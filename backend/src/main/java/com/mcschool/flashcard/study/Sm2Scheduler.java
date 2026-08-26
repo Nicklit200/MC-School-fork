@@ -5,23 +5,23 @@ import java.time.LocalDate;
 import org.springframework.stereotype.Component;
 
 /**
- * The simplified spaced-repetition schedule from PRD 4.4.
+ * Compact spaced-repetition schedule for school flashcards.
  *
  * <p>After a card is answered correctly in a <b>scheduled</b> session its
  * repetition number is advanced and its next review is booked using fixed
  * intervals:
  *
  * <pre>
- *   repetition 1  → next review in  3 days
- *   repetition 2  → next review in  7 days
- *   repetition 3  → next review in 21 days
+ *   repetition 1  -> next review in 1 day
+ *   repetition 2  -> next review in 2 days
+ *   repetition 3  -> next review in 4 days
+ *   repetition 4  -> next review in 7 days
  * </pre>
  *
- * <p>A card is considered <b>learned after 3 successful repetitions</b>
- * (PRD 4.4). When it reaches repetition 3 its status becomes {@link CardStatus#LEARNED}
- * and it is no longer surfaced in mandatory sessions. The 21-day due date is still
- * recorded so a future "maintenance review" feature (v1.5) can use it, but the MVP
- * treats a learned card as finished.
+ * <p>A card is considered <b>learned after 4 successful repetitions</b>.
+ * When it reaches repetition 4 its status becomes {@link CardStatus#LEARNED}
+ * and it is no longer surfaced in mandatory sessions. The 7-day due date is
+ * still recorded so a future maintenance-review feature can reuse it.
  *
  * <p>Mistakes never reset the interval: a wrong card is simply retried within the
  * same session and the schedule only advances once the session completes
@@ -33,8 +33,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class Sm2Scheduler {
 
-    /** Days until the next review after repetitions 1, 2 and 3 respectively. */
-    static final int[] INTERVAL_DAYS = {3, 7, 21};
+    /** Days until the next review after repetitions 1, 2, 3 and 4 respectively. */
+    static final int[] INTERVAL_DAYS = {1, 2, 4, 7};
 
     /** A card is learned once it has been successfully reviewed this many times. */
     static final int REPETITIONS_TO_LEARN = INTERVAL_DAYS.length;
@@ -47,7 +47,7 @@ public class Sm2Scheduler {
      * Computes the next state for a card that was just reviewed successfully in a
      * scheduled session.
      *
-     * @param currentRepetition the card's repetition number before this review (0..2)
+     * @param currentRepetition the card's repetition number before this review (0..3)
      * @param today             the day the session completed
      */
     public Scheduling afterSuccessfulReview(int currentRepetition, LocalDate today) {
