@@ -7,28 +7,16 @@ import org.springframework.stereotype.Component;
 /**
  * Compact spaced-repetition schedule for school flashcards.
  *
- * <p>After a card is answered correctly in a <b>scheduled</b> session its
- * repetition number is advanced and its next review is booked using fixed
- * intervals:
+ * <p>After a clean successful review in a <b>scheduled</b> session, the card moves
+ * through the fixed intervals 1 -> 2 -> 4 -> 7 days.
  *
- * <pre>
- *   repetition 1  -> next review in 1 day
- *   repetition 2  -> next review in 2 days
- *   repetition 3  -> next review in 4 days
- *   repetition 4  -> next review in 7 days
- * </pre>
+ * <p>If the student makes at least one mistake on a card during a scheduled review,
+ * that card is still retried in the same session until answered correctly, but its
+ * spaced-repetition streak is reset. After the session completes, the card starts
+ * again from repetition 1 and is due the next day.
  *
- * <p>A card is considered <b>learned after 4 successful repetitions</b>.
- * When it reaches repetition 4 its status becomes {@link CardStatus#LEARNED}
- * and it is no longer surfaced in mandatory sessions. The 7-day due date is
- * still recorded so a future maintenance-review feature can reuse it.
- *
- * <p>Mistakes never reset the interval: a wrong card is simply retried within the
- * same session and the schedule only advances once the session completes
- * successfully. Voluntary practice sessions never call this scheduler.
- *
- * <p>All rules live here and are covered by unit tests, so the intervals or the
- * "learned" threshold can be changed in one place if the team refines them.
+ * <p>A card is considered <b>learned after 4 clean successful repetitions</b>.
+ * Voluntary practice sessions never change the schedule.
  */
 @Component
 public class Sm2Scheduler {
@@ -36,24 +24,27 @@ public class Sm2Scheduler {
     /** Days until the next review after repetitions 1, 2, 3 and 4 respectively. */
     static final int[] INTERVAL_DAYS = {1, 2, 4, 7};
 
-    /** A card is learned once it has been successfully reviewed this many times. */
+    /** A card is learned once it has completed this many clean scheduled reviews. */
     static final int REPETITIONS_TO_LEARN = INTERVAL_DAYS.length;
 
     /** The new spaced-repetition state to store on a card. */
     public record Scheduling(int repetitionNumber, LocalDate dueDate, CardStatus status) {
     }
 
-    /**
-     * Computes the next state for a card that was just reviewed successfully in a
-     * scheduled session.
-     *
-     * @param currentRepetition the card's repetition number before this review (0..3)
-     * @param today             the day the session completed
-     */
+    /** Advances a card after a scheduled review with no wrong attempt. */
     public Scheduling afterSuccessfulReview(int currentRepetition, LocalDate today) {
         int newRepetition = currentRepetition + 1;
         int intervalDays = INTERVAL_DAYS[Math.min(newRepetition, REPETITIONS_TO_LEARN) - 1];
         CardStatus status = newRepetition >= REPETITIONS_TO_LEARN ? CardStatus.LEARNED : CardStatus.ACTIVE;
         return new Scheduling(newRepetition, today.plusDays(intervalDays), status);
+    }
+
+    /**
+     * Resets the spaced-repetition streak after any wrong attempt in a scheduled
+     * review. The card becomes active again and restarts at the first interval,
+     * so it is due tomorrow regardless of its previous repetition number.
+     */
+    public Scheduling afterReviewWithMistake(LocalDate today) {
+        return new Scheduling(1, today.plusDays(INTERVAL_DAYS[0]), CardStatus.ACTIVE);
     }
 }
