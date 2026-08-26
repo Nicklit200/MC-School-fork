@@ -46,4 +46,13 @@ class Sm2SchedulerTest {
         assertThat(result.dueDate()).isEqualTo(today.plusDays(7));
         assertThat(result.status()).isEqualTo(CardStatus.LEARNED);
     }
+
+    @Test
+    void wrongAttemptRestartsStreakFromOneDay() {
+        Sm2Scheduler.Scheduling result = scheduler.afterReviewWithMistake(today);
+
+        assertThat(result.repetitionNumber()).isEqualTo(1);
+        assertThat(result.dueDate()).isEqualTo(today.plusDays(1));
+        assertThat(result.status()).isEqualTo(CardStatus.ACTIVE);
+    }
 }
