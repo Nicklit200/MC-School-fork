@@ -28,21 +28,22 @@ import org.springframework.transaction.annotation.Transactional;
  * result screen. Every method is scoped to the calling student, who can only ever
  * see and act on their own cards and sessions.
  *
- * <p>Session rules (PRD 4.3–4.5):
+ * <p>Session rules:
  * <ul>
  *   <li>A session needs at least {@value #MIN_CARDS_TO_START} cards so four answer
  *       options can be built.</li>
  *   <li>A wrong answer re-queues the card within the same session; the session ends
  *       only when every card has been answered correctly.</li>
- *   <li>Completing a <b>scheduled</b> session advances the SM-2 schedule; a
- *       <b>practice</b> session never changes it.</li>
+ *   <li>In a scheduled session, a card with any wrong attempt restarts its spaced-
+ *       repetition streak from the first interval after the session completes.</li>
+ *   <li>Completing a clean scheduled review advances the 1/2/4/7-day schedule; a
+ *       practice session never changes it.</li>
  *   <li>At most one session is in progress at a time, so it can be resumed unambiguously.</li>
  * </ul>
  */
 @Service
 public class StudyService {
 
-    /** Minimum cards a student needs before any session can start (for distractors). */
     public static final int MIN_CARDS_TO_START = 4;
 
     private final StudySessionRepository sessionRepository;
@@ -82,7 +83,6 @@ public class StudyService {
                 enoughCards && due > 0, enoughCards, inProgress);
     }
 
-    /** The student's personal card list with progress (PRD: "all cards with progress"). */
     @Transactional(readOnly = true)
     public List<CardResponse> listMyCards(AuthenticatedUser student) {
         return cardRepository.findAllByStudentIdAndArchivedFalseOrderByCreatedAtDesc(student.id()).stream()
@@ -135,7 +135,7 @@ public class StudyService {
 
         Card card = item.getCard();
         List<String> options = distractorGenerator.buildOptions(card,
-                cardRepository.findAllByStudentIdAndArchivedFalse(student.id()));
+                cardRepository.findAllByStudentIdAndArchivedFalseOrderByCreatedAtDesc(student.id()));
         int answered = (int) itemRepository.countBySessionIdAndState(sessionId, ItemState.ANSWERED_CORRECT);
         return new QuestionResponse(card.getId(), card.getQuestion(), options, answered, session.getTotalCards());
     }
@@ -181,8 +181,6 @@ public class StudyService {
                 session.getCorrectFirstTry(), soonestNextReview(sessionId));
     }
 
-    // --- Internals ---
-
     private List<Card> selectCardsForSession(UUID studentId, SessionType type) {
         if (type == SessionType.SCHEDULED) {
             List<Card> due = cardRepository.findDueCards(studentId, LocalDate.now());
@@ -191,11 +189,9 @@ public class StudyService {
             }
             return due;
         }
-        // PRACTICE runs over all of the student's cards; the schedule is left untouched.
         return cardRepository.findAllByStudentIdAndArchivedFalseOrderByCreatedAtDesc(studentId);
     }
 
-    /** Marks the session completed and, for scheduled sessions, advances the SM-2 schedule. */
     private void completeSession(StudySession session) {
         session.markCompleted();
         if (!session.isScheduled()) {
@@ -204,12 +200,13 @@ public class StudyService {
         LocalDate today = LocalDate.now();
         for (StudySessionItem item : itemRepository.findAllBySessionId(session.getId())) {
             Card card = item.getCard();
-            Sm2Scheduler.Scheduling next = sm2Scheduler.afterSuccessfulReview(card.getRepetitionNumber(), today);
+            Sm2Scheduler.Scheduling next = item.isFirstTryClean()
+                    ? sm2Scheduler.afterSuccessfulReview(card.getRepetitionNumber(), today)
+                    : sm2Scheduler.afterReviewWithMistake(today);
             card.applyScheduling(next.repetitionNumber(), next.dueDate(), next.status());
         }
     }
 
-    /** Soonest upcoming review among the session's still-active cards, or null if all learned. */
     private LocalDate soonestNextReview(UUID sessionId) {
         return itemRepository.findAllBySessionId(sessionId).stream()
                 .map(StudySessionItem::getCard)
