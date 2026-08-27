@@ -102,6 +102,23 @@ export interface SessionResult {
   nextReviewDate: string | null;
 }
 
+export interface ReviewAnswer {
+  cardId: string;
+  question: string;
+  selectedAnswer: string | null;
+  correctAnswer: string;
+  correct: boolean;
+}
+
+export interface ReviewSessionHistory {
+  sessionId: string;
+  completedAt: string;
+  totalCards: number;
+  correctAnswers: number;
+  wrongAnswers: number;
+  answers: ReviewAnswer[];
+}
+
 /** Shape of the backend's error body; `errorCode` drives user-facing messages. */
 export interface ApiError {
   timestamp: string;
