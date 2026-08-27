@@ -23,24 +23,6 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Student-facing study flow: today's tasks, running a session card by card, and the
- * result screen. Every method is scoped to the calling student, who can only ever
- * see and act on their own cards and sessions.
- *
- * <p>Session rules:
- * <ul>
- *   <li>A session needs at least {@value #MIN_CARDS_TO_START} cards so four answer
- *       options can be built.</li>
- *   <li>A wrong answer re-queues the card within the same session; the session ends
- *       only when every card has been answered correctly.</li>
- *   <li>In a scheduled session, a card with any wrong attempt restarts its spaced-
- *       repetition streak from the first interval after the session completes.</li>
- *   <li>Completing a clean scheduled review advances the 1/2/4/7-day schedule; a
- *       practice session never changes it.</li>
- *   <li>At most one session is in progress at a time, so it can be resumed unambiguously.</li>
- * </ul>
- */
 @Service
 public class StudyService {
 
@@ -152,7 +134,9 @@ public class StudyService {
                         "Card is not part of this session or has already been answered"));
 
         Card card = item.getCard();
-        boolean correct = card.getCorrectAnswer().equals(request.selectedAnswer().strip());
+        String selectedAnswer = request.selectedAnswer().strip();
+        boolean correct = card.getCorrectAnswer().equals(selectedAnswer);
+        item.recordFirstAnswer(selectedAnswer, correct);
         if (correct) {
             if (item.isFirstTryClean()) {
                 session.recordCorrectFirstTry();
