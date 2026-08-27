@@ -50,6 +50,12 @@ public class StudySessionItem {
     @Column(name = "had_wrong_attempt", nullable = false)
     private boolean hadWrongAttempt;
 
+    @Column(name = "first_selected_answer", columnDefinition = "TEXT")
+    private String firstSelectedAnswer;
+
+    @Column(name = "first_answer_correct")
+    private Boolean firstAnswerCorrect;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -69,6 +75,14 @@ public class StudySessionItem {
 
     public static StudySessionItem create(StudySession session, Card card, int queuePosition) {
         return new StudySessionItem(session, card, queuePosition);
+    }
+
+    /** Stores the first answer only; later retries do not overwrite what the student chose first. */
+    public void recordFirstAnswer(String selectedAnswer, boolean correct) {
+        if (this.firstSelectedAnswer == null) {
+            this.firstSelectedAnswer = selectedAnswer;
+            this.firstAnswerCorrect = correct;
+        }
     }
 
     public void markCorrect() {
