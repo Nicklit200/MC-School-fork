@@ -56,6 +56,12 @@ public class StudySessionItem {
     @Column(name = "first_answer_correct")
     private Boolean firstAnswerCorrect;
 
+    @Column(name = "question_snapshot", columnDefinition = "TEXT")
+    private String questionSnapshot;
+
+    @Column(name = "correct_answer_snapshot", columnDefinition = "TEXT")
+    private String correctAnswerSnapshot;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -71,6 +77,8 @@ public class StudySessionItem {
         this.queuePosition = queuePosition;
         this.state = ItemState.PENDING;
         this.hadWrongAttempt = false;
+        this.questionSnapshot = card.getQuestion();
+        this.correctAnswerSnapshot = card.getCorrectAnswer();
     }
 
     public static StudySessionItem create(StudySession session, Card card, int queuePosition) {
