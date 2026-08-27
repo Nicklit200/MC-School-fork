@@ -7,6 +7,7 @@ import type {
   Language,
   ParsedCard,
   Question,
+  ReviewSessionHistory,
   Session,
   SessionResult,
   SessionType,
@@ -30,7 +31,6 @@ export class ApiRequestError extends Error {
   }
 }
 
-// The JWT is held in memory and mirrored to localStorage so a page reload stays logged in.
 let accessToken: string | null = localStorage.getItem('accessToken');
 
 export function setAccessToken(token: string | null): void {
@@ -76,7 +76,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return payload as T;
 }
 
-/** All backend endpoints, grouped by area. Keeps components free of URL strings. */
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -98,6 +97,8 @@ export const api = {
     list: () => request<User[]>('GET', '/students'),
     create: (fullName: string, email: string) =>
       request<StudentInvitation>('POST', '/students', { fullName, email }),
+    reviewHistory: (studentId: string) =>
+      request<ReviewSessionHistory[]>('GET', `/students/${studentId}/review-history`),
   },
   cards: {
     listForStudent: (studentId: string) =>
