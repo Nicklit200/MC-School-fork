@@ -207,7 +207,7 @@ function TableCell({ children }: { children: string }) {
 }
 
 function csvCell(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function formatDisplayDate(value: string): string {
