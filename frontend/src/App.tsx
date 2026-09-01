@@ -8,6 +8,7 @@ import { ActivatePage } from './pages/ActivatePage';
 import { TeachersPage } from './pages/admin/TeachersPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
+import { StudentDrivePage } from './pages/teacher/StudentDrivePage';
 import { HomeworkDetailPage } from './pages/teacher/HomeworkDetailPage';
 import { GroupsPage } from './pages/teacher/GroupsPage';
 import { GroupDetailPage } from './pages/teacher/GroupDetailPage';
@@ -52,6 +53,14 @@ export function App() {
         element={
           <ProtectedRoute role="TEACHER">
             <Layout><StudentDetailPage /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/students/:studentId/drive"
+        element={
+          <ProtectedRoute role="TEACHER">
+            <Layout><StudentDrivePage /></Layout>
           </ProtectedRoute>
         }
       />
