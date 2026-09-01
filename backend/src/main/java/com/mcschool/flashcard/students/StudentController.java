@@ -8,6 +8,7 @@ import com.mcschool.flashcard.students.dto.PilotDueCardResponse;
 import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
+import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -47,6 +49,19 @@ public class StudentController {
     @GetMapping
     public List<StudentListResponse> listStudents(@AuthenticationPrincipal AuthenticatedUser caller) {
         return studentService.listStudents(caller);
+    }
+
+    @GetMapping("/{studentId}")
+    public StudentListResponse getStudent(@AuthenticationPrincipal AuthenticatedUser caller,
+                                          @PathVariable UUID studentId) {
+        return studentService.getStudent(caller, studentId);
+    }
+
+    @PutMapping("/{studentId}/drive-folder")
+    public StudentListResponse updateDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                 @PathVariable UUID studentId,
+                                                 @Valid @RequestBody UpdateStudentDriveFolderRequest request) {
+        return studentService.updateGoogleDriveFolder(caller, studentId, request);
     }
 
     @GetMapping("/{studentId}/review-history")
