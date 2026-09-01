@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.groups;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.groups.dto.AddGroupMembersRequest;
 import com.mcschool.flashcard.groups.dto.CreateGroupCardRequest;
 import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
 import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
@@ -46,6 +47,13 @@ public class StudentGroupController {
     public StudentGroupResponse create(@AuthenticationPrincipal AuthenticatedUser caller,
                                        @Valid @RequestBody CreateStudentGroupRequest request) {
         return groupService.create(caller, request);
+    }
+
+    @PostMapping("/{groupId}/members")
+    public StudentGroupResponse addMembers(@AuthenticationPrincipal AuthenticatedUser caller,
+                                           @PathVariable UUID groupId,
+                                           @Valid @RequestBody AddGroupMembersRequest request) {
+        return groupService.addMembers(caller, groupId, request);
     }
 
     @PostMapping("/{groupId}/cards")
