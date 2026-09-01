@@ -6,6 +6,7 @@ import com.mcschool.flashcard.cards.CardRepository;
 import com.mcschool.flashcard.cards.dto.ParsedCard;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.groups.dto.AddGroupMembersRequest;
 import com.mcschool.flashcard.groups.dto.CreateGroupCardRequest;
 import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
 import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
@@ -55,6 +56,17 @@ public class StudentGroupService {
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
         StudentGroup group = groupRepository.save(StudentGroup.create(teacherEntity, request.name()));
 
+        request.emails().stream()
+                .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                .distinct()
+                .forEach(email -> addStudentByEmail(group, teacherEntity, email));
+        return response(group);
+    }
+
+    @Transactional
+    public StudentGroupResponse addMembers(AuthenticatedUser teacher, UUID groupId, AddGroupMembersRequest request) {
+        StudentGroup group = requireOwnedGroup(teacher.id(), groupId);
+        User teacherEntity = group.getTeacher();
         request.emails().stream()
                 .map(email -> email.trim().toLowerCase(Locale.ROOT))
                 .distinct()
