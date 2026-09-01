@@ -22,6 +22,12 @@ export interface StudentListItem extends User {
   invitationToken: string | null;
 }
 
+export interface StudentGroup {
+  id: string;
+  name: string;
+  students: User[];
+}
+
 export interface AuthResponse {
   accessToken: string;
   tokenType: string;
