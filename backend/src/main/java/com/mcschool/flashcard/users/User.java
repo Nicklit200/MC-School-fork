@@ -58,6 +58,10 @@ public class User {
     @JoinColumn(name = "teacher_id")
     private User teacher;
 
+    /** Folder where this student's exported review tables will be uploaded. */
+    @Column(name = "google_drive_folder_url", length = 1000)
+    private String googleDriveFolderUrl;
+
     @Column(name = "invitation_token", length = 100)
     private String invitationToken;
 
@@ -84,16 +88,22 @@ public class User {
         this.fullName = fullName;
         this.email = email;
         this.role = role;
-        // Matches the DB default; the user can change it in Settings.
         this.preferredLanguage = Language.RU;
     }
 
-    /** Updates the interface language chosen in Settings. */
     public void changeLanguage(Language language) {
         this.preferredLanguage = language;
     }
 
-    /** The initial admin account, created at startup with a known password. */
+    /** Teacher-controlled destination for automatic review exports. */
+    public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
+        if (googleDriveFolderUrl == null || googleDriveFolderUrl.isBlank()) {
+            this.googleDriveFolderUrl = null;
+            return;
+        }
+        this.googleDriveFolderUrl = googleDriveFolderUrl.trim();
+    }
+
     public static User bootstrapAdmin(String fullName, String email, String passwordHash) {
         User user = new User(fullName, email, Role.ADMIN);
         user.passwordHash = passwordHash;
@@ -120,7 +130,6 @@ public class User {
         return user;
     }
 
-    /** Completes the invitation: sets the password and makes the account usable. */
     public void activate(String passwordHash) {
         if (this.status != UserStatus.INVITED) {
             throw new IllegalStateException("Only INVITED accounts can be activated");
@@ -134,11 +143,6 @@ public class User {
         this.invitationExpiresAt = null;
     }
 
-    /**
-     * Soft-deletes a student account. The row is kept so cards and completed
-     * study-session history retain their references, but credentials/invitations
-     * are invalidated and the account is hidden from teacher workflows.
-     */
     public void archive() {
         this.archived = true;
         this.passwordHash = null;
