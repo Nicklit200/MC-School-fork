@@ -13,6 +13,7 @@ import com.mcschool.flashcard.students.dto.PilotDueCardResponse;
 import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
+import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
@@ -84,6 +85,24 @@ public class StudentService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public StudentListResponse getStudent(AuthenticatedUser teacher, UUID studentId) {
+        return StudentListResponse.from(requireOwnedStudent(teacher.id(), studentId));
+    }
+
+    @Transactional
+    public StudentListResponse updateGoogleDriveFolder(AuthenticatedUser teacher, UUID studentId,
+                                                       UpdateStudentDriveFolderRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        String url = request.googleDriveFolderUrl();
+        if (url != null && !url.isBlank()
+                && !url.startsWith("https://drive.google.com/drive/folders/")) {
+            throw new IllegalArgumentException("Please provide a Google Drive folder URL");
+        }
+        student.changeGoogleDriveFolderUrl(url);
+        return StudentListResponse.from(student);
+    }
+
     @Transactional
     public TestReviewReminderResponse sendTestReviewReminder(AuthenticatedUser teacher, UUID studentId) {
         User student = requireOwnedActiveStudent(teacher.id(), studentId);
@@ -107,20 +126,19 @@ public class StudentService {
         return PilotDueCardResponse.from(cardRepository.save(card));
     }
 
-    /**
-     * Soft-deletes only a student owned by the calling teacher. Cards are archived
-     * so they disappear from active study/teacher screens, while the student row,
-     * cards, and study-session rows remain available for historical references.
-     */
     @Transactional
     public void deleteStudent(AuthenticatedUser teacher, UUID studentId) {
-        User student = userRepository.findById(studentId)
-                .filter(u -> u.getRole() == Role.STUDENT)
-                .filter(u -> !u.isArchived())
-                .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacher.id()))
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        User student = requireOwnedStudent(teacher.id(), studentId);
         cardRepository.archiveAllByStudentId(studentId);
         student.archive();
+    }
+
+    private User requireOwnedStudent(UUID teacherId, UUID studentId) {
+        return userRepository.findById(studentId)
+                .filter(u -> u.getRole() == Role.STUDENT)
+                .filter(u -> !u.isArchived())
+                .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacherId))
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
     }
 
     private User requireOwnedActiveStudent(UUID teacherId, UUID studentId) {
