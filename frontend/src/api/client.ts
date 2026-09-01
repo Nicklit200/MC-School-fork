@@ -100,8 +100,11 @@ export const api = {
   },
   students: {
     list: () => request<StudentListItem[]>('GET', '/students'),
+    get: (studentId: string) => request<StudentListItem>('GET', `/students/${studentId}`),
     create: (fullName: string, email: string) =>
       request<StudentInvitation>('POST', '/students', { fullName, email }),
+    updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) =>
+      request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
     reviewHistory: (studentId: string) =>
       request<DailyReviewHistoryItem[]>('GET', `/students/${studentId}/review-history`),
     testReviewReminder: (studentId: string) =>
