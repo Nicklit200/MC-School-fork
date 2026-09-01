@@ -20,6 +20,7 @@ export interface User {
 
 export interface StudentListItem extends User {
   invitationToken: string | null;
+  googleDriveFolderUrl: string | null;
 }
 
 export interface StudentGroup {
