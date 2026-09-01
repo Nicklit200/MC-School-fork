@@ -110,6 +110,9 @@ export function StudentsPage() {
             <div>
               <div className="list-row__title">{student.fullName}</div>
               <div className="muted">{student.email}</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Google Drive: {student.googleDriveFolderUrl ? 'папка задана' : 'не настроен'}
+              </div>
             </div>
             <div className="muted">
               {activeCount(summaries[student.id])} {t('students.activeCards')}
@@ -117,6 +120,9 @@ export function StudentsPage() {
             <div className="list-row__actions">
               <Link to={`/students/${student.id}`} className="btn btn--secondary">
                 {t('students.cardsButton')}
+              </Link>
+              <Link to={`/students/${student.id}/drive`} className="btn btn--secondary">
+                Google Drive
               </Link>
               {student.status === 'INVITED' && student.invitationToken && (
                 <button className="btn btn--ghost" type="button" onClick={() => copyInvitationLink(student)}>
