@@ -9,6 +9,7 @@ export function GroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
   const { t } = useI18n();
   const [group, setGroup] = useState<StudentGroup | null>(null);
+  const [memberEmails, setMemberEmails] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -26,6 +27,25 @@ export function GroupDetailPage() {
 
   if (!groupId) {
     return <div className="banner banner--error">Группа не найдена</div>;
+  }
+
+  async function addMembers(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    const emails = memberEmails
+      .split(/[\n,;]+/)
+      .map((email) => email.trim())
+      .filter(Boolean);
+    if (emails.length === 0) return;
+    try {
+      const updated = await api.groups.addMembers(groupId!, emails);
+      setGroup(updated);
+      setMemberEmails('');
+      setMessage(`Добавлено учеников: ${updated.students.length}.`);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
   }
 
   async function createCard(event: FormEvent) {
@@ -80,6 +100,26 @@ export function GroupDetailPage() {
 
       {error && <div className="banner banner--error">{error}</div>}
       {message && <div className="banner banner--success">{message}</div>}
+
+      <div className="panel">
+        <h2>Добавить учеников</h2>
+        <form onSubmit={addMembers}>
+          <label className="field">
+            <span className="field__label">Email учеников</span>
+            <textarea
+              className="textarea"
+              value={memberEmails}
+              onChange={(e) => setMemberEmails(e.target.value)}
+              placeholder={'student1@example.com\nstudent2@example.com'}
+              required
+            />
+          </label>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+            Можно вставить несколько email через новую строку, запятую или точку с запятой.
+          </div>
+          <button className="btn" type="submit">Добавить в группу</button>
+        </form>
+      </div>
 
       <div className="panel">
         <h2>Ученики группы</h2>
