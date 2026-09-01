@@ -9,6 +9,8 @@ import { TeachersPage } from './pages/admin/TeachersPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
 import { HomeworkDetailPage } from './pages/teacher/HomeworkDetailPage';
+import { GroupsPage } from './pages/teacher/GroupsPage';
+import { GroupDetailPage } from './pages/teacher/GroupDetailPage';
 import { TodayPage } from './pages/student/TodayPage';
 import { SessionPage } from './pages/student/SessionPage';
 import { ResultPage } from './pages/student/ResultPage';
@@ -16,7 +18,6 @@ import { MyCardsPage } from './pages/student/MyCardsPage';
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
 import { SettingsPage } from './pages/student/SettingsPage';
 
-/** Top-level routes. Public: login and activation. Everything else is role-guarded. */
 export function App() {
   const { user, initializing } = useAuth();
 
@@ -33,9 +34,7 @@ export function App() {
         path="/teachers"
         element={
           <ProtectedRoute role="ADMIN">
-            <Layout>
-              <TeachersPage />
-            </Layout>
+            <Layout><TeachersPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -44,9 +43,7 @@ export function App() {
         path="/students"
         element={
           <ProtectedRoute role="TEACHER">
-            <Layout>
-              <StudentsPage />
-            </Layout>
+            <Layout><StudentsPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -54,9 +51,7 @@ export function App() {
         path="/students/:studentId"
         element={
           <ProtectedRoute role="TEACHER">
-            <Layout>
-              <StudentDetailPage />
-            </Layout>
+            <Layout><StudentDetailPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -64,9 +59,23 @@ export function App() {
         path="/teacher/students/:studentId/homeworks/:homeworkId"
         element={
           <ProtectedRoute role="TEACHER">
-            <Layout>
-              <HomeworkDetailPage />
-            </Layout>
+            <Layout><HomeworkDetailPage /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/groups"
+        element={
+          <ProtectedRoute role="TEACHER">
+            <Layout><GroupsPage /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/groups/:groupId"
+        element={
+          <ProtectedRoute role="TEACHER">
+            <Layout><GroupDetailPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -75,9 +84,7 @@ export function App() {
         path="/today"
         element={
           <ProtectedRoute role="STUDENT">
-            <Layout>
-              <TodayPage />
-            </Layout>
+            <Layout><TodayPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -85,9 +92,7 @@ export function App() {
         path="/session/:sessionId"
         element={
           <ProtectedRoute role="STUDENT">
-            <Layout>
-              <SessionPage />
-            </Layout>
+            <Layout><SessionPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -95,9 +100,7 @@ export function App() {
         path="/session/:sessionId/result"
         element={
           <ProtectedRoute role="STUDENT">
-            <Layout>
-              <ResultPage />
-            </Layout>
+            <Layout><ResultPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -105,9 +108,7 @@ export function App() {
         path="/my-cards"
         element={
           <ProtectedRoute role="STUDENT">
-            <Layout>
-              <MyCardsPage />
-            </Layout>
+            <Layout><MyCardsPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -115,9 +116,7 @@ export function App() {
         path="/student/homeworks/:homeworkId"
         element={
           <ProtectedRoute role="STUDENT">
-            <Layout>
-              <StudentHomeworkDetailPage />
-            </Layout>
+            <Layout><StudentHomeworkDetailPage /></Layout>
           </ProtectedRoute>
         }
       />
@@ -125,9 +124,7 @@ export function App() {
         path="/settings"
         element={
           <ProtectedRoute role="STUDENT">
-            <Layout>
-              <SettingsPage />
-            </Layout>
+            <Layout><SettingsPage /></Layout>
           </ProtectedRoute>
         }
       />
