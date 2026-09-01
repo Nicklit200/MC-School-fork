@@ -13,6 +13,7 @@ import type {
   Session,
   SessionResult,
   SessionType,
+  StudentGroup,
   StudentListItem,
   StudentInvitation,
   TestReviewReminderResult,
@@ -35,7 +36,6 @@ export class ApiRequestError extends Error {
   }
 }
 
-// The JWT is held in memory and mirrored to localStorage so a page reload stays logged in.
 let accessToken: string | null = localStorage.getItem('accessToken');
 
 export function setAccessToken(token: string | null): void {
@@ -81,7 +81,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return payload as T;
 }
 
-/** All backend endpoints, grouped by area. Keeps components free of URL strings. */
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -110,6 +109,16 @@ export const api = {
     makeOneCardDueToday: (studentId: string) =>
       request<PilotDueCardResult>('POST', `/students/${studentId}/make-one-card-due-today`),
     remove: (studentId: string) => request<void>('DELETE', `/students/${studentId}`),
+  },
+  groups: {
+    list: () => request<StudentGroup[]>('GET', '/groups'),
+    get: (groupId: string) => request<StudentGroup>('GET', `/groups/${groupId}`),
+    create: (name: string, emails: string[]) =>
+      request<StudentGroup>('POST', '/groups', { name, emails }),
+    createCard: (groupId: string, startDate: string, question: string, correctAnswer: string) =>
+      request<number>('POST', `/groups/${groupId}/cards`, { startDate, question, correctAnswer }),
+    importCards: (groupId: string, startDate: string, cards: ParsedCard[]) =>
+      request<number>('POST', `/groups/${groupId}/cards/import`, { startDate, cards }),
   },
   cards: {
     listForStudent: (studentId: string) =>
