@@ -4,11 +4,6 @@ import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 
-/**
- * App shell with a role-aware top navigation. Teacher/admin screens get a wide
- * desktop layout; student screens use a narrow mobile-first column (see index.css,
- * which keys the width off the data-variant attribute).
- */
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { t } = useI18n();
@@ -35,6 +30,9 @@ export function Layout({ children }: { children: ReactNode }) {
               {t(link.label)}
             </NavLink>
           ))}
+          {user?.role === 'TEACHER' && (
+            <NavLink to="/groups" className="topbar__link">Группы</NavLink>
+          )}
         </nav>
         <div className="topbar__spacer" />
         {user && (
