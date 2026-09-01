@@ -17,11 +17,13 @@ public record StudentListResponse(
         Role role,
         UserStatus status,
         Language preferredLanguage,
-        String invitationToken
+        String invitationToken,
+        String googleDriveFolderUrl
 ) {
     public static StudentListResponse from(User student) {
         return new StudentListResponse(student.getId(), student.getFullName(), student.getEmail(),
                 student.getRole(), student.getStatus(), student.getPreferredLanguage(),
-                student.getStatus() == UserStatus.INVITED ? student.getInvitationToken() : null);
+                student.getStatus() == UserStatus.INVITED ? student.getInvitationToken() : null,
+                student.getGoogleDriveFolderUrl());
     }
 }
