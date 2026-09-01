@@ -115,6 +115,8 @@ export const api = {
     get: (groupId: string) => request<StudentGroup>('GET', `/groups/${groupId}`),
     create: (name: string, emails: string[]) =>
       request<StudentGroup>('POST', '/groups', { name, emails }),
+    addMembers: (groupId: string, emails: string[]) =>
+      request<StudentGroup>('POST', `/groups/${groupId}/members`, { emails }),
     createCard: (groupId: string, startDate: string, question: string, correctAnswer: string) =>
       request<number>('POST', `/groups/${groupId}/cards`, { startDate, question, correctAnswer }),
     importCards: (groupId: string, startDate: string, cards: ParsedCard[]) =>
