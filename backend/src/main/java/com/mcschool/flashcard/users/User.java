@@ -18,11 +18,6 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-/**
- * A platform account. Accounts are never self-registered: admins create
- * teachers and teachers create students, always through the invitation flow
- * (see the static factory methods).
- */
 @Entity
 @Table(name = "users")
 @Getter
@@ -53,20 +48,18 @@ public class User {
     @Column(name = "preferred_language", nullable = false, length = 5)
     private Language preferredLanguage;
 
-    /** The teacher who owns this student. Null unless {@code role == STUDENT}. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "teacher_id")
     private User teacher;
-
-    /** Folder where this student's exported review tables will be uploaded. */
-    @Column(name = "google_drive_folder_url", length = 1000)
-    private String googleDriveFolderUrl;
 
     @Column(name = "invitation_token", length = 100)
     private String invitationToken;
 
     @Column(name = "invitation_expires_at")
     private Instant invitationExpiresAt;
+
+    @Column(name = "google_drive_folder_url", length = 1000)
+    private String googleDriveFolderUrl;
 
     @Column(nullable = false)
     private boolean archived;
@@ -95,7 +88,6 @@ public class User {
         this.preferredLanguage = language;
     }
 
-    /** Teacher-controlled destination for automatic review exports. */
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
         if (googleDriveFolderUrl == null || googleDriveFolderUrl.isBlank()) {
             this.googleDriveFolderUrl = null;
@@ -128,6 +120,20 @@ public class User {
         user.invitationToken = invitationToken;
         user.invitationExpiresAt = invitationExpiresAt;
         return user;
+    }
+
+    public void restoreAsInvitedStudent(String fullName, User teacher,
+                                        String invitationToken, Instant invitationExpiresAt) {
+        if (this.role != Role.STUDENT || !this.archived) {
+            throw new IllegalStateException("Only archived student accounts can be restored");
+        }
+        this.fullName = fullName;
+        this.teacher = teacher;
+        this.passwordHash = null;
+        this.status = UserStatus.INVITED;
+        this.invitationToken = invitationToken;
+        this.invitationExpiresAt = invitationExpiresAt;
+        this.archived = false;
     }
 
     public void activate(String passwordHash) {
