@@ -36,7 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class HomeworkPdfService {
 
-    private static final long MAX_PDF_BYTES = 15L * 1024L * 1024L;
+    private static final long MAX_PDF_BYTES = 25L * 1024L * 1024L;
     private static final float PAGE_RENDER_DPI = 144f;
     private static final ZoneId SCHOOL_ZONE = ZoneId.of("Europe/Berlin");
 
