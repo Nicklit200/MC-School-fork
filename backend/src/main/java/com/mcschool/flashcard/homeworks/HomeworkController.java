@@ -6,6 +6,7 @@ import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -45,6 +46,17 @@ public class HomeworkController {
                                            @PathVariable UUID studentId,
                                            @Valid @RequestBody CreateHomeworkRequest request) {
         return homeworkService.createHomework(caller, studentId, request);
+    }
+
+    /** Always creates a NEW homework row and attaches the selected PDF to it. */
+    @PostMapping(value = "/students/{studentId}/homeworks/pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('TEACHER')")
+    public HomeworkResponse createPdfHomework(@AuthenticationPrincipal AuthenticatedUser caller,
+                                              @PathVariable UUID studentId,
+                                              @RequestParam("startDate") LocalDate startDate,
+                                              @RequestParam("file") MultipartFile file) {
+        return homeworkPdfService.createWorksheetHomework(caller, studentId, startDate, file);
     }
 
     @GetMapping("/students/{studentId}/homeworks")
