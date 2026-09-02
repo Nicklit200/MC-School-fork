@@ -8,6 +8,7 @@ import { ActivatePage } from './pages/ActivatePage';
 import { TeachersPage } from './pages/admin/TeachersPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
+import { StudentHomeworksPage } from './pages/teacher/StudentHomeworksPage';
 import { StudentDrivePage } from './pages/teacher/StudentDrivePage';
 import { HomeworkDetailPage } from './pages/teacher/HomeworkDetailPage';
 import { GroupsPage } from './pages/teacher/GroupsPage';
@@ -32,6 +33,7 @@ export function App() {
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
       <Route path="/students" element={<ProtectedRoute role="TEACHER"><Layout><StudentsPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/students/:studentId/homeworks" element={<ProtectedRoute role="TEACHER"><Layout><StudentHomeworksPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId/drive" element={<ProtectedRoute role="TEACHER"><Layout><StudentDrivePage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
