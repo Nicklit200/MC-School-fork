@@ -276,7 +276,7 @@ public class StudyService {
             String timestamp = session.getCompletedAt()
                     .atZone(reviewHistoryZone)
                     .format(EXPORT_TIME);
-            String fileName = timestamp + "_cards.csv";
+            String fileName = safeFileName(student.getFullName()) + "_" + timestamp + "_cards.csv";
             googleDriveService.uploadBytes(folderId, fileName, "text/csv; charset=utf-8",
                     csv.toString().getBytes(StandardCharsets.UTF_8));
             log.info("Uploaded completed card session to Google Drive: studentId={} sessionId={} file={}",
@@ -285,6 +285,14 @@ public class StudyService {
             log.error("Could not export completed card session to Google Drive: studentId={} sessionId={}",
                     student.getId(), session.getId(), ex);
         }
+    }
+
+    private String safeFileName(String value) {
+        if (value == null || value.isBlank()) {
+            return "student";
+        }
+        String cleaned = value.trim().replaceAll("[\\\\/:*?\"<>|]", "_").replaceAll("\\s+", "_");
+        return cleaned.isBlank() ? "student" : cleaned;
     }
 
     private String csvCell(String value) {
