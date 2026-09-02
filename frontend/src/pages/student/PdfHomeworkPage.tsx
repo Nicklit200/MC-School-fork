@@ -174,10 +174,7 @@ export function PdfHomeworkPage() {
 
 function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (value: number) => void }) {
   return (
-    <div
-      aria-label="Масштаб документа"
-      style={{ position: 'absolute', right: 12, top: 12, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 6 }}
-    >
+    <div aria-label="Масштаб документа" style={{ position: 'absolute', right: 12, top: 12, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
       <button className="btn btn--secondary" type="button" onClick={() => onChange(Math.min(200, zoom + 20))} disabled={zoom >= 200}>+</button>
       <button className="btn btn--secondary" type="button" onClick={() => onChange(Math.max(60, zoom - 20))} disabled={zoom <= 60}>−</button>
     </div>
@@ -199,14 +196,55 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   const drawingPointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<string[]>([]);
   const touchesRef = useRef<Map<number, TouchPoint>>(new Map());
-  const gestureStartRef = useRef<{
-    distance: number;
-    center: TouchPoint;
-    view: MobileView;
-  } | null>(null);
+  const gestureStartRef = useRef<{ distance: number; center: TouchPoint; view: MobileView } | null>(null);
+  const scrollLockRef = useRef<{ y: number; bodyStyle: string; htmlOverflow: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [mobileView, setMobileView] = useState<MobileView>({ scale: 1, x: 0, y: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const blockTouch = (event: TouchEvent) => event.preventDefault();
+    canvas.addEventListener('touchstart', blockTouch, { passive: false });
+    canvas.addEventListener('touchmove', blockTouch, { passive: false });
+    canvas.addEventListener('touchend', blockTouch, { passive: false });
+    canvas.addEventListener('touchcancel', blockTouch, { passive: false });
+    return () => {
+      canvas.removeEventListener('touchstart', blockTouch);
+      canvas.removeEventListener('touchmove', blockTouch);
+      canvas.removeEventListener('touchend', blockTouch);
+      canvas.removeEventListener('touchcancel', blockTouch);
+      unlockPageScroll();
+    };
+  }, []);
+
+  function lockPageScroll() {
+    if (scrollLockRef.current) return;
+    const y = window.scrollY;
+    scrollLockRef.current = {
+      y,
+      bodyStyle: document.body.getAttribute('style') ?? '',
+      htmlOverflow: document.documentElement.style.overflow,
+    };
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${y}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function unlockPageScroll() {
+    const lock = scrollLockRef.current;
+    if (!lock) return;
+    document.documentElement.style.overflow = lock.htmlOverflow;
+    if (lock.bodyStyle) document.body.setAttribute('style', lock.bodyStyle);
+    else document.body.removeAttribute('style');
+    scrollLockRef.current = null;
+    window.scrollTo(0, lock.y);
+  }
 
   function setupCanvas() {
     const image = imageRef.current;
@@ -228,10 +266,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    return {
-      x: (event.clientX - rect.left) * (canvas.width / rect.width),
-      y: (event.clientY - rect.top) * (canvas.height / rect.height),
-    };
+    return { x: (event.clientX - rect.left) * (canvas.width / rect.width), y: (event.clientY - rect.top) * (canvas.height / rect.height) };
   }
 
   function pushHistory(canvas: HTMLCanvasElement) {
@@ -244,10 +279,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     const points = Array.from(touchesRef.current.values());
     if (points.length < 2) return null;
     const [a, b] = points;
-    return {
-      distance: Math.hypot(b.x - a.x, b.y - a.y),
-      center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-    };
+    return { distance: Math.hypot(b.x - a.x, b.y - a.y), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
   }
 
   function beginTouch(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -269,11 +301,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     if (!geometry) return;
     const start = gestureStartRef.current;
     const scale = Math.max(1, Math.min(3, start.view.scale * (geometry.distance / start.distance)));
-    setMobileView({
-      scale,
-      x: start.view.x + (geometry.center.x - start.center.x),
-      y: start.view.y + (geometry.center.y - start.center.y),
-    });
+    setMobileView({ scale, x: start.view.x + (geometry.center.x - start.center.x), y: start.view.y + (geometry.center.y - start.center.y) });
   }
 
   function endTouch(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -292,10 +320,10 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     event.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
+    lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     pushHistory(canvas);
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const p = point(event);
@@ -335,6 +363,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     const canvas = canvasRef.current;
     if (canvas) onChange(canvas.toDataURL('image/png'));
+    unlockPageScroll();
   }
 
   function restore(dataUrl: string) {
@@ -367,58 +396,26 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
-  const mobileTransform = desktopControls
-    ? undefined
-    : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
+  const mobileTransform = desktopControls ? undefined : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
 
   return (
     <div>
       <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
-          {language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}
-        </button>
-        <button className="btn btn--ghost" type="button" onClick={clear}>
-          {language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}
-        </button>
+        <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>{language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}</button>
+        <button className="btn btn--ghost" type="button" onClick={clear}>{language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}</button>
       </div>
 
-      <div style={{ position: 'relative', overflow: 'hidden', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ position: 'relative', overflow: 'hidden', width: '100%', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'none' }}>
         {desktopControls && <DesktopZoomControls zoom={desktopZoom} onChange={onDesktopZoomChange} />}
-        <div
-          style={{
-            position: 'relative',
-            width: documentWidth,
-            maxWidth: desktopControls ? 1500 : 1000,
-            margin: '0 auto',
-            boxShadow: '0 2px 14px rgba(0,0,0,.12)',
-            background: '#fff',
-            transform: mobileTransform,
-            transformOrigin: 'center center',
-          }}
-        >
-          <img
-            ref={imageRef}
-            src={pageUrl}
-            alt="Homework PDF page"
-            onLoad={setupCanvas}
-            style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none', WebkitUserSelect: 'none' }}
-            draggable={false}
-          />
+        <div style={{ position: 'relative', width: documentWidth, maxWidth: desktopControls ? 1500 : 1000, margin: '0 auto', boxShadow: '0 2px 14px rgba(0,0,0,.12)', background: '#fff', transform: mobileTransform, transformOrigin: 'center center' }}>
+          <img ref={imageRef} src={pageUrl} alt="Homework PDF page" onLoad={setupCanvas} style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none', WebkitUserSelect: 'none' }} draggable={false} />
           <canvas
             ref={canvasRef}
             onPointerDown={start}
             onPointerMove={move}
             onPointerUp={finish}
             onPointerCancel={finish}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              touchAction: 'none',
-              cursor: tool === 'eraser' ? 'cell' : 'crosshair',
-              opacity: ready ? 1 : 0,
-            }}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none', cursor: tool === 'eraser' ? 'cell' : 'crosshair', opacity: ready ? 1 : 0 }}
           />
         </div>
       </div>
