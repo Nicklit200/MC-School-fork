@@ -51,13 +51,14 @@ export function StudentHomeworksPage() {
     setError(null);
     setMessage(null);
     try {
-      const created = await api.homeworks.create(studentId, startDate);
-      await api.homeworks.uploadWorksheet(created.id, pdfFile);
+      await api.homeworks.createPdf(studentId, startDate, pdfFile);
       setPdfFile(null);
       const fileInput = document.getElementById('homework-pdf-file') as HTMLInputElement | null;
       if (fileInput) fileInput.value = '';
       await reload();
-      setMessage(language === 'DE' ? 'Hausaufgabe wurde erstellt.' : 'Домашка создана и добавлена в историю.');
+      setMessage(language === 'DE'
+        ? 'Neue Hausaufgabe wurde erstellt.'
+        : 'Новая отдельная домашка создана и добавлена в историю.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -108,8 +109,8 @@ export function StudentHomeworksPage() {
           {pdfFile && <div className="muted" style={{ fontSize: 13 }}>{pdfFile.name}</div>}
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Du kannst mehrere getrennte Hausaufgaben für dasselbe Datum erstellen.'
-              : 'На одну дату можно создать несколько отдельных домашних работ.'}
+              ? 'Jeder Klick erstellt eine neue, getrennte Hausaufgabe. Mehrere Hausaufgaben am selben Datum sind erlaubt.'
+              : 'Каждое создание добавляет новую отдельную домашку. На одну дату можно задать несколько домашних работ.'}
           </p>
         </form>
       </div>
