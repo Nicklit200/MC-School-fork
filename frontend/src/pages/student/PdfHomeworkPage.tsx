@@ -196,6 +196,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   const drawingPointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<string[]>([]);
   const touchesRef = useRef<Map<number, TouchPoint>>(new Map());
+  const ignoredTouchIdsRef = useRef<Set<number>>(new Set());
   const gestureStartRef = useRef<{ distance: number; center: TouchPoint; view: MobileView } | null>(null);
   const scrollLockRef = useRef<{ y: number; bodyStyle: string; htmlOverflow: string } | null>(null);
   const [ready, setReady] = useState(false);
@@ -266,7 +267,10 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    return { x: (event.clientX - rect.left) * (canvas.width / rect.width), y: (event.clientY - rect.top) * (canvas.height / rect.height) };
+    return {
+      x: (event.clientX - rect.left) * (canvas.width / rect.width),
+      y: (event.clientY - rect.top) * (canvas.height / rect.height),
+    };
   }
 
   function pushHistory(canvas: HTMLCanvasElement) {
@@ -277,35 +281,63 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
 
   function touchGeometry() {
     const points = Array.from(touchesRef.current.values());
-    if (points.length < 2) return null;
+    if (points.length !== 2) return null;
     const [a, b] = points;
-    return { distance: Math.hypot(b.x - a.x, b.y - a.y), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+    return {
+      distance: Math.hypot(b.x - a.x, b.y - a.y),
+      center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    };
+  }
+
+  function looksLikePalm(event: React.PointerEvent<HTMLCanvasElement>) {
+    return event.width >= 32 || event.height >= 32;
   }
 
   function beginTouch(event: React.PointerEvent<HTMLCanvasElement>) {
     event.preventDefault();
+
+    // Palm rejection: a resting hand usually has a much larger contact ellipse than a fingertip.
+    // Also ignore every touch while Apple Pencil is actively drawing.
+    if (drawingPointerIdRef.current !== null || looksLikePalm(event)) {
+      ignoredTouchIdsRef.current.add(event.pointerId);
+      return;
+    }
+
     touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
+
     if (touchesRef.current.size === 2) {
       const geometry = touchGeometry();
       if (geometry) gestureStartRef.current = { ...geometry, view: mobileView };
+    } else if (touchesRef.current.size > 2) {
+      // More than two contacts are treated as a hand/palm, not an intentional gesture.
+      touchesRef.current.clear();
+      gestureStartRef.current = null;
     }
   }
 
   function moveTouch(event: React.PointerEvent<HTMLCanvasElement>) {
     event.preventDefault();
+    if (ignoredTouchIdsRef.current.has(event.pointerId) || drawingPointerIdRef.current !== null) return;
     if (!touchesRef.current.has(event.pointerId)) return;
+
     touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (touchesRef.current.size < 2 || !gestureStartRef.current) return;
+    if (touchesRef.current.size !== 2 || !gestureStartRef.current) return;
+
     const geometry = touchGeometry();
     if (!geometry) return;
     const start = gestureStartRef.current;
     const scale = Math.max(1, Math.min(3, start.view.scale * (geometry.distance / start.distance)));
-    setMobileView({ scale, x: start.view.x + (geometry.center.x - start.center.x), y: start.view.y + (geometry.center.y - start.center.y) });
+    setMobileView({
+      scale,
+      x: start.view.x + (geometry.center.x - start.center.x),
+      y: start.view.y + (geometry.center.y - start.center.y),
+    });
   }
 
   function endTouch(event: React.PointerEvent<HTMLCanvasElement>) {
     event.preventDefault();
+    ignoredTouchIdsRef.current.delete(event.pointerId);
     touchesRef.current.delete(event.pointerId);
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     if (touchesRef.current.size < 2) gestureStartRef.current = null;
@@ -316,20 +348,24 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
       beginTouch(event);
       return;
     }
+
     event.preventDefault();
     event.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
 
-    // Read the Pencil coordinate BEFORE fixing the page. On iPad, changing body to
-    // position: fixed can move the canvas' bounding rect during pointerdown and used
-    // to create a long artificial line at the beginning of every stroke.
     const startPoint = point(event);
+
+    // Once Pencil starts, any finger/palm contacts already resting on the screen must stop
+    // affecting the document until the Pencil is lifted.
+    touchesRef.current.clear();
+    gestureStartRef.current = null;
 
     lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     pushHistory(canvas);
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.beginPath();
@@ -347,6 +383,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
       return;
     }
     if (drawingPointerIdRef.current !== event.pointerId) return;
+
     event.preventDefault();
     event.stopPropagation();
     const ctx = canvasRef.current?.getContext('2d');
@@ -362,6 +399,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
       return;
     }
     if (drawingPointerIdRef.current !== event.pointerId) return;
+
     event.preventDefault();
     event.stopPropagation();
     drawingPointerIdRef.current = null;
@@ -401,26 +439,58 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
-  const mobileTransform = desktopControls ? undefined : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
+  const mobileTransform = desktopControls
+    ? undefined
+    : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
 
   return (
     <div>
       <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>{language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}</button>
-        <button className="btn btn--ghost" type="button" onClick={clear}>{language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}</button>
+        <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
+          {language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}
+        </button>
+        <button className="btn btn--ghost" type="button" onClick={clear}>
+          {language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}
+        </button>
       </div>
 
       <div style={{ position: 'relative', overflow: 'hidden', width: '100%', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'none' }}>
         {desktopControls && <DesktopZoomControls zoom={desktopZoom} onChange={onDesktopZoomChange} />}
-        <div style={{ position: 'relative', width: documentWidth, maxWidth: desktopControls ? 1500 : 1000, margin: '0 auto', boxShadow: '0 2px 14px rgba(0,0,0,.12)', background: '#fff', transform: mobileTransform, transformOrigin: 'center center' }}>
-          <img ref={imageRef} src={pageUrl} alt="Homework PDF page" onLoad={setupCanvas} style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none', WebkitUserSelect: 'none' }} draggable={false} />
+        <div
+          style={{
+            position: 'relative',
+            width: documentWidth,
+            maxWidth: desktopControls ? 1500 : 1000,
+            margin: '0 auto',
+            boxShadow: '0 2px 14px rgba(0,0,0,.12)',
+            background: '#fff',
+            transform: mobileTransform,
+            transformOrigin: 'center center',
+          }}
+        >
+          <img
+            ref={imageRef}
+            src={pageUrl}
+            alt="Homework PDF page"
+            onLoad={setupCanvas}
+            style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none', WebkitUserSelect: 'none' }}
+            draggable={false}
+          />
           <canvas
             ref={canvasRef}
             onPointerDown={start}
             onPointerMove={move}
             onPointerUp={finish}
             onPointerCancel={finish}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none', cursor: tool === 'eraser' ? 'cell' : 'crosshair', opacity: ready ? 1 : 0 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              touchAction: 'none',
+              cursor: tool === 'eraser' ? 'cell' : 'crosshair',
+              opacity: ready ? 1 : 0,
+            }}
           />
         </div>
       </div>
