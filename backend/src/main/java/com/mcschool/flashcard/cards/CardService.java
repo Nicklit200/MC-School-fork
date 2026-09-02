@@ -11,6 +11,7 @@ import com.mcschool.flashcard.cards.dto.UpdateCardRequest;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.notifications.CardPushNotificationService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -32,13 +33,16 @@ public class CardService {
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
     private final CardImportParser importParser;
+    private final CardPushNotificationService cardPushNotificationService;
 
     public CardService(CardRepository cardRepository, UserRepository userRepository,
-                       HomeworkRepository homeworkRepository, CardImportParser importParser) {
+                       HomeworkRepository homeworkRepository, CardImportParser importParser,
+                       CardPushNotificationService cardPushNotificationService) {
         this.cardRepository = cardRepository;
         this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
         this.importParser = importParser;
+        this.cardPushNotificationService = cardPushNotificationService;
     }
 
     // --- Import ---
@@ -54,12 +58,17 @@ public class CardService {
                                                       ImportCardsRequest request) {
         User teacherEntity = requireTeacher(teacher.id());
         Homework homework = requireOwnedHomework(teacher.id(), homeworkId);
-        return request.cards().stream()
+        List<CardResponse> created = request.cards().stream()
                 .map(parsed -> cardRepository.save(
                         Card.createImported(homework, teacherEntity, parsed.question(), parsed.correctAnswer(),
                                 parsed.wrongAnswer1(), parsed.wrongAnswer2(), parsed.wrongAnswer3())))
                 .map(CardResponse::from)
                 .toList();
+        if (!created.isEmpty()) {
+            cardPushNotificationService.notifyCardsAssigned(
+                    homework.getStudent().getId(), homework.getId(), homework.getStartDate());
+        }
+        return created;
     }
 
     // --- CRUD ---
@@ -71,6 +80,8 @@ public class CardService {
         Homework homework = requireOwnedHomework(teacher.id(), homeworkId);
         Card card = cardRepository.save(
                 Card.create(homework, teacherEntity, request.question(), request.correctAnswer()));
+        cardPushNotificationService.notifyCardsAssigned(
+                homework.getStudent().getId(), homework.getId(), homework.getStartDate());
         return CardResponse.from(card);
     }
 
