@@ -6,6 +6,8 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type Tool = 'pen' | 'eraser';
+type TouchPoint = { x: number; y: number };
+type MobileView = { scale: number; x: number; y: number };
 
 export function PdfHomeworkPage() {
   const { homeworkId = '' } = useParams();
@@ -161,8 +163,8 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Apple Pencil schreibt. Mit zwei Fingern kannst du zoomen.'
-              : 'Apple Pencil пишет. Двумя пальцами можно приближать и отдалять.'}
+              ? 'Apple Pencil schreibt. Mit zwei Fingern kannst du das Blatt verschieben und zoomen.'
+              : 'Apple Pencil пишет. Двумя пальцами можно двигать и приближать лист.'}
           </p>
         </div>
       )}
@@ -196,8 +198,15 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingPointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<string[]>([]);
+  const touchesRef = useRef<Map<number, TouchPoint>>(new Map());
+  const gestureStartRef = useRef<{
+    distance: number;
+    center: TouchPoint;
+    view: MobileView;
+  } | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
+  const [mobileView, setMobileView] = useState<MobileView>({ scale: 1, x: 0, y: 0 });
 
   function setupCanvas() {
     const image = imageRef.current;
@@ -231,8 +240,54 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     setUndoCount(historyRef.current.length);
   }
 
+  function touchGeometry() {
+    const points = Array.from(touchesRef.current.values());
+    if (points.length < 2) return null;
+    const [a, b] = points;
+    return {
+      distance: Math.hypot(b.x - a.x, b.y - a.y),
+      center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    };
+  }
+
+  function beginTouch(event: React.PointerEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
+    if (touchesRef.current.size === 2) {
+      const geometry = touchGeometry();
+      if (geometry) gestureStartRef.current = { ...geometry, view: mobileView };
+    }
+  }
+
+  function moveTouch(event: React.PointerEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    if (!touchesRef.current.has(event.pointerId)) return;
+    touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touchesRef.current.size < 2 || !gestureStartRef.current) return;
+    const geometry = touchGeometry();
+    if (!geometry) return;
+    const start = gestureStartRef.current;
+    const scale = Math.max(1, Math.min(3, start.view.scale * (geometry.distance / start.distance)));
+    setMobileView({
+      scale,
+      x: start.view.x + (geometry.center.x - start.center.x),
+      y: start.view.y + (geometry.center.y - start.center.y),
+    });
+  }
+
+  function endTouch(event: React.PointerEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    touchesRef.current.delete(event.pointerId);
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
+    if (touchesRef.current.size < 2) gestureStartRef.current = null;
+  }
+
   function start(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch') return;
+    if (event.pointerType === 'touch') {
+      beginTouch(event);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const canvas = canvasRef.current;
@@ -254,7 +309,11 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+    if (event.pointerType === 'touch') {
+      moveTouch(event);
+      return;
+    }
+    if (drawingPointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     const ctx = canvasRef.current?.getContext('2d');
@@ -265,7 +324,11 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+    if (event.pointerType === 'touch') {
+      endTouch(event);
+      return;
+    }
+    if (drawingPointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     drawingPointerIdRef.current = null;
@@ -304,6 +367,9 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
+  const mobileTransform = desktopControls
+    ? undefined
+    : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
 
   return (
     <div>
@@ -316,7 +382,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
         </button>
       </div>
 
-      <div style={{ position: 'relative', overflow: desktopControls ? 'auto' : 'visible', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ position: 'relative', overflow: 'hidden', width: '100%', WebkitOverflowScrolling: 'touch' }}>
         {desktopControls && <DesktopZoomControls zoom={desktopZoom} onChange={onDesktopZoomChange} />}
         <div
           style={{
@@ -326,6 +392,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
             margin: '0 auto',
             boxShadow: '0 2px 14px rgba(0,0,0,.12)',
             background: '#fff',
+            transform: mobileTransform,
+            transformOrigin: 'center center',
           }}
         >
           <img
@@ -347,7 +415,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
               inset: 0,
               width: '100%',
               height: '100%',
-              touchAction: 'pinch-zoom',
+              touchAction: 'none',
               cursor: tool === 'eraser' ? 'cell' : 'crosshair',
               opacity: ready ? 1 : 0,
             }}
