@@ -174,15 +174,7 @@ function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (valu
   return (
     <div
       aria-label="Масштаб документа"
-      style={{
-        position: 'absolute',
-        right: 12,
-        top: 12,
-        zIndex: 4,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-      }}
+      style={{ position: 'absolute', right: 12, top: 12, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 6 }}
     >
       <button className="btn btn--secondary" type="button" onClick={() => onChange(Math.min(200, zoom + 20))} disabled={zoom >= 200}>+</button>
       <button className="btn btn--secondary" type="button" onClick={() => onChange(Math.max(60, zoom - 20))} disabled={zoom <= 60}>−</button>
@@ -241,6 +233,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
 
   function start(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.pointerType === 'touch') return;
+    event.preventDefault();
+    event.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
     drawingPointerIdRef.current = event.pointerId;
@@ -261,6 +255,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
     const p = point(event);
@@ -270,6 +266,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
     drawingPointerIdRef.current = null;
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     const canvas = canvasRef.current;
@@ -335,7 +333,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
             src={pageUrl}
             alt="Homework PDF page"
             onLoad={setupCanvas}
-            style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none' }}
+            style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none', WebkitUserSelect: 'none' }}
             draggable={false}
           />
           <canvas
