@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.students;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.drive.GoogleDriveTestService;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.reviewhistory.dto.DailyReviewHistoryResponse;
 import com.mcschool.flashcard.students.dto.CreateStudentRequest;
@@ -11,6 +12,7 @@ import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,10 +35,14 @@ public class StudentController {
 
     private final StudentService studentService;
     private final DailyReviewHistoryService historyService;
+    private final GoogleDriveTestService googleDriveTestService;
 
-    public StudentController(StudentService studentService, DailyReviewHistoryService historyService) {
+    public StudentController(StudentService studentService,
+                             DailyReviewHistoryService historyService,
+                             GoogleDriveTestService googleDriveTestService) {
         this.studentService = studentService;
         this.historyService = historyService;
+        this.googleDriveTestService = googleDriveTestService;
     }
 
     @PostMapping
@@ -62,6 +68,13 @@ public class StudentController {
                                                  @PathVariable UUID studentId,
                                                  @Valid @RequestBody UpdateStudentDriveFolderRequest request) {
         return studentService.updateGoogleDriveFolder(caller, studentId, request);
+    }
+
+    @PostMapping("/{studentId}/drive-folder/test")
+    public Map<String, String> testDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                               @PathVariable UUID studentId) {
+        StudentListResponse student = studentService.getStudent(caller, studentId);
+        return googleDriveTestService.testFolder(student.googleDriveFolderUrl());
     }
 
     @GetMapping("/{studentId}/review-history")
