@@ -70,10 +70,15 @@ public class HomeworkController {
 
     @GetMapping(value = "/study/homeworks/{homeworkId}/worksheet/pages/{pageIndex}", produces = MediaType.IMAGE_PNG_VALUE)
     @PreAuthorize("hasRole('STUDENT')")
-    public byte[] worksheetPage(@AuthenticationPrincipal AuthenticatedUser caller,
-                                @PathVariable UUID homeworkId,
-                                @PathVariable int pageIndex) {
-        return homeworkPdfService.renderStudentPage(caller, homeworkId, pageIndex);
+    public ResponseEntity<byte[]> worksheetPage(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                 @PathVariable UUID homeworkId,
+                                                 @PathVariable int pageIndex) {
+        byte[] png = homeworkPdfService.renderStudentPage(caller, homeworkId, pageIndex);
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .contentLength(png.length)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(png);
     }
 
     @PostMapping("/study/homeworks/{homeworkId}/submit-pdf")
@@ -97,6 +102,7 @@ public class HomeworkController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdf.length)
                 .body(pdf);
     }
 }
