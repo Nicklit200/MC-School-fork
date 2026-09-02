@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -18,7 +19,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-/** A dated homework bucket for one student's cards. */
+/** A dated homework bucket for one student's cards and optional PDF worksheet. */
 @Entity
 @Table(name = "homeworks")
 @Getter
@@ -34,6 +35,26 @@ public class Homework {
 
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
+
+    @Lob
+    @Column(name = "worksheet_pdf")
+    private byte[] worksheetPdf;
+
+    @Column(name = "worksheet_filename", length = 255)
+    private String worksheetFilename;
+
+    @Column(name = "worksheet_page_count")
+    private Integer worksheetPageCount;
+
+    @Lob
+    @Column(name = "submitted_pdf")
+    private byte[] submittedPdf;
+
+    @Column(name = "submitted_filename", length = 255)
+    private String submittedFilename;
+
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -55,5 +76,28 @@ public class Homework {
 
     public static Homework create(User student, LocalDate startDate) {
         return new Homework(student, startDate);
+    }
+
+    public void attachWorksheet(String filename, byte[] pdf, int pageCount) {
+        this.worksheetFilename = filename;
+        this.worksheetPdf = pdf;
+        this.worksheetPageCount = pageCount;
+        this.submittedPdf = null;
+        this.submittedFilename = null;
+        this.submittedAt = null;
+    }
+
+    public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
+        this.submittedFilename = filename;
+        this.submittedPdf = pdf;
+        this.submittedAt = submittedAt;
+    }
+
+    public boolean hasWorksheet() {
+        return worksheetPdf != null && worksheetPdf.length > 0;
+    }
+
+    public boolean isSubmitted() {
+        return submittedPdf != null && submittedPdf.length > 0 && submittedAt != null;
     }
 }
