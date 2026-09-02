@@ -6,6 +6,7 @@ import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ContentDisposition;
@@ -79,6 +80,19 @@ public class HomeworkController {
                 .contentLength(png.length)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(png);
+    }
+
+    @GetMapping(value = "/study/homeworks/{homeworkId}/worksheet/pages/{pageIndex}/data-url", produces = MediaType.TEXT_PLAIN_VALUE)
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<String> worksheetPageDataUrl(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                        @PathVariable UUID homeworkId,
+                                                        @PathVariable int pageIndex) {
+        byte[] png = homeworkPdfService.renderStudentPage(caller, homeworkId, pageIndex);
+        String dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(png);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(dataUrl);
     }
 
     @PostMapping("/study/homeworks/{homeworkId}/submit-pdf")
