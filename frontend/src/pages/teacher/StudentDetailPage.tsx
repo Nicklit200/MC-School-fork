@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { CardCreator } from './CardCreator';
 import { CardRow } from './CardRow';
+import { DriveFolderPicker } from './DriveFolderPicker';
 
 /** Minimum cards a student needs before any session can start (mirrors the backend). */
 const MIN_CARDS_TO_START = 4;
@@ -58,6 +59,10 @@ export function StudentDetailPage() {
 
       <h2>{t('cards.add')}</h2>
       <CardCreator studentId={studentId} onChanged={reload} />
+
+      <div style={{ marginTop: 24 }}>
+        <DriveFolderPicker />
+      </div>
 
       <h2>{t('cards.title')}</h2>
       {loading ? (
