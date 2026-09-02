@@ -6,7 +6,7 @@ import type { TranslationKey } from '../i18n/translations';
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const navigate = useNavigate();
 
   const isStudent = user?.role === 'STUDENT';
@@ -30,6 +30,11 @@ export function Layout({ children }: { children: ReactNode }) {
               {t(link.label)}
             </NavLink>
           ))}
+          {isStudent && (
+            <NavLink to="/homeworks" className="topbar__link">
+              {language === 'DE' ? 'Hausaufgaben' : 'Домашка'}
+            </NavLink>
+          )}
           {user?.role === 'TEACHER' && (
             <NavLink to="/groups" className="topbar__link">Группы</NavLink>
           )}
