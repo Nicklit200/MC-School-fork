@@ -14,7 +14,8 @@ public interface HomeworkRepository extends JpaRepository<Homework, UUID> {
 
     Optional<Homework> findByIdAndStudentId(UUID id, UUID studentId);
 
-    Optional<Homework> findByStudentIdAndStartDate(UUID studentId, LocalDate startDate);
+    Optional<Homework> findFirstByStudentIdAndStartDateAndWorksheetPdfIsNullOrderByCreatedAtAsc(
+            UUID studentId, LocalDate startDate);
 
     @Query("""
             SELECT new com.mcschool.flashcard.homeworks.HomeworkStats(
