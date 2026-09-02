@@ -98,6 +98,17 @@ async function requestBlob(path: string): Promise<Blob> {
   return response.blob();
 }
 
+async function requestText(path: string): Promise<string> {
+  const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
+  const text = await response.text();
+  if (!response.ok) {
+    let payload: any;
+    try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
+    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
+  }
+  return text;
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) => request<AuthResponse>('POST', '/auth/login', { email, password }),
@@ -160,6 +171,7 @@ export const api = {
     homeworks: () => request<Homework[]>('GET', '/study/homeworks'),
     homeworkCards: (homeworkId: string) => request<Card[]>('GET', `/study/homeworks/${homeworkId}/cards`),
     worksheetPage: (homeworkId: string, pageIndex: number) => requestBlob(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}`),
+    worksheetPageDataUrl: (homeworkId: string, pageIndex: number) => requestText(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}/data-url`),
     submitPdfHomework: (homeworkId: string, overlays: HomeworkPageOverlay[]) =>
       request<void>('POST', `/study/homeworks/${homeworkId}/submit-pdf`, { overlays }),
     myCards: () => request<Card[]>('GET', '/study/cards'),
