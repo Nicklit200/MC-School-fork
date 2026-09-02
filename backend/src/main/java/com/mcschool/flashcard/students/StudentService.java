@@ -112,7 +112,7 @@ public class StudentService {
         long dueCount = cardRepository.countDueCards(studentId, today);
         if (dueCount > 0) {
             historyService.recordDueSnapshot(student, today, dueCount);
-            notificationService.sendReviewReminder(student, dueCount);
+            notificationService.sendDailyTaskReminder(student, dueCount, 0);
             return new TestReviewReminderResponse(studentId, dueCount, true);
         }
         return new TestReviewReminderResponse(studentId, 0, false);
