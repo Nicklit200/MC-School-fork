@@ -68,6 +68,16 @@ export interface Homework {
   inProgress: number;
   learned: number;
   status: HomeworkStatus;
+  hasWorksheet: boolean;
+  worksheetFilename: string | null;
+  worksheetPageCount: number | null;
+  submitted: boolean;
+  submittedAt: string | null;
+}
+
+export interface HomeworkPageOverlay {
+  pageIndex: number;
+  imageBase64: string;
 }
 
 export interface CardSummary {
