@@ -14,7 +14,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -45,11 +44,9 @@ public class HomeworkService {
     public HomeworkResponse createHomework(AuthenticatedUser teacher, UUID studentId,
                                            CreateHomeworkRequest request) {
         User student = requireOwnedStudent(teacher.id(), studentId);
-        Optional<Homework> existing = homeworkRepository.findByStudentIdAndStartDate(studentId, request.startDate());
-        boolean newlyCreated = existing.isEmpty();
-        Homework homework = existing.orElseGet(() -> homeworkRepository.save(Homework.create(student, request.startDate())));
+        Homework homework = homeworkRepository.save(Homework.create(student, request.startDate()));
 
-        if (newlyCreated && request.startDate().equals(LocalDate.now(SCHOOL_ZONE))) {
+        if (request.startDate().equals(LocalDate.now(SCHOOL_ZONE))) {
             notifyTodayAssignment(student, homework.getId());
         }
 
