@@ -59,7 +59,6 @@ class StudentServiceTest {
         assertThat(response.student().email()).isEqualTo("student@test.local");
         assertThat(response.invitationToken()).isNotBlank();
         assertThat(response.invitationExpiresAt()).isAfter(Instant.now());
-        // The invited student is notified so they can set a password.
         verify(notificationService).sendInvitation(any(User.class), any(String.class));
     }
 
@@ -130,7 +129,7 @@ class StudentServiceTest {
         assertThat(response.dueCount()).isEqualTo(2L);
         assertThat(response.reminderAttempted()).isTrue();
         verify(historyService).recordDueSnapshot(student, today, 2L);
-        verify(notificationService).sendReviewReminder(student, 2L);
+        verify(notificationService).sendDailyTaskReminder(student, 2L, 0L);
     }
 
     @Test
@@ -145,7 +144,7 @@ class StudentServiceTest {
         assertThat(response.dueCount()).isZero();
         assertThat(response.reminderAttempted()).isFalse();
         verify(historyService, never()).recordDueSnapshot(any(), any(), anyLong());
-        verify(notificationService, never()).sendReviewReminder(any(), anyLong());
+        verify(notificationService, never()).sendDailyTaskReminder(any(), anyLong(), anyLong());
     }
 
     @Test
