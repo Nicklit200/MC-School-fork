@@ -57,20 +57,31 @@ public class StudentService {
     @Transactional
     public StudentInvitationResponse createStudent(AuthenticatedUser teacher, CreateStudentRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
-        if (userRepository.existsByEmail(email)) {
-            throw new ConflictException("An account with this email already exists");
-        }
         User teacherEntity = userRepository.findById(teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
         String token = Invitations.newToken();
         Instant expiresAt = Invitations.expiry(Instant.now());
-        User student = userRepository.save(
-                User.invitedStudent(request.fullName().trim(), email, teacherEntity, token, expiresAt));
+
+        User student = userRepository.findByEmail(email)
+                .map(existing -> restoreDeletedStudent(existing, teacherEntity, request.fullName().trim(), token, expiresAt))
+                .orElseGet(() -> userRepository.save(
+                        User.invitedStudent(request.fullName().trim(), email, teacherEntity, token, expiresAt)));
+
         log.info("Sending student invitation email for studentId={} email={}", student.getId(), student.getEmail());
         notificationService.sendInvitation(student, token);
         log.info("Finished student invitation email attempt for studentId={} email={}",
                 student.getId(), student.getEmail());
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
+    }
+
+    private User restoreDeletedStudent(User existing, User teacher, String fullName,
+                                       String token, Instant expiresAt) {
+        if (existing.getRole() != Role.STUDENT || !existing.isArchived()
+                || existing.getTeacher() == null || !existing.getTeacher().getId().equals(teacher.getId())) {
+            throw new ConflictException("An account with this email already exists");
+        }
+        existing.restoreAsInvitedStudent(fullName, teacher, token, expiresAt);
+        return existing;
     }
 
     @Transactional(readOnly = true)
