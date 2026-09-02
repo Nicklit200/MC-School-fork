@@ -23,7 +23,10 @@ export function StudentDrivePage() {
       <p><Link to={`/students/${studentId}`} className="muted">← {t('common.back')}</Link></p>
       <h1>Google Drive — {student?.fullName ?? 'ученик'}</h1>
       {error && <div className="banner banner--error">{error}</div>}
-      <DriveFolderPicker />
+      <DriveFolderPicker
+        studentId={studentId}
+        savedFolderId={student?.googleDriveFolderUrl ?? null}
+      />
     </div>
   );
 }
