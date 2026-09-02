@@ -1,27 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
-import { driveApi, type DriveItem, type DriveUploadResult } from '../../api/drive';
+import { api } from '../../api/client';
+import { driveApi, type DriveItem } from '../../api/drive';
 import { useI18n } from '../../i18n/I18nContext';
 
 type PathItem = DriveItem;
 
-export function DriveFolderPicker() {
+type Props = {
+  studentId: string;
+  savedFolderId?: string | null;
+};
+
+export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
   const { language, t } = useI18n();
   const ru = language === 'RU';
   const [drives, setDrives] = useState<DriveItem[]>([]);
   const [selectedDriveId, setSelectedDriveId] = useState('');
   const [folders, setFolders] = useState<DriveItem[]>([]);
   const [path, setPath] = useState<PathItem[]>([]);
-  const [file, setFile] = useState<File | null>(null);
   const [loadingDrives, setLoadingDrives] = useState(true);
   const [loadingFolders, setLoadingFolders] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploaded, setUploaded] = useState<DriveUploadResult | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState(savedFolderId ?? '');
+  const [savedMessage, setSavedMessage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const currentFolderId = useMemo(() => {
     if (path.length > 0) return path[path.length - 1].id;
     return selectedDriveId;
   }, [path, selectedDriveId]);
+
+  const currentPathName = useMemo(() => {
+    if (!selectedDriveId) return '';
+    const driveName = drives.find((drive) => drive.id === selectedDriveId)?.name ?? '';
+    return [driveName, ...path.map((item) => item.name)].filter(Boolean).join(' / ');
+  }, [drives, path, selectedDriveId]);
 
   useEffect(() => {
     driveApi.listSharedDrives()
@@ -45,7 +57,7 @@ export function DriveFolderPicker() {
   async function onDriveChange(driveId: string) {
     setSelectedDriveId(driveId);
     setPath([]);
-    setUploaded(null);
+    setSavedMessage(false);
     if (!driveId) {
       setFolders([]);
       return;
@@ -55,53 +67,62 @@ export function DriveFolderPicker() {
 
   async function enterFolder(folder: DriveItem) {
     setPath([...path, folder]);
-    setUploaded(null);
+    setSavedMessage(false);
     await loadFolders(selectedDriveId, folder.id);
   }
 
   async function jumpTo(index: number) {
+    setSavedMessage(false);
     if (index < 0) {
       setPath([]);
-      setUploaded(null);
       await loadFolders(selectedDriveId);
       return;
     }
     const nextPath = path.slice(0, index + 1);
     setPath(nextPath);
-    setUploaded(null);
     await loadFolders(selectedDriveId, nextPath[nextPath.length - 1].id);
   }
 
-  async function upload() {
-    if (!file || !currentFolderId) return;
-    setUploading(true);
-    setUploaded(null);
+  async function saveFolder() {
+    if (!currentFolderId) return;
+    setSaving(true);
+    setSavedMessage(false);
     setError(null);
     try {
-      setUploaded(await driveApi.upload(currentFolderId, file));
-      setFile(null);
+      await api.students.updateDriveFolder(studentId, currentFolderId);
+      setSavedId(currentFolderId);
+      setSavedMessage(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setUploading(false);
+      setSaving(false);
     }
   }
 
   return (
     <div className="panel">
       <h2 style={{ marginTop: 0 }}>Google Drive</h2>
-      <p className="muted">{ru ? 'Выберите общий диск и папку. Ссылку вставлять не нужно.' : 'Wähle eine geteilte Ablage und einen Ordner. Kein Link nötig.'}</p>
+      <p className="muted">
+        {ru
+          ? 'Выберите папку один раз. После завершения карточек таблица с результатами ученика будет сохраняться сюда автоматически.'
+          : 'Wähle den Ordner einmal aus. Nach jeder abgeschlossenen Karten-Session wird die Ergebnistabelle automatisch hier gespeichert.'}
+      </p>
+
       {error && <div className="banner banner--error">{error}</div>}
-      {uploaded && (
+      {savedMessage && (
         <div className="banner banner--success">
-          {ru ? 'Файл загружен' : 'Datei hochgeladen'}: <strong>{uploaded.name}</strong>
-          {uploaded.webViewLink && <> · <a href={uploaded.webViewLink} target="_blank" rel="noreferrer">{ru ? 'Открыть' : 'Öffnen'}</a></>}
+          {ru ? `Папка сохранена: ${currentPathName}` : `Ordner gespeichert: ${currentPathName}`}
         </div>
       )}
 
       <label className="field">
         <span className="field__label">{ru ? 'Общий диск' : 'Geteilte Ablage'}</span>
-        <select className="select" value={selectedDriveId} onChange={(e) => void onDriveChange(e.target.value)} disabled={loadingDrives}>
+        <select
+          className="select"
+          value={selectedDriveId}
+          onChange={(e) => void onDriveChange(e.target.value)}
+          disabled={loadingDrives}
+        >
           <option value="">{loadingDrives ? t('common.loading') : (ru ? 'Выберите диск' : 'Ablage auswählen')}</option>
           {drives.map((drive) => <option key={drive.id} value={drive.id}>{drive.name}</option>)}
         </select>
@@ -129,19 +150,29 @@ export function DriveFolderPicker() {
             {loadingFolders ? <p className="muted">{t('common.loading')}</p> : folders.length === 0 ? (
               <p className="muted">{ru ? 'В этой папке нет подпапок.' : 'Keine Unterordner.'}</p>
             ) : folders.map((folder) => (
-              <button type="button" key={folder.id} className="list-row" onClick={() => void enterFolder(folder)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+              <button
+                type="button"
+                key={folder.id}
+                className="list-row"
+                onClick={() => void enterFolder(folder)}
+                style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
+              >
                 <div className="list-row__title">📁 {folder.name}</div>
               </button>
             ))}
           </div>
 
-          <label className="field">
-            <span className="field__label">{ru ? 'Таблица' : 'Tabelle'}</span>
-            <input className="input" type="file" accept=".xlsx,.xls,.csv,.ods,.tsv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          </label>
-
-          <button className="btn" type="button" onClick={() => void upload()} disabled={!file || uploading}>
-            {uploading ? (ru ? 'Загрузка…' : 'Wird hochgeladen…') : (ru ? 'Загрузить в эту папку' : 'In diesen Ordner hochladen')}
+          <button
+            className="btn"
+            type="button"
+            onClick={() => void saveFolder()}
+            disabled={!currentFolderId || saving || currentFolderId === savedId}
+          >
+            {saving
+              ? (ru ? 'Сохраняю…' : 'Speichern…')
+              : currentFolderId === savedId
+                ? (ru ? 'Эта папка уже выбрана' : 'Dieser Ordner ist bereits gewählt')
+                : (ru ? 'Использовать эту папку' : 'Diesen Ordner verwenden')}
           </button>
         </>
       )}
