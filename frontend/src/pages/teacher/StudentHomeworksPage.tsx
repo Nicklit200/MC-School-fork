@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -9,13 +9,15 @@ type HomeworkHistoryStatus = 'DONE' | 'MISSED' | 'TODAY' | 'UPCOMING';
 
 export function StudentHomeworksPage() {
   const { studentId = '' } = useParams();
-  const navigate = useNavigate();
   const { language, t } = useI18n();
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [startDate, setStartDate] = useState(() => localDateString(new Date()));
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   async function reload() {
     const [studentPayload, homeworkPayload] = await Promise.all([
@@ -36,18 +38,30 @@ export function StudentHomeworksPage() {
   }, [studentId]);
 
   const worksheetHomeworks = useMemo(
-    () => homeworks.filter((homework) => homework.hasWorksheet).sort((a, b) => b.startDate.localeCompare(a.startDate)),
+    () => homeworks
+      .filter((homework) => homework.hasWorksheet)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate) || (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
     [homeworks],
   );
 
   async function createHomework(event: FormEvent) {
     event.preventDefault();
+    if (!pdfFile || creating) return;
+    setCreating(true);
     setError(null);
+    setMessage(null);
     try {
       const created = await api.homeworks.create(studentId, startDate);
-      navigate(`/teacher/students/${studentId}/homeworks/${created.id}`);
+      await api.homeworks.uploadWorksheet(created.id, pdfFile);
+      setPdfFile(null);
+      const fileInput = document.getElementById('homework-pdf-file') as HTMLInputElement | null;
+      if (fileInput) fileInput.value = '';
+      await reload();
+      setMessage(language === 'DE' ? 'Hausaufgabe wurde erstellt.' : 'Домашка создана и добавлена в историю.');
     } catch (e) {
       setError(toErrorMessage(e, t));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -56,21 +70,48 @@ export function StudentHomeworksPage() {
       <p><Link to="/students" className="muted">← {t('common.back')}</Link></p>
       <h1>{language === 'DE' ? 'Hausaufgaben' : 'Домашка'}{student ? ` — ${student.fullName}` : ''}</h1>
       {error && <div className="banner banner--error">{error}</div>}
+      {message && <div className="banner banner--success">{message}</div>}
 
       <div className="panel">
         <h2>{language === 'DE' ? 'Hausaufgabe erstellen' : 'Создать домашку'}</h2>
-        <form className="row" onSubmit={createHomework}>
-          <label className="field" style={{ margin: 0 }}>
-            <span className="field__label">{language === 'DE' ? 'Datum' : 'Дата'}</span>
-            <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-          </label>
-          <button className="btn" type="submit">{language === 'DE' ? 'Erstellen' : 'Создать'}</button>
+        <form className="stack" onSubmit={createHomework}>
+          <div className="row" style={{ alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
+            <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
+              <span className="field__label">{language === 'DE' ? 'Datum' : 'Дата'}</span>
+              <input
+                className="input"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                disabled={creating}
+                required
+              />
+            </label>
+            <label className="field" style={{ margin: 0, flex: '2 1 360px' }}>
+              <span className="field__label">PDF</span>
+              <input
+                id="homework-pdf-file"
+                className="input"
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={creating}
+                onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
+                required
+              />
+            </label>
+            <button className="btn" type="submit" disabled={!pdfFile || creating} style={{ minWidth: 180 }}>
+              {creating
+                ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём…')
+                : (language === 'DE' ? 'Erstellen' : 'Создать')}
+            </button>
+          </div>
+          {pdfFile && <div className="muted" style={{ fontSize: 13 }}>{pdfFile.name}</div>}
+          <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
+            {language === 'DE'
+              ? 'Du kannst mehrere getrennte Hausaufgaben für dasselbe Datum erstellen.'
+              : 'На одну дату можно создать несколько отдельных домашних работ.'}
+          </p>
         </form>
-        <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
-          {language === 'DE'
-            ? 'Nach dem Erstellen kannst du das PDF für den Schüler hochladen.'
-            : 'После создания откроется страница домашки, где можно загрузить PDF для ученика.'}
-        </p>
       </div>
 
       <h2>{language === 'DE' ? 'Hausaufgaben-Historie' : 'История домашки'}</h2>
