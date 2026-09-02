@@ -91,7 +91,7 @@ public class StudentGroupService {
         StudentGroup group = requireOwnedGroup(teacher.id(), groupId);
         List<StudentGroupMember> members = memberRepository.findAllByGroupIdOrderByStudentFullNameAsc(groupId);
         for (StudentGroupMember member : members) {
-            Homework homework = homeworkFor(member.getStudent(), request.startDate());
+            Homework homework = homeworkForCards(member.getStudent(), request.startDate());
             cardRepository.save(Card.create(homework, group.getTeacher(), request.question(), request.correctAnswer()));
         }
         return members.size();
@@ -102,7 +102,7 @@ public class StudentGroupService {
         StudentGroup group = requireOwnedGroup(teacher.id(), groupId);
         List<StudentGroupMember> members = memberRepository.findAllByGroupIdOrderByStudentFullNameAsc(groupId);
         for (StudentGroupMember member : members) {
-            Homework homework = homeworkFor(member.getStudent(), request.startDate());
+            Homework homework = homeworkForCards(member.getStudent(), request.startDate());
             for (ParsedCard parsed : request.cards()) {
                 cardRepository.save(Card.createImported(homework, group.getTeacher(), parsed.question(), parsed.correctAnswer(),
                         parsed.wrongAnswer1(), parsed.wrongAnswer2(), parsed.wrongAnswer3()));
@@ -135,8 +135,9 @@ public class StudentGroupService {
         return student;
     }
 
-    private Homework homeworkFor(User student, java.time.LocalDate startDate) {
-        return homeworkRepository.findByStudentIdAndStartDate(student.getId(), startDate)
+    private Homework homeworkForCards(User student, java.time.LocalDate startDate) {
+        return homeworkRepository.findFirstByStudentIdAndStartDateAndWorksheetPdfIsNullOrderByCreatedAtAsc(
+                        student.getId(), startDate)
                 .orElseGet(() -> homeworkRepository.save(Homework.create(student, startDate)));
     }
 
