@@ -6,7 +6,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -36,8 +35,7 @@ public class Homework {
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
-    @Lob
-    @Column(name = "worksheet_pdf")
+    @Column(name = "worksheet_pdf", columnDefinition = "bytea")
     private byte[] worksheetPdf;
 
     @Column(name = "worksheet_filename", length = 255)
@@ -46,8 +44,7 @@ public class Homework {
     @Column(name = "worksheet_page_count")
     private Integer worksheetPageCount;
 
-    @Lob
-    @Column(name = "submitted_pdf")
+    @Column(name = "submitted_pdf", columnDefinition = "bytea")
     private byte[] submittedPdf;
 
     @Column(name = "submitted_filename", length = 255)
