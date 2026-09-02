@@ -320,15 +320,20 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     event.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
+
+    // Read the Pencil coordinate BEFORE fixing the page. On iPad, changing body to
+    // position: fixed can move the canvas' bounding rect during pointerdown and used
+    // to create a long artificial line at the beginning of every stroke.
+    const startPoint = point(event);
+
     lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     pushHistory(canvas);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const p = point(event);
     ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
+    ctx.moveTo(startPoint.x, startPoint.y);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = tool === 'eraser' ? 32 : 5;
