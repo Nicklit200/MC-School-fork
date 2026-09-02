@@ -61,7 +61,10 @@ export function StudentDrivePage() {
         setError(result.message || 'Не удалось проверить Google Drive');
         return;
       }
-      setTestResult({ fileName: result.fileName, fileUrl: result.fileUrl });
+      setTestResult({
+        fileName: result.fileName ?? 'тестовый файл',
+        fileUrl: result.fileUrl ?? '',
+      });
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
