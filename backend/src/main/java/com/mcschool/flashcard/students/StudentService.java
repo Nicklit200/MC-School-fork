@@ -32,10 +32,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Student accounts are always owned by the teacher who created them; every
- * operation here is scoped to the calling teacher.
- */
 @Service
 public class StudentService {
 
@@ -77,7 +73,6 @@ public class StudentService {
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
     }
 
-    /** Lists only the calling teacher's own students — teachers never see each other's students. */
     @Transactional(readOnly = true)
     public List<StudentListResponse> listStudents(AuthenticatedUser teacher) {
         return userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()).stream()
@@ -94,12 +89,8 @@ public class StudentService {
     public StudentListResponse updateGoogleDriveFolder(AuthenticatedUser teacher, UUID studentId,
                                                        UpdateStudentDriveFolderRequest request) {
         User student = requireOwnedStudent(teacher.id(), studentId);
-        String url = request.googleDriveFolderUrl();
-        if (url != null && !url.isBlank()
-                && !url.startsWith("https://drive.google.com/drive/folders/")) {
-            throw new IllegalArgumentException("Please provide a Google Drive folder URL");
-        }
-        student.changeGoogleDriveFolderUrl(url);
+        String folderId = request.googleDriveFolderUrl();
+        student.changeGoogleDriveFolderUrl(folderId);
         return StudentListResponse.from(student);
     }
 
