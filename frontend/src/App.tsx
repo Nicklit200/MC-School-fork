@@ -17,6 +17,8 @@ import { TodayPage } from './pages/student/TodayPage';
 import { SessionPage } from './pages/student/SessionPage';
 import { ResultPage } from './pages/student/ResultPage';
 import { MyCardsPage } from './pages/student/MyCardsPage';
+import { StudentCardsDetailPage } from './pages/student/StudentCardsDetailPage';
+import { StudentHomeworksListPage } from './pages/student/StudentHomeworksListPage';
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
 import { PdfHomeworkPage } from './pages/student/PdfHomeworkPage';
 import { SettingsPage } from './pages/student/SettingsPage';
@@ -43,6 +45,8 @@ export function App() {
       <Route path="/session/:sessionId" element={<ProtectedRoute role="STUDENT"><Layout><SessionPage /></Layout></ProtectedRoute>} />
       <Route path="/session/:sessionId/result" element={<ProtectedRoute role="STUDENT"><Layout><ResultPage /></Layout></ProtectedRoute>} />
       <Route path="/my-cards" element={<ProtectedRoute role="STUDENT"><Layout><MyCardsPage /></Layout></ProtectedRoute>} />
+      <Route path="/my-cards/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentCardsDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/homeworks" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworksListPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkPage /></Layout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
