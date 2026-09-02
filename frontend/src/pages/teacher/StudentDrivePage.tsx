@@ -12,6 +12,8 @@ export function StudentDrivePage() {
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [folderUrl, setFolderUrl] = useState('');
   const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ fileName: string; fileUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +34,7 @@ export function StudentDrivePage() {
     event.preventDefault();
     setError(null);
     setSaved(false);
+    setTestResult(null);
     try {
       const updated = await api.students.updateDriveFolder(studentId, folderUrl.trim());
       setStudent(updated);
@@ -42,6 +45,26 @@ export function StudentDrivePage() {
     }
   }
 
+  async function testConnection() {
+    setError(null);
+    setTestResult(null);
+    setTesting(true);
+    try {
+      let currentStudent = student;
+      if (folderUrl.trim() !== (student?.googleDriveFolderUrl ?? '')) {
+        currentStudent = await api.students.updateDriveFolder(studentId, folderUrl.trim());
+        setStudent(currentStudent);
+        setFolderUrl(currentStudent.googleDriveFolderUrl ?? '');
+      }
+      const result = await api.students.testDriveFolder(studentId);
+      setTestResult({ fileName: result.fileName, fileUrl: result.fileUrl });
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <div>
       <p><Link to={`/students/${studentId}`} className="muted">← {t('common.back')}</Link></p>
@@ -49,6 +72,14 @@ export function StudentDrivePage() {
 
       {error && <div className="banner banner--error">{error}</div>}
       {saved && <div className="banner banner--success">Папка сохранена.</div>}
+      {testResult && (
+        <div className="banner banner--success">
+          Google Drive работает. Создан тестовый файл <strong>{testResult.fileName}</strong>.
+          {testResult.fileUrl && (
+            <> <a href={testResult.fileUrl} target="_blank" rel="noreferrer">Открыть файл</a></>
+          )}
+        </div>
+      )}
 
       <div className="panel">
         {loading ? (
@@ -70,6 +101,14 @@ export function StudentDrivePage() {
             </p>
             <div className="row">
               <button className="btn" type="submit">Сохранить путь</button>
+              <button
+                className="btn btn--secondary"
+                type="button"
+                onClick={testConnection}
+                disabled={!folderUrl.trim() || testing}
+              >
+                {testing ? 'Проверяю…' : 'Проверить Google Drive'}
+              </button>
               {folderUrl && (
                 <button className="btn btn--secondary" type="button" onClick={() => setFolderUrl('')}>
                   Очистить
