@@ -2,11 +2,7 @@ package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.users.Language;
 
-/**
- * Subject/body text for notification emails, in the recipient's language
- * (German or Russian, per PRD 6). Plain text keeps delivery robust; HTML
- * templates can replace this later without touching the send logic.
- */
+/** Subject/body text for transactional notification emails. */
 final class NotificationMessages {
 
     record Email(String subject, String body) {
@@ -36,22 +32,34 @@ final class NotificationMessages {
                         + "Mindcraft School");
     }
 
-    static Email reviewReminder(Language language, String fullName, long dueCardCount, String loginLink) {
+    static Email dailyTaskReminder(Language language, String fullName, long cards, long homeworks, String todayLink) {
         if (language == Language.DE) {
             return new Email(
-                    "Heute sind Karten zur Wiederholung fällig",
+                    "Deine Aufgaben für heute",
                     "Hallo " + fullName + ",\n\n"
-                            + "du hast heute " + dueCardCount + " Karte(n) zu wiederholen. "
-                            + "Melde dich an, um sie zu bearbeiten:\n\n"
-                            + loginLink + "\n\n"
+                            + dailyLineDe(cards, homeworks) + "\n\n"
+                            + "Öffne Mindcrafti, um die Aufgaben zu erledigen:\n\n"
+                            + todayLink + "\n\n"
                             + "Mindcraft School");
         }
         return new Email(
-                "Сегодня есть карточки для повторения",
+                "Твои задания на сегодня",
                 "Здравствуйте, " + fullName + "!\n\n"
-                        + "Сегодня нужно повторить " + dueCardCount + " карточк(и). "
-                        + "Войдите, чтобы начать:\n\n"
-                        + loginLink + "\n\n"
+                        + dailyLineRu(cards, homeworks) + "\n\n"
+                        + "Откройте Mindcrafti, чтобы выполнить задания:\n\n"
+                        + todayLink + "\n\n"
                         + "Mindcraft School");
+    }
+
+    private static String dailyLineRu(long cards, long homeworks) {
+        if (cards > 0 && homeworks > 0) return "На сегодня: " + cards + " карточек и " + homeworks + " домашка.";
+        if (cards > 0) return "На сегодня нужно повторить " + cards + " карточек.";
+        return "На сегодня есть домашка: " + homeworks + ".";
+    }
+
+    private static String dailyLineDe(long cards, long homeworks) {
+        if (cards > 0 && homeworks > 0) return "Für heute: " + cards + " Karte(n) und " + homeworks + " Hausaufgabe(n).";
+        if (cards > 0) return "Für heute sind " + cards + " Karte(n) zur Wiederholung fällig.";
+        return "Für heute gibt es " + homeworks + " Hausaufgabe(n).";
     }
 }
