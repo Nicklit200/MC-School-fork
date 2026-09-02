@@ -13,6 +13,7 @@ import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
 import com.mcschool.flashcard.groups.dto.StudentGroupResponse;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.notifications.CardPushNotificationService;
 import com.mcschool.flashcard.notifications.NotificationService;
 import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
@@ -35,19 +36,22 @@ public class StudentGroupService {
     private final HomeworkRepository homeworkRepository;
     private final CardRepository cardRepository;
     private final NotificationService notificationService;
+    private final CardPushNotificationService cardPushNotificationService;
 
     public StudentGroupService(StudentGroupRepository groupRepository,
                                StudentGroupMemberRepository memberRepository,
                                UserRepository userRepository,
                                HomeworkRepository homeworkRepository,
                                CardRepository cardRepository,
-                               NotificationService notificationService) {
+                               NotificationService notificationService,
+                               CardPushNotificationService cardPushNotificationService) {
         this.groupRepository = groupRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
         this.cardRepository = cardRepository;
         this.notificationService = notificationService;
+        this.cardPushNotificationService = cardPushNotificationService;
     }
 
     @Transactional
@@ -93,6 +97,8 @@ public class StudentGroupService {
         for (StudentGroupMember member : members) {
             Homework homework = homeworkForCards(member.getStudent(), request.startDate());
             cardRepository.save(Card.create(homework, group.getTeacher(), request.question(), request.correctAnswer()));
+            cardPushNotificationService.notifyCardsAssigned(
+                    member.getStudent().getId(), homework.getId(), request.startDate());
         }
         return members.size();
     }
@@ -106,6 +112,10 @@ public class StudentGroupService {
             for (ParsedCard parsed : request.cards()) {
                 cardRepository.save(Card.createImported(homework, group.getTeacher(), parsed.question(), parsed.correctAnswer(),
                         parsed.wrongAnswer1(), parsed.wrongAnswer2(), parsed.wrongAnswer3()));
+            }
+            if (!request.cards().isEmpty()) {
+                cardPushNotificationService.notifyCardsAssigned(
+                        member.getStudent().getId(), homework.getId(), request.startDate());
             }
         }
         return members.size() * request.cards().size();
