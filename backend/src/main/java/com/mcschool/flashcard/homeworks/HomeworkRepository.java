@@ -46,4 +46,14 @@ public interface HomeworkRepository extends JpaRepository<Homework, UUID> {
     boolean isStartedForStudent(@Param("homeworkId") UUID homeworkId,
                                 @Param("studentId") UUID studentId,
                                 @Param("day") LocalDate day);
+
+    @Query("""
+            SELECT COUNT(h) FROM Homework h
+            WHERE h.student.id = :studentId
+              AND h.startDate = :day
+              AND h.worksheetPdf IS NOT NULL
+              AND h.submittedAt IS NULL
+            """)
+    long countOpenWorksheetsForDay(@Param("studentId") UUID studentId,
+                                   @Param("day") LocalDate day);
 }
