@@ -87,6 +87,24 @@ async function uploadFile(path: string, file: File): Promise<void> {
   }
 }
 
+async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> {
+  const form = new FormData();
+  form.append('startDate', startDate);
+  form.append('file', file);
+  const response = await fetch(`${BASE_URL}/students/${studentId}/homeworks/pdf`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  const text = await response.text();
+  let payload: any;
+  try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
+  if (!response.ok) {
+    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
+  }
+  return payload as Homework;
+}
+
 async function requestBlob(path: string): Promise<Blob> {
   const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
   if (!response.ok) {
@@ -171,6 +189,7 @@ export const api = {
   homeworks: {
     listForStudent: (studentId: string) => request<Homework[]>('GET', `/students/${studentId}/homeworks`),
     create: (studentId: string, startDate: string) => request<Homework>('POST', `/students/${studentId}/homeworks`, { startDate }),
+    createPdf: (studentId: string, startDate: string, file: File) => createPdfHomework(studentId, startDate, file),
     uploadWorksheet: (homeworkId: string, file: File) => uploadFile(`/homeworks/${homeworkId}/worksheet`, file),
     submission: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/submission`),
   },
