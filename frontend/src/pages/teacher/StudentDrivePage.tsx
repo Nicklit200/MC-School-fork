@@ -57,6 +57,10 @@ export function StudentDrivePage() {
         setFolderUrl(currentStudent.googleDriveFolderUrl ?? '');
       }
       const result = await api.students.testDriveFolder(studentId);
+      if (result.status === 'error') {
+        setError(result.message || 'Не удалось проверить Google Drive');
+        return;
+      }
       setTestResult({ fileName: result.fileName, fileUrl: result.fileUrl });
     } catch (e) {
       setError(toErrorMessage(e, t));
