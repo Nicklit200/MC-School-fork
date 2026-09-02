@@ -7,6 +7,8 @@ import { toErrorMessage } from '../../lib/errors';
 
 type Tool = 'pen' | 'eraser';
 
+type TouchPoint = { x: number; y: number };
+
 export function PdfHomeworkPage() {
   const { homeworkId = '' } = useParams();
   const { language, t } = useI18n();
@@ -15,6 +17,7 @@ export function PdfHomeworkPage() {
   const [pageUrls, setPageUrls] = useState<Record<number, string>>({});
   const [drawings, setDrawings] = useState<Record<number, string>>({});
   const [tool, setTool] = useState<Tool>('pen');
+  const [zoom, setZoom] = useState(140);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -81,12 +84,12 @@ export function PdfHomeworkPage() {
   }
 
   return (
-    <div className="pdf-homework-page">
+    <div className="pdf-homework-page" style={{ maxWidth: 1500, margin: '0 auto' }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <Link to={`/student/homeworks/${homeworkId}`} className="muted">← {t('common.back')}</Link>
           <h1 style={{ margin: '8px 0 2px' }}>{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</h1>
-          <div className="muted">{homework.worksheetFilename}</div>
+          <div className="muted" style={{ overflowWrap: 'anywhere' }}>{homework.worksheetFilename}</div>
         </div>
         {homework.submitted && <span className="pill pill--learned">{language === 'DE' ? 'Abgegeben' : 'Сдано'}</span>}
       </div>
@@ -99,10 +102,10 @@ export function PdfHomeworkPage() {
         </div>
       )}
 
-      <div className="panel" style={{ position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }}>
-        <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+      <div className="panel" style={{ position: 'sticky', top: 8, zIndex: 5, marginBottom: 12, padding: 12 }}>
+        <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           {!homework.submitted && (
-            <div className="row" style={{ gap: 8 }}>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
                 {language === 'DE' ? 'Stift' : 'Ручка'}
               </button>
@@ -111,6 +114,16 @@ export function PdfHomeworkPage() {
               </button>
             </div>
           )}
+
+          <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn--secondary" type="button" onClick={() => setZoom((z) => Math.max(80, z - 20))} disabled={zoom <= 80}>−</button>
+            <strong style={{ minWidth: 56, textAlign: 'center' }}>{Math.round(zoom)}%</strong>
+            <button className="btn btn--secondary" type="button" onClick={() => setZoom((z) => Math.min(240, z + 20))} disabled={zoom >= 240}>+</button>
+            <button className="btn btn--ghost" type="button" onClick={() => setZoom(140)}>
+              {language === 'DE' ? 'Standard' : 'Обычный'}
+            </button>
+          </div>
+
           <div className="row" style={{ gap: 8, alignItems: 'center' }}>
             <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)}>←</button>
             <strong>{pageIndex + 1} / {pageCount}</strong>
@@ -122,8 +135,10 @@ export function PdfHomeworkPage() {
       {!pageUrl ? (
         <div className="panel">{t('common.loading')}</div>
       ) : homework.submitted ? (
-        <div style={{ width: '100%', maxWidth: 1000, margin: '0 auto', boxShadow: '0 2px 14px rgba(0,0,0,.12)', background: '#fff' }}>
-          <img src={pageUrl} alt="Submitted homework PDF page" style={{ display: 'block', width: '100%', height: 'auto' }} />
+        <div style={{ overflow: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ width: `${zoom}%`, minWidth: zoom > 100 ? 720 : undefined, margin: '0 auto', background: '#fff' }}>
+            <img src={pageUrl} alt="Submitted homework PDF page" style={{ display: 'block', width: '100%', height: 'auto' }} />
+          </div>
         </div>
       ) : (
         <WorksheetCanvas
@@ -131,7 +146,9 @@ export function PdfHomeworkPage() {
           pageUrl={pageUrl}
           initialDrawing={drawings[pageIndex]}
           tool={tool}
+          zoom={zoom}
           language={language}
+          onZoomChange={setZoom}
           onChange={(dataUrl) => setDrawings((current) => ({ ...current, [pageIndex]: dataUrl }))}
         />
       )}
@@ -143,8 +160,8 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Du kannst direkt mit Apple Pencil oder einem Stylus auf dem Arbeitsblatt schreiben.'
-              : 'Можно писать прямо по листу Apple Pencil или стилусом. При сдаче сохранится новый PDF с твоими записями.'}
+              ? 'Mit Apple Pencil schreiben. Mit zwei Fingern zoomen.'
+              : 'Пиши Apple Pencil. Двумя пальцами можно приближать и отдалять — пальцы не рисуют.'}
           </p>
         </div>
       )}
@@ -152,18 +169,24 @@ export function PdfHomeworkPage() {
   );
 }
 
-function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: {
+function WorksheetCanvas({ pageUrl, initialDrawing, tool, zoom, language, onZoomChange, onChange }: {
   pageUrl: string;
   initialDrawing?: string;
   tool: Tool;
+  zoom: number;
   language: 'DE' | 'RU';
+  onZoomChange: (zoom: number) => void;
   onChange: (dataUrl: string) => void;
 }) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingRef = useRef(false);
+  const drawingPointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<string[]>([]);
+  const touchPointsRef = useRef<Map<number, TouchPoint>>(new Map());
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef(zoom);
   const [ready, setReady] = useState(false);
+  const [undoCount, setUndoCount] = useState(0);
 
   function setupCanvas() {
     const image = imageRef.current;
@@ -191,12 +214,35 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
     };
   }
 
-  function start(event: React.PointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
+  function distanceBetweenTouches() {
+    const values = Array.from(touchPointsRef.current.values());
+    if (values.length < 2) return null;
+    const [a, b] = values;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function pushHistory(canvas: HTMLCanvasElement) {
     historyRef.current.push(canvas.toDataURL('image/png'));
-    if (historyRef.current.length > 20) historyRef.current.shift();
+    if (historyRef.current.length > 30) historyRef.current.shift();
+    setUndoCount(historyRef.current.length);
+  }
+
+  function start(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (event.pointerType === 'touch') {
+      touchPointsRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchPointsRef.current.size === 2) {
+        pinchStartDistanceRef.current = distanceBetweenTouches();
+        pinchStartZoomRef.current = zoom;
+      }
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas || drawingPointerIdRef.current !== null) return;
+    drawingPointerIdRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pushHistory(canvas);
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const p = point(event);
@@ -207,11 +253,24 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
     ctx.lineWidth = tool === 'eraser' ? 32 : 5;
     ctx.strokeStyle = '#111111';
     ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-    drawingRef.current = true;
   }
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (!drawingRef.current) return;
+    if (event.pointerType === 'touch') {
+      if (!touchPointsRef.current.has(event.pointerId)) return;
+      touchPointsRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchPointsRef.current.size >= 2 && pinchStartDistanceRef.current) {
+        const currentDistance = distanceBetweenTouches();
+        if (currentDistance) {
+          const scale = currentDistance / pinchStartDistanceRef.current;
+          const nextZoom = Math.max(80, Math.min(240, pinchStartZoomRef.current * scale));
+          onZoomChange(nextZoom);
+        }
+      }
+      return;
+    }
+
+    if (drawingPointerIdRef.current !== event.pointerId) return;
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
     const p = point(event);
@@ -220,8 +279,16 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
   }
 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
+    if (event.pointerType === 'touch') {
+      touchPointsRef.current.delete(event.pointerId);
+      if (touchPointsRef.current.size < 2) {
+        pinchStartDistanceRef.current = null;
+      }
+      return;
+    }
+
+    if (drawingPointerIdRef.current !== event.pointerId) return;
+    drawingPointerIdRef.current = null;
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     const canvas = canvasRef.current;
     if (canvas) onChange(canvas.toDataURL('image/png'));
@@ -243,6 +310,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
 
   function undo() {
     const previous = historyRef.current.pop();
+    setUndoCount(historyRef.current.length);
     if (previous) restore(previous);
   }
 
@@ -250,27 +318,61 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    historyRef.current.push(canvas.toDataURL('image/png'));
+    pushHistory(canvas);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     onChange(canvas.toDataURL('image/png'));
   }
 
   return (
     <div>
-      <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-        <button className="btn btn--secondary" type="button" onClick={undo}>{language === 'DE' ? 'Rückgängig' : 'Отменить'}</button>
-        <button className="btn btn--ghost" type="button" onClick={clear}>{language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}</button>
+      <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
+          {language === 'DE' ? 'Einen Schritt zurück' : '↶ Шаг назад'}
+        </button>
+        <button className="btn btn--ghost" type="button" onClick={clear}>
+          {language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}
+        </button>
       </div>
-      <div style={{ position: 'relative', width: '100%', maxWidth: 1000, margin: '0 auto', boxShadow: '0 2px 14px rgba(0,0,0,.12)', background: '#fff' }}>
-        <img ref={imageRef} src={pageUrl} alt="Homework PDF page" onLoad={setupCanvas} style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none' }} draggable={false} />
-        <canvas
-          ref={canvasRef}
-          onPointerDown={start}
-          onPointerMove={move}
-          onPointerUp={finish}
-          onPointerCancel={finish}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none', cursor: tool === 'eraser' ? 'cell' : 'crosshair', opacity: ready ? 1 : 0 }}
-        />
+
+      <div style={{ overflow: 'auto', width: '100%', paddingBottom: 8, WebkitOverflowScrolling: 'touch' }}>
+        <div
+          style={{
+            position: 'relative',
+            width: `${zoom}%`,
+            minWidth: zoom > 100 ? 720 : undefined,
+            margin: '0 auto',
+            boxShadow: '0 2px 14px rgba(0,0,0,.12)',
+            background: '#fff',
+          }}
+        >
+          <img
+            ref={imageRef}
+            src={pageUrl}
+            alt="Homework PDF page"
+            onLoad={setupCanvas}
+            style={{ display: 'block', width: '100%', height: 'auto', userSelect: 'none' }}
+            draggable={false}
+          />
+          <canvas
+            ref={canvasRef}
+            onPointerDown={start}
+            onPointerMove={move}
+            onPointerUp={finish}
+            onPointerCancel={finish}
+            onPointerLeave={(event) => {
+              if (event.pointerType === 'touch') finish(event);
+            }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              touchAction: 'none',
+              cursor: tool === 'eraser' ? 'cell' : 'crosshair',
+              opacity: ready ? 1 : 0,
+            }}
+          />
+        </div>
       </div>
     </div>
   );
