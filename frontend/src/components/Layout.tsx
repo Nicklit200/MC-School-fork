@@ -31,7 +31,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
           {isStudent && (
-            <NavLink to="/homeworks" className="topbar__link">
+            <NavLink to="/student/homeworks" end className="topbar__link">
               {language === 'DE' ? 'Hausaufgaben' : 'Домашка'}
             </NavLink>
           )}
