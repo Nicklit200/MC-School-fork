@@ -121,6 +121,9 @@ export function StudentsPage() {
               <Link to={`/students/${student.id}`} className="btn btn--secondary">
                 {t('students.cardsButton')}
               </Link>
+              <Link to={`/students/${student.id}`} className="btn btn--secondary">
+                Домашка
+              </Link>
               <Link to={`/students/${student.id}/drive`} className="btn btn--secondary">
                 Google Drive
               </Link>
