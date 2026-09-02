@@ -26,7 +26,9 @@ export function TodayPage() {
 
   const todayHomeworks = useMemo(() => {
     const todayDate = localDateString(new Date());
-    return homeworks.filter((homework) => homework.hasWorksheet && homework.startDate === todayDate);
+    return homeworks.filter(
+      (homework) => homework.hasWorksheet && homework.startDate === todayDate && !homework.submitted,
+    );
   }, [homeworks]);
 
   async function start(type: SessionType) {
@@ -101,14 +103,14 @@ export function TodayPage() {
       <h2 style={{ marginBottom: 0 }}>{language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'}</h2>
       {todayHomeworks.length === 0 ? (
         <div className="banner banner--success">
-          {language === 'DE' ? 'Für heute gibt es keine Hausaufgabe 🎉' : 'На сегодня домашки нет 🎉'}
+          {language === 'DE' ? 'Für heute gibt es keine offene Hausaufgabe 🎉' : 'На сегодня невыполненной домашки нет 🎉'}
         </div>
       ) : (
         <div className="panel stack">
           <div className="center">
             <div className="result__stat">{todayHomeworks.length}</div>
             <div className="muted">
-              {language === 'DE' ? 'Hausaufgaben für heute' : 'Домашних заданий на сегодня'}
+              {language === 'DE' ? 'Offene Hausaufgaben für heute' : 'Домашних заданий осталось на сегодня'}
             </div>
           </div>
           {todayHomeworks.map((homework) => (
@@ -128,10 +130,8 @@ export function TodayPage() {
                     : ''}
                 </div>
               </div>
-              <span className={`pill ${homework.submitted ? 'pill--learned' : 'pill--pending'}`}>
-                {homework.submitted
-                  ? (language === 'DE' ? 'Abgegeben' : 'Сдано')
-                  : (language === 'DE' ? 'Zu erledigen' : 'Нужно сделать')}
+              <span className="pill pill--pending">
+                {language === 'DE' ? 'Zu erledigen' : 'Нужно сделать'}
               </span>
             </Link>
           ))}
