@@ -53,15 +53,19 @@ export function HomeworkDetailPage() {
     }
   }
 
-  async function createAnotherHomework() {
-    if (!homework) return;
+  async function createAnotherHomeworkWithPdf() {
+    if (!homework || !pdfFile) return;
     setCreatingAnother(true);
     setError(null);
+    setMessage(null);
     try {
       const created = await api.homeworks.create(studentId, homework.startDate);
+      await api.homeworks.uploadWorksheet(created.id, pdfFile);
+      setPdfFile(null);
       navigate(`/teacher/students/${studentId}/homeworks/${created.id}`);
     } catch (e) {
       setError(toErrorMessage(e, t));
+    } finally {
       setCreatingAnother(false);
     }
   }
@@ -122,36 +126,44 @@ export function HomeworkDetailPage() {
       <h2>{language === 'DE' ? 'PDF-Hausaufgabe' : 'PDF-домашка'}</h2>
       <div className="panel stack">
         {homework?.hasWorksheet ? (
-          <>
-            <div className="banner banner--info">
-              <strong>{homework.worksheetFilename}</strong>
-              {homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}
-            </div>
-            <button className="btn" type="button" onClick={createAnotherHomework} disabled={creatingAnother}>
-              {creatingAnother
-                ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём…')
-                : (language === 'DE' ? 'Weitere Hausaufgabe für diesen Tag' : '+ Ещё домашка на этот день')}
-            </button>
-          </>
+          <div className="banner banner--info">
+            <strong>{homework.worksheetFilename}</strong>
+            {homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}
+          </div>
         ) : (
-          <>
-            <p className="muted" style={{ marginTop: 0 }}>
-              {language === 'DE'
-                ? 'Lade ein PDF hoch. Der Schüler kann direkt mit Apple Pencil oder Stylus darauf schreiben.'
-                : 'Загрузи готовый PDF. Ученик сможет открыть его на сайте и писать прямо по нему Apple Pencil или стилусом.'}
-            </p>
-            <input
-              className="input"
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
-            />
-            <button className="btn" type="button" disabled={!pdfFile || pdfBusy} onClick={uploadWorksheet}>
-              {pdfBusy
-                ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
-                : (language === 'DE' ? 'PDF hochladen' : 'Загрузить PDF')}
-            </button>
-          </>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {language === 'DE'
+              ? 'Lade ein PDF hoch. Der Schüler kann direkt mit Apple Pencil oder Stylus darauf schreiben.'
+              : 'Загрузи готовый PDF. Ученик сможет открыть его на сайте и писать прямо по нему Apple Pencil или стилусом.'}
+          </p>
+        )}
+
+        <input
+          className="input"
+          type="file"
+          accept="application/pdf,.pdf"
+          disabled={pdfBusy || creatingAnother}
+          onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
+        />
+        {pdfFile && <div className="muted" style={{ fontSize: 13 }}>{pdfFile.name}</div>}
+
+        {homework?.hasWorksheet ? (
+          <button
+            className="btn"
+            type="button"
+            disabled={!pdfFile || creatingAnother}
+            onClick={createAnotherHomeworkWithPdf}
+          >
+            {creatingAnother
+              ? (language === 'DE' ? 'Wird erstellt und hochgeladen…' : 'Создаём и загружаем…')
+              : (language === 'DE' ? 'Weitere Hausaufgabe erstellen' : '+ Создать ещё домашку')}
+          </button>
+        ) : (
+          <button className="btn" type="button" disabled={!pdfFile || pdfBusy} onClick={uploadWorksheet}>
+            {pdfBusy
+              ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
+              : (language === 'DE' ? 'PDF hochladen' : 'Загрузить PDF')}
+          </button>
         )}
 
         {homework?.submitted && (
