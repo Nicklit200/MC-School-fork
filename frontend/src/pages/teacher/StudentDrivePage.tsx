@@ -66,7 +66,11 @@ export function StudentDrivePage() {
         fileUrl: result.fileUrl ?? '',
       });
     } catch (e) {
-      setError(toErrorMessage(e, t));
+      if (e instanceof Error && e.message) {
+        setError(e.message);
+      } else {
+        setError('Не удалось проверить Google Drive');
+      }
     } finally {
       setTesting(false);
     }
