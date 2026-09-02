@@ -26,9 +26,8 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Stateless API security: every request is authenticated by the JWT filter,
- * there is no HTTP session. Only login, invitation activation and the health
- * check are public; role rules for the individual endpoints live on the
- * controllers as {@code @PreAuthorize}.
+ * there is no HTTP session. Login, invitation activation, health checks and
+ * the public Web Push/VAPID configuration are accessible without a JWT.
  */
 @Configuration
 @EnableWebSecurity
@@ -46,14 +45,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                // CSRF protection targets cookie/session auth; this API is
-                // stateless and authenticates via the Authorization header.
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
-                // Hardened response headers. This is a JSON API that references no
-                // resources and must never be framed, so lock CSP down to nothing.
-                // X-Content-Type-Options: nosniff and X-Frame-Options: DENY are on by
-                // default; HSTS is added automatically on HTTPS requests.
                 .headers(headers -> headers
                         .contentSecurityPolicy(csp ->
                                 csp.policyDirectives("default-src 'none'; frame-ancestors 'none'"))
@@ -61,6 +54,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
+                        // The VAPID public key is intentionally public: browsers need it before subscribing.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
