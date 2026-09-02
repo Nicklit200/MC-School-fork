@@ -1,13 +1,21 @@
 package com.mcschool.flashcard.notifications;
 
 import java.nio.charset.StandardCharsets;
+import java.security.Security;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class WebPushService {
+
+    static {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
 
     private final PushSubscriptionRepository subscriptionRepository;
     private final String publicKey;
