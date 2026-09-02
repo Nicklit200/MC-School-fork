@@ -95,7 +95,7 @@ export function PdfHomeworkPage() {
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
 
   return (
-    <div className="pdf-homework-page">
+    <div className="pdf-homework-page" style={{ paddingTop: desktopControls ? 0 : 78 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ minWidth: 0 }}>
           <Link to={`/student/homeworks/${homeworkId}`} className="muted">← {t('common.back')}</Link>
@@ -113,7 +113,22 @@ export function PdfHomeworkPage() {
         </div>
       )}
 
-      <div className="panel" style={{ position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }}>
+      <div
+        className="panel"
+        style={desktopControls
+          ? { position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }
+          : {
+              position: 'fixed',
+              top: 10,
+              left: 10,
+              right: 10,
+              zIndex: 50,
+              marginBottom: 0,
+              padding: 10,
+              boxShadow: '0 4px 18px rgba(0,0,0,.18)',
+              touchAction: 'manipulation',
+            }}
+      >
         <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           {!homework.submitted && (
             <div className="row" style={{ gap: 8 }}>
@@ -295,22 +310,16 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
 
   function beginTouch(event: React.PointerEvent<HTMLCanvasElement>) {
     event.preventDefault();
-
-    // Palm rejection: a resting hand usually has a much larger contact ellipse than a fingertip.
-    // Also ignore every touch while Apple Pencil is actively drawing.
     if (drawingPointerIdRef.current !== null || looksLikePalm(event)) {
       ignoredTouchIdsRef.current.add(event.pointerId);
       return;
     }
-
     touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
-
     if (touchesRef.current.size === 2) {
       const geometry = touchGeometry();
       if (geometry) gestureStartRef.current = { ...geometry, view: mobileView };
     } else if (touchesRef.current.size > 2) {
-      // More than two contacts are treated as a hand/palm, not an intentional gesture.
       touchesRef.current.clear();
       gestureStartRef.current = null;
     }
@@ -320,10 +329,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     event.preventDefault();
     if (ignoredTouchIdsRef.current.has(event.pointerId) || drawingPointerIdRef.current !== null) return;
     if (!touchesRef.current.has(event.pointerId)) return;
-
     touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (touchesRef.current.size !== 2 || !gestureStartRef.current) return;
-
     const geometry = touchGeometry();
     if (!geometry) return;
     const start = gestureStartRef.current;
@@ -348,24 +355,17 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
       beginTouch(event);
       return;
     }
-
     event.preventDefault();
     event.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
-
     const startPoint = point(event);
-
-    // Once Pencil starts, any finger/palm contacts already resting on the screen must stop
-    // affecting the document until the Pencil is lifted.
     touchesRef.current.clear();
     gestureStartRef.current = null;
-
     lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     pushHistory(canvas);
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.beginPath();
@@ -383,7 +383,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
       return;
     }
     if (drawingPointerIdRef.current !== event.pointerId) return;
-
     event.preventDefault();
     event.stopPropagation();
     const ctx = canvasRef.current?.getContext('2d');
@@ -399,7 +398,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
       return;
     }
     if (drawingPointerIdRef.current !== event.pointerId) return;
-
     event.preventDefault();
     event.stopPropagation();
     drawingPointerIdRef.current = null;
@@ -444,8 +442,27 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
 
   return (
-    <div>
-      <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+    <div style={{ paddingBottom: desktopControls ? 0 : 70 }}>
+      <div
+        className="row"
+        style={desktopControls
+          ? { gap: 8, marginBottom: 8, flexWrap: 'wrap' }
+          : {
+              position: 'fixed',
+              left: 10,
+              right: 10,
+              bottom: 10,
+              zIndex: 50,
+              gap: 8,
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              padding: 10,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,.96)',
+              boxShadow: '0 4px 18px rgba(0,0,0,.18)',
+              touchAction: 'manipulation',
+            }}
+      >
         <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
           {language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}
         </button>
