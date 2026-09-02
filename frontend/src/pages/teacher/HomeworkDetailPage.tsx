@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -8,10 +8,12 @@ import { toErrorMessage } from '../../lib/errors';
 /** Teacher view of one PDF homework. Flashcards are managed separately. */
 export function HomeworkDetailPage() {
   const { studentId = '', homeworkId = '' } = useParams();
+  const navigate = useNavigate();
   const { language, t } = useI18n();
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [creatingAnother, setCreatingAnother] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -51,6 +53,19 @@ export function HomeworkDetailPage() {
     }
   }
 
+  async function createAnotherHomework() {
+    if (!homework) return;
+    setCreatingAnother(true);
+    setError(null);
+    try {
+      const created = await api.homeworks.create(studentId, homework.startDate);
+      navigate(`/teacher/students/${studentId}/homeworks/${created.id}`);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+      setCreatingAnother(false);
+    }
+  }
+
   async function downloadSubmission() {
     setError(null);
     try {
@@ -79,10 +94,19 @@ export function HomeworkDetailPage() {
       {error && <div className="banner banner--error">{error}</div>}
       {message && <div className="banner banner--success">{message}</div>}
 
-      <h1>{homework ? formatHomeworkDate(homework.startDate, language) : t('homeworks.title')}</h1>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ marginBottom: 0 }}>{homework ? formatHomeworkDate(homework.startDate, language) : t('homeworks.title')}</h1>
+        {homework && (
+          <button className="btn btn--secondary" type="button" onClick={createAnotherHomework} disabled={creatingAnother}>
+            {creatingAnother
+              ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём…')
+              : (language === 'DE' ? 'Weitere Hausaufgabe für diesen Tag' : '+ Ещё домашка на этот день')}
+          </button>
+        )}
+      </div>
 
       {homework && (
-        <div className="panel row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="panel row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
           <div>
             <div className="muted" style={{ fontSize: 13 }}>{language === 'DE' ? 'Status' : 'Статус'}</div>
             <strong>
@@ -129,9 +153,17 @@ export function HomeworkDetailPage() {
           {pdfBusy
             ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
             : (homework?.hasWorksheet
-              ? (language === 'DE' ? 'PDF ersetzen' : 'Заменить PDF')
+              ? (language === 'DE' ? 'Vorhandenes PDF ersetzen' : 'Заменить текущий PDF')
               : (language === 'DE' ? 'PDF hochladen' : 'Загрузить PDF'))}
         </button>
+
+        {homework?.hasWorksheet && (
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            {language === 'DE'
+              ? 'Für eine zweite Hausaufgabe am selben Tag nutze oben „Weitere Hausaufgabe für diesen Tag“.'
+              : 'Если нужна вторая домашка на эту же дату, нажми сверху «+ Ещё домашка на этот день».'}
+          </p>
+        )}
 
         {homework?.submitted && (
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
