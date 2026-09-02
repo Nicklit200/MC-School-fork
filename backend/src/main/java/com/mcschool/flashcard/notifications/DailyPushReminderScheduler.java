@@ -13,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/** Sends the student's due cards and due PDF homework every morning. */
 @Component
 @ConditionalOnProperty(name = "app.web-push.reminders.enabled", havingValue = "true")
 public class DailyPushReminderScheduler {
@@ -38,7 +39,7 @@ public class DailyPushReminderScheduler {
         this.zone = ZoneId.of(zone);
     }
 
-    @Scheduled(cron = "${app.web-push.reminders.cron:0 0 16 * * *}", zone = "${app.web-push.reminders.zone:Europe/Berlin}")
+    @Scheduled(cron = "${app.web-push.reminders.cron:0 0 8 * * *}", zone = "${app.web-push.reminders.zone:Europe/Berlin}")
     public void sendDailyReminders() {
         if (!webPushService.isConfigured()) return;
 
@@ -62,11 +63,11 @@ public class DailyPushReminderScheduler {
 
     private static String buildBody(long cards, long homeworks) {
         if (cards > 0 && homeworks > 0) {
-            return "Сегодня: " + cards + " карточек и " + homeworks + " домашка.";
+            return "На сегодня: " + cards + " карточек и " + homeworks + " домашка.";
         }
         if (cards > 0) {
-            return "Сегодня к повторению: " + cards + " карточек.";
+            return "На сегодня к повторению: " + cards + " карточек.";
         }
-        return "Сегодня есть домашка: " + homeworks + ".";
+        return "На сегодня есть домашка: " + homeworks + ".";
     }
 }
