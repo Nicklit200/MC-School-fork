@@ -1,23 +1,21 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Card, CardSummary, DailyReviewHistoryItem, DailyReviewStatus, Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
-/** Minimum cards a student needs before any session can start (mirrors the backend). */
 const MIN_CARDS_TO_START = 4;
-
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
 
-/** A single student's cards: status summary, review schedule, homework, and pilot controls. */
+/** Teacher cards area. PDF homework is intentionally not shown or linked from here. */
 export function StudentDetailPage() {
   const { studentId = '' } = useParams();
   const navigate = useNavigate();
   const { language, t } = useI18n();
-  const [homeworks, setHomeworks] = useState<Homework[]>([]);
+  const [cardBatches, setCardBatches] = useState<Homework[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
-  const [newHomeworkDate, setNewHomeworkDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newBatchDate, setNewBatchDate] = useState(() => localDateString(new Date()));
   const [summary, setSummary] = useState<CardSummary | null>(null);
   const [reviewHistory, setReviewHistory] = useState<DailyReviewHistoryItem[]>([]);
   const [openHistoryDate, setOpenHistoryDate] = useState<string | null>(null);
@@ -27,13 +25,13 @@ export function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    const [homeworkList, cardList, cardSummary, history] = await Promise.all([
+    const [allBatches, cardList, cardSummary, history] = await Promise.all([
       api.homeworks.listForStudent(studentId),
       api.cards.listForStudent(studentId),
       api.cards.summaryForStudent(studentId),
       api.students.reviewHistory(studentId),
     ]);
-    setHomeworks(homeworkList);
+    setCardBatches(allBatches.filter((item) => item.totalCards > 0));
     setCards(cardList);
     setSummary(cardSummary);
     setReviewHistory(history);
@@ -41,18 +39,20 @@ export function StudentDetailPage() {
   }, [studentId]);
 
   useEffect(() => {
-    reload().catch((e) => setError(toErrorMessage(e, t)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reload]);
+    reload().catch((e) => {
+      setError(toErrorMessage(e, t));
+      setLoading(false);
+    });
+  }, [reload, t]);
 
-  const futureSchedule = buildFutureReviewSchedule(cards);
+  const futureSchedule = useMemo(() => buildFutureReviewSchedule(cards), [cards]);
 
-  async function createHomework(event: FormEvent) {
+  async function createCardBatch(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      const homework = await api.homeworks.create(studentId, newHomeworkDate);
-      navigate(`/teacher/students/${studentId}/homeworks/${homework.id}`);
+      const batch = await api.homeworks.create(studentId, newBatchDate);
+      navigate(`/teacher/students/${studentId}/cards/${batch.id}`);
     } catch (e) {
       setError(toErrorMessage(e, t));
     }
@@ -115,9 +115,7 @@ export function StudentDetailPage() {
 
   return (
     <div>
-      <p>
-        <Link to="/students" className="muted">← {t('common.back')}</Link>
-      </p>
+      <p><Link to="/students" className="muted">← {t('common.back')}</Link></p>
       <h1>{t('cards.title')}</h1>
       {error && <div className="banner banner--error">{error}</div>}
 
@@ -134,6 +132,54 @@ export function StudentDetailPage() {
           )}
         </>
       )}
+
+      <h2>{historyText(language, 'Создать карточки', 'Karten erstellen')}</h2>
+      <div className="panel stack">
+        <form className="row" onSubmit={createCardBatch}>
+          <label className="field" style={{ margin: 0 }}>
+            <span className="field__label">{historyText(language, 'Дата карточек', 'Datum der Karten')}</span>
+            <input
+              className="input"
+              type="date"
+              value={newBatchDate}
+              onChange={(e) => setNewBatchDate(e.target.value)}
+              required
+            />
+          </label>
+          <button className="btn" type="submit">
+            {historyText(language, 'Создать набор карточек', 'Kartensatz erstellen')}
+          </button>
+        </form>
+      </div>
+
+      <h2>{historyText(language, 'Наборы карточек', 'Kartensätze')}</h2>
+      <div className="panel stack">
+        {loading ? (
+          <p className="muted">{t('common.loading')}</p>
+        ) : cardBatches.length === 0 ? (
+          <p className="muted">{t('cards.empty')}</p>
+        ) : (
+          cardBatches.map((batch) => (
+            <Link
+              key={batch.id}
+              className="list-row"
+              to={`/teacher/students/${studentId}/cards/${batch.id}`}
+              style={{ textDecoration: 'none' }}
+            >
+              <div>
+                <div className="list-row__title">{formatDate(batch.startDate, language)}</div>
+                <div className="muted">
+                  {t('homeworks.total')}: {batch.totalCards} · {t('homeworks.notStarted')}: {batch.notStarted} ·{' '}
+                  {t('homeworks.inProgress')}: {batch.inProgress} · {t('homeworks.learned')}: {batch.learned}
+                </div>
+              </div>
+              <span className={`pill ${homeworkStatusClass(batch.status)}`}>
+                {t(`homeworks.status.${batch.status}`)}
+              </span>
+            </Link>
+          ))
+        )}
+      </div>
 
       <h2>{t('reviewHistory.title')}</h2>
       <div className="panel">
@@ -164,49 +210,40 @@ export function StudentDetailPage() {
                       {t(`reviewHistory.status.${displayStatus}`)}
                     </span>
                   </button>
-
-                  {isOpen && (
+                  {isOpen && item.answers.length > 0 && (
                     <div style={{ padding: '10px 16px 16px' }}>
-                      {item.answers.length === 0 ? (
-                        <p className="muted" style={{ margin: 0 }}>
-                          {historyText(language, 'Подробные ответы для этого повторения не сохранены', 'Detaillierte Antworten für diese Wiederholung wurden nicht gespeichert')}
-                        </p>
-                      ) : (
-                        <>
-                          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <div className="row">
-                              <span>{historyText(language, 'Всего карточек', 'Karten gesamt')}: {item.answers.length}</span>
-                              <span>{historyText(language, 'Правильных ответов', 'Richtige Antworten')}: {correctCount}</span>
-                              <span>{historyText(language, 'Неправильных ответов', 'Falsche Antworten')}: {wrongCount}</span>
-                            </div>
-                            <button className="btn btn--secondary" type="button" onClick={() => downloadReviewTable(item)}>
-                              {historyText(language, 'Скачать таблицу', 'Tabelle herunterladen')}
-                            </button>
-                          </div>
-                          <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-                              <thead>
-                                <tr>
-                                  <HistoryHeader>{historyText(language, 'Вопрос', 'Frage')}</HistoryHeader>
-                                  <HistoryHeader>{historyText(language, 'Ответ ученика', 'Antwort des Schülers')}</HistoryHeader>
-                                  <HistoryHeader>{historyText(language, 'Правильный ответ', 'Richtige Antwort')}</HistoryHeader>
-                                  <HistoryHeader>{historyText(language, 'Результат', 'Ergebnis')}</HistoryHeader>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {item.answers.map((answer) => (
-                                  <tr key={answer.cardId}>
-                                    <HistoryCell>{answer.question}</HistoryCell>
-                                    <HistoryCell>{answer.selectedAnswer ?? historyText(language, 'Ответ не сохранён', 'Antwort nicht gespeichert')}</HistoryCell>
-                                    <HistoryCell>{answer.correctAnswer}</HistoryCell>
-                                    <HistoryCell>{answer.correct ? historyText(language, 'Правильно', 'Richtig') : historyText(language, 'Неправильно', 'Falsch')}</HistoryCell>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </>
-                      )}
+                      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <div className="row">
+                          <span>{historyText(language, 'Всего карточек', 'Karten gesamt')}: {item.answers.length}</span>
+                          <span>{historyText(language, 'Правильных ответов', 'Richtige Antworten')}: {correctCount}</span>
+                          <span>{historyText(language, 'Неправильных ответов', 'Falsche Antworten')}: {wrongCount}</span>
+                        </div>
+                        <button className="btn btn--secondary" type="button" onClick={() => downloadReviewTable(item)}>
+                          {historyText(language, 'Скачать таблицу', 'Tabelle herunterladen')}
+                        </button>
+                      </div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+                          <thead>
+                            <tr>
+                              <HistoryHeader>{historyText(language, 'Вопрос', 'Frage')}</HistoryHeader>
+                              <HistoryHeader>{historyText(language, 'Ответ ученика', 'Antwort des Schülers')}</HistoryHeader>
+                              <HistoryHeader>{historyText(language, 'Правильный ответ', 'Richtige Antwort')}</HistoryHeader>
+                              <HistoryHeader>{historyText(language, 'Результат', 'Ergebnis')}</HistoryHeader>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {item.answers.map((answer) => (
+                              <tr key={answer.cardId}>
+                                <HistoryCell>{answer.question}</HistoryCell>
+                                <HistoryCell>{answer.selectedAnswer ?? historyText(language, 'Ответ не сохранён', 'Antwort nicht gespeichert')}</HistoryCell>
+                                <HistoryCell>{answer.correctAnswer}</HistoryCell>
+                                <HistoryCell>{answer.correct ? historyText(language, 'Правильно', 'Richtig') : historyText(language, 'Неправильно', 'Falsch')}</HistoryCell>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -259,52 +296,6 @@ export function StudentDetailPage() {
           </button>
         </div>
       </div>
-
-      <h2>{t('homeworks.create')}</h2>
-      <div className="panel stack">
-        <form className="row" onSubmit={createHomework}>
-          <label className="field" style={{ margin: 0 }}>
-            <span className="field__label">{t('homeworks.startDate')}</span>
-            <input
-              className="input"
-              type="date"
-              value={newHomeworkDate}
-              onChange={(e) => setNewHomeworkDate(e.target.value)}
-              required
-            />
-          </label>
-          <button className="btn" type="submit">{t('homeworks.create')}</button>
-        </form>
-      </div>
-
-      <h2>{t('homeworks.title')}</h2>
-      <div className="panel stack">
-        {loading ? (
-          <p className="muted">{t('common.loading')}</p>
-        ) : homeworks.length === 0 ? (
-          <p className="muted">{t('homeworks.empty')}</p>
-        ) : (
-          homeworks.map((homework) => (
-            <Link
-              key={homework.id}
-              className="list-row"
-              to={`/teacher/students/${studentId}/homeworks/${homework.id}`}
-              style={{ textDecoration: 'none' }}
-            >
-              <div>
-                <div className="list-row__title">{formatHomeworkDate(homework.startDate, language)}</div>
-                <div className="muted">
-                  {t('homeworks.total')}: {homework.totalCards} · {t('homeworks.notStarted')}: {homework.notStarted} ·{' '}
-                  {t('homeworks.inProgress')}: {homework.inProgress} · {t('homeworks.learned')}: {homework.learned}
-                </div>
-              </div>
-              <span className={`pill ${homeworkStatusClass(homework.status)}`}>
-                {t(`homeworks.status.${homework.status}`)}
-              </span>
-            </Link>
-          ))
-        )}
-      </div>
     </div>
   );
 }
@@ -312,16 +303,12 @@ export function StudentDetailPage() {
 function buildFutureReviewSchedule(cards: Card[]) {
   const today = localDateString(new Date());
   const grouped = new Map<string, Card[]>();
-
   cards
     .filter((card) => card.status === 'ACTIVE' && card.dueDate != null && card.dueDate > today)
     .forEach((card) => {
       const date = card.dueDate as string;
-      const existing = grouped.get(date) ?? [];
-      existing.push(card);
-      grouped.set(date, existing);
+      grouped.set(date, [...(grouped.get(date) ?? []), card]);
     });
-
   return Array.from(grouped.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, scheduledCards]) => ({
@@ -332,11 +319,7 @@ function buildFutureReviewSchedule(cards: Card[]) {
 
 function resolveHistoryStatus(item: DailyReviewHistoryItem): ReviewHistoryDisplayStatus {
   const today = localDateString(new Date());
-
-  if (item.date === today && item.dueCount > 0 && item.completedCount === 0) {
-    return 'EXPECTED';
-  }
-
+  if (item.date === today && item.dueCount > 0 && item.completedCount === 0) return 'EXPECTED';
   return item.status;
 }
 
@@ -349,39 +332,26 @@ function localDateString(date: Date) {
 
 function formatHistoryDate(date: string, language: 'DE' | 'RU') {
   return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
+    day: '2-digit', month: '2-digit',
   }).format(new Date(`${date}T00:00:00`));
 }
 
-function formatHomeworkDate(date: string, language: 'DE' | 'RU') {
+function formatDate(date: string, language: 'DE' | 'RU') {
   return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+    day: '2-digit', month: '2-digit', year: 'numeric',
   }).format(new Date(`${date}T00:00:00`));
 }
 
 function historyStatusClass(status: ReviewHistoryDisplayStatus) {
-  if (status === 'COMPLETED') {
-    return 'pill--learned';
-  }
-  if (status === 'PARTIAL') {
-    return 'pill--active';
-  }
-  if (status === 'EXPECTED') {
-    return 'pill--pending';
-  }
+  if (status === 'COMPLETED') return 'pill--learned';
+  if (status === 'PARTIAL') return 'pill--active';
+  if (status === 'EXPECTED') return 'pill--pending';
   return 'pill--wrong';
 }
 
 function homeworkStatusClass(status: Homework['status']) {
-  if (status === 'COMPLETED') {
-    return 'pill--learned';
-  }
-  if (status === 'ACTIVE') {
-    return 'pill--active';
-  }
+  if (status === 'COMPLETED') return 'pill--learned';
+  if (status === 'ACTIVE') return 'pill--active';
   return 'pill--pending';
 }
 
@@ -395,19 +365,11 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
 }
 
 function HistoryHeader({ children }: { children: string }) {
-  return (
-    <th style={{ textAlign: 'left', padding: '10px 12px', borderBottom: '1px solid rgba(128,128,128,.3)' }}>
-      {children}
-    </th>
-  );
+  return <th style={{ textAlign: 'left', padding: '10px 12px', borderBottom: '1px solid rgba(128,128,128,.3)' }}>{children}</th>;
 }
 
 function HistoryCell({ children }: { children: string }) {
-  return (
-    <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(128,128,128,.18)', verticalAlign: 'top' }}>
-      {children}
-    </td>
-  );
+  return <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(128,128,128,.18)', verticalAlign: 'top' }}>{children}</td>;
 }
 
 function csvCell(value: string): string {
