@@ -5,7 +5,7 @@ import type { Card, Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
-/** Read-only student view of one homework folder, with manual practice. */
+/** Student view of one homework: PDF worksheet plus flashcard practice. */
 export function StudentHomeworkDetailPage() {
   const { homeworkId = '' } = useParams();
   const navigate = useNavigate();
@@ -36,8 +36,7 @@ export function StudentHomeworkDetailPage() {
       setError(toErrorMessage(e, t));
       setLoading(false);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reload]);
+  }, [reload, t]);
 
   async function startPractice() {
     setBusy(true);
@@ -53,12 +52,7 @@ export function StudentHomeworkDetailPage() {
 
   return (
     <div>
-      <p>
-        <Link to="/my-cards" className="muted">
-          ← {t('common.back')}
-        </Link>
-      </p>
-
+      <p><Link to="/my-cards" className="muted">← {t('common.back')}</Link></p>
       {error && <div className="banner banner--error">{error}</div>}
 
       <h1>{homework ? formatHomeworkDate(homework.startDate, language) : t('homeworks.title')}</h1>
@@ -69,6 +63,28 @@ export function StudentHomeworkDetailPage() {
           <SummaryStat label={t('homeworks.notStarted')} value={homework.notStarted} />
           <SummaryStat label={t('homeworks.inProgress')} value={homework.inProgress} />
           <SummaryStat label={t('homeworks.learned')} value={homework.learned} />
+        </div>
+      )}
+
+      {homework?.hasWorksheet && (
+        <div className="panel stack" style={{ marginBottom: 16 }}>
+          <div>
+            <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF'}</h2>
+            <div className="muted">
+              {homework.worksheetFilename}
+              {homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}
+            </div>
+          </div>
+          <Link className="btn btn--block" to={`/student/homeworks/${homeworkId}/worksheet`}>
+            {homework.submitted
+              ? (language === 'DE' ? 'Hausaufgabe öffnen' : 'Открыть сданную домашку')
+              : (language === 'DE' ? 'Hausaufgabe lösen' : 'Решить домашку')}
+          </Link>
+          {homework.submitted && homework.submittedAt && (
+            <div className="banner banner--success">
+              {language === 'DE' ? 'Abgegeben:' : 'Сдано:'} {new Date(homework.submittedAt).toLocaleString(language === 'DE' ? 'de-DE' : 'ru-RU')}
+            </div>
+          )}
         </div>
       )}
 
@@ -102,17 +118,10 @@ export function StudentHomeworkDetailPage() {
 
 function formatHomeworkDate(date: string, language: 'DE' | 'RU') {
   return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+    day: '2-digit', month: '2-digit', year: 'numeric',
   }).format(new Date(`${date}T00:00:00`));
 }
 
 function SummaryStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div style={{ fontSize: 28, fontWeight: 700 }}>{value}</div>
-      <div className="muted" style={{ fontSize: 13 }}>{label}</div>
-    </div>
-  );
+  return <div><div style={{ fontSize: 28, fontWeight: 700 }}>{value}</div><div className="muted" style={{ fontSize: 13 }}>{label}</div></div>;
 }
