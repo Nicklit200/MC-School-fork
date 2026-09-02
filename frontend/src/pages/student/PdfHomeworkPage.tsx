@@ -146,11 +146,9 @@ export function PdfHomeworkPage() {
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
   const toolbarScale = desktopControls ? 1 : 1 / Math.max(viewport.scale, 0.5);
-  const toolbarCenterX = viewport.offsetLeft + viewport.width / 2;
-  const toolbarWidth = Math.max(320, (viewport.width - 20) * viewport.scale);
 
   return (
-    <div className="pdf-homework-page" style={{ paddingTop: desktopControls ? 0 : 78 }}>
+    <div className="pdf-homework-page" style={{ paddingLeft: desktopControls ? 0 : 72 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ minWidth: 0 }}>
           <Link to={`/student/homeworks/${homeworkId}`} className="muted">← {t('common.back')}</Link>
@@ -168,42 +166,27 @@ export function PdfHomeworkPage() {
         </div>
       )}
 
-      <div
-        className="panel"
-        style={desktopControls
-          ? { position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }
-          : {
-              position: 'fixed',
-              top: viewport.offsetTop + 10,
-              left: toolbarCenterX,
-              zIndex: 50,
-              width: toolbarWidth,
-              marginBottom: 0,
-              padding: 10,
-              boxShadow: '0 4px 18px rgba(0,0,0,.18)',
-              touchAction: 'manipulation',
-              transform: `translateX(-50%) scale(${toolbarScale})`,
-              transformOrigin: 'top center',
-            }}
-      >
-        <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          {!homework.submitted && (
-            <div className="row" style={{ gap: 8 }}>
-              <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
-                {language === 'DE' ? 'Stift' : 'Ручка'}
-              </button>
-              <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
-                {language === 'DE' ? 'Radierer' : 'Ластик'}
-              </button>
+      {desktopControls && (
+        <div className="panel" style={{ position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }}>
+          <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            {!homework.submitted && (
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
+                  {language === 'DE' ? 'Stift' : 'Ручка'}
+                </button>
+                <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
+                  {language === 'DE' ? 'Radierer' : 'Ластик'}
+                </button>
+              </div>
+            )}
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)}>←</button>
+              <strong>{pageIndex + 1} / {pageCount}</strong>
+              <button className="btn btn--secondary" type="button" disabled={pageIndex >= pageCount - 1} onClick={() => setPageIndex((p) => p + 1)}>→</button>
             </div>
-          )}
-          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-            <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)}>←</button>
-            <strong>{pageIndex + 1} / {pageCount}</strong>
-            <button className="btn btn--secondary" type="button" disabled={pageIndex >= pageCount - 1} onClick={() => setPageIndex((p) => p + 1)}>→</button>
           </div>
         </div>
-      </div>
+      )}
 
       {!pageUrl ? (
         <div className="panel">{t('common.loading')}</div>
@@ -220,11 +203,15 @@ export function PdfHomeworkPage() {
           pageUrl={pageUrl}
           initialDrawing={drawings[pageIndex]}
           tool={tool}
+          setTool={setTool}
           language={language}
           desktopControls={desktopControls}
           desktopZoom={desktopZoom}
           viewport={viewport}
           toolbarScale={toolbarScale}
+          pageIndex={pageIndex}
+          pageCount={pageCount}
+          setPageIndex={setPageIndex}
           onDesktopZoomChange={setDesktopZoom}
           onChange={(dataUrl) => setDrawings((current) => ({ ...current, [pageIndex]: dataUrl }))}
         />
@@ -237,8 +224,8 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; die Werkzeugleiste bleibt am Bildschirm.'
-              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница, а панель инструментов остаётся на экране.'}
+              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; die Werkzeugleiste bleibt links am Bildschirm.'
+              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница, а панель инструментов остаётся слева на экране.'}
           </p>
         </div>
       )}
@@ -255,15 +242,19 @@ function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (valu
   );
 }
 
-function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopControls, desktopZoom, viewport, toolbarScale, onDesktopZoomChange, onChange }: {
+function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, language, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange }: {
   pageUrl: string;
   initialDrawing?: string;
   tool: Tool;
+  setTool: (tool: Tool) => void;
   language: 'DE' | 'RU';
   desktopControls: boolean;
   desktopZoom: number;
   viewport: ViewportState;
   toolbarScale: number;
+  pageIndex: number;
+  pageCount: number;
+  setPageIndex: (updater: (page: number) => number) => void;
   onDesktopZoomChange: (value: number) => void;
   onChange: (dataUrl: string) => void;
 }) {
@@ -416,39 +407,53 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
-  const bottomCenterX = viewport.offsetLeft + viewport.width / 2;
-  const bottomY = viewport.offsetTop + viewport.height - 10;
+  const railLeft = viewport.offsetLeft + 8;
+  const railTop = viewport.offsetTop + viewport.height / 2;
 
   return (
-    <div style={{ paddingBottom: desktopControls ? 0 : 70 }}>
-      <div
-        className="row"
-        style={desktopControls
-          ? { gap: 8, marginBottom: 8, flexWrap: 'wrap' }
-          : {
-              position: 'fixed',
-              left: bottomCenterX,
-              top: bottomY,
-              zIndex: 50,
-              gap: 8,
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              padding: 10,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,.96)',
-              boxShadow: '0 4px 18px rgba(0,0,0,.18)',
-              touchAction: 'manipulation',
-              transform: `translate(-50%, -100%) scale(${toolbarScale})`,
-              transformOrigin: 'bottom center',
-            }}
-      >
-        <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
-          {language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}
-        </button>
-        <button className="btn btn--ghost" type="button" onClick={clear}>
-          {language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}
-        </button>
-      </div>
+    <div>
+      {!desktopControls && (
+        <div
+          aria-label={language === 'DE' ? 'Werkzeuge' : 'Инструменты'}
+          style={{
+            position: 'fixed',
+            left: railLeft,
+            top: railTop,
+            zIndex: 60,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 7,
+            padding: 8,
+            borderRadius: 14,
+            background: 'rgba(255,255,255,.97)',
+            boxShadow: '0 4px 18px rgba(0,0,0,.18)',
+            touchAction: 'manipulation',
+            transform: `translateY(-50%) scale(${toolbarScale})`,
+            transformOrigin: 'left center',
+          }}
+        >
+          <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')} title={language === 'DE' ? 'Stift' : 'Ручка'}>✎</button>
+          <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')} title={language === 'DE' ? 'Radierer' : 'Ластик'}>⌫</button>
+          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
+          <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)} title={language === 'DE' ? 'Vorherige Seite' : 'Предыдущая страница'}>↑</button>
+          <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{pageIndex + 1}/{pageCount}</div>
+          <button className="btn btn--secondary" type="button" disabled={pageIndex >= pageCount - 1} onClick={() => setPageIndex((p) => p + 1)} title={language === 'DE' ? 'Nächste Seite' : 'Следующая страница'}>↓</button>
+          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
+          <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0} title={language === 'DE' ? 'Rückgängig' : 'Шаг назад'}>↶</button>
+          <button className="btn btn--ghost" type="button" onClick={clear} title={language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}>×</button>
+        </div>
+      )}
+
+      {desktopControls && (
+        <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
+            {language === 'DE' ? 'Rückgängig' : '↶ Шаг назад'}
+          </button>
+          <button className="btn btn--ghost" type="button" onClick={clear}>
+            {language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}
+          </button>
+        </div>
+      )}
 
       <div style={{ position: 'relative', overflow: desktopControls ? 'auto' : 'visible', width: '100%', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'none' }}>
         {desktopControls && <DesktopZoomControls zoom={desktopZoom} onChange={onDesktopZoomChange} />}
