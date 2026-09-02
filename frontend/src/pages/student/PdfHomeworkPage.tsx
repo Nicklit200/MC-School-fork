@@ -13,6 +13,7 @@ export function PdfHomeworkPage() {
   const [homework, setHomework] = useState<Homework | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageUrls, setPageUrls] = useState<Record<number, string>>({});
+  const pageUrlsRef = useRef<Record<number, string>>({});
   const [drawings, setDrawings] = useState<Record<number, string>>({});
   const [tool, setTool] = useState<Tool>('pen');
   const [busy, setBusy] = useState(false);
@@ -32,6 +33,7 @@ export function PdfHomeworkPage() {
       .then((blob) => {
         if (cancelled) return;
         const url = URL.createObjectURL(blob);
+        pageUrlsRef.current[pageIndex] = url;
         setPageUrls((current) => ({ ...current, [pageIndex]: url }));
       })
       .catch((e) => setError(toErrorMessage(e, t)));
@@ -39,8 +41,8 @@ export function PdfHomeworkPage() {
   }, [homework, homeworkId, pageIndex, pageUrls, t]);
 
   useEffect(() => () => {
-    Object.values(pageUrls).forEach((url) => URL.revokeObjectURL(url));
-  }, [pageUrls]);
+    Object.values(pageUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   const pageCount = homework?.worksheetPageCount ?? 0;
   const pageUrl = pageUrls[pageIndex];
@@ -52,16 +54,17 @@ export function PdfHomeworkPage() {
   }, [homework?.submittedAt, language]);
 
   async function submitHomework() {
-    if (!homework?.hasWorksheet) return;
+    if (!homework?.hasWorksheet || homework.submitted) return;
     if (!window.confirm(language === 'DE' ? 'Hausaufgabe jetzt abgeben?' : 'Сдать домашнюю работу сейчас?')) return;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const overlays = Object.entries(drawings).map(([index, imageBase64]) => ({
-        pageIndex: Number(index), imageBase64,
-      }));
+      const overlays = Object.entries(drawings).map(([index, imageBase64]) => ({ pageIndex: Number(index), imageBase64 }));
       await api.study.submitPdfHomework(homeworkId, overlays);
+      Object.values(pageUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+      pageUrlsRef.current = {};
+      setPageUrls({});
       const updated = (await api.study.homeworks()).find((item) => item.id === homeworkId) ?? null;
       setHomework(updated);
       setMessage(language === 'DE' ? 'Hausaufgabe wurde abgegeben.' : 'Домашняя работа сдана.');
@@ -100,18 +103,24 @@ export function PdfHomeworkPage() {
 
       {error && <div className="banner banner--error">{error}</div>}
       {message && <div className="banner banner--success">{message}</div>}
-      {submittedText && <div className="banner banner--info">{language === 'DE' ? 'Abgegeben:' : 'Сдано:'} {submittedText}</div>}
+      {submittedText && (
+        <div className="banner banner--info">
+          {language === 'DE' ? 'Abgegeben:' : 'Сдано:'} {submittedText}. {language === 'DE' ? 'Die abgegebene Version ist schreibgeschützt.' : 'Сейчас показывается сохранённая версия PDF, редактирование закрыто.'}
+        </div>
+      )}
 
       <div className="panel" style={{ position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }}>
         <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
-              {language === 'DE' ? 'Stift' : 'Ручка'}
-            </button>
-            <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
-              {language === 'DE' ? 'Radierer' : 'Ластик'}
-            </button>
-          </div>
+          {!homework.submitted && (
+            <div className="row" style={{ gap: 8 }}>
+              <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
+                {language === 'DE' ? 'Stift' : 'Ручка'}
+              </button>
+              <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
+                {language === 'DE' ? 'Radierer' : 'Ластик'}
+              </button>
+            </div>
+          )}
           <div className="row" style={{ gap: 8, alignItems: 'center' }}>
             <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)}>←</button>
             <strong>{pageIndex + 1} / {pageCount}</strong>
@@ -122,6 +131,10 @@ export function PdfHomeworkPage() {
 
       {!pageUrl ? (
         <div className="panel">{t('common.loading')}</div>
+      ) : homework.submitted ? (
+        <div style={{ width: '100%', maxWidth: 1000, margin: '0 auto', boxShadow: '0 2px 14px rgba(0,0,0,.12)', background: '#fff' }}>
+          <img src={pageUrl} alt="Submitted homework PDF page" style={{ display: 'block', width: '100%', height: 'auto' }} />
+        </div>
       ) : (
         <WorksheetCanvas
           key={pageIndex}
@@ -133,16 +146,18 @@ export function PdfHomeworkPage() {
         />
       )}
 
-      <div className="panel" style={{ marginTop: 12 }}>
-        <button className="btn btn--block" type="button" onClick={submitHomework} disabled={busy}>
-          {busy ? (language === 'DE' ? 'Wird abgegeben…' : 'Сохраняем…') : (language === 'DE' ? 'Hausaufgabe abgeben' : 'Сдать домашку')}
-        </button>
-        <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
-          {language === 'DE'
-            ? 'Du kannst direkt mit Apple Pencil oder einem Stylus auf dem Arbeitsblatt schreiben.'
-            : 'Можно писать прямо по листу Apple Pencil или стилусом. При сдаче сохранится новый PDF с твоими записями.'}
-        </p>
-      </div>
+      {!homework.submitted && (
+        <div className="panel" style={{ marginTop: 12 }}>
+          <button className="btn btn--block" type="button" onClick={submitHomework} disabled={busy}>
+            {busy ? (language === 'DE' ? 'Wird abgegeben…' : 'Сохраняем…') : (language === 'DE' ? 'Hausaufgabe abgeben' : 'Сдать домашку')}
+          </button>
+          <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
+            {language === 'DE'
+              ? 'Du kannst direkt mit Apple Pencil oder einem Stylus auf dem Arbeitsblatt schreiben.'
+              : 'Можно писать прямо по листу Apple Pencil или стилусом. При сдаче сохранится новый PDF с твоими записями.'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -207,9 +222,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
     const p = point(event);
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
@@ -218,7 +232,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, onChange }: 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return;
     drawingRef.current = false;
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     const canvas = canvasRef.current;
     if (canvas) onChange(canvas.toDataURL('image/png'));
   }
