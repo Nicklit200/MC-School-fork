@@ -1,43 +1,41 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
-/** The student's own cards with their learning status (PRD: "all cards with progress"). */
+/** The student's flashcard batches only. PDF homework has its own top-level page. */
 export function MyCardsPage() {
   const { t } = useI18n();
-  const [homeworks, setHomeworks] = useState<Homework[] | null>(null);
+  const [items, setItems] = useState<Homework[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.study
       .homeworks()
-      .then(setHomeworks)
+      .then(setItems)
       .catch((e) => setError(toErrorMessage(e, t)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (error) {
-    return <div className="banner banner--error">{error}</div>;
-  }
-  if (!homeworks) {
-    return <p className="muted">{t('common.loading')}</p>;
-  }
+  const cardBatches = useMemo(() => (items ?? []).filter((item) => item.totalCards > 0), [items]);
+
+  if (error) return <div className="banner banner--error">{error}</div>;
+  if (!items) return <p className="muted">{t('common.loading')}</p>;
 
   return (
     <div>
       <h1>{t('nav.myCards')}</h1>
-      {homeworks.length === 0 ? (
-        <p className="muted">{t('homeworks.empty')}</p>
+      {cardBatches.length === 0 ? (
+        <p className="muted">{t('cards.empty')}</p>
       ) : (
         <div className="panel stack">
-          {homeworks.map((homework) => (
+          {cardBatches.map((homework) => (
             <Link
               key={homework.id}
               className="list-row"
-              to={`/student/homeworks/${homework.id}`}
+              to={`/my-cards/${homework.id}`}
               style={{ textDecoration: 'none' }}
             >
               <div className="list-row__title">{homework.startDate}</div>
