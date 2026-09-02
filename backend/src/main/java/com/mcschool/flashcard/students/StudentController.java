@@ -74,7 +74,42 @@ public class StudentController {
     public Map<String, String> testDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
                                                @PathVariable UUID studentId) {
         StudentListResponse student = studentService.getStudent(caller, studentId);
-        return googleDriveTestService.testFolder(student.googleDriveFolderUrl());
+        try {
+            return googleDriveTestService.testFolder(student.googleDriveFolderUrl());
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return Map.of(
+                    "status", "error",
+                    "message", safeDriveTestMessage(ex.getMessage())
+            );
+        }
+    }
+
+    private String safeDriveTestMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return "Не удалось проверить Google Drive";
+        }
+        if (message.contains("GOOGLE_SERVICE_ACCOUNT_JSON is not configured")) {
+            return "В Railway не найдена переменная GOOGLE_SERVICE_ACCOUNT_JSON";
+        }
+        if (message.contains("Invalid Google Drive folder URL")) {
+            return "Ссылка на папку Google Drive имеет неверный формат";
+        }
+        if (message.contains("Google authentication returned HTTP 400")) {
+            return "Google не принял JSON-ключ. Проверь, что в Railway вставлен весь JSON-файл целиком";
+        }
+        if (message.contains("Google authentication returned HTTP 401")) {
+            return "Google отклонил ключ сервисного аккаунта";
+        }
+        if (message.contains("Google Drive returned HTTP 403")) {
+            return "Сервисному аккаунту не хватает доступа к этой папке или Shared Drive";
+        }
+        if (message.contains("Google Drive returned HTTP 404")) {
+            return "Папка не найдена или сервисный аккаунт её не видит";
+        }
+        if (message.startsWith("Google Drive returned HTTP ")) {
+            return message;
+        }
+        return "Ошибка подключения Google Drive: " + message;
     }
 
     @GetMapping("/{studentId}/review-history")
