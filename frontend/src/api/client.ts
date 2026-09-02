@@ -107,6 +107,8 @@ export const api = {
       request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
     testDriveFolder: (studentId: string) =>
       request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test`),
+    testAutomaticExport: (studentId: string) =>
+      request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test-export`),
     reviewHistory: (studentId: string) =>
       request<DailyReviewHistoryItem[]>('GET', `/students/${studentId}/review-history`),
     testReviewReminder: (studentId: string) =>
