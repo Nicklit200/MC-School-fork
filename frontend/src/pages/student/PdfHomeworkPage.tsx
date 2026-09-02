@@ -13,7 +13,6 @@ export function PdfHomeworkPage() {
   const [homework, setHomework] = useState<Homework | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageUrls, setPageUrls] = useState<Record<number, string>>({});
-  const pageUrlsRef = useRef<Record<number, string>>({});
   const [drawings, setDrawings] = useState<Record<number, string>>({});
   const [tool, setTool] = useState<Tool>('pen');
   const [busy, setBusy] = useState(false);
@@ -29,20 +28,13 @@ export function PdfHomeworkPage() {
   useEffect(() => {
     if (!homework?.hasWorksheet || pageUrls[pageIndex]) return;
     let cancelled = false;
-    api.study.worksheetPage(homeworkId, pageIndex)
-      .then((blob) => {
-        if (cancelled) return;
-        const url = URL.createObjectURL(blob);
-        pageUrlsRef.current[pageIndex] = url;
-        setPageUrls((current) => ({ ...current, [pageIndex]: url }));
+    api.study.worksheetPageDataUrl(homeworkId, pageIndex)
+      .then((dataUrl) => {
+        if (!cancelled) setPageUrls((current) => ({ ...current, [pageIndex]: dataUrl.trim() }));
       })
       .catch((e) => setError(toErrorMessage(e, t)));
     return () => { cancelled = true; };
   }, [homework, homeworkId, pageIndex, pageUrls, t]);
-
-  useEffect(() => () => {
-    Object.values(pageUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
-  }, []);
 
   const pageCount = homework?.worksheetPageCount ?? 0;
   const pageUrl = pageUrls[pageIndex];
@@ -62,8 +54,6 @@ export function PdfHomeworkPage() {
     try {
       const overlays = Object.entries(drawings).map(([index, imageBase64]) => ({ pageIndex: Number(index), imageBase64 }));
       await api.study.submitPdfHomework(homeworkId, overlays);
-      Object.values(pageUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
-      pageUrlsRef.current = {};
       setPageUrls({});
       const updated = (await api.study.homeworks()).find((item) => item.id === homeworkId) ?? null;
       setHomework(updated);
