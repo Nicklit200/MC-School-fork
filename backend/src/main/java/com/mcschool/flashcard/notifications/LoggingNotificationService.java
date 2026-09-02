@@ -31,8 +31,8 @@ public class LoggingNotificationService implements NotificationService {
     }
 
     @Override
-    public void sendReviewReminder(User student, long dueCardCount) {
-        log.info("[notification] Review reminder for {} — {} card(s) due today: {} (email not enabled)",
-                student.getEmail(), dueCardCount, appLinks.todayLink());
+    public void sendDailyTaskReminder(User student, long dueCardCount, long dueHomeworkCount) {
+        log.info("[notification] Daily reminder for {} — {} card(s), {} homework(s): {} (email not enabled)",
+                student.getEmail(), dueCardCount, dueHomeworkCount, appLinks.todayLink());
     }
 }
