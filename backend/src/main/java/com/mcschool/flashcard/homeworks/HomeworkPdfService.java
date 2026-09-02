@@ -3,6 +3,7 @@ package com.mcschool.flashcard.homeworks;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.dto.HomeworkPageOverlayRequest;
+import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
 import com.mcschool.flashcard.notifications.PushSubscription;
 import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.Map;
 import java.util.UUID;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
@@ -53,23 +55,34 @@ public class HomeworkPdfService {
         this.webPushService = webPushService;
     }
 
+    /**
+     * Creates a brand-new PDF homework. Even if the student already has one or more
+     * homeworks for the same date, this method always creates another row with a new UUID.
+     */
+    @Transactional
+    public HomeworkResponse createWorksheetHomework(AuthenticatedUser teacher,
+                                                     UUID studentId,
+                                                     LocalDate startDate,
+                                                     MultipartFile file) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        PdfUpload pdf = readPdf(file);
+
+        Homework homework = homeworkRepository.save(Homework.create(student, startDate));
+        homework.attachWorksheet(pdf.filename(), pdf.bytes(), pdf.pageCount());
+
+        if (startDate.equals(LocalDate.now(SCHOOL_ZONE))) {
+            notifyTodayAssignment(homework);
+        }
+
+        return HomeworkResponse.from(homework, Map.of());
+    }
+
     @Transactional
     public void uploadWorksheet(AuthenticatedUser teacher, UUID homeworkId, MultipartFile file) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
         boolean firstAssignment = !homework.hasWorksheet();
-        if (file == null || file.isEmpty()) throw new IllegalArgumentException("PDF file is required");
-        if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("PDF is too large");
-        String filename = file.getOriginalFilename() == null ? "worksheet.pdf" : file.getOriginalFilename();
-        if (!filename.toLowerCase().endsWith(".pdf")) throw new IllegalArgumentException("Only PDF files are supported");
-        try {
-            byte[] bytes = file.getBytes();
-            try (PDDocument document = Loader.loadPDF(bytes)) {
-                if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
-                homework.attachWorksheet(filename, bytes, document.getNumberOfPages());
-            }
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Could not read PDF", e);
-        }
+        PdfUpload pdf = readPdf(file);
+        homework.attachWorksheet(pdf.filename(), pdf.bytes(), pdf.pageCount());
 
         if (firstAssignment && homework.getStartDate().equals(LocalDate.now(SCHOOL_ZONE))) {
             notifyTodayAssignment(homework);
@@ -139,6 +152,22 @@ public class HomeworkPdfService {
         return homework.getSubmittedFilename();
     }
 
+    private PdfUpload readPdf(MultipartFile file) {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("PDF file is required");
+        if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("PDF is too large");
+        String filename = file.getOriginalFilename() == null ? "worksheet.pdf" : file.getOriginalFilename();
+        if (!filename.toLowerCase().endsWith(".pdf")) throw new IllegalArgumentException("Only PDF files are supported");
+        try {
+            byte[] bytes = file.getBytes();
+            try (PDDocument document = Loader.loadPDF(bytes)) {
+                if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
+                return new PdfUpload(filename, bytes, document.getNumberOfPages());
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Could not read PDF", e);
+        }
+    }
+
     private void notifyTodayAssignment(Homework homework) {
         if (!webPushService.isConfigured()) return;
         String url = "/student/homeworks/" + homework.getId() + "/worksheet";
@@ -172,6 +201,14 @@ public class HomeworkPdfService {
         }
     }
 
+    private User requireOwnedStudent(UUID teacherId, UUID studentId) {
+        return userRepository.findById(studentId)
+                .filter(user -> user.getRole() == Role.STUDENT)
+                .filter(user -> !user.isArchived())
+                .filter(user -> user.getTeacher() != null && user.getTeacher().getId().equals(teacherId))
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+    }
+
     private Homework requireTeacherHomework(UUID teacherId, UUID homeworkId) {
         Homework homework = homeworkRepository.findById(homeworkId)
                 .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
@@ -192,4 +229,6 @@ public class HomeworkPdfService {
         if (!homework.getStudent().getId().equals(student.getId())) throw new ResourceNotFoundException("Homework not found");
         return homework;
     }
+
+    private record PdfUpload(String filename, byte[] bytes, int pageCount) {}
 }
