@@ -118,6 +118,14 @@ export const api = {
   users: {
     updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }),
   },
+  push: {
+    config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'),
+    subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) =>
+      request<void>('POST', '/push/subscriptions', subscription),
+    unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) =>
+      request<void>('DELETE', '/push/subscriptions', subscription),
+    test: () => request<void>('POST', '/push/test'),
+  },
   teachers: {
     list: () => request<User[]>('GET', '/teachers'),
     create: (fullName: string, email: string) => request<TeacherInvitation>('POST', '/teachers', { fullName, email }),
