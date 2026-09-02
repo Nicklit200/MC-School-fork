@@ -6,8 +6,6 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type Tool = 'pen' | 'eraser';
-type TouchPoint = { x: number; y: number };
-type MobileView = { scale: number; x: number; y: number };
 
 export function PdfHomeworkPage() {
   const { homeworkId = '' } = useParams();
@@ -19,6 +17,7 @@ export function PdfHomeworkPage() {
   const [tool, setTool] = useState<Tool>('pen');
   const [desktopZoom, setDesktopZoom] = useState(100);
   const [desktopControls, setDesktopControls] = useState(false);
+  const [viewportScale, setViewportScale] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -29,6 +28,19 @@ export function PdfHomeworkPage() {
     update();
     media.addEventListener?.('change', update);
     return () => media.removeEventListener?.('change', update);
+  }, []);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => setViewportScale(viewport.scale || 1);
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+    };
   }, []);
 
   useEffect(() => {
@@ -93,6 +105,7 @@ export function PdfHomeworkPage() {
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
+  const toolbarScale = desktopControls ? 1 : 1 / Math.max(viewportScale, 0.5);
 
   return (
     <div className="pdf-homework-page" style={{ paddingTop: desktopControls ? 0 : 78 }}>
@@ -120,13 +133,15 @@ export function PdfHomeworkPage() {
           : {
               position: 'fixed',
               top: 10,
-              left: 10,
-              right: 10,
+              left: '50%',
               zIndex: 50,
+              width: 'calc(100vw - 20px)',
               marginBottom: 0,
               padding: 10,
               boxShadow: '0 4px 18px rgba(0,0,0,.18)',
               touchAction: 'manipulation',
+              transform: `translateX(-50%) scale(${toolbarScale})`,
+              transformOrigin: 'top center',
             }}
       >
         <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -166,6 +181,7 @@ export function PdfHomeworkPage() {
           language={language}
           desktopControls={desktopControls}
           desktopZoom={desktopZoom}
+          toolbarScale={toolbarScale}
           onDesktopZoomChange={setDesktopZoom}
           onChange={(dataUrl) => setDrawings((current) => ({ ...current, [pageIndex]: dataUrl }))}
         />
@@ -178,8 +194,8 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Apple Pencil schreibt. Mit zwei Fingern kannst du das Blatt verschieben und zoomen.'
-              : 'Apple Pencil пишет. Двумя пальцами можно двигать и приближать лист.'}
+              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; die Werkzeugleiste bleibt gleich groß.'
+              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница, а панель инструментов остаётся одного размера.'}
           </p>
         </div>
       )}
@@ -196,13 +212,14 @@ function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (valu
   );
 }
 
-function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopControls, desktopZoom, onDesktopZoomChange, onChange }: {
+function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopControls, desktopZoom, toolbarScale, onDesktopZoomChange, onChange }: {
   pageUrl: string;
   initialDrawing?: string;
   tool: Tool;
   language: 'DE' | 'RU';
   desktopControls: boolean;
   desktopZoom: number;
+  toolbarScale: number;
   onDesktopZoomChange: (value: number) => void;
   onChange: (dataUrl: string) => void;
 }) {
@@ -210,27 +227,25 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingPointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<string[]>([]);
-  const touchesRef = useRef<Map<number, TouchPoint>>(new Map());
-  const ignoredTouchIdsRef = useRef<Set<number>>(new Set());
-  const gestureStartRef = useRef<{ distance: number; center: TouchPoint; view: MobileView } | null>(null);
   const scrollLockRef = useRef<{ y: number; bodyStyle: string; htmlOverflow: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
-  const [mobileView, setMobileView] = useState<MobileView>({ scale: 1, x: 0, y: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const blockTouch = (event: TouchEvent) => event.preventDefault();
-    canvas.addEventListener('touchstart', blockTouch, { passive: false });
-    canvas.addEventListener('touchmove', blockTouch, { passive: false });
-    canvas.addEventListener('touchend', blockTouch, { passive: false });
-    canvas.addEventListener('touchcancel', blockTouch, { passive: false });
+
+    // One-finger touches (including a resting palm) must not move the page.
+    // Two-finger touches are left to Safari so the whole page can pinch-zoom naturally.
+    const guardTouch = (event: TouchEvent) => {
+      if (event.touches.length < 2) event.preventDefault();
+    };
+
+    canvas.addEventListener('touchstart', guardTouch, { passive: false });
+    canvas.addEventListener('touchmove', guardTouch, { passive: false });
     return () => {
-      canvas.removeEventListener('touchstart', blockTouch);
-      canvas.removeEventListener('touchmove', blockTouch);
-      canvas.removeEventListener('touchend', blockTouch);
-      canvas.removeEventListener('touchcancel', blockTouch);
+      canvas.removeEventListener('touchstart', guardTouch);
+      canvas.removeEventListener('touchmove', guardTouch);
       unlockPageScroll();
     };
   }, []);
@@ -294,78 +309,20 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     setUndoCount(historyRef.current.length);
   }
 
-  function touchGeometry() {
-    const points = Array.from(touchesRef.current.values());
-    if (points.length !== 2) return null;
-    const [a, b] = points;
-    return {
-      distance: Math.hypot(b.x - a.x, b.y - a.y),
-      center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-    };
-  }
-
-  function looksLikePalm(event: React.PointerEvent<HTMLCanvasElement>) {
-    return event.width >= 32 || event.height >= 32;
-  }
-
-  function beginTouch(event: React.PointerEvent<HTMLCanvasElement>) {
-    event.preventDefault();
-    if (drawingPointerIdRef.current !== null || looksLikePalm(event)) {
-      ignoredTouchIdsRef.current.add(event.pointerId);
-      return;
-    }
-    touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
-    if (touchesRef.current.size === 2) {
-      const geometry = touchGeometry();
-      if (geometry) gestureStartRef.current = { ...geometry, view: mobileView };
-    } else if (touchesRef.current.size > 2) {
-      touchesRef.current.clear();
-      gestureStartRef.current = null;
-    }
-  }
-
-  function moveTouch(event: React.PointerEvent<HTMLCanvasElement>) {
-    event.preventDefault();
-    if (ignoredTouchIdsRef.current.has(event.pointerId) || drawingPointerIdRef.current !== null) return;
-    if (!touchesRef.current.has(event.pointerId)) return;
-    touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (touchesRef.current.size !== 2 || !gestureStartRef.current) return;
-    const geometry = touchGeometry();
-    if (!geometry) return;
-    const start = gestureStartRef.current;
-    const scale = Math.max(1, Math.min(3, start.view.scale * (geometry.distance / start.distance)));
-    setMobileView({
-      scale,
-      x: start.view.x + (geometry.center.x - start.center.x),
-      y: start.view.y + (geometry.center.y - start.center.y),
-    });
-  }
-
-  function endTouch(event: React.PointerEvent<HTMLCanvasElement>) {
-    event.preventDefault();
-    ignoredTouchIdsRef.current.delete(event.pointerId);
-    touchesRef.current.delete(event.pointerId);
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
-    if (touchesRef.current.size < 2) gestureStartRef.current = null;
-  }
-
   function start(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch') {
-      beginTouch(event);
-      return;
-    }
+    if (event.pointerType === 'touch') return;
+
     event.preventDefault();
     event.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
+
     const startPoint = point(event);
-    touchesRef.current.clear();
-    gestureStartRef.current = null;
     lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     pushHistory(canvas);
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.beginPath();
@@ -378,11 +335,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch') {
-      moveTouch(event);
-      return;
-    }
-    if (drawingPointerIdRef.current !== event.pointerId) return;
+    if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+
     event.preventDefault();
     event.stopPropagation();
     const ctx = canvasRef.current?.getContext('2d');
@@ -393,11 +347,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch') {
-      endTouch(event);
-      return;
-    }
-    if (drawingPointerIdRef.current !== event.pointerId) return;
+    if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+
     event.preventDefault();
     event.stopPropagation();
     drawingPointerIdRef.current = null;
@@ -437,9 +388,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
-  const mobileTransform = desktopControls
-    ? undefined
-    : `translate(${mobileView.x}px, ${mobileView.y}px) scale(${mobileView.scale})`;
 
   return (
     <div style={{ paddingBottom: desktopControls ? 0 : 70 }}>
@@ -449,8 +397,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
           ? { gap: 8, marginBottom: 8, flexWrap: 'wrap' }
           : {
               position: 'fixed',
-              left: 10,
-              right: 10,
+              left: '50%',
               bottom: 10,
               zIndex: 50,
               gap: 8,
@@ -461,6 +408,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
               background: 'rgba(255,255,255,.96)',
               boxShadow: '0 4px 18px rgba(0,0,0,.18)',
               touchAction: 'manipulation',
+              transform: `translateX(-50%) scale(${toolbarScale})`,
+              transformOrigin: 'bottom center',
             }}
       >
         <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0}>
@@ -471,7 +420,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
         </button>
       </div>
 
-      <div style={{ position: 'relative', overflow: 'hidden', width: '100%', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'none' }}>
+      <div style={{ position: 'relative', overflow: desktopControls ? 'auto' : 'visible', width: '100%', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'none' }}>
         {desktopControls && <DesktopZoomControls zoom={desktopZoom} onChange={onDesktopZoomChange} />}
         <div
           style={{
@@ -481,8 +430,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
             margin: '0 auto',
             boxShadow: '0 2px 14px rgba(0,0,0,.12)',
             background: '#fff',
-            transform: mobileTransform,
-            transformOrigin: 'center center',
           }}
         >
           <img
@@ -504,7 +451,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
               inset: 0,
               width: '100%',
               height: '100%',
-              touchAction: 'none',
+              touchAction: 'pinch-zoom',
               cursor: tool === 'eraser' ? 'cell' : 'crosshair',
               opacity: ready ? 1 : 0,
             }}
