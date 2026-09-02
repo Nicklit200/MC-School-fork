@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Card, Homework } from '../../api/types';
+import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
-import { CardCreator } from './CardCreator';
-import { CardRow } from './CardRow';
 
-/** One homework folder: cards plus an optional PDF worksheet the student can write on. */
+/** Teacher view of one PDF homework. Flashcards are managed separately. */
 export function HomeworkDetailPage() {
   const { studentId = '', homeworkId = '' } = useParams();
   const { language, t } = useI18n();
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -25,14 +22,10 @@ export function HomeworkDetailPage() {
   );
 
   const reload = useCallback(async () => {
-    const [homeworkList, cardList] = await Promise.all([
-      api.homeworks.listForStudent(studentId),
-      api.cards.listForHomework(homeworkId),
-    ]);
+    const homeworkList = await api.homeworks.listForStudent(studentId);
     setHomeworks(homeworkList);
-    setCards(cardList);
     setLoading(false);
-  }, [studentId, homeworkId]);
+  }, [studentId]);
 
   useEffect(() => {
     reload().catch((e) => {
@@ -75,9 +68,13 @@ export function HomeworkDetailPage() {
     }
   }
 
+  if (loading && !homework) {
+    return <p className="muted">{t('common.loading')}</p>;
+  }
+
   return (
     <div>
-      <p><Link to={`/students/${studentId}`} className="muted">← {t('homeworks.backToStudent')}</Link></p>
+      <p><Link to={`/students/${studentId}/homeworks`} className="muted">← {language === 'DE' ? 'Zu den Hausaufgaben' : 'Назад к домашкам'}</Link></p>
 
       {error && <div className="banner banner--error">{error}</div>}
       {message && <div className="banner banner--success">{message}</div>}
@@ -85,16 +82,29 @@ export function HomeworkDetailPage() {
       <h1>{homework ? formatHomeworkDate(homework.startDate, language) : t('homeworks.title')}</h1>
 
       {homework && (
-        <div className="panel row center">
-          <span className={`pill ${homeworkStatusClass(homework.status)}`}>{t(`homeworks.status.${homework.status}`)}</span>
-          <SummaryStat label={t('homeworks.total')} value={homework.totalCards} />
-          <SummaryStat label={t('homeworks.notStarted')} value={homework.notStarted} />
-          <SummaryStat label={t('homeworks.inProgress')} value={homework.inProgress} />
-          <SummaryStat label={t('homeworks.learned')} value={homework.learned} />
+        <div className="panel row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div className="muted" style={{ fontSize: 13 }}>{language === 'DE' ? 'Status' : 'Статус'}</div>
+            <strong>
+              {homework.submitted
+                ? (language === 'DE' ? 'Abgegeben' : 'Сдано')
+                : homework.startDate < localDateString(new Date())
+                  ? (language === 'DE' ? 'Nicht erledigt' : 'Не сделано')
+                  : homework.startDate === localDateString(new Date())
+                    ? (language === 'DE' ? 'Heute zu erledigen' : 'Нужно сделать сегодня')
+                    : (language === 'DE' ? 'Geplant' : 'Запланировано')}
+            </strong>
+          </div>
+          {homework.submittedAt && (
+            <div style={{ textAlign: 'right' }}>
+              <div className="muted" style={{ fontSize: 13 }}>{language === 'DE' ? 'Abgegeben am' : 'Сдано'}</div>
+              <strong>{new Date(homework.submittedAt).toLocaleString(language === 'DE' ? 'de-DE' : 'ru-RU')}</strong>
+            </div>
+          )}
         </div>
       )}
 
-      <h2>{language === 'DE' ? 'PDF-Arbeitsblatt' : 'PDF-домашка'}</h2>
+      <h2>{language === 'DE' ? 'PDF-Hausaufgabe' : 'PDF-домашка'}</h2>
       <div className="panel stack">
         {homework?.hasWorksheet ? (
           <div className="banner banner--info">
@@ -108,6 +118,7 @@ export function HomeworkDetailPage() {
               : 'Загрузи готовый PDF. Ученик сможет открыть его на сайте и писать прямо по нему Apple Pencil или стилусом.'}
           </p>
         )}
+
         <input
           className="input"
           type="file"
@@ -136,20 +147,6 @@ export function HomeworkDetailPage() {
           </div>
         )}
       </div>
-
-      <h2>{t('cards.add')}</h2>
-      <CardCreator homeworkId={homeworkId} onChanged={reload} />
-
-      <h2>{t('cards.title')}</h2>
-      {loading ? (
-        <p className="muted">{t('common.loading')}</p>
-      ) : cards.length === 0 ? (
-        <p className="muted">{t('cards.empty')}</p>
-      ) : (
-        cards.map((card) => (
-          <CardRow key={card.id} card={card} onChanged={reload} onDeleted={() => setMessage(t('cards.deleted'))} />
-        ))
-      )}
     </div>
   );
 }
@@ -160,12 +157,9 @@ function formatHomeworkDate(date: string, language: 'DE' | 'RU') {
   }).format(new Date(`${date}T00:00:00`));
 }
 
-function SummaryStat({ label, value }: { label: string; value: number }) {
-  return <div><div style={{ fontSize: 28, fontWeight: 700 }}>{value}</div><div className="muted" style={{ fontSize: 13 }}>{label}</div></div>;
-}
-
-function homeworkStatusClass(status: Homework['status']) {
-  if (status === 'COMPLETED') return 'pill--learned';
-  if (status === 'ACTIVE') return 'pill--active';
-  return 'pill--pending';
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
