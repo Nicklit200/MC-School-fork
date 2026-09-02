@@ -1,7 +1,9 @@
 package com.mcschool.flashcard.students;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.drive.GoogleDriveService;
 import com.mcschool.flashcard.drive.GoogleDriveTestService;
+import com.mcschool.flashcard.drive.dto.DriveUploadResponse;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.reviewhistory.dto.DailyReviewHistoryResponse;
 import com.mcschool.flashcard.students.dto.CreateStudentRequest;
@@ -11,6 +13,9 @@ import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,16 +38,21 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('TEACHER')")
 public class StudentController {
 
+    private static final DateTimeFormatter TEST_EXPORT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+
     private final StudentService studentService;
     private final DailyReviewHistoryService historyService;
     private final GoogleDriveTestService googleDriveTestService;
+    private final GoogleDriveService googleDriveService;
 
     public StudentController(StudentService studentService,
                              DailyReviewHistoryService historyService,
-                             GoogleDriveTestService googleDriveTestService) {
+                             GoogleDriveTestService googleDriveTestService,
+                             GoogleDriveService googleDriveService) {
         this.studentService = studentService;
         this.historyService = historyService;
         this.googleDriveTestService = googleDriveTestService;
+        this.googleDriveService = googleDriveService;
     }
 
     @PostMapping
@@ -82,6 +92,60 @@ public class StudentController {
                     "message", safeDriveTestMessage(ex.getMessage())
             );
         }
+    }
+
+    @PostMapping("/{studentId}/drive-folder/test-export")
+    public Map<String, String> testAutomaticExport(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                   @PathVariable UUID studentId) {
+        StudentListResponse student = studentService.getStudent(caller, studentId);
+        String folderId = student.googleDriveFolderUrl();
+        if (folderId == null || folderId.isBlank()) {
+            return Map.of("status", "error", "message", "Сначала выберите и сохраните папку Google Drive");
+        }
+
+        try {
+            String csv = "\uFEFFStudent;Session type;Total;Correct first try;Wrong first try\r\n"
+                    + csvCell(student.fullName()) + ";TEST;5;4;1\r\n\r\n"
+                    + "Question;Student answer;Correct answer;Result\r\n"
+                    + "2 + 2;4;4;CORRECT\r\n"
+                    + "5 x 3;12;15;WRONG\r\n"
+                    + "10 - 3;7;7;CORRECT\r\n";
+
+            String fileName = safeFileName(student.fullName()) + "_"
+                    + ZonedDateTime.now().format(TEST_EXPORT_TIME)
+                    + "_TEST_cards.csv";
+            DriveUploadResponse uploaded = googleDriveService.uploadBytes(
+                    folderId,
+                    fileName,
+                    "text/csv; charset=utf-8",
+                    csv.getBytes(StandardCharsets.UTF_8)
+            );
+            return Map.of(
+                    "status", "ok",
+                    "fileName", uploaded.name(),
+                    "fileUrl", uploaded.webViewLink() == null ? "" : uploaded.webViewLink()
+            );
+        } catch (RuntimeException ex) {
+            return Map.of(
+                    "status", "error",
+                    "message", "Не удалось создать тестовую таблицу: " + ex.getMessage()
+            );
+        }
+    }
+
+    private String csvCell(String value) {
+        if (value == null) {
+            return "\"\"";
+        }
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
+    private String safeFileName(String value) {
+        if (value == null || value.isBlank()) {
+            return "student";
+        }
+        String cleaned = value.trim().replaceAll("[\\\\/:*?\"<>|]", "_").replaceAll("\\s+", "_");
+        return cleaned.isBlank() ? "student" : cleaned;
     }
 
     private String safeDriveTestMessage(String message) {
