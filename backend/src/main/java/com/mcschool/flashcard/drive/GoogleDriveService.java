@@ -69,6 +69,23 @@ public class GoogleDriveService {
         return toItems(payload.get("files"));
     }
 
+    public boolean fileExists(String folderId, String fileName) {
+        if (folderId == null || folderId.isBlank() || fileName == null || fileName.isBlank()) {
+            return false;
+        }
+        String q = "'" + folderId.replace("'", "\\'") + "' in parents and name='"
+                + fileName.replace("'", "\\'") + "' and trashed=false";
+        String url = DRIVE_API + "/files"
+                + "?includeItemsFromAllDrives=true"
+                + "&supportsAllDrives=true"
+                + "&pageSize=1"
+                + "&q=" + enc(q)
+                + "&fields=files(id)";
+        Map<String, Object> payload = getJson(url);
+        Object files = payload.get("files");
+        return files instanceof List<?> list && !list.isEmpty();
+    }
+
     public DriveUploadResponse upload(String folderId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is required");
