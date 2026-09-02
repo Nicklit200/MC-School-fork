@@ -5,12 +5,15 @@ import type { ImportPreview, StudentGroup } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
+type CardTab = 'manual' | 'import';
+
 export function GroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
   const { t } = useI18n();
   const [group, setGroup] = useState<StudentGroup | null>(null);
   const [memberEmails, setMemberEmails] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [cardTab, setCardTab] = useState<CardTab>('manual');
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [rawText, setRawText] = useState('');
@@ -147,54 +150,84 @@ export function GroupDetailPage() {
           <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
         </label>
 
-        <h3>Одна карточка</h3>
-        <form onSubmit={createCard}>
-          <label className="field">
-            <span className="field__label">Вопрос</span>
-            <input className="input" value={question} onChange={(e) => setQuestion(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span className="field__label">Правильный ответ</span>
-            <input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
-          </label>
-          <button className="btn" type="submit" disabled={!group || group.students.length === 0}>Добавить всей группе</button>
-        </form>
+        <div className="row" style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            className={`btn ${cardTab === 'manual' ? '' : 'btn--ghost'}`}
+            onClick={() => setCardTab('manual')}
+          >
+            Вручную
+          </button>
+          <button
+            type="button"
+            className={`btn ${cardTab === 'import' ? '' : 'btn--ghost'}`}
+            onClick={() => setCardTab('import')}
+          >
+            Импорт
+          </button>
+        </div>
 
-        <hr style={{ margin: '24px 0', opacity: 0.2 }} />
-
-        <h3>Импорт нескольких карточек</h3>
-        <form onSubmit={makePreview}>
-          <label className="field">
-            <span className="field__label">Карточки</span>
-            <textarea
-              className="textarea"
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              placeholder={'2 + 2 -> 4 | 3 | 5 | 6\n3 + 3 -> 6 | 5 | 7 | 9'}
-              required
-            />
-          </label>
-          <button className="btn btn--secondary" type="submit">Предпросмотр</button>
-        </form>
-
-        {preview && (
-          <div style={{ marginTop: 16 }}>
-            <h3>Карточек: {preview.cards.length}</h3>
-            {preview.cards.map((card, index) => (
-              <div className="list-row" key={index}>
-                <div>
-                  <div className="list-row__title">{card.question}</div>
-                  <div className="muted">Ответ: {card.correctAnswer}</div>
-                  <div className="muted">Неверные: {card.wrongAnswer1} · {card.wrongAnswer2} · {card.wrongAnswer3}</div>
-                </div>
+        {cardTab === 'manual' ? (
+          <form onSubmit={createCard}>
+            <label className="field">
+              <span className="field__label">Вопрос</span>
+              <input className="input" value={question} onChange={(e) => setQuestion(e.target.value)} required />
+            </label>
+            <label className="field">
+              <span className="field__label">Правильный ответ</span>
+              <input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
+            </label>
+            <button className="btn" type="submit" disabled={!group || group.students.length === 0}>Добавить всей группе</button>
+          </form>
+        ) : (
+          <div>
+            <form onSubmit={makePreview}>
+              <label className="field">
+                <span className="field__label">Текст для импорта</span>
+                <textarea
+                  className="textarea"
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder={'2 + 2 -> 4 | 3 | 5 | 6\n3 + 3 -> 6 | 5 | 7 | 9'}
+                  required
+                />
+              </label>
+              <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+                Формат такой же, как у отдельного ученика: вопрос -&gt; правильный ответ | неверный 1 | неверный 2 | неверный 3
               </div>
-            ))}
-            {preview.warnings.length > 0 && (
-              <div className="banner banner--info">Пропущено строк: {preview.warnings.length}</div>
+              <button className="btn btn--secondary" type="submit">Предпросмотр</button>
+            </form>
+
+            {preview && (
+              <div style={{ marginTop: 16 }}>
+                <h3>Карточек: {preview.cards.length}</h3>
+                {preview.cards.map((card, index) => (
+                  <div className="list-row" key={index}>
+                    <div>
+                      <div className="list-row__title">{card.question}</div>
+                      <div className="muted">Ответ: {card.correctAnswer}</div>
+                      <div className="muted">Неверные: {card.wrongAnswer1} · {card.wrongAnswer2} · {card.wrongAnswer3}</div>
+                    </div>
+                  </div>
+                ))}
+                {preview.warnings.length > 0 && (
+                  <div className="banner banner--info">
+                    <strong>Предупреждения:</strong>
+                    <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                      {preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={importCards}
+                  disabled={!group || group.students.length === 0 || preview.cards.length === 0}
+                >
+                  Выдать {preview.cards.length} карточек всей группе
+                </button>
+              </div>
             )}
-            <button className="btn" type="button" onClick={importCards} disabled={!group || group.students.length === 0 || preview.cards.length === 0}>
-              Выдать {preview.cards.length} карточек всей группе
-            </button>
           </div>
         )}
       </div>
