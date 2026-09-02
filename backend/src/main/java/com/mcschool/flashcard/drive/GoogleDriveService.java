@@ -73,19 +73,31 @@ public class GoogleDriveService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is required");
         }
-        if (folderId == null || folderId.isBlank()) {
-            throw new IllegalArgumentException("Folder id is required");
-        }
-
         try {
-            String boundary = "mindcrafti-" + UUID.randomUUID();
             String mimeType = file.getContentType() == null || file.getContentType().isBlank()
                     ? "application/octet-stream"
                     : file.getContentType();
             String fileName = file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()
                     ? "upload"
                     : file.getOriginalFilename();
+            return uploadBytes(folderId, fileName, mimeType, file.getBytes());
+        } catch (Exception ex) {
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Google Drive upload failed", ex);
+        }
+    }
 
+    public DriveUploadResponse uploadBytes(String folderId, String fileName, String mimeType, byte[] bytes) {
+        if (folderId == null || folderId.isBlank()) {
+            throw new IllegalArgumentException("Folder id is required");
+        }
+        if (fileName == null || fileName.isBlank()) {
+            throw new IllegalArgumentException("File name is required");
+        }
+        try {
+            String boundary = "mindcrafti-" + UUID.randomUUID();
             String metadata = objectMapper.writeValueAsString(Map.of(
                     "name", fileName,
                     "parents", List.of(folderId)
@@ -96,8 +108,8 @@ public class GoogleDriveService {
             writeUtf8(body, "Content-Type: application/json; charset=UTF-8\r\n\r\n");
             writeUtf8(body, metadata + "\r\n");
             writeUtf8(body, "--" + boundary + "\r\n");
-            writeUtf8(body, "Content-Type: " + mimeType + "\r\n\r\n");
-            body.write(file.getBytes());
+            writeUtf8(body, "Content-Type: " + (mimeType == null || mimeType.isBlank() ? "application/octet-stream" : mimeType) + "\r\n\r\n");
+            body.write(bytes == null ? new byte[0] : bytes);
             writeUtf8(body, "\r\n--" + boundary + "--\r\n");
 
             HttpRequest request = HttpRequest.newBuilder()
