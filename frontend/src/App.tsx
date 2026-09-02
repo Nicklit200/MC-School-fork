@@ -17,126 +17,33 @@ import { SessionPage } from './pages/student/SessionPage';
 import { ResultPage } from './pages/student/ResultPage';
 import { MyCardsPage } from './pages/student/MyCardsPage';
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
+import { PdfHomeworkPage } from './pages/student/PdfHomeworkPage';
 import { SettingsPage } from './pages/student/SettingsPage';
 
 export function App() {
   const { user, initializing } = useAuth();
-
-  if (initializing) {
-    return null;
-  }
+  if (initializing) return null;
 
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivatePage />} />
 
-      <Route
-        path="/teachers"
-        element={
-          <ProtectedRoute role="ADMIN">
-            <Layout><TeachersPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
+      <Route path="/students" element={<ProtectedRoute role="TEACHER"><Layout><StudentsPage /></Layout></ProtectedRoute>} />
+      <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/students/:studentId/drive" element={<ProtectedRoute role="TEACHER"><Layout><StudentDrivePage /></Layout></ProtectedRoute>} />
+      <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
+      <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailPage /></Layout></ProtectedRoute>} />
 
-      <Route
-        path="/students"
-        element={
-          <ProtectedRoute role="TEACHER">
-            <Layout><StudentsPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/students/:studentId"
-        element={
-          <ProtectedRoute role="TEACHER">
-            <Layout><StudentDetailPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/students/:studentId/drive"
-        element={
-          <ProtectedRoute role="TEACHER">
-            <Layout><StudentDrivePage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/teacher/students/:studentId/homeworks/:homeworkId"
-        element={
-          <ProtectedRoute role="TEACHER">
-            <Layout><HomeworkDetailPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/groups"
-        element={
-          <ProtectedRoute role="TEACHER">
-            <Layout><GroupsPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/groups/:groupId"
-        element={
-          <ProtectedRoute role="TEACHER">
-            <Layout><GroupDetailPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/today"
-        element={
-          <ProtectedRoute role="STUDENT">
-            <Layout><TodayPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/session/:sessionId"
-        element={
-          <ProtectedRoute role="STUDENT">
-            <Layout><SessionPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/session/:sessionId/result"
-        element={
-          <ProtectedRoute role="STUDENT">
-            <Layout><ResultPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-cards"
-        element={
-          <ProtectedRoute role="STUDENT">
-            <Layout><MyCardsPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/student/homeworks/:homeworkId"
-        element={
-          <ProtectedRoute role="STUDENT">
-            <Layout><StudentHomeworkDetailPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute role="STUDENT">
-            <Layout><SettingsPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/today" element={<ProtectedRoute role="STUDENT"><Layout><TodayPage /></Layout></ProtectedRoute>} />
+      <Route path="/session/:sessionId" element={<ProtectedRoute role="STUDENT"><Layout><SessionPage /></Layout></ProtectedRoute>} />
+      <Route path="/session/:sessionId/result" element={<ProtectedRoute role="STUDENT"><Layout><ResultPage /></Layout></ProtectedRoute>} />
+      <Route path="/my-cards" element={<ProtectedRoute role="STUDENT"><Layout><MyCardsPage /></Layout></ProtectedRoute>} />
+      <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkPage /></Layout></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to={user ? homePathForRole(user.role) : '/login'} replace />} />
     </Routes>
