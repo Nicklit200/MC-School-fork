@@ -43,22 +43,14 @@ public class HomeworkPdfService {
     @Transactional
     public void uploadWorksheet(AuthenticatedUser teacher, UUID homeworkId, MultipartFile file) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("PDF file is required");
-        }
-        if (file.getSize() > MAX_PDF_BYTES) {
-            throw new IllegalArgumentException("PDF is too large");
-        }
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("PDF file is required");
+        if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("PDF is too large");
         String filename = file.getOriginalFilename() == null ? "worksheet.pdf" : file.getOriginalFilename();
-        if (!filename.toLowerCase().endsWith(".pdf")) {
-            throw new IllegalArgumentException("Only PDF files are supported");
-        }
+        if (!filename.toLowerCase().endsWith(".pdf")) throw new IllegalArgumentException("Only PDF files are supported");
         try {
             byte[] bytes = file.getBytes();
             try (PDDocument document = Loader.loadPDF(bytes)) {
-                if (document.getNumberOfPages() == 0) {
-                    throw new IllegalArgumentException("PDF has no pages");
-                }
+                if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
                 homework.attachWorksheet(filename, bytes, document.getNumberOfPages());
             }
         } catch (IOException e) {
@@ -73,7 +65,8 @@ public class HomeworkPdfService {
         if (pageIndex < 0 || pageIndex >= homework.getWorksheetPageCount()) {
             throw new ResourceNotFoundException("Homework page not found");
         }
-        try (PDDocument document = Loader.loadPDF(homework.getWorksheetPdf());
+        byte[] sourcePdf = homework.isSubmitted() ? homework.getSubmittedPdf() : homework.getWorksheetPdf();
+        try (PDDocument document = Loader.loadPDF(sourcePdf);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, PAGE_RENDER_DPI, ImageType.RGB);
@@ -88,6 +81,7 @@ public class HomeworkPdfService {
     public void submit(AuthenticatedUser student, UUID homeworkId, SubmitHomeworkRequest request) {
         Homework homework = requireStudentHomework(student.id(), homeworkId);
         ensureWorksheet(homework);
+        if (homework.isSubmitted()) throw new IllegalArgumentException("Homework has already been submitted");
         try (PDDocument document = Loader.loadPDF(homework.getWorksheetPdf());
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             for (HomeworkPageOverlayRequest overlay : request.overlays()) {
@@ -116,27 +110,21 @@ public class HomeworkPdfService {
     @Transactional(readOnly = true)
     public byte[] teacherSubmission(AuthenticatedUser teacher, UUID homeworkId) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
-        if (!homework.isSubmitted()) {
-            throw new ResourceNotFoundException("Homework has not been submitted yet");
-        }
+        if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
         return homework.getSubmittedPdf();
     }
 
     @Transactional(readOnly = true)
     public String submissionFilename(AuthenticatedUser teacher, UUID homeworkId) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
-        if (!homework.isSubmitted()) {
-            throw new ResourceNotFoundException("Homework has not been submitted yet");
-        }
+        if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
         return homework.getSubmittedFilename();
     }
 
     private byte[] decodeBase64Image(String value) {
         String payload = value;
         int comma = value.indexOf(',');
-        if (comma >= 0) {
-            payload = value.substring(comma + 1);
-        }
+        if (comma >= 0) payload = value.substring(comma + 1);
         try {
             return Base64.getDecoder().decode(payload);
         } catch (IllegalArgumentException e) {
@@ -167,9 +155,7 @@ public class HomeworkPdfService {
                 .filter(user -> user.getRole() == Role.STUDENT)
                 .filter(user -> !user.isArchived())
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
-        if (!homework.getStudent().getId().equals(student.getId())) {
-            throw new ResourceNotFoundException("Homework not found");
-        }
+        if (!homework.getStudent().getId().equals(student.getId())) throw new ResourceNotFoundException("Homework not found");
         return homework;
     }
 }
