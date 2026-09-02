@@ -4,6 +4,9 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.dto.HomeworkPageOverlayRequest;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
+import com.mcschool.flashcard.notifications.PushSubscription;
+import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
+import com.mcschool.flashcard.notifications.WebPushService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -11,6 +14,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Base64;
 import java.util.UUID;
 import javax.imageio.ImageIO;
@@ -31,18 +36,27 @@ public class HomeworkPdfService {
 
     private static final long MAX_PDF_BYTES = 15L * 1024L * 1024L;
     private static final float PAGE_RENDER_DPI = 144f;
+    private static final ZoneId SCHOOL_ZONE = ZoneId.of("Europe/Berlin");
 
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
+    private final PushSubscriptionRepository pushSubscriptionRepository;
+    private final WebPushService webPushService;
 
-    public HomeworkPdfService(HomeworkRepository homeworkRepository, UserRepository userRepository) {
+    public HomeworkPdfService(HomeworkRepository homeworkRepository,
+                              UserRepository userRepository,
+                              PushSubscriptionRepository pushSubscriptionRepository,
+                              WebPushService webPushService) {
         this.homeworkRepository = homeworkRepository;
         this.userRepository = userRepository;
+        this.pushSubscriptionRepository = pushSubscriptionRepository;
+        this.webPushService = webPushService;
     }
 
     @Transactional
     public void uploadWorksheet(AuthenticatedUser teacher, UUID homeworkId, MultipartFile file) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
+        boolean firstAssignment = !homework.hasWorksheet();
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("PDF file is required");
         if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("PDF is too large");
         String filename = file.getOriginalFilename() == null ? "worksheet.pdf" : file.getOriginalFilename();
@@ -55,6 +69,10 @@ public class HomeworkPdfService {
             }
         } catch (IOException e) {
             throw new IllegalArgumentException("Could not read PDF", e);
+        }
+
+        if (firstAssignment && homework.getStartDate().equals(LocalDate.now(SCHOOL_ZONE))) {
+            notifyTodayAssignment(homework);
         }
     }
 
@@ -119,6 +137,22 @@ public class HomeworkPdfService {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
         if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
         return homework.getSubmittedFilename();
+    }
+
+    private void notifyTodayAssignment(Homework homework) {
+        if (!webPushService.isConfigured()) return;
+        String url = "/student/homeworks/" + homework.getId() + "/worksheet";
+        for (PushSubscription subscription : pushSubscriptionRepository.findAllByUserId(homework.getStudent().getId())) {
+            try {
+                webPushService.send(
+                        subscription,
+                        "Mindcrafti School",
+                        "Тебе задана новая домашняя работа на сегодня 📝",
+                        url);
+            } catch (RuntimeException ignored) {
+                // Assigning homework must still succeed even if one device subscription is broken.
+            }
+        }
     }
 
     private byte[] decodeBase64Image(String value) {
