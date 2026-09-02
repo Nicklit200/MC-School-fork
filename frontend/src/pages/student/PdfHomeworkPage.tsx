@@ -53,18 +53,22 @@ export function PdfHomeworkPage() {
 
   useEffect(() => {
     const visual = window.visualViewport;
+    let frame = 0;
     const update = () => {
-      if (visual) {
-        setViewport({
-          scale: visual.scale || 1,
-          offsetLeft: visual.offsetLeft || 0,
-          offsetTop: visual.offsetTop || 0,
-          width: visual.width || window.innerWidth,
-          height: visual.height || window.innerHeight,
-        });
-      } else {
-        setViewport({ scale: 1, offsetLeft: 0, offsetTop: 0, width: window.innerWidth, height: window.innerHeight });
-      }
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (visual) {
+          setViewport({
+            scale: visual.scale || 1,
+            offsetLeft: visual.offsetLeft || 0,
+            offsetTop: visual.offsetTop || 0,
+            width: visual.width || window.innerWidth,
+            height: visual.height || window.innerHeight,
+          });
+        } else {
+          setViewport({ scale: 1, offsetLeft: 0, offsetTop: 0, width: window.innerWidth, height: window.innerHeight });
+        }
+      });
     };
 
     update();
@@ -72,6 +76,7 @@ export function PdfHomeworkPage() {
     visual?.addEventListener('scroll', update);
     window.addEventListener('resize', update);
     return () => {
+      cancelAnimationFrame(frame);
       visual?.removeEventListener('resize', update);
       visual?.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
@@ -267,7 +272,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   const drawingPointerIdRef = useRef<number | null>(null);
   const strokeGeometryRef = useRef<StrokeGeometry | null>(null);
   const historyRef = useRef<string[]>([]);
-  const scrollLockRef = useRef<{ y: number; bodyStyle: string; htmlOverflow: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
 
@@ -284,36 +288,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     return () => {
       canvas.removeEventListener('touchstart', guardTouch);
       canvas.removeEventListener('touchmove', guardTouch);
-      unlockPageScroll();
     };
   }, []);
-
-  function lockPageScroll() {
-    if (scrollLockRef.current) return;
-    const y = window.scrollY;
-    scrollLockRef.current = {
-      y,
-      bodyStyle: document.body.getAttribute('style') ?? '',
-      htmlOverflow: document.documentElement.style.overflow,
-    };
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${y}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.width = '100%';
-    document.body.style.overflow = 'hidden';
-  }
-
-  function unlockPageScroll() {
-    const lock = scrollLockRef.current;
-    if (!lock) return;
-    document.documentElement.style.overflow = lock.htmlOverflow;
-    if (lock.bodyStyle) document.body.setAttribute('style', lock.bodyStyle);
-    else document.body.removeAttribute('style');
-    scrollLockRef.current = null;
-    window.scrollTo(0, lock.y);
-  }
 
   function setupCanvas() {
     const image = imageRef.current;
@@ -367,13 +343,10 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
 
-    // Freeze the canvas coordinate system for the whole stroke. iPad Safari can move the
-    // layout/visual viewport when scrolling is locked, which otherwise creates a long line downward.
     const geometry = currentGeometry(canvas);
     strokeGeometryRef.current = geometry;
     const startPoint = point(event, geometry);
 
-    lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     pushHistory(canvas);
@@ -411,7 +384,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     const canvas = canvasRef.current;
     if (canvas) onChange(canvas.toDataURL('image/png'));
-    unlockPageScroll();
   }
 
   function restore(dataUrl: string) {
