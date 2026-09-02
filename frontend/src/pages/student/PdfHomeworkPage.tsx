@@ -161,8 +161,8 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Auf dem iPad kannst du wie gewohnt mit Apple Pencil schreiben und mit zwei Fingern zoomen.'
-              : 'На iPad всё как обычно: Apple Pencil пишет, а масштабируй двумя пальцами.'}
+              ? 'Apple Pencil schreibt. Mit zwei Fingern kannst du zoomen.'
+              : 'Apple Pencil пишет. Двумя пальцами можно приближать и отдалять.'}
           </p>
         </div>
       )}
@@ -347,7 +347,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
               inset: 0,
               width: '100%',
               height: '100%',
-              touchAction: 'pan-x pan-y pinch-zoom',
+              touchAction: 'pinch-zoom',
               cursor: tool === 'eraser' ? 'cell' : 'crosshair',
               opacity: ready ? 1 : 0,
             }}
