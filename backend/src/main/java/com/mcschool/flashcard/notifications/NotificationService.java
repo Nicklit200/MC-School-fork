@@ -13,6 +13,6 @@ public interface NotificationService {
     /** A new account was created; invite the person to set their password (PRD 4.7). */
     void sendInvitation(User invitee, String invitationToken);
 
-    /** A student's spaced-repetition review is due today (PRD 4.6). */
-    void sendReviewReminder(User student, long dueCardCount);
+    /** A student's daily cards/homework reminder. */
+    void sendDailyTaskReminder(User student, long dueCardCount, long dueHomeworkCount);
 }
