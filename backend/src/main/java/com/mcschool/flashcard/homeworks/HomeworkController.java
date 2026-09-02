@@ -3,10 +3,16 @@ package com.mcschool.flashcard.homeworks;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
+import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,17 +20,21 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1")
 public class HomeworkController {
 
     private final HomeworkService homeworkService;
+    private final HomeworkPdfService homeworkPdfService;
 
-    public HomeworkController(HomeworkService homeworkService) {
+    public HomeworkController(HomeworkService homeworkService, HomeworkPdfService homeworkPdfService) {
         this.homeworkService = homeworkService;
+        this.homeworkPdfService = homeworkPdfService;
     }
 
     @PostMapping("/students/{studentId}/homeworks")
@@ -47,5 +57,46 @@ public class HomeworkController {
     @PreAuthorize("hasRole('STUDENT')")
     public List<HomeworkResponse> listForStudent(@AuthenticationPrincipal AuthenticatedUser caller) {
         return homeworkService.listForStudent(caller);
+    }
+
+    @PostMapping(value = "/homeworks/{homeworkId}/worksheet", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('TEACHER')")
+    public void uploadWorksheet(@AuthenticationPrincipal AuthenticatedUser caller,
+                                @PathVariable UUID homeworkId,
+                                @RequestParam("file") MultipartFile file) {
+        homeworkPdfService.uploadWorksheet(caller, homeworkId, file);
+    }
+
+    @GetMapping(value = "/study/homeworks/{homeworkId}/worksheet/pages/{pageIndex}", produces = MediaType.IMAGE_PNG_VALUE)
+    @PreAuthorize("hasRole('STUDENT')")
+    public byte[] worksheetPage(@AuthenticationPrincipal AuthenticatedUser caller,
+                                @PathVariable UUID homeworkId,
+                                @PathVariable int pageIndex) {
+        return homeworkPdfService.renderStudentPage(caller, homeworkId, pageIndex);
+    }
+
+    @PostMapping("/study/homeworks/{homeworkId}/submit-pdf")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('STUDENT')")
+    public void submitPdf(@AuthenticationPrincipal AuthenticatedUser caller,
+                          @PathVariable UUID homeworkId,
+                          @Valid @RequestBody SubmitHomeworkRequest request) {
+        homeworkPdfService.submit(caller, homeworkId, request);
+    }
+
+    @GetMapping(value = "/homeworks/{homeworkId}/submission", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<byte[]> downloadSubmission(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                     @PathVariable UUID homeworkId) {
+        byte[] pdf = homeworkPdfService.teacherSubmission(caller, homeworkId);
+        String filename = homeworkPdfService.submissionFilename(caller, homeworkId);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }
