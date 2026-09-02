@@ -20,8 +20,11 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
   const [loadingDrives, setLoadingDrives] = useState(true);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testingExport, setTestingExport] = useState(false);
   const [savedId, setSavedId] = useState(savedFolderId ?? '');
   const [savedMessage, setSavedMessage] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [testFileUrl, setTestFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const currentFolderId = useMemo(() => {
@@ -58,6 +61,8 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
     setSelectedDriveId(driveId);
     setPath([]);
     setSavedMessage(false);
+    setTestMessage(null);
+    setTestFileUrl(null);
     if (!driveId) {
       setFolders([]);
       return;
@@ -68,11 +73,15 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
   async function enterFolder(folder: DriveItem) {
     setPath([...path, folder]);
     setSavedMessage(false);
+    setTestMessage(null);
+    setTestFileUrl(null);
     await loadFolders(selectedDriveId, folder.id);
   }
 
   async function jumpTo(index: number) {
     setSavedMessage(false);
+    setTestMessage(null);
+    setTestFileUrl(null);
     if (index < 0) {
       setPath([]);
       await loadFolders(selectedDriveId);
@@ -87,6 +96,8 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
     if (!currentFolderId) return;
     setSaving(true);
     setSavedMessage(false);
+    setTestMessage(null);
+    setTestFileUrl(null);
     setError(null);
     try {
       await api.students.updateDriveFolder(studentId, currentFolderId);
@@ -96,6 +107,26 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function testAutomaticExport() {
+    setTestingExport(true);
+    setTestMessage(null);
+    setTestFileUrl(null);
+    setError(null);
+    try {
+      const result = await api.students.testAutomaticExport(studentId);
+      if (result.status === 'error') {
+        setError(result.message || (ru ? 'Не удалось создать тестовую таблицу' : 'Testtabelle konnte nicht erstellt werden'));
+        return;
+      }
+      setTestMessage(ru ? `Тестовая таблица создана: ${result.fileName ?? ''}` : `Testtabelle erstellt: ${result.fileName ?? ''}`);
+      setTestFileUrl(result.fileUrl ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTestingExport(false);
     }
   }
 
@@ -112,6 +143,12 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
       {savedMessage && (
         <div className="banner banner--success">
           {ru ? `Папка сохранена: ${currentPathName}` : `Ordner gespeichert: ${currentPathName}`}
+        </div>
+      )}
+      {testMessage && (
+        <div className="banner banner--success">
+          {testMessage}
+          {testFileUrl && <> · <a href={testFileUrl} target="_blank" rel="noreferrer">{ru ? 'Открыть файл' : 'Datei öffnen'}</a></>}
         </div>
       )}
 
@@ -162,18 +199,31 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
             ))}
           </div>
 
-          <button
-            className="btn"
-            type="button"
-            onClick={() => void saveFolder()}
-            disabled={!currentFolderId || saving || currentFolderId === savedId}
-          >
-            {saving
-              ? (ru ? 'Сохраняю…' : 'Speichern…')
-              : currentFolderId === savedId
-                ? (ru ? 'Эта папка уже выбрана' : 'Dieser Ordner ist bereits gewählt')
-                : (ru ? 'Использовать эту папку' : 'Diesen Ordner verwenden')}
-          </button>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void saveFolder()}
+              disabled={!currentFolderId || saving || currentFolderId === savedId}
+            >
+              {saving
+                ? (ru ? 'Сохраняю…' : 'Speichern…')
+                : currentFolderId === savedId
+                  ? (ru ? 'Эта папка уже выбрана' : 'Dieser Ordner ist bereits gewählt')
+                  : (ru ? 'Использовать эту папку' : 'Diesen Ordner verwenden')}
+            </button>
+
+            <button
+              className="btn btn--secondary"
+              type="button"
+              onClick={() => void testAutomaticExport()}
+              disabled={!savedId || testingExport}
+            >
+              {testingExport
+                ? (ru ? 'Создаю тест…' : 'Test wird erstellt…')
+                : (ru ? 'Создать тестовую таблицу' : 'Testtabelle erstellen')}
+            </button>
+          </div>
         </>
       )}
     </div>
