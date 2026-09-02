@@ -6,6 +6,21 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type Tool = 'pen' | 'eraser';
+type ViewportState = {
+  scale: number;
+  offsetLeft: number;
+  offsetTop: number;
+  width: number;
+  height: number;
+};
+type StrokeGeometry = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  canvasWidth: number;
+  canvasHeight: number;
+};
 
 export function PdfHomeworkPage() {
   const { homeworkId = '' } = useParams();
@@ -17,7 +32,13 @@ export function PdfHomeworkPage() {
   const [tool, setTool] = useState<Tool>('pen');
   const [desktopZoom, setDesktopZoom] = useState(100);
   const [desktopControls, setDesktopControls] = useState(false);
-  const [viewportScale, setViewportScale] = useState(1);
+  const [viewport, setViewport] = useState<ViewportState>({
+    scale: 1,
+    offsetLeft: 0,
+    offsetTop: 0,
+    width: typeof window === 'undefined' ? 1024 : window.innerWidth,
+    height: typeof window === 'undefined' ? 768 : window.innerHeight,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -31,15 +52,29 @@ export function PdfHomeworkPage() {
   }, []);
 
   useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const update = () => setViewportScale(viewport.scale || 1);
+    const visual = window.visualViewport;
+    const update = () => {
+      if (visual) {
+        setViewport({
+          scale: visual.scale || 1,
+          offsetLeft: visual.offsetLeft || 0,
+          offsetTop: visual.offsetTop || 0,
+          width: visual.width || window.innerWidth,
+          height: visual.height || window.innerHeight,
+        });
+      } else {
+        setViewport({ scale: 1, offsetLeft: 0, offsetTop: 0, width: window.innerWidth, height: window.innerHeight });
+      }
+    };
+
     update();
-    viewport.addEventListener('resize', update);
-    viewport.addEventListener('scroll', update);
+    visual?.addEventListener('resize', update);
+    visual?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
     return () => {
-      viewport.removeEventListener('resize', update);
-      viewport.removeEventListener('scroll', update);
+      visual?.removeEventListener('resize', update);
+      visual?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
     };
   }, []);
 
@@ -105,7 +140,9 @@ export function PdfHomeworkPage() {
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
-  const toolbarScale = desktopControls ? 1 : 1 / Math.max(viewportScale, 0.5);
+  const toolbarScale = desktopControls ? 1 : 1 / Math.max(viewport.scale, 0.5);
+  const toolbarCenterX = viewport.offsetLeft + viewport.width / 2;
+  const toolbarWidth = Math.max(320, (viewport.width - 20) * viewport.scale);
 
   return (
     <div className="pdf-homework-page" style={{ paddingTop: desktopControls ? 0 : 78 }}>
@@ -132,10 +169,10 @@ export function PdfHomeworkPage() {
           ? { position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }
           : {
               position: 'fixed',
-              top: 10,
-              left: '50%',
+              top: viewport.offsetTop + 10,
+              left: toolbarCenterX,
               zIndex: 50,
-              width: 'calc(100vw - 20px)',
+              width: toolbarWidth,
               marginBottom: 0,
               padding: 10,
               boxShadow: '0 4px 18px rgba(0,0,0,.18)',
@@ -181,6 +218,7 @@ export function PdfHomeworkPage() {
           language={language}
           desktopControls={desktopControls}
           desktopZoom={desktopZoom}
+          viewport={viewport}
           toolbarScale={toolbarScale}
           onDesktopZoomChange={setDesktopZoom}
           onChange={(dataUrl) => setDrawings((current) => ({ ...current, [pageIndex]: dataUrl }))}
@@ -194,8 +232,8 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; die Werkzeugleiste bleibt gleich groß.'
-              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница, а панель инструментов остаётся одного размера.'}
+              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; die Werkzeugleiste bleibt am Bildschirm.'
+              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница, а панель инструментов остаётся на экране.'}
           </p>
         </div>
       )}
@@ -212,13 +250,14 @@ function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (valu
   );
 }
 
-function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopControls, desktopZoom, toolbarScale, onDesktopZoomChange, onChange }: {
+function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopControls, desktopZoom, viewport, toolbarScale, onDesktopZoomChange, onChange }: {
   pageUrl: string;
   initialDrawing?: string;
   tool: Tool;
   language: 'DE' | 'RU';
   desktopControls: boolean;
   desktopZoom: number;
+  viewport: ViewportState;
   toolbarScale: number;
   onDesktopZoomChange: (value: number) => void;
   onChange: (dataUrl: string) => void;
@@ -226,6 +265,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   const imageRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingPointerIdRef = useRef<number | null>(null);
+  const strokeGeometryRef = useRef<StrokeGeometry | null>(null);
   const historyRef = useRef<string[]>([]);
   const scrollLockRef = useRef<{ y: number; bodyStyle: string; htmlOverflow: string } | null>(null);
   const [ready, setReady] = useState(false);
@@ -235,8 +275,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // One-finger touches (including a resting palm) must not move the page.
-    // Two-finger touches are left to Safari so the whole page can pinch-zoom naturally.
     const guardTouch = (event: TouchEvent) => {
       if (event.touches.length < 2) event.preventDefault();
     };
@@ -294,12 +332,24 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     setReady(true);
   }
 
-  function point(event: React.PointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current!;
+  function currentGeometry(canvas: HTMLCanvasElement): StrokeGeometry {
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (event.clientX - rect.left) * (canvas.width / rect.width),
-      y: (event.clientY - rect.top) * (canvas.height / rect.height),
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+    };
+  }
+
+  function point(event: React.PointerEvent<HTMLCanvasElement>, geometry?: StrokeGeometry | null) {
+    const canvas = canvasRef.current!;
+    const g = geometry ?? currentGeometry(canvas);
+    return {
+      x: (event.clientX - g.left) * (g.canvasWidth / g.width),
+      y: (event.clientY - g.top) * (g.canvasHeight / g.height),
     };
   }
 
@@ -317,7 +367,12 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     const canvas = canvasRef.current;
     if (!canvas || drawingPointerIdRef.current !== null) return;
 
-    const startPoint = point(event);
+    // Freeze the canvas coordinate system for the whole stroke. iPad Safari can move the
+    // layout/visual viewport when scrolling is locked, which otherwise creates a long line downward.
+    const geometry = currentGeometry(canvas);
+    strokeGeometryRef.current = geometry;
+    const startPoint = point(event, geometry);
+
     lockPageScroll();
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -341,7 +396,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     event.stopPropagation();
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
-    const p = point(event);
+    const p = point(event, strokeGeometryRef.current);
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
   }
@@ -352,6 +407,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
     event.preventDefault();
     event.stopPropagation();
     drawingPointerIdRef.current = null;
+    strokeGeometryRef.current = null;
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
     const canvas = canvasRef.current;
     if (canvas) onChange(canvas.toDataURL('image/png'));
@@ -388,6 +444,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
   }
 
   const documentWidth = desktopControls ? `${desktopZoom}%` : '100%';
+  const bottomCenterX = viewport.offsetLeft + viewport.width / 2;
+  const bottomY = viewport.offsetTop + viewport.height - 10;
 
   return (
     <div style={{ paddingBottom: desktopControls ? 0 : 70 }}>
@@ -397,8 +455,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
           ? { gap: 8, marginBottom: 8, flexWrap: 'wrap' }
           : {
               position: 'fixed',
-              left: '50%',
-              bottom: 10,
+              left: bottomCenterX,
+              top: bottomY,
               zIndex: 50,
               gap: 8,
               flexWrap: 'wrap',
@@ -408,7 +466,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, language, desktopContr
               background: 'rgba(255,255,255,.96)',
               boxShadow: '0 4px 18px rgba(0,0,0,.18)',
               touchAction: 'manipulation',
-              transform: `translateX(-50%) scale(${toolbarScale})`,
+              transform: `translate(-50%, -100%) scale(${toolbarScale})`,
               transformOrigin: 'bottom center',
             }}
       >
