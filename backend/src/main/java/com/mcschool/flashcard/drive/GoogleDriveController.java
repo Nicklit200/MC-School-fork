@@ -3,7 +3,10 @@ package com.mcschool.flashcard.drive;
 import com.mcschool.flashcard.drive.dto.DriveItemResponse;
 import com.mcschool.flashcard.drive.dto.DriveUploadResponse;
 import java.util.List;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,6 +35,23 @@ public class GoogleDriveController {
     public List<DriveItemResponse> listFolders(@RequestParam String driveId,
                                                @RequestParam(required = false) String parentId) {
         return googleDriveService.listFolders(driveId, parentId);
+    }
+
+    @GetMapping("/pdf-files")
+    public List<DriveItemResponse> listPdfFiles(@RequestParam String driveId,
+                                                @RequestParam(required = false) String parentId) {
+        return googleDriveService.listPdfFiles(driveId, parentId);
+    }
+
+    @GetMapping("/download")
+    public ResponseEntity<byte[]> download(@RequestParam String fileId,
+                                           @RequestParam String fileName) {
+        byte[] bytes = googleDriveService.downloadFile(fileId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(fileName).build().toString())
+                .body(bytes);
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
