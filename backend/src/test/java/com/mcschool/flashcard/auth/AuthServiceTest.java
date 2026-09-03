@@ -73,8 +73,8 @@ class AuthServiceTest {
                 Instant.now().plusSeconds(3600));
         when(userRepository.findByInvitationToken("valid-token")).thenReturn(Optional.of(invited));
 
-        AuthResponse response =
-                authService.activateAccount(new ActivateAccountRequest("valid-token", "NewPassword1!"));
+        AuthResponse response = authService.activateAccount(
+                new ActivateAccountRequest("valid-token", "teacher@test.local", "NewPassword1!"));
 
         assertThat(invited.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(invited.getInvitationToken()).isNull();
@@ -83,10 +83,26 @@ class AuthServiceTest {
     }
 
     @Test
+    void activateStudentWithoutEmailStoresProvidedEmail() {
+        User teacher = User.bootstrapAdmin("Owner", "owner@test.local", passwordEncoder.encode("Password1!"));
+        User invited = User.invitedStudent("Student", null, teacher, "student-token",
+                Instant.now().plusSeconds(3600));
+        when(userRepository.findByInvitationToken("student-token")).thenReturn(Optional.of(invited));
+        when(userRepository.existsByEmail("student@test.local")).thenReturn(false);
+
+        authService.activateAccount(
+                new ActivateAccountRequest("student-token", " Student@Test.Local ", "NewPassword1!"));
+
+        assertThat(invited.getEmail()).isEqualTo("student@test.local");
+        assertThat(invited.getStatus()).isEqualTo(UserStatus.ACTIVE);
+    }
+
+    @Test
     void activateFailsForUnknownToken() {
         when(userRepository.findByInvitationToken("unknown")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.activateAccount(new ActivateAccountRequest("unknown", "Password1!")))
+        assertThatThrownBy(() -> authService.activateAccount(
+                new ActivateAccountRequest("unknown", "nobody@test.local", "Password1!")))
                 .isInstanceOf(InvalidInvitationException.class);
     }
 
@@ -97,7 +113,7 @@ class AuthServiceTest {
         when(userRepository.findByInvitationToken("expired-token")).thenReturn(Optional.of(invited));
 
         assertThatThrownBy(() -> authService.activateAccount(
-                new ActivateAccountRequest("expired-token", "Password1!")))
+                new ActivateAccountRequest("expired-token", "teacher@test.local", "Password1!")))
                 .isInstanceOf(InvalidInvitationException.class)
                 .hasMessageContaining("expired");
     }
