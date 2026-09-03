@@ -12,7 +12,7 @@ export type DailyReviewStatus = 'COMPLETED' | 'PARTIAL' | 'MISSED';
 export interface User {
   id: string;
   fullName: string;
-  email: string;
+  email: string | null;
   role: Role;
   status: UserStatus;
   preferredLanguage: Language;
