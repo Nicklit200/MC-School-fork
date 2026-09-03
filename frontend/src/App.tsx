@@ -23,6 +23,7 @@ import { StudentHomeworksListPage } from './pages/student/StudentHomeworksListPa
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
 import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSubmissionPage';
 import { SettingsPage } from './pages/student/SettingsPage';
+import { ParentPage } from './pages/parent/ParentPage';
 
 export function App() {
   const { user, initializing } = useAuth();
@@ -53,6 +54,9 @@ export function App() {
       <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkWithSubmissionPage /></Layout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
+
+      <Route path="/parent" element={<ProtectedRoute role="PARENT"><Layout><ParentPage /></Layout></ProtectedRoute>} />
+      <Route path="/parent/settings" element={<ProtectedRoute role="PARENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to={user ? homePathForRole(user.role) : '/login'} replace />} />
     </Routes>
