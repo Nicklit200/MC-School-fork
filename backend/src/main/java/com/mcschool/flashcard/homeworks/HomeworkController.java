@@ -116,6 +116,15 @@ public class HomeworkController {
         homeworkPdfService.submit(caller, homeworkId, request);
     }
 
+    @PostMapping(value = "/study/homeworks/{homeworkId}/submit-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('STUDENT')")
+    public void submitFile(@AuthenticationPrincipal AuthenticatedUser caller,
+                           @PathVariable UUID homeworkId,
+                           @RequestParam("file") MultipartFile file) {
+        homeworkPdfService.submitFile(caller, homeworkId, file);
+    }
+
     @GetMapping(value = "/homeworks/{homeworkId}/submission", produces = MediaType.APPLICATION_PDF_VALUE)
     @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<byte[]> downloadSubmission(@AuthenticationPrincipal AuthenticatedUser caller,
