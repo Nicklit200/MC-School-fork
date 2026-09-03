@@ -30,7 +30,7 @@ public class User {
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
-    @Column(nullable = false)
+    @Column(length = 255)
     private String email;
 
     @Column(name = "password_hash", length = 100)
@@ -94,6 +94,10 @@ public class User {
             return;
         }
         this.googleDriveFolderUrl = googleDriveFolderUrl.trim();
+    }
+
+    public void assignEmail(String email) {
+        this.email = email;
     }
 
     public static User bootstrapAdmin(String fullName, String email, String passwordHash) {
