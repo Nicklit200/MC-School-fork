@@ -22,10 +22,19 @@ export function StudentDrivePage() {
     <div>
       <p><Link to={`/students/${studentId}`} className="muted">← {t('common.back')}</Link></p>
       <h1>Google Drive — {student?.fullName ?? 'ученик'}</h1>
+      <p className="muted">Для каждого ученика отдельно выберите, куда сохранять результаты карточек и куда сохранять сданные PDF-домашки.</p>
       {error && <div className="banner banner--error">{error}</div>}
+
       <DriveFolderPicker
+        kind="cards"
         studentId={studentId}
         savedFolderId={student?.googleDriveFolderUrl ?? null}
+      />
+
+      <DriveFolderPicker
+        kind="homework"
+        studentId={studentId}
+        savedFolderId={student?.googleDriveHomeworkFolderId ?? null}
       />
     </div>
   );
