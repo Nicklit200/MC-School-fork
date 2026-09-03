@@ -87,11 +87,11 @@ async function uploadFile(path: string, file: File): Promise<void> {
   }
 }
 
-async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> {
+async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> {
   const form = new FormData();
   form.append('startDate', startDate);
   form.append('file', file);
-  const response = await fetch(`${BASE_URL}/students/${studentId}/homeworks/pdf`, {
+  const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: authHeaders(),
     body: form,
@@ -102,7 +102,11 @@ async function createPdfHomework(studentId: string, startDate: string, file: Fil
   if (!response.ok) {
     throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
   }
-  return payload as Homework;
+  return payload as T;
+}
+
+async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> {
+  return uploadDatedFile<Homework>(`/students/${studentId}/homeworks/pdf`, startDate, file);
 }
 
 async function requestBlob(path: string): Promise<Blob> {
@@ -174,6 +178,8 @@ export const api = {
       request<number>('POST', `/groups/${groupId}/cards`, { startDate, question, correctAnswer }),
     importCards: (groupId: string, startDate: string, cards: ParsedCard[]) =>
       request<number>('POST', `/groups/${groupId}/cards/import`, { startDate, cards }),
+    createPdfHomework: (groupId: string, startDate: string, file: File) =>
+      uploadDatedFile<number>(`/groups/${groupId}/homeworks/pdf`, startDate, file),
   },
   cards: {
     listForStudent: (studentId: string) => request<Card[]>('GET', `/students/${studentId}/cards`),
