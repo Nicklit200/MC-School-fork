@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,9 +27,11 @@ public class HomeworkDriveExportService {
     }
 
     /**
-     * Best-effort export. The student's submission must remain successful even if
-     * Google Drive is temporarily unavailable; the failure is logged explicitly.
+     * Best-effort background export. The student's submission response must not
+     * wait for Google Drive, especially on mobile networks. The homework is already
+     * committed before this asynchronous method loads it and starts the Drive upload.
      */
+    @Async
     @Transactional(readOnly = true)
     public void exportSubmittedHomework(UUID studentId, UUID homeworkId) {
         Homework homework = homeworkRepository.findByIdAndStudentId(homeworkId, studentId).orElse(null);
