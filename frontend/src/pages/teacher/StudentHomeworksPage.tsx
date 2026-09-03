@@ -13,7 +13,8 @@ export function StudentHomeworksPage() {
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [startDate, setStartDate] = useState(() => localDateString(new Date()));
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [daysCount, setDaysCount] = useState(1);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,21 +45,30 @@ export function StudentHomeworksPage() {
     [homeworks],
   );
 
+  const plannedDates = useMemo(
+    () => Array.from({ length: daysCount }, (_, index) => addDays(startDate, index)),
+    [startDate, daysCount],
+  );
+
+  const filesMatchDays = pdfFiles.length === daysCount;
+
   async function createHomework(event: FormEvent) {
     event.preventDefault();
-    if (!pdfFile || creating) return;
+    if (!filesMatchDays || creating) return;
     setCreating(true);
     setError(null);
     setMessage(null);
     try {
-      await api.homeworks.createPdf(studentId, startDate, pdfFile);
-      setPdfFile(null);
-      const fileInput = document.getElementById('homework-pdf-file') as HTMLInputElement | null;
+      for (let index = 0; index < pdfFiles.length; index += 1) {
+        await api.homeworks.createPdf(studentId, plannedDates[index], pdfFiles[index]);
+      }
+      setPdfFiles([]);
+      const fileInput = document.getElementById('homework-pdf-files') as HTMLInputElement | null;
       if (fileInput) fileInput.value = '';
       await reload();
       setMessage(language === 'DE'
-        ? 'Neue Hausaufgabe wurde erstellt.'
-        : 'Новая отдельная домашка создана и добавлена в историю.');
+        ? `${daysCount} Hausaufgaben wurden für aufeinanderfolgende Tage erstellt.`
+        : `Создано ${daysCount} домашних работ: по одному PDF на каждый день.`);
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -77,8 +87,8 @@ export function StudentHomeworksPage() {
         <h2>{language === 'DE' ? 'Hausaufgabe erstellen' : 'Создать домашку'}</h2>
         <form className="stack" onSubmit={createHomework}>
           <div className="row" style={{ alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
-            <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
-              <span className="field__label">{language === 'DE' ? 'Datum' : 'Дата'}</span>
+            <label className="field" style={{ margin: 0, flex: '1 1 220px' }}>
+              <span className="field__label">{language === 'DE' ? 'Erster Tag' : 'Первый день'}</span>
               <input
                 className="input"
                 type="date"
@@ -88,29 +98,81 @@ export function StudentHomeworksPage() {
                 required
               />
             </label>
-            <label className="field" style={{ margin: 0, flex: '2 1 360px' }}>
-              <span className="field__label">PDF</span>
+
+            <label className="field" style={{ margin: 0, flex: '0 1 180px' }}>
+              <span className="field__label">{language === 'DE' ? 'Anzahl Tage' : 'На сколько дней'}</span>
               <input
-                id="homework-pdf-file"
                 className="input"
-                type="file"
-                accept="application/pdf,.pdf"
+                type="number"
+                min={1}
+                max={31}
+                value={daysCount}
+                onChange={(e) => {
+                  const next = Math.max(1, Math.min(31, Number(e.target.value) || 1));
+                  setDaysCount(next);
+                  setPdfFiles([]);
+                  const fileInput = document.getElementById('homework-pdf-files') as HTMLInputElement | null;
+                  if (fileInput) fileInput.value = '';
+                }}
                 disabled={creating}
-                onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
                 required
               />
             </label>
-            <button className="btn" type="submit" disabled={!pdfFile || creating} style={{ minWidth: 180 }}>
-              {creating
-                ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём…')
-                : (language === 'DE' ? 'Erstellen' : 'Создать')}
-            </button>
+
+            <label className="field" style={{ margin: 0, flex: '2 1 360px' }}>
+              <span className="field__label">
+                {language === 'DE' ? `PDF-Dateien (${daysCount})` : `PDF-файлы (${daysCount})`}
+              </span>
+              <input
+                id="homework-pdf-files"
+                className="input"
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple={daysCount > 1}
+                disabled={creating}
+                onChange={(event) => setPdfFiles(Array.from(event.target.files ?? []))}
+                required
+              />
+            </label>
           </div>
-          {pdfFile && <div className="muted" style={{ fontSize: 13 }}>{pdfFile.name}</div>}
+
+          {pdfFiles.length > 0 && (
+            <div className="panel" style={{ padding: 12, margin: 0 }}>
+              <strong>
+                {language === 'DE'
+                  ? `${pdfFiles.length} von ${daysCount} Dateien ausgewählt`
+                  : `Выбрано ${pdfFiles.length} из ${daysCount} PDF`}
+              </strong>
+              {!filesMatchDays && (
+                <div className="banner banner--error" style={{ marginTop: 8, marginBottom: 0 }}>
+                  {language === 'DE'
+                    ? `Bitte genau ${daysCount} PDF-Dateien auswählen.`
+                    : `Нужно выбрать ровно ${daysCount} PDF-файлов — по одному на каждый день.`}
+                </div>
+              )}
+              <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                {plannedDates.map((date, index) => (
+                  <div key={date} className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+                    <span><strong>{formatDate(date, language)}</strong></span>
+                    <span className="muted" style={{ overflowWrap: 'anywhere', textAlign: 'right' }}>
+                      {pdfFiles[index]?.name ?? (language === 'DE' ? 'PDF fehlt' : 'PDF не выбран')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button className="btn" type="submit" disabled={!filesMatchDays || creating} style={{ minWidth: 220, alignSelf: 'flex-start' }}>
+            {creating
+              ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём домашки…')
+              : (language === 'DE' ? `${daysCount} Hausaufgaben erstellen` : `Создать на ${daysCount} дн.`)}
+          </button>
+
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Jeder Klick erstellt eine neue, getrennte Hausaufgabe. Mehrere Hausaufgaben am selben Datum sind erlaubt.'
-              : 'Каждое создание добавляет новую отдельную домашку. На одну дату можно задать несколько домашних работ.'}
+              ? 'Die Dateien werden in der ausgewählten Reihenfolge verteilt: die erste PDF für den ersten Tag, die zweite für den nächsten Tag usw.'
+              : 'PDF распределяются по порядку выбора: первый файл — на первый день, второй — на следующий и так далее. Каждый день у ученика будет отдельная домашка.'}
           </p>
         </form>
       </div>
@@ -184,6 +246,13 @@ function homeworkHistoryText(status: HomeworkHistoryStatus, language: 'DE' | 'RU
     case 'TODAY': return 'Нужно сделать сегодня';
     case 'UPCOMING': return 'Запланировано';
   }
+}
+
+function addDays(dateString: string, days: number) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
 }
 
 function localDateString(date: Date) {
