@@ -1,16 +1,22 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { CardSummary, StudentInvitation, StudentListItem } from '../../api/types';
+import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { InvitationNotice } from '../../components/InvitationNotice';
 
-/** Teacher home: the list of their students with each student's active-card count. */
+type TodayCompletion = {
+  cards: 'done' | 'pending' | 'none';
+  homework: 'done' | 'pending' | 'none';
+};
+
+/** Teacher home: the list of their students with each student's current daily status. */
 export function StudentsPage() {
   const { language, t } = useI18n();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
+  const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
@@ -22,10 +28,25 @@ export function StudentsPage() {
   async function reload() {
     const list = await api.students.list();
     setStudents(list);
-    const entries = await Promise.all(
-      list.map(async (s) => [s.id, await api.cards.summaryForStudent(s.id)] as const),
+    const today = localDateString(new Date());
+
+    const details = await Promise.all(
+      list.map(async (student) => {
+        const [summary, homeworks, reviewHistory] = await Promise.all([
+          api.cards.summaryForStudent(student.id),
+          api.homeworks.listForStudent(student.id),
+          api.students.reviewHistory(student.id),
+        ]);
+        return {
+          studentId: student.id,
+          summary,
+          completion: buildTodayCompletion(today, summary, homeworks, reviewHistory),
+        };
+      }),
     );
-    setSummaries(Object.fromEntries(entries));
+
+    setSummaries(Object.fromEntries(details.map((item) => [item.studentId, item.summary])));
+    setTodayCompletion(Object.fromEntries(details.map((item) => [item.studentId, item.completion])));
     setLoading(false);
   }
 
@@ -145,78 +166,145 @@ export function StudentsPage() {
         <div className="teacher-empty-state">{t('students.empty')}</div>
       ) : (
         <div className="teacher-student-list">
-          {students.map((student, index) => (
-            <article key={student.id} className="teacher-student-card">
-              <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>
-                {studentInitial(student.fullName)}
-              </div>
-
-              <div className="teacher-student-main">
-                <div className="teacher-student-name">{student.fullName}</div>
-                <div className="teacher-student-email">
-                  {student.email ?? (language === 'DE' ? 'E-Mail noch nicht angegeben' : 'Email не указан')}
+          {students.map((student, index) => {
+            const completion = todayCompletion[student.id] ?? { cards: 'none', homework: 'none' };
+            return (
+              <article key={student.id} className="teacher-student-card">
+                <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>
+                  {studentInitial(student.fullName)}
                 </div>
-                <div className="teacher-student-meta">Google вход не настроен</div>
-              </div>
 
-              <div className="teacher-student-stats">
-                <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
-                <span>{language === 'DE' ? 'Letzte Aktivität:' : 'Последняя активность:'}</span>
-                <strong>—</strong>
-              </div>
+                <div className="teacher-student-main">
+                  <div className="teacher-student-name">{student.fullName}</div>
+                  <div className="teacher-student-email">
+                    {student.email ?? (language === 'DE' ? 'E-Mail noch nicht angegeben' : 'Email не указан')}
+                  </div>
+                  <div className="teacher-student-meta">Google вход не настроен</div>
+                </div>
 
-              <div className="teacher-student-actions">
-                <div className="teacher-student-actions__top">
-                  <Link to={`/students/${student.id}`} className="teacher-action-chip">
-                    <span>▣</span>{language === 'DE' ? 'Karten' : 'Карточки'}
-                  </Link>
-                  <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">
-                    <span>▤</span>{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}
-                  </Link>
-                  <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">
-                    <span>△</span>Google Drive
-                  </Link>
-
-                  <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="teacher-more-btn"
-                      aria-label="Дополнительные действия"
-                      aria-expanded={openMenuId === student.id}
-                      onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}
-                    >
-                      ⋮
-                    </button>
-
-                    {openMenuId === student.id && (
-                      <div className="teacher-student-menu">
-                        <button
-                          type="button"
-                          disabled={!student.invitationToken}
-                          onClick={() => void copyInvitationLink(student)}
-                        >
-                          <span>⌁</span>
-                          {copiedStudentId === student.id
-                            ? (language === 'DE' ? 'Link kopiert' : 'Ссылка скопирована')
-                            : (language === 'DE' ? 'Link speichern' : 'Сохранить ссылку')}
-                        </button>
-                        <button type="button" onClick={() => void renameStudent(student)}>
-                          <span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}
-                        </button>
-                        <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}>
-                          <span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}
-                        </button>
-                      </div>
-                    )}
+                <div className="teacher-student-stats">
+                  <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
+                  <div className="teacher-today-statuses">
+                    <TodayStatusBadge
+                      label={language === 'DE' ? 'Karten heute' : 'Карточки сегодня'}
+                      status={completion.cards}
+                      language={language}
+                    />
+                    <TodayStatusBadge
+                      label={language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'}
+                      status={completion.homework}
+                      language={language}
+                    />
                   </div>
                 </div>
-              </div>
-            </article>
-          ))}
+
+                <div className="teacher-student-actions">
+                  <div className="teacher-student-actions__top">
+                    <Link to={`/students/${student.id}`} className="teacher-action-chip">
+                      <span>▣</span>{language === 'DE' ? 'Karten' : 'Карточки'}
+                    </Link>
+                    <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">
+                      <span>▤</span>{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}
+                    </Link>
+                    <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">
+                      <span>△</span>Google Drive
+                    </Link>
+
+                    <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="teacher-more-btn"
+                        aria-label="Дополнительные действия"
+                        aria-expanded={openMenuId === student.id}
+                        onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}
+                      >
+                        ⋮
+                      </button>
+
+                      {openMenuId === student.id && (
+                        <div className="teacher-student-menu">
+                          <button
+                            type="button"
+                            disabled={!student.invitationToken}
+                            onClick={() => void copyInvitationLink(student)}
+                          >
+                            <span>⌁</span>
+                            {copiedStudentId === student.id
+                              ? (language === 'DE' ? 'Link kopiert' : 'Ссылка скопирована')
+                              : (language === 'DE' ? 'Link speichern' : 'Сохранить ссылку')}
+                          </button>
+                          <button type="button" onClick={() => void renameStudent(student)}>
+                            <span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}
+                          </button>
+                          <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}>
+                            <span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>
   );
+}
+
+function TodayStatusBadge({
+  label,
+  status,
+  language,
+}: {
+  label: string;
+  status: TodayCompletion['cards'];
+  language: 'DE' | 'RU';
+}) {
+  const icon = status === 'done' ? '✓' : status === 'pending' ? '✕' : '—';
+  const text = status === 'done'
+    ? (language === 'DE' ? 'erledigt' : 'сделано')
+    : status === 'pending'
+      ? (language === 'DE' ? 'offen' : 'не сделано')
+      : (language === 'DE' ? 'nichts geplant' : 'не задано');
+
+  return (
+    <div className={`teacher-today-status teacher-today-status--${status}`} title={`${label}: ${text}`}>
+      <span className="teacher-today-status__icon">{icon}</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function buildTodayCompletion(
+  today: string,
+  summary: CardSummary,
+  homeworks: Homework[],
+  reviewHistory: DailyReviewHistoryItem[],
+): TodayCompletion {
+  const todayPdf = homeworks.filter((homework) => homework.startDate === today && homework.hasWorksheet);
+  const homework: TodayCompletion['homework'] = todayPdf.length === 0
+    ? 'none'
+    : todayPdf.every((item) => item.submitted) ? 'done' : 'pending';
+
+  const todayReview = reviewHistory.find((item) => item.date === today && item.dueCount > 0);
+  const todayCardBatches = homeworks.filter((homework) => homework.startDate === today && homework.totalCards > 0);
+  const hasCardsToday = Boolean(todayReview) || todayCardBatches.length > 0 || summary.dueNow > 0;
+  const cardsDoneByReview = todayReview?.status === 'COMPLETED';
+  const cardsDoneByBatch = todayCardBatches.length > 0 && todayCardBatches.every((item) => item.status === 'COMPLETED');
+  const cards: TodayCompletion['cards'] = !hasCardsToday
+    ? 'none'
+    : (cardsDoneByReview || cardsDoneByBatch) ? 'done' : 'pending';
+
+  return { cards, homework };
+}
+
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function studentInitial(name: string) {
