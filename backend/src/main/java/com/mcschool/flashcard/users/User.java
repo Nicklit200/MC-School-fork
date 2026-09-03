@@ -93,6 +93,13 @@ public class User {
         this.preferredLanguage = language;
     }
 
+    public void changeFullName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("Full name is required");
+        }
+        this.fullName = fullName.trim();
+    }
+
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
         this.googleDriveFolderUrl = normalizeFolderId(googleDriveFolderUrl);
     }
