@@ -51,6 +51,22 @@ final class NotificationMessages {
                         + "Mindcraft School");
     }
 
+    static Email parentMissedHomework(Language language, String parentName, String studentName,
+                                      long count, String parentLink) {
+        if (language == Language.DE) {
+            return new Email(
+                    "Hausaufgabe noch nicht erledigt",
+                    "Hallo " + parentName + ",\n\n"
+                            + studentName + " hat heute noch " + count + " offene Hausaufgabe(n).\n\n"
+                            + "Status ansehen:\n" + parentLink + "\n\nMindcraft School");
+        }
+        return new Email(
+                "Домашняя работа ещё не выполнена",
+                "Здравствуйте, " + parentName + "!\n\n"
+                        + studentName + " ещё не выполнил(а) сегодня домашнюю работу: " + count + ".\n\n"
+                        + "Посмотреть статус:\n" + parentLink + "\n\nMindcraft School");
+    }
+
     private static String dailyLineRu(long cards, long homeworks) {
         if (cards > 0 && homeworks > 0) return "На сегодня: " + cards + " карточек и " + homeworks + " домашка.";
         if (cards > 0) return "На сегодня нужно повторить " + cards + " карточек.";
