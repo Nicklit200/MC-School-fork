@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { driveApi, type DriveItem } from '../../api/drive';
 
 type Props = {
@@ -16,8 +16,6 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect }: Props) {
   const [loading, setLoading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const currentParentId = useMemo(() => path[path.length - 1]?.id, [path]);
 
   useEffect(() => {
     if (!open || drives.length > 0) return;
