@@ -8,7 +8,7 @@ import { InvitationNotice } from '../../components/InvitationNotice';
 
 /** Teacher home: the list of their students with each student's active-card count. */
 export function StudentsPage() {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
   const [fullName, setFullName] = useState('');
@@ -88,11 +88,17 @@ export function StudentsPage() {
               <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             </label>
             <label className="field">
-              <span className="field__label">{t('common.email')}</span>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <span className="field__label">
+                {t('common.email')} {language === 'DE' ? '(optional)' : '(необязательно)'}
+              </span>
+              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
           </div>
-          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>{t('students.emailHint')}</p>
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            {language === 'DE'
+              ? 'Ohne E-Mail wird trotzdem ein Einladungslink erstellt. Der Schüler gibt seine E-Mail beim Öffnen des Links ein.'
+              : 'Если email не указан, ссылка-приглашение всё равно создастся. Ученик введёт свою почту при переходе по ссылке.'}
+          </p>
           <button className="btn" type="submit">{t('students.create')}</button>
         </form>
         {invitation && (
@@ -109,7 +115,9 @@ export function StudentsPage() {
           <div key={student.id} className="list-row">
             <div>
               <div className="list-row__title">{student.fullName}</div>
-              <div className="muted">{student.email}</div>
+              <div className="muted">
+                {student.email ?? (language === 'DE' ? 'E-Mail noch nicht angegeben' : 'Email ещё не указан')}
+              </div>
               <div className="muted" style={{ fontSize: 12 }}>
                 Google Drive: {student.googleDriveFolderUrl ? 'папка задана' : 'не настроен'}
               </div>
