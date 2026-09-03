@@ -4,13 +4,15 @@ import { useAuth } from '../auth/AuthContext';
 import { homePathForRole } from '../auth/roleRoutes';
 import { useI18n } from '../i18n/I18nContext';
 import { LanguageToggle } from '../components/LanguageToggle';
+import '../login-page.css';
 
 export function LoginPage() {
   const { user, login } = useAuth();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,40 +35,73 @@ export function LoginPage() {
   }
 
   return (
-    <div className="auth">
-      <form className="auth__card" onSubmit={onSubmit}>
-        <div className="auth__brand">{t('app.name')}</div>
-        <h1>{t('login.title')}</h1>
+    <div className="login-screen">
+      <div className="login-decor-dots login-decor-dots--top" />
+      <div className="login-decor-dots login-decor-dots--bottom" />
+
+      <div className="login-brand" aria-label="MindCrafti School">
+        <div className="login-brand__mark">M</div>
+        <div className="login-brand__name"><span>MindCrafti</span> School</div>
+      </div>
+
+      <form className="login-card" onSubmit={onSubmit}>
+        <h1 className="login-card__title">{language === 'DE' ? 'Anmeldung' : 'Вход'}</h1>
+        <p className="login-card__subtitle">
+          {language === 'DE'
+            ? 'Melde dich an, um in der Schule weiterzuarbeiten.'
+            : 'Войдите, чтобы продолжить работу в системе'}
+        </p>
+
         {error && <div className="banner banner--error">{t('login.error')}</div>}
-        <label className="field">
+
+        <label className="field login-field">
           <span className="field__label">{t('common.email')}</span>
           <input
             className="input"
             type="email"
             value={email}
             autoComplete="username"
+            placeholder="name@example.com"
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </label>
-        <label className="field">
+
+        <label className="field login-field">
           <span className="field__label">{t('common.password')}</span>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div className="login-password-wrap">
+            <input
+              className="input"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              autoComplete="current-password"
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="login-password-toggle"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword
+                ? (language === 'DE' ? 'Passwort verbergen' : 'Скрыть пароль')
+                : (language === 'DE' ? 'Passwort anzeigen' : 'Показать пароль')}
+            >
+              {showPassword ? '◉' : '◎'}
+            </button>
+          </div>
         </label>
-        <button className="btn btn--block" type="submit" disabled={submitting}>
-          {t('login.submit')}
+
+        <button className="login-submit" type="submit" disabled={submitting}>
+          {submitting
+            ? (language === 'DE' ? 'Anmeldung…' : 'Входим…')
+            : t('login.submit')}
         </button>
-        <p className="muted center" style={{ marginTop: 16, fontSize: 14 }}>
+
+        <div className="login-activate-link">
           <Link to="/activate">{t('activate.title')}</Link>
-        </p>
-        <div className="center" style={{ marginTop: 8 }}>
+        </div>
+
+        <div className="login-language-switch">
           <LanguageToggle />
         </div>
       </form>
