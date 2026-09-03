@@ -14,6 +14,7 @@ import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
 import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
@@ -107,8 +108,15 @@ public class StudentService {
     public StudentListResponse updateGoogleDriveFolder(AuthenticatedUser teacher, UUID studentId,
                                                        UpdateStudentDriveFolderRequest request) {
         User student = requireOwnedStudent(teacher.id(), studentId);
-        String folderId = request.googleDriveFolderUrl();
-        student.changeGoogleDriveFolderUrl(folderId);
+        student.changeGoogleDriveFolderUrl(request.googleDriveFolderUrl());
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
+    public StudentListResponse updateGoogleDriveHomeworkFolder(AuthenticatedUser teacher, UUID studentId,
+                                                               UpdateStudentHomeworkDriveFolderRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.changeGoogleDriveHomeworkFolderId(request.googleDriveHomeworkFolderId());
         return StudentListResponse.from(student);
     }
 
