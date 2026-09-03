@@ -20,4 +20,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(Role role, UserStatus status);
 
     List<User> findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(UUID teacherId);
+
+    List<User> findAllByParentIdAndArchivedFalseOrderByFullNameAsc(UUID parentId);
 }
