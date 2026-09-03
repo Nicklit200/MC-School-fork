@@ -29,6 +29,7 @@ export function PdfHomeworkWithSubmissionPage() {
   async function refresh() {
     const current = (await api.study.homeworks()).find((item) => item.id === homeworkId) ?? null;
     setHomework(current);
+    return current;
   }
 
   useEffect(() => {
@@ -96,19 +97,35 @@ export function PdfHomeworkWithSubmissionPage() {
     setMessage(null);
     try {
       await api.study.submitHomeworkFile(homeworkId, file);
-      await refresh();
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      setMessage(
-        language === 'DE'
-          ? 'Datei wurde abgegeben. Der Lehrer erhält sie als PDF.'
-          : 'Файл сдан. Учитель получит его как PDF.',
-      );
+      await finishSuccessfulUpload();
     } catch (e) {
+      // Mobile browsers can lose the response after the server has already saved
+      // a large upload (backgrounding Safari, brief network switch, etc.). Before
+      // showing an error, ask the server whether the homework is in fact submitted.
+      try {
+        const current = await refresh();
+        if (current?.submitted) {
+          await finishSuccessfulUpload(false);
+          return;
+        }
+      } catch {
+        // Preserve the original upload error below.
+      }
       setError(toErrorMessage(e, t));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function finishSuccessfulUpload(refreshFirst = true) {
+    if (refreshFirst) await refresh();
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setMessage(
+      language === 'DE'
+        ? 'Datei wurde abgegeben. Der Lehrer erhält sie als PDF.'
+        : 'Файл сдан. Учитель получит его как PDF.',
+    );
   }
 
   return (
@@ -170,6 +187,14 @@ export function PdfHomeworkWithSubmissionPage() {
               ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
               : (language === 'DE' ? 'Datei abgeben' : 'Сдать файл')}
           </button>
+
+          {busy && (
+            <div className="banner banner--info" style={{ marginTop: 10 }}>
+              {language === 'DE'
+                ? 'Bitte diese Seite geöffnet lassen, bis die Abgabe bestätigt ist.'
+                : 'Не закрывай страницу до подтверждения сдачи. На мобильном интернете загрузка может занять немного времени.'}
+            </div>
+          )}
 
           <p className="muted" style={{ marginBottom: 0, marginTop: 10, fontSize: 12 }}>
             {language === 'DE'
