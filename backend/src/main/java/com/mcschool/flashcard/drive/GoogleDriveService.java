@@ -69,6 +69,46 @@ public class GoogleDriveService {
         return toItems(payload.get("files"));
     }
 
+    public List<DriveItemResponse> listPdfFiles(String driveId, String parentId) {
+        String effectiveParent = parentId == null || parentId.isBlank() ? driveId : parentId;
+        String q = "'" + effectiveParent.replace("'", "\\'")
+                + "' in parents and mimeType='application/pdf' and trashed=false";
+        String url = DRIVE_API + "/files"
+                + "?corpora=drive"
+                + "&driveId=" + enc(driveId)
+                + "&includeItemsFromAllDrives=true"
+                + "&supportsAllDrives=true"
+                + "&pageSize=1000"
+                + "&orderBy=name"
+                + "&q=" + enc(q)
+                + "&fields=files(id,name)";
+        Map<String, Object> payload = getJson(url);
+        return toItems(payload.get("files"));
+    }
+
+    public byte[] downloadFile(String fileId) {
+        if (fileId == null || fileId.isBlank()) {
+            throw new IllegalArgumentException("File id is required");
+        }
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(DRIVE_API + "/files/" + enc(fileId) + "?alt=media&supportsAllDrives=true"))
+                    .header("Authorization", "Bearer " + accessToken())
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("Google API returned HTTP " + response.statusCode());
+            }
+            return response.body();
+        } catch (Exception ex) {
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Google Drive download failed", ex);
+        }
+    }
+
     public boolean fileExists(String folderId, String fileName) {
         if (folderId == null || folderId.isBlank() || fileName == null || fileName.isBlank()) {
             return false;
