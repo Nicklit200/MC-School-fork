@@ -12,6 +12,7 @@ import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
@@ -138,6 +139,45 @@ public class HomeworkPdfService {
         }
     }
 
+    /**
+     * Alternative submission path for students who solved the worksheet on paper.
+     * A PDF is stored as-is; a JPEG/PNG photo is wrapped into a one-page PDF so the
+     * teacher can keep using the same submission download flow.
+     */
+    @Transactional
+    public void submitFile(AuthenticatedUser student, UUID homeworkId, MultipartFile file) {
+        Homework homework = requireStudentHomework(student.id(), homeworkId);
+        ensureWorksheet(homework);
+        if (homework.isSubmitted()) throw new IllegalArgumentException("Homework has already been submitted");
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Submission file is required");
+        if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("Submission file is too large");
+
+        String filename = file.getOriginalFilename() == null ? "homework" : file.getOriginalFilename();
+        String lower = filename.toLowerCase();
+        try {
+            byte[] bytes = file.getBytes();
+            byte[] submittedPdf;
+            if (lower.endsWith(".pdf") || "application/pdf".equalsIgnoreCase(file.getContentType())) {
+                try (PDDocument document = Loader.loadPDF(bytes)) {
+                    if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
+                }
+                submittedPdf = bytes;
+            } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
+                    || "image/jpeg".equalsIgnoreCase(file.getContentType())
+                    || "image/png".equalsIgnoreCase(file.getContentType())) {
+                submittedPdf = imageToPdf(bytes);
+            } else {
+                throw new IllegalArgumentException("Only PDF, JPG and PNG files are supported");
+            }
+
+            String baseName = filename.replaceFirst("(?i)\\.(pdf|jpe?g|png)$", "");
+            if (baseName.isBlank()) baseName = "homework";
+            homework.submitWorksheet(baseName + "-submitted.pdf", submittedPdf, Instant.now());
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Could not read submission file", e);
+        }
+    }
+
     @Transactional(readOnly = true)
     public byte[] teacherSubmission(AuthenticatedUser teacher, UUID homeworkId) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
@@ -150,6 +190,38 @@ public class HomeworkPdfService {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
         if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
         return homework.getSubmittedFilename();
+    }
+
+    private byte[] imageToPdf(byte[] imageBytes) throws IOException {
+        BufferedImage imageInfo = ImageIO.read(new ByteArrayInputStream(imageBytes));
+        if (imageInfo == null) throw new IllegalArgumentException("Could not read image");
+
+        boolean landscape = imageInfo.getWidth() > imageInfo.getHeight();
+        PDRectangle pageSize = landscape
+                ? new PDRectangle(PDRectangle.A4.getHeight(), PDRectangle.A4.getWidth())
+                : PDRectangle.A4;
+
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage(pageSize);
+            document.addPage(page);
+            PDImageXObject image = PDImageXObject.createFromByteArray(document, imageBytes, "student-photo");
+
+            float margin = 24f;
+            float availableWidth = pageSize.getWidth() - margin * 2;
+            float availableHeight = pageSize.getHeight() - margin * 2;
+            float scale = Math.min(availableWidth / image.getWidth(), availableHeight / image.getHeight());
+            float width = image.getWidth() * scale;
+            float height = image.getHeight() * scale;
+            float x = (pageSize.getWidth() - width) / 2;
+            float y = (pageSize.getHeight() - height) / 2;
+
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.drawImage(image, x, y, width, height);
+            }
+            document.save(out);
+            return out.toByteArray();
+        }
     }
 
     private PdfUpload readPdf(MultipartFile file) {
