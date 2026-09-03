@@ -15,6 +15,7 @@ import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
 import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
@@ -102,6 +103,14 @@ public class StudentService {
     @Transactional(readOnly = true)
     public StudentListResponse getStudent(AuthenticatedUser teacher, UUID studentId) {
         return StudentListResponse.from(requireOwnedStudent(teacher.id(), studentId));
+    }
+
+    @Transactional
+    public StudentListResponse updateStudentName(AuthenticatedUser teacher, UUID studentId,
+                                                 UpdateStudentNameRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.changeFullName(request.fullName().trim());
+        return StudentListResponse.from(student);
     }
 
     @Transactional
