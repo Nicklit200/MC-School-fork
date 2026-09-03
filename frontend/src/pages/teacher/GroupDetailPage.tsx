@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { ImportPreview, StudentGroup } from '../../api/types';
@@ -21,12 +21,24 @@ export function GroupDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [homeworkStartDate, setHomeworkStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [homeworkDays, setHomeworkDays] = useState(1);
+  const [homeworkFiles, setHomeworkFiles] = useState<Array<File | null>>([null]);
+  const [creatingHomework, setCreatingHomework] = useState(false);
+
   useEffect(() => {
     if (!groupId) return;
     api.groups.get(groupId)
       .then(setGroup)
       .catch((e) => setError(toErrorMessage(e, t)));
   }, [groupId, t]);
+
+  const homeworkDates = useMemo(
+    () => Array.from({ length: homeworkDays }, (_, index) => addDays(homeworkStartDate, index)),
+    [homeworkStartDate, homeworkDays],
+  );
+
+  const allHomeworkFilesSelected = homeworkFiles.length === homeworkDays && homeworkFiles.every((file) => file !== null);
 
   if (!groupId) {
     return <div className="banner banner--error">Группа не найдена</div>;
@@ -48,6 +60,53 @@ export function GroupDetailPage() {
       setMessage(`Добавлено учеников: ${updated.students.length}.`);
     } catch (e) {
       setError(toErrorMessage(e, t));
+    }
+  }
+
+  function changeHomeworkDays(value: number) {
+    const next = Math.max(1, Math.min(31, value || 1));
+    setHomeworkDays(next);
+    setHomeworkFiles((current) => Array.from({ length: next }, (_, index) => current[index] ?? null));
+  }
+
+  function setHomeworkFile(index: number, file: File | null) {
+    setHomeworkFiles((current) => current.map((existing, currentIndex) => currentIndex === index ? file : existing));
+  }
+
+  function removeHomeworkFile(index: number) {
+    setHomeworkFile(index, null);
+    const input = document.getElementById(`group-homework-pdf-${index}`) as HTMLInputElement | null;
+    if (input) input.value = '';
+  }
+
+  function moveHomeworkFile(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= homeworkFiles.length) return;
+    setHomeworkFiles((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  async function createGroupHomework(event: FormEvent) {
+    event.preventDefault();
+    if (!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework) return;
+    setCreatingHomework(true);
+    setError(null);
+    setMessage(null);
+    try {
+      for (let index = 0; index < homeworkFiles.length; index += 1) {
+        const file = homeworkFiles[index];
+        if (!file) continue;
+        await api.groups.createPdfHomework(groupId!, homeworkDates[index], file);
+      }
+      setHomeworkFiles(Array.from({ length: homeworkDays }, () => null));
+      setMessage(`Готово: ${homeworkDays} домашних работ выдано всей группе.`);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setCreatingHomework(false);
     }
   }
 
@@ -96,7 +155,7 @@ export function GroupDetailPage() {
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ marginBottom: 4 }}>{group?.name ?? 'Группа'}</h1>
-          <div className="muted">Одинаковые карточки выдаются всем, но прогресс считается отдельно для каждого ученика.</div>
+          <div className="muted">Задания выдаются всей группе, но каждый ученик выполняет и сдаёт их отдельно.</div>
         </div>
         <Link className="btn btn--secondary" to="/groups">Назад к группам</Link>
       </div>
@@ -135,12 +194,97 @@ export function GroupDetailPage() {
             <div className="list-row" key={student.id}>
               <div>
                 <div className="list-row__title">{student.fullName}</div>
-                <div className="muted">{student.email}</div>
+                <div className="muted">{student.email ?? 'Email не указан'}</div>
               </div>
               <Link className="btn btn--secondary" to={`/students/${student.id}`}>Ошибки и карточки</Link>
             </div>
           ))
         )}
+      </div>
+
+      <div className="panel">
+        <h2>Задать PDF-домашку всей группе</h2>
+        <form className="stack" onSubmit={createGroupHomework}>
+          <div className="row" style={{ alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
+            <label className="field" style={{ margin: 0, flex: '1 1 220px' }}>
+              <span className="field__label">Первый день</span>
+              <input
+                className="input"
+                type="date"
+                value={homeworkStartDate}
+                onChange={(e) => setHomeworkStartDate(e.target.value)}
+                disabled={creatingHomework}
+                required
+              />
+            </label>
+            <label className="field" style={{ margin: 0, flex: '0 1 180px' }}>
+              <span className="field__label">На сколько дней</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={31}
+                value={homeworkDays}
+                onChange={(e) => changeHomeworkDays(Number(e.target.value))}
+                disabled={creatingHomework}
+                required
+              />
+            </label>
+          </div>
+
+          <div className="panel" style={{ padding: 12, margin: 0 }}>
+            <strong>PDF на каждый день</strong>
+            <p className="muted" style={{ marginTop: 6, marginBottom: 12, fontSize: 13 }}>
+              Каждый PDF будет выдан каждому ученику группы на указанную дату. Файлы можно заменить, удалить или передвинуть на другую дату.
+            </p>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {homeworkDates.map((date, index) => {
+                const file = homeworkFiles[index];
+                return (
+                  <div key={`${date}-${index}`} className="panel" style={{ padding: 12, margin: 0 }}>
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <div>
+                        <strong>День {index + 1}</strong>
+                        <div className="muted">{formatDate(date)}</div>
+                      </div>
+                      {file && (
+                        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                          <button type="button" className="btn btn--secondary" disabled={creatingHomework || index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button>
+                          <button type="button" className="btn btn--secondary" disabled={creatingHomework || index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button>
+                          <button type="button" className="btn btn--danger" disabled={creatingHomework} onClick={() => removeHomeworkFile(index)}>Удалить</button>
+                        </div>
+                      )}
+                    </div>
+                    <label className="field" style={{ margin: '10px 0 0' }}>
+                      <span className="field__label">{file ? 'Заменить PDF' : 'Выбрать PDF'}</span>
+                      <input
+                        id={`group-homework-pdf-${index}`}
+                        className="input"
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        disabled={creatingHomework}
+                        onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <div style={{ marginTop: 8, overflowWrap: 'anywhere' }}>
+                      {file ? <strong>{file.name}</strong> : <span className="muted">Файл пока не выбран</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня.</div>}
+
+          <button
+            className="btn"
+            type="submit"
+            disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}
+          >
+            {creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}
+          </button>
+        </form>
       </div>
 
       <div className="panel">
@@ -151,20 +295,8 @@ export function GroupDetailPage() {
         </label>
 
         <div className="row" style={{ marginBottom: 16 }}>
-          <button
-            type="button"
-            className={`btn ${cardTab === 'manual' ? '' : 'btn--ghost'}`}
-            onClick={() => setCardTab('manual')}
-          >
-            Вручную
-          </button>
-          <button
-            type="button"
-            className={`btn ${cardTab === 'import' ? '' : 'btn--ghost'}`}
-            onClick={() => setCardTab('import')}
-          >
-            Импорт
-          </button>
+          <button type="button" className={`btn ${cardTab === 'manual' ? '' : 'btn--ghost'}`} onClick={() => setCardTab('manual')}>Вручную</button>
+          <button type="button" className={`btn ${cardTab === 'import' ? '' : 'btn--ghost'}`} onClick={() => setCardTab('import')}>Импорт</button>
         </div>
 
         {cardTab === 'manual' ? (
@@ -218,12 +350,7 @@ export function GroupDetailPage() {
                     </ul>
                   </div>
                 )}
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={importCards}
-                  disabled={!group || group.students.length === 0 || preview.cards.length === 0}
-                >
+                <button className="btn" type="button" onClick={importCards} disabled={!group || group.students.length === 0 || preview.cards.length === 0}>
                   Выдать {preview.cards.length} карточек всей группе
                 </button>
               </div>
@@ -233,4 +360,23 @@ export function GroupDetailPage() {
       </div>
     </div>
   );
+}
+
+function addDays(dateString: string, days: number) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
+}
+
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDate(date: string) {
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    .format(new Date(`${date}T00:00:00`));
 }
