@@ -1,6 +1,6 @@
 // TypeScript mirrors of the backend DTOs. Keep these in sync with the Java records.
 
-export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT';
+export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT';
 export type UserStatus = 'INVITED' | 'ACTIVE';
 export type Language = 'DE' | 'RU';
 export type CardStatus = 'ACTIVE' | 'LEARNED';
@@ -22,6 +22,11 @@ export interface StudentListItem extends User {
   invitationToken: string | null;
   googleDriveFolderUrl: string | null;
   googleDriveHomeworkFolderId: string | null;
+  parentId: string | null;
+  parentFullName: string | null;
+  parentEmail: string | null;
+  parentStatus: UserStatus | null;
+  parentInvitationToken: string | null;
 }
 
 export interface StudentGroup {
@@ -47,6 +52,21 @@ export interface StudentInvitation {
   student: User;
   invitationToken: string;
   invitationExpiresAt: string;
+}
+
+export interface ParentInvitation {
+  parent: User;
+  invitationToken: string | null;
+  invitationExpiresAt: string | null;
+}
+
+export interface ParentChildStatus {
+  studentId: string;
+  studentName: string;
+  homeworkAssignedToday: number;
+  homeworkCompletedToday: number;
+  homeworkOpenToday: number;
+  cardsDueToday: number;
 }
 
 export interface Card {
@@ -119,72 +139,59 @@ export interface PilotDueCardResult {
 export interface ParsedCard {
   question: string;
   correctAnswer: string;
-  wrongAnswer1: string;
-  wrongAnswer2: string;
-  wrongAnswer3: string;
+  wrongAnswers?: string[];
 }
 
 export interface ImportPreview {
   cards: ParsedCard[];
-  warnings: string[];
+  errors: string[];
 }
 
 export interface Today {
   totalCards: number;
-  dueCardCount: number;
-  learnedCount: number;
+  dueCards: number;
+  learnedCards: number;
   minCardsToStart: number;
   canStartScheduled: boolean;
-  canPractice: boolean;
+  canStartPractice: boolean;
   inProgressSessionId: string | null;
 }
 
 export interface Session {
   id: string;
-  type: SessionType;
+  sessionType: SessionType;
   status: SessionStatus;
   totalCards: number;
-  answeredCount: number;
-  remaining: number;
+  answeredCards: number;
 }
 
 export interface Question {
   cardId: string;
   question: string;
   options: string[];
-  answeredCount: number;
+  answeredCards: number;
   totalCards: number;
 }
 
 export interface AnswerResult {
   correct: boolean;
   correctAnswer: string;
-  sessionCompleted: boolean;
+  completed: boolean;
   remaining: number;
-}
-
-export interface SessionResult {
-  type: SessionType;
-  totalCards: number;
-  correctFirstTry: number;
-  nextReviewDate: string | null;
-  review: SessionReviewItem[];
 }
 
 export interface SessionReviewItem {
   cardId: string;
   question: string;
-  selectedAnswer: string;
+  selectedAnswer: string | null;
   correctAnswer: string;
   correct: boolean;
 }
 
-/** Shape of the backend's error body; `errorCode` drives user-facing messages. */
-export interface ApiError {
-  timestamp: string;
-  status: number;
-  errorCode: string;
-  message: string;
-  path: string;
-  fieldErrors?: { field: string; message: string }[];
+export interface SessionResult {
+  sessionType: SessionType;
+  totalCards: number;
+  correctFirstTry: number;
+  nextReviewDate: string | null;
+  reviewItems: SessionReviewItem[];
 }
