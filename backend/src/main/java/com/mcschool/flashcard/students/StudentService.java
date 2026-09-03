@@ -9,6 +9,8 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.notifications.NotificationService;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.students.dto.CreateStudentRequest;
+import com.mcschool.flashcard.students.dto.LinkParentRequest;
+import com.mcschool.flashcard.students.dto.ParentInvitationResponse;
 import com.mcschool.flashcard.students.dto.PilotDueCardResponse;
 import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
@@ -74,13 +76,41 @@ public class StudentService {
                     .orElseGet(() -> userRepository.save(
                             User.invitedStudent(fullName, email, teacherEntity, token, expiresAt)));
 
-            log.info("Sending student invitation email for studentId={} email={}", student.getId(), student.getEmail());
             notificationService.sendInvitation(student, token);
-            log.info("Finished student invitation email attempt for studentId={} email={}",
-                    student.getId(), student.getEmail());
         }
 
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
+    }
+
+    @Transactional
+    public ParentInvitationResponse linkParent(AuthenticatedUser teacher, UUID studentId, LinkParentRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        String email = normalizeOptionalEmail(request.email());
+        if (email == null) {
+            throw new IllegalArgumentException("Parent email is required");
+        }
+
+        User parent = userRepository.findByEmail(email).orElse(null);
+        String token = null;
+        Instant expiresAt = null;
+
+        if (parent == null) {
+            token = Invitations.newToken();
+            expiresAt = Invitations.expiry(Instant.now());
+            parent = userRepository.save(User.invitedParent(request.fullName().trim(), email, token, expiresAt));
+            notificationService.sendInvitation(parent, token);
+        } else {
+            if (parent.getRole() != Role.PARENT || parent.isArchived()) {
+                throw new ConflictException("An account with this email already exists and is not a parent account");
+            }
+            if (parent.getStatus() == UserStatus.INVITED) {
+                token = parent.getInvitationToken();
+                expiresAt = parent.getInvitationExpiresAt();
+            }
+        }
+
+        student.linkParent(parent);
+        return new ParentInvitationResponse(UserResponse.from(parent), token, expiresAt);
     }
 
     private User restoreDeletedStudent(User existing, User teacher, String fullName,
