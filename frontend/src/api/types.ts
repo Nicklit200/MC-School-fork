@@ -139,21 +139,23 @@ export interface PilotDueCardResult {
 export interface ParsedCard {
   question: string;
   correctAnswer: string;
-  wrongAnswers?: string[];
+  wrongAnswer1: string;
+  wrongAnswer2: string;
+  wrongAnswer3: string;
 }
 
 export interface ImportPreview {
   cards: ParsedCard[];
-  errors: string[];
+  warnings: string[];
 }
 
 export interface Today {
   totalCards: number;
-  dueCards: number;
-  learnedCards: number;
+  dueCardCount: number;
+  learnedCount: number;
   minCardsToStart: number;
   canStartScheduled: boolean;
-  canStartPractice: boolean;
+  canPractice: boolean;
   inProgressSessionId: string | null;
 }
 
@@ -169,14 +171,14 @@ export interface Question {
   cardId: string;
   question: string;
   options: string[];
-  answeredCards: number;
+  answeredCount: number;
   totalCards: number;
 }
 
 export interface AnswerResult {
   correct: boolean;
   correctAnswer: string;
-  completed: boolean;
+  sessionCompleted: boolean;
   remaining: number;
 }
 
@@ -189,9 +191,9 @@ export interface SessionReviewItem {
 }
 
 export interface SessionResult {
-  sessionType: SessionType;
+  type: SessionType;
   totalCards: number;
   correctFirstTry: number;
   nextReviewDate: string | null;
-  reviewItems: SessionReviewItem[];
+  review: SessionReviewItem[];
 }
