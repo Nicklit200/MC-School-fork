@@ -9,6 +9,7 @@ import './teacher-groups.css';
 import './teacher-detail.css';
 import './group-detail.css';
 import './login-page.css';
+import './pdf-homework.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
