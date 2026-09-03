@@ -141,8 +141,9 @@ public class HomeworkPdfService {
 
     /**
      * Alternative submission path for students who solved the worksheet on paper.
-     * A PDF is stored as-is; a JPEG/PNG photo is wrapped into a one-page PDF so the
-     * teacher can keep using the same submission download flow.
+     * The student's photo/PDF is converted to PDF when needed and APPENDED to the
+     * originally assigned worksheet. The teacher and Google Drive therefore receive
+     * one combined PDF: assigned homework first, student's paper solution afterwards.
      */
     @Transactional
     public void submitFile(AuthenticatedUser student, UUID homeworkId, MultipartFile file) {
@@ -156,23 +157,24 @@ public class HomeworkPdfService {
         String lower = filename.toLowerCase();
         try {
             byte[] bytes = file.getBytes();
-            byte[] submittedPdf;
+            byte[] answerPdf;
             if (lower.endsWith(".pdf") || "application/pdf".equalsIgnoreCase(file.getContentType())) {
                 try (PDDocument document = Loader.loadPDF(bytes)) {
                     if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
                 }
-                submittedPdf = bytes;
+                answerPdf = bytes;
             } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
                     || "image/jpeg".equalsIgnoreCase(file.getContentType())
                     || "image/png".equalsIgnoreCase(file.getContentType())) {
-                submittedPdf = imageToPdf(bytes);
+                answerPdf = imageToPdf(bytes);
             } else {
                 throw new IllegalArgumentException("Only PDF, JPG and PNG files are supported");
             }
 
-            String baseName = filename.replaceFirst("(?i)\\.(pdf|jpe?g|png)$", "");
-            if (baseName.isBlank()) baseName = "homework";
-            homework.submitWorksheet(baseName + "-submitted.pdf", submittedPdf, Instant.now());
+            byte[] combinedPdf = appendPdf(homework.getWorksheetPdf(), answerPdf);
+            String baseName = homework.getWorksheetFilename() == null
+                    ? "homework" : homework.getWorksheetFilename().replaceFirst("(?i)\\.pdf$", "");
+            homework.submitWorksheet(baseName + "-submitted.pdf", combinedPdf, Instant.now());
         } catch (IOException e) {
             throw new IllegalArgumentException("Could not read submission file", e);
         }
@@ -190,6 +192,18 @@ public class HomeworkPdfService {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
         if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
         return homework.getSubmittedFilename();
+    }
+
+    private byte[] appendPdf(byte[] originalWorksheetPdf, byte[] studentAnswerPdf) throws IOException {
+        try (PDDocument worksheet = Loader.loadPDF(originalWorksheetPdf);
+             PDDocument answer = Loader.loadPDF(studentAnswerPdf);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            for (PDPage page : answer.getPages()) {
+                worksheet.importPage(page);
+            }
+            worksheet.save(out);
+            return out.toByteArray();
+        }
     }
 
     private byte[] imageToPdf(byte[] imageBytes) throws IOException {
