@@ -7,6 +7,8 @@ import com.mcschool.flashcard.drive.dto.DriveUploadResponse;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.reviewhistory.dto.DailyReviewHistoryResponse;
 import com.mcschool.flashcard.students.dto.CreateStudentRequest;
+import com.mcschool.flashcard.students.dto.LinkParentRequest;
+import com.mcschool.flashcard.students.dto.ParentInvitationResponse;
 import com.mcschool.flashcard.students.dto.PilotDueCardResponse;
 import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
@@ -64,6 +66,14 @@ public class StudentController {
         return studentService.createStudent(caller, request);
     }
 
+    @PostMapping("/{studentId}/parent")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ParentInvitationResponse linkParent(@AuthenticationPrincipal AuthenticatedUser caller,
+                                               @PathVariable UUID studentId,
+                                               @Valid @RequestBody LinkParentRequest request) {
+        return studentService.linkParent(caller, studentId, request);
+    }
+
     @GetMapping
     public List<StudentListResponse> listStudents(@AuthenticationPrincipal AuthenticatedUser caller) {
         return studentService.listStudents(caller);
@@ -105,10 +115,7 @@ public class StudentController {
         try {
             return googleDriveTestService.testFolder(student.googleDriveFolderUrl());
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            return Map.of(
-                    "status", "error",
-                    "message", safeDriveTestMessage(ex.getMessage())
-            );
+            return Map.of("status", "error", "message", safeDriveTestMessage(ex.getMessage()));
         }
     }
 
@@ -119,10 +126,7 @@ public class StudentController {
         try {
             return googleDriveTestService.testFolder(student.googleDriveHomeworkFolderId());
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            return Map.of(
-                    "status", "error",
-                    "message", safeDriveTestMessage(ex.getMessage())
-            );
+            return Map.of("status", "error", "message", safeDriveTestMessage(ex.getMessage()));
         }
     }
 
@@ -134,7 +138,6 @@ public class StudentController {
         if (folderId == null || folderId.isBlank()) {
             return Map.of("status", "error", "message", "Сначала выберите папку для карточек Google Drive");
         }
-
         try {
             String csv = "\uFEFFStudent;Session type;Total;Correct first try;Wrong first try\r\n"
                     + csvCell(student.fullName()) + ";TEST;5;4;1\r\n\r\n"
@@ -142,70 +145,15 @@ public class StudentController {
                     + "2 + 2;4;4;CORRECT\r\n"
                     + "5 x 3;12;15;WRONG\r\n"
                     + "10 - 3;7;7;CORRECT\r\n";
-
             String fileName = safeFileName(student.fullName()) + "_"
-                    + ZonedDateTime.now().format(TEST_EXPORT_TIME)
-                    + "_TEST_cards.csv";
+                    + ZonedDateTime.now().format(TEST_EXPORT_TIME) + "_TEST_cards.csv";
             DriveUploadResponse uploaded = googleDriveService.uploadBytes(
-                    folderId,
-                    fileName,
-                    "text/csv; charset=utf-8",
-                    csv.getBytes(StandardCharsets.UTF_8)
-            );
-            return Map.of(
-                    "status", "ok",
-                    "fileName", uploaded.name(),
-                    "fileUrl", uploaded.webViewLink() == null ? "" : uploaded.webViewLink()
-            );
+                    folderId, fileName, "text/csv; charset=utf-8", csv.getBytes(StandardCharsets.UTF_8));
+            return Map.of("status", "ok", "fileName", uploaded.name(),
+                    "fileUrl", uploaded.webViewLink() == null ? "" : uploaded.webViewLink());
         } catch (RuntimeException ex) {
-            return Map.of(
-                    "status", "error",
-                    "message", "Не удалось создать тестовую таблицу: " + ex.getMessage()
-            );
+            return Map.of("status", "error", "message", "Не удалось создать тестовую таблицу: " + ex.getMessage());
         }
-    }
-
-    private String csvCell(String value) {
-        if (value == null) {
-            return "\"\"";
-        }
-        return "\"" + value.replace("\"", "\"\"") + "\"";
-    }
-
-    private String safeFileName(String value) {
-        if (value == null || value.isBlank()) {
-            return "student";
-        }
-        String cleaned = value.trim().replaceAll("[\\\\/:*?\"<>|]", "_").replaceAll("\\s+", "_");
-        return cleaned.isBlank() ? "student" : cleaned;
-    }
-
-    private String safeDriveTestMessage(String message) {
-        if (message == null || message.isBlank()) {
-            return "Не удалось проверить Google Drive";
-        }
-        if (message.contains("GOOGLE_SERVICE_ACCOUNT_JSON is not configured")) {
-            return "В Railway не найдена переменная GOOGLE_SERVICE_ACCOUNT_JSON";
-        }
-        if (message.contains("Invalid Google Drive folder URL")) {
-            return "Ссылка на папку Google Drive имеет неверный формат";
-        }
-        if (message.contains("Google authentication returned HTTP 400")) {
-            return "Google не принял JSON-ключ. Проверь, что в Railway вставлен весь JSON-файл целиком";
-        }
-        if (message.contains("Google authentication returned HTTP 401")) {
-            return "Google отклонил ключ сервисного аккаунта";
-        }
-        if (message.contains("Google Drive returned HTTP 403")) {
-            return "Сервисному аккаунту не хватает доступа к этой папке или Shared Drive";
-        }
-        if (message.contains("Google Drive returned HTTP 404")) {
-            return "Папка не найдена или сервисный аккаунт её не видит";
-        }
-        if (message.startsWith("Google Drive returned HTTP ")) {
-            return message;
-        }
-        return "Ошибка подключения Google Drive: " + message;
     }
 
     @GetMapping("/{studentId}/review-history")
@@ -231,5 +179,28 @@ public class StudentController {
     public void deleteStudent(@AuthenticationPrincipal AuthenticatedUser caller,
                               @PathVariable UUID studentId) {
         studentService.deleteStudent(caller, studentId);
+    }
+
+    private String csvCell(String value) {
+        if (value == null) return "\"\"";
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
+    private String safeFileName(String value) {
+        if (value == null || value.isBlank()) return "student";
+        String cleaned = value.trim().replaceAll("[\\\\/:*?\"<>|]", "_").replaceAll("\\s+", "_");
+        return cleaned.isBlank() ? "student" : cleaned;
+    }
+
+    private String safeDriveTestMessage(String message) {
+        if (message == null || message.isBlank()) return "Не удалось проверить Google Drive";
+        if (message.contains("GOOGLE_SERVICE_ACCOUNT_JSON is not configured")) return "В Railway не найдена переменная GOOGLE_SERVICE_ACCOUNT_JSON";
+        if (message.contains("Invalid Google Drive folder URL")) return "Ссылка на папку Google Drive имеет неверный формат";
+        if (message.contains("Google authentication returned HTTP 400")) return "Google не принял JSON-ключ. Проверь, что в Railway вставлен весь JSON-файл целиком";
+        if (message.contains("Google authentication returned HTTP 401")) return "Google отклонил ключ сервисного аккаунта";
+        if (message.contains("Google Drive returned HTTP 403")) return "Сервисному аккаунту не хватает доступа к этой папке или Shared Drive";
+        if (message.contains("Google Drive returned HTTP 404")) return "Папка не найдена или сервисный аккаунт её не видит";
+        if (message.startsWith("Google Drive returned HTTP ")) return message;
+        return "Ошибка подключения Google Drive: " + message;
     }
 }
