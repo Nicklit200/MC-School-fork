@@ -13,6 +13,7 @@ import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
@@ -72,6 +73,13 @@ public class StudentController {
     public StudentListResponse getStudent(@AuthenticationPrincipal AuthenticatedUser caller,
                                           @PathVariable UUID studentId) {
         return studentService.getStudent(caller, studentId);
+    }
+
+    @PutMapping("/{studentId}/name")
+    public StudentListResponse updateStudentName(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                 @PathVariable UUID studentId,
+                                                 @Valid @RequestBody UpdateStudentNameRequest request) {
+        return studentService.updateStudentName(caller, studentId, request);
     }
 
     /** Destination for completed card-session CSV exports. */
