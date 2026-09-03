@@ -337,38 +337,23 @@ export function GroupDetailPage() {
       )}
 
       {pageTab === 'homework' && (
-        <div className="group-tab-stack">
-          <section className="group-overview-card">
-            <div className="group-overview-card__header">
-              <div><h2>Сдача домашки по группе</h2><p>Статус каждого ученика по всем выданным PDF.</p></div>
-              <button className="group-refresh-btn" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>Обновить</button>
+        <section className="group-work-card">
+          <h2>Задать PDF-домашку всей группе</h2>
+          <form className="stack" onSubmit={createGroupHomework}>
+            <div className="group-homework-options">
+              <label className="field"><span className="field__label">Первый день</span><input className="input" type="date" value={homeworkStartDate} onChange={(e) => setHomeworkStartDate(e.target.value)} disabled={creatingHomework} required /></label>
+              <label className="field"><span className="field__label">На сколько дней</span><input className="input" type="number" min={1} max={31} value={homeworkDays} onChange={(e) => changeHomeworkDays(Number(e.target.value))} disabled={creatingHomework} required /></label>
             </div>
-            <div className="group-homework-table-wrap">
-              <table className="group-homework-table">
-                <thead><tr><th>Название задания</th><th>Дата задания</th>{group?.students.map((student) => <th key={student.id}>{student.fullName}</th>)}</tr></thead>
-                <tbody>{groupHomeworkRows.map((row) => <tr key={row.key}><td><span className="group-pdf-icon">PDF</span>{row.filename}</td><td>{formatDate(row.startDate)}</td>{group?.students.map((student) => { const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row); return <td key={student.id}>{homework ? <Link className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/homeworks/${homework.id}`}>{homework.submitted ? '✓' : '✕'}</Link> : '—'}</td>; })}</tr>)}</tbody>
-              </table>
+            <div className="group-day-grid">
+              {homeworkDates.map((date, index) => {
+                const file = homeworkFiles[index];
+                return <div key={`${date}-${index}`} className="group-day-card"><div className="group-day-card__head"><div><strong>День {index + 1}</strong><span>{formatDate(date)}</span></div>{file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}</div><label className="field"><span className="field__label">{file ? 'Заменить PDF' : 'Выбрать PDF'}</span><input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} /></label><span className="group-day-card__file">{file?.name ?? 'Файл пока не выбран'}</span></div>;
+              })}
             </div>
-          </section>
-
-          <section className="group-work-card">
-            <h2>Задать PDF-домашку всей группе</h2>
-            <form className="stack" onSubmit={createGroupHomework}>
-              <div className="group-homework-options">
-                <label className="field"><span className="field__label">Первый день</span><input className="input" type="date" value={homeworkStartDate} onChange={(e) => setHomeworkStartDate(e.target.value)} disabled={creatingHomework} required /></label>
-                <label className="field"><span className="field__label">На сколько дней</span><input className="input" type="number" min={1} max={31} value={homeworkDays} onChange={(e) => changeHomeworkDays(Number(e.target.value))} disabled={creatingHomework} required /></label>
-              </div>
-              <div className="group-day-grid">
-                {homeworkDates.map((date, index) => {
-                  const file = homeworkFiles[index];
-                  return <div key={`${date}-${index}`} className="group-day-card"><div className="group-day-card__head"><div><strong>День {index + 1}</strong><span>{formatDate(date)}</span></div>{file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}</div><label className="field"><span className="field__label">{file ? 'Заменить PDF' : 'Выбрать PDF'}</span><input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} /></label><span className="group-day-card__file">{file?.name ?? 'Файл пока не выбран'}</span></div>;
-                })}
-              </div>
-              {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня.</div>}
-              <button className="btn group-submit-btn" type="submit" disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}>{creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}</button>
-            </form>
-          </section>
-        </div>
+            {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня.</div>}
+            <button className="btn group-submit-btn" type="submit" disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}>{creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}</button>
+          </form>
+        </section>
       )}
 
       {pageTab === 'cards' && (
