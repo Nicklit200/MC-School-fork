@@ -52,6 +52,11 @@ public class User {
     @JoinColumn(name = "teacher_id")
     private User teacher;
 
+    /** Parent account linked to this student. Null for non-students or when no parent is linked yet. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private User parent;
+
     @Column(name = "invitation_token", length = 100)
     private String invitationToken;
 
@@ -100,6 +105,16 @@ public class User {
         this.fullName = fullName.trim();
     }
 
+    public void linkParent(User parent) {
+        if (this.role != Role.STUDENT) {
+            throw new IllegalStateException("Only students can have a parent account");
+        }
+        if (parent == null || parent.getRole() != Role.PARENT) {
+            throw new IllegalArgumentException("Parent account is required");
+        }
+        this.parent = parent;
+    }
+
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
         this.googleDriveFolderUrl = normalizeFolderId(googleDriveFolderUrl);
     }
@@ -140,6 +155,15 @@ public class User {
         User user = new User(fullName, email, Role.STUDENT);
         user.status = UserStatus.INVITED;
         user.teacher = teacher;
+        user.invitationToken = invitationToken;
+        user.invitationExpiresAt = invitationExpiresAt;
+        return user;
+    }
+
+    public static User invitedParent(String fullName, String email,
+                                     String invitationToken, Instant invitationExpiresAt) {
+        User user = new User(fullName, email, Role.PARENT);
+        user.status = UserStatus.INVITED;
         user.invitationToken = invitationToken;
         user.invitationExpiresAt = invitationExpiresAt;
         return user;
