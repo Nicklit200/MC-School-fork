@@ -53,6 +53,9 @@ public class Homework {
     @Column(name = "submitted_at")
     private Instant submittedAt;
 
+    @Column(name = "parent_notified_at")
+    private Instant parentNotifiedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -82,12 +85,17 @@ public class Homework {
         this.submittedPdf = null;
         this.submittedFilename = null;
         this.submittedAt = null;
+        this.parentNotifiedAt = null;
     }
 
     public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
         this.submittedFilename = filename;
         this.submittedPdf = pdf;
         this.submittedAt = submittedAt;
+    }
+
+    public void markParentNotified(Instant notifiedAt) {
+        this.parentNotifiedAt = notifiedAt;
     }
 
     public boolean hasWorksheet() {
