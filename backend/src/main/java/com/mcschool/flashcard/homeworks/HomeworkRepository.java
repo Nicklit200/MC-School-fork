@@ -57,4 +57,19 @@ public interface HomeworkRepository extends JpaRepository<Homework, UUID> {
             """)
     long countOpenWorksheetsForDay(@Param("studentId") UUID studentId,
                                    @Param("day") LocalDate day);
+
+    @Query("""
+            SELECT h FROM Homework h
+            JOIN FETCH h.student s
+            JOIN FETCH s.parent p
+            WHERE h.startDate = :day
+              AND h.worksheetPdf IS NOT NULL
+              AND h.submittedAt IS NULL
+              AND h.parentNotifiedAt IS NULL
+              AND s.archived = false
+              AND p.archived = false
+              AND p.status = com.mcschool.flashcard.users.UserStatus.ACTIVE
+            ORDER BY s.id, h.createdAt
+            """)
+    List<Homework> findOpenForParentNotification(@Param("day") LocalDate day);
 }
