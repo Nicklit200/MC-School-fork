@@ -8,7 +8,7 @@ interface AuthValue {
   /** True until the initial "am I logged in?" check finishes. */
   initializing: boolean;
   login: (email: string, password: string) => Promise<User>;
-  activate: (invitationToken: string, password: string) => Promise<User>;
+  activate: (invitationToken: string, email: string, password: string) => Promise<User>;
   logout: () => void;
   setUser: (user: User) => void;
 }
@@ -20,7 +20,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
   const { setLanguage } = useI18n();
 
-  // Apply the user's saved language whenever we learn who they are.
   const applyUser = useCallback(
     (next: User) => {
       setUser(next);
@@ -29,7 +28,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setLanguage],
   );
 
-  // On first load, restore the session from a stored token (if any).
   useEffect(() => {
     if (!getAccessToken()) {
       setInitializing(false);
@@ -53,8 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const activate = useCallback(
-    async (invitationToken: string, password: string) => {
-      const auth = await api.auth.activate(invitationToken, password);
+    async (invitationToken: string, email: string, password: string) => {
+      const auth = await api.auth.activate(invitationToken, email, password);
       setAccessToken(auth.accessToken);
       applyUser(auth.user);
       return auth.user;
@@ -75,9 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth(): AuthValue {
-  const ctx = useContext(AuthContext);
+  const ctx = useContext(AuthValueContextGuard(AuthContext));
   if (!ctx) {
     throw new Error('useAuth must be used within AuthProvider');
   }
   return ctx;
+}
+
+function AuthValueContextGuard(context: typeof AuthContext) {
+  return context;
 }
