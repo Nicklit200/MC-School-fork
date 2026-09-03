@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework, ImportPreview, StudentGroup } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -24,6 +24,7 @@ type GroupCardRow = {
 
 export function GroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
+  const navigate = useNavigate();
   const { t } = useI18n();
   const [group, setGroup] = useState<StudentGroup | null>(null);
   const [pageTab, setPageTab] = useState<PageTab>('overview');
@@ -126,6 +127,14 @@ export function GroupDetailPage() {
   }, [groupHomeworkRows]);
 
   if (!groupId) return <div className="banner banner--error">Группа не найдена</div>;
+
+  function goBack() {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/groups');
+    }
+  }
 
   async function addMembers(event: FormEvent) {
     event.preventDefault();
@@ -236,7 +245,7 @@ export function GroupDetailPage() {
 
   return (
     <div className="group-detail-dashboard">
-      <Link className="group-detail-back" to="/groups">← <span>Назад к группам</span></Link>
+      <button className="group-detail-back" type="button" onClick={goBack}>← <span>Назад</span></button>
 
       <div className="group-detail-heading">
         <div>
