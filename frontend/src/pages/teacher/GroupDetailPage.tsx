@@ -6,7 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type CardTab = 'manual' | 'import';
-type PageTab = 'overview' | 'homework' | 'cards';
+type PageTab = 'overview' | 'students' | 'homework' | 'cards';
 type HomeworkByStudent = Record<string, Homework[]>;
 
 type GroupHomeworkRow = {
@@ -220,7 +220,7 @@ export function GroupDetailPage() {
       {message && <div className="banner banner--success">{message}</div>}
 
       <div className="group-summary-grid">
-        <button type="button" className="group-summary-card" onClick={() => setPageTab('overview')}>
+        <button type="button" className="group-summary-card" onClick={() => setPageTab('students')}>
           <div className="group-summary-card__icon group-summary-card__icon--orange">♙</div>
           <div><strong>{group?.students.length ?? 0}</strong><span>ученика</span></div>
           <small>Перейти к ученикам →</small>
@@ -239,6 +239,7 @@ export function GroupDetailPage() {
 
       <div className="group-detail-tabs">
         <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>▤ <span>Обзор</span></button>
+        <button className={pageTab === 'students' ? 'active' : ''} onClick={() => setPageTab('students')}>♙ <span>Ученики</span></button>
         <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}>▣ <span>Домашние задания</span></button>
         <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}>▥ <span>Карточки</span></button>
         <div className="group-detail-tabs__spacer" />
@@ -306,28 +307,33 @@ export function GroupDetailPage() {
             )}
           </section>
 
-          <section className="group-members-card">
-            <div className="group-members-card__header">
-              <h2>Ученики группы</h2>
-              <span>{group?.students.length ?? 0} учеников</span>
-            </div>
-            <div className="group-member-list">
-              {group?.students.map((student, index) => (
-                <div className="group-member-row" key={student.id}>
-                  <span className={`teacher-member-avatar teacher-member-avatar--${index % 4}`}>{student.fullName.charAt(0).toUpperCase()}</span>
-                  <div><strong>{student.fullName}</strong><span>{student.email ?? 'Email не указан'}</span></div>
-                  <Link to={`/students/${student.id}`} className="group-member-open">Открыть ученика</Link>
-                </div>
-              ))}
-            </div>
-            <form className="group-add-member" onSubmit={addMembers}>
-              <input className="input" value={memberEmails} onChange={(e) => setMemberEmails(e.target.value)} placeholder="Email нового ученика" required />
-              <button className="btn" type="submit">Добавить</button>
-            </form>
-          </section>
-
-          <div className="group-tip">💡 <strong>Совет:</strong>&nbsp; используйте вкладки выше, чтобы управлять домашними заданиями и карточками более детально.</div>
+          <div className="group-tip">💡 <strong>Совет:</strong>&nbsp; используйте вкладки выше, чтобы управлять учениками, домашними заданиями и карточками отдельно.</div>
         </>
+      )}
+
+      {pageTab === 'students' && (
+        <section className="group-members-card">
+          <div className="group-members-card__header">
+            <div>
+              <h2>Ученики группы</h2>
+              <p>Все ученики этой группы. Здесь можно открыть профиль ученика или добавить нового.</p>
+            </div>
+            <span>{group?.students.length ?? 0} учеников</span>
+          </div>
+          <div className="group-member-list">
+            {group?.students.map((student, index) => (
+              <div className="group-member-row" key={student.id}>
+                <span className={`teacher-member-avatar teacher-member-avatar--${index % 4}`}>{student.fullName.charAt(0).toUpperCase()}</span>
+                <div><strong>{student.fullName}</strong><span>{student.email ?? 'Email не указан'}</span></div>
+                <Link to={`/students/${student.id}`} className="group-member-open">Открыть ученика</Link>
+              </div>
+            ))}
+          </div>
+          <form className="group-add-member" onSubmit={addMembers}>
+            <input className="input" value={memberEmails} onChange={(e) => setMemberEmails(e.target.value)} placeholder="Email нового ученика" required />
+            <button className="btn" type="submit">Добавить</button>
+          </form>
+        </section>
       )}
 
       {pageTab === 'homework' && (
