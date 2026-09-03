@@ -6,6 +6,9 @@ import { AuthProvider } from './auth/AuthContext';
 import { I18nProvider } from './i18n/I18nContext';
 import './index.css';
 import './teacher-groups.css';
+import './teacher-detail.css';
+import './group-detail.css';
+import './login-page.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
