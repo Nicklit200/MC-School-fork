@@ -11,6 +11,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const isStudent = user?.role === 'STUDENT';
   const isTeacher = user?.role === 'TEACHER';
+  const isParent = user?.role === 'PARENT';
 
   if (isTeacher) {
     const teacherLinks = [
@@ -88,13 +89,18 @@ export function Layout({ children }: { children: ReactNode }) {
     );
   }
 
-  const links: { to: string; label: TranslationKey }[] = isStudent
+  const links: { to: string; label: TranslationKey | string }[] = isStudent
     ? [
         { to: '/today', label: 'nav.today' },
         { to: '/my-cards', label: 'nav.myCards' },
         { to: '/settings', label: 'nav.settings' },
       ]
-    : [{ to: '/teachers', label: 'nav.teachers' }];
+    : isParent
+      ? [
+          { to: '/parent', label: language === 'DE' ? 'Mein Kind' : 'Мой ребёнок' },
+          { to: '/parent/settings', label: language === 'DE' ? 'Einstellungen' : 'Настройки' },
+        ]
+      : [{ to: '/teachers', label: 'nav.teachers' }];
 
   return (
     <div className="app" data-variant={isStudent ? 'student' : 'staff'}>
@@ -103,7 +109,9 @@ export function Layout({ children }: { children: ReactNode }) {
         <nav className="topbar__nav">
           {links.map((link) => (
             <NavLink key={link.to} to={link.to} className="topbar__link">
-              {t(link.label)}
+              {typeof link.label === 'string' && link.label.startsWith('nav.')
+                ? t(link.label as TranslationKey)
+                : link.label}
             </NavLink>
           ))}
           {isStudent && (
