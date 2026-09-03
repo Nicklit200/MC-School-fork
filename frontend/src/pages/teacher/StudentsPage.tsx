@@ -15,6 +15,7 @@ export function StudentsPage() {
   const [email, setEmail] = useState('');
   const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
   const [copiedStudentId, setCopiedStudentId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,7 +57,27 @@ export function StudentsPage() {
     const link = `${window.location.origin}/activate?token=${encodeURIComponent(student.invitationToken)}`;
     await navigator.clipboard.writeText(link);
     setCopiedStudentId(student.id);
+    setOpenMenuId(null);
     window.setTimeout(() => setCopiedStudentId((current) => (current === student.id ? null : current)), 2000);
+  }
+
+  async function renameStudent(student: StudentListItem) {
+    const nextName = window.prompt(
+      language === 'DE' ? 'Neuer Schülername' : 'Новое имя ученика',
+      student.fullName,
+    );
+    if (!nextName || nextName.trim() === student.fullName) {
+      setOpenMenuId(null);
+      return;
+    }
+    setError(null);
+    try {
+      await api.students.rename(student.id, nextName.trim());
+      setOpenMenuId(null);
+      await reload();
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
   }
 
   async function deleteStudent(student: StudentListItem) {
@@ -64,6 +85,7 @@ export function StudentsPage() {
     setError(null);
     try {
       await api.students.remove(student.id);
+      setOpenMenuId(null);
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
@@ -71,7 +93,7 @@ export function StudentsPage() {
   }
 
   return (
-    <div className="teacher-students-page">
+    <div className="teacher-students-page" onClick={() => openMenuId && setOpenMenuId(null)}>
       <div className="teacher-page-heading">
         <h1>{language === 'DE' ? 'Meine Schüler' : 'Мои ученики'}</h1>
         <p>{language === 'DE' ? 'Verwalte Schüler und ihren Zugriff auf Materialien' : 'Управляйте своими учениками и их доступом к материалам'}</p>
@@ -154,18 +176,39 @@ export function StudentsPage() {
                   <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">
                     <span>△</span>Google Drive
                   </Link>
-                  <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия">⋮</button>
-                </div>
 
-                <div className="teacher-student-actions__bottom">
-                  {student.status === 'INVITED' && student.invitationToken && (
-                    <button type="button" className="teacher-text-action" onClick={() => copyInvitationLink(student)}>
-                      <span>⌁</span>{copiedStudentId === student.id ? t('students.inviteCopied') : t('students.copyInvite')}
+                  <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="teacher-more-btn"
+                      aria-label="Дополнительные действия"
+                      aria-expanded={openMenuId === student.id}
+                      onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}
+                    >
+                      ⋮
                     </button>
-                  )}
-                  <button type="button" className="teacher-text-action teacher-text-action--danger" onClick={() => deleteStudent(student)}>
-                    <span>♧</span>{t('common.delete')}
-                  </button>
+
+                    {openMenuId === student.id && (
+                      <div className="teacher-student-menu">
+                        <button
+                          type="button"
+                          disabled={!student.invitationToken}
+                          onClick={() => void copyInvitationLink(student)}
+                        >
+                          <span>⌁</span>
+                          {copiedStudentId === student.id
+                            ? (language === 'DE' ? 'Link kopiert' : 'Ссылка скопирована')
+                            : (language === 'DE' ? 'Link speichern' : 'Сохранить ссылку')}
+                        </button>
+                        <button type="button" onClick={() => void renameStudent(student)}>
+                          <span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}
+                        </button>
+                        <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}>
+                          <span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </article>
