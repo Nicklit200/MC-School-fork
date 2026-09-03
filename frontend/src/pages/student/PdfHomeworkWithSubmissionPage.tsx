@@ -6,10 +6,14 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { PdfHomeworkPage } from './PdfHomeworkPage';
 
+const MAX_IMAGE_EDGE = 2200;
+const JPEG_QUALITY = 0.86;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
 /**
  * Student homework workspace: solve directly on the worksheet or hand in a
- * photo/PDF of work completed on paper. Both paths end up as one downloadable
- * PDF submission for the teacher.
+ * photo/PDF of work completed on paper. Mobile photos are normalized to JPEG
+ * before upload so HEIC/WebP/very large camera images do not fail on the server.
  */
 export function PdfHomeworkWithSubmissionPage() {
   const { homeworkId = '' } = useParams();
@@ -17,6 +21,7 @@ export function PdfHomeworkWithSubmissionPage() {
   const [homework, setHomework] = useState<Homework | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preparingFile, setPreparingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -28,8 +33,6 @@ export function PdfHomeworkWithSubmissionPage() {
 
   useEffect(() => {
     refresh().catch((e) => setError(toErrorMessage(e, t)));
-    // The drawing page owns its own submit state. A lightweight refresh keeps
-    // this second submission option in sync when the student submits drawings.
     const timer = window.setInterval(() => {
       if (!homework?.submitted) refresh().catch(() => undefined);
     }, 3000);
@@ -37,14 +40,50 @@ export function PdfHomeworkWithSubmissionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeworkId, homework?.submitted]);
 
-  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+  async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0] ?? null;
     setError(null);
     setMessage(null);
-    setFile(event.target.files?.[0] ?? null);
+    setFile(null);
+    if (!selected) return;
+
+    if (selected.type === 'application/pdf' || selected.name.toLowerCase().endsWith('.pdf')) {
+      if (selected.size > MAX_UPLOAD_BYTES) {
+        setError(language === 'DE' ? 'Die PDF-Datei ist größer als 25 MB.' : 'PDF больше 25 МБ. Выбери файл поменьше.');
+        event.target.value = '';
+        return;
+      }
+      setFile(selected);
+      return;
+    }
+
+    if (!selected.type.startsWith('image/') && !isImageFilename(selected.name)) {
+      setError(language === 'DE'
+        ? 'Bitte wähle ein Foto oder eine PDF-Datei.'
+        : 'Выбери фотографию или PDF-файл.');
+      event.target.value = '';
+      return;
+    }
+
+    setPreparingFile(true);
+    try {
+      const normalized = await normalizePhoto(selected);
+      if (normalized.size > MAX_UPLOAD_BYTES) {
+        throw new Error(language === 'DE'
+          ? 'Das Foto ist auch nach der Verarbeitung zu groß.'
+          : 'Фотография слишком большая даже после обработки.');
+      }
+      setFile(normalized);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      event.target.value = '';
+    } finally {
+      setPreparingFile(false);
+    }
   }
 
   async function submitFile() {
-    if (!file || homework?.submitted) return;
+    if (!file || homework?.submitted || preparingFile) return;
     const confirmed = window.confirm(
       language === 'DE'
         ? 'Diese Datei als Hausaufgabe abgeben? Danach kann die Abgabe nicht mehr geändert werden.'
@@ -103,15 +142,21 @@ export function PdfHomeworkWithSubmissionPage() {
               ref={fileInputRef}
               className="input"
               type="file"
-              accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
-              onChange={chooseFile}
-              disabled={busy}
+              accept="image/*,application/pdf,.pdf"
+              onChange={(event) => void chooseFile(event)}
+              disabled={busy || preparingFile}
             />
           </label>
 
+          {preparingFile && (
+            <div className="banner banner--info">
+              {language === 'DE' ? 'Foto wird für den Upload vorbereitet…' : 'Подготавливаем фотографию для загрузки…'}
+            </div>
+          )}
+
           {file && (
             <div className="muted" style={{ fontSize: 13, marginBottom: 12, overflowWrap: 'anywhere' }}>
-              {language === 'DE' ? 'Ausgewählt:' : 'Выбрано:'} {file.name}
+              {language === 'DE' ? 'Ausgewählt:' : 'Выбрано:'} {file.name} · {formatMegabytes(file.size)} MB
             </div>
           )}
 
@@ -119,7 +164,7 @@ export function PdfHomeworkWithSubmissionPage() {
             className="btn btn--block"
             type="button"
             onClick={submitFile}
-            disabled={!file || busy}
+            disabled={!file || busy || preparingFile}
           >
             {busy
               ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
@@ -128,11 +173,56 @@ export function PdfHomeworkWithSubmissionPage() {
 
           <p className="muted" style={{ marginBottom: 0, marginTop: 10, fontSize: 12 }}>
             {language === 'DE'
-              ? 'Unterstützt: JPG, PNG oder PDF bis 25 MB. Fotos werden automatisch in PDF umgewandelt.'
-              : 'Поддерживаются JPG, PNG и PDF до 25 МБ. Фотография автоматически превратится в PDF для учителя.'}
+              ? 'Fotos vom Handy werden automatisch verkleinert und in JPEG umgewandelt. PDF bis 25 MB.'
+              : 'Фото с телефона автоматически уменьшается и переводится в JPEG. PDF — до 25 МБ.'}
           </p>
         </div>
       )}
     </>
   );
+}
+
+async function normalizePhoto(source: File): Promise<File> {
+  const url = URL.createObjectURL(source);
+  try {
+    const image = await loadImage(url);
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Не удалось подготовить фотографию.');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
+    if (!blob) throw new Error('Не удалось преобразовать фотографию в JPEG.');
+    const originalBase = source.name.replace(/\.[^.]+$/, '') || 'homework-photo';
+    return new File([blob], `${originalBase}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+  } catch {
+    throw new Error('Телефон выбрал формат фото, который браузер не смог обработать. Попробуй сделать обычное фото/скриншот или выбрать JPG.');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not decode image'));
+    image.src = url;
+  });
+}
+
+function isImageFilename(name: string) {
+  return /\.(jpe?g|png|heic|heif|webp)$/i.test(name);
+}
+
+function formatMegabytes(bytes: number) {
+  return (bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 1 : 2);
 }
