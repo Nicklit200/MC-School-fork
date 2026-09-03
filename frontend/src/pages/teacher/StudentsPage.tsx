@@ -52,9 +52,7 @@ export function StudentsPage() {
   }
 
   async function copyInvitationLink(student: StudentListItem) {
-    if (!student.invitationToken) {
-      return;
-    }
+    if (!student.invitationToken) return;
     const link = `${window.location.origin}/activate?token=${encodeURIComponent(student.invitationToken)}`;
     await navigator.clipboard.writeText(link);
     setCopiedStudentId(student.id);
@@ -62,9 +60,7 @@ export function StudentsPage() {
   }
 
   async function deleteStudent(student: StudentListItem) {
-    if (!window.confirm(t('students.deleteConfirm', { name: student.fullName }))) {
-      return;
-    }
+    if (!window.confirm(t('students.deleteConfirm', { name: student.fullName }))) return;
     setError(null);
     try {
       await api.students.remove(student.id);
@@ -75,78 +71,111 @@ export function StudentsPage() {
   }
 
   return (
-    <div>
-      <h1>{t('students.title')}</h1>
+    <div className="teacher-students-page">
+      <div className="teacher-page-heading">
+        <h1>{language === 'DE' ? 'Meine Schüler' : 'Мои ученики'}</h1>
+        <p>{language === 'DE' ? 'Verwalte Schüler und ihren Zugriff auf Materialien' : 'Управляйте своими учениками и их доступом к материалам'}</p>
+      </div>
+
       {error && <div className="banner banner--error">{error}</div>}
 
-      <div className="panel">
-        <h2>{t('students.create')}</h2>
+      <section className="teacher-create-student">
+        <h2>{language === 'DE' ? 'Neuen Schüler hinzufügen' : 'Добавить нового ученика'}</h2>
         <form onSubmit={onCreate}>
-          <div className="row">
+          <div className="teacher-create-grid">
             <label className="field">
-              <span className="field__label">{t('common.name')}</span>
-              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+              <span className="field__label">{language === 'DE' ? 'Name des Schülers' : 'Имя ученика'}</span>
+              <input
+                className="input"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder={language === 'DE' ? 'Name eingeben' : 'Введите имя ученика'}
+                required
+              />
             </label>
             <label className="field">
-              <span className="field__label">
-                {t('common.email')} {language === 'DE' ? '(optional)' : '(необязательно)'}
-              </span>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <span className="field__label">{language === 'DE' ? 'E-Mail (optional)' : 'Эл. почта (необязательно)'}</span>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@email.com"
+              />
             </label>
           </div>
-          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+          <p className="teacher-form-hint">
+            <span>ⓘ</span>
             {language === 'DE'
               ? 'Ohne E-Mail wird trotzdem ein Einladungslink erstellt. Der Schüler gibt seine E-Mail beim Öffnen des Links ein.'
-              : 'Если email не указан, ссылка-приглашение всё равно создастся. Ученик введёт свою почту при переходе по ссылке.'}
+              : 'Если email не указан, система предложит его позже создать. Ученик в любой момент получит доступ по ссылке.'}
           </p>
-          <button className="btn" type="submit">{t('students.create')}</button>
+          <button className="btn teacher-primary-btn" type="submit">
+            {language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}
+          </button>
         </form>
-        {invitation && (
-          <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />
-        )}
-      </div>
+        {invitation && <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />}
+      </section>
 
       {loading ? (
         <p className="muted">{t('common.loading')}</p>
       ) : students.length === 0 ? (
-        <p className="muted">{t('students.empty')}</p>
+        <div className="teacher-empty-state">{t('students.empty')}</div>
       ) : (
-        students.map((student) => (
-          <div key={student.id} className="list-row">
-            <div>
-              <div className="list-row__title">{student.fullName}</div>
-              <div className="muted">
-                {student.email ?? (language === 'DE' ? 'E-Mail noch nicht angegeben' : 'Email ещё не указан')}
+        <div className="teacher-student-list">
+          {students.map((student, index) => (
+            <article key={student.id} className="teacher-student-card">
+              <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>
+                {studentInitial(student.fullName)}
               </div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Google Drive: {student.googleDriveFolderUrl ? 'папка задана' : 'не настроен'}
+
+              <div className="teacher-student-main">
+                <div className="teacher-student-name">{student.fullName}</div>
+                <div className="teacher-student-email">
+                  {student.email ?? (language === 'DE' ? 'E-Mail noch nicht angegeben' : 'Email не указан')}
+                </div>
+                <div className="teacher-student-meta">Google вход не настроен</div>
               </div>
-            </div>
-            <div className="muted">
-              {activeCount(summaries[student.id])} {t('students.activeCards')}
-            </div>
-            <div className="list-row__actions">
-              <Link to={`/students/${student.id}`} className="btn btn--secondary">
-                {t('students.cardsButton')}
-              </Link>
-              <Link to={`/students/${student.id}/homeworks`} className="btn btn--secondary">
-                Домашка
-              </Link>
-              <Link to={`/students/${student.id}/drive`} className="btn btn--secondary">
-                Google Drive
-              </Link>
-              {student.status === 'INVITED' && student.invitationToken && (
-                <button className="btn btn--ghost" type="button" onClick={() => copyInvitationLink(student)}>
-                  {copiedStudentId === student.id ? t('students.inviteCopied') : t('students.copyInvite')}
-                </button>
-              )}
-              <button className="btn btn--danger" type="button" onClick={() => deleteStudent(student)}>
-                {t('common.delete')}
-              </button>
-            </div>
-          </div>
-        ))
+
+              <div className="teacher-student-stats">
+                <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
+                <span>{language === 'DE' ? 'Letzte Aktivität:' : 'Последняя активность:'}</span>
+                <strong>—</strong>
+              </div>
+
+              <div className="teacher-student-actions">
+                <div className="teacher-student-actions__top">
+                  <Link to={`/students/${student.id}`} className="teacher-action-chip">
+                    <span>▣</span>{language === 'DE' ? 'Karten' : 'Карточки'}
+                  </Link>
+                  <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">
+                    <span>▤</span>{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}
+                  </Link>
+                  <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">
+                    <span>△</span>Google Drive
+                  </Link>
+                  <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия">⋮</button>
+                </div>
+
+                <div className="teacher-student-actions__bottom">
+                  {student.status === 'INVITED' && student.invitationToken && (
+                    <button type="button" className="teacher-text-action" onClick={() => copyInvitationLink(student)}>
+                      <span>⌁</span>{copiedStudentId === student.id ? t('students.inviteCopied') : t('students.copyInvite')}
+                    </button>
+                  )}
+                  <button type="button" className="teacher-text-action teacher-text-action--danger" onClick={() => deleteStudent(student)}>
+                    <span>♧</span>{t('common.delete')}
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
       )}
     </div>
   );
+}
+
+function studentInitial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || '?';
 }
