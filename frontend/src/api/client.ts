@@ -130,7 +130,8 @@ async function requestText(path: string): Promise<string> {
 export const api = {
   auth: {
     login: (email: string, password: string) => request<AuthResponse>('POST', '/auth/login', { email, password }),
-    activate: (invitationToken: string, password: string) => request<AuthResponse>('POST', '/auth/activate', { invitationToken, password }),
+    activate: (invitationToken: string, email: string, password: string) =>
+      request<AuthResponse>('POST', '/auth/activate', { invitationToken, email: email.trim() || null, password }),
     me: () => request<User>('GET', '/auth/me'),
   },
   users: {
@@ -151,7 +152,8 @@ export const api = {
   students: {
     list: () => request<StudentListItem[]>('GET', '/students'),
     get: (studentId: string) => request<StudentListItem>('GET', `/students/${studentId}`),
-    create: (fullName: string, email: string) => request<StudentInvitation>('POST', '/students', { fullName, email }),
+    create: (fullName: string, email: string) =>
+      request<StudentInvitation>('POST', '/students', { fullName, email: email.trim() || null }),
     updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) =>
       request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
     testDriveFolder: (studentId: string) =>
