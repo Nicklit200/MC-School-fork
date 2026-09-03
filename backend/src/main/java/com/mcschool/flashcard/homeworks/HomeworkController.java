@@ -33,10 +33,14 @@ public class HomeworkController {
 
     private final HomeworkService homeworkService;
     private final HomeworkPdfService homeworkPdfService;
+    private final HomeworkDriveExportService homeworkDriveExportService;
 
-    public HomeworkController(HomeworkService homeworkService, HomeworkPdfService homeworkPdfService) {
+    public HomeworkController(HomeworkService homeworkService,
+                              HomeworkPdfService homeworkPdfService,
+                              HomeworkDriveExportService homeworkDriveExportService) {
         this.homeworkService = homeworkService;
         this.homeworkPdfService = homeworkPdfService;
+        this.homeworkDriveExportService = homeworkDriveExportService;
     }
 
     @PostMapping("/students/{studentId}/homeworks")
@@ -114,6 +118,7 @@ public class HomeworkController {
                           @PathVariable UUID homeworkId,
                           @Valid @RequestBody SubmitHomeworkRequest request) {
         homeworkPdfService.submit(caller, homeworkId, request);
+        homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
 
     @PostMapping(value = "/study/homeworks/{homeworkId}/submit-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -123,6 +128,7 @@ public class HomeworkController {
                            @PathVariable UUID homeworkId,
                            @RequestParam("file") MultipartFile file) {
         homeworkPdfService.submitFile(caller, homeworkId, file);
+        homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
 
     @GetMapping(value = "/homeworks/{homeworkId}/submission", produces = MediaType.APPLICATION_PDF_VALUE)
