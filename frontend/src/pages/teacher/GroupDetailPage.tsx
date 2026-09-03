@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Homework, ImportPreview, StudentGroup } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type CardTab = 'manual' | 'import';
 type PageTab = 'overview' | 'students' | 'homework' | 'cards';
@@ -437,10 +438,27 @@ export function GroupDetailPage() {
             <div className="group-day-grid">
               {homeworkDates.map((date, index) => {
                 const file = homeworkFiles[index];
-                return <div key={`${date}-${index}`} className="group-day-card"><div className="group-day-card__head"><div><strong>День {index + 1}</strong><span>{formatDate(date)}</span></div>{file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}</div><label className="field"><span className="field__label">{file ? 'Заменить PDF' : 'Выбрать PDF'}</span><input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} /></label><span className="group-day-card__file">{file?.name ?? 'Файл пока не выбран'}</span></div>;
+                return (
+                  <div key={`${date}-${index}`} className="group-day-card">
+                    <div className="group-day-card__head">
+                      <div><strong>День {index + 1}</strong><span>{formatDate(date)}</span></div>
+                      {file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}
+                    </div>
+                    <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap' }}>
+                      <label className="field" style={{ flex: '1 1 360px', margin: 0 }}>
+                        <span className="field__label">{file ? 'Заменить PDF с компьютера' : 'Выбрать PDF с компьютера'}</span>
+                        <input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} />
+                      </label>
+                      <div style={{ paddingBottom: 1 }}>
+                        <GoogleDrivePdfPicker disabled={creatingHomework} onSelect={(driveFile) => setHomeworkFile(index, driveFile)} />
+                      </div>
+                    </div>
+                    <span className="group-day-card__file">{file ? `Выбран: ${file.name}` : 'Файл пока не выбран'}</span>
+                  </div>
+                );
               })}
             </div>
-            {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня.</div>}
+            {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня — с компьютера или из Google Drive.</div>}
             <button className="btn group-submit-btn" type="submit" disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}>{creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}</button>
           </form>
         </section>
