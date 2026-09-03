@@ -203,6 +203,8 @@ export const api = {
     worksheetPageDataUrl: (homeworkId: string, pageIndex: number) => requestText(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}/data-url`),
     submitPdfHomework: (homeworkId: string, overlays: HomeworkPageOverlay[]) =>
       request<void>('POST', `/study/homeworks/${homeworkId}/submit-pdf`, { overlays }),
+    submitHomeworkFile: (homeworkId: string, file: File) =>
+      uploadFile(`/study/homeworks/${homeworkId}/submit-file`, file),
     myCards: () => request<Card[]>('GET', '/study/cards'),
     startSession: (type: SessionType, homeworkId?: string) =>
       request<Session>('POST', '/study/sessions', homeworkId ? { type, homeworkId } : { type }),
