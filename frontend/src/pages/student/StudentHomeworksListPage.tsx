@@ -18,16 +18,24 @@ export function StudentHomeworksListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const homeworks = useMemo(() => (items ?? []).filter((item) => item.hasWorksheet), [items]);
+  const today = localDateString(new Date());
+  const homeworks = useMemo(
+    () => (items ?? [])
+      .filter((item) => item.hasWorksheet && item.startDate === today)
+      .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
+    [items, today],
+  );
 
   if (error) return <div className="banner banner--error">{error}</div>;
   if (!items) return <p className="muted">{t('common.loading')}</p>;
 
   return (
     <div>
-      <h1>{t('homeworks.title')}</h1>
+      <h1>{language === 'DE' ? 'Hausaufgaben für heute' : 'Домашка на сегодня'}</h1>
       {homeworks.length === 0 ? (
-        <p className="muted">{t('homeworks.empty')}</p>
+        <p className="muted">
+          {language === 'DE' ? 'Für heute gibt es keine Hausaufgabe.' : 'На сегодня домашки нет.'}
+        </p>
       ) : (
         <div className="panel stack">
           {homeworks.map((homework) => (
@@ -49,7 +57,7 @@ export function StudentHomeworksListPage() {
               <span className={`pill ${homework.submitted ? 'pill--learned' : 'pill--active'}`}>
                 {homework.submitted
                   ? (language === 'DE' ? 'Abgegeben' : 'Сдано')
-                  : (language === 'DE' ? 'Offen' : 'Нужно решить')}
+                  : (language === 'DE' ? 'Heute erledigen' : 'Сделать сегодня')}
               </span>
             </Link>
           ))}
@@ -57,6 +65,13 @@ export function StudentHomeworksListPage() {
       )}
     </div>
   );
+}
+
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDate(date: string, language: 'DE' | 'RU') {
