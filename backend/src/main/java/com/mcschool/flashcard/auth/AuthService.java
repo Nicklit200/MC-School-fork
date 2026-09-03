@@ -3,6 +3,7 @@ package com.mcschool.flashcard.auth;
 import com.mcschool.flashcard.auth.dto.ActivateAccountRequest;
 import com.mcschool.flashcard.auth.dto.AuthResponse;
 import com.mcschool.flashcard.auth.dto.LoginRequest;
+import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.InvalidInvitationException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.users.User;
@@ -31,9 +32,6 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        // One generic failure for unknown email, wrong password and
-        // not-yet-activated accounts, so the endpoint cannot be used to
-        // probe which emails exist.
         User user = userRepository.findByEmail(normalizeEmail(request.email()))
                 .orElseThrow(AuthService::invalidCredentials);
         if (user.isArchived()
@@ -45,8 +43,8 @@ public class AuthService {
     }
 
     /**
-     * Completes an invitation: the invited teacher or student sets their
-     * password and is logged in right away.
+     * Completes an invitation. Students created without an email provide it here;
+     * accounts that already have an email can leave the field empty.
      */
     @Transactional
     public AuthResponse activateAccount(ActivateAccountRequest request) {
@@ -58,6 +56,18 @@ public class AuthService {
         if (user.isInvitationExpired(Instant.now())) {
             throw new InvalidInvitationException("Invitation has expired — ask for a new invitation");
         }
+
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            if (request.email() == null || request.email().isBlank()) {
+                throw new InvalidInvitationException("Email is required to activate this account");
+            }
+            String email = normalizeEmail(request.email());
+            if (userRepository.existsByEmail(email)) {
+                throw new ConflictException("An account with this email already exists");
+            }
+            user.assignEmail(email);
+        }
+
         user.activate(passwordEncoder.encode(request.password()));
         return issueToken(user);
     }
