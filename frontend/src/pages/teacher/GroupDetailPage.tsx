@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type CardTab = 'manual' | 'import';
+type PageTab = 'overview' | 'homework' | 'cards';
 type HomeworkByStudent = Record<string, Homework[]>;
 
 type GroupHomeworkRow = {
@@ -19,6 +20,7 @@ export function GroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
   const { t } = useI18n();
   const [group, setGroup] = useState<StudentGroup | null>(null);
+  const [pageTab, setPageTab] = useState<PageTab>('overview');
   const [memberEmails, setMemberEmails] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [cardTab, setCardTab] = useState<CardTab>('manual');
@@ -55,10 +57,7 @@ export function GroupDetailPage() {
     setLoadingHomeworkStatus(true);
     try {
       const entries = await Promise.all(
-        currentGroup.students.map(async (student) => [
-          student.id,
-          await api.homeworks.listForStudent(student.id),
-        ] as const),
+        currentGroup.students.map(async (student) => [student.id, await api.homeworks.listForStudent(student.id)] as const),
       );
       setHomeworkByStudent(Object.fromEntries(entries));
     } finally {
@@ -75,7 +74,6 @@ export function GroupDetailPage() {
 
   const groupHomeworkRows = useMemo<GroupHomeworkRow[]>(() => {
     if (!group || group.students.length === 0) return [];
-
     const rows = new Map<string, GroupHomeworkRow>();
     for (const student of group.students) {
       for (const homework of homeworkByStudent[student.id] ?? []) {
@@ -83,16 +81,10 @@ export function GroupDetailPage() {
         const filename = homework.worksheetFilename ?? 'Домашка в PDF';
         const key = `${homework.startDate}::${filename}::${homework.worksheetPageCount ?? ''}`;
         if (!rows.has(key)) {
-          rows.set(key, {
-            key,
-            startDate: homework.startDate,
-            filename,
-            pageCount: homework.worksheetPageCount ?? null,
-          });
+          rows.set(key, { key, startDate: homework.startDate, filename, pageCount: homework.worksheetPageCount ?? null });
         }
       }
     }
-
     return Array.from(rows.values())
       .filter((row) => {
         const matches = group.students.filter((student) => findHomeworkForRow(homeworkByStudent[student.id] ?? [], row)).length;
@@ -101,18 +93,18 @@ export function GroupDetailPage() {
       .sort((a, b) => b.startDate.localeCompare(a.startDate) || a.filename.localeCompare(b.filename));
   }, [group, homeworkByStudent]);
 
-  if (!groupId) {
-    return <div className="banner banner--error">Группа не найдена</div>;
-  }
+  const activeHomeworkCount = useMemo(() => {
+    const today = localDateString(new Date());
+    return groupHomeworkRows.filter((row) => row.startDate >= today).length;
+  }, [groupHomeworkRows]);
+
+  if (!groupId) return <div className="banner banner--error">Группа не найдена</div>;
 
   async function addMembers(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setMessage(null);
-    const emails = memberEmails
-      .split(/[\n,;]+/)
-      .map((email) => email.trim())
-      .filter(Boolean);
+    const emails = memberEmails.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean);
     if (emails.length === 0) return;
     try {
       const updated = await api.groups.addMembers(groupId!, emails);
@@ -214,262 +206,183 @@ export function GroupDetailPage() {
   }
 
   return (
-    <div>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="group-detail-dashboard">
+      <Link className="group-detail-back" to="/groups">← <span>Назад к группам</span></Link>
+
+      <div className="group-detail-heading">
         <div>
-          <h1 style={{ marginBottom: 4 }}>{group?.name ?? 'Группа'}</h1>
-          <div className="muted">Задания выдаются всей группе, но каждый ученик выполняет и сдаёт их отдельно.</div>
+          <h1>{group?.name ?? 'Группа'}</h1>
+          <p>Управляйте учениками, домашними заданиями и карточками для всей группы.</p>
         </div>
-        <Link className="btn btn--secondary" to="/groups">Назад к группам</Link>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
       {message && <div className="banner banner--success">{message}</div>}
 
-      <div className="panel">
-        <h2>Добавить учеников</h2>
-        <form onSubmit={addMembers}>
-          <label className="field">
-            <span className="field__label">Email учеников</span>
-            <textarea
-              className="textarea"
-              value={memberEmails}
-              onChange={(e) => setMemberEmails(e.target.value)}
-              placeholder={'student1@example.com\nstudent2@example.com'}
-              required
-            />
-          </label>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
-            Можно вставить несколько email через новую строку, запятую или точку с запятой.
-          </div>
-          <button className="btn" type="submit">Добавить в группу</button>
-        </form>
+      <div className="group-summary-grid">
+        <button type="button" className="group-summary-card" onClick={() => setPageTab('overview')}>
+          <div className="group-summary-card__icon group-summary-card__icon--orange">♙</div>
+          <div><strong>{group?.students.length ?? 0}</strong><span>ученика</span></div>
+          <small>Перейти к ученикам →</small>
+        </button>
+        <button type="button" className="group-summary-card" onClick={() => setPageTab('homework')}>
+          <div className="group-summary-card__icon group-summary-card__icon--yellow">▤</div>
+          <div><strong>{activeHomeworkCount}</strong><span>активное ДЗ</span></div>
+          <small>Перейти к домашним заданиям →</small>
+        </button>
+        <div className="group-summary-card group-summary-card--lesson">
+          <div className="group-summary-card__icon group-summary-card__icon--green">▣</div>
+          <div><span>Следующий урок</span><strong className="group-summary-card__lesson">—</strong></div>
+          <small>Расписание появится позже →</small>
+        </div>
       </div>
 
-      <div className="panel">
-        <h2>Ученики группы</h2>
-        {!group ? (
-          <p className="muted">{t('common.loading')}</p>
-        ) : group.students.length === 0 ? (
-          <p className="muted">В группе пока нет учеников</p>
-        ) : (
-          group.students.map((student) => (
-            <div className="list-row" key={student.id}>
+      <div className="group-detail-tabs">
+        <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>▤ <span>Обзор</span></button>
+        <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}>▣ <span>Домашние задания</span></button>
+        <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}>▥ <span>Карточки</span></button>
+        <div className="group-detail-tabs__spacer" />
+        <button className="group-message-btn" type="button" disabled>✉ <span>Написать группе</span></button>
+        <button className="teacher-more-btn" type="button" title="Дополнительно">⋮</button>
+      </div>
+
+      {pageTab === 'overview' && (
+        <>
+          <section className="group-overview-card">
+            <div className="group-overview-card__header">
               <div>
-                <div className="list-row__title">{student.fullName}</div>
-                <div className="muted">{student.email ?? 'Email не указан'}</div>
+                <h2>Обзор домашних заданий</h2>
+                <p>✓ — ученик сдал PDF, ✕ — ещё не сдал.</p>
               </div>
-              <Link className="btn btn--secondary" to={`/students/${student.id}`}>Ошибки и карточки</Link>
+              <button className="group-refresh-btn" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>
+                {loadingHomeworkStatus ? 'Обновляем…' : 'Обновить'}
+              </button>
             </div>
-          ))
-        )}
-      </div>
 
-      <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ marginBottom: 4 }}>Сдача домашки по группе</h2>
-            <div className="muted">✓ — ученик сдал PDF, ✕ — ещё не сдал.</div>
-          </div>
-          <button className="btn btn--secondary" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>
-            {loadingHomeworkStatus ? 'Обновляем…' : 'Обновить'}
-          </button>
-        </div>
-
-        {!group || loadingHomeworkStatus ? (
-          <p className="muted">{t('common.loading')}</p>
-        ) : groupHomeworkRows.length === 0 ? (
-          <p className="muted">Групповых PDF-домашек пока нет.</p>
-        ) : (
-          <div style={{ overflowX: 'auto', marginTop: 12 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-              <thead>
-                <tr>
-                  <th style={tableHeaderStyle}>Домашка</th>
-                  {group.students.map((student) => (
-                    <th key={student.id} style={{ ...tableHeaderStyle, textAlign: 'center', minWidth: 120 }}>
-                      {student.fullName}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {groupHomeworkRows.map((row) => (
-                  <tr key={row.key}>
-                    <td style={tableCellStyle}>
-                      <strong>{formatDate(row.startDate)}</strong>
-                      <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-                        {row.filename}{row.pageCount ? ` · ${row.pageCount} стр.` : ''}
-                      </div>
-                    </td>
-                    {group.students.map((student) => {
-                      const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
-                      return (
-                        <td key={student.id} style={{ ...tableCellStyle, textAlign: 'center' }}>
-                          {homework ? (
-                            <Link
-                              to={`/teacher/students/${student.id}/homeworks/${homework.id}`}
-                              title={homework.submitted ? 'Сдано — открыть' : 'Не сдано — открыть'}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 34,
-                                height: 34,
-                                borderRadius: '50%',
-                                textDecoration: 'none',
-                                fontSize: 22,
-                                fontWeight: 800,
-                                color: homework.submitted ? '#15803d' : '#b91c1c',
-                                background: homework.submitted ? '#dcfce7' : '#fee2e2',
-                              }}
-                            >
-                              {homework.submitted ? '✓' : '✕'}
-                            </Link>
-                          ) : (
-                            <span className="muted" title="Эта домашка не найдена у ученика">—</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="panel">
-        <h2>Задать PDF-домашку всей группе</h2>
-        <form className="stack" onSubmit={createGroupHomework}>
-          <div className="row" style={{ alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
-            <label className="field" style={{ margin: 0, flex: '1 1 220px' }}>
-              <span className="field__label">Первый день</span>
-              <input className="input" type="date" value={homeworkStartDate} onChange={(e) => setHomeworkStartDate(e.target.value)} disabled={creatingHomework} required />
-            </label>
-            <label className="field" style={{ margin: 0, flex: '0 1 180px' }}>
-              <span className="field__label">На сколько дней</span>
-              <input className="input" type="number" min={1} max={31} value={homeworkDays} onChange={(e) => changeHomeworkDays(Number(e.target.value))} disabled={creatingHomework} required />
-            </label>
-          </div>
-
-          <div className="panel" style={{ padding: 12, margin: 0 }}>
-            <strong>PDF на каждый день</strong>
-            <p className="muted" style={{ marginTop: 6, marginBottom: 12, fontSize: 13 }}>
-              Каждый PDF будет выдан каждому ученику группы на указанную дату. Файлы можно заменить, удалить или передвинуть на другую дату.
-            </p>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {homeworkDates.map((date, index) => {
-                const file = homeworkFiles[index];
-                return (
-                  <div key={`${date}-${index}`} className="panel" style={{ padding: 12, margin: 0 }}>
-                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <div><strong>День {index + 1}</strong><div className="muted">{formatDate(date)}</div></div>
-                      {file && (
-                        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                          <button type="button" className="btn btn--secondary" disabled={creatingHomework || index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button>
-                          <button type="button" className="btn btn--secondary" disabled={creatingHomework || index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button>
-                          <button type="button" className="btn btn--danger" disabled={creatingHomework} onClick={() => removeHomeworkFile(index)}>Удалить</button>
-                        </div>
-                      )}
-                    </div>
-                    <label className="field" style={{ margin: '10px 0 0' }}>
-                      <span className="field__label">{file ? 'Заменить PDF' : 'Выбрать PDF'}</span>
-                      <input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} />
-                    </label>
-                    <div style={{ marginTop: 8, overflowWrap: 'anywhere' }}>{file ? <strong>{file.name}</strong> : <span className="muted">Файл пока не выбран</span>}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня.</div>}
-
-          <button className="btn" type="submit" disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}>
-            {creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}
-          </button>
-        </form>
-      </div>
-
-      <div className="panel">
-        <h2>Выдать карточки всей группе</h2>
-        <label className="field"><span className="field__label">Дата начала</span><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required /></label>
-
-        <div className="row" style={{ marginBottom: 16 }}>
-          <button type="button" className={`btn ${cardTab === 'manual' ? '' : 'btn--ghost'}`} onClick={() => setCardTab('manual')}>Вручную</button>
-          <button type="button" className={`btn ${cardTab === 'import' ? '' : 'btn--ghost'}`} onClick={() => setCardTab('import')}>Импорт</button>
-        </div>
-
-        {cardTab === 'manual' ? (
-          <form onSubmit={createCard}>
-            <label className="field"><span className="field__label">Вопрос</span><input className="input" value={question} onChange={(e) => setQuestion(e.target.value)} required /></label>
-            <label className="field"><span className="field__label">Правильный ответ</span><input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required /></label>
-            <button className="btn" type="submit" disabled={!group || group.students.length === 0}>Добавить всей группе</button>
-          </form>
-        ) : (
-          <div>
-            <form onSubmit={makePreview}>
-              <label className="field">
-                <span className="field__label">Текст для импорта</span>
-                <textarea className="textarea" value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder={'2 + 2 -> 4 | 3 | 5 | 6\n3 + 3 -> 6 | 5 | 7 | 9'} required />
-              </label>
-              <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>Формат такой же, как у отдельного ученика: вопрос -&gt; правильный ответ | неверный 1 | неверный 2 | неверный 3</div>
-              <button className="btn btn--secondary" type="submit">Предпросмотр</button>
-            </form>
-
-            {preview && (
-              <div style={{ marginTop: 16 }}>
-                <h3>Карточек: {preview.cards.length}</h3>
-                {preview.cards.map((card, index) => (
-                  <div className="list-row" key={index}>
-                    <div>
-                      <div className="list-row__title">{card.question}</div>
-                      <div className="muted">Ответ: {card.correctAnswer}</div>
-                      <div className="muted">Неверные: {card.wrongAnswer1} · {card.wrongAnswer2} · {card.wrongAnswer3}</div>
-                    </div>
-                  </div>
-                ))}
-                {preview.warnings.length > 0 && (
-                  <div className="banner banner--info">
-                    <strong>Предупреждения:</strong>
-                    <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
-                  </div>
-                )}
-                <button className="btn" type="button" onClick={importCards} disabled={!group || group.students.length === 0 || preview.cards.length === 0}>
-                  Выдать {preview.cards.length} карточек всей группе
-                </button>
+            {!group || loadingHomeworkStatus ? (
+              <p className="muted">{t('common.loading')}</p>
+            ) : groupHomeworkRows.length === 0 ? (
+              <div className="teacher-empty-state">Групповых PDF-домашек пока нет.</div>
+            ) : (
+              <div className="group-homework-table-wrap">
+                <table className="group-homework-table">
+                  <thead>
+                    <tr>
+                      <th>Название задания</th>
+                      <th>Дата задания</th>
+                      {group.students.map((student) => (
+                        <th key={student.id}>
+                          <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
+                          <span>{student.fullName}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupHomeworkRows.slice(0, 5).map((row) => (
+                      <tr key={row.key}>
+                        <td><span className="group-pdf-icon">PDF</span><span>{row.filename}</span></td>
+                        <td>{formatDate(row.startDate)}</td>
+                        {group.students.map((student) => {
+                          const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
+                          return (
+                            <td key={student.id}>
+                              {homework ? (
+                                <Link className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/homeworks/${homework.id}`}>
+                                  {homework.submitted ? '✓' : '✕'}
+                                </Link>
+                              ) : <span className="muted">—</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-          </div>
-        )}
-      </div>
+            {groupHomeworkRows.length > 5 && (
+              <button className="group-show-all" type="button" onClick={() => setPageTab('homework')}>Показать все задания</button>
+            )}
+          </section>
+
+          <section className="group-members-card">
+            <div className="group-members-card__header">
+              <h2>Ученики группы</h2>
+              <span>{group?.students.length ?? 0} учеников</span>
+            </div>
+            <div className="group-member-list">
+              {group?.students.map((student, index) => (
+                <div className="group-member-row" key={student.id}>
+                  <span className={`teacher-member-avatar teacher-member-avatar--${index % 4}`}>{student.fullName.charAt(0).toUpperCase()}</span>
+                  <div><strong>{student.fullName}</strong><span>{student.email ?? 'Email не указан'}</span></div>
+                  <Link to={`/students/${student.id}`} className="group-member-open">Открыть ученика</Link>
+                </div>
+              ))}
+            </div>
+            <form className="group-add-member" onSubmit={addMembers}>
+              <input className="input" value={memberEmails} onChange={(e) => setMemberEmails(e.target.value)} placeholder="Email нового ученика" required />
+              <button className="btn" type="submit">Добавить</button>
+            </form>
+          </section>
+
+          <div className="group-tip">💡 <strong>Совет:</strong>&nbsp; используйте вкладки выше, чтобы управлять домашними заданиями и карточками более детально.</div>
+        </>
+      )}
+
+      {pageTab === 'homework' && (
+        <div className="group-tab-stack">
+          <section className="group-overview-card">
+            <div className="group-overview-card__header">
+              <div><h2>Сдача домашки по группе</h2><p>Статус каждого ученика по всем выданным PDF.</p></div>
+              <button className="group-refresh-btn" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>Обновить</button>
+            </div>
+            <div className="group-homework-table-wrap">
+              <table className="group-homework-table">
+                <thead><tr><th>Название задания</th><th>Дата задания</th>{group?.students.map((student) => <th key={student.id}>{student.fullName}</th>)}</tr></thead>
+                <tbody>{groupHomeworkRows.map((row) => <tr key={row.key}><td><span className="group-pdf-icon">PDF</span>{row.filename}</td><td>{formatDate(row.startDate)}</td>{group?.students.map((student) => { const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row); return <td key={student.id}>{homework ? <Link className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/homeworks/${homework.id}`}>{homework.submitted ? '✓' : '✕'}</Link> : '—'}</td>; })}</tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="group-work-card">
+            <h2>Задать PDF-домашку всей группе</h2>
+            <form className="stack" onSubmit={createGroupHomework}>
+              <div className="group-homework-options">
+                <label className="field"><span className="field__label">Первый день</span><input className="input" type="date" value={homeworkStartDate} onChange={(e) => setHomeworkStartDate(e.target.value)} disabled={creatingHomework} required /></label>
+                <label className="field"><span className="field__label">На сколько дней</span><input className="input" type="number" min={1} max={31} value={homeworkDays} onChange={(e) => changeHomeworkDays(Number(e.target.value))} disabled={creatingHomework} required /></label>
+              </div>
+              <div className="group-day-grid">
+                {homeworkDates.map((date, index) => {
+                  const file = homeworkFiles[index];
+                  return <div key={`${date}-${index}`} className="group-day-card"><div className="group-day-card__head"><div><strong>День {index + 1}</strong><span>{formatDate(date)}</span></div>{file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}</div><label className="field"><span className="field__label">{file ? 'Заменить PDF' : 'Выбрать PDF'}</span><input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} /></label><span className="group-day-card__file">{file?.name ?? 'Файл пока не выбран'}</span></div>;
+                })}
+              </div>
+              {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня.</div>}
+              <button className="btn group-submit-btn" type="submit" disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}>{creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}</button>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {pageTab === 'cards' && (
+        <section className="group-work-card">
+          <h2>Выдать карточки всей группе</h2>
+          <label className="field"><span className="field__label">Дата начала</span><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required /></label>
+          <div className="group-card-tabs"><button type="button" className={cardTab === 'manual' ? 'active' : ''} onClick={() => setCardTab('manual')}>Вручную</button><button type="button" className={cardTab === 'import' ? 'active' : ''} onClick={() => setCardTab('import')}>Импорт</button></div>
+          {cardTab === 'manual' ? (
+            <form onSubmit={createCard}><label className="field"><span className="field__label">Вопрос</span><input className="input" value={question} onChange={(e) => setQuestion(e.target.value)} required /></label><label className="field"><span className="field__label">Правильный ответ</span><input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required /></label><button className="btn" type="submit" disabled={!group || group.students.length === 0}>Добавить всей группе</button></form>
+          ) : (
+            <div><form onSubmit={makePreview}><label className="field"><span className="field__label">Текст для импорта</span><textarea className="textarea" value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder={'2 + 2 -> 4 | 3 | 5 | 6\n3 + 3 -> 6 | 5 | 7 | 9'} required /></label><button className="btn btn--secondary" type="submit">Предпросмотр</button></form>{preview && <div className="group-preview"><h3>Карточек: {preview.cards.length}</h3>{preview.cards.map((card, index) => <div className="list-row" key={index}><div><div className="list-row__title">{card.question}</div><div className="muted">Ответ: {card.correctAnswer}</div></div></div>)}<button className="btn" type="button" onClick={importCards} disabled={!group || group.students.length === 0 || preview.cards.length === 0}>Выдать {preview.cards.length} карточек всей группе</button></div>}</div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
 
-const tableHeaderStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderBottom: '1px solid rgba(0,0,0,.12)',
-  textAlign: 'left',
-  verticalAlign: 'bottom',
-  whiteSpace: 'nowrap',
-};
-
-const tableCellStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderBottom: '1px solid rgba(0,0,0,.08)',
-  verticalAlign: 'middle',
-};
-
 function findHomeworkForRow(homeworks: Homework[], row: GroupHomeworkRow) {
-  return homeworks.find((homework) =>
-    homework.hasWorksheet
-    && homework.startDate === row.startDate
-    && (homework.worksheetFilename ?? 'Домашка в PDF') === row.filename
-    && (homework.worksheetPageCount ?? null) === row.pageCount,
-  );
+  return homeworks.find((homework) => homework.hasWorksheet && homework.startDate === row.startDate && (homework.worksheetFilename ?? 'Домашка в PDF') === row.filename && (homework.worksheetPageCount ?? null) === row.pageCount);
 }
 
 function addDays(dateString: string, days: number) {
