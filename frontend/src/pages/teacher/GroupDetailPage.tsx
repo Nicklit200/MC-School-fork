@@ -16,6 +16,12 @@ type GroupHomeworkRow = {
   pageCount: number | null;
 };
 
+type GroupCardRow = {
+  key: string;
+  startDate: string;
+  totalCards: number;
+};
+
 export function GroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
   const { t } = useI18n();
@@ -91,6 +97,27 @@ export function GroupDetailPage() {
         return group.students.length === 1 || matches >= 2;
       })
       .sort((a, b) => b.startDate.localeCompare(a.startDate) || a.filename.localeCompare(b.filename));
+  }, [group, homeworkByStudent]);
+
+  const groupCardRows = useMemo<GroupCardRow[]>(() => {
+    if (!group || group.students.length === 0) return [];
+    const rows = new Map<string, GroupCardRow>();
+    for (const student of group.students) {
+      for (const homework of homeworkByStudent[student.id] ?? []) {
+        if (homework.totalCards <= 0) continue;
+        const key = homework.startDate;
+        const existing = rows.get(key);
+        if (!existing || homework.totalCards > existing.totalCards) {
+          rows.set(key, { key, startDate: homework.startDate, totalCards: homework.totalCards });
+        }
+      }
+    }
+    return Array.from(rows.values())
+      .filter((row) => {
+        const matches = group.students.filter((student) => findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row)).length;
+        return group.students.length === 1 || matches >= 2;
+      })
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
   }, [group, homeworkByStudent]);
 
   const activeHomeworkCount = useMemo(() => {
@@ -174,6 +201,7 @@ export function GroupDetailPage() {
       setQuestion('');
       setAnswer('');
       setMessage(`Карточка создана для ${count} учеников.`);
+      await loadHomeworkStatuses(group);
     } catch (e) {
       setError(toErrorMessage(e, t));
     }
@@ -200,6 +228,7 @@ export function GroupDetailPage() {
       setMessage(`Готово: ${preview.cards.length} карточек выдано ${studentCount} ученикам (${created} индивидуальных карточек).`);
       setPreview(null);
       setRawText('');
+      await loadHomeworkStatuses(group);
     } catch (e) {
       setError(toErrorMessage(e, t));
     }
@@ -249,63 +278,115 @@ export function GroupDetailPage() {
 
       {pageTab === 'overview' && (
         <>
-          <section className="group-overview-card">
-            <div className="group-overview-card__header">
-              <div>
-                <h2>Обзор домашних заданий</h2>
-                <p>✓ — ученик сдал PDF, ✕ — ещё не сдал.</p>
+          <div className="group-overview-grid">
+            <section className="group-overview-card">
+              <div className="group-overview-card__header">
+                <div>
+                  <h2>Обзор домашних заданий</h2>
+                  <p>✓ — ученик сдал PDF, ✕ — ещё не сдал.</p>
+                </div>
+                <button className="group-refresh-btn" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>
+                  {loadingHomeworkStatus ? 'Обновляем…' : 'Обновить'}
+                </button>
               </div>
-              <button className="group-refresh-btn" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>
-                {loadingHomeworkStatus ? 'Обновляем…' : 'Обновить'}
-              </button>
-            </div>
 
-            {!group || loadingHomeworkStatus ? (
-              <p className="muted">{t('common.loading')}</p>
-            ) : groupHomeworkRows.length === 0 ? (
-              <div className="teacher-empty-state">Групповых PDF-домашек пока нет.</div>
-            ) : (
-              <div className="group-homework-table-wrap">
-                <table className="group-homework-table">
-                  <thead>
-                    <tr>
-                      <th>Название задания</th>
-                      <th>Дата задания</th>
-                      {group.students.map((student) => (
-                        <th key={student.id}>
-                          <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
-                          <span>{student.fullName}</span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupHomeworkRows.slice(0, 5).map((row) => (
-                      <tr key={row.key}>
-                        <td><span className="group-pdf-icon">PDF</span><span>{row.filename}</span></td>
-                        <td>{formatDate(row.startDate)}</td>
-                        {group.students.map((student) => {
-                          const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
-                          return (
-                            <td key={student.id}>
-                              {homework ? (
-                                <Link className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/homeworks/${homework.id}`}>
-                                  {homework.submitted ? '✓' : '✕'}
-                                </Link>
-                              ) : <span className="muted">—</span>}
-                            </td>
-                          );
-                        })}
+              {!group || loadingHomeworkStatus ? (
+                <p className="muted">{t('common.loading')}</p>
+              ) : groupHomeworkRows.length === 0 ? (
+                <div className="teacher-empty-state">Групповых PDF-домашек пока нет.</div>
+              ) : (
+                <div className="group-homework-table-wrap">
+                  <table className="group-homework-table group-homework-table--compact">
+                    <thead>
+                      <tr>
+                        <th>Название задания</th>
+                        <th>Дата задания</th>
+                        {group.students.map((student) => (
+                          <th key={student.id}>
+                            <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
+                            <span>{student.fullName}</span>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {groupHomeworkRows.slice(0, 3).map((row) => (
+                        <tr key={row.key}>
+                          <td><span className="group-pdf-icon">PDF</span><span>{row.filename}</span></td>
+                          <td>{formatDate(row.startDate)}</td>
+                          {group.students.map((student) => {
+                            const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
+                            return (
+                              <td key={student.id}>
+                                {homework ? (
+                                  <Link className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/homeworks/${homework.id}`}>
+                                    {homework.submitted ? '✓' : '✕'}
+                                  </Link>
+                                ) : <span className="muted">—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="group-overview-card">
+              <div className="group-overview-card__header">
+                <div>
+                  <h2>Обзор карточек</h2>
+                  <p>✓ — ученик выучил весь набор, ✕ — ещё не завершил.</p>
+                </div>
               </div>
-            )}
-            {groupHomeworkRows.length > 5 && (
-              <button className="group-show-all" type="button" onClick={() => setPageTab('homework')}>Показать все задания</button>
-            )}
-          </section>
+
+              {!group || loadingHomeworkStatus ? (
+                <p className="muted">{t('common.loading')}</p>
+              ) : groupCardRows.length === 0 ? (
+                <div className="teacher-empty-state">Групповых карточек пока нет.</div>
+              ) : (
+                <div className="group-homework-table-wrap">
+                  <table className="group-homework-table group-homework-table--compact">
+                    <thead>
+                      <tr>
+                        <th>Название набора</th>
+                        <th>Дата задания</th>
+                        {group.students.map((student) => (
+                          <th key={student.id}>
+                            <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
+                            <span>{student.fullName}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupCardRows.slice(0, 3).map((row) => (
+                        <tr key={row.key}>
+                          <td><span className="group-card-set-icon">▥</span><span>Карточки · {row.totalCards} шт.</span></td>
+                          <td>{formatDate(row.startDate)}</td>
+                          {group.students.map((student) => {
+                            const homework = findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
+                            const completed = homework?.status === 'COMPLETED';
+                            return (
+                              <td key={student.id}>
+                                {homework ? (
+                                  <Link className={`group-status-dot ${completed ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/cards/${homework.id}`}>
+                                    {completed ? '✓' : '✕'}
+                                  </Link>
+                                ) : <span className="muted">—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
 
           <div className="group-tip">💡 <strong>Совет:</strong>&nbsp; используйте вкладки выше, чтобы управлять учениками, домашними заданиями и карточками отдельно.</div>
         </>
@@ -374,6 +455,10 @@ export function GroupDetailPage() {
 
 function findHomeworkForRow(homeworks: Homework[], row: GroupHomeworkRow) {
   return homeworks.find((homework) => homework.hasWorksheet && homework.startDate === row.startDate && (homework.worksheetFilename ?? 'Домашка в PDF') === row.filename && (homework.worksheetPageCount ?? null) === row.pageCount);
+}
+
+function findCardHomeworkForRow(homeworks: Homework[], row: GroupCardRow) {
+  return homeworks.find((homework) => homework.totalCards > 0 && homework.startDate === row.startDate);
 }
 
 function addDays(dateString: string, days: number) {
