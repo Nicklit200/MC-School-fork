@@ -21,7 +21,7 @@ import { MyCardsPage } from './pages/student/MyCardsPage';
 import { StudentCardsDetailPage } from './pages/student/StudentCardsDetailPage';
 import { StudentHomeworksListPage } from './pages/student/StudentHomeworksListPage';
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
-import { PdfHomeworkPage } from './pages/student/PdfHomeworkPage';
+import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSubmissionPage';
 import { SettingsPage } from './pages/student/SettingsPage';
 
 export function App() {
@@ -51,7 +51,7 @@ export function App() {
       <Route path="/homeworks" element={<Navigate to="/student/homeworks" replace />} />
       <Route path="/student/homeworks" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworksListPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
-      <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkPage /></Layout></ProtectedRoute>} />
+      <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkWithSubmissionPage /></Layout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to={user ? homePathForRole(user.role) : '/login'} replace />} />
