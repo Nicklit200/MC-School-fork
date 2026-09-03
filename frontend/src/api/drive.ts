@@ -48,6 +48,30 @@ export const driveApi = {
     return parseResponse<DriveItem[]>(response);
   },
 
+  async listPdfFiles(driveId: string, parentId?: string): Promise<DriveItem[]> {
+    const params = new URLSearchParams({ driveId });
+    if (parentId) params.set('parentId', parentId);
+    const response = await fetch(`${BASE_URL}/drive/pdf-files?${params.toString()}`, {
+      headers: authHeaders(),
+    });
+    return parseResponse<DriveItem[]>(response);
+  },
+
+  async downloadPdf(fileId: string, fileName: string): Promise<File> {
+    const params = new URLSearchParams({ fileId, fileName });
+    const response = await fetch(`${BASE_URL}/drive/download?${params.toString()}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      let payload: any;
+      try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
+      throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
+    }
+    const blob = await response.blob();
+    return new File([blob], fileName, { type: 'application/pdf' });
+  },
+
   async upload(folderId: string, file: File): Promise<DriveUploadResult> {
     const formData = new FormData();
     formData.append('folderId', folderId);
