@@ -320,7 +320,7 @@ export function GroupDetailPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {groupHomeworkRows.slice(0, 3).map((row) => (
+                      {groupHomeworkRows.map((row) => (
                         <tr key={row.key}>
                           <td><span className="group-pdf-icon">PDF</span><span>{row.filename}</span></td>
                           <td>{formatDate(row.startDate)}</td>
