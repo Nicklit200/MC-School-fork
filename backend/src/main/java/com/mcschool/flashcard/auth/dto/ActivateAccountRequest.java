@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record ActivateAccountRequest(
         @NotBlank String invitationToken,
-        @Email @Size(max = 255) String email,
+        @NotBlank @Email @Size(max = 255) String email,
         // 72 bytes is the BCrypt input limit.
         @NotBlank @Size(min = 8, max = 72) String password
 ) {
