@@ -158,6 +158,8 @@ export const api = {
     get: (studentId: string) => request<StudentListItem>('GET', `/students/${studentId}`),
     create: (fullName: string, email: string) =>
       request<StudentInvitation>('POST', '/students', { fullName, email: email.trim() || null }),
+    rename: (studentId: string, fullName: string) =>
+      request<StudentListItem>('PUT', `/students/${studentId}/name`, { fullName }),
     updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) =>
       request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
     updateHomeworkDriveFolder: (studentId: string, googleDriveHomeworkFolderId: string) =>
