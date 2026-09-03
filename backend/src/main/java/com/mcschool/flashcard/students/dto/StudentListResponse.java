@@ -6,10 +6,7 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserStatus;
 import java.util.UUID;
 
-/**
- * Teacher-owned student row. Includes the invitation token only while the
- * student is still invited so the owning teacher can copy an activation link.
- */
+/** Teacher-owned student row, including optional linked parent account. */
 public record StudentListResponse(
         UUID id,
         String fullName,
@@ -19,12 +16,30 @@ public record StudentListResponse(
         Language preferredLanguage,
         String invitationToken,
         String googleDriveFolderUrl,
-        String googleDriveHomeworkFolderId
+        String googleDriveHomeworkFolderId,
+        UUID parentId,
+        String parentFullName,
+        String parentEmail,
+        UserStatus parentStatus,
+        String parentInvitationToken
 ) {
     public static StudentListResponse from(User student) {
-        return new StudentListResponse(student.getId(), student.getFullName(), student.getEmail(),
-                student.getRole(), student.getStatus(), student.getPreferredLanguage(),
+        User parent = student.getParent();
+        return new StudentListResponse(
+                student.getId(),
+                student.getFullName(),
+                student.getEmail(),
+                student.getRole(),
+                student.getStatus(),
+                student.getPreferredLanguage(),
                 student.getStatus() == UserStatus.INVITED ? student.getInvitationToken() : null,
-                student.getGoogleDriveFolderUrl(), student.getGoogleDriveHomeworkFolderId());
+                student.getGoogleDriveFolderUrl(),
+                student.getGoogleDriveHomeworkFolderId(),
+                parent == null ? null : parent.getId(),
+                parent == null ? null : parent.getFullName(),
+                parent == null ? null : parent.getEmail(),
+                parent == null ? null : parent.getStatus(),
+                parent != null && parent.getStatus() == UserStatus.INVITED ? parent.getInvitationToken() : null
+        );
     }
 }
