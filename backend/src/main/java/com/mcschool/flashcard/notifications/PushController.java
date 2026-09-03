@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import jakarta.validation.Valid;
@@ -33,9 +34,7 @@ public class PushController {
 
     @GetMapping("/config")
     public Map<String, Object> config() {
-        return Map.of(
-                "enabled", webPushService.isConfigured(),
-                "publicKey", webPushService.publicKey());
+        return Map.of("enabled", webPushService.isConfigured(), "publicKey", webPushService.publicKey());
     }
 
     @PostMapping("/subscriptions")
@@ -60,8 +59,9 @@ public class PushController {
     @PostMapping("/test")
     @Transactional(readOnly = true)
     public ResponseEntity<Void> test(@AuthenticationPrincipal AuthenticatedUser principal) {
+        String url = principal.role() == Role.PARENT ? "/parent" : "/today";
         for (PushSubscription subscription : subscriptionRepository.findAllByUserId(principal.id())) {
-            webPushService.send(subscription, "Mindcrafti School", "Тестовое уведомление работает 🎉", "/today");
+            webPushService.send(subscription, "Mindcrafti School", "Тестовое уведомление работает 🎉", url);
         }
         return ResponseEntity.noContent().build();
     }
