@@ -58,8 +58,13 @@ public class User {
     @Column(name = "invitation_expires_at")
     private Instant invitationExpiresAt;
 
+    /** Destination for completed card-session CSV exports. */
     @Column(name = "google_drive_folder_url", length = 1000)
     private String googleDriveFolderUrl;
+
+    /** Destination for PDFs submitted by the student. */
+    @Column(name = "google_drive_homework_folder_id", length = 1000)
+    private String googleDriveHomeworkFolderId;
 
     @Column(nullable = false)
     private boolean archived;
@@ -89,11 +94,18 @@ public class User {
     }
 
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
-        if (googleDriveFolderUrl == null || googleDriveFolderUrl.isBlank()) {
-            this.googleDriveFolderUrl = null;
-            return;
+        this.googleDriveFolderUrl = normalizeFolderId(googleDriveFolderUrl);
+    }
+
+    public void changeGoogleDriveHomeworkFolderId(String folderId) {
+        this.googleDriveHomeworkFolderId = normalizeFolderId(folderId);
+    }
+
+    private String normalizeFolderId(String folderId) {
+        if (folderId == null || folderId.isBlank()) {
+            return null;
         }
-        this.googleDriveFolderUrl = googleDriveFolderUrl.trim();
+        return folderId.trim();
     }
 
     public void assignEmail(String email) {
