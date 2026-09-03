@@ -4,13 +4,15 @@ import { driveApi, type DriveItem } from '../../api/drive';
 import { useI18n } from '../../i18n/I18nContext';
 
 type PathItem = DriveItem;
+type FolderKind = 'cards' | 'homework';
 
 type Props = {
   studentId: string;
   savedFolderId?: string | null;
+  kind: FolderKind;
 };
 
-export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
+export function DriveFolderPicker({ studentId, savedFolderId, kind }: Props) {
   const { language, t } = useI18n();
   const ru = language === 'RU';
   const [drives, setDrives] = useState<DriveItem[]>([]);
@@ -20,12 +22,16 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
   const [loadingDrives, setLoadingDrives] = useState(true);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [testingExport, setTestingExport] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [savedId, setSavedId] = useState(savedFolderId ?? '');
   const [savedMessage, setSavedMessage] = useState(false);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [testFileUrl, setTestFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSavedId(savedFolderId ?? '');
+  }, [savedFolderId]);
 
   const currentFolderId = useMemo(() => {
     if (path.length > 0) return path[path.length - 1].id;
@@ -60,9 +66,7 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
   async function onDriveChange(driveId: string) {
     setSelectedDriveId(driveId);
     setPath([]);
-    setSavedMessage(false);
-    setTestMessage(null);
-    setTestFileUrl(null);
+    clearMessages();
     if (!driveId) {
       setFolders([]);
       return;
@@ -72,16 +76,12 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
 
   async function enterFolder(folder: DriveItem) {
     setPath([...path, folder]);
-    setSavedMessage(false);
-    setTestMessage(null);
-    setTestFileUrl(null);
+    clearMessages();
     await loadFolders(selectedDriveId, folder.id);
   }
 
   async function jumpTo(index: number) {
-    setSavedMessage(false);
-    setTestMessage(null);
-    setTestFileUrl(null);
+    clearMessages();
     if (index < 0) {
       setPath([]);
       await loadFolders(selectedDriveId);
@@ -92,15 +92,23 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
     await loadFolders(selectedDriveId, nextPath[nextPath.length - 1].id);
   }
 
-  async function saveFolder() {
-    if (!currentFolderId) return;
-    setSaving(true);
+  function clearMessages() {
     setSavedMessage(false);
     setTestMessage(null);
     setTestFileUrl(null);
+  }
+
+  async function saveFolder() {
+    if (!currentFolderId) return;
+    setSaving(true);
+    clearMessages();
     setError(null);
     try {
-      await api.students.updateDriveFolder(studentId, currentFolderId);
+      if (kind === 'cards') {
+        await api.students.updateDriveFolder(studentId, currentFolderId);
+      } else {
+        await api.students.updateHomeworkDriveFolder(studentId, currentFolderId);
+      }
       setSavedId(currentFolderId);
       setSavedMessage(true);
     } catch (e) {
@@ -110,35 +118,58 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
     }
   }
 
-  async function testAutomaticExport() {
-    setTestingExport(true);
+  async function testFolder() {
+    setTesting(true);
     setTestMessage(null);
     setTestFileUrl(null);
     setError(null);
     try {
-      const result = await api.students.testAutomaticExport(studentId);
-      if (result.status === 'error') {
-        setError(result.message || (ru ? 'Не удалось создать тестовую таблицу' : 'Testtabelle konnte nicht erstellt werden'));
-        return;
+      if (kind === 'cards') {
+        const result = await api.students.testAutomaticExport(studentId);
+        if (result.status === 'error') {
+          setError(result.message || (ru ? 'Не удалось создать тестовую таблицу' : 'Testtabelle konnte nicht erstellt werden'));
+          return;
+        }
+        setTestMessage(ru ? `Тестовая таблица создана: ${result.fileName ?? ''}` : `Testtabelle erstellt: ${result.fileName ?? ''}`);
+        setTestFileUrl(result.fileUrl ?? null);
+      } else {
+        const result = await api.students.testHomeworkDriveFolder(studentId);
+        if (result.status === 'error') {
+          setError(result.message || (ru ? 'Не удалось проверить папку' : 'Ordner konnte nicht geprüft werden'));
+          return;
+        }
+        setTestMessage(ru ? 'Папка для выполненных домашних работ доступна.' : 'Ordner für abgegebene Hausaufgaben ist verfügbar.');
+        setTestFileUrl(result.fileUrl ?? null);
       }
-      setTestMessage(ru ? `Тестовая таблица создана: ${result.fileName ?? ''}` : `Testtabelle erstellt: ${result.fileName ?? ''}`);
-      setTestFileUrl(result.fileUrl ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setTestingExport(false);
+      setTesting(false);
     }
   }
 
+  const title = kind === 'cards'
+    ? (ru ? 'Карточки → Google Drive' : 'Karten → Google Drive')
+    : (ru ? 'Сделанные домашки → Google Drive' : 'Abgegebene Hausaufgaben → Google Drive');
+
+  const description = kind === 'cards'
+    ? (ru
+      ? 'Выберите папку, куда после завершения карточек автоматически сохраняется таблица с результатами ученика.'
+      : 'Wähle den Ordner, in dem nach abgeschlossenen Karten-Sessions die Ergebnistabelle gespeichert wird.')
+    : (ru
+      ? 'Выберите отдельную папку, куда после сдачи домашки автоматически сохраняется готовый PDF ученика с его пометками.'
+      : 'Wähle einen separaten Ordner, in dem nach der Abgabe automatisch das fertige PDF mit den Notizen des Schülers gespeichert wird.');
+
   return (
     <div className="panel">
-      <h2 style={{ marginTop: 0 }}>Google Drive</h2>
-      <p className="muted">
-        {ru
-          ? 'Выберите папку один раз. После завершения карточек таблица с результатами ученика будет сохраняться сюда автоматически.'
-          : 'Wähle den Ordner einmal aus. Nach jeder abgeschlossenen Karten-Session wird die Ergebnistabelle automatisch hier gespeichert.'}
-      </p>
+      <h2 style={{ marginTop: 0 }}>{title}</h2>
+      <p className="muted">{description}</p>
 
+      {savedId && (
+        <div className="banner banner--info">
+          {ru ? 'Папка уже настроена для этого типа файлов.' : 'Für diesen Dateityp ist bereits ein Ordner eingerichtet.'}
+        </div>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
       {savedMessage && (
         <div className="banner banner--success">
@@ -216,12 +247,14 @@ export function DriveFolderPicker({ studentId, savedFolderId }: Props) {
             <button
               className="btn btn--secondary"
               type="button"
-              onClick={() => void testAutomaticExport()}
-              disabled={!savedId || testingExport}
+              onClick={() => void testFolder()}
+              disabled={!savedId || testing}
             >
-              {testingExport
-                ? (ru ? 'Создаю тест…' : 'Test wird erstellt…')
-                : (ru ? 'Создать тестовую таблицу' : 'Testtabelle erstellen')}
+              {testing
+                ? (ru ? 'Проверяю…' : 'Prüfen…')
+                : kind === 'cards'
+                  ? (ru ? 'Создать тестовую таблицу' : 'Testtabelle erstellen')
+                  : (ru ? 'Проверить папку' : 'Ordner prüfen')}
             </button>
           </div>
         </>
