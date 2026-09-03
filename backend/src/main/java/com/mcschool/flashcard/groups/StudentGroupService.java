@@ -12,6 +12,7 @@ import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
 import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
 import com.mcschool.flashcard.groups.dto.StudentGroupResponse;
 import com.mcschool.flashcard.homeworks.Homework;
+import com.mcschool.flashcard.homeworks.HomeworkPdfService;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.notifications.CardPushNotificationService;
 import com.mcschool.flashcard.notifications.NotificationService;
@@ -21,11 +22,13 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class StudentGroupService {
@@ -37,6 +40,7 @@ public class StudentGroupService {
     private final CardRepository cardRepository;
     private final NotificationService notificationService;
     private final CardPushNotificationService cardPushNotificationService;
+    private final HomeworkPdfService homeworkPdfService;
 
     public StudentGroupService(StudentGroupRepository groupRepository,
                                StudentGroupMemberRepository memberRepository,
@@ -44,7 +48,8 @@ public class StudentGroupService {
                                HomeworkRepository homeworkRepository,
                                CardRepository cardRepository,
                                NotificationService notificationService,
-                               CardPushNotificationService cardPushNotificationService) {
+                               CardPushNotificationService cardPushNotificationService,
+                               HomeworkPdfService homeworkPdfService) {
         this.groupRepository = groupRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
@@ -52,6 +57,7 @@ public class StudentGroupService {
         this.cardRepository = cardRepository;
         this.notificationService = notificationService;
         this.cardPushNotificationService = cardPushNotificationService;
+        this.homeworkPdfService = homeworkPdfService;
     }
 
     @Transactional
@@ -119,6 +125,23 @@ public class StudentGroupService {
             }
         }
         return members.size() * request.cards().size();
+    }
+
+    @Transactional
+    public int createPdfHomeworkForGroup(AuthenticatedUser teacher,
+                                         UUID groupId,
+                                         LocalDate startDate,
+                                         MultipartFile file) {
+        requireOwnedGroup(teacher.id(), groupId);
+        List<StudentGroupMember> members = memberRepository.findAllByGroupIdOrderByStudentFullNameAsc(groupId);
+        for (StudentGroupMember member : members) {
+            homeworkPdfService.createWorksheetHomework(
+                    teacher,
+                    member.getStudent().getId(),
+                    startDate,
+                    file);
+        }
+        return members.size();
     }
 
     private void addStudentByEmail(StudentGroup group, User teacher, String email) {
