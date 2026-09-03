@@ -18,12 +18,13 @@ public record StudentListResponse(
         UserStatus status,
         Language preferredLanguage,
         String invitationToken,
-        String googleDriveFolderUrl
+        String googleDriveFolderUrl,
+        String googleDriveHomeworkFolderId
 ) {
     public static StudentListResponse from(User student) {
         return new StudentListResponse(student.getId(), student.getFullName(), student.getEmail(),
                 student.getRole(), student.getStatus(), student.getPreferredLanguage(),
                 student.getStatus() == UserStatus.INVITED ? student.getInvitationToken() : null,
-                student.getGoogleDriveFolderUrl());
+                student.getGoogleDriveFolderUrl(), student.getGoogleDriveHomeworkFolderId());
     }
 }
