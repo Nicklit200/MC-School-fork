@@ -11,6 +11,7 @@ import './group-detail.css';
 import './login-page.css';
 import './pdf-homework.css';
 import './student-menu.css';
+import './student-today-status.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
