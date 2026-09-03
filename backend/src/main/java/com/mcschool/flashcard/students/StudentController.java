@@ -12,6 +12,7 @@ import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
@@ -73,11 +74,20 @@ public class StudentController {
         return studentService.getStudent(caller, studentId);
     }
 
+    /** Destination for completed card-session CSV exports. */
     @PutMapping("/{studentId}/drive-folder")
     public StudentListResponse updateDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
                                                  @PathVariable UUID studentId,
                                                  @Valid @RequestBody UpdateStudentDriveFolderRequest request) {
         return studentService.updateGoogleDriveFolder(caller, studentId, request);
+    }
+
+    /** Destination for PDFs submitted by the student. */
+    @PutMapping("/{studentId}/homework-drive-folder")
+    public StudentListResponse updateHomeworkDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                         @PathVariable UUID studentId,
+                                                         @Valid @RequestBody UpdateStudentHomeworkDriveFolderRequest request) {
+        return studentService.updateGoogleDriveHomeworkFolder(caller, studentId, request);
     }
 
     @PostMapping("/{studentId}/drive-folder/test")
@@ -94,13 +104,27 @@ public class StudentController {
         }
     }
 
+    @PostMapping("/{studentId}/homework-drive-folder/test")
+    public Map<String, String> testHomeworkDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                       @PathVariable UUID studentId) {
+        StudentListResponse student = studentService.getStudent(caller, studentId);
+        try {
+            return googleDriveTestService.testFolder(student.googleDriveHomeworkFolderId());
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return Map.of(
+                    "status", "error",
+                    "message", safeDriveTestMessage(ex.getMessage())
+            );
+        }
+    }
+
     @PostMapping("/{studentId}/drive-folder/test-export")
     public Map<String, String> testAutomaticExport(@AuthenticationPrincipal AuthenticatedUser caller,
                                                    @PathVariable UUID studentId) {
         StudentListResponse student = studentService.getStudent(caller, studentId);
         String folderId = student.googleDriveFolderUrl();
         if (folderId == null || folderId.isBlank()) {
-            return Map.of("status", "error", "message", "Сначала выберите и сохраните папку Google Drive");
+            return Map.of("status", "error", "message", "Сначала выберите папку для карточек Google Drive");
         }
 
         try {
