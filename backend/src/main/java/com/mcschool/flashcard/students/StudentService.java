@@ -56,21 +56,28 @@ public class StudentService {
 
     @Transactional
     public StudentInvitationResponse createStudent(AuthenticatedUser teacher, CreateStudentRequest request) {
-        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String email = normalizeOptionalEmail(request.email());
         User teacherEntity = userRepository.findById(teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
         String token = Invitations.newToken();
         Instant expiresAt = Invitations.expiry(Instant.now());
+        String fullName = request.fullName().trim();
 
-        User student = userRepository.findByEmail(email)
-                .map(existing -> restoreDeletedStudent(existing, teacherEntity, request.fullName().trim(), token, expiresAt))
-                .orElseGet(() -> userRepository.save(
-                        User.invitedStudent(request.fullName().trim(), email, teacherEntity, token, expiresAt)));
+        User student;
+        if (email == null) {
+            student = userRepository.save(User.invitedStudent(fullName, null, teacherEntity, token, expiresAt));
+        } else {
+            student = userRepository.findByEmail(email)
+                    .map(existing -> restoreDeletedStudent(existing, teacherEntity, fullName, token, expiresAt))
+                    .orElseGet(() -> userRepository.save(
+                            User.invitedStudent(fullName, email, teacherEntity, token, expiresAt)));
 
-        log.info("Sending student invitation email for studentId={} email={}", student.getId(), student.getEmail());
-        notificationService.sendInvitation(student, token);
-        log.info("Finished student invitation email attempt for studentId={} email={}",
-                student.getId(), student.getEmail());
+            log.info("Sending student invitation email for studentId={} email={}", student.getId(), student.getEmail());
+            notificationService.sendInvitation(student, token);
+            log.info("Finished student invitation email attempt for studentId={} email={}",
+                    student.getId(), student.getEmail());
+        }
+
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
     }
 
@@ -154,5 +161,12 @@ public class StudentService {
 
     private LocalDate reviewToday() {
         return LocalDate.now(reviewReminderZone);
+    }
+
+    private static String normalizeOptionalEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }
