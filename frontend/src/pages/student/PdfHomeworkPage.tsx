@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type Tool = 'pen' | 'eraser';
+type PenColor = '#111111' | '#2563eb' | '#dc2626' | '#16a34a';
 type ViewportState = {
   scale: number;
   offsetLeft: number;
@@ -22,6 +23,15 @@ type StrokeGeometry = {
   canvasHeight: number;
 };
 
+const PEN_COLORS: Array<{ value: PenColor; labelRu: string; labelDe: string }> = [
+  { value: '#2563eb', labelRu: 'Синий', labelDe: 'Blau' },
+  { value: '#111111', labelRu: 'Чёрный', labelDe: 'Schwarz' },
+  { value: '#dc2626', labelRu: 'Красный', labelDe: 'Rot' },
+  { value: '#16a34a', labelRu: 'Зелёный', labelDe: 'Grün' },
+];
+
+const PEN_SIZES = [3, 5, 8, 12];
+
 export function PdfHomeworkPage() {
   const { homeworkId = '' } = useParams();
   const { language, t } = useI18n();
@@ -30,6 +40,8 @@ export function PdfHomeworkPage() {
   const [pageUrls, setPageUrls] = useState<Record<number, string>>({});
   const [drawings, setDrawings] = useState<Record<number, string>>({});
   const [tool, setTool] = useState<Tool>('pen');
+  const [penColor, setPenColor] = useState<PenColor>('#2563eb');
+  const [penSize, setPenSize] = useState(5);
   const [desktopZoom, setDesktopZoom] = useState(100);
   const [desktopControls, setDesktopControls] = useState(false);
   const [viewport, setViewport] = useState<ViewportState>({
@@ -168,15 +180,17 @@ export function PdfHomeworkPage() {
 
       {desktopControls && (
         <div className="panel" style={{ position: 'sticky', top: 8, zIndex: 5, marginBottom: 12 }}>
-          <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             {!homework.submitted && (
-              <div className="row" style={{ gap: 8 }}>
+              <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
                   {language === 'DE' ? 'Stift' : 'Ручка'}
                 </button>
                 <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
                   {language === 'DE' ? 'Radierer' : 'Ластик'}
                 </button>
+                <ColorPicker language={language} value={penColor} onChange={(color) => { setPenColor(color); setTool('pen'); }} />
+                <SizePicker language={language} value={penSize} onChange={(size) => { setPenSize(size); setTool('pen'); }} />
               </div>
             )}
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
@@ -204,6 +218,10 @@ export function PdfHomeworkPage() {
           initialDrawing={drawings[pageIndex]}
           tool={tool}
           setTool={setTool}
+          penColor={penColor}
+          setPenColor={setPenColor}
+          penSize={penSize}
+          setPenSize={setPenSize}
           language={language}
           desktopControls={desktopControls}
           desktopZoom={desktopZoom}
@@ -224,11 +242,56 @@ export function PdfHomeworkPage() {
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; die Werkzeugleiste bleibt links am Bildschirm.'
-              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница, а панель инструментов остаётся слева на экране.'}
+              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; Farbe und Stiftbreite kannst du in der Werkzeugleiste ändern.'
+              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница. Цвет и толщину ручки можно менять в панели инструментов.'}
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function ColorPicker({ language, value, onChange }: { language: 'DE' | 'RU'; value: PenColor; onChange: (value: PenColor) => void }) {
+  return (
+    <div className="row" style={{ gap: 6, alignItems: 'center' }} aria-label={language === 'DE' ? 'Stiftfarbe' : 'Цвет ручки'}>
+      {PEN_COLORS.map((color) => (
+        <button
+          key={color.value}
+          type="button"
+          onClick={() => onChange(color.value)}
+          title={language === 'DE' ? color.labelDe : color.labelRu}
+          aria-label={language === 'DE' ? color.labelDe : color.labelRu}
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: color.value,
+            border: value === color.value ? '3px solid #fff' : '2px solid rgba(0,0,0,.18)',
+            boxShadow: value === color.value ? '0 0 0 2px #111827' : 'none',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SizePicker({ language, value, onChange }: { language: 'DE' | 'RU'; value: number; onChange: (value: number) => void }) {
+  return (
+    <div className="row" style={{ gap: 5, alignItems: 'center' }} aria-label={language === 'DE' ? 'Stiftbreite' : 'Размер кисти'}>
+      {PEN_SIZES.map((size) => (
+        <button
+          key={size}
+          type="button"
+          className={`btn ${value === size ? '' : 'btn--secondary'}`}
+          onClick={() => onChange(size)}
+          title={`${language === 'DE' ? 'Breite' : 'Толщина'}: ${size}`}
+          style={{ minWidth: 38, padding: '6px 8px' }}
+        >
+          <span style={{ display: 'inline-block', width: 20, height: Math.max(2, size / 2), borderRadius: 999, background: 'currentColor', verticalAlign: 'middle' }} />
+        </button>
+      ))}
     </div>
   );
 }
@@ -242,11 +305,15 @@ function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (valu
   );
 }
 
-function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, language, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange }: {
+function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, setPenColor, penSize, setPenSize, language, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange }: {
   pageUrl: string;
   initialDrawing?: string;
   tool: Tool;
   setTool: (tool: Tool) => void;
+  penColor: PenColor;
+  setPenColor: (color: PenColor) => void;
+  penSize: number;
+  setPenSize: (size: number) => void;
   language: 'DE' | 'RU';
   desktopControls: boolean;
   desktopZoom: number;
@@ -348,8 +415,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, language, des
     ctx.moveTo(startPoint.x, startPoint.y);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = tool === 'eraser' ? 32 : 5;
-    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = tool === 'eraser' ? Math.max(24, penSize * 5) : penSize;
+    ctx.strokeStyle = penColor;
     ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
   }
 
@@ -434,6 +501,38 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, language, des
         >
           <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')} title={language === 'DE' ? 'Stift' : 'Ручка'}>✎</button>
           <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')} title={language === 'DE' ? 'Radierer' : 'Ластик'}>⌫</button>
+          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
+          {PEN_COLORS.map((color) => (
+            <button
+              key={color.value}
+              type="button"
+              onClick={() => { setPenColor(color.value); setTool('pen'); }}
+              title={language === 'DE' ? color.labelDe : color.labelRu}
+              style={{
+                width: 34,
+                height: 34,
+                alignSelf: 'center',
+                borderRadius: '50%',
+                background: color.value,
+                border: penColor === color.value ? '3px solid #fff' : '2px solid rgba(0,0,0,.18)',
+                boxShadow: penColor === color.value ? '0 0 0 2px #111827' : 'none',
+                padding: 0,
+              }}
+            />
+          ))}
+          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
+          {PEN_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              className={`btn ${penSize === size ? '' : 'btn--secondary'}`}
+              onClick={() => { setPenSize(size); setTool('pen'); }}
+              title={`${language === 'DE' ? 'Breite' : 'Толщина'}: ${size}`}
+              style={{ padding: '6px 7px' }}
+            >
+              <span style={{ display: 'block', width: 20, height: Math.max(2, size / 2), borderRadius: 999, background: 'currentColor', margin: '0 auto' }} />
+            </button>
+          ))}
           <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
           <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)} title={language === 'DE' ? 'Vorherige Seite' : 'Предыдущая страница'}>↑</button>
           <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{pageIndex + 1}/{pageCount}</div>
