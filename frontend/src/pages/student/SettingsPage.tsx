@@ -25,11 +25,30 @@ export function SettingsPage() {
       try {
         const config = await api.push.config();
         setPushConfigured(config.enabled);
+        if (!config.enabled) return;
+
         const registration = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
-        setPushEnabled(Boolean(subscription));
+
+        if (!subscription) {
+          setPushEnabled(false);
+          return;
+        }
+
+        // A browser may still have a local subscription while the backend no longer
+        // has it (for example after a database reset) or while it is bound to an old
+        // account on the same device. Re-register it every time Settings is opened.
+        const json = subscription.toJSON();
+        if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+          setPushEnabled(false);
+          return;
+        }
+        await api.push.subscribe({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+        setPushEnabled(true);
       } catch {
         setPushConfigured(false);
+        setPushEnabled(false);
       }
     }
     loadPushState();
