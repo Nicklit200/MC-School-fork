@@ -58,6 +58,10 @@ public class PushSubscription {
         return new PushSubscription(user, endpoint, p256dh, auth);
     }
 
+    public void reassignTo(User user) {
+        this.user = user;
+    }
+
     public void updateKeys(String p256dh, String auth) {
         this.p256dh = p256dh;
         this.auth = auth;
