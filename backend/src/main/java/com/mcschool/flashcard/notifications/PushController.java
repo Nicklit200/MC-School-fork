@@ -44,6 +44,9 @@ public class PushController {
         User user = userRepository.findById(principal.id()).orElseThrow();
         PushSubscription subscription = subscriptionRepository.findByEndpoint(request.endpoint())
                 .orElseGet(() -> PushSubscription.create(user, request.endpoint(), request.p256dh(), request.auth()));
+        // A browser/device may keep the same push endpoint after another account used it.
+        // Always bind the endpoint to the currently authenticated account.
+        subscription.reassignTo(user);
         subscription.updateKeys(request.p256dh(), request.auth());
         subscriptionRepository.save(subscription);
         return ResponseEntity.noContent().build();
