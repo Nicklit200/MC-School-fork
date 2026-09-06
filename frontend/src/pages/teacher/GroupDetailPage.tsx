@@ -43,6 +43,7 @@ export function GroupDetailPage() {
   const [homeworkDays, setHomeworkDays] = useState(1);
   const [homeworkFiles, setHomeworkFiles] = useState<Array<File | null>>([null]);
   const [creatingHomework, setCreatingHomework] = useState(false);
+  const [deletingHomeworkKey, setDeletingHomeworkKey] = useState<string | null>(null);
   const [homeworkByStudent, setHomeworkByStudent] = useState<HomeworkByStudent>({});
   const [loadingHomeworkStatus, setLoadingHomeworkStatus] = useState(false);
 
@@ -207,6 +208,32 @@ export function GroupDetailPage() {
     }
   }
 
+  async function deleteGroupHomework(row: GroupHomeworkRow) {
+    if (!group || deletingHomeworkKey) return;
+    const homeworks = group.students
+      .map((student) => findHomeworkForRow(homeworkByStudent[student.id] ?? [], row))
+      .filter((homework): homework is Homework => Boolean(homework));
+    if (homeworks.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Удалить «${row.filename}» у всей группы? Домашка исчезнет у ${homeworks.length} учеников. Если кто-то уже сдал её, сданная работа тоже будет удалена.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingHomeworkKey(row.key);
+    setError(null);
+    setMessage(null);
+    try {
+      await Promise.all(homeworks.map((homework) => api.homeworks.remove(homework.id)));
+      setMessage(`Домашка «${row.filename}» удалена у всей группы.`);
+      await loadHomeworkStatuses(group);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setDeletingHomeworkKey(null);
+    }
+  }
+
   async function createCard(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -327,6 +354,7 @@ export function GroupDetailPage() {
                             <span className="muted">Свободно</span>
                           </th>
                         ))}
+                        <th aria-label="Действия" style={{ width: 54 }} />
                       </tr>
                     </thead>
                     <tbody>
@@ -347,6 +375,25 @@ export function GroupDetailPage() {
                               </td>
                             );
                           })}
+                          <td style={{ position: 'relative', textAlign: 'right' }}>
+                            <details style={{ position: 'relative', display: 'inline-block' }}>
+                              <summary
+                                aria-label="Действия с домашкой"
+                                title="Действия"
+                                style={{ cursor: 'pointer', listStyle: 'none', fontSize: 24, lineHeight: 1, padding: '8px 10px', userSelect: 'none' }}
+                              >⋮</summary>
+                              <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, minWidth: 170, padding: 6, background: '#fff', border: '1px solid #eadfd8', borderRadius: 12, boxShadow: '0 10px 30px rgba(15,23,42,.12)' }}>
+                                <button
+                                  type="button"
+                                  disabled={deletingHomeworkKey === row.key}
+                                  onClick={() => void deleteGroupHomework(row)}
+                                  style={{ width: '100%', border: 0, background: 'transparent', color: '#c2410c', fontWeight: 700, textAlign: 'left', padding: '10px 12px', cursor: 'pointer' }}
+                                >
+                                  {deletingHomeworkKey === row.key ? 'Удаляем…' : 'Удалить домашку'}
+                                </button>
+                              </div>
+                            </details>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
