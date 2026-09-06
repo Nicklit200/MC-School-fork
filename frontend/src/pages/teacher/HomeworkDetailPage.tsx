@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
@@ -16,6 +16,9 @@ export function HomeworkDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [openingChatGpt, setOpeningChatGpt] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewUrlRef = useRef<string | null>(null);
 
   const homework = useMemo(
     () => homeworks.find((item) => item.id === homeworkId) ?? null,
@@ -28,12 +31,41 @@ export function HomeworkDetailPage() {
     setLoading(false);
   }, [studentId]);
 
+  const loadWorksheetPreview = useCallback(async () => {
+    setPreviewLoading(true);
+    try {
+      const blob = await api.homeworks.worksheet(homeworkId);
+      const nextUrl = URL.createObjectURL(blob);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = nextUrl;
+      setPreviewUrl(nextUrl);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [homeworkId, t]);
+
   useEffect(() => {
     reload().catch((e) => {
       setError(toErrorMessage(e, t));
       setLoading(false);
     });
   }, [reload, t]);
+
+  useEffect(() => {
+    if (homework?.hasWorksheet) {
+      void loadWorksheetPreview();
+    } else {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+      setPreviewUrl(null);
+    }
+  }, [homework?.hasWorksheet, loadWorksheetPreview]);
+
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
 
   function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
@@ -81,8 +113,8 @@ export function HomeworkDetailPage() {
       downloadBlob(blob, homework.worksheetFilename ?? 'worksheet.pdf');
 
       const instruction = language === 'DE'
-        ? `Bearbeite die angehängte PDF-Hausaufgabe für den Schüler. Ändere nur das, was ich dir im Chat sage. Behalte Seitenformat und Arbeitsblatt-Struktur bei und gib das Ergebnis wieder als PDF zurück.`
-        : `Отредактируй прикреплённую PDF-домашку для ученика. Меняй только то, что я попрошу в чате. Сохрани формат страниц и структуру рабочей тетради и верни результат снова PDF-файлом.`;
+        ? 'Bearbeite die angehängte PDF-Hausaufgabe für den Schüler. Ändere nur das, was ich dir im Chat sage. Behalte Seitenformat und Arbeitsblatt-Struktur bei und gib das Ergebnis wieder als PDF zurück.'
+        : 'Отредактируй прикреплённую PDF-домашку для ученика. Меняй только то, что я попрошу в чате. Сохрани формат страниц и структуру рабочей тетради и верни результат снова PDF-файлом.';
 
       try {
         await navigator.clipboard.writeText(instruction);
@@ -109,9 +141,10 @@ export function HomeworkDetailPage() {
     try {
       await api.homeworks.uploadWorksheet(homeworkId, file);
       await reload();
+      await loadWorksheetPreview();
       setMessage(language === 'DE'
-        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt.'
-        : 'Готово: отредактированный PDF загружен и заменил предыдущий файл.');
+        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Die Vorschau zeigt jetzt die aktuelle Version.'
+        : 'Готово: отредактированный PDF заменил предыдущий файл. Ниже уже показана текущая версия домашки.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -170,6 +203,54 @@ export function HomeworkDetailPage() {
           <p className="muted" style={{ margin: 0 }}>
             {language === 'DE' ? 'Kein PDF hinterlegt.' : 'PDF для этой домашки не загружен.'}
           </p>
+        )}
+
+        {homework?.hasWorksheet && (
+          <div className="panel" style={{ margin: 0, padding: 16 }}>
+            <div className="row" style={{ justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+              <div>
+                <strong>{language === 'DE' ? 'Aktuelle Hausaufgabe' : 'Текущая домашка'}</strong>
+                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                  {language === 'DE'
+                    ? 'Das ist genau die PDF-Version, die der Schüler sieht.'
+                    : 'Это именно та версия PDF, которую сейчас видит ученик.'}
+                </div>
+              </div>
+              <button
+                className="btn btn--secondary"
+                type="button"
+                disabled={!previewUrl || previewLoading}
+                onClick={() => previewUrl && window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+              >
+                {language === 'DE' ? 'Groß öffnen' : 'Открыть на весь экран'}
+              </button>
+            </div>
+
+            {previewLoading && !previewUrl ? (
+              <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
+                {language === 'DE' ? 'PDF wird geladen…' : 'Загружаем PDF…'}
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                key={previewUrl}
+                src={`${previewUrl}#toolbar=1&navpanes=0&view=FitH`}
+                title={language === 'DE' ? 'Hausaufgaben-PDF Vorschau' : 'Просмотр PDF-домашки'}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: 'min(900px, 78vh)',
+                  minHeight: 620,
+                  border: '1px solid var(--border-color, #ddd)',
+                  borderRadius: 12,
+                  background: '#f7f7f7',
+                }}
+              />
+            ) : (
+              <div className="banner banner--info">
+                {language === 'DE' ? 'Die PDF-Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр PDF.'}
+              </div>
+            )}
+          </div>
         )}
 
         {homework?.hasWorksheet && (
