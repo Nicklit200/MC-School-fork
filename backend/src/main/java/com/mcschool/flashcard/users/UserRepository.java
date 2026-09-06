@@ -13,6 +13,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByInvitationToken(String invitationToken);
 
+    Optional<User> findByGoogleCalendarOauthState(String googleCalendarOauthState);
+
     boolean existsByEmail(String email);
 
     boolean existsByUsernameIgnoreCase(String username);
