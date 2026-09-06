@@ -6,6 +6,7 @@ import com.mcschool.flashcard.auth.dto.LoginRequest;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.InvalidInvitationException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
@@ -32,7 +33,9 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(normalizeEmail(request.email()))
+        String identifier = request.email().trim();
+        User user = userRepository.findByEmail(identifier.toLowerCase(Locale.ROOT))
+                .or(() -> userRepository.findByUsernameIgnoreCase(identifier))
                 .orElseThrow(AuthService::invalidCredentials);
         if (user.isArchived()
                 || user.getPasswordHash() == null
@@ -43,8 +46,8 @@ public class AuthService {
     }
 
     /**
-     * Completes an invitation. The invitee confirms/provides their email and sets a password.
-     * For students created without email, this is where the login email is first saved.
+     * Completes an invitation. Students can activate with the school username only;
+     * teachers and parents still require an email address.
      */
     @Transactional
     public AuthResponse activateAccount(ActivateAccountRequest request) {
@@ -56,18 +59,26 @@ public class AuthService {
         if (user.isInvitationExpired(Instant.now())) {
             throw new InvalidInvitationException("Invitation has expired — ask for a new invitation");
         }
-        if (request.email() == null || request.email().isBlank()) {
+
+        boolean hasEmail = request.email() != null && !request.email().isBlank();
+        if (!hasEmail && user.getRole() != Role.STUDENT) {
             throw new InvalidInvitationException("Email is required to activate this account");
         }
 
-        String email = normalizeEmail(request.email());
-        if (user.getEmail() == null || user.getEmail().isBlank()) {
-            if (userRepository.existsByEmail(email)) {
-                throw new ConflictException("An account with this email already exists");
+        if (hasEmail) {
+            String email = normalizeEmail(request.email());
+            if (user.getEmail() == null || user.getEmail().isBlank()) {
+                if (userRepository.existsByEmail(email)) {
+                    throw new ConflictException("An account with this email already exists");
+                }
+                user.assignEmail(email);
+            } else if (!user.getEmail().equalsIgnoreCase(email)) {
+                throw new InvalidInvitationException("Email does not match this invitation");
             }
-            user.assignEmail(email);
-        } else if (!user.getEmail().equalsIgnoreCase(email)) {
-            throw new InvalidInvitationException("Email does not match this invitation");
+        }
+
+        if (user.getRole() == Role.STUDENT && (user.getUsername() == null || user.getUsername().isBlank())) {
+            throw new InvalidInvitationException("Student login is not ready yet — ask the teacher to open the student list once");
         }
 
         user.activate(passwordEncoder.encode(request.password()));
@@ -88,7 +99,7 @@ public class AuthService {
     }
 
     private static BadCredentialsException invalidCredentials() {
-        return new BadCredentialsException("Invalid email or password");
+        return new BadCredentialsException("Invalid login or password");
     }
 
     private static String normalizeEmail(String email) {
