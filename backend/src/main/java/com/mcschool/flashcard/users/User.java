@@ -118,6 +118,13 @@ public class User {
         this.username = username.trim();
     }
 
+    public void changePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("Password hash is required");
+        }
+        this.passwordHash = passwordHash;
+    }
+
     public void linkParent(User parent) {
         if (this.role != Role.STUDENT) {
             throw new IllegalStateException("Only students can have a parent account");
