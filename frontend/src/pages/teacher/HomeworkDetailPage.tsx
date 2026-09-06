@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 /** Teacher view of one PDF homework. Flashcards are managed on separate card pages. */
 export function HomeworkDetailPage() {
@@ -12,6 +13,9 @@ export function HomeworkDetailPage() {
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [openingChatGpt, setOpeningChatGpt] = useState(false);
 
   const homework = useMemo(
     () => homeworks.find((item) => item.id === homeworkId) ?? null,
@@ -31,20 +35,87 @@ export function HomeworkDetailPage() {
     });
   }, [reload, t]);
 
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   async function downloadSubmission() {
     setError(null);
     try {
       const blob = await api.homeworks.submission(homeworkId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${homework?.worksheetFilename?.replace(/\.pdf$/i, '') ?? 'homework'}-submitted.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${homework?.worksheetFilename?.replace(/\.pdf$/i, '') ?? 'homework'}-submitted.pdf`);
     } catch (e) {
       setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function downloadWorksheet() {
+    setError(null);
+    try {
+      const blob = await api.homeworks.worksheet(homeworkId);
+      downloadBlob(blob, homework?.worksheetFilename ?? 'worksheet.pdf');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function editInChatGpt() {
+    if (!homework?.hasWorksheet || openingChatGpt) return;
+    setOpeningChatGpt(true);
+    setError(null);
+    setMessage(null);
+
+    // Open immediately while this is still a direct user click, otherwise browsers may block the new tab.
+    const chatTab = window.open('https://chatgpt.com/', '_blank');
+    if (chatTab) chatTab.opener = null;
+
+    try {
+      const blob = await api.homeworks.worksheet(homeworkId);
+      downloadBlob(blob, homework.worksheetFilename ?? 'worksheet.pdf');
+
+      const instruction = language === 'DE'
+        ? `Bearbeite die angehängte PDF-Hausaufgabe für den Schüler. Ändere nur das, was ich dir im Chat sage. Behalte Seitenformat und Arbeitsblatt-Struktur bei und gib das Ergebnis wieder als PDF zurück.`
+        : `Отредактируй прикреплённую PDF-домашку для ученика. Меняй только то, что я попрошу в чате. Сохрани формат страниц и структуру рабочей тетради и верни результат снова PDF-файлом.`;
+
+      try {
+        await navigator.clipboard.writeText(instruction);
+      } catch {
+        // Clipboard permission may be unavailable. The workflow still works without it.
+      }
+
+      setMessage(language === 'DE'
+        ? 'PDF wurde heruntergeladen und ChatGPT geöffnet. Wähle dort das Schüler-Projekt, hänge die heruntergeladene PDF an und füge die kopierte Anweisung ein. Danach lade die bearbeitete PDF hier wieder hoch.'
+        : 'PDF скачан и ChatGPT открыт. Там выбери проект ученика, прикрепи скачанный PDF и вставь скопированную инструкцию. После редактирования загрузи готовый PDF обратно сюда.');
+    } catch (e) {
+      if (chatTab) chatTab.close();
+      setError(toErrorMessage(e, t));
+    } finally {
+      setOpeningChatGpt(false);
+    }
+  }
+
+  async function replaceWorksheet(file: File | null) {
+    if (!file || !homework || homework.submitted || replacing) return;
+    setReplacing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.homeworks.uploadWorksheet(homeworkId, file);
+      await reload();
+      setMessage(language === 'DE'
+        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt.'
+        : 'Готово: отредактированный PDF загружен и заменил предыдущий файл.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setReplacing(false);
     }
   }
 
@@ -61,6 +132,7 @@ export function HomeworkDetailPage() {
       </p>
 
       {error && <div className="banner banner--error">{error}</div>}
+      {message && <div className="banner banner--success">{message}</div>}
 
       <h1>{homework ? formatHomeworkDate(homework.startDate, language) : t('homeworks.title')}</h1>
 
@@ -98,6 +170,68 @@ export function HomeworkDetailPage() {
           <p className="muted" style={{ margin: 0 }}>
             {language === 'DE' ? 'Kein PDF hinterlegt.' : 'PDF для этой домашки не загружен.'}
           </p>
+        )}
+
+        {homework?.hasWorksheet && (
+          <div className="panel" style={{ margin: 0, padding: 16 }}>
+            <div className="row" style={{ justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 420px' }}>
+                <strong>{language === 'DE' ? 'Mit ChatGPT bearbeiten' : 'Редактировать в ChatGPT'}</strong>
+                <p className="muted" style={{ margin: '6px 0 0' }}>
+                  {language === 'DE'
+                    ? 'Die PDF wird heruntergeladen und ChatGPT wird geöffnet. Dort kannst du das passende Schüler-Projekt wählen und die Datei anhängen.'
+                    : 'PDF скачается, и откроется ChatGPT. Там можно выбрать нужный проект ученика и прикрепить скачанный файл.'}
+                </p>
+              </div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
+                  {language === 'DE' ? 'Original-PDF herunterladen' : 'Скачать исходный PDF'}
+                </button>
+                <button className="btn" type="button" onClick={editInChatGpt} disabled={openingChatGpt}>
+                  {openingChatGpt
+                    ? (language === 'DE' ? 'Öffnen…' : 'Открываем…')
+                    : (language === 'DE' ? 'In ChatGPT bearbeiten' : 'Редактировать в ChatGPT')}
+                </button>
+              </div>
+            </div>
+
+            {!homework.submitted ? (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
+                <strong>{language === 'DE' ? 'Bearbeitete PDF zurückladen' : 'Загрузить отредактированный PDF обратно'}</strong>
+                <p className="muted" style={{ margin: '6px 0 10px' }}>
+                  {language === 'DE'
+                    ? 'Die neue Datei ersetzt die aktuelle Hausaufgaben-PDF für den Schüler.'
+                    : 'Новый файл заменит текущий PDF домашки у ученика.'}
+                </p>
+                <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap' }}>
+                  <label className="field" style={{ flex: '1 1 360px', margin: 0 }}>
+                    <span className="field__label">{language === 'DE' ? 'Bearbeitete PDF vom Computer' : 'Отредактированный PDF с компьютера'}</span>
+                    <input
+                      className="input"
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      disabled={replacing}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        void replaceWorksheet(file);
+                        event.currentTarget.value = '';
+                      }}
+                    />
+                  </label>
+                  <div style={{ paddingBottom: 1 }}>
+                    <GoogleDrivePdfPicker disabled={replacing} onSelect={(file) => void replaceWorksheet(file)} />
+                  </div>
+                </div>
+                {replacing && <div className="muted" style={{ marginTop: 8 }}>{language === 'DE' ? 'PDF wird ersetzt…' : 'Заменяем PDF…'}</div>}
+              </div>
+            ) : (
+              <div className="banner banner--info" style={{ marginTop: 16 }}>
+                {language === 'DE'
+                  ? 'Diese Hausaufgabe wurde bereits abgegeben. Die Aufgaben-PDF kann hier nicht mehr ersetzt werden, damit die Abgabehistorie erhalten bleibt.'
+                  : 'Эта домашка уже сдана. Замену исходного PDF здесь отключили, чтобы не ломать историю выполненной работы.'}
+              </div>
+            )}
+          </div>
         )}
 
         {homework?.submitted ? (
