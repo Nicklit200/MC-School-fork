@@ -15,6 +15,7 @@ import { TeacherCardsDetailPage } from './pages/teacher/TeacherCardsDetailPage';
 import { GroupsPage } from './pages/teacher/GroupsPage';
 import { GroupDetailWithHomeworkLinks } from './pages/teacher/GroupDetailWithHomeworkLinks';
 import { GroupHomeworkDetailPage } from './pages/teacher/GroupHomeworkDetailPage';
+import { GroupCardsDetailPage } from './pages/teacher/GroupCardsDetailPage';
 import { TodayPage } from './pages/student/TodayPage';
 import { SessionPage } from './pages/student/SessionPage';
 import { ResultPage } from './pages/student/ResultPage';
@@ -45,6 +46,7 @@ export function App() {
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailWithHomeworkLinks /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><GroupHomeworkDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/groups/:groupId/cards/:startDate" element={<ProtectedRoute role="TEACHER"><Layout><GroupCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/settings" element={<ProtectedRoute role="TEACHER"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="/today" element={<ProtectedRoute role="STUDENT"><Layout><TodayPage /></Layout></ProtectedRoute>} />
