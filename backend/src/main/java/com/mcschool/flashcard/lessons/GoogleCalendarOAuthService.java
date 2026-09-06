@@ -36,9 +36,9 @@ public class GoogleCalendarOAuthService {
 
     public GoogleCalendarOAuthService(UserRepository userRepository,
                                       ObjectMapper objectMapper,
-                                      @Value("${app.google-calendar.oauth.client-id:}") String clientId,
-                                      @Value("${app.google-calendar.oauth.client-secret:}") String clientSecret,
-                                      @Value("${app.google-calendar.oauth.redirect-uri:}") String redirectUri,
+                                      @Value("${GOOGLE_CALENDAR_OAUTH_CLIENT_ID:}") String clientId,
+                                      @Value("${GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET:}") String clientSecret,
+                                      @Value("${GOOGLE_CALENDAR_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/google-calendar/oauth/callback}") String redirectUri,
                                       @Value("${app.frontend.base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
@@ -62,12 +62,8 @@ public class GoogleCalendarOAuthService {
 
     @Transactional
     public String handleCallback(String state, String code, String error) {
-        if (error != null && !error.isBlank()) {
-            return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
-        }
-        if (state == null || state.isBlank() || code == null || code.isBlank()) {
-            return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
-        }
+        if (error != null && !error.isBlank()) return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
+        if (state == null || state.isBlank() || code == null || code.isBlank()) return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
 
         User teacher = userRepository.findByGoogleCalendarOauthState(state).orElse(null);
         if (teacher == null || !teacher.isGoogleCalendarOauthStateValid(state, Instant.now())) {
@@ -77,9 +73,7 @@ public class GoogleCalendarOAuthService {
         ensureConfigured();
         Map<String, Object> token = exchangeCode(code);
         String refreshToken = stringValue(token.get("refresh_token"));
-        if (refreshToken.isBlank()) {
-            return frontendBaseUrl + "/teacher/lessons?googleCalendar=missing_refresh_token";
-        }
+        if (refreshToken.isBlank()) return frontendBaseUrl + "/teacher/lessons?googleCalendar=missing_refresh_token";
         teacher.connectGoogleCalendar(refreshToken);
         return frontendBaseUrl + "/teacher/lessons?googleCalendar=connected";
     }
