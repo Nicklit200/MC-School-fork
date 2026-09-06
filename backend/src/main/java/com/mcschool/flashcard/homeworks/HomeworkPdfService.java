@@ -82,6 +82,21 @@ public class HomeworkPdfService {
     }
 
     @Transactional(readOnly = true)
+    public byte[] teacherWorksheet(AuthenticatedUser teacher, UUID homeworkId) {
+        Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
+        ensureWorksheet(homework);
+        return homework.getWorksheetPdf();
+    }
+
+    @Transactional(readOnly = true)
+    public String worksheetFilename(AuthenticatedUser teacher, UUID homeworkId) {
+        Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
+        ensureWorksheet(homework);
+        String filename = homework.getWorksheetFilename();
+        return filename == null || filename.isBlank() ? "worksheet.pdf" : filename;
+    }
+
+    @Transactional(readOnly = true)
     public byte[] renderStudentPage(AuthenticatedUser student, UUID homeworkId, int pageIndex) {
         Homework homework = requireStudentHomework(student.id(), homeworkId);
         ensureWorksheet(homework);
