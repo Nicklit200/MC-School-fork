@@ -52,7 +52,6 @@ public class HomeworkController {
         return homeworkService.createHomework(caller, studentId, request);
     }
 
-    /** Always creates a NEW homework row and attaches the selected PDF to it. */
     @PostMapping(value = "/students/{studentId}/homeworks/pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('TEACHER')")
@@ -128,6 +127,16 @@ public class HomeworkController {
                            @PathVariable UUID homeworkId,
                            @RequestParam("file") MultipartFile file) {
         homeworkPdfService.submitFile(caller, homeworkId, file);
+        homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
+    }
+
+    @PostMapping(value = "/study/homeworks/{homeworkId}/submit-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('STUDENT')")
+    public void submitFiles(@AuthenticationPrincipal AuthenticatedUser caller,
+                            @PathVariable UUID homeworkId,
+                            @RequestParam("files") List<MultipartFile> files) {
+        homeworkPdfService.submitFiles(caller, homeworkId, files);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
 
