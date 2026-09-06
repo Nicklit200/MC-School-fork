@@ -43,7 +43,6 @@ public class GoogleCalendarLessonService {
         if (accessToken == null || accessToken.isBlank()) return List.of();
 
         List<StudentGroup> groups = groupRepository.findAllByTeacherIdOrderByNameAsc(teacher.id());
-        if (groups.isEmpty()) return List.of();
 
         Instant now = Instant.now();
         String url = CALENDAR_API + "/calendars/primary/events"
@@ -64,7 +63,6 @@ public class GoogleCalendarLessonService {
             Map<String, Object> event = asMap(rawMap);
             String title = stringValue(event.get("summary"));
             StudentGroup group = matchGroup(groups, title);
-            if (group == null) continue;
 
             Instant startsAt = eventInstant(event.get("start"));
             Instant endsAt = eventInstant(event.get("end"));
@@ -72,12 +70,13 @@ public class GoogleCalendarLessonService {
 
             String meetUrl = stringValue(event.get("hangoutLink"));
             if (meetUrl.isBlank()) meetUrl = conferenceMeetUrl(event.get("conferenceData"));
+            String displayTitle = title.isBlank() ? "Google Calendar" : title;
 
             result.add(new GroupLessonResponse(
                     stringValue(event.get("id")),
-                    group.getId(),
-                    group.getName(),
-                    title.isBlank() ? group.getName() : title,
+                    group == null ? null : group.getId(),
+                    group == null ? null : group.getName(),
+                    displayTitle,
                     startsAt,
                     endsAt,
                     meetUrl.isBlank() ? null : meetUrl,
@@ -103,7 +102,7 @@ public class GoogleCalendarLessonService {
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+        return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]+", " ").trim();
     }
 
     private Instant eventInstant(Object value) {
