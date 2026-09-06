@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
@@ -8,6 +8,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { language, t } = useI18n();
   const navigate = useNavigate();
+  const [teacherMenuOpen, setTeacherMenuOpen] = useState(true);
 
   const isStudent = user?.role === 'STUDENT';
   const isTeacher = user?.role === 'TEACHER';
@@ -28,36 +29,46 @@ export function Layout({ children }: { children: ReactNode }) {
     ];
 
     return (
-      <div className="app teacher-shell" data-variant="staff">
-        <aside className="teacher-sidebar">
-          <div className="teacher-brand">
-            <div className="teacher-brand__mark">M</div>
-            <div className="teacher-brand__text"><span>MindCrafti</span> School</div>
-          </div>
-
-          <nav className="teacher-sidebar__nav">
-            {teacherLinks.map((link, index) => link.disabled ? (
-              <div key={`${link.label}-${index}`} className="teacher-nav-item teacher-nav-item--disabled" title="Раздел появится позже">
-                <span>{link.label}</span>
-              </div>
-            ) : (
-              <NavLink key={link.to} to={link.to} end={link.end} className="teacher-nav-item">
-                <span>{link.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="teacher-help">
-            <div>
-              <strong>Нужна помощь?</strong>
-              <span>Свяжитесь с поддержкой</span>
+      <div className={`app teacher-shell${teacherMenuOpen ? '' : ' teacher-shell--menu-closed'}`} data-variant="staff">
+        {teacherMenuOpen && (
+          <aside className="teacher-sidebar">
+            <div className="teacher-brand">
+              <div className="teacher-brand__mark">M</div>
+              <div className="teacher-brand__text"><span>MindCrafti</span> School</div>
             </div>
-          </div>
-        </aside>
+
+            <nav className="teacher-sidebar__nav">
+              {teacherLinks.map((link, index) => link.disabled ? (
+                <div key={`${link.label}-${index}`} className="teacher-nav-item teacher-nav-item--disabled" title="Раздел появится позже">
+                  <span>{link.label}</span>
+                </div>
+              ) : (
+                <NavLink key={link.to} to={link.to} end={link.end} className="teacher-nav-item">
+                  <span>{link.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+
+            <div className="teacher-help">
+              <div>
+                <strong>Нужна помощь?</strong>
+                <span>Свяжитесь с поддержкой</span>
+              </div>
+            </div>
+          </aside>
+        )}
 
         <section className="teacher-workspace">
           <header className="teacher-topbar">
-            <div />
+            <button
+              type="button"
+              className="teacher-menu-toggle"
+              aria-expanded={teacherMenuOpen}
+              aria-label={teacherMenuOpen ? 'Скрыть меню' : 'Показать меню'}
+              onClick={() => setTeacherMenuOpen((current) => !current)}
+            >
+              {teacherMenuOpen ? 'Скрыть меню' : 'Меню'}
+            </button>
             <div className="teacher-topbar__right">
               <div className="teacher-profile">
                 <div className="teacher-profile__avatar">{initials(user.fullName)}</div>
