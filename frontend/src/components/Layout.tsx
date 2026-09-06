@@ -15,16 +15,16 @@ export function Layout({ children }: { children: ReactNode }) {
 
   if (isTeacher) {
     const teacherLinks = [
-      { to: '/students', label: 'Мои ученики', icon: '◉', end: true },
-      { to: '/groups', label: 'Мои группы', icon: '◎' },
-      { to: '/teacher/settings', label: 'Настройки', icon: '⚙' },
-      { to: '/students', label: 'Уроки', icon: '⌘', disabled: true },
-      { to: '/students', label: 'Домашние задания', icon: '▣', disabled: true },
-      { to: '/students', label: 'Материалы', icon: '▤', disabled: true },
-      { to: '/students', label: 'Карточки', icon: '⌁', disabled: true },
-      { to: '/students', label: 'Прогресс', icon: '⌁', disabled: true },
-      { to: '/students', label: 'Сообщения', icon: '✉', disabled: true },
-      { to: '/students', label: 'Уведомления', icon: '♧', disabled: true },
+      { to: '/students', label: 'Мои ученики', end: true },
+      { to: '/groups', label: 'Мои группы' },
+      { to: '/teacher/settings', label: 'Настройки' },
+      { to: '/students', label: 'Уроки', disabled: true },
+      { to: '/students', label: 'Домашние задания', disabled: true },
+      { to: '/students', label: 'Материалы', disabled: true },
+      { to: '/students', label: 'Карточки', disabled: true },
+      { to: '/students', label: 'Прогресс', disabled: true },
+      { to: '/students', label: 'Сообщения', disabled: true },
+      { to: '/students', label: 'Уведомления', disabled: true },
     ];
 
     return (
@@ -38,19 +38,16 @@ export function Layout({ children }: { children: ReactNode }) {
           <nav className="teacher-sidebar__nav">
             {teacherLinks.map((link, index) => link.disabled ? (
               <div key={`${link.label}-${index}`} className="teacher-nav-item teacher-nav-item--disabled" title="Раздел появится позже">
-                <span className="teacher-nav-item__icon">{link.icon}</span>
                 <span>{link.label}</span>
               </div>
             ) : (
               <NavLink key={link.to} to={link.to} end={link.end} className="teacher-nav-item">
-                <span className="teacher-nav-item__icon">{link.icon}</span>
                 <span>{link.label}</span>
               </NavLink>
             ))}
           </nav>
 
           <div className="teacher-help">
-            <div className="teacher-help__icon">◌</div>
             <div>
               <strong>Нужна помощь?</strong>
               <span>Свяжитесь с поддержкой</span>
