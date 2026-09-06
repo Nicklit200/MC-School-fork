@@ -127,6 +127,11 @@ export function GroupDetailPage() {
     return groupHomeworkRows.filter((row) => row.startDate >= today).length;
   }, [groupHomeworkRows]);
 
+  const studentSlots = useMemo(() => {
+    const students = group?.students ?? [];
+    return Array.from({ length: Math.max(4, students.length) }, (_, index) => students[index] ?? null);
+  }, [group]);
+
   if (!groupId) return <div className="banner banner--error">Группа не найдена</div>;
 
   function goBack() {
@@ -311,10 +316,15 @@ export function GroupDetailPage() {
                       <tr>
                         <th>Название задания</th>
                         <th>Дата задания</th>
-                        {group.students.map((student) => (
+                        {studentSlots.map((student, index) => student ? (
                           <th key={student.id}>
                             <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
                             <span>{student.fullName}</span>
+                          </th>
+                        ) : (
+                          <th key={`empty-homework-slot-${index}`}>
+                            <span className="group-table-avatar" style={{ opacity: 0.45 }}>+</span>
+                            <span className="muted">Свободно</span>
                           </th>
                         ))}
                       </tr>
@@ -324,7 +334,8 @@ export function GroupDetailPage() {
                         <tr key={row.key}>
                           <td><span className="group-pdf-icon">PDF</span><span>{row.filename}</span></td>
                           <td>{formatDate(row.startDate)}</td>
-                          {group.students.map((student) => {
+                          {studentSlots.map((student, index) => {
+                            if (!student) return <td key={`empty-homework-status-${index}`}><span className="muted">—</span></td>;
                             const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
                             return (
                               <td key={student.id}>
@@ -363,10 +374,15 @@ export function GroupDetailPage() {
                       <tr>
                         <th>Название набора</th>
                         <th>Дата задания</th>
-                        {group.students.map((student) => (
+                        {studentSlots.map((student, index) => student ? (
                           <th key={student.id}>
                             <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
                             <span>{student.fullName}</span>
+                          </th>
+                        ) : (
+                          <th key={`empty-card-slot-${index}`}>
+                            <span className="group-table-avatar" style={{ opacity: 0.45 }}>+</span>
+                            <span className="muted">Свободно</span>
                           </th>
                         ))}
                       </tr>
@@ -376,7 +392,8 @@ export function GroupDetailPage() {
                         <tr key={row.key}>
                           <td><span className="group-card-set-icon">▥</span><span>Карточки · {row.totalCards} шт.</span></td>
                           <td>{formatDate(row.startDate)}</td>
-                          {group.students.map((student) => {
+                          {studentSlots.map((student, index) => {
+                            if (!student) return <td key={`empty-card-status-${index}`}><span className="muted">—</span></td>;
                             const homework = findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
                             const completed = homework?.status === 'COMPLETED';
                             return (
