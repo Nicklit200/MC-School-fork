@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Homework } from '../../api/types';
+import type { Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
@@ -10,12 +10,15 @@ import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 export function HomeworkDetailPage() {
   const { studentId = '', homeworkId = '' } = useParams();
   const { language, t } = useI18n();
+  const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [openingChatGpt, setOpeningChatGpt] = useState(false);
+  const [savingProjectUrl, setSavingProjectUrl] = useState(false);
+  const [projectUrlInput, setProjectUrlInput] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewUrlsRef = useRef<string[]>([]);
@@ -26,10 +29,18 @@ export function HomeworkDetailPage() {
   );
 
   const reload = useCallback(async () => {
-    const homeworkList = await api.homeworks.listForStudent(studentId);
+    const [homeworkList, studentPayload] = await Promise.all([
+      api.homeworks.listForStudent(studentId),
+      api.students.get(studentId),
+    ]);
     setHomeworks(homeworkList);
+    setStudent(studentPayload);
     setLoading(false);
   }, [studentId]);
+
+  useEffect(() => {
+    setProjectUrlInput(student?.chatGptProjectUrl ?? '');
+  }, [student?.chatGptProjectUrl]);
 
   const clearPreviewUrls = useCallback(() => {
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -104,13 +115,34 @@ export function HomeworkDetailPage() {
     }
   }
 
+  async function saveProjectUrl() {
+    if (savingProjectUrl) return;
+    setSavingProjectUrl(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await api.students.updateChatGptProjectUrl(studentId, projectUrlInput.trim());
+      setStudent(updated);
+      setMessage(language === 'DE'
+        ? 'ChatGPT-Projektlink wurde gespeichert.'
+        : updated.chatGptProjectUrl
+          ? 'Ссылка на проект ChatGPT сохранена. Теперь кнопка будет открывать этот проект.'
+          : 'Ссылка на проект ChatGPT удалена.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setSavingProjectUrl(false);
+    }
+  }
+
   async function editInChatGpt() {
     if (!homework?.hasWorksheet || openingChatGpt) return;
     setOpeningChatGpt(true);
     setError(null);
     setMessage(null);
 
-    const chatTab = window.open('https://chatgpt.com/', '_blank');
+    const chatUrl = student?.chatGptProjectUrl?.trim() || 'https://chatgpt.com/';
+    const chatTab = window.open(chatUrl, '_blank');
     if (chatTab) chatTab.opener = null;
 
     try {
@@ -128,8 +160,12 @@ export function HomeworkDetailPage() {
       }
 
       setMessage(language === 'DE'
-        ? 'PDF wurde heruntergeladen und ChatGPT geöffnet. Wähle dort das Schüler-Projekt, hänge die heruntergeladene PDF an und füge die kopierte Anweisung ein. Danach lade die bearbeitete PDF hier wieder hoch.'
-        : 'PDF скачан и ChatGPT открыт. Там выбери проект ученика, прикрепи скачанный PDF и вставь скопированную инструкцию. После редактирования загрузи готовый PDF обратно сюда.');
+        ? student?.chatGptProjectUrl
+          ? 'PDF wurde heruntergeladen und das gespeicherte ChatGPT-Projekt geöffnet. Hänge die Datei dort an und füge die kopierte Anweisung ein.'
+          : 'PDF wurde heruntergeladen und ChatGPT geöffnet. Speichere oben den Projektlink, damit künftig direkt das richtige Projekt geöffnet wird.'
+        : student?.chatGptProjectUrl
+          ? 'PDF скачан и открыт сохранённый проект ChatGPT этого ученика. Прикрепи файл и вставь скопированную инструкцию.'
+          : 'PDF скачан и открыт ChatGPT. Сохрани выше ссылку на проект ученика, чтобы дальше открывался сразу правильный проект.');
     } catch (e) {
       if (chatTab) chatTab.close();
       setError(toErrorMessage(e, t));
@@ -255,13 +291,49 @@ export function HomeworkDetailPage() {
             )}
 
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
+              <strong>{language === 'DE' ? 'ChatGPT-Projekt des Schülers' : 'Проект ChatGPT ученика'}</strong>
+              <p className="muted" style={{ margin: '6px 0 10px' }}>
+                {language === 'DE'
+                  ? 'Füge einmal den Link zum ChatGPT-Projekt dieses Schülers ein. Du kannst ihn jederzeit ändern.'
+                  : 'Один раз вставь ссылку на проект ChatGPT этого ученика. Потом её можно изменить в любой момент.'}
+              </p>
+              <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  className="input"
+                  type="url"
+                  value={projectUrlInput}
+                  placeholder="https://chatgpt.com/..."
+                  onChange={(event) => setProjectUrlInput(event.target.value)}
+                  disabled={savingProjectUrl}
+                  style={{ flex: '1 1 480px' }}
+                />
+                <button className="btn btn--secondary" type="button" onClick={saveProjectUrl} disabled={savingProjectUrl}>
+                  {savingProjectUrl
+                    ? (language === 'DE' ? 'Speichern…' : 'Сохраняем…')
+                    : student?.chatGptProjectUrl
+                      ? (language === 'DE' ? 'Link ändern' : 'Изменить ссылку')
+                      : (language === 'DE' ? 'Link speichern' : 'Сохранить ссылку')}
+                </button>
+              </div>
+              {student?.chatGptProjectUrl && (
+                <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                  {language === 'DE' ? '✓ Projekt ist mit diesem Schüler verknüpft.' : '✓ Проект привязан к этому ученику.'}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
               <div className="row" style={{ justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 420px' }}>
                   <strong>{language === 'DE' ? 'Mit ChatGPT bearbeiten' : 'Редактировать в ChatGPT'}</strong>
                   <p className="muted" style={{ margin: '6px 0 0' }}>
                     {language === 'DE'
-                      ? 'Die PDF wird heruntergeladen und ChatGPT wird geöffnet. Dort kannst du das passende Schüler-Projekt wählen und die Datei anhängen.'
-                      : 'PDF скачается, и откроется ChatGPT. Там можно выбрать нужный проект ученика и прикрепить скачанный файл.'}
+                      ? student?.chatGptProjectUrl
+                        ? 'Die PDF wird heruntergeladen und direkt das gespeicherte Projekt dieses Schülers geöffnet.'
+                        : 'Die PDF wird heruntergeladen und ChatGPT geöffnet. Speichere oben einen Projektlink für direkten Zugriff.'
+                      : student?.chatGptProjectUrl
+                        ? 'PDF скачается, и сразу откроется сохранённый проект этого ученика.'
+                        : 'PDF скачается, и откроется ChatGPT. Сохрани выше ссылку, чтобы сразу открывался нужный проект.'}
                   </p>
                 </div>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
