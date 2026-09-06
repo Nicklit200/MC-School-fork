@@ -16,6 +16,7 @@ import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentTranscriptDriveFolderRequest;
 import com.mcschool.flashcard.users.dto.ChangePasswordRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
@@ -115,6 +116,13 @@ public class StudentController {
         return studentService.updateGoogleDriveHomeworkFolder(caller, studentId, request);
     }
 
+    @PutMapping("/{studentId}/transcript-drive-folder")
+    public StudentListResponse updateTranscriptDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                           @PathVariable UUID studentId,
+                                                           @RequestBody UpdateStudentTranscriptDriveFolderRequest request) {
+        return studentService.updateGoogleDriveTranscriptFolder(caller, studentId, request);
+    }
+
     @PostMapping("/{studentId}/drive-folder/test")
     public Map<String, String> testDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
                                                @PathVariable UUID studentId) {
@@ -132,6 +140,17 @@ public class StudentController {
         StudentListResponse student = studentService.getStudent(caller, studentId);
         try {
             return googleDriveTestService.testFolder(student.googleDriveHomeworkFolderId());
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return Map.of("status", "error", "message", safeDriveTestMessage(ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/{studentId}/transcript-drive-folder/test")
+    public Map<String, String> testTranscriptDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                         @PathVariable UUID studentId) {
+        StudentListResponse student = studentService.getStudent(caller, studentId);
+        try {
+            return googleDriveTestService.testFolder(student.googleDriveTranscriptFolderId());
         } catch (IllegalArgumentException | IllegalStateException ex) {
             return Map.of("status", "error", "message", safeDriveTestMessage(ex.getMessage()));
         }
