@@ -53,6 +53,12 @@ export interface GoogleCalendarConnection {
   authorizationUrl: string | null;
 }
 
+export interface GoogleMeetEventStatus {
+  configured: boolean;
+  subscribed: boolean;
+  lastLeftAt: string | null;
+}
+
 export interface AuthResponse {
   accessToken: string;
   tokenType: string;
