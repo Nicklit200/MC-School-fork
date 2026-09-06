@@ -173,10 +173,17 @@ export function StudentsPage() {
               <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="example@email.com" />
             </label>
           </div>
-          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Ohne E-Mail wird trotzdem ein Einladungslink erstellt.' : 'Если email не указан, ученик сможет создать его при активации.'}</p>
+          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Für jeden Schüler wird automatisch ein eigener Schul-Login erstellt.' : 'Для каждого ученика автоматически создаётся отдельный школьный логин.'}</p>
           <button className="btn teacher-primary-btn" type="submit">{language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
         </form>
-        {invitation && <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />}
+        {invitation && (
+          <div className="stack">
+            <div className="banner banner--success">
+              {language === 'DE' ? 'Schüler-Login' : 'Логин ученика'}: <strong>{invitation.student.username}</strong>
+            </div>
+            <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />
+          </div>
+        )}
       </section>
 
       {loading ? <p className="muted">{t('common.loading')}</p> : students.length === 0 ? (
@@ -190,7 +197,8 @@ export function StudentsPage() {
                 <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>{studentInitial(student.fullName)}</div>
                 <div className="teacher-student-main">
                   <div className="teacher-student-name">{student.fullName}</div>
-                  <div className="teacher-student-email">{student.email ?? (language === 'DE' ? 'E-Mail noch nicht angegeben' : 'Email не указан')}</div>
+                  <div className="teacher-student-email">{language === 'DE' ? 'Login' : 'Логин'}: <strong>{student.username ?? '—'}</strong></div>
+                  <div className="teacher-student-email">{student.email ?? (language === 'DE' ? 'E-Mail nicht erforderlich' : 'Email не требуется')}</div>
                   <div className="teacher-student-meta">
                     {student.parentFullName
                       ? `${language === 'DE' ? 'Elternteil' : 'Родитель'}: ${student.parentFullName}`
