@@ -30,6 +30,7 @@ type ScheduleDay = {
 
 const STARTED_LESSON_KEY = 'mindcrafti.startedGroupLesson';
 const STARTED_LESSON_AT_KEY = 'mindcrafti.startedGroupLessonOpenedAt';
+const SONIOX_NOTIFICATION_PREFIX = 'mindcrafti.sonioxStopNotification.';
 
 export function GroupLessonsPage() {
   const { language, t } = useI18n();
@@ -91,12 +92,17 @@ export function GroupLessonsPage() {
     const openedAt = Number(localStorage.getItem(STARTED_LESSON_AT_KEY) ?? 0);
     const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
 
+    const triggerStopReminder = () => {
+      setFinishReminderLessonId(startedLessonId);
+      void showSonioxBrowserNotification(startedLessonId, openedAt, startedLesson?.title ?? 'Google Meet', language);
+    };
+
     const check = async () => {
       try {
         const status = await api.lessons.googleMeetEventStatus();
         const leftAt = status.lastLeftAt ? new Date(status.lastLeftAt).getTime() : 0;
         if (openedAt > 0 && leftAt >= openedAt) {
-          setFinishReminderLessonId(startedLessonId);
+          triggerStopReminder();
           return;
         }
       } catch {
@@ -104,14 +110,14 @@ export function GroupLessonsPage() {
       }
 
       if (startedLesson && Date.now() >= new Date(startedLesson.endsAt).getTime()) {
-        setFinishReminderLessonId(startedLessonId);
+        triggerStopReminder();
       }
     };
 
     void check();
-    const timer = window.setInterval(() => void check(), 2500);
+    const timer = window.setInterval(() => void check(), 1800);
     return () => window.clearInterval(timer);
-  }, [startedLessonId, lessons]);
+  }, [startedLessonId, lessons, language]);
 
   const scheduleDays = useMemo<ScheduleDay[]>(() => {
     const start = startOfLocalDay(new Date());
@@ -149,11 +155,13 @@ export function GroupLessonsPage() {
     }
   }
 
-  function requestStartLesson(lesson: GroupLesson) {
+  async function requestStartLesson(lesson: GroupLesson) {
     if (!lesson.meetUrl) {
       window.alert(language === 'DE' ? 'Kein Google Meet für diesen Termin.' : 'У этого события нет ссылки Google Meet.');
       return;
     }
+
+    await prepareBrowserNotifications();
     setStartReminderLessonId(lesson.eventId);
   }
 
@@ -168,6 +176,7 @@ export function GroupLessonsPage() {
     const openedAt = Date.now();
     localStorage.setItem(STARTED_LESSON_KEY, lesson.eventId);
     localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
+    localStorage.removeItem(`${SONIOX_NOTIFICATION_PREFIX}${lesson.eventId}`);
     setStartedLessonId(lesson.eventId);
     setFinishedLessonId(null);
     setFinishReminderLessonId(null);
@@ -182,6 +191,7 @@ export function GroupLessonsPage() {
     setFinishReminderLessonId(null);
     localStorage.removeItem(STARTED_LESSON_KEY);
     localStorage.removeItem(STARTED_LESSON_AT_KEY);
+    void closeSonioxBrowserNotification(lesson.eventId);
   }
 
   if (loading) return <p className="muted">{t('common.loading')}</p>;
@@ -240,7 +250,7 @@ export function GroupLessonsPage() {
                             <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
 
                             <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-                              <button className="btn" type="button" onClick={() => requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>
+                              <button className="btn" type="button" onClick={() => void requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>
                               {linked && <button className="btn btn--secondary" type="button" onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)} style={{ width: '100%' }}>{expanded ? (language === 'DE' ? 'Details schließen' : 'Скрыть детали') : (language === 'DE' ? 'Vorbereitung' : 'Подготовка')}</button>}
                               {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer" style={{ width: '100%', textAlign: 'center' }}>Google Calendar</a>}
                             </div>
@@ -305,6 +315,63 @@ export function GroupLessonsPage() {
       )}
     </div>
   );
+}
+
+async function prepareBrowserNotifications() {
+  if (!('Notification' in window)) return;
+  try {
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+    }
+    if (Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+  } catch {
+    // The lesson flow must continue even if browser notifications are unavailable.
+  }
+}
+
+async function showSonioxBrowserNotification(lessonId: string, openedAt: number, title: string, language: 'DE' | 'RU') {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const storageKey = `${SONIOX_NOTIFICATION_PREFIX}${lessonId}`;
+  const marker = String(openedAt);
+  if (localStorage.getItem(storageKey) === marker) return;
+  localStorage.setItem(storageKey, marker);
+
+  const notificationTitle = language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox';
+  const body = language === 'DE'
+    ? `${title}: Du hast Google Meet verlassen. Stoppe jetzt die Soniox-Aufnahme.`
+    : `${title}: ты вышел из Google Meet. Останови запись Soniox.`;
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(notificationTitle, {
+        body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: `soniox-stop-${lessonId}`,
+        requireInteraction: true,
+        data: { url: '/teacher/lessons' },
+      });
+      return;
+    }
+    new Notification(notificationTitle, { body, requireInteraction: true, tag: `soniox-stop-${lessonId}` });
+  } catch {
+    // The Mindcrafti modal remains as a fallback.
+  }
+}
+
+async function closeSonioxBrowserNotification(lessonId: string) {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const registration = await navigator.serviceWorker.ready;
+    const notifications = await registration.getNotifications({ tag: `soniox-stop-${lessonId}` });
+    notifications.forEach((notification) => notification.close());
+  } catch {
+    // No-op.
+  }
 }
 
 function TranscriptUpload({ groupId, language }: { groupId: string; language: 'DE' | 'RU' }) {
