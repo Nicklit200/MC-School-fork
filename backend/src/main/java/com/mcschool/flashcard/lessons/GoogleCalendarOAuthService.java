@@ -25,6 +25,8 @@ public class GoogleCalendarOAuthService {
     private static final String AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
     private static final String TOKEN_URL = "https://oauth2.googleapis.com/token";
     private static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+    private static final String MEET_SCOPE = "https://www.googleapis.com/auth/meetings.space.readonly";
+    private static final String PROFILE_SCOPE = "https://www.googleapis.com/auth/userinfo.profile";
 
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
@@ -96,11 +98,12 @@ public class GoogleCalendarOAuthService {
     }
 
     private String authorizationUrl(String state) {
+        String scopes = String.join(" ", CALENDAR_SCOPE, MEET_SCOPE, PROFILE_SCOPE);
         return AUTH_URL
                 + "?client_id=" + enc(clientId)
                 + "&redirect_uri=" + enc(redirectUri)
                 + "&response_type=code"
-                + "&scope=" + enc(CALENDAR_SCOPE)
+                + "&scope=" + enc(scopes)
                 + "&access_type=offline"
                 + "&prompt=consent"
                 + "&include_granted_scopes=true"
