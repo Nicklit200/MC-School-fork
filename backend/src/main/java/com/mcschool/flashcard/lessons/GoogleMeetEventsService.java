@@ -5,11 +5,9 @@ import com.mcschool.flashcard.lessons.dto.GoogleMeetEventStatusResponse;
 import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
 import com.mcschool.flashcard.notifications.WebPushService;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
@@ -82,6 +80,14 @@ public class GoogleMeetEventsService {
         String accessToken = oauthService.accessTokenForTeacher(teacherId);
         if (accessToken == null || accessToken.isBlank()) return status(caller);
 
+        if (existing != null && existing.getWorkspaceSubscriptionName() != null) {
+            try {
+                deleteSubscription(existing.getWorkspaceSubscriptionName(), accessToken);
+            } catch (RuntimeException ignored) {
+                // An already expired/deleted subscription can safely be replaced below.
+            }
+        }
+
         String googleUserId = currentGoogleUserId(accessToken);
         Map<String, Object> requestBody = Map.of(
                 "targetResource", "//cloudidentity.googleapis.com/users/" + googleUserId,
@@ -122,31 +128,22 @@ public class GoogleMeetEventsService {
 
         Object rawMessage = envelope.get("message");
         if (!(rawMessage instanceof Map<?, ?> message)) return;
-        String encoded = stringValue(message.get("data"));
-        if (encoded.isBlank()) return;
+        Object rawAttributes = message.get("attributes");
+        if (!(rawAttributes instanceof Map<?, ?> attributes)) return;
 
-        Map<String, Object> event;
-        try {
-            byte[] decoded = Base64.getDecoder().decode(encoded);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> parsed = (Map<String, Object>) objectMapper.readValue(decoded, Map.class);
-            event = parsed;
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid Google Meet event payload", ex);
-        }
-
-        String eventType = stringValue(event.get("type"));
-        String source = stringValue(event.get("source"));
-        String subscriptionName = extractSubscriptionName(source, envelope);
+        String eventType = stringValue(attributes.get("ce-type"));
+        String source = stringValue(attributes.get("ce-source"));
+        Instant eventTime = parseInstant(attributes.get("ce-time"));
+        String subscriptionName = extractWorkspaceSubscriptionName(source);
         if (subscriptionName == null) return;
 
         GoogleMeetTeacherEventState state = stateRepository.findByWorkspaceSubscriptionName(subscriptionName).orElse(null);
         if (state == null) return;
 
-        Instant eventTime = parseInstant(event.get("time"));
+        Map<String, Object> eventData = decodeEventData(message.get("data"));
         boolean teacherLeft = eventType.endsWith("conference.v2.ended");
         if (!teacherLeft && eventType.endsWith("participant.v2.left")) {
-            teacherLeft = isTeacherParticipant(state, event, state.getTeacherId());
+            teacherLeft = isTeacherParticipant(state, eventData, state.getTeacherId());
         }
 
         if (teacherLeft) {
@@ -156,11 +153,22 @@ public class GoogleMeetEventsService {
         }
     }
 
-    private boolean isTeacherParticipant(GoogleMeetTeacherEventState state, Map<String, Object> event, UUID teacherId) {
+    private Map<String, Object> decodeEventData(Object rawData) {
+        String encoded = stringValue(rawData);
+        if (encoded.isBlank()) return Map.of();
         try {
-            Object rawData = event.get("data");
-            if (!(rawData instanceof Map<?, ?> data)) return false;
-            Object rawSession = data.get("participantSession");
+            byte[] decoded = Base64.getDecoder().decode(encoded);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = (Map<String, Object>) objectMapper.readValue(decoded, Map.class);
+            return parsed;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid Google Meet event data", ex);
+        }
+    }
+
+    private boolean isTeacherParticipant(GoogleMeetTeacherEventState state, Map<String, Object> eventData, UUID teacherId) {
+        try {
+            Object rawSession = eventData.get("participantSession");
             if (!(rawSession instanceof Map<?, ?> session)) return false;
             String sessionName = stringValue(session.get("name"));
             int marker = sessionName.indexOf("/participantSessions/");
@@ -225,6 +233,22 @@ public class GoogleMeetEventsService {
         throw new IllegalStateException("Workspace Events subscription creation timed out");
     }
 
+    private void deleteSubscription(String subscriptionName, String accessToken) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(WORKSPACE_EVENTS_API + "/" + subscriptionName))
+                    .header("Authorization", "Bearer " + accessToken)
+                    .DELETE().build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 404 && (response.statusCode() < 200 || response.statusCode() >= 300)) {
+                throw new IllegalStateException("Google subscription delete returned HTTP " + response.statusCode());
+            }
+        } catch (Exception ex) {
+            if (ex instanceof RuntimeException runtimeException) throw runtimeException;
+            throw new IllegalStateException("Google subscription delete failed", ex);
+        }
+    }
+
     private Map<String, Object> getJson(String url, String accessToken) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
@@ -265,12 +289,9 @@ public class GoogleMeetEventsService {
         }
     }
 
-    private String extractSubscriptionName(String source, Map<String, Object> envelope) {
+    private String extractWorkspaceSubscriptionName(String source) {
         int index = source.indexOf("subscriptions/");
-        if (index >= 0) return source.substring(index);
-        String pubsubSubscription = stringValue(envelope.get("subscription"));
-        index = pubsubSubscription.indexOf("subscriptions/");
-        return index >= 0 ? pubsubSubscription.substring(index) : null;
+        return index >= 0 ? source.substring(index) : null;
     }
 
     private GoogleMeetEventStatusResponse toResponse(GoogleMeetTeacherEventState state) {
@@ -289,7 +310,6 @@ public class GoogleMeetEventsService {
     @SuppressWarnings("unchecked")
     private Map<String, Object> asMap(Object value) { return (Map<String, Object>) value; }
     private String stringValue(Object value) { return value == null ? "" : String.valueOf(value); }
-    private String enc(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
 
     private boolean constantTimeEquals(String expected, String actual) {
         if (expected.length() != actual.length()) return false;
