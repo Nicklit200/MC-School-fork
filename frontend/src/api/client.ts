@@ -5,6 +5,7 @@ import type {
   CardSummary,
   DailyReviewHistoryItem,
   GoogleCalendarConnection,
+  GoogleMeetEventStatus,
   GroupLesson,
   Homework,
   HomeworkPageOverlay,
@@ -183,6 +184,8 @@ export const api = {
     groupLessons: () => request<GroupLesson[]>('GET', '/lessons/groups'),
     googleCalendarConnection: () => request<GoogleCalendarConnection>('GET', '/google-calendar/connection'),
     disconnectGoogleCalendar: () => request<void>('DELETE', '/google-calendar/connection'),
+    ensureGoogleMeetEvents: () => request<GoogleMeetEventStatus>('POST', '/google-meet/subscription'),
+    googleMeetEventStatus: () => request<GoogleMeetEventStatus>('GET', '/google-meet/status'),
   },
   cards: {
     listForStudent: (studentId: string) => request<Card[]>('GET', `/students/${studentId}/cards`),
