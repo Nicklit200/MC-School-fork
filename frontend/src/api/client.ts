@@ -176,6 +176,7 @@ export const api = {
     get: (groupId: string) => request<StudentGroup>('GET', `/groups/${groupId}`),
     create: (name: string, emails: string[]) => request<StudentGroup>('POST', '/groups', { name, emails }),
     addMembers: (groupId: string, emails: string[]) => request<StudentGroup>('POST', `/groups/${groupId}/members`, { emails }),
+    updateTranscriptFolder: (groupId: string, folderId: string) => request<StudentGroup>('PUT', `/groups/${groupId}/transcript-drive-folder`, { folderId }),
     createCard: (groupId: string, startDate: string, question: string, correctAnswer: string) => request<number>('POST', `/groups/${groupId}/cards`, { startDate, question, correctAnswer }),
     importCards: (groupId: string, startDate: string, cards: ParsedCard[]) => request<number>('POST', `/groups/${groupId}/cards/import`, { startDate, cards }),
     createPdfHomework: (groupId: string, startDate: string, file: File) => uploadDatedFile<number>(`/groups/${groupId}/homeworks/pdf`, startDate, file),
