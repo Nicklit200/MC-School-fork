@@ -44,6 +44,29 @@ export function GroupLessonsPage() {
   const [finishReminderLessonId, setFinishReminderLessonId] = useState<string | null>(null);
   const [startedLessonId, setStartedLessonId] = useState<string | null>(() => localStorage.getItem(STARTED_LESSON_KEY));
   const [finishedLessonId, setFinishedLessonId] = useState<string | null>(null);
+  const [returnedLessonId, setReturnedLessonId] = useState<string | null>(null);
+  const [returnedGroupId, setReturnedGroupId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const completedLesson = params.get('completedLesson');
+    const completedGroup = params.get('groupId');
+    const returnedFromMeet = params.get('fromMeet') === '1';
+    if (!returnedFromMeet) return;
+
+    if (completedLesson) {
+      setReturnedLessonId(completedLesson);
+      setFinishedLessonId(completedLesson);
+    }
+    if (completedGroup) setReturnedGroupId(completedGroup);
+
+    setStartedLessonId(null);
+    setFinishReminderLessonId(null);
+    localStorage.removeItem(STARTED_LESSON_KEY);
+    localStorage.removeItem(STARTED_LESSON_AT_KEY);
+
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -143,6 +166,10 @@ export function GroupLessonsPage() {
     });
   }, [lessons]);
 
+  const returnedLesson = returnedLessonId ? lessons.find((lesson) => lesson.eventId === returnedLessonId) ?? null : null;
+  const effectiveReturnedGroupId = returnedGroupId ?? returnedLesson?.groupId ?? null;
+  const returnedBrief = effectiveReturnedGroupId ? briefs[effectiveReturnedGroupId] : undefined;
+
   async function disconnectCalendar() {
     if (!window.confirm(language === 'DE' ? 'Google Calendar trennen?' : 'Отключить Google Calendar?')) return;
     try {
@@ -179,6 +206,8 @@ export function GroupLessonsPage() {
     localStorage.removeItem(`${SONIOX_NOTIFICATION_PREFIX}${lesson.eventId}`);
     setStartedLessonId(lesson.eventId);
     setFinishedLessonId(null);
+    setReturnedLessonId(null);
+    setReturnedGroupId(null);
     setFinishReminderLessonId(null);
     setStartReminderLessonId(null);
     const tab = window.open(lesson.meetUrl, '_blank');
@@ -207,6 +236,33 @@ export function GroupLessonsPage() {
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
+
+      {returnedLessonId && (
+        <div className="panel" style={{ marginBottom: 18, padding: 22, border: '2px solid #ff6a00', boxShadow: '0 12px 32px rgba(255,106,0,.10)' }}>
+          <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>
+            {language === 'DE' ? 'Unterricht beendet' : 'Урок завершён'}
+          </div>
+          <div style={{ fontSize: 16, marginBottom: 14 }}>
+            {returnedLesson?.title
+              ? (language === 'DE' ? `${returnedLesson.title}. Lade jetzt die Soniox-Transkription hoch.` : `${returnedLesson.title}. Теперь загрузи транскрипцию Soniox.`)
+              : (language === 'DE' ? 'Lade jetzt die Soniox-Transkription hoch.' : 'Теперь загрузи транскрипцию Soniox.')}
+          </div>
+          {effectiveReturnedGroupId ? (
+            <TranscriptUpload
+              groupId={effectiveReturnedGroupId}
+              initialFolderId={returnedBrief?.group.googleDriveTranscriptFolderId ?? null}
+              language={language}
+              prominent
+            />
+          ) : (
+            <div className="banner banner--info">
+              {language === 'DE'
+                ? 'Der Termin konnte noch keiner Mindcrafti-Gruppe zugeordnet werden.'
+                : 'Не удалось определить группу для этого события. Проверь название группы и события календаря.'}
+            </div>
+          )}
+        </div>
+      )}
 
       {connection?.connected !== true ? (
         <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
@@ -250,7 +306,16 @@ export function GroupLessonsPage() {
                             <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
 
                             <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-                              <button className="btn" type="button" onClick={() => void requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>
+                              <button
+                                className="btn"
+                                type="button"
+                                data-mindcrafti-lesson-id={lesson.eventId}
+                                data-mindcrafti-group-id={lesson.groupId ?? ''}
+                                onClick={() => void requestStartLesson(lesson)}
+                                style={{ width: '100%' }}
+                              >
+                                {language === 'DE' ? 'Unterricht starten' : 'Начать урок'}
+                              </button>
                               {linked && <button className="btn btn--secondary" type="button" onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)} style={{ width: '100%' }}>{expanded ? (language === 'DE' ? 'Details schließen' : 'Скрыть детали') : (language === 'DE' ? 'Vorbereitung' : 'Подготовка')}</button>}
                               {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer" style={{ width: '100%', textAlign: 'center' }}>Google Calendar</a>}
                             </div>
@@ -273,7 +338,13 @@ export function GroupLessonsPage() {
                               </div>
                             )}
 
-                            {finished && linked && lesson.groupId && <TranscriptUpload groupId={lesson.groupId} language={language} />}
+                            {finished && linked && lesson.groupId && !returnedLessonId && (
+                              <TranscriptUpload
+                                groupId={lesson.groupId}
+                                initialFolderId={brief?.group.googleDriveTranscriptFolderId ?? null}
+                                language={language}
+                              />
+                            )}
                           </div>
                         );
                       })}
@@ -398,10 +469,20 @@ async function closeSonioxBrowserNotification(lessonId: string) {
   }
 }
 
-function TranscriptUpload({ groupId, language }: { groupId: string; language: 'DE' | 'RU' }) {
+function TranscriptUpload({
+  groupId,
+  initialFolderId,
+  language,
+  prominent = false,
+}: {
+  groupId: string;
+  initialFolderId: string | null;
+  language: 'DE' | 'RU';
+  prominent?: boolean;
+}) {
   const storageKey = `mindcrafti.groupTranscriptFolder.${groupId}`;
-  const [folderId, setFolderId] = useState(() => localStorage.getItem(storageKey) ?? '');
-  const [folderPickerOpen, setFolderPickerOpen] = useState(!folderId);
+  const [folderId, setFolderId] = useState(initialFolderId ?? localStorage.getItem(storageKey) ?? '');
+  const [folderPickerOpen, setFolderPickerOpen] = useState(!(initialFolderId ?? localStorage.getItem(storageKey)));
   const [drives, setDrives] = useState<DriveItem[]>([]);
   const [driveId, setDriveId] = useState('');
   const [folders, setFolders] = useState<DriveItem[]>([]);
@@ -410,6 +491,30 @@ function TranscriptUpload({ groupId, language }: { groupId: string; language: 'D
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSavedFolder() {
+      try {
+        const group = await api.groups.get(groupId);
+        if (cancelled) return;
+        const localFolder = localStorage.getItem(storageKey);
+        const savedFolder = group.googleDriveTranscriptFolderId ?? localFolder ?? '';
+        if (savedFolder) {
+          setFolderId(savedFolder);
+          setFolderPickerOpen(false);
+          localStorage.setItem(storageKey, savedFolder);
+          if (!group.googleDriveTranscriptFolderId && localFolder) {
+            await api.groups.updateTranscriptFolder(groupId, localFolder);
+          }
+        }
+      } catch {
+        // Existing local folder remains usable if backend lookup is temporarily unavailable.
+      }
+    }
+    void loadSavedFolder();
+    return () => { cancelled = true; };
+  }, [groupId, storageKey]);
 
   useEffect(() => {
     if (!folderPickerOpen || drives.length > 0) return;
@@ -427,12 +532,18 @@ function TranscriptUpload({ groupId, language }: { groupId: string; language: 'D
     setFolders(await driveApi.listFolders(driveId, folder.id));
   }
 
-  function saveCurrentFolder() {
+  async function saveCurrentFolder() {
     const current = path.length > 0 ? path[path.length - 1].id : driveId;
     if (!current) return;
-    localStorage.setItem(storageKey, current);
-    setFolderId(current);
-    setFolderPickerOpen(false);
+    setError(null);
+    try {
+      await api.groups.updateTranscriptFolder(groupId, current);
+      localStorage.setItem(storageKey, current);
+      setFolderId(current);
+      setFolderPickerOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function upload() {
@@ -442,7 +553,9 @@ function TranscriptUpload({ groupId, language }: { groupId: string; language: 'D
     setMessage(null);
     try {
       const result = await driveApi.upload(folderId, file);
-      setMessage(language === 'DE' ? `Gespeichert: ${result.name}` : `Файл сохранён в Google Drive: ${result.name}`);
+      setMessage(language === 'DE'
+        ? `Transkription gespeichert: ${result.name}`
+        : `Транскрипция загружена в папку Google Meet: ${result.name}`);
       setFile(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -452,24 +565,54 @@ function TranscriptUpload({ groupId, language }: { groupId: string; language: 'D
   }
 
   return (
-    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-      <strong style={{ fontSize: 12 }}>{language === 'DE' ? 'Soniox-Datei' : 'Файл Soniox'}</strong>
-      {error && <div className="banner banner--error" style={{ marginTop: 6 }}>{error}</div>}
-      {message && <div className="banner banner--success" style={{ marginTop: 6 }}>{message}</div>}
+    <div style={prominent ? { marginTop: 8 } : { marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+      <strong style={{ fontSize: prominent ? 16 : 12 }}>{language === 'DE' ? 'Soniox-Transkription' : 'Транскрипция Soniox'}</strong>
+      {folderId && !folderPickerOpen && (
+        <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+          {language === 'DE' ? 'Zielordner „Google Meet“ ist gespeichert.' : 'Папка Google Meet уже сохранена для этой группы.'}
+        </div>
+      )}
+      {error && <div className="banner banner--error" style={{ marginTop: 8 }}>{error}</div>}
+      {message && <div className="banner banner--success" style={{ marginTop: 8 }}>{message}</div>}
+
       {!folderId || folderPickerOpen ? (
-        <div className="stack" style={{ gap: 6, marginTop: 8 }}>
+        <div className="stack" style={{ gap: 7, marginTop: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>
+            {language === 'DE' ? 'Einmalig den Ordner „Google Meet“ auswählen:' : 'Один раз выбери папку Google Meet для этой группы:'}
+          </div>
           <select className="select" value={driveId} onChange={(e) => void selectDrive(e.target.value)}>
             <option value="">{language === 'DE' ? 'Drive auswählen' : 'Выберите общий диск'}</option>
             {drives.map((drive) => <option key={drive.id} value={drive.id}>{drive.name}</option>)}
           </select>
           {driveId && <>
+            {path.length > 0 && <div className="muted" style={{ fontSize: 12 }}>{path.map((item) => item.name).join(' / ')}</div>}
             {folders.map((folder) => <button key={folder.id} className="btn btn--ghost" type="button" onClick={() => void enter(folder)}>{folder.name}</button>)}
-            <button className="btn btn--secondary" type="button" onClick={saveCurrentFolder}>{language === 'DE' ? 'Ordner verwenden' : 'Использовать эту папку'}</button>
+            <button className="btn btn--secondary" type="button" onClick={() => void saveCurrentFolder()}>{language === 'DE' ? 'Diesen Google-Meet-Ordner speichern' : 'Сохранить эту папку Google Meet'}</button>
           </>}
         </div>
-      ) : <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 6 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button>}
-      <input className="input" type="file" style={{ marginTop: 8 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <button className="btn" type="button" disabled={!file || !folderId || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 6 }}>{uploading ? (language === 'DE' ? 'Speichern…' : 'Сохраняем…') : (language === 'DE' ? 'In Drive speichern' : 'Сохранить в Drive')}</button>
+      ) : (
+        <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 8 }}>
+          {language === 'DE' ? 'Google-Meet-Ordner ändern' : 'Изменить папку Google Meet'}
+        </button>
+      )}
+
+      <input
+        className="input"
+        type="file"
+        style={{ marginTop: 10 }}
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
+      <button
+        className="btn"
+        type="button"
+        disabled={!file || !folderId || uploading}
+        onClick={() => void upload()}
+        style={{ width: '100%', marginTop: 8, minHeight: prominent ? 50 : undefined }}
+      >
+        {uploading
+          ? (language === 'DE' ? 'Speichern…' : 'Загружаем…')
+          : (language === 'DE' ? 'Transkription in Google Meet speichern' : 'Загрузить транскрипцию в Google Meet')}
+      </button>
     </div>
   );
 }
