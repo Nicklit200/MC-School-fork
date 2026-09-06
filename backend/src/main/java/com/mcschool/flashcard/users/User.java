@@ -74,6 +74,10 @@ public class User {
     @Column(name = "google_drive_homework_folder_id", length = 1000)
     private String googleDriveHomeworkFolderId;
 
+    /** Direct link to this student's ChatGPT Project. */
+    @Column(name = "chatgpt_project_url", length = 2000)
+    private String chatGptProjectUrl;
+
     @Column(nullable = false)
     private boolean archived;
 
@@ -136,18 +140,26 @@ public class User {
     }
 
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
-        this.googleDriveFolderUrl = normalizeFolderId(googleDriveFolderUrl);
+        this.googleDriveFolderUrl = normalizeOptionalValue(googleDriveFolderUrl);
     }
 
     public void changeGoogleDriveHomeworkFolderId(String folderId) {
-        this.googleDriveHomeworkFolderId = normalizeFolderId(folderId);
+        this.googleDriveHomeworkFolderId = normalizeOptionalValue(folderId);
     }
 
-    private String normalizeFolderId(String folderId) {
-        if (folderId == null || folderId.isBlank()) {
+    public void changeChatGptProjectUrl(String projectUrl) {
+        String normalized = normalizeOptionalValue(projectUrl);
+        if (normalized != null && !(normalized.startsWith("https://chatgpt.com/") || normalized.startsWith("https://www.chatgpt.com/"))) {
+            throw new IllegalArgumentException("ChatGPT project URL must be a chatgpt.com link");
+        }
+        this.chatGptProjectUrl = normalized;
+    }
+
+    private String normalizeOptionalValue(String value) {
+        if (value == null || value.isBlank()) {
             return null;
         }
-        return folderId.trim();
+        return value.trim();
     }
 
     public void assignEmail(String email) {
