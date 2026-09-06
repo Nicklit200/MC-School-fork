@@ -10,7 +10,7 @@ export function LoginPage() {
   const { user, login } = useAuth();
   const { language, t } = useI18n();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
@@ -25,7 +25,7 @@ export function LoginPage() {
     setError(false);
     setSubmitting(true);
     try {
-      const loggedIn = await login(email, password);
+      const loggedIn = await login(identifier, password);
       navigate(homePathForRole(loggedIn.role), { replace: true });
     } catch {
       setError(true);
@@ -55,14 +55,14 @@ export function LoginPage() {
         {error && <div className="banner banner--error">{t('login.error')}</div>}
 
         <label className="field login-field">
-          <span className="field__label">{t('common.email')}</span>
+          <span className="field__label">{language === 'DE' ? 'Login oder E-Mail' : 'Логин или email'}</span>
           <input
             className="input"
-            type="email"
-            value={email}
+            type="text"
+            value={identifier}
             autoComplete="username"
-            placeholder="name@example.com"
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder={language === 'DE' ? 'z. B. Mark124' : 'например Марк124'}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
           />
         </label>
