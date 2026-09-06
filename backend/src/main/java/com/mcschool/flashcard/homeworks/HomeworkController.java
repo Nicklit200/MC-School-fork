@@ -17,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -67,6 +68,14 @@ public class HomeworkController {
     public List<HomeworkResponse> listForTeacher(@AuthenticationPrincipal AuthenticatedUser caller,
                                                  @PathVariable UUID studentId) {
         return homeworkService.listForTeacher(caller, studentId);
+    }
+
+    @DeleteMapping("/homeworks/{homeworkId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('TEACHER')")
+    public void deleteHomework(@AuthenticationPrincipal AuthenticatedUser caller,
+                               @PathVariable UUID homeworkId) {
+        homeworkService.deleteHomework(caller, homeworkId);
     }
 
     @GetMapping("/study/homeworks")
