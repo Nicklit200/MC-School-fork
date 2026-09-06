@@ -183,6 +183,8 @@ export const api = {
       request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
     updateHomeworkDriveFolder: (studentId: string, googleDriveHomeworkFolderId: string) =>
       request<StudentListItem>('PUT', `/students/${studentId}/homework-drive-folder`, { googleDriveHomeworkFolderId }),
+    updateChatGptProjectUrl: (studentId: string, chatGptProjectUrl: string) =>
+      request<StudentListItem>('PUT', `/students/${studentId}/chatgpt-project`, { chatGptProjectUrl }),
     testDriveFolder: (studentId: string) =>
       request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test`),
     testHomeworkDriveFolder: (studentId: string) =>
