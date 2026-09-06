@@ -13,6 +13,27 @@
     const label = normalize(target.textContent || target.getAttribute('aria-label') || '');
     if (!START_LABELS.some((value) => label.includes(value))) return;
 
+    const lessonId = target.getAttribute('data-mindcrafti-lesson-id') || '';
+    const groupId = target.getAttribute('data-mindcrafti-group-id') || '';
+    const params = new URLSearchParams();
+    if (lessonId) params.set('completedLesson', lessonId);
+    if (groupId) params.set('groupId', groupId);
+    params.set('fromMeet', '1');
+
+    const returnUrl = `${window.location.origin}/teacher/lessons?${params.toString()}`;
+    try {
+      chrome.storage.local.set({
+        mindcraftiActiveLesson: {
+          lessonId,
+          groupId,
+          returnUrl,
+          startedAt: Date.now(),
+        },
+      });
+    } catch {
+      // Returning to Mindcrafti is an enhancement; lesson start must still continue.
+    }
+
     try {
       window.location.href = PROTOCOL_URL;
     } catch {
