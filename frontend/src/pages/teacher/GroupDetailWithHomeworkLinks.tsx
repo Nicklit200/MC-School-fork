@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { GroupDetailPage } from './GroupDetailPage';
+import { GroupTranscriptFolderPicker } from './GroupTranscriptFolderPicker';
 
 /** Makes group homework and card-set titles open their group-level editors. */
 export function GroupDetailWithHomeworkLinks() {
@@ -165,5 +166,10 @@ export function GroupDetailWithHomeworkLinks() {
     };
   }, [groupId, navigate]);
 
-  return <GroupDetailPage />;
+  return (
+    <>
+      <GroupDetailPage />
+      {groupId && <GroupTranscriptFolderPicker groupId={groupId} />}
+    </>
+  );
 }
