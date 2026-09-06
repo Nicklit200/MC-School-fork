@@ -34,6 +34,7 @@ export interface StudentListItem extends User {
 export interface StudentGroup {
   id: string;
   name: string;
+  googleDriveTranscriptFolderId: string | null;
   students: User[];
 }
 
