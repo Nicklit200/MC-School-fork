@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.homeworks;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
@@ -44,6 +45,23 @@ public class HomeworkService {
     @Transactional(readOnly = true)
     public List<HomeworkResponse> listForStudent(AuthenticatedUser student) {
         return listForStudent(student.id());
+    }
+
+    @Transactional
+    public void deleteHomework(AuthenticatedUser teacher, UUID homeworkId) {
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        User student = homework.getStudent();
+        requireOwnedStudent(teacher.id(), student.getId());
+
+        HomeworkStats stats = homeworkRepository.statsByStudentId(student.getId()).stream()
+                .filter(item -> item.homeworkId().equals(homeworkId))
+                .findFirst()
+                .orElse(null);
+        if (stats != null && stats.totalCards() > 0) {
+            throw new ConflictException("Homework with cards cannot be deleted from the PDF overview");
+        }
+        homeworkRepository.delete(homework);
     }
 
     private List<HomeworkResponse> listForStudent(UUID studentId) {
