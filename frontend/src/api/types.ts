@@ -53,6 +53,15 @@ export interface GroupLesson {
   calendarUrl: string | null;
 }
 
+export interface LessonPreparation {
+  eventId: string;
+  homeworkNotes: string | null;
+  difficulties: string | null;
+  lessonPlan: string | null;
+  hasWorkbook: boolean;
+  workbookFilename: string | null;
+}
+
 export interface GoogleCalendarConnection {
   connected: boolean;
   authorizationUrl: string | null;
