@@ -153,8 +153,8 @@ export function HomeworkDetailPage() {
         await loadWorksheetPreview(updatedHomework.worksheetPageCount);
       }
       setMessage(language === 'DE'
-        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Oben siehst du jetzt die aktuelle Version.'
-        : 'Готово: отредактированный PDF заменил предыдущий файл. Сверху уже показана текущая версия домашки.');
+        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Unten siehst du jetzt die aktuelle Version.'
+        : 'Готово: отредактированный PDF заменил предыдущий файл. Ниже уже показана текущая версия домашки.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -213,58 +213,6 @@ export function HomeworkDetailPage() {
           <p className="muted" style={{ margin: 0 }}>
             {language === 'DE' ? 'Kein PDF hinterlegt.' : 'PDF для этой домашки не загружен.'}
           </p>
-        )}
-
-        {homework?.hasWorksheet && (
-          <div className="panel" style={{ margin: 0, padding: 16 }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-              <div>
-                <strong>{language === 'DE' ? 'Aktuelle Hausaufgabe' : 'Текущая домашка'}</strong>
-                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                  {language === 'DE'
-                    ? 'Das ist genau die PDF-Version, die der Schüler sieht.'
-                    : 'Это именно та версия PDF, которую сейчас видит ученик.'}
-                </div>
-              </div>
-              <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
-                {language === 'DE' ? 'PDF öffnen / herunterladen' : 'Открыть / скачать PDF'}
-              </button>
-            </div>
-
-            {previewLoading && previewUrls.length === 0 ? (
-              <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
-                {language === 'DE' ? 'Vorschau wird geladen…' : 'Загружаем предпросмотр…'}
-              </div>
-            ) : previewUrls.length > 0 ? (
-              <div style={{ display: 'grid', gap: 16, justifyItems: 'center' }}>
-                {previewUrls.map((url, index) => (
-                  <div key={url} style={{ width: '100%', maxWidth: 1100 }}>
-                    {previewUrls.length > 1 && (
-                      <div className="muted" style={{ marginBottom: 6, fontSize: 13 }}>
-                        {language === 'DE' ? `Seite ${index + 1}` : `Страница ${index + 1}`}
-                      </div>
-                    )}
-                    <img
-                      src={url}
-                      alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        height: 'auto',
-                        border: '1px solid var(--border-color, #ddd)',
-                        borderRadius: 12,
-                        background: '#fff',
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="banner banner--info">
-                {language === 'DE' ? 'Die Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр.'}
-              </div>
-            )}
-          </div>
         )}
 
         {homework?.hasWorksheet && (
@@ -328,6 +276,58 @@ export function HomeworkDetailPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {homework?.hasWorksheet && (
+          <div className="panel" style={{ margin: 0, padding: 16 }}>
+            <div className="row" style={{ justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+              <div>
+                <strong>{language === 'DE' ? 'Aktuelle Hausaufgabe' : 'Текущая домашка'}</strong>
+                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                  {language === 'DE'
+                    ? 'Das ist genau die PDF-Version, die der Schüler sieht.'
+                    : 'Это именно та версия PDF, которую сейчас видит ученик.'}
+                </div>
+              </div>
+              <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
+                {language === 'DE' ? 'PDF öffnen / herunterladen' : 'Открыть / скачать PDF'}
+              </button>
+            </div>
+
+            {previewLoading && previewUrls.length === 0 ? (
+              <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
+                {language === 'DE' ? 'Vorschau wird geladen…' : 'Загружаем предпросмотр…'}
+              </div>
+            ) : previewUrls.length > 0 ? (
+              <div style={{ display: 'grid', gap: 16, justifyItems: 'center' }}>
+                {previewUrls.map((url, index) => (
+                  <div key={url} style={{ width: '100%', maxWidth: 1100 }}>
+                    {previewUrls.length > 1 && (
+                      <div className="muted" style={{ marginBottom: 6, fontSize: 13 }}>
+                        {language === 'DE' ? `Seite ${index + 1}` : `Страница ${index + 1}`}
+                      </div>
+                    )}
+                    <img
+                      src={url}
+                      alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: 'auto',
+                        border: '1px solid var(--border-color, #ddd)',
+                        borderRadius: 12,
+                        background: '#fff',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="banner banner--info">
+                {language === 'DE' ? 'Die Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр.'}
+              </div>
+            )}
           </div>
         )}
 
