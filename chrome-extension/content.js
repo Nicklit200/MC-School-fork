@@ -65,6 +65,22 @@
     return hasRejoin && !hasActiveLeaveControl;
   }
 
+  async function returnToMindcrafti(root) {
+    root.querySelector('button')?.setAttribute('disabled', 'true');
+    try {
+      const stored = await chrome.storage.local.get('mindcraftiActiveLesson');
+      const context = stored?.mindcraftiActiveLesson;
+      if (context?.returnUrl) {
+        await chrome.storage.local.remove('mindcraftiActiveLesson');
+        window.location.href = context.returnUrl;
+        return;
+      }
+    } catch {
+      // Fall through and simply close the reminder.
+    }
+    root.remove();
+  }
+
   function showReminder() {
     if (document.getElementById(OVERLAY_ID)) return;
     shownForCurrentLeave = true;
@@ -99,12 +115,12 @@
     title.style.cssText = 'font-size:34px;font-weight:900;line-height:1.1;color:#d94f00;margin-bottom:14px';
 
     const text = document.createElement('div');
-    text.textContent = 'Ты вышел из Google Meet. Не забудь сейчас остановить запись Soniox.';
+    text.textContent = 'Ты вышел из Google Meet. Останови запись Soniox, затем вернись в Mindcrafti и загрузи транскрипцию.';
     text.style.cssText = 'font-size:19px;line-height:1.5;margin-bottom:24px';
 
     const done = document.createElement('button');
     done.type = 'button';
-    done.textContent = 'Soniox остановлен';
+    done.textContent = 'Soniox остановлен — перейти в Mindcrafti';
     done.style.cssText = [
       'width:100%',
       'min-height:54px',
@@ -116,7 +132,7 @@
       'font-weight:800',
       'cursor:pointer'
     ].join(';');
-    done.addEventListener('click', () => root.remove());
+    done.addEventListener('click', () => void returnToMindcrafti(root));
 
     const hint = document.createElement('div');
     hint.textContent = 'Mindcrafti';
