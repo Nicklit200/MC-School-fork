@@ -13,7 +13,7 @@ import { StudentDrivePage } from './pages/teacher/StudentDrivePage';
 import { HomeworkDetailPage } from './pages/teacher/HomeworkDetailPage';
 import { TeacherCardsDetailPage } from './pages/teacher/TeacherCardsDetailPage';
 import { GroupsPage } from './pages/teacher/GroupsPage';
-import { GroupDetailPage } from './pages/teacher/GroupDetailPage';
+import { GroupDetailWithHomeworkLinks } from './pages/teacher/GroupDetailWithHomeworkLinks';
 import { GroupHomeworkDetailPage } from './pages/teacher/GroupHomeworkDetailPage';
 import { TodayPage } from './pages/student/TodayPage';
 import { SessionPage } from './pages/student/SessionPage';
@@ -43,7 +43,7 @@ export function App() {
       <Route path="/teacher/students/:studentId/cards/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><TeacherCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
-      <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailWithHomeworkLinks /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><GroupHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/settings" element={<ProtectedRoute role="TEACHER"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
