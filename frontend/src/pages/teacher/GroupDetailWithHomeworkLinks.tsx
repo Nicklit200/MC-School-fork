@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { api } from '../../api/client';
 import { GroupDetailPage } from './GroupDetailPage';
 
 /** Makes group homework and card-set titles open their group-level editors. */
@@ -10,6 +11,14 @@ export function GroupDetailWithHomeworkLinks() {
   useEffect(() => {
     const root = document.querySelector('.group-detail-dashboard');
     if (!root) return;
+
+    const cardDateFromRow = (row: HTMLTableRowElement) => {
+      const dateText = row.querySelector<HTMLTableCellElement>('td:nth-child(2)')?.textContent?.trim() ?? '';
+      const match = dateText.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+      if (!match) return null;
+      const [, day, month, year] = match;
+      return `${year}-${month}-${day}`;
+    };
 
     const refreshClickableRows = () => {
       const overviewCards = root.querySelectorAll('.group-overview-grid .group-overview-card');
@@ -26,14 +35,77 @@ export function GroupDetailWithHomeworkLinks() {
         titleCell.setAttribute('tabindex', '0');
       });
 
-      cardsSection?.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
-        const titleCell = row.querySelector<HTMLTableCellElement>('td:first-child');
-        if (!titleCell) return;
-        titleCell.style.cursor = 'pointer';
-        titleCell.title = 'Открыть карточки всей группы';
-        titleCell.setAttribute('role', 'link');
-        titleCell.setAttribute('tabindex', '0');
-      });
+      if (cardsSection) {
+        const headerRow = cardsSection.querySelector<HTMLTableRowElement>('thead tr');
+        if (headerRow && !headerRow.querySelector('.group-card-actions-header')) {
+          const headerCell = document.createElement('th');
+          headerCell.className = 'group-card-actions-header';
+          headerCell.setAttribute('aria-label', 'Действия');
+          headerCell.style.width = '74px';
+          headerRow.appendChild(headerCell);
+        }
+
+        cardsSection.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
+          const titleCell = row.querySelector<HTMLTableCellElement>('td:first-child');
+          if (titleCell) {
+            titleCell.style.cursor = 'pointer';
+            titleCell.title = 'Открыть карточки всей группы';
+            titleCell.setAttribute('role', 'link');
+            titleCell.setAttribute('tabindex', '0');
+          }
+
+          if (!row.querySelector('.group-card-actions-cell')) {
+            const actionCell = document.createElement('td');
+            actionCell.className = 'group-card-actions-cell';
+            actionCell.style.textAlign = 'center';
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'teacher-more-btn';
+            button.textContent = '⋮';
+            button.title = 'Действия с набором карточек';
+            button.setAttribute('aria-label', 'Действия с набором карточек');
+            button.setAttribute('data-group-card-delete', 'true');
+
+            actionCell.appendChild(button);
+            row.appendChild(actionCell);
+          }
+        });
+      }
+    };
+
+    const deleteCardSet = async (row: HTMLTableRowElement, button: HTMLButtonElement) => {
+      const startDate = cardDateFromRow(row);
+      if (!startDate) return;
+
+      const title = row.querySelector<HTMLTableCellElement>('td:first-child')?.textContent?.trim() || 'Карточки';
+      if (!window.confirm(`Удалить полностью набор «${title}» у всех учеников группы? Карточки исчезнут у всей группы.`)) return;
+
+      button.disabled = true;
+      try {
+        const group = await api.groups.get(groupId);
+        const homeworkLists = await Promise.all(
+          group.students.map((student) => api.homeworks.listForStudent(student.id)),
+        );
+        const cardHomeworks = homeworkLists
+          .flat()
+          .filter((homework) => homework.startDate === startDate && homework.totalCards > 0);
+        const cardLists = await Promise.all(cardHomeworks.map((homework) => api.cards.listForHomework(homework.id)));
+        const cardIds = Array.from(new Set(cardLists.flat().map((card) => card.id)));
+
+        if (cardIds.length === 0) {
+          window.alert('В этом наборе уже нет карточек.');
+          return;
+        }
+
+        await Promise.all(cardIds.map((cardId) => api.cards.remove(cardId)));
+        window.alert(`Набор удалён у всей группы. Удалено карточек: ${cardIds.length}.`);
+        window.location.reload();
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : 'Не удалось удалить набор карточек.');
+      } finally {
+        button.disabled = false;
+      }
     };
 
     const openTarget = (target: EventTarget | null) => {
@@ -54,15 +126,23 @@ export function GroupDetailWithHomeworkLinks() {
       }
 
       if (cardsSection && cardsSection.contains(target)) {
-        const dateText = row.querySelector<HTMLTableCellElement>('td:nth-child(2)')?.textContent?.trim() ?? '';
-        const match = dateText.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-        if (!match) return;
-        const [, day, month, year] = match;
-        navigate(`/groups/${groupId}/cards/${year}-${month}-${day}`);
+        const startDate = cardDateFromRow(row);
+        if (startDate) navigate(`/groups/${groupId}/cards/${startDate}`);
       }
     };
 
-    const onClick: EventListener = (event) => openTarget(event.target);
+    const onClick: EventListener = (event) => {
+      if (!(event.target instanceof Element)) return;
+      const deleteButton = event.target.closest<HTMLButtonElement>('button[data-group-card-delete="true"]');
+      if (deleteButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        const row = deleteButton.closest<HTMLTableRowElement>('tr');
+        if (row) void deleteCardSet(row, deleteButton);
+        return;
+      }
+      openTarget(event.target);
+    };
 
     const onKeyDown: EventListener = (event) => {
       if (!(event instanceof KeyboardEvent)) return;
