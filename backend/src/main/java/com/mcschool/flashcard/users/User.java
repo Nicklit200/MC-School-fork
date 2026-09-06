@@ -55,7 +55,6 @@ public class User {
     @JoinColumn(name = "teacher_id")
     private User teacher;
 
-    /** Parent account linked to this student. Null for non-students or when no parent is linked yet. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
     private User parent;
@@ -66,17 +65,23 @@ public class User {
     @Column(name = "invitation_expires_at")
     private Instant invitationExpiresAt;
 
-    /** Destination for completed card-session CSV exports. */
     @Column(name = "google_drive_folder_url", length = 1000)
     private String googleDriveFolderUrl;
 
-    /** Destination for PDFs submitted by the student. */
     @Column(name = "google_drive_homework_folder_id", length = 1000)
     private String googleDriveHomeworkFolderId;
 
-    /** Direct link to this student's ChatGPT Project. */
     @Column(name = "chatgpt_project_url", length = 2000)
     private String chatGptProjectUrl;
+
+    @Column(name = "google_calendar_refresh_token", columnDefinition = "text")
+    private String googleCalendarRefreshToken;
+
+    @Column(name = "google_calendar_oauth_state", length = 120)
+    private String googleCalendarOauthState;
+
+    @Column(name = "google_calendar_oauth_state_expires_at")
+    private Instant googleCalendarOauthStateExpiresAt;
 
     @Column(nullable = false)
     private boolean archived;
@@ -101,51 +106,32 @@ public class User {
         this.preferredLanguage = Language.RU;
     }
 
-    public void changeLanguage(Language language) {
-        this.preferredLanguage = language;
-    }
+    public void changeLanguage(Language language) { this.preferredLanguage = language; }
 
     public void changeFullName(String fullName) {
-        if (fullName == null || fullName.isBlank()) {
-            throw new IllegalArgumentException("Full name is required");
-        }
+        if (fullName == null || fullName.isBlank()) throw new IllegalArgumentException("Full name is required");
         this.fullName = fullName.trim();
     }
 
     public void assignUsername(String username) {
-        if (this.role != Role.STUDENT) {
-            throw new IllegalStateException("Only students can have a school username");
-        }
-        if (username == null || username.isBlank()) {
-            throw new IllegalArgumentException("Username is required");
-        }
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can have a school username");
+        if (username == null || username.isBlank()) throw new IllegalArgumentException("Username is required");
         this.username = username.trim();
     }
 
     public void changePasswordHash(String passwordHash) {
-        if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("Password hash is required");
-        }
+        if (passwordHash == null || passwordHash.isBlank()) throw new IllegalArgumentException("Password hash is required");
         this.passwordHash = passwordHash;
     }
 
     public void linkParent(User parent) {
-        if (this.role != Role.STUDENT) {
-            throw new IllegalStateException("Only students can have a parent account");
-        }
-        if (parent == null || parent.getRole() != Role.PARENT) {
-            throw new IllegalArgumentException("Parent account is required");
-        }
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can have a parent account");
+        if (parent == null || parent.getRole() != Role.PARENT) throw new IllegalArgumentException("Parent account is required");
         this.parent = parent;
     }
 
-    public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) {
-        this.googleDriveFolderUrl = normalizeOptionalValue(googleDriveFolderUrl);
-    }
-
-    public void changeGoogleDriveHomeworkFolderId(String folderId) {
-        this.googleDriveHomeworkFolderId = normalizeOptionalValue(folderId);
-    }
+    public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) { this.googleDriveFolderUrl = normalizeOptionalValue(googleDriveFolderUrl); }
+    public void changeGoogleDriveHomeworkFolderId(String folderId) { this.googleDriveHomeworkFolderId = normalizeOptionalValue(folderId); }
 
     public void changeChatGptProjectUrl(String projectUrl) {
         String normalized = normalizeOptionalValue(projectUrl);
@@ -155,16 +141,37 @@ public class User {
         this.chatGptProjectUrl = normalized;
     }
 
+    public void beginGoogleCalendarOauth(String state, Instant expiresAt) {
+        if (role != Role.TEACHER) throw new IllegalStateException("Only teachers can connect Google Calendar");
+        this.googleCalendarOauthState = state;
+        this.googleCalendarOauthStateExpiresAt = expiresAt;
+    }
+
+    public boolean isGoogleCalendarOauthStateValid(String state, Instant now) {
+        return state != null && state.equals(this.googleCalendarOauthState)
+                && googleCalendarOauthStateExpiresAt != null && now.isBefore(googleCalendarOauthStateExpiresAt);
+    }
+
+    public void connectGoogleCalendar(String refreshToken) {
+        if (role != Role.TEACHER) throw new IllegalStateException("Only teachers can connect Google Calendar");
+        if (refreshToken == null || refreshToken.isBlank()) throw new IllegalArgumentException("Google refresh token is required");
+        this.googleCalendarRefreshToken = refreshToken;
+        this.googleCalendarOauthState = null;
+        this.googleCalendarOauthStateExpiresAt = null;
+    }
+
+    public void disconnectGoogleCalendar() {
+        this.googleCalendarRefreshToken = null;
+        this.googleCalendarOauthState = null;
+        this.googleCalendarOauthStateExpiresAt = null;
+    }
+
     private String normalizeOptionalValue(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
+        if (value == null || value.isBlank()) return null;
         return value.trim();
     }
 
-    public void assignEmail(String email) {
-        this.email = email;
-    }
+    public void assignEmail(String email) { this.email = email; }
 
     public static User bootstrapAdmin(String fullName, String email, String passwordHash) {
         User user = new User(fullName, email, Role.ADMIN);
@@ -173,8 +180,7 @@ public class User {
         return user;
     }
 
-    public static User invitedTeacher(String fullName, String email,
-                                      String invitationToken, Instant invitationExpiresAt) {
+    public static User invitedTeacher(String fullName, String email, String invitationToken, Instant invitationExpiresAt) {
         User user = new User(fullName, email, Role.TEACHER);
         user.status = UserStatus.INVITED;
         user.invitationToken = invitationToken;
@@ -182,8 +188,7 @@ public class User {
         return user;
     }
 
-    public static User invitedStudent(String fullName, String email, User teacher,
-                                      String invitationToken, Instant invitationExpiresAt) {
+    public static User invitedStudent(String fullName, String email, User teacher, String invitationToken, Instant invitationExpiresAt) {
         User user = new User(fullName, email, Role.STUDENT);
         user.status = UserStatus.INVITED;
         user.teacher = teacher;
@@ -192,8 +197,7 @@ public class User {
         return user;
     }
 
-    public static User invitedParent(String fullName, String email,
-                                     String invitationToken, Instant invitationExpiresAt) {
+    public static User invitedParent(String fullName, String email, String invitationToken, Instant invitationExpiresAt) {
         User user = new User(fullName, email, Role.PARENT);
         user.status = UserStatus.INVITED;
         user.invitationToken = invitationToken;
@@ -201,11 +205,8 @@ public class User {
         return user;
     }
 
-    public void restoreAsInvitedStudent(String fullName, User teacher,
-                                        String invitationToken, Instant invitationExpiresAt) {
-        if (this.role != Role.STUDENT || !this.archived) {
-            throw new IllegalStateException("Only archived student accounts can be restored");
-        }
+    public void restoreAsInvitedStudent(String fullName, User teacher, String invitationToken, Instant invitationExpiresAt) {
+        if (this.role != Role.STUDENT || !this.archived) throw new IllegalStateException("Only archived student accounts can be restored");
         this.fullName = fullName;
         this.teacher = teacher;
         this.passwordHash = null;
@@ -216,12 +217,8 @@ public class User {
     }
 
     public void activate(String passwordHash) {
-        if (this.status != UserStatus.INVITED) {
-            throw new IllegalStateException("Only INVITED accounts can be activated");
-        }
-        if (this.archived) {
-            throw new IllegalStateException("Archived accounts cannot be activated");
-        }
+        if (this.status != UserStatus.INVITED) throw new IllegalStateException("Only INVITED accounts can be activated");
+        if (this.archived) throw new IllegalStateException("Archived accounts cannot be activated");
         this.passwordHash = passwordHash;
         this.status = UserStatus.ACTIVE;
         this.invitationToken = null;
@@ -233,9 +230,10 @@ public class User {
         this.passwordHash = null;
         this.invitationToken = null;
         this.invitationExpiresAt = null;
+        this.googleCalendarRefreshToken = null;
+        this.googleCalendarOauthState = null;
+        this.googleCalendarOauthStateExpiresAt = null;
     }
 
-    public boolean isInvitationExpired(Instant now) {
-        return invitationExpiresAt != null && now.isAfter(invitationExpiresAt);
-    }
+    public boolean isInvitationExpired(Instant now) { return invitationExpiresAt != null && now.isAfter(invitationExpiresAt); }
 }
