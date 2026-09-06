@@ -134,7 +134,49 @@ public class GoogleCalendarLessonService {
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]+", " ").trim();
+        if (value == null) return "";
+        String lower = value.toLowerCase(Locale.ROOT);
+        StringBuilder transliterated = new StringBuilder(lower.length() * 2);
+        for (int i = 0; i < lower.length(); i++) {
+            transliterated.append(transliterate(lower.charAt(i)));
+        }
+        return transliterated.toString().replaceAll("[^a-z0-9]+", " ").trim();
+    }
+
+    private String transliterate(char value) {
+        return switch (value) {
+            case 'а' -> "a";
+            case 'б' -> "b";
+            case 'в' -> "v";
+            case 'г' -> "g";
+            case 'д' -> "d";
+            case 'е', 'э' -> "e";
+            case 'ё' -> "yo";
+            case 'ж' -> "zh";
+            case 'з' -> "z";
+            case 'и', 'й' -> "i";
+            case 'к' -> "k";
+            case 'л' -> "l";
+            case 'м' -> "m";
+            case 'н' -> "n";
+            case 'о' -> "o";
+            case 'п' -> "p";
+            case 'р' -> "r";
+            case 'с' -> "s";
+            case 'т' -> "t";
+            case 'у' -> "u";
+            case 'ф' -> "f";
+            case 'х' -> "h";
+            case 'ц' -> "c";
+            case 'ч' -> "ch";
+            case 'ш' -> "sh";
+            case 'щ' -> "sch";
+            case 'ы' -> "y";
+            case 'ю' -> "yu";
+            case 'я' -> "ya";
+            case 'ь', 'ъ' -> "";
+            default -> String.valueOf(value);
+        };
     }
 
     private Instant eventInstant(Object value) {
@@ -168,8 +210,7 @@ public class GoogleCalendarLessonService {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Authorization", "Bearer " + accessToken)
-                    .GET()
-                    .build();
+                    .GET().build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("Google Calendar API returned HTTP " + response.statusCode());
