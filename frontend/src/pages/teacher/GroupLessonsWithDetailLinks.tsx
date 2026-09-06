@@ -6,15 +6,16 @@ export function GroupLessonsWithDetailLinks() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const root = document.querySelector('.teacher-lessons-page');
-    if (!root) return;
-
     const refresh = () => {
+      const root = document.querySelector('.teacher-lessons-page');
+      if (!root) return;
+
       root.querySelectorAll<HTMLButtonElement>('button[data-mindcrafti-lesson-id]').forEach((startButton) => {
         const eventId = startButton.dataset.mindcraftiLessonId;
         if (!eventId) return;
-        const card = startButton.closest<HTMLDivElement>('div[style*="border-radius: 12px"]');
-        if (!card || card.querySelector('[data-open-lesson-workspace]')) return;
+
+        const actions = startButton.parentElement;
+        if (!actions || actions.querySelector(`[data-open-lesson-workspace="${CSS.escape(eventId)}"]`)) return;
 
         const button = document.createElement('button');
         button.type = 'button';
@@ -22,8 +23,8 @@ export function GroupLessonsWithDetailLinks() {
         button.textContent = 'Открыть урок';
         button.setAttribute('data-open-lesson-workspace', eventId);
         button.style.width = '100%';
-        button.style.marginBottom = '6px';
-        startButton.parentElement?.insertBefore(button, startButton);
+
+        actions.insertBefore(button, startButton);
       });
     };
 
@@ -34,16 +35,21 @@ export function GroupLessonsWithDetailLinks() {
       const eventId = button.getAttribute('data-open-lesson-workspace');
       if (!eventId) return;
       event.preventDefault();
+      event.stopPropagation();
       navigate(`/teacher/lessons/${encodeURIComponent(eventId)}`);
     };
 
     refresh();
+
+    // The schedule is loaded asynchronously. Watch the document until the lesson cards appear,
+    // instead of giving up when GroupLessonsPage is still showing its loading state.
     const observer = new MutationObserver(refresh);
-    observer.observe(root, { childList: true, subtree: true });
-    root.addEventListener('click', onClick);
+    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('click', onClick);
+
     return () => {
       observer.disconnect();
-      root.removeEventListener('click', onClick);
+      document.removeEventListener('click', onClick);
     };
   }, [navigate]);
 
