@@ -16,9 +16,9 @@ export function HomeworkDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [openingChatGpt, setOpeningChatGpt] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const previewUrlRef = useRef<string | null>(null);
+  const previewUrlsRef = useRef<string[]>([]);
 
   const homework = useMemo(
     () => homeworks.find((item) => item.id === homeworkId) ?? null,
@@ -31,14 +31,22 @@ export function HomeworkDetailPage() {
     setLoading(false);
   }, [studentId]);
 
-  const loadWorksheetPreview = useCallback(async () => {
+  const clearPreviewUrls = useCallback(() => {
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrlsRef.current = [];
+    setPreviewUrls([]);
+  }, []);
+
+  const loadWorksheetPreview = useCallback(async (pageCount: number) => {
     setPreviewLoading(true);
     try {
-      const blob = await api.homeworks.worksheet(homeworkId);
-      const nextUrl = URL.createObjectURL(blob);
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = nextUrl;
-      setPreviewUrl(nextUrl);
+      const blobs = await Promise.all(
+        Array.from({ length: pageCount }, (_, pageIndex) => api.homeworks.worksheetPage(homeworkId, pageIndex)),
+      );
+      const nextUrls = blobs.map((blob) => URL.createObjectURL(blob));
+      previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrlsRef.current = nextUrls;
+      setPreviewUrls(nextUrls);
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -54,17 +62,15 @@ export function HomeworkDetailPage() {
   }, [reload, t]);
 
   useEffect(() => {
-    if (homework?.hasWorksheet) {
-      void loadWorksheetPreview();
+    if (homework?.hasWorksheet && homework.worksheetPageCount) {
+      void loadWorksheetPreview(homework.worksheetPageCount);
     } else {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-      setPreviewUrl(null);
+      clearPreviewUrls();
     }
-  }, [homework?.hasWorksheet, loadWorksheetPreview]);
+  }, [homework?.hasWorksheet, homework?.worksheetPageCount, loadWorksheetPreview, clearPreviewUrls]);
 
   useEffect(() => () => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
   function downloadBlob(blob: Blob, filename: string) {
@@ -104,7 +110,6 @@ export function HomeworkDetailPage() {
     setError(null);
     setMessage(null);
 
-    // Open immediately while this is still a direct user click, otherwise browsers may block the new tab.
     const chatTab = window.open('https://chatgpt.com/', '_blank');
     if (chatTab) chatTab.opener = null;
 
@@ -141,7 +146,12 @@ export function HomeworkDetailPage() {
     try {
       await api.homeworks.uploadWorksheet(homeworkId, file);
       await reload();
-      await loadWorksheetPreview();
+      const updatedList = await api.homeworks.listForStudent(studentId);
+      setHomeworks(updatedList);
+      const updatedHomework = updatedList.find((item) => item.id === homeworkId);
+      if (updatedHomework?.worksheetPageCount) {
+        await loadWorksheetPreview(updatedHomework.worksheetPageCount);
+      }
       setMessage(language === 'DE'
         ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Oben siehst du jetzt die aktuelle Version.'
         : 'Готово: отредактированный PDF заменил предыдущий файл. Сверху уже показана текущая версия домашки.');
@@ -216,38 +226,42 @@ export function HomeworkDetailPage() {
                     : 'Это именно та версия PDF, которую сейчас видит ученик.'}
                 </div>
               </div>
-              <button
-                className="btn btn--secondary"
-                type="button"
-                disabled={!previewUrl || previewLoading}
-                onClick={() => previewUrl && window.open(previewUrl, '_blank', 'noopener,noreferrer')}
-              >
-                {language === 'DE' ? 'Groß öffnen' : 'Открыть на весь экран'}
+              <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
+                {language === 'DE' ? 'PDF öffnen / herunterladen' : 'Открыть / скачать PDF'}
               </button>
             </div>
 
-            {previewLoading && !previewUrl ? (
+            {previewLoading && previewUrls.length === 0 ? (
               <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
-                {language === 'DE' ? 'PDF wird geladen…' : 'Загружаем PDF…'}
+                {language === 'DE' ? 'Vorschau wird geladen…' : 'Загружаем предпросмотр…'}
               </div>
-            ) : previewUrl ? (
-              <iframe
-                key={previewUrl}
-                src={`${previewUrl}#toolbar=1&navpanes=0&view=FitH`}
-                title={language === 'DE' ? 'Hausaufgaben-PDF Vorschau' : 'Просмотр PDF-домашки'}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  height: 'min(900px, 78vh)',
-                  minHeight: 620,
-                  border: '1px solid var(--border-color, #ddd)',
-                  borderRadius: 12,
-                  background: '#f7f7f7',
-                }}
-              />
+            ) : previewUrls.length > 0 ? (
+              <div style={{ display: 'grid', gap: 16, justifyItems: 'center' }}>
+                {previewUrls.map((url, index) => (
+                  <div key={url} style={{ width: '100%', maxWidth: 1100 }}>
+                    {previewUrls.length > 1 && (
+                      <div className="muted" style={{ marginBottom: 6, fontSize: 13 }}>
+                        {language === 'DE' ? `Seite ${index + 1}` : `Страница ${index + 1}`}
+                      </div>
+                    )}
+                    <img
+                      src={url}
+                      alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: 'auto',
+                        border: '1px solid var(--border-color, #ddd)',
+                        borderRadius: 12,
+                        background: '#fff',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="banner banner--info">
-                {language === 'DE' ? 'Die PDF-Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр PDF.'}
+                {language === 'DE' ? 'Die Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр.'}
               </div>
             )}
           </div>
