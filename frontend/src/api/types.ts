@@ -13,6 +13,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string | null;
+  username: string | null;
   role: Role;
   status: UserStatus;
   preferredLanguage: Language;
@@ -120,6 +121,8 @@ export interface DailyReviewHistoryItem {
   date: string;
   dueCount: number;
   completedCount: number;
+  correctCount: number;
+  incorrectCount: number;
   status: DailyReviewStatus;
   answers: DailyReviewAnswer[];
 }
@@ -127,59 +130,43 @@ export interface DailyReviewHistoryItem {
 export interface TestReviewReminderResult {
   studentId: string;
   dueCount: number;
-  reminderAttempted: boolean;
+  sent: boolean;
 }
 
 export interface PilotDueCardResult {
-  id: string;
+  cardId: string;
   question: string;
-  dueDate: string;
-}
-
-export interface ParsedCard {
-  question: string;
-  correctAnswer: string;
-  wrongAnswer1: string;
-  wrongAnswer2: string;
-  wrongAnswer3: string;
-}
-
-export interface ImportPreview {
-  cards: ParsedCard[];
-  warnings: string[];
+  dueDate: string | null;
+  repetitionNumber: number;
 }
 
 export interface Today {
-  totalCards: number;
-  dueCardCount: number;
-  learnedCount: number;
-  minCardsToStart: number;
-  canStartScheduled: boolean;
-  canPractice: boolean;
-  inProgressSessionId: string | null;
+  dueCount: number;
+  hasDueCards: boolean;
+  activeSessionId: string | null;
+  homeworkCount: number;
+  hasHomework: boolean;
 }
 
 export interface Session {
   id: string;
-  sessionType: SessionType;
+  type: SessionType;
   status: SessionStatus;
   totalCards: number;
-  answeredCards: number;
+  completedCards: number;
 }
 
 export interface Question {
   cardId: string;
   question: string;
-  options: string[];
-  answeredCount: number;
-  totalCards: number;
+  answers: string[];
 }
 
 export interface AnswerResult {
   correct: boolean;
-  correctAnswer: string;
+  completedCards: number;
+  totalCards: number;
   sessionCompleted: boolean;
-  remaining: number;
 }
 
 export interface SessionReviewItem {
@@ -191,9 +178,20 @@ export interface SessionReviewItem {
 }
 
 export interface SessionResult {
+  sessionId: string;
   type: SessionType;
   totalCards: number;
-  correctFirstTry: number;
-  nextReviewDate: string | null;
-  review: SessionReviewItem[];
+  correctCount: number;
+  incorrectCount: number;
+  items: SessionReviewItem[];
+}
+
+export interface ParsedCard {
+  question: string;
+  correctAnswer: string;
+}
+
+export interface ImportPreview {
+  cards: ParsedCard[];
+  errors: string[];
 }
