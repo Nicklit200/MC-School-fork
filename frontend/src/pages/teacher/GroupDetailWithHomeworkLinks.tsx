@@ -45,8 +45,12 @@ export function GroupDetailWithHomeworkLinks() {
       navigate(`/groups/${groupId}/homeworks/${match[1]}`);
     };
 
-    const onClick = (event: MouseEvent) => openGroupHomework(event.target);
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onClick: EventListener = (event) => {
+      openGroupHomework(event.target);
+    };
+
+    const onKeyDown: EventListener = (event) => {
+      if (!(event instanceof KeyboardEvent)) return;
       if (event.key !== 'Enter' && event.key !== ' ') return;
       if (!(event.target instanceof Element) || !event.target.matches('td:first-child')) return;
       event.preventDefault();
@@ -57,12 +61,12 @@ export function GroupDetailWithHomeworkLinks() {
     const observer = new MutationObserver(refreshClickableRows);
     observer.observe(root, { childList: true, subtree: true });
     root.addEventListener('click', onClick);
-    root.addEventListener('keydown', onKeyDown as EventListener);
+    root.addEventListener('keydown', onKeyDown);
 
     return () => {
       observer.disconnect();
       root.removeEventListener('click', onClick);
-      root.removeEventListener('keydown', onKeyDown as EventListener);
+      root.removeEventListener('keydown', onKeyDown);
     };
   }, [groupId, navigate]);
 
