@@ -97,11 +97,29 @@ public class HomeworkPdfService {
     }
 
     @Transactional(readOnly = true)
+    public byte[] renderTeacherPage(AuthenticatedUser teacher, UUID homeworkId, int pageIndex) {
+        Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
+        ensureWorksheet(homework);
+        validatePageIndex(homework, pageIndex);
+        return renderPdfPage(homework.getWorksheetPdf(), pageIndex);
+    }
+
+    @Transactional(readOnly = true)
     public byte[] renderStudentPage(AuthenticatedUser student, UUID homeworkId, int pageIndex) {
         Homework homework = requireStudentHomework(student.id(), homeworkId);
         ensureWorksheet(homework);
-        if (pageIndex < 0 || pageIndex >= homework.getWorksheetPageCount()) throw new ResourceNotFoundException("Homework page not found");
+        validatePageIndex(homework, pageIndex);
         byte[] sourcePdf = homework.isSubmitted() ? homework.getSubmittedPdf() : homework.getWorksheetPdf();
+        return renderPdfPage(sourcePdf, pageIndex);
+    }
+
+    private void validatePageIndex(Homework homework, int pageIndex) {
+        if (pageIndex < 0 || pageIndex >= homework.getWorksheetPageCount()) {
+            throw new ResourceNotFoundException("Homework page not found");
+        }
+    }
+
+    private byte[] renderPdfPage(byte[] sourcePdf, int pageIndex) {
         try (PDDocument document = Loader.loadPDF(sourcePdf); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, PAGE_RENDER_DPI, ImageType.RGB);
