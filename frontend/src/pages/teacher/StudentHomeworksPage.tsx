@@ -4,6 +4,8 @@ import { api } from '../../api/client';
 import type { Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
+import { GoogleDriveMultiPdfPicker } from './GoogleDriveMultiPdfPicker';
 
 type HomeworkHistoryStatus = 'DONE' | 'MISSED' | 'TODAY' | 'UPCOMING';
 
@@ -60,6 +62,16 @@ export function StudentHomeworksPage() {
 
   function setPdfForDay(index: number, file: File | null) {
     setPdfFiles((current) => current.map((existing, currentIndex) => currentIndex === index ? file : existing));
+  }
+
+  function applyPdfBatch(files: File[]) {
+    if (files.length === 0) return;
+    const nextDays = Math.max(daysCount, Math.min(31, files.length));
+    setDaysCount(nextDays);
+    setPdfFiles((current) => Array.from(
+      { length: nextDays },
+      (_, index) => files[index] ?? current[index] ?? null,
+    ));
   }
 
   function removePdf(index: number) {
@@ -148,6 +160,34 @@ export function StudentHomeworksPage() {
                 : 'Каждая строка привязана к своей дате. Файл можно заменить, удалить или передвинуть выше/ниже на другую дату.'}
             </p>
 
+            <div
+              className="panel"
+              style={{
+                padding: 12,
+                margin: '0 0 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: '1 1 360px' }}>
+                <strong>{language === 'DE' ? 'Mehrere Tage schnell ausfüllen' : 'Быстро заполнить несколько дней'}</strong>
+                <p className="muted" style={{ margin: '5px 0 0', fontSize: 13 }}>
+                  {language === 'DE'
+                    ? 'Wähle mehrere PDFs in Google Drive in der gewünschten Reihenfolge. Die Reihenfolge wird Tag 1, Tag 2 usw. zugeordnet.'
+                    : 'Выберите несколько PDF в Google Drive в нужном порядке. Первый файл станет Днём 1, второй — Днём 2 и так далее.'}
+                </p>
+              </div>
+              <GoogleDriveMultiPdfPicker
+                disabled={creating}
+                maxFiles={31}
+                buttonLabel={language === 'DE' ? 'Mehrere PDFs aus Google Drive' : 'Выбрать несколько PDF из Google Drive'}
+                onSelect={applyPdfBatch}
+              />
+            </div>
+
             <div style={{ display: 'grid', gap: 12 }}>
               {plannedDates.map((date, index) => {
                 const file = pdfFiles[index];
@@ -195,21 +235,26 @@ export function StudentHomeworksPage() {
                       )}
                     </div>
 
-                    <label className="field" style={{ margin: '10px 0 0' }}>
-                      <span className="field__label">
-                        {file
-                          ? (language === 'DE' ? 'PDF ersetzen' : 'Заменить PDF')
-                          : (language === 'DE' ? 'PDF auswählen' : 'Выбрать PDF')}
-                      </span>
-                      <input
-                        id={`homework-pdf-${index}`}
-                        className="input"
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        disabled={creating}
-                        onChange={(event) => setPdfForDay(index, event.target.files?.[0] ?? null)}
-                      />
-                    </label>
+                    <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+                      <label className="field" style={{ margin: 0, flex: '1 1 360px' }}>
+                        <span className="field__label">
+                          {file
+                            ? (language === 'DE' ? 'PDF vom Computer ersetzen' : 'Заменить PDF с компьютера')
+                            : (language === 'DE' ? 'PDF vom Computer auswählen' : 'Выбрать PDF с компьютера')}
+                        </span>
+                        <input
+                          id={`homework-pdf-${index}`}
+                          className="input"
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          disabled={creating}
+                          onChange={(event) => setPdfForDay(index, event.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      <div style={{ paddingBottom: 1 }}>
+                        <GoogleDrivePdfPicker disabled={creating} onSelect={(driveFile) => setPdfForDay(index, driveFile)} />
+                      </div>
+                    </div>
 
                     <div style={{ marginTop: 8, overflowWrap: 'anywhere' }}>
                       {file ? (
@@ -227,8 +272,8 @@ export function StudentHomeworksPage() {
           {!allFilesSelected && (
             <div className="banner banner--info">
               {language === 'DE'
-                ? `Bitte für alle ${daysCount} Tage eine PDF auswählen.`
-                : `Нужно выбрать PDF для каждого из ${daysCount} дней.`}
+                ? `Bitte für alle ${daysCount} Tage eine PDF vom Computer oder aus Google Drive auswählen.`
+                : `Нужно выбрать PDF для каждого из ${daysCount} дней — с компьютера или из Google Drive.`}
             </div>
           )}
 
