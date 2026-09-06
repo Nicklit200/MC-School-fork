@@ -69,9 +69,12 @@ export function Layout({ children }: { children: ReactNode }) {
                   type="button"
                   className="teacher-profile__logout"
                   title={t('common.logout')}
-                  onClick={() => navigate('/teacher/settings')}
+                  onClick={() => {
+                    logout();
+                    navigate('/login');
+                  }}
                 >
-                  ⌄
+                  {t('common.logout')}
                 </button>
               </div>
             </div>
