@@ -2,13 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { GroupDetailPage } from './GroupDetailPage';
 
-/**
- * Keeps the existing group dashboard intact while making a PDF-homework title
- * open the group-level homework editor. The current dashboard already renders
- * one individual homework link per student in the same row, so we reuse the
- * first matching homework id as the stable representative id for that group
- * assignment.
- */
+/** Makes group homework and card-set titles open their group-level editors. */
 export function GroupDetailWithHomeworkLinks() {
   const { groupId = '' } = useParams();
   const navigate = useNavigate();
@@ -18,9 +12,11 @@ export function GroupDetailWithHomeworkLinks() {
     if (!root) return;
 
     const refreshClickableRows = () => {
-      const homeworkSection = root.querySelector('.group-overview-grid .group-overview-card:first-child');
-      if (!homeworkSection) return;
-      homeworkSection.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
+      const overviewCards = root.querySelectorAll('.group-overview-grid .group-overview-card');
+      const homeworkSection = overviewCards.item(0);
+      const cardsSection = overviewCards.item(1);
+
+      homeworkSection?.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
         const titleCell = row.querySelector<HTMLTableCellElement>('td:first-child');
         const individualLink = row.querySelector<HTMLAnchorElement>('a[href*="/teacher/students/"][href*="/homeworks/"]');
         if (!titleCell || !individualLink) return;
@@ -29,32 +25,51 @@ export function GroupDetailWithHomeworkLinks() {
         titleCell.setAttribute('role', 'link');
         titleCell.setAttribute('tabindex', '0');
       });
+
+      cardsSection?.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
+        const titleCell = row.querySelector<HTMLTableCellElement>('td:first-child');
+        if (!titleCell) return;
+        titleCell.style.cursor = 'pointer';
+        titleCell.title = 'Открыть карточки всей группы';
+        titleCell.setAttribute('role', 'link');
+        titleCell.setAttribute('tabindex', '0');
+      });
     };
 
-    const openGroupHomework = (target: EventTarget | null) => {
+    const openTarget = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return;
-      const homeworkSection = target.closest('.group-overview-grid .group-overview-card:first-child');
-      if (!homeworkSection) return;
+      const overviewCards = root.querySelectorAll('.group-overview-grid .group-overview-card');
+      const homeworkSection = overviewCards.item(0);
+      const cardsSection = overviewCards.item(1);
+
       const titleCell = target.closest('td:first-child');
       const row = titleCell?.closest('tr');
       if (!titleCell || !row) return;
-      const individualLink = row.querySelector<HTMLAnchorElement>('a[href*="/teacher/students/"][href*="/homeworks/"]');
-      if (!individualLink) return;
-      const match = individualLink.getAttribute('href')?.match(/\/homeworks\/([^/?#]+)/);
-      if (!match) return;
-      navigate(`/groups/${groupId}/homeworks/${match[1]}`);
+
+      if (homeworkSection && homeworkSection.contains(target)) {
+        const individualLink = row.querySelector<HTMLAnchorElement>('a[href*="/teacher/students/"][href*="/homeworks/"]');
+        const match = individualLink?.getAttribute('href')?.match(/\/homeworks\/([^/?#]+)/);
+        if (match) navigate(`/groups/${groupId}/homeworks/${match[1]}`);
+        return;
+      }
+
+      if (cardsSection && cardsSection.contains(target)) {
+        const dateText = row.querySelector<HTMLTableCellElement>('td:nth-child(2)')?.textContent?.trim() ?? '';
+        const match = dateText.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (!match) return;
+        const [, day, month, year] = match;
+        navigate(`/groups/${groupId}/cards/${year}-${month}-${day}`);
+      }
     };
 
-    const onClick: EventListener = (event) => {
-      openGroupHomework(event.target);
-    };
+    const onClick: EventListener = (event) => openTarget(event.target);
 
     const onKeyDown: EventListener = (event) => {
       if (!(event instanceof KeyboardEvent)) return;
       if (event.key !== 'Enter' && event.key !== ' ') return;
       if (!(event.target instanceof Element) || !event.target.matches('td:first-child')) return;
       event.preventDefault();
-      openGroupHomework(event.target);
+      openTarget(event.target);
     };
 
     refreshClickableRows();
