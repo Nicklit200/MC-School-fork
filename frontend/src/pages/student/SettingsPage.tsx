@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Language } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
-/** Student settings: language, password and free PWA push notifications. */
+/** Shared account settings: language, password for students, push notifications and logout. */
 export function SettingsPage() {
   const { t, language, setLanguage } = useI18n();
-  const { user, setUser } = useAuth();
+  const { user, setUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -258,6 +260,19 @@ export function SettingsPage() {
             </button>
           </>
         )}
+      </div>
+
+      <div className="panel">
+        <button
+          className="btn btn--ghost btn--block"
+          type="button"
+          onClick={() => {
+            logout();
+            navigate('/login');
+          }}
+        >
+          {language === 'DE' ? 'Abmelden' : 'Выйти из аккаунта'}
+        </button>
       </div>
     </div>
   );
