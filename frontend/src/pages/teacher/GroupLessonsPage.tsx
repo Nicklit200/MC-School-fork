@@ -318,18 +318,42 @@ export function GroupLessonsPage() {
 }
 
 async function prepareBrowserNotifications() {
-  if (!('Notification' in window)) return;
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
-    if ('serviceWorker' in navigator) {
-      await navigator.serviceWorker.register('/sw.js');
-      await navigator.serviceWorker.ready;
+    const config = await api.push.config();
+    if (!config.enabled || !config.publicKey) return;
+
+    const permission = Notification.permission === 'default'
+      ? await Notification.requestPermission()
+      : Notification.permission;
+    if (permission !== 'granted') return;
+
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToArrayBuffer(config.publicKey),
+      });
     }
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
+
+    const json = subscription.toJSON();
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+    await api.push.subscribe({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
   } catch {
-    // The lesson flow must continue even if browser notifications are unavailable.
+    // The lesson flow must continue even if web push registration is unavailable.
   }
+}
+
+function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const bytes = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i += 1) bytes[i] = rawData.charCodeAt(i);
+  return bytes.buffer;
 }
 
 async function showSonioxBrowserNotification(lessonId: string, openedAt: number, title: string, language: 'DE' | 'RU') {
