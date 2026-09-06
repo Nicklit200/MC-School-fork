@@ -8,18 +8,16 @@ import { PdfHomeworkPage } from './PdfHomeworkPage';
 
 const MAX_IMAGE_EDGE = 2200;
 const JPEG_QUALITY = 0.86;
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const MAX_SINGLE_UPLOAD_BYTES = 25 * 1024 * 1024;
+const MAX_TOTAL_UPLOAD_BYTES = 60 * 1024 * 1024;
+const MAX_FILES = 12;
 
-/**
- * Student homework workspace: solve directly on the worksheet or hand in a
- * photo/PDF of work completed on paper. Mobile photos are normalized to JPEG
- * before upload so HEIC/WebP/very large camera images do not fail on the server.
- */
+/** Student homework workspace: solve directly on the worksheet or hand in photos/PDFs of paper work. */
 export function PdfHomeworkWithSubmissionPage() {
   const { homeworkId = '' } = useParams();
   const { language, t } = useI18n();
   const [homework, setHomework] = useState<Homework | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [preparingFile, setPreparingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,54 +39,73 @@ export function PdfHomeworkWithSubmissionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeworkId, homework?.submitted]);
 
-  async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
+  async function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
     setError(null);
     setMessage(null);
-    setFile(null);
-    if (!selected) return;
+    if (selected.length === 0) return;
 
-    if (selected.type === 'application/pdf' || selected.name.toLowerCase().endsWith('.pdf')) {
-      if (selected.size > MAX_UPLOAD_BYTES) {
-        setError(language === 'DE' ? 'Die PDF-Datei ist größer als 25 MB.' : 'PDF больше 25 МБ. Выбери файл поменьше.');
-        event.target.value = '';
-        return;
-      }
-      setFile(selected);
-      return;
-    }
-
-    if (!selected.type.startsWith('image/') && !isImageFilename(selected.name)) {
+    if (files.length + selected.length > MAX_FILES) {
       setError(language === 'DE'
-        ? 'Bitte wähle ein Foto oder eine PDF-Datei.'
-        : 'Выбери фотографию или PDF-файл.');
+        ? `Du kannst höchstens ${MAX_FILES} Dateien abgeben.`
+        : `Можно прикрепить максимум ${MAX_FILES} файлов.`);
       event.target.value = '';
       return;
     }
 
     setPreparingFile(true);
     try {
-      const normalized = await normalizePhoto(selected);
-      if (normalized.size > MAX_UPLOAD_BYTES) {
-        throw new Error(language === 'DE'
-          ? 'Das Foto ist auch nach der Verarbeitung zu groß.'
-          : 'Фотография слишком большая даже после обработки.');
+      const prepared: File[] = [];
+      for (const selectedFile of selected) {
+        if (selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf')) {
+          if (selectedFile.size > MAX_SINGLE_UPLOAD_BYTES) {
+            throw new Error(language === 'DE' ? 'Eine PDF-Datei ist größer als 25 MB.' : 'Один из PDF-файлов больше 25 МБ.');
+          }
+          prepared.push(selectedFile);
+          continue;
+        }
+
+        if (!selectedFile.type.startsWith('image/') && !isImageFilename(selectedFile.name)) {
+          throw new Error(language === 'DE'
+            ? 'Bitte wähle nur Fotos oder PDF-Dateien.'
+            : 'Можно выбрать только фотографии или PDF-файлы.');
+        }
+
+        const normalized = await normalizePhoto(selectedFile);
+        if (normalized.size > MAX_SINGLE_UPLOAD_BYTES) {
+          throw new Error(language === 'DE'
+            ? 'Ein Foto ist auch nach der Verarbeitung zu groß.'
+            : 'Одна из фотографий слишком большая даже после обработки.');
+        }
+        prepared.push(normalized);
       }
-      setFile(normalized);
+
+      const nextFiles = [...files, ...prepared];
+      const totalBytes = nextFiles.reduce((sum, item) => sum + item.size, 0);
+      if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) {
+        throw new Error(language === 'DE'
+          ? 'Alle ausgewählten Dateien zusammen sind größer als 60 MB.'
+          : 'Все выбранные файлы вместе больше 60 МБ. Удали несколько фотографий.');
+      }
+      setFiles(nextFiles);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      event.target.value = '';
     } finally {
       setPreparingFile(false);
+      event.target.value = '';
     }
   }
 
-  async function submitFile() {
-    if (!file || homework?.submitted || preparingFile) return;
+  function removeFile(index: number) {
+    setFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  async function submitFiles() {
+    if (files.length === 0 || homework?.submitted || preparingFile) return;
     const confirmed = window.confirm(
       language === 'DE'
-        ? 'Diese Datei als Hausaufgabe abgeben? Danach kann die Abgabe nicht mehr geändert werden.'
-        : 'Сдать этот файл как домашнюю работу? После сдачи изменить ответ уже нельзя.',
+        ? `${files.length} Datei(en) als Hausaufgabe abgeben? Danach kann die Abgabe nicht mehr geändert werden.`
+        : `Сдать ${files.length} файл(а) как домашнюю работу? После сдачи изменить ответ уже нельзя.`,
     );
     if (!confirmed) return;
 
@@ -96,12 +113,9 @@ export function PdfHomeworkWithSubmissionPage() {
     setError(null);
     setMessage(null);
     try {
-      await api.study.submitHomeworkFile(homeworkId, file);
+      await api.study.submitHomeworkFiles(homeworkId, files);
       await finishSuccessfulUpload();
     } catch (e) {
-      // Mobile browsers can lose the response after the server has already saved
-      // a large upload (backgrounding Safari, brief network switch, etc.). Before
-      // showing an error, ask the server whether the homework is in fact submitted.
       try {
         const current = await refresh();
         if (current?.submitted) {
@@ -109,7 +123,7 @@ export function PdfHomeworkWithSubmissionPage() {
           return;
         }
       } catch {
-        // Preserve the original upload error below.
+        // Preserve original upload error.
       }
       setError(toErrorMessage(e, t));
     } finally {
@@ -119,21 +133,23 @@ export function PdfHomeworkWithSubmissionPage() {
 
   async function finishSuccessfulUpload(refreshFirst = true) {
     if (refreshFirst) await refresh();
-    setFile(null);
+    setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setMessage(
       language === 'DE'
-        ? 'Datei wurde abgegeben. Der Lehrer erhält sie als PDF.'
-        : 'Файл сдан. Учитель получит его как PDF.',
+        ? 'Die Dateien wurden abgegeben. Der Lehrer erhält alles in einer PDF-Datei.'
+        : 'Файлы сданы. Учитель получит все фотографии одним PDF-документом.',
     );
   }
+
+  const totalSize = files.reduce((sum, item) => sum + item.size, 0);
 
   return (
     <>
       <PdfHomeworkPage />
 
       {!homework?.submitted && (
-        <div className="panel" style={{ marginTop: 18 }}>
+        <div className="panel" style={{ marginTop: 18, marginBottom: 32 }}>
           <div style={{ textAlign: 'center', marginBottom: 14 }}>
             <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
               {language === 'DE' ? 'ODER' : 'ИЛИ'}
@@ -143,8 +159,8 @@ export function PdfHomeworkWithSubmissionPage() {
             </h2>
             <p className="muted" style={{ marginBottom: 0 }}>
               {language === 'DE'
-                ? 'Lade ein Foto deiner Lösung oder eine fertige PDF-Datei hoch.'
-                : 'Загрузи фотографию своего решения или готовый PDF-файл.'}
+                ? 'Wähle mehrere Fotos deiner Lösung oder PDF-Dateien aus.'
+                : 'Выбери сразу несколько фотографий решения или PDF-файлов.'}
             </p>
           </div>
 
@@ -153,53 +169,69 @@ export function PdfHomeworkWithSubmissionPage() {
 
           <label className="field">
             <span className="field__label">
-              {language === 'DE' ? 'Foto oder PDF auswählen' : 'Выбрать фото или PDF'}
+              {language === 'DE' ? 'Fotos oder PDFs auswählen' : 'Выбрать фото или PDF'}
             </span>
             <input
               ref={fileInputRef}
               className="input"
               type="file"
               accept="image/*,application/pdf,.pdf"
-              onChange={(event) => void chooseFile(event)}
+              multiple
+              onChange={(event) => void chooseFiles(event)}
               disabled={busy || preparingFile}
             />
           </label>
 
           {preparingFile && (
             <div className="banner banner--info">
-              {language === 'DE' ? 'Foto wird für den Upload vorbereitet…' : 'Подготавливаем фотографию для загрузки…'}
+              {language === 'DE' ? 'Fotos werden vorbereitet…' : 'Подготавливаем фотографии для загрузки…'}
             </div>
           )}
 
-          {file && (
-            <div className="muted" style={{ fontSize: 13, marginBottom: 12, overflowWrap: 'anywhere' }}>
-              {language === 'DE' ? 'Ausgewählt:' : 'Выбрано:'} {file.name} · {formatMegabytes(file.size)} MB
+          {files.length > 0 && (
+            <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+              <div className="muted" style={{ fontSize: 13 }}>
+                {language === 'DE' ? 'Ausgewählt' : 'Выбрано'}: {files.length} · {formatMegabytes(totalSize)} MB
+              </div>
+              {files.map((item, index) => (
+                <div key={`${item.name}-${item.lastModified}-${index}`} className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <span style={{ minWidth: 0, overflowWrap: 'anywhere', fontSize: 13 }}>{index + 1}. {item.name}</span>
+                  <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => removeFile(index)}>
+                    {language === 'DE' ? 'Entfernen' : 'Удалить'}
+                  </button>
+                </div>
+              ))}
+              {files.length < MAX_FILES && (
+                <button type="button" className="btn btn--secondary btn--block" disabled={busy || preparingFile} onClick={() => fileInputRef.current?.click()}>
+                  {language === 'DE' ? 'Weitere Fotos hinzufügen' : 'Добавить ещё фотографии'}
+                </button>
+              )}
             </div>
           )}
 
           <button
             className="btn btn--block"
             type="button"
-            onClick={submitFile}
-            disabled={!file || busy || preparingFile}
+            onClick={submitFiles}
+            disabled={files.length === 0 || busy || preparingFile}
           >
             {busy
               ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
-              : (language === 'DE' ? 'Datei abgeben' : 'Сдать файл')}
+              : (language === 'DE' ? `${files.length || ''} Datei(en) abgeben` : `Сдать ${files.length || ''} фото/файлов`)}
           </button>
 
           {busy && (
             <div className="banner banner--info" style={{ marginTop: 10 }}>
               {language === 'DE'
                 ? 'Bitte diese Seite geöffnet lassen, bis die Abgabe bestätigt ist.'
-                : 'Не закрывай страницу до подтверждения сдачи. На мобильном интернете загрузка может занять немного времени.'}
+                : 'Не закрывай страницу до подтверждения сдачи. Несколько фото могут загружаться немного дольше.'}
             </div>
           )}
 
           <p className="muted" style={{ marginBottom: 0, marginTop: 10, fontSize: 12 }}>
             {language === 'DE'
-              ? 'Fotos vom Handy werden automatisch verkleinert und in JPEG umgewandelt. PDF bis 25 MB.'
-              : 'Фото с телефона автоматически уменьшается и переводится в JPEG. PDF — до 25 МБ.'}
+              ? `Bis zu ${MAX_FILES} Dateien. Handy-Fotos werden automatisch verkleinert. Alles wird zu einer PDF zusammengefügt.`
+              : `До ${MAX_FILES} файлов. Фото с телефона автоматически уменьшаются. Все страницы будут объединены в один PDF.`}
           </p>
         </div>
       )}
