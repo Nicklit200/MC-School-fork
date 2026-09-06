@@ -4,6 +4,7 @@ import type {
   Card,
   CardSummary,
   DailyReviewHistoryItem,
+  GroupLesson,
   Homework,
   HomeworkPageOverlay,
   ImportPreview,
@@ -207,6 +208,9 @@ export const api = {
       request<number>('POST', `/groups/${groupId}/cards/import`, { startDate, cards }),
     createPdfHomework: (groupId: string, startDate: string, file: File) =>
       uploadDatedFile<number>(`/groups/${groupId}/homeworks/pdf`, startDate, file),
+  },
+  lessons: {
+    groupLessons: () => request<GroupLesson[]>('GET', '/lessons/groups'),
   },
   cards: {
     listForStudent: (studentId: string) => request<Card[]>('GET', `/students/${studentId}/cards`),
