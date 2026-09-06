@@ -5,7 +5,7 @@ import { homePathForRole } from '../auth/roleRoutes';
 import { useI18n } from '../i18n/I18nContext';
 import { LanguageToggle } from '../components/LanguageToggle';
 
-/** Invitation acceptance. The link carries the invitation token; the invitee sets email and password. */
+/** Invitation acceptance. Students may use the generated school login without email. */
 export function ActivatePage() {
   const { activate } = useAuth();
   const { language, t } = useI18n();
@@ -38,8 +38,8 @@ export function ActivatePage() {
         <h1>{t('activate.title')}</h1>
         <p className="muted">
           {language === 'DE'
-            ? 'Gib deine E-Mail-Adresse ein und lege ein Passwort fest.'
-            : 'Укажи свою электронную почту и придумай пароль для входа.'}
+            ? 'Schüler können die E-Mail leer lassen und später mit ihrem Schul-Login anmelden.'
+            : 'Ученику email можно не указывать: после активации он сможет входить по школьному логину.'}
         </p>
         {error && <div className="banner banner--error">{t('activate.error')}</div>}
         <label className="field">
@@ -53,14 +53,13 @@ export function ActivatePage() {
           />
         </label>
         <label className="field">
-          <span className="field__label">{t('common.email')}</span>
+          <span className="field__label">{language === 'DE' ? 'E-Mail (für Schüler optional)' : 'Email (для ученика необязательно)'}</span>
           <input
             className="input"
             type="email"
             value={email}
             autoComplete="email"
             onChange={(e) => setEmail(e.target.value)}
-            required
           />
         </label>
         <label className="field">
