@@ -33,6 +33,9 @@ public class StudentGroup {
     @Column(nullable = false, length = 120)
     private String name;
 
+    @Column(name = "google_drive_transcript_folder_id", length = 255)
+    private String googleDriveTranscriptFolderId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -53,5 +56,9 @@ public class StudentGroup {
 
     public static StudentGroup create(User teacher, String name) {
         return new StudentGroup(teacher, name);
+    }
+
+    public void updateTranscriptFolder(String folderId) {
+        this.googleDriveTranscriptFolderId = folderId == null || folderId.isBlank() ? null : folderId.strip();
     }
 }
