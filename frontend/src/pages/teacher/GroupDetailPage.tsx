@@ -509,15 +509,27 @@ export function GroupDetailPage() {
                       {file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}
                     </div>
                     <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap' }}>
-                      <label className="field" style={{ flex: '1 1 360px', margin: 0 }}>
-                        <span className="field__label">{file ? 'Заменить PDF с компьютера' : 'Выбрать PDF с компьютера'}</span>
-                        <input id={`group-homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creatingHomework} onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)} />
-                      </label>
+                      <div style={{ flex: '1 1 360px' }}>
+                        <input
+                          id={`group-homework-pdf-${index}`}
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          disabled={creatingHomework}
+                          onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)}
+                          style={{ display: 'none' }}
+                        />
+                        <label
+                          htmlFor={`group-homework-pdf-${index}`}
+                          className="input"
+                          style={{ display: 'flex', alignItems: 'center', minHeight: 46, cursor: creatingHomework ? 'default' : 'pointer', color: file ? '#172033' : '#6d7890' }}
+                        >
+                          {file ? file.name : 'Выбрать PDF с компьютера'}
+                        </label>
+                      </div>
                       <div style={{ paddingBottom: 1 }}>
                         <GoogleDrivePdfPicker disabled={creatingHomework} onSelect={(driveFile) => setHomeworkFile(index, driveFile)} />
                       </div>
                     </div>
-                    <span className="group-day-card__file">{file ? `Выбран: ${file.name}` : 'Файл пока не выбран'}</span>
                   </div>
                 );
               })}
