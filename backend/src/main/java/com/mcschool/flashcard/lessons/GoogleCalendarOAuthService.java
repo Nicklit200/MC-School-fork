@@ -54,7 +54,11 @@ public class GoogleCalendarOAuthService {
         if (teacher.getGoogleCalendarRefreshToken() != null && !teacher.getGoogleCalendarRefreshToken().isBlank()) {
             return new GoogleCalendarConnectionResponse(true, null);
         }
-        ensureConfigured();
+
+        if (!isConfigured()) {
+            return new GoogleCalendarConnectionResponse(false, null);
+        }
+
         String state = UUID.randomUUID().toString();
         teacher.beginGoogleCalendarOauth(state, Instant.now().plus(15, ChronoUnit.MINUTES));
         return new GoogleCalendarConnectionResponse(false, authorizationUrl(state));
@@ -149,8 +153,14 @@ public class GoogleCalendarOAuthService {
                 .orElseThrow(() -> new IllegalStateException("Teacher account not found"));
     }
 
+    private boolean isConfigured() {
+        return clientId != null && !clientId.isBlank()
+                && clientSecret != null && !clientSecret.isBlank()
+                && redirectUri != null && !redirectUri.isBlank();
+    }
+
     private void ensureConfigured() {
-        if (clientId == null || clientId.isBlank() || clientSecret == null || clientSecret.isBlank() || redirectUri == null || redirectUri.isBlank()) {
+        if (!isConfigured()) {
             throw new IllegalStateException("Google Calendar OAuth is not configured");
         }
     }
