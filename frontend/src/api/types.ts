@@ -23,6 +23,7 @@ export interface StudentListItem extends User {
   invitationToken: string | null;
   googleDriveFolderUrl: string | null;
   googleDriveHomeworkFolderId: string | null;
+  chatGptProjectUrl: string | null;
   parentId: string | null;
   parentFullName: string | null;
   parentEmail: string | null;
