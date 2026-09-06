@@ -134,6 +134,30 @@ export function StudentsPage() {
     }
   }
 
+  async function resetStudentPassword(student: StudentListItem) {
+    const password = window.prompt(
+      language === 'DE'
+        ? `Neues Passwort für ${student.fullName} (mindestens 6 Zeichen)`
+        : `Новый пароль для ${student.fullName} (минимум 6 символов)`,
+      '',
+    );
+    if (password == null) return;
+    if (password.length < 6) {
+      window.alert(language === 'DE' ? 'Das Passwort muss mindestens 6 Zeichen haben.' : 'Пароль должен содержать минимум 6 символов.');
+      return;
+    }
+    setError(null);
+    try {
+      await api.students.resetPassword(student.id, password);
+      setOpenMenuId(null);
+      window.alert(language === 'DE'
+        ? `Passwort geändert. Login: ${student.username ?? student.email ?? '—'}`
+        : `Пароль изменён. Логин: ${student.username ?? student.email ?? '—'}`);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
   async function deleteStudent(student: StudentListItem) {
     if (!window.confirm(t('students.deleteConfirm', { name: student.fullName }))) return;
     setError(null);
@@ -225,6 +249,9 @@ export function StudentsPage() {
                         <div className="teacher-student-menu">
                           <button type="button" disabled={!student.invitationToken} onClick={() => void copyInvitationLink(student)}>
                             <span>⌁</span>{copiedStudentId === student.id ? (language === 'DE' ? 'Link kopiert' : 'Ссылка скопирована') : (language === 'DE' ? 'Schüler-Link' : 'Ссылка ученика')}
+                          </button>
+                          <button type="button" onClick={() => void resetStudentPassword(student)}>
+                            <span>⌘</span>{language === 'DE' ? 'Passwort ändern' : 'Сбросить пароль'}
                           </button>
                           <button type="button" onClick={() => void linkParent(student)}>
                             <span>♙</span>{student.parentId ? (language === 'DE' ? 'Elternteil ändern' : 'Изменить родителя') : (language === 'DE' ? 'Elternteil hinzufügen' : 'Добавить родителя')}
