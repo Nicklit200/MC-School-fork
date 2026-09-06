@@ -5,8 +5,11 @@ import java.util.UUID;
 
 public record GroupLessonResponse(
         String eventId,
+        String bindingKey,
         UUID groupId,
         String groupName,
+        UUID studentId,
+        String studentName,
         String title,
         Instant startsAt,
         Instant endsAt,
