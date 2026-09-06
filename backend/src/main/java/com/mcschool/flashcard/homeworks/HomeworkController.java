@@ -84,6 +84,22 @@ public class HomeworkController {
         homeworkPdfService.uploadWorksheet(caller, homeworkId, file);
     }
 
+    @GetMapping(value = "/homeworks/{homeworkId}/worksheet", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<byte[]> downloadWorksheet(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                     @PathVariable UUID homeworkId) {
+        byte[] pdf = homeworkPdfService.teacherWorksheet(caller, homeworkId);
+        String filename = homeworkPdfService.worksheetFilename(caller, homeworkId);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdf.length)
+                .body(pdf);
+    }
+
     @GetMapping(value = "/study/homeworks/{homeworkId}/worksheet/pages/{pageIndex}", produces = MediaType.IMAGE_PNG_VALUE)
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<byte[]> worksheetPage(@AuthenticationPrincipal AuthenticatedUser caller,
