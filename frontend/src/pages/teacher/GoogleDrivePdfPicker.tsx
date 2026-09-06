@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { driveApi, type DriveItem } from '../../api/drive';
 
 type Props = {
@@ -8,8 +8,10 @@ type Props = {
   maxFiles?: number;
 };
 
-export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany, maxFiles = 1 }: Props) {
+export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany, maxFiles = 31 }: Props) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [selectionLimit, setSelectionLimit] = useState(1);
   const [drives, setDrives] = useState<DriveItem[]>([]);
   const [driveId, setDriveId] = useState('');
   const [folders, setFolders] = useState<DriveItem[]>([]);
@@ -22,7 +24,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
   const [selected, setSelected] = useState<DriveItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const multi = Boolean(onSelectMany) && maxFiles > 1;
+  const multi = selectionLimit > 1;
 
   useEffect(() => {
     if (!open || drives.length > 0 || loadingDrives) return;
@@ -38,6 +40,23 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingDrives(false));
   }, [open, drives.length, loadingDrives]);
+
+  function openPicker() {
+    setSelected([]);
+    setError(null);
+
+    const currentCard = buttonRef.current?.closest('.group-day-card');
+    if (currentCard) {
+      const cards = Array.from(document.querySelectorAll('.group-day-card'));
+      const startIndex = cards.indexOf(currentCard);
+      const remaining = startIndex >= 0 ? cards.length - startIndex : 1;
+      setSelectionLimit(Math.max(1, Math.min(maxFiles, remaining)));
+    } else {
+      setSelectionLimit(onSelectMany ? Math.max(1, maxFiles) : 1);
+    }
+
+    setOpen(true);
+  }
 
   async function load(drive: string, parentId?: string) {
     setLoading(true);
@@ -90,8 +109,8 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
       if (existingIndex >= 0) {
         return current.filter((selectedFile) => selectedFile.id !== item.id);
       }
-      if (current.length >= maxFiles) {
-        setError(`Можно выбрать максимум ${maxFiles} PDF.`);
+      if (current.length >= selectionLimit) {
+        setError(`Можно выбрать максимум ${selectionLimit} PDF.`);
         return current;
       }
       return [...current, item];
@@ -112,8 +131,39 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
     }
   }
 
+  function applyFilesToGroupDays(downloaded: File[]) {
+    const currentCard = buttonRef.current?.closest('.group-day-card');
+    if (!currentCard) {
+      if (onSelectMany) onSelectMany(downloaded);
+      else if (downloaded[0]) onSelect(downloaded[0]);
+      return;
+    }
+
+    const cards = Array.from(document.querySelectorAll('.group-day-card'));
+    const startIndex = cards.indexOf(currentCard);
+    if (startIndex < 0) {
+      if (downloaded[0]) onSelect(downloaded[0]);
+      return;
+    }
+
+    downloaded.forEach((file, offset) => {
+      const targetIndex = startIndex + offset;
+      if (offset === 0) {
+        onSelect(file);
+        return;
+      }
+
+      const input = document.getElementById(`group-homework-pdf-${targetIndex}`) as HTMLInputElement | null;
+      if (!input || typeof DataTransfer === 'undefined') return;
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
   async function confirmMany() {
-    if (!onSelectMany || selected.length === 0 || downloadingMany) return;
+    if (selected.length === 0 || downloadingMany) return;
     setDownloadingMany(true);
     setError(null);
     try {
@@ -121,7 +171,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
       for (const item of selected) {
         downloaded.push(await driveApi.downloadPdf(item.id, item.name));
       }
-      onSelectMany(downloaded);
+      applyFilesToGroupDays(downloaded);
       setSelected([]);
       setOpen(false);
     } catch (e) {
@@ -139,7 +189,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
 
   return (
     <>
-      <button className="btn btn--secondary" type="button" disabled={disabled} onClick={() => setOpen(true)}>
+      <button ref={buttonRef} className="btn btn--secondary" type="button" disabled={disabled} onClick={openPicker}>
         Google Drive
       </button>
 
@@ -176,7 +226,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
                 <strong style={{ fontSize: 18 }}>{multi ? 'Выбрать несколько PDF из Google Drive' : 'Выбрать PDF из Google Drive'}</strong>
                 <p className="muted" style={{ margin: '6px 0 0' }}>
                   {multi
-                    ? `Нажимай на PDF по очереди. Номер показывает, на какой день он попадёт. Можно выбрать до ${maxFiles}.`
+                    ? `Нажимай на PDF в нужном порядке. Первый выбранный пойдёт на текущий день, второй — на следующий и так далее. Можно выбрать до ${selectionLimit}.`
                     : 'Открой нужную папку и нажми на PDF.'}
                 </p>
               </div>
@@ -200,7 +250,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
 
             {multi && selected.length > 0 && (
               <div className="banner banner--info" style={{ marginBottom: 14 }}>
-                Выбрано {selected.length} из {maxFiles}: {selected.map((item, index) => `${index + 1}. ${item.name}`).join(' · ')}
+                Выбрано {selected.length} из {selectionLimit}: {selected.map((item, index) => `${index + 1}. ${item.name}`).join(' · ')}
               </div>
             )}
 
