@@ -5,9 +5,11 @@ import com.mcschool.flashcard.lessons.dto.GoogleMeetEventStatusResponse;
 import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
 import com.mcschool.flashcard.notifications.WebPushService;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
@@ -113,8 +115,25 @@ public class GoogleMeetEventsService {
         return toResponse(state);
     }
 
+    @Transactional
     public GoogleMeetEventStatusResponse status(AuthenticatedUser caller) {
         GoogleMeetTeacherEventState state = stateRepository.findById(caller.id()).orElse(null);
+
+        // Pub/Sub is the fastest path when configured. This direct Meet REST API check is a
+        // second exact path and also makes the feature work without Pub/Sub infrastructure.
+        try {
+            Instant detectedLeftAt = latestTeacherLeaveFromMeetApi(caller.id(), state);
+            if (detectedLeftAt != null
+                    && (state == null || state.getLastLeftAt() == null || detectedLeftAt.isAfter(state.getLastLeftAt()))) {
+                if (state == null) state = GoogleMeetTeacherEventState.create(caller.id());
+                state.markLeft(detectedLeftAt);
+                stateRepository.save(state);
+                sendStopSonioxPush(caller.id());
+            }
+        } catch (RuntimeException ignored) {
+            // Keep status usable if the account has not yet re-authorized the Meet scope.
+        }
+
         return state == null
                 ? new GoogleMeetEventStatusResponse(isConfigured(), false, null)
                 : toResponse(state);
@@ -151,6 +170,48 @@ public class GoogleMeetEventsService {
             stateRepository.save(state);
             sendStopSonioxPush(state.getTeacherId());
         }
+    }
+
+    private Instant latestTeacherLeaveFromMeetApi(UUID teacherId, GoogleMeetTeacherEventState state) {
+        String accessToken = oauthService.accessTokenForTeacher(teacherId);
+        if (accessToken == null || accessToken.isBlank()) return null;
+
+        String googleUserId = state == null ? null : state.getGoogleUserId();
+        if (googleUserId == null || googleUserId.isBlank()) {
+            googleUserId = "users/" + currentGoogleUserId(accessToken);
+        }
+
+        String recordsUrl = MEET_API + "conferenceRecords?pageSize=10&fields="
+                + enc("conferenceRecords(name,startTime,endTime)");
+        Map<String, Object> recordsPayload = getJson(recordsUrl, accessToken);
+        Object rawRecords = recordsPayload.get("conferenceRecords");
+        if (!(rawRecords instanceof List<?> records)) return null;
+
+        Instant latestLeftAt = null;
+        for (Object rawRecord : records) {
+            if (!(rawRecord instanceof Map<?, ?> record)) continue;
+            String recordName = stringValue(record.get("name"));
+            if (recordName.isBlank()) continue;
+
+            String participantsUrl = MEET_API + recordName + "/participants?pageSize=100&fields="
+                    + enc("participants(signedinUser(user),latestEndTime)");
+            Map<String, Object> participantsPayload = getJson(participantsUrl, accessToken);
+            Object rawParticipants = participantsPayload.get("participants");
+            if (!(rawParticipants instanceof List<?> participants)) continue;
+
+            for (Object rawParticipant : participants) {
+                if (!(rawParticipant instanceof Map<?, ?> participant)) continue;
+                Object rawSignedIn = participant.get("signedinUser");
+                if (!(rawSignedIn instanceof Map<?, ?> signedIn)) continue;
+                if (!googleUserId.equals(stringValue(signedIn.get("user")))) continue;
+
+                Instant leftAt = parseInstant(participant.get("latestEndTime"));
+                if (leftAt != null && (latestLeftAt == null || leftAt.isAfter(latestLeftAt))) {
+                    latestLeftAt = leftAt;
+                }
+            }
+        }
+        return latestLeftAt;
     }
 
     private Map<String, Object> decodeEventData(Object rawData) {
@@ -310,6 +371,7 @@ public class GoogleMeetEventsService {
     @SuppressWarnings("unchecked")
     private Map<String, Object> asMap(Object value) { return (Map<String, Object>) value; }
     private String stringValue(Object value) { return value == null ? "" : String.valueOf(value); }
+    private String enc(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
 
     private boolean constantTimeEquals(String expected, String actual) {
         if (expected.length() != actual.length()) return false;
