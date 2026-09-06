@@ -6,6 +6,7 @@ import com.mcschool.flashcard.groups.dto.CreateGroupCardRequest;
 import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
 import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
 import com.mcschool.flashcard.groups.dto.StudentGroupResponse;
+import com.mcschool.flashcard.groups.dto.UpdateGroupTranscriptFolderRequest;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -58,6 +60,13 @@ public class StudentGroupController {
                                            @PathVariable UUID groupId,
                                            @Valid @RequestBody AddGroupMembersRequest request) {
         return groupService.addMembers(caller, groupId, request);
+    }
+
+    @PutMapping("/{groupId}/transcript-drive-folder")
+    public StudentGroupResponse updateTranscriptFolder(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                       @PathVariable UUID groupId,
+                                                       @Valid @RequestBody UpdateGroupTranscriptFolderRequest request) {
+        return groupService.updateTranscriptFolder(caller, groupId, request);
     }
 
     @PostMapping("/{groupId}/cards")
