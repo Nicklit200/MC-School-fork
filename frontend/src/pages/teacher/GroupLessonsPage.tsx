@@ -232,28 +232,18 @@ export function GroupLessonsPage() {
                         const brief = lesson.groupId ? briefs[lesson.groupId] : undefined;
                         const linked = Boolean(lesson.groupId && lesson.groupName);
                         const expanded = expandedLessonId === lesson.eventId;
-                        const started = startedLessonId === lesson.eventId;
                         const finished = finishedLessonId === lesson.eventId;
                         return (
                           <div key={lesson.eventId} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: '#fff' }}>
                             <div style={{ fontSize: 17, fontWeight: 800 }}>{formatStartTime(lesson.startsAt, language)}</div>
-                            <div style={{ fontWeight: 750, marginTop: 4 }}>{lesson.groupName ?? lesson.title}</div>
+                            <div style={{ fontWeight: 750, marginTop: 4 }}>{lesson.title}</div>
                             <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
 
-                            {!linked && <div className="muted" style={{ fontSize: 12, marginTop: 7 }}>{language === 'DE' ? 'Noch keiner Mindcrafti-Gruppe zugeordnet.' : 'Событие пока не связано с группой Mindcrafti.'}</div>}
-
                             <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-                              {lesson.meetUrl && !started && <button className="btn" type="button" onClick={() => requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>}
+                              <button className="btn" type="button" onClick={() => requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>
                               {linked && <button className="btn btn--secondary" type="button" onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)} style={{ width: '100%' }}>{expanded ? (language === 'DE' ? 'Details schließen' : 'Скрыть детали') : (language === 'DE' ? 'Vorbereitung' : 'Подготовка')}</button>}
                               {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer" style={{ width: '100%', textAlign: 'center' }}>Google Calendar</a>}
                             </div>
-
-                            {started && (
-                              <div style={{ marginTop: 10 }}>
-                                <div style={{ padding: 10, borderRadius: 10, background: '#fff3ec', border: '1px solid #ffd4bd', fontSize: 13, fontWeight: 750, marginBottom: 8 }}>{language === 'DE' ? 'Soniox-Aufnahme läuft.' : 'Soniox должен записывать урок.'}</div>
-                                <button className="btn btn--secondary" type="button" onClick={() => setFinishReminderLessonId(lesson.eventId)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht beenden' : 'Завершить урок'}</button>
-                              </div>
-                            )}
 
                             {expanded && linked && brief && lesson.groupId && (
                               <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
@@ -291,7 +281,7 @@ export function GroupLessonsPage() {
           <div className="panel" style={{ width: 'min(560px, 100%)', padding: 28, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.28)' }}>
             <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 10 }}>{language === 'DE' ? 'Soniox einschalten' : 'Включи Soniox'}</div>
             <div style={{ fontSize: 17, lineHeight: 1.5, marginBottom: 20 }}>{language === 'DE' ? 'Starte jetzt die Soniox-Aufnahme. Erst danach öffnen wir Google Meet.' : 'Сначала запусти запись Soniox. Только после этого открывай Google Meet.'}</div>
-            <div style={{ fontWeight: 800, marginBottom: 18 }}>{startReminderLesson.groupName ?? startReminderLesson.title} · {formatLessonTime(startReminderLesson.startsAt, startReminderLesson.endsAt, language)}</div>
+            <div style={{ fontWeight: 800, marginBottom: 18 }}>{startReminderLesson.title} · {formatLessonTime(startReminderLesson.startsAt, startReminderLesson.endsAt, language)}</div>
             <div className="stack" style={{ gap: 10 }}>
               <button className="btn" type="button" onClick={() => void openMeetAfterSoniox(startReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox läuft — Google Meet öffnen' : 'Soniox включён — открыть Google Meet'}</button>
               <button className="btn btn--ghost" type="button" onClick={() => setStartReminderLessonId(null)} style={{ width: '100%' }}>{language === 'DE' ? 'Abbrechen' : 'Отмена'}</button>
@@ -305,7 +295,7 @@ export function GroupLessonsPage() {
           <div className="panel" style={{ width: 'min(580px, 100%)', padding: 30, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.32)', border: '2px solid #ff6a00' }}>
             <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: '#d94f00' }}>{language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}</div>
             <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>{language === 'DE' ? 'Google Meet meldet, dass du den Anruf verlassen hast. Stoppe jetzt Soniox.' : 'Google Meet сообщил, что ты вышел из звонка. Сейчас останови запись Soniox.'}</div>
-            <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.groupName ?? finishReminderLesson.title}</div>
+            <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.title}</div>
             <div className="stack" style={{ gap: 10 }}>
               <button className="btn" type="button" onClick={() => confirmSonioxStopped(finishReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox gestoppt — Unterricht abschließen' : 'Soniox остановлен — завершить урок'}</button>
               <button className="btn btn--secondary" type="button" onClick={() => setFinishReminderLessonId(null)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht läuft noch' : 'Урок ещё идёт'}</button>
