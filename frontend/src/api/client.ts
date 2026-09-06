@@ -140,6 +140,7 @@ export const api = {
   },
   users: {
     updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }),
+    changePassword: (password: string) => request<void>('PUT', '/users/me/password', { password }),
   },
   push: {
     config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'),
@@ -160,6 +161,8 @@ export const api = {
       request<StudentInvitation>('POST', '/students', { fullName, email: email.trim() || null }),
     rename: (studentId: string, fullName: string) =>
       request<StudentListItem>('PUT', `/students/${studentId}/name`, { fullName }),
+    resetPassword: (studentId: string, password: string) =>
+      request<void>('PUT', `/students/${studentId}/password`, { password }),
     updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) =>
       request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
     updateHomeworkDriveFolder: (studentId: string, googleDriveHomeworkFolderId: string) =>
