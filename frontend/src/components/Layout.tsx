@@ -29,12 +29,33 @@ export function Layout({ children }: { children: ReactNode }) {
     ];
 
     return (
-      <div className={`app teacher-shell${teacherMenuOpen ? '' : ' teacher-shell--menu-closed'}`} data-variant="staff">
+      <div
+        className="app teacher-shell"
+        data-variant="staff"
+        style={{ gridTemplateColumns: teacherMenuOpen ? undefined : 'minmax(0, 1fr)' }}
+      >
         {teacherMenuOpen && (
           <aside className="teacher-sidebar">
             <div className="teacher-brand">
               <div className="teacher-brand__mark">M</div>
               <div className="teacher-brand__text"><span>MindCrafti</span> School</div>
+              <button
+                type="button"
+                aria-label="Скрыть меню"
+                onClick={() => setTeacherMenuOpen(false)}
+                style={{
+                  marginLeft: 'auto',
+                  border: 0,
+                  background: 'transparent',
+                  color: '#59657d',
+                  fontSize: 14,
+                  fontWeight: 650,
+                  cursor: 'pointer',
+                  padding: '8px 4px',
+                }}
+              >
+                Скрыть
+              </button>
             </div>
 
             <nav className="teacher-sidebar__nav">
@@ -58,14 +79,27 @@ export function Layout({ children }: { children: ReactNode }) {
           </aside>
         )}
 
-        <section className="teacher-workspace">
+        <section
+          className="teacher-workspace"
+          style={{ borderRadius: teacherMenuOpen ? undefined : 28 }}
+        >
           <header className="teacher-topbar">
             <button
               type="button"
-              className="teacher-menu-toggle"
               aria-expanded={teacherMenuOpen}
               aria-label={teacherMenuOpen ? 'Скрыть меню' : 'Показать меню'}
               onClick={() => setTeacherMenuOpen((current) => !current)}
+              style={{
+                minHeight: 40,
+                padding: '0 14px',
+                borderRadius: 10,
+                border: '1px solid #e1e5ec',
+                background: teacherMenuOpen ? '#fff' : '#fff3ec',
+                color: teacherMenuOpen ? '#273653' : '#ff5b00',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
             >
               {teacherMenuOpen ? 'Скрыть меню' : 'Меню'}
             </button>
