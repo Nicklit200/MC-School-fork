@@ -37,6 +37,17 @@ export interface StudentGroup {
   students: User[];
 }
 
+export interface GroupLesson {
+  eventId: string;
+  groupId: string;
+  groupName: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  meetUrl: string | null;
+  calendarUrl: string | null;
+}
+
 export interface AuthResponse {
   accessToken: string;
   tokenType: string;
