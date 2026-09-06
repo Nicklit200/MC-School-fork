@@ -8,9 +8,15 @@ import java.util.UUID;
 public record StudentGroupResponse(
         UUID id,
         String name,
+        String googleDriveTranscriptFolderId,
         List<UserResponse> students
 ) {
     public static StudentGroupResponse from(StudentGroup group, List<UserResponse> students) {
-        return new StudentGroupResponse(group.getId(), group.getName(), students);
+        return new StudentGroupResponse(
+                group.getId(),
+                group.getName(),
+                group.getGoogleDriveTranscriptFolderId(),
+                students
+        );
     }
 }
