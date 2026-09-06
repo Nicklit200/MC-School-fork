@@ -251,6 +251,28 @@ export function HomeworkDetailPage() {
           </p>
         )}
 
+        {homework?.submitted ? (
+          <div className="panel" style={{ margin: 0, padding: 16 }}>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div>
+                <strong>{language === 'DE' ? 'Hausaufgabe abgegeben' : 'Домашка сдана'}</strong>
+                {homework.submittedAt && (
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    {new Date(homework.submittedAt).toLocaleString(language === 'DE' ? 'de-DE' : 'ru-RU')}
+                  </div>
+                )}
+              </div>
+              <button className="btn btn--secondary" type="button" onClick={downloadSubmission}>
+                {language === 'DE' ? 'Abgegebenes PDF herunterladen' : 'Скачать выполненную домашку'}
+              </button>
+            </div>
+          </div>
+        ) : homework?.hasWorksheet ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {language === 'DE' ? 'Noch nicht abgegeben.' : 'Ученик пока не сдал эту домашку.'}
+          </p>
+        ) : null}
+
         {homework?.hasWorksheet && (
           <div className="panel" style={{ margin: 0, padding: 16 }}>
             {!homework.submitted ? (
@@ -402,24 +424,6 @@ export function HomeworkDetailPage() {
             )}
           </div>
         )}
-
-        {homework?.submitted ? (
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <strong>{language === 'DE' ? 'Hausaufgabe abgegeben' : 'Домашка сдана'}</strong>
-              {homework.submittedAt && (
-                <div className="muted">{new Date(homework.submittedAt).toLocaleString(language === 'DE' ? 'de-DE' : 'ru-RU')}</div>
-              )}
-            </div>
-            <button className="btn btn--secondary" type="button" onClick={downloadSubmission}>
-              {language === 'DE' ? 'Abgegebenes PDF herunterladen' : 'Скачать выполненную домашку'}
-            </button>
-          </div>
-        ) : homework?.hasWorksheet ? (
-          <p className="muted" style={{ margin: 0 }}>
-            {language === 'DE' ? 'Noch nicht abgegeben.' : 'Ученик пока не сдал эту домашку.'}
-          </p>
-        ) : null}
       </div>
     </div>
   );
