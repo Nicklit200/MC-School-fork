@@ -67,6 +67,9 @@ export function GroupLessonsPage() {
         }));
         setBriefs(Object.fromEntries(entries));
       } catch (e) {
+        setConnection({ connected: false, authorizationUrl: null });
+        setLessons([]);
+        setBriefs({});
         setError(toErrorMessage(e, t));
       } finally {
         setLoading(false);
@@ -129,25 +132,7 @@ export function GroupLessonsPage() {
 
       {loading ? (
         <p className="muted">{t('common.loading')}</p>
-      ) : connection && !connection.connected ? (
-        <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
-          <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Google Calendar verbinden' : 'Подключить Google Calendar'}</h2>
-          <p className="muted">
-            {language === 'DE'
-              ? 'Melde dich mit deinem eigenen Google-Konto an. Mindcrafti liest danach deinen primären Kalender und zeigt nur deine Gruppentermine.'
-              : 'Войди в свой Google-аккаунт. После подключения Mindcrafti будет читать твой основной Google Calendar и показывать здесь только твои групповые уроки.'}
-          </p>
-          {connection.authorizationUrl ? (
-            <a className="btn" href={connection.authorizationUrl}>
-              {language === 'DE' ? 'Mit Google verbinden' : 'Войти через Google и подключить календарь'}
-            </a>
-          ) : (
-            <div className="banner banner--info">
-              {language === 'DE' ? 'Google OAuth ist auf dem Server noch nicht eingerichtet.' : 'Google OAuth на сервере пока не настроен.'}
-            </div>
-          )}
-        </div>
-      ) : (
+      ) : connection?.connected === true ? (
         <>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
             <div className="banner banner--success" style={{ margin: 0 }}>
@@ -240,6 +225,24 @@ export function GroupLessonsPage() {
             </div>
           )}
         </>
+      ) : (
+        <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
+          <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Google Calendar verbinden' : 'Подключить Google Calendar'}</h2>
+          <p className="muted">
+            {language === 'DE'
+              ? 'Melde dich mit deinem eigenen Google-Konto an. Mindcrafti liest danach deinen primären Kalender und zeigt nur deine Gruppentermine.'
+              : 'Войди в свой Google-аккаунт. После подключения Mindcrafti будет читать твой основной Google Calendar и показывать здесь только твои групповые уроки.'}
+          </p>
+          {connection?.authorizationUrl ? (
+            <a className="btn" href={connection.authorizationUrl}>
+              {language === 'DE' ? 'Mit Google verbinden' : 'Войти через Google и подключить календарь'}
+            </a>
+          ) : (
+            <div className="banner banner--info">
+              {language === 'DE' ? 'Google OAuth ist auf dem Server noch nicht eingerichtet.' : 'Google OAuth на сервере пока не настроен.'}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
