@@ -6,6 +6,8 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
+type OpenSection = 'edit' | 'preview' | null;
+
 /** Teacher view of one PDF homework. Flashcards are managed on separate card pages. */
 export function HomeworkDetailPage() {
   const { studentId = '', homeworkId = '' } = useParams();
@@ -21,6 +23,7 @@ export function HomeworkDetailPage() {
   const [projectUrlInput, setProjectUrlInput] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [openSection, setOpenSection] = useState<OpenSection>(null);
   const previewUrlsRef = useRef<string[]>([]);
 
   const homework = useMemo(
@@ -126,7 +129,7 @@ export function HomeworkDetailPage() {
       setMessage(language === 'DE'
         ? 'ChatGPT-Projektlink wurde gespeichert.'
         : updated.chatGptProjectUrl
-          ? 'Ссылка на проект ChatGPT сохранена. Теперь кнопка будет открывать этот проект.'
+          ? 'Ссылка на проект ChatGPT сохранена.'
           : 'Ссылка на проект ChatGPT удалена.');
     } catch (e) {
       setError(toErrorMessage(e, t));
@@ -148,24 +151,17 @@ export function HomeworkDetailPage() {
     try {
       const blob = await api.homeworks.worksheet(homeworkId);
       downloadBlob(blob, homework.worksheetFilename ?? 'worksheet.pdf');
-
       const instruction = language === 'DE'
         ? 'Bearbeite die angehängte PDF-Hausaufgabe für den Schüler. Ändere nur das, was ich dir im Chat sage. Behalte Seitenformat und Arbeitsblatt-Struktur bei und gib das Ergebnis wieder als PDF zurück.'
         : 'Отредактируй прикреплённую PDF-домашку для ученика. Меняй только то, что я попрошу в чате. Сохрани формат страниц и структуру рабочей тетради и верни результат снова PDF-файлом.';
-
       try {
         await navigator.clipboard.writeText(instruction);
       } catch {
-        // Clipboard permission may be unavailable. The workflow still works without it.
+        // Clipboard permission may be unavailable.
       }
-
       setMessage(language === 'DE'
-        ? student?.chatGptProjectUrl
-          ? 'PDF wurde heruntergeladen und das gespeicherte ChatGPT-Projekt geöffnet. Hänge die Datei dort an und füge die kopierte Anweisung ein.'
-          : 'PDF wurde heruntergeladen und ChatGPT geöffnet. Speichere oben den Projektlink, damit künftig direkt das richtige Projekt geöffnet wird.'
-        : student?.chatGptProjectUrl
-          ? 'PDF скачан и открыт сохранённый проект ChatGPT этого ученика. Прикрепи файл и вставь скопированную инструкцию.'
-          : 'PDF скачан и открыт ChatGPT. Сохрани выше ссылку на проект ученика, чтобы дальше открывался сразу правильный проект.');
+        ? 'PDF wurde heruntergeladen und ChatGPT geöffnet.'
+        : 'PDF скачан и ChatGPT открыт.');
     } catch (e) {
       if (chatTab) chatTab.close();
       setError(toErrorMessage(e, t));
@@ -189,8 +185,8 @@ export function HomeworkDetailPage() {
         await loadWorksheetPreview(updatedHomework.worksheetPageCount);
       }
       setMessage(language === 'DE'
-        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Unten siehst du jetzt die aktuelle Version.'
-        : 'Готово: отредактированный PDF заменил предыдущий файл. Ниже уже показана текущая версия домашки.');
+        ? 'PDF wurde ersetzt.'
+        : 'Готово: PDF домашки заменён.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -198,9 +194,11 @@ export function HomeworkDetailPage() {
     }
   }
 
-  if (loading && !homework) {
-    return <p className="muted">{t('common.loading')}</p>;
-  }
+  if (loading && !homework) return <p className="muted">{t('common.loading')}</p>;
+
+  const toggleSection = (section: Exclude<OpenSection, null>) => {
+    setOpenSection((current) => current === section ? null : section);
+  };
 
   return (
     <div>
@@ -246,12 +244,10 @@ export function HomeworkDetailPage() {
             {homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}
           </div>
         ) : (
-          <p className="muted" style={{ margin: 0 }}>
-            {language === 'DE' ? 'Kein PDF hinterlegt.' : 'PDF для этой домашки не загружен.'}
-          </p>
+          <p className="muted" style={{ margin: 0 }}>{language === 'DE' ? 'Kein PDF hinterlegt.' : 'PDF для этой домашки не загружен.'}</p>
         )}
 
-        {homework?.submitted ? (
+        {homework?.submitted && (
           <div className="panel" style={{ margin: 0, padding: 16 }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <div>
@@ -267,25 +263,37 @@ export function HomeworkDetailPage() {
               </button>
             </div>
           </div>
-        ) : homework?.hasWorksheet ? (
-          <p className="muted" style={{ margin: 0 }}>
-            {language === 'DE' ? 'Noch nicht abgegeben.' : 'Ученик пока не сдал эту домашку.'}
-          </p>
-        ) : null}
+        )}
 
         {homework?.hasWorksheet && (
-          <div className="panel" style={{ margin: 0, padding: 16 }}>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn--secondary" type="button" onClick={() => toggleSection('preview')}>
+              {openSection === 'preview'
+                ? (language === 'DE' ? 'Vorschau schließen' : 'Скрыть домашку')
+                : (language === 'DE' ? 'Hausaufgabe ansehen' : 'Посмотреть домашку')}
+            </button>
+            <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
+              {language === 'DE' ? 'Original-PDF herunterladen' : 'Скачать исходный PDF'}
+            </button>
+            <button className="btn" type="button" onClick={() => toggleSection('edit')}>
+              {openSection === 'edit'
+                ? (language === 'DE' ? 'Bearbeitung schließen' : 'Скрыть редактирование')
+                : (language === 'DE' ? 'Hausaufgabe bearbeiten' : 'Редактировать домашку')}
+            </button>
+          </div>
+        )}
+
+        {homework?.hasWorksheet && openSection === 'edit' && (
+          <div className="panel stack" style={{ margin: 0, padding: 18 }}>
             {!homework.submitted ? (
               <div>
-                <strong>{language === 'DE' ? 'Bearbeitete PDF zurückladen' : 'Загрузить отредактированный PDF обратно'}</strong>
+                <strong>{language === 'DE' ? 'Bearbeitete PDF hochladen' : 'Загрузить изменённый PDF'}</strong>
                 <p className="muted" style={{ margin: '6px 0 10px' }}>
-                  {language === 'DE'
-                    ? 'Die neue Datei ersetzt die aktuelle Hausaufgaben-PDF für den Schüler.'
-                    : 'Новый файл заменит текущий PDF домашки у ученика.'}
+                  {language === 'DE' ? 'Die neue Datei ersetzt die aktuelle PDF.' : 'Новый файл заменит текущую домашку у ученика.'}
                 </p>
                 <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap' }}>
                   <label className="field" style={{ flex: '1 1 360px', margin: 0 }}>
-                    <span className="field__label">{language === 'DE' ? 'Bearbeitete PDF vom Computer' : 'Отредактированный PDF с компьютера'}</span>
+                    <span className="field__label">{language === 'DE' ? 'PDF vom Computer' : 'PDF с компьютера'}</span>
                     <input
                       className="input"
                       type="file"
@@ -307,19 +315,14 @@ export function HomeworkDetailPage() {
             ) : (
               <div className="banner banner--info">
                 {language === 'DE'
-                  ? 'Diese Hausaufgabe wurde bereits abgegeben. Die Aufgaben-PDF kann hier nicht mehr ersetzt werden, damit die Abgabehistorie erhalten bleibt.'
-                  : 'Эта домашка уже сдана. Замену исходного PDF здесь отключили, чтобы не ломать историю выполненной работы.'}
+                  ? 'Diese Hausaufgabe wurde bereits abgegeben. Die PDF kann nicht mehr ersetzt werden.'
+                  : 'Эта домашка уже сдана, поэтому исходный PDF больше нельзя заменить.'}
               </div>
             )}
 
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
-              <strong>{language === 'DE' ? 'ChatGPT-Projekt des Schülers' : 'Проект ChatGPT ученика'}</strong>
-              <p className="muted" style={{ margin: '6px 0 10px' }}>
-                {language === 'DE'
-                  ? 'Füge einmal den Link zum ChatGPT-Projekt dieses Schülers ein. Du kannst ihn jederzeit ändern.'
-                  : 'Один раз вставь ссылку на проект ChatGPT этого ученика. Потом её можно изменить в любой момент.'}
-              </p>
-              <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <strong>{language === 'DE' ? 'ChatGPT-Projekt' : 'Проект ChatGPT ученика'}</strong>
+              <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
                 <input
                   className="input"
                   type="url"
@@ -337,58 +340,20 @@ export function HomeworkDetailPage() {
                       : (language === 'DE' ? 'Link speichern' : 'Сохранить ссылку')}
                 </button>
               </div>
-              {student?.chatGptProjectUrl && (
-                <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-                  {language === 'DE' ? '✓ Projekt ist mit diesem Schüler verknüpft.' : '✓ Проект привязан к этому ученику.'}
-                </div>
-              )}
             </div>
 
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 420px' }}>
-                  <strong>{language === 'DE' ? 'Mit ChatGPT bearbeiten' : 'Редактировать в ChatGPT'}</strong>
-                  <p className="muted" style={{ margin: '6px 0 0' }}>
-                    {language === 'DE'
-                      ? student?.chatGptProjectUrl
-                        ? 'Die PDF wird heruntergeladen und direkt das gespeicherte Projekt dieses Schülers geöffnet.'
-                        : 'Die PDF wird heruntergeladen und ChatGPT geöffnet. Speichere oben einen Projektlink für direkten Zugriff.'
-                      : student?.chatGptProjectUrl
-                        ? 'PDF скачается, и сразу откроется сохранённый проект этого ученика.'
-                        : 'PDF скачается, и откроется ChatGPT. Сохрани выше ссылку, чтобы сразу открывался нужный проект.'}
-                  </p>
-                </div>
-                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                  <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
-                    {language === 'DE' ? 'Original-PDF herunterladen' : 'Скачать исходный PDF'}
-                  </button>
-                  <button className="btn" type="button" onClick={editInChatGpt} disabled={openingChatGpt}>
-                    {openingChatGpt
-                      ? (language === 'DE' ? 'Öffnen…' : 'Открываем…')
-                      : (language === 'DE' ? 'In ChatGPT bearbeiten' : 'Редактировать в ChatGPT')}
-                  </button>
-                </div>
-              </div>
+            <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <button className="btn" type="button" onClick={editInChatGpt} disabled={openingChatGpt}>
+                {openingChatGpt
+                  ? (language === 'DE' ? 'Öffnen…' : 'Открываем…')
+                  : (language === 'DE' ? 'In ChatGPT bearbeiten' : 'Редактировать в ChatGPT')}
+              </button>
             </div>
           </div>
         )}
 
-        {homework?.hasWorksheet && (
+        {homework?.hasWorksheet && openSection === 'preview' && (
           <div className="panel" style={{ margin: 0, padding: 16 }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-              <div>
-                <strong>{language === 'DE' ? 'Aktuelle Hausaufgabe' : 'Текущая домашка'}</strong>
-                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                  {language === 'DE'
-                    ? 'Das ist genau die PDF-Version, die der Schüler sieht.'
-                    : 'Это именно та версия PDF, которую сейчас видит ученик.'}
-                </div>
-              </div>
-              <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
-                {language === 'DE' ? 'PDF öffnen / herunterladen' : 'Открыть / скачать PDF'}
-              </button>
-            </div>
-
             {previewLoading && previewUrls.length === 0 ? (
               <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
                 {language === 'DE' ? 'Vorschau wird geladen…' : 'Загружаем предпросмотр…'}
@@ -405,14 +370,7 @@ export function HomeworkDetailPage() {
                     <img
                       src={url}
                       alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        height: 'auto',
-                        border: '1px solid var(--border-color, #ddd)',
-                        borderRadius: 12,
-                        background: '#fff',
-                      }}
+                      style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
                     />
                   </div>
                 ))}
