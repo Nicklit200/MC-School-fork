@@ -59,7 +59,6 @@ export function Layout({ children }: { children: ReactNode }) {
           <header className="teacher-topbar">
             <div />
             <div className="teacher-topbar__right">
-              <button type="button" className="teacher-bell" title="Уведомления">♧<span /></button>
               <div className="teacher-profile">
                 <div className="teacher-profile__avatar">{initials(user.fullName)}</div>
                 <div className="teacher-profile__text">
