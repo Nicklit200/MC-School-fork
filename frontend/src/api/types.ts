@@ -41,6 +41,7 @@ export interface StudentGroup {
 
 export interface GroupLesson {
   eventId: string;
+  bindingKey: string;
   groupId: string | null;
   groupName: string | null;
   studentId: string | null;
