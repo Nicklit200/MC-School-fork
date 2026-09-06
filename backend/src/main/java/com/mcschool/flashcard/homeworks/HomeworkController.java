@@ -100,6 +100,19 @@ public class HomeworkController {
                 .body(pdf);
     }
 
+    @GetMapping(value = "/homeworks/{homeworkId}/worksheet/pages/{pageIndex}", produces = MediaType.IMAGE_PNG_VALUE)
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<byte[]> teacherWorksheetPage(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                        @PathVariable UUID homeworkId,
+                                                        @PathVariable int pageIndex) {
+        byte[] png = homeworkPdfService.renderTeacherPage(caller, homeworkId, pageIndex);
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .contentLength(png.length)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(png);
+    }
+
     @GetMapping(value = "/study/homeworks/{homeworkId}/worksheet/pages/{pageIndex}", produces = MediaType.IMAGE_PNG_VALUE)
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<byte[]> worksheetPage(@AuthenticationPrincipal AuthenticatedUser caller,
