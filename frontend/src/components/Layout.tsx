@@ -18,8 +18,8 @@ export function Layout({ children }: { children: ReactNode }) {
     const teacherLinks = [
       { to: '/students', label: 'Мои ученики', end: true },
       { to: '/groups', label: 'Мои группы' },
+      { to: '/teacher/lessons', label: 'Уроки' },
       { to: '/teacher/settings', label: 'Настройки' },
-      { to: '/students', label: 'Уроки', disabled: true },
       { to: '/students', label: 'Домашние задания', disabled: true },
       { to: '/students', label: 'Материалы', disabled: true },
       { to: '/students', label: 'Карточки', disabled: true },
