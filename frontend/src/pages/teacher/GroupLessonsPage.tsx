@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
@@ -37,8 +37,11 @@ export function GroupLessonsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
+  const [startReminderLessonId, setStartReminderLessonId] = useState<string | null>(null);
+  const [finishReminderLessonId, setFinishReminderLessonId] = useState<string | null>(null);
   const [startedLessonId, setStartedLessonId] = useState<string | null>(() => localStorage.getItem('mindcrafti.startedGroupLesson'));
   const [finishedLessonId, setFinishedLessonId] = useState<string | null>(null);
+  const meetTabRef = useRef<Window | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -87,6 +90,25 @@ export function GroupLessonsPage() {
     void load();
   }, [t]);
 
+  useEffect(() => {
+    if (!startedLessonId) return;
+
+    const checkForFinishedMeet = () => {
+      const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
+      if (!startedLesson) return;
+
+      const meetTabClosed = Boolean(meetTabRef.current && meetTabRef.current.closed);
+      const scheduledEndReached = Date.now() >= new Date(startedLesson.endsAt).getTime();
+      if (meetTabClosed || scheduledEndReached) {
+        setFinishReminderLessonId(startedLessonId);
+      }
+    };
+
+    checkForFinishedMeet();
+    const timer = window.setInterval(checkForFinishedMeet, 1500);
+    return () => window.clearInterval(timer);
+  }, [startedLessonId, lessons]);
+
   const scheduleDays = useMemo<ScheduleDay[]>(() => {
     const start = startOfLocalDay(new Date());
     const endExclusive = addDays(start, 7);
@@ -123,33 +145,41 @@ export function GroupLessonsPage() {
     }
   }
 
-  function startLesson(lesson: GroupLesson) {
+  function requestStartLesson(lesson: GroupLesson) {
     if (!lesson.meetUrl) {
       window.alert(language === 'DE' ? 'Kein Google Meet für diesen Termin.' : 'У этого события нет ссылки Google Meet.');
       return;
     }
-    const confirmed = window.confirm(language === 'DE'
-      ? 'Hast du Soniox gestartet? Danach öffnet sich genau dieses Google Meet.'
-      : 'Ты включил запись Soniox? После подтверждения откроется именно Google Meet этого события.');
-    if (!confirmed) return;
-    setStartedLessonId(lesson.eventId);
-    setFinishedLessonId(null);
-    localStorage.setItem('mindcrafti.startedGroupLesson', lesson.eventId);
-    const tab = window.open(lesson.meetUrl, '_blank');
-    if (tab) tab.opener = null;
+    setStartReminderLessonId(lesson.eventId);
   }
 
-  function finishLesson(lesson: GroupLesson) {
-    const confirmed = window.confirm(language === 'DE'
-      ? 'Stoppe zuerst Soniox. Ist die Aufnahme gestoppt?'
-      : 'Сначала останови запись Soniox. Запись уже остановлена?');
-    if (!confirmed) return;
+  function openMeetAfterSoniox(lesson: GroupLesson) {
+    if (!lesson.meetUrl) return;
+    setStartReminderLessonId(null);
+    setStartedLessonId(lesson.eventId);
+    setFinishedLessonId(null);
+    setFinishReminderLessonId(null);
+    localStorage.setItem('mindcrafti.startedGroupLesson', lesson.eventId);
+    const tab = window.open(lesson.meetUrl, '_blank');
+    meetTabRef.current = tab;
+  }
+
+  function requestFinishLesson(lesson: GroupLesson) {
+    setFinishReminderLessonId(lesson.eventId);
+  }
+
+  function confirmSonioxStopped(lesson: GroupLesson) {
     setFinishedLessonId(lesson.eventId);
     setStartedLessonId(null);
+    setFinishReminderLessonId(null);
+    meetTabRef.current = null;
     localStorage.removeItem('mindcrafti.startedGroupLesson');
   }
 
   if (loading) return <p className="muted">{t('common.loading')}</p>;
+
+  const startReminderLesson = startReminderLessonId ? lessons.find((lesson) => lesson.eventId === startReminderLessonId) ?? null : null;
+  const finishReminderLesson = finishReminderLessonId ? lessons.find((lesson) => lesson.eventId === finishReminderLessonId) ?? null : null;
 
   return (
     <div className="teacher-lessons-page">
@@ -214,8 +244,8 @@ export function GroupLessonsPage() {
                             )}
 
                             <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-                              {lesson.meetUrl && (
-                                <button className="btn" type="button" onClick={() => startLesson(lesson)} style={{ width: '100%' }}>
+                              {lesson.meetUrl && !started && (
+                                <button className="btn" type="button" onClick={() => requestStartLesson(lesson)} style={{ width: '100%' }}>
                                   {language === 'DE' ? 'Unterricht starten' : 'Начать урок'}
                                 </button>
                               )}
@@ -231,7 +261,10 @@ export function GroupLessonsPage() {
 
                             {started && (
                               <div style={{ marginTop: 10 }}>
-                                <button className="btn btn--secondary" type="button" onClick={() => finishLesson(lesson)} style={{ width: '100%' }}>
+                                <div style={{ padding: 10, borderRadius: 10, background: '#fff3ec', border: '1px solid #ffd4bd', fontSize: 13, fontWeight: 750, marginBottom: 8 }}>
+                                  {language === 'DE' ? 'Soniox-Aufnahme läuft.' : 'Soniox должен записывать урок.'}
+                                </div>
+                                <button className="btn btn--secondary" type="button" onClick={() => requestFinishLesson(lesson)} style={{ width: '100%' }}>
                                   {language === 'DE' ? 'Unterricht beenden' : 'Завершить урок'}
                                 </button>
                               </div>
@@ -269,6 +302,54 @@ export function GroupLessonsPage() {
             </div>
           </div>
         </>
+      )}
+
+      {startReminderLesson && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15, 23, 42, .55)', display: 'grid', placeItems: 'center', padding: 20 }}>
+          <div className="panel" style={{ width: 'min(560px, 100%)', padding: 28, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.28)' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 10 }}>
+              {language === 'DE' ? 'Soniox einschalten' : 'Включи Soniox'}
+            </div>
+            <div style={{ fontSize: 17, lineHeight: 1.5, marginBottom: 20 }}>
+              {language === 'DE'
+                ? 'Starte jetzt die Soniox-Aufnahme. Erst danach öffnen wir Google Meet.'
+                : 'Сначала запусти запись Soniox. Только после этого открывай Google Meet.'}
+            </div>
+            <div style={{ fontWeight: 800, marginBottom: 18 }}>{startReminderLesson.groupName ?? startReminderLesson.title} · {formatLessonTime(startReminderLesson.startsAt, startReminderLesson.endsAt, language)}</div>
+            <div className="stack" style={{ gap: 10 }}>
+              <button className="btn" type="button" onClick={() => openMeetAfterSoniox(startReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>
+                {language === 'DE' ? 'Soniox läuft — Google Meet öffnen' : 'Soniox включён — открыть Google Meet'}
+              </button>
+              <button className="btn btn--ghost" type="button" onClick={() => setStartReminderLessonId(null)} style={{ width: '100%' }}>
+                {language === 'DE' ? 'Abbrechen' : 'Отмена'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {finishReminderLesson && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(15, 23, 42, .62)', display: 'grid', placeItems: 'center', padding: 20 }}>
+          <div className="panel" style={{ width: 'min(580px, 100%)', padding: 30, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.32)', border: '2px solid #ff6a00' }}>
+            <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: '#d94f00' }}>
+              {language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}
+            </div>
+            <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>
+              {language === 'DE'
+                ? 'Der Unterricht ist beendet oder das Meet-Fenster wurde geschlossen. Stoppe jetzt die Soniox-Aufnahme.'
+                : 'Урок закончился или окно Google Meet было закрыто. Сейчас останови запись Soniox.'}
+            </div>
+            <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.groupName ?? finishReminderLesson.title}</div>
+            <div className="stack" style={{ gap: 10 }}>
+              <button className="btn" type="button" onClick={() => confirmSonioxStopped(finishReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>
+                {language === 'DE' ? 'Soniox gestoppt — Unterricht abschließen' : 'Soniox остановлен — завершить урок'}
+              </button>
+              <button className="btn btn--secondary" type="button" onClick={() => setFinishReminderLessonId(null)} style={{ width: '100%' }}>
+                {language === 'DE' ? 'Unterricht läuft noch' : 'Урок ещё идёт'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
