@@ -23,6 +23,7 @@ export interface StudentListItem extends User {
   invitationToken: string | null;
   googleDriveFolderUrl: string | null;
   googleDriveHomeworkFolderId: string | null;
+  googleDriveTranscriptFolderId: string | null;
   chatGptProjectUrl: string | null;
   parentId: string | null;
   parentFullName: string | null;
@@ -42,6 +43,8 @@ export interface GroupLesson {
   eventId: string;
   groupId: string | null;
   groupName: string | null;
+  studentId: string | null;
+  studentName: string | null;
   title: string;
   startsAt: string;
   endsAt: string;
