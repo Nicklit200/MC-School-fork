@@ -43,6 +43,7 @@ export function App() {
       <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/teacher/settings" element={<ProtectedRoute role="TEACHER"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="/today" element={<ProtectedRoute role="STUDENT"><Layout><TodayPage /></Layout></ProtectedRoute>} />
       <Route path="/session/:sessionId" element={<ProtectedRoute role="STUDENT"><Layout><SessionPage /></Layout></ProtectedRoute>} />
