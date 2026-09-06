@@ -29,6 +29,9 @@ type ScheduleDay = {
   lessons: GroupLesson[];
 };
 
+const STARTED_LESSON_KEY = 'mindcrafti.startedGroupLesson';
+const STARTED_LESSON_AT_KEY = 'mindcrafti.startedGroupLessonOpenedAt';
+
 export function GroupLessonsPage() {
   const { language, t } = useI18n();
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
@@ -39,9 +42,13 @@ export function GroupLessonsPage() {
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [startReminderLessonId, setStartReminderLessonId] = useState<string | null>(null);
   const [finishReminderLessonId, setFinishReminderLessonId] = useState<string | null>(null);
-  const [startedLessonId, setStartedLessonId] = useState<string | null>(() => localStorage.getItem('mindcrafti.startedGroupLesson'));
+  const [startedLessonId, setStartedLessonId] = useState<string | null>(() => localStorage.getItem(STARTED_LESSON_KEY));
   const [finishedLessonId, setFinishedLessonId] = useState<string | null>(null);
   const meetTabRef = useRef<Window | null>(null);
+  const meetOpenedAtRef = useRef<number | null>(() => {
+    const value = Number(localStorage.getItem(STARTED_LESSON_AT_KEY));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  });
 
   useEffect(() => {
     async function load() {
@@ -93,6 +100,17 @@ export function GroupLessonsPage() {
   useEffect(() => {
     if (!startedLessonId) return;
 
+    const showFinishReminder = () => {
+      const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
+      if (!startedLesson) return;
+
+      const openedAt = meetOpenedAtRef.current ?? Number(localStorage.getItem(STARTED_LESSON_AT_KEY));
+      const hasActuallyLeftForMeet = Number.isFinite(openedAt) && openedAt > 0 && Date.now() - openedAt >= 5000;
+      if (hasActuallyLeftForMeet) {
+        setFinishReminderLessonId(startedLessonId);
+      }
+    };
+
     const checkForFinishedMeet = () => {
       const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
       if (!startedLesson) return;
@@ -104,9 +122,19 @@ export function GroupLessonsPage() {
       }
     };
 
-    checkForFinishedMeet();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') showFinishReminder();
+    };
+
+    window.addEventListener('focus', showFinishReminder);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     const timer = window.setInterval(checkForFinishedMeet, 1500);
-    return () => window.clearInterval(timer);
+
+    return () => {
+      window.removeEventListener('focus', showFinishReminder);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.clearInterval(timer);
+    };
   }, [startedLessonId, lessons]);
 
   const scheduleDays = useMemo<ScheduleDay[]>(() => {
@@ -159,7 +187,10 @@ export function GroupLessonsPage() {
     setStartedLessonId(lesson.eventId);
     setFinishedLessonId(null);
     setFinishReminderLessonId(null);
-    localStorage.setItem('mindcrafti.startedGroupLesson', lesson.eventId);
+    const openedAt = Date.now();
+    meetOpenedAtRef.current = openedAt;
+    localStorage.setItem(STARTED_LESSON_KEY, lesson.eventId);
+    localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
     const tab = window.open(lesson.meetUrl, '_blank');
     meetTabRef.current = tab;
   }
@@ -173,7 +204,9 @@ export function GroupLessonsPage() {
     setStartedLessonId(null);
     setFinishReminderLessonId(null);
     meetTabRef.current = null;
-    localStorage.removeItem('mindcrafti.startedGroupLesson');
+    meetOpenedAtRef.current = null;
+    localStorage.removeItem(STARTED_LESSON_KEY);
+    localStorage.removeItem(STARTED_LESSON_AT_KEY);
   }
 
   if (loading) return <p className="muted">{t('common.loading')}</p>;
@@ -336,8 +369,8 @@ export function GroupLessonsPage() {
             </div>
             <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>
               {language === 'DE'
-                ? 'Der Unterricht ist beendet oder das Meet-Fenster wurde geschlossen. Stoppe jetzt die Soniox-Aufnahme.'
-                : 'Урок закончился или окно Google Meet было закрыто. Сейчас останови запись Soniox.'}
+                ? 'Du bist aus Google Meet zurück. Stoppe jetzt die Soniox-Aufnahme.'
+                : 'Ты вернулся из Google Meet. Сейчас останови запись Soniox.'}
             </div>
             <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.groupName ?? finishReminderLesson.title}</div>
             <div className="stack" style={{ gap: 10 }}>
