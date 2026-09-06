@@ -43,6 +43,7 @@ public class GoogleCalendarLessonService {
         if (accessToken == null || accessToken.isBlank()) return List.of();
 
         List<StudentGroup> groups = groupRepository.findAllByTeacherIdOrderByNameAsc(teacher.id());
+        String connectedGoogleAccount = primaryCalendarId(accessToken);
 
         Instant now = Instant.now();
         String url = CALENDAR_API + "/calendars/primary/events"
@@ -71,6 +72,10 @@ public class GoogleCalendarLessonService {
             String meetUrl = stringValue(event.get("hangoutLink"));
             if (meetUrl.isBlank()) meetUrl = conferenceMeetUrl(event.get("conferenceData"));
             String displayTitle = title.isBlank() ? "Google Calendar" : title;
+            String calendarUrl = blankToNull(stringValue(event.get("htmlLink")));
+            if (calendarUrl != null && connectedGoogleAccount != null && !connectedGoogleAccount.isBlank()) {
+                calendarUrl = withAuthUser(calendarUrl, connectedGoogleAccount);
+            }
 
             result.add(new GroupLessonResponse(
                     stringValue(event.get("id")),
@@ -80,11 +85,25 @@ public class GoogleCalendarLessonService {
                     startsAt,
                     endsAt,
                     meetUrl.isBlank() ? null : meetUrl,
-                    blankToNull(stringValue(event.get("htmlLink")))
+                    calendarUrl
             ));
         }
 
         return result.stream().sorted(Comparator.comparing(GroupLessonResponse::startsAt)).toList();
+    }
+
+    private String primaryCalendarId(String accessToken) {
+        try {
+            Map<String, Object> calendar = getJson(CALENDAR_API + "/calendars/primary?fields=id", accessToken);
+            return blankToNull(stringValue(calendar.get("id")));
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private String withAuthUser(String url, String account) {
+        String separator = url.contains("?") ? "&" : "?";
+        return url + separator + "authuser=" + enc(account);
     }
 
     private StudentGroup matchGroup(List<StudentGroup> groups, String title) {
