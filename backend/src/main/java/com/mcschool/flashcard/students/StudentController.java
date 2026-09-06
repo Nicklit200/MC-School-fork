@@ -16,6 +16,7 @@ import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
+import com.mcschool.flashcard.users.dto.ChangePasswordRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
@@ -92,7 +93,14 @@ public class StudentController {
         return studentService.updateStudentName(caller, studentId, request);
     }
 
-    /** Destination for completed card-session CSV exports. */
+    @PutMapping("/{studentId}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetStudentPassword(@AuthenticationPrincipal AuthenticatedUser caller,
+                                     @PathVariable UUID studentId,
+                                     @Valid @RequestBody ChangePasswordRequest request) {
+        studentService.resetStudentPassword(caller, studentId, request);
+    }
+
     @PutMapping("/{studentId}/drive-folder")
     public StudentListResponse updateDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
                                                  @PathVariable UUID studentId,
@@ -100,7 +108,6 @@ public class StudentController {
         return studentService.updateGoogleDriveFolder(caller, studentId, request);
     }
 
-    /** Destination for PDFs submitted by the student. */
     @PutMapping("/{studentId}/homework-drive-folder")
     public StudentListResponse updateHomeworkDriveFolder(@AuthenticationPrincipal AuthenticatedUser caller,
                                                          @PathVariable UUID studentId,
