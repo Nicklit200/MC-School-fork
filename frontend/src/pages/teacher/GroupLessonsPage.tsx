@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
@@ -10,7 +10,6 @@ type StudentBrief = {
   studentId: string;
   name: string;
   homeworkText: string;
-  cardText: string;
   errorText: string | null;
   recommendation: string;
 };
@@ -44,11 +43,6 @@ export function GroupLessonsPage() {
   const [finishReminderLessonId, setFinishReminderLessonId] = useState<string | null>(null);
   const [startedLessonId, setStartedLessonId] = useState<string | null>(() => localStorage.getItem(STARTED_LESSON_KEY));
   const [finishedLessonId, setFinishedLessonId] = useState<string | null>(null);
-  const meetTabRef = useRef<Window | null>(null);
-  const meetOpenedAtRef = useRef<number | null>(() => {
-    const value = Number(localStorage.getItem(STARTED_LESSON_AT_KEY));
-    return Number.isFinite(value) && value > 0 ? value : null;
-  });
 
   useEffect(() => {
     async function load() {
@@ -65,11 +59,7 @@ export function GroupLessonsPage() {
 
         const lessonList = await api.lessons.groupLessons();
         setLessons(lessonList);
-
-        const groupIds = Array.from(new Set(
-          lessonList.map((lesson) => lesson.groupId).filter((id): id is string => Boolean(id)),
-        ));
-
+        const groupIds = Array.from(new Set(lessonList.map((lesson) => lesson.groupId).filter((id): id is string => Boolean(id))));
         const entries = await Promise.all(groupIds.map(async (groupId) => {
           const group = await api.groups.get(groupId);
           const students = await Promise.all(group.students.map(async (student) => {
@@ -86,7 +76,6 @@ export function GroupLessonsPage() {
             .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.createdAt.localeCompare(a.createdAt))[0] ?? null;
           return [groupId, { group, students, recentWorksheet }] as const;
         }));
-
         setBriefs(Object.fromEntries(entries));
       } catch (e) {
         setError(toErrorMessage(e, t));
@@ -99,42 +88,29 @@ export function GroupLessonsPage() {
 
   useEffect(() => {
     if (!startedLessonId) return;
+    const openedAt = Number(localStorage.getItem(STARTED_LESSON_AT_KEY) ?? 0);
+    const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
 
-    const showFinishReminder = () => {
-      const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
-      if (!startedLesson) return;
+    const check = async () => {
+      try {
+        const status = await api.lessons.googleMeetEventStatus();
+        const leftAt = status.lastLeftAt ? new Date(status.lastLeftAt).getTime() : 0;
+        if (openedAt > 0 && leftAt >= openedAt) {
+          setFinishReminderLessonId(startedLessonId);
+          return;
+        }
+      } catch {
+        // Exact Meet events are an enhancement. Keep the time fallback below.
+      }
 
-      const openedAt = meetOpenedAtRef.current ?? Number(localStorage.getItem(STARTED_LESSON_AT_KEY));
-      const hasActuallyLeftForMeet = Number.isFinite(openedAt) && openedAt > 0 && Date.now() - openedAt >= 5000;
-      if (hasActuallyLeftForMeet) {
+      if (startedLesson && Date.now() >= new Date(startedLesson.endsAt).getTime()) {
         setFinishReminderLessonId(startedLessonId);
       }
     };
 
-    const checkForFinishedMeet = () => {
-      const startedLesson = lessons.find((lesson) => lesson.eventId === startedLessonId);
-      if (!startedLesson) return;
-
-      const meetTabClosed = Boolean(meetTabRef.current && meetTabRef.current.closed);
-      const scheduledEndReached = Date.now() >= new Date(startedLesson.endsAt).getTime();
-      if (meetTabClosed || scheduledEndReached) {
-        setFinishReminderLessonId(startedLessonId);
-      }
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') showFinishReminder();
-    };
-
-    window.addEventListener('focus', showFinishReminder);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    const timer = window.setInterval(checkForFinishedMeet, 1500);
-
-    return () => {
-      window.removeEventListener('focus', showFinishReminder);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.clearInterval(timer);
-    };
+    void check();
+    const timer = window.setInterval(() => void check(), 2500);
+    return () => window.clearInterval(timer);
   }, [startedLessonId, lessons]);
 
   const scheduleDays = useMemo<ScheduleDay[]>(() => {
@@ -181,30 +157,29 @@ export function GroupLessonsPage() {
     setStartReminderLessonId(lesson.eventId);
   }
 
-  function openMeetAfterSoniox(lesson: GroupLesson) {
+  async function openMeetAfterSoniox(lesson: GroupLesson) {
     if (!lesson.meetUrl) return;
-    setStartReminderLessonId(null);
+    try {
+      await api.lessons.ensureGoogleMeetEvents();
+    } catch {
+      // Meet still opens: scheduled-end fallback remains available.
+    }
+
+    const openedAt = Date.now();
+    localStorage.setItem(STARTED_LESSON_KEY, lesson.eventId);
+    localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
     setStartedLessonId(lesson.eventId);
     setFinishedLessonId(null);
     setFinishReminderLessonId(null);
-    const openedAt = Date.now();
-    meetOpenedAtRef.current = openedAt;
-    localStorage.setItem(STARTED_LESSON_KEY, lesson.eventId);
-    localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
+    setStartReminderLessonId(null);
     const tab = window.open(lesson.meetUrl, '_blank');
-    meetTabRef.current = tab;
-  }
-
-  function requestFinishLesson(lesson: GroupLesson) {
-    setFinishReminderLessonId(lesson.eventId);
+    if (tab) tab.opener = null;
   }
 
   function confirmSonioxStopped(lesson: GroupLesson) {
     setFinishedLessonId(lesson.eventId);
     setStartedLessonId(null);
     setFinishReminderLessonId(null);
-    meetTabRef.current = null;
-    meetOpenedAtRef.current = null;
     localStorage.removeItem(STARTED_LESSON_KEY);
     localStorage.removeItem(STARTED_LESSON_AT_KEY);
   }
@@ -226,11 +201,7 @@ export function GroupLessonsPage() {
       {connection?.connected !== true ? (
         <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
           <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Google Calendar verbinden' : 'Подключить Google Calendar'}</h2>
-          <p className="muted">
-            {language === 'DE'
-              ? 'Verbinde dein Google-Konto, damit deine Termine hier erscheinen.'
-              : 'Подключи свой Google-аккаунт, и события календаря появятся здесь.'}
-          </p>
+          <p className="muted">{language === 'DE' ? 'Verbinde dein Google-Konto, damit deine Termine hier erscheinen.' : 'Подключи свой Google-аккаунт, и события календаря появятся здесь.'}</p>
           {connection?.authorizationUrl ? (
             <a className="btn" href={connection.authorizationUrl}>{language === 'DE' ? 'Mit Google verbinden' : 'Войти через Google'}</a>
           ) : (
@@ -263,43 +234,24 @@ export function GroupLessonsPage() {
                         const expanded = expandedLessonId === lesson.eventId;
                         const started = startedLessonId === lesson.eventId;
                         const finished = finishedLessonId === lesson.eventId;
-
                         return (
                           <div key={lesson.eventId} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: '#fff' }}>
                             <div style={{ fontSize: 17, fontWeight: 800 }}>{formatStartTime(lesson.startsAt, language)}</div>
                             <div style={{ fontWeight: 750, marginTop: 4 }}>{lesson.groupName ?? lesson.title}</div>
                             <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
 
-                            {!linked && (
-                              <div className="muted" style={{ fontSize: 12, marginTop: 7 }}>
-                                {language === 'DE' ? 'Noch keiner Mindcrafti-Gruppe zugeordnet.' : 'Событие пока не связано с группой Mindcrafti.'}
-                              </div>
-                            )}
+                            {!linked && <div className="muted" style={{ fontSize: 12, marginTop: 7 }}>{language === 'DE' ? 'Noch keiner Mindcrafti-Gruppe zugeordnet.' : 'Событие пока не связано с группой Mindcrafti.'}</div>}
 
                             <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-                              {lesson.meetUrl && !started && (
-                                <button className="btn" type="button" onClick={() => requestStartLesson(lesson)} style={{ width: '100%' }}>
-                                  {language === 'DE' ? 'Unterricht starten' : 'Начать урок'}
-                                </button>
-                              )}
-                              {linked && (
-                                <button className="btn btn--secondary" type="button" onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)} style={{ width: '100%' }}>
-                                  {expanded ? (language === 'DE' ? 'Details schließen' : 'Скрыть детали') : (language === 'DE' ? 'Vorbereitung' : 'Подготовка')}
-                                </button>
-                              )}
-                              {lesson.calendarUrl && (
-                                <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer" style={{ width: '100%', textAlign: 'center' }}>Google Calendar</a>
-                              )}
+                              {lesson.meetUrl && !started && <button className="btn" type="button" onClick={() => requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>}
+                              {linked && <button className="btn btn--secondary" type="button" onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)} style={{ width: '100%' }}>{expanded ? (language === 'DE' ? 'Details schließen' : 'Скрыть детали') : (language === 'DE' ? 'Vorbereitung' : 'Подготовка')}</button>}
+                              {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer" style={{ width: '100%', textAlign: 'center' }}>Google Calendar</a>}
                             </div>
 
                             {started && (
                               <div style={{ marginTop: 10 }}>
-                                <div style={{ padding: 10, borderRadius: 10, background: '#fff3ec', border: '1px solid #ffd4bd', fontSize: 13, fontWeight: 750, marginBottom: 8 }}>
-                                  {language === 'DE' ? 'Soniox-Aufnahme läuft.' : 'Soniox должен записывать урок.'}
-                                </div>
-                                <button className="btn btn--secondary" type="button" onClick={() => requestFinishLesson(lesson)} style={{ width: '100%' }}>
-                                  {language === 'DE' ? 'Unterricht beenden' : 'Завершить урок'}
-                                </button>
+                                <div style={{ padding: 10, borderRadius: 10, background: '#fff3ec', border: '1px solid #ffd4bd', fontSize: 13, fontWeight: 750, marginBottom: 8 }}>{language === 'DE' ? 'Soniox-Aufnahme läuft.' : 'Soniox должен записывать урок.'}</div>
+                                <button className="btn btn--secondary" type="button" onClick={() => setFinishReminderLessonId(lesson.eventId)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht beenden' : 'Завершить урок'}</button>
                               </div>
                             )}
 
@@ -316,11 +268,8 @@ export function GroupLessonsPage() {
                                     </div>
                                   ))}
                                 </div>
-                                <div style={{ marginTop: 10 }}>
-                                  <Link className="btn btn--secondary" to={`/groups/${lesson.groupId}`} style={{ width: '100%', textAlign: 'center' }}>
-                                    {language === 'DE' ? 'Gruppe / Material öffnen' : 'Открыть группу / материал'}
-                                  </Link>
-                                </div>
+                                {brief.recentWorksheet && <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>{brief.recentWorksheet.worksheetFilename}</div>}
+                                <Link className="btn btn--secondary" to={`/groups/${lesson.groupId}`} style={{ width: '100%', textAlign: 'center', marginTop: 10 }}>{language === 'DE' ? 'Gruppe / Material öffnen' : 'Открыть группу / материал'}</Link>
                               </div>
                             )}
 
@@ -338,48 +287,28 @@ export function GroupLessonsPage() {
       )}
 
       {startReminderLesson && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15, 23, 42, .55)', display: 'grid', placeItems: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,23,42,.55)', display: 'grid', placeItems: 'center', padding: 20 }}>
           <div className="panel" style={{ width: 'min(560px, 100%)', padding: 28, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.28)' }}>
-            <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 10 }}>
-              {language === 'DE' ? 'Soniox einschalten' : 'Включи Soniox'}
-            </div>
-            <div style={{ fontSize: 17, lineHeight: 1.5, marginBottom: 20 }}>
-              {language === 'DE'
-                ? 'Starte jetzt die Soniox-Aufnahme. Erst danach öffnen wir Google Meet.'
-                : 'Сначала запусти запись Soniox. Только после этого открывай Google Meet.'}
-            </div>
+            <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 10 }}>{language === 'DE' ? 'Soniox einschalten' : 'Включи Soniox'}</div>
+            <div style={{ fontSize: 17, lineHeight: 1.5, marginBottom: 20 }}>{language === 'DE' ? 'Starte jetzt die Soniox-Aufnahme. Erst danach öffnen wir Google Meet.' : 'Сначала запусти запись Soniox. Только после этого открывай Google Meet.'}</div>
             <div style={{ fontWeight: 800, marginBottom: 18 }}>{startReminderLesson.groupName ?? startReminderLesson.title} · {formatLessonTime(startReminderLesson.startsAt, startReminderLesson.endsAt, language)}</div>
             <div className="stack" style={{ gap: 10 }}>
-              <button className="btn" type="button" onClick={() => openMeetAfterSoniox(startReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>
-                {language === 'DE' ? 'Soniox läuft — Google Meet öffnen' : 'Soniox включён — открыть Google Meet'}
-              </button>
-              <button className="btn btn--ghost" type="button" onClick={() => setStartReminderLessonId(null)} style={{ width: '100%' }}>
-                {language === 'DE' ? 'Abbrechen' : 'Отмена'}
-              </button>
+              <button className="btn" type="button" onClick={() => void openMeetAfterSoniox(startReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox läuft — Google Meet öffnen' : 'Soniox включён — открыть Google Meet'}</button>
+              <button className="btn btn--ghost" type="button" onClick={() => setStartReminderLessonId(null)} style={{ width: '100%' }}>{language === 'DE' ? 'Abbrechen' : 'Отмена'}</button>
             </div>
           </div>
         </div>
       )}
 
       {finishReminderLesson && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(15, 23, 42, .62)', display: 'grid', placeItems: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(15,23,42,.62)', display: 'grid', placeItems: 'center', padding: 20 }}>
           <div className="panel" style={{ width: 'min(580px, 100%)', padding: 30, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.32)', border: '2px solid #ff6a00' }}>
-            <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: '#d94f00' }}>
-              {language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}
-            </div>
-            <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>
-              {language === 'DE'
-                ? 'Du bist aus Google Meet zurück. Stoppe jetzt die Soniox-Aufnahme.'
-                : 'Ты вернулся из Google Meet. Сейчас останови запись Soniox.'}
-            </div>
+            <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: '#d94f00' }}>{language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}</div>
+            <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>{language === 'DE' ? 'Google Meet meldet, dass du den Anruf verlassen hast. Stoppe jetzt Soniox.' : 'Google Meet сообщил, что ты вышел из звонка. Сейчас останови запись Soniox.'}</div>
             <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.groupName ?? finishReminderLesson.title}</div>
             <div className="stack" style={{ gap: 10 }}>
-              <button className="btn" type="button" onClick={() => confirmSonioxStopped(finishReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>
-                {language === 'DE' ? 'Soniox gestoppt — Unterricht abschließen' : 'Soniox остановлен — завершить урок'}
-              </button>
-              <button className="btn btn--secondary" type="button" onClick={() => setFinishReminderLessonId(null)} style={{ width: '100%' }}>
-                {language === 'DE' ? 'Unterricht läuft noch' : 'Урок ещё идёт'}
-              </button>
+              <button className="btn" type="button" onClick={() => confirmSonioxStopped(finishReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox gestoppt — Unterricht abschließen' : 'Soniox остановлен — завершить урок'}</button>
+              <button className="btn btn--secondary" type="button" onClick={() => setFinishReminderLessonId(null)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht läuft noch' : 'Урок ещё идёт'}</button>
             </div>
           </div>
         </div>
@@ -446,28 +375,20 @@ function TranscriptUpload({ groupId, language }: { groupId: string; language: 'D
       <strong style={{ fontSize: 12 }}>{language === 'DE' ? 'Soniox-Datei' : 'Файл Soniox'}</strong>
       {error && <div className="banner banner--error" style={{ marginTop: 6 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginTop: 6 }}>{message}</div>}
-
       {!folderId || folderPickerOpen ? (
         <div className="stack" style={{ gap: 6, marginTop: 8 }}>
           <select className="select" value={driveId} onChange={(e) => void selectDrive(e.target.value)}>
             <option value="">{language === 'DE' ? 'Drive auswählen' : 'Выберите общий диск'}</option>
             {drives.map((drive) => <option key={drive.id} value={drive.id}>{drive.name}</option>)}
           </select>
-          {driveId && (
-            <>
-              {folders.map((folder) => <button key={folder.id} className="btn btn--ghost" type="button" onClick={() => void enter(folder)}>{folder.name}</button>)}
-              <button className="btn btn--secondary" type="button" onClick={saveCurrentFolder}>{language === 'DE' ? 'Ordner verwenden' : 'Использовать эту папку'}</button>
-            </>
-          )}
+          {driveId && <>
+            {folders.map((folder) => <button key={folder.id} className="btn btn--ghost" type="button" onClick={() => void enter(folder)}>{folder.name}</button>)}
+            <button className="btn btn--secondary" type="button" onClick={saveCurrentFolder}>{language === 'DE' ? 'Ordner verwenden' : 'Использовать эту папку'}</button>
+          </>}
         </div>
-      ) : (
-        <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 6 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button>
-      )}
-
+      ) : <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 6 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button>}
       <input className="input" type="file" style={{ marginTop: 8 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <button className="btn" type="button" disabled={!file || !folderId || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 6 }}>
-        {uploading ? (language === 'DE' ? 'Speichern…' : 'Сохраняем…') : (language === 'DE' ? 'In Drive speichern' : 'Сохранить в Drive')}
-      </button>
+      <button className="btn" type="button" disabled={!file || !folderId || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 6 }}>{uploading ? (language === 'DE' ? 'Speichern…' : 'Сохраняем…') : (language === 'DE' ? 'In Drive speichern' : 'Сохранить в Drive')}</button>
     </div>
   );
 }
@@ -476,25 +397,10 @@ function buildStudentBrief(studentId: string, name: string, homeworks: Homework[
   const recentHomework = [...homeworks].filter((item) => item.hasWorksheet).sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
   const recentHistory = [...history].sort((a, b) => b.date.localeCompare(a.date))[0];
   const wrongAnswers = recentHistory?.answers?.filter((answer) => !answer.correct) ?? [];
-
-  const homeworkText = !recentHomework
-    ? 'Домашка: данных пока нет.'
-    : recentHomework.submitted
-      ? `Домашка: сдана (${recentHomework.startDate}).`
-      : `Домашка: не сдана (${recentHomework.startDate}).`;
-  const cardText = dueCards > 0 ? `Карточки: повторить ${dueCards}.` : 'Карточки: срочных повторений нет.';
-  const errorText = wrongAnswers.length > 0
-    ? `Ошибки: ${wrongAnswers.slice(0, 2).map((answer) => answer.question).join('; ')}${wrongAnswers.length > 2 ? '…' : ''}`
-    : null;
-  const recommendation = !recentHomework?.submitted
-    ? 'В начале проверить домашку.'
-    : wrongAnswers.length > 0
-      ? 'Коротко разобрать повторяющиеся ошибки.'
-      : dueCards > 0
-        ? 'Начать с короткого повторения.'
-        : 'Быстро проверить прошлую тему и идти дальше.';
-
-  return { studentId, name, homeworkText, cardText, errorText, recommendation };
+  const homeworkText = !recentHomework ? 'Домашка: данных пока нет.' : recentHomework.submitted ? `Домашка: сдана (${recentHomework.startDate}).` : `Домашка: не сдана (${recentHomework.startDate}).`;
+  const errorText = wrongAnswers.length > 0 ? `Ошибки: ${wrongAnswers.slice(0, 2).map((answer) => answer.question).join('; ')}${wrongAnswers.length > 2 ? '…' : ''}` : null;
+  const recommendation = !recentHomework?.submitted ? 'В начале проверить домашку.' : wrongAnswers.length > 0 ? 'Коротко разобрать повторяющиеся ошибки.' : dueCards > 0 ? 'Начать с короткого повторения.' : 'Быстро проверить прошлую тему и идти дальше.';
+  return { studentId, name, homeworkText, errorText, recommendation };
 }
 
 function formatDayTitle(date: Date, index: number, language: 'DE' | 'RU') {
@@ -503,31 +409,9 @@ function formatDayTitle(date: Date, index: number, language: 'DE' | 'RU') {
   return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { weekday: 'short' }).format(date);
 }
 
-function formatDayDate(date: Date, language: 'DE' | 'RU') {
-  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { day: '2-digit', month: '2-digit' }).format(date);
-}
-
-function formatStartTime(value: string, language: 'DE' | 'RU') {
-  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-}
-
-function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') {
-  const locale = language === 'DE' ? 'de-DE' : 'ru-RU';
-  const formatter = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
-  return `${formatter.format(new Date(start))}–${formatter.format(new Date(end))}`;
-}
-
-function startOfLocalDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function addDays(date: Date, days: number) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
-function localDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+function formatDayDate(date: Date, language: 'DE' | 'RU') { return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { day: '2-digit', month: '2-digit' }).format(date); }
+function formatStartTime(value: string, language: 'DE' | 'RU') { return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(value)); }
+function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') { const formatter = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }); return `${formatter.format(new Date(start))}–${formatter.format(new Date(end))}`; }
+function startOfLocalDay(date: Date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
+function addDays(date: Date, days: number) { return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days); }
+function localDateKey(date: Date) { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }
