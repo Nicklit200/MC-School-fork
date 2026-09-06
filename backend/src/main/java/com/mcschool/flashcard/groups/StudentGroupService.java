@@ -11,6 +11,7 @@ import com.mcschool.flashcard.groups.dto.CreateGroupCardRequest;
 import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
 import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
 import com.mcschool.flashcard.groups.dto.StudentGroupResponse;
+import com.mcschool.flashcard.groups.dto.UpdateGroupTranscriptFolderRequest;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkPdfService;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
@@ -94,6 +95,15 @@ public class StudentGroupService {
     @Transactional(readOnly = true)
     public StudentGroupResponse get(AuthenticatedUser teacher, UUID groupId) {
         return response(requireOwnedGroup(teacher.id(), groupId));
+    }
+
+    @Transactional
+    public StudentGroupResponse updateTranscriptFolder(AuthenticatedUser teacher,
+                                                       UUID groupId,
+                                                       UpdateGroupTranscriptFolderRequest request) {
+        StudentGroup group = requireOwnedGroup(teacher.id(), groupId);
+        group.updateTranscriptFolder(request.folderId());
+        return response(group);
     }
 
     @Transactional
