@@ -29,199 +29,46 @@ import type {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 export class ApiRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly errorCode: string,
-    message: string,
-  ) {
+  constructor(public readonly status: number, public readonly errorCode: string, message: string) {
     super(message);
     this.name = 'ApiRequestError';
   }
 }
 
 let accessToken: string | null = localStorage.getItem('accessToken');
-
-export function setAccessToken(token: string | null): void {
-  accessToken = token;
-  if (token) localStorage.setItem('accessToken', token);
-  else localStorage.removeItem('accessToken');
-}
-
+export function setAccessToken(token: string | null): void { accessToken = token; if (token) localStorage.setItem('accessToken', token); else localStorage.removeItem('accessToken'); }
 export function getAccessToken(): string | null { return accessToken; }
-
-function authHeaders(): Record<string, string> {
-  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
-}
+function authHeaders(): Record<string, string> { return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}; }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = authHeaders();
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const response = await fetch(`${BASE_URL}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   const payload = text ? JSON.parse(text) : undefined;
-  if (!response.ok) {
-    const code = payload?.errorCode ?? 'UNKNOWN';
-    const message = payload?.message ?? response.statusText;
-    throw new ApiRequestError(response.status, code, message);
-  }
-  return payload as T;
-}
-
-async function uploadFile(path: string, file: File): Promise<void> {
-  const form = new FormData();
-  form.append('file', file);
-  const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form });
-  if (!response.ok) {
-    const text = await response.text();
-    let payload: any;
-    try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
-    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
-  }
-}
-
-async function uploadFiles(path: string, files: File[]): Promise<void> {
-  const form = new FormData();
-  files.forEach((file) => form.append('files', file));
-  const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form });
-  if (!response.ok) {
-    const text = await response.text();
-    let payload: any;
-    try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
-    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
-  }
-}
-
-async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> {
-  const form = new FormData();
-  form.append('startDate', startDate);
-  form.append('file', file);
-  const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form });
-  const text = await response.text();
-  let payload: any;
-  try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
   if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
   return payload as T;
 }
 
-async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> {
-  return uploadDatedFile<Homework>(`/students/${studentId}/homeworks/pdf`, startDate, file);
-}
-
-async function requestBlob(path: string): Promise<Blob> {
-  const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
-  if (!response.ok) {
-    const text = await response.text();
-    let payload: any;
-    try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
-    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
-  }
-  return response.blob();
-}
-
-async function requestText(path: string): Promise<string> {
-  const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
-  const text = await response.text();
-  if (!response.ok) {
-    let payload: any;
-    try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
-    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
-  }
-  return text;
-}
+async function uploadFile(path: string, file: File): Promise<void> { const form = new FormData(); form.append('file', file); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
+async function uploadFiles(path: string, files: File[]): Promise<void> { const form = new FormData(); files.forEach((file) => form.append('files', file)); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
+async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> { const form = new FormData(); form.append('startDate', startDate); form.append('file', file); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); return payload as T; }
+async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> { return uploadDatedFile<Homework>(`/students/${studentId}/homeworks/pdf`, startDate, file); }
+async function requestBlob(path: string): Promise<Blob> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return response.blob(); }
+async function requestText(path: string): Promise<string> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); const text = await response.text(); if (!response.ok) { let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return text; }
 
 export const api = {
-  auth: {
-    login: (email: string, password: string) => request<AuthResponse>('POST', '/auth/login', { email, password }),
-    activate: (invitationToken: string, email: string, password: string) => request<AuthResponse>('POST', '/auth/activate', { invitationToken, email: email.trim() || null, password }),
-    me: () => request<User>('GET', '/auth/me'),
-  },
-  users: {
-    updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }),
-    changePassword: (password: string) => request<void>('PUT', '/users/me/password', { password }),
-  },
-  push: {
-    config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'),
-    subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('POST', '/push/subscriptions', subscription),
-    unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('DELETE', '/push/subscriptions', subscription),
-    test: () => request<void>('POST', '/push/test'),
-  },
-  teachers: {
-    list: () => request<User[]>('GET', '/teachers'),
-    create: (fullName: string, email: string) => request<TeacherInvitation>('POST', '/teachers', { fullName, email }),
-  },
+  auth: { login: (email: string, password: string) => request<AuthResponse>('POST', '/auth/login', { email, password }), activate: (invitationToken: string, email: string, password: string) => request<AuthResponse>('POST', '/auth/activate', { invitationToken, email: email.trim() || null, password }), me: () => request<User>('GET', '/auth/me') },
+  users: { updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }), changePassword: (password: string) => request<void>('PUT', '/users/me/password', { password }) },
+  push: { config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'), subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('POST', '/push/subscriptions', subscription), unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('DELETE', '/push/subscriptions', subscription), test: () => request<void>('POST', '/push/test') },
+  teachers: { list: () => request<User[]>('GET', '/teachers'), create: (fullName: string, email: string) => request<TeacherInvitation>('POST', '/teachers', { fullName, email }) },
   students: {
-    list: () => request<StudentListItem[]>('GET', '/students'),
-    get: (studentId: string) => request<StudentListItem>('GET', `/students/${studentId}`),
-    create: (fullName: string, email: string) => request<StudentInvitation>('POST', '/students', { fullName, email: email.trim() || null }),
-    rename: (studentId: string, fullName: string) => request<StudentListItem>('PUT', `/students/${studentId}/name`, { fullName }),
-    resetPassword: (studentId: string, password: string) => request<void>('PUT', `/students/${studentId}/password`, { password }),
-    updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) => request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }),
-    updateHomeworkDriveFolder: (studentId: string, googleDriveHomeworkFolderId: string) => request<StudentListItem>('PUT', `/students/${studentId}/homework-drive-folder`, { googleDriveHomeworkFolderId }),
-    updateChatGptProjectUrl: (studentId: string, chatGptProjectUrl: string) => request<StudentListItem>('PUT', `/students/${studentId}/chatgpt-project`, { chatGptProjectUrl }),
-    testDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test`),
-    testHomeworkDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/homework-drive-folder/test`),
-    testAutomaticExport: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test-export`),
-    reviewHistory: (studentId: string) => request<DailyReviewHistoryItem[]>('GET', `/students/${studentId}/review-history`),
-    testReviewReminder: (studentId: string) => request<TestReviewReminderResult>('POST', `/students/${studentId}/test-review-reminder`),
-    makeOneCardDueToday: (studentId: string) => request<PilotDueCardResult>('POST', `/students/${studentId}/make-one-card-due-today`),
-    remove: (studentId: string) => request<void>('DELETE', `/students/${studentId}`),
+    list: () => request<StudentListItem[]>('GET', '/students'), get: (studentId: string) => request<StudentListItem>('GET', `/students/${studentId}`), create: (fullName: string, email: string) => request<StudentInvitation>('POST', '/students', { fullName, email: email.trim() || null }), rename: (studentId: string, fullName: string) => request<StudentListItem>('PUT', `/students/${studentId}/name`, { fullName }), resetPassword: (studentId: string, password: string) => request<void>('PUT', `/students/${studentId}/password`, { password }), updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) => request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }), updateHomeworkDriveFolder: (studentId: string, googleDriveHomeworkFolderId: string) => request<StudentListItem>('PUT', `/students/${studentId}/homework-drive-folder`, { googleDriveHomeworkFolderId }), updateTranscriptDriveFolder: (studentId: string, googleDriveTranscriptFolderId: string) => request<StudentListItem>('PUT', `/students/${studentId}/transcript-drive-folder`, { googleDriveTranscriptFolderId }), updateChatGptProjectUrl: (studentId: string, chatGptProjectUrl: string) => request<StudentListItem>('PUT', `/students/${studentId}/chatgpt-project`, { chatGptProjectUrl }), testDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test`), testHomeworkDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/homework-drive-folder/test`), testTranscriptDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/transcript-drive-folder/test`), testAutomaticExport: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test-export`), reviewHistory: (studentId: string) => request<DailyReviewHistoryItem[]>('GET', `/students/${studentId}/review-history`), testReviewReminder: (studentId: string) => request<TestReviewReminderResult>('POST', `/students/${studentId}/test-review-reminder`), makeOneCardDueToday: (studentId: string) => request<PilotDueCardResult>('POST', `/students/${studentId}/make-one-card-due-today`), remove: (studentId: string) => request<void>('DELETE', `/students/${studentId}`),
   },
-  groups: {
-    list: () => request<StudentGroup[]>('GET', '/groups'),
-    get: (groupId: string) => request<StudentGroup>('GET', `/groups/${groupId}`),
-    create: (name: string, emails: string[]) => request<StudentGroup>('POST', '/groups', { name, emails }),
-    addMembers: (groupId: string, emails: string[]) => request<StudentGroup>('POST', `/groups/${groupId}/members`, { emails }),
-    updateTranscriptFolder: (groupId: string, folderId: string) => request<StudentGroup>('PUT', `/groups/${groupId}/transcript-drive-folder`, { folderId }),
-    createCard: (groupId: string, startDate: string, question: string, correctAnswer: string) => request<number>('POST', `/groups/${groupId}/cards`, { startDate, question, correctAnswer }),
-    importCards: (groupId: string, startDate: string, cards: ParsedCard[]) => request<number>('POST', `/groups/${groupId}/cards/import`, { startDate, cards }),
-    createPdfHomework: (groupId: string, startDate: string, file: File) => uploadDatedFile<number>(`/groups/${groupId}/homeworks/pdf`, startDate, file),
-  },
-  lessons: {
-    groupLessons: () => request<GroupLesson[]>('GET', '/lessons/groups'),
-    googleCalendarConnection: () => request<GoogleCalendarConnection>('GET', '/google-calendar/connection'),
-    disconnectGoogleCalendar: () => request<void>('DELETE', '/google-calendar/connection'),
-    ensureGoogleMeetEvents: () => request<GoogleMeetEventStatus>('POST', '/google-meet/subscription'),
-    googleMeetEventStatus: () => request<GoogleMeetEventStatus>('GET', '/google-meet/status'),
-  },
-  cards: {
-    listForStudent: (studentId: string) => request<Card[]>('GET', `/students/${studentId}/cards`),
-    summaryForStudent: (studentId: string) => request<CardSummary>('GET', `/students/${studentId}/cards/summary`),
-    update: (cardId: string, question: string, correctAnswer: string) => request<Card>('PUT', `/cards/${cardId}`, { question, correctAnswer }),
-    remove: (cardId: string) => request<void>('DELETE', `/cards/${cardId}`),
-    importPreview: (rawText: string, questionAnswerSeparator: string, cardSeparator: string) => request<ImportPreview>('POST', '/cards/import/preview', { rawText, questionAnswerSeparator, cardSeparator }),
-    listForHomework: (homeworkId: string) => request<Card[]>('GET', `/homeworks/${homeworkId}/cards`),
-    createInHomework: (homeworkId: string, question: string, correctAnswer: string) => request<Card>('POST', `/homeworks/${homeworkId}/cards`, { question, correctAnswer }),
-    importConfirmInHomework: (homeworkId: string, cards: ParsedCard[]) => request<Card[]>('POST', `/homeworks/${homeworkId}/cards/import`, { cards }),
-  },
-  homeworks: {
-    listForStudent: (studentId: string) => request<Homework[]>('GET', `/students/${studentId}/homeworks`),
-    create: (studentId: string, startDate: string) => request<Homework>('POST', `/students/${studentId}/homeworks`, { startDate }),
-    createPdf: (studentId: string, startDate: string, file: File) => createPdfHomework(studentId, startDate, file),
-    remove: (homeworkId: string) => request<void>('DELETE', `/homeworks/${homeworkId}`),
-    uploadWorksheet: (homeworkId: string, file: File) => uploadFile(`/homeworks/${homeworkId}/worksheet`, file),
-    worksheet: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/worksheet`),
-    worksheetPage: (homeworkId: string, pageIndex: number) => requestBlob(`/homeworks/${homeworkId}/worksheet/pages/${pageIndex}`),
-    submission: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/submission`),
-  },
-  study: {
-    today: () => request<Today>('GET', '/study/today'),
-    homeworks: () => request<Homework[]>('GET', '/study/homeworks'),
-    homeworkCards: (homeworkId: string) => request<Card[]>('GET', `/study/homeworks/${homeworkId}/cards`),
-    worksheetPage: (homeworkId: string, pageIndex: number) => requestBlob(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}`),
-    worksheetPageDataUrl: (homeworkId: string, pageIndex: number) => requestText(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}/data-url`),
-    submitPdfHomework: (homeworkId: string, overlays: HomeworkPageOverlay[]) => request<void>('POST', `/study/homeworks/${homeworkId}/submit-pdf`, { overlays }),
-    submitHomeworkFile: (homeworkId: string, file: File) => uploadFile(`/study/homeworks/${homeworkId}/submit-file`, file),
-    submitHomeworkFiles: (homeworkId: string, files: File[]) => uploadFiles(`/study/homeworks/${homeworkId}/submit-files`, files),
-    myCards: () => request<Card[]>('GET', '/study/cards'),
-    startSession: (type: SessionType, homeworkId?: string) => request<Session>('POST', '/study/sessions', homeworkId ? { type, homeworkId } : { type }),
-    getSession: (sessionId: string) => request<Session>('GET', `/study/sessions/${sessionId}`),
-    currentQuestion: (sessionId: string) => request<Question>('GET', `/study/sessions/${sessionId}/current-question`),
-    answer: (sessionId: string, cardId: string, selectedAnswer: string) => request<AnswerResult>('POST', `/study/sessions/${sessionId}/answer`, { cardId, selectedAnswer }),
-    result: (sessionId: string) => request<SessionResult>('GET', `/study/sessions/${sessionId}/result`),
-  },
+  groups: { list: () => request<StudentGroup[]>('GET', '/groups'), get: (groupId: string) => request<StudentGroup>('GET', `/groups/${groupId}`), create: (name: string, emails: string[]) => request<StudentGroup>('POST', '/groups', { name, emails }), addMembers: (groupId: string, emails: string[]) => request<StudentGroup>('POST', `/groups/${groupId}/members`, { emails }), updateTranscriptFolder: (groupId: string, folderId: string) => request<StudentGroup>('PUT', `/groups/${groupId}/transcript-drive-folder`, { folderId }), createCard: (groupId: string, startDate: string, question: string, correctAnswer: string) => request<number>('POST', `/groups/${groupId}/cards`, { startDate, question, correctAnswer }), importCards: (groupId: string, startDate: string, cards: ParsedCard[]) => request<number>('POST', `/groups/${groupId}/cards/import`, { startDate, cards }), createPdfHomework: (groupId: string, startDate: string, file: File) => uploadDatedFile<number>(`/groups/${groupId}/homeworks/pdf`, startDate, file) },
+  lessons: { groupLessons: () => request<GroupLesson[]>('GET', '/lessons/groups'), bindStudent: (eventId: string, studentId: string) => request<GroupLesson>('PUT', `/lessons/${encodeURIComponent(eventId)}/student`, { studentId }), googleCalendarConnection: () => request<GoogleCalendarConnection>('GET', '/google-calendar/connection'), disconnectGoogleCalendar: () => request<void>('DELETE', '/google-calendar/connection'), ensureGoogleMeetEvents: () => request<GoogleMeetEventStatus>('POST', '/google-meet/subscription'), googleMeetEventStatus: () => request<GoogleMeetEventStatus>('GET', '/google-meet/status') },
+  cards: { listForStudent: (studentId: string) => request<Card[]>('GET', `/students/${studentId}/cards`), summaryForStudent: (studentId: string) => request<CardSummary>('GET', `/students/${studentId}/cards/summary`), update: (cardId: string, question: string, correctAnswer: string) => request<Card>('PUT', `/cards/${cardId}`, { question, correctAnswer }), remove: (cardId: string) => request<void>('DELETE', `/cards/${cardId}`), importPreview: (rawText: string, questionAnswerSeparator: string, cardSeparator: string) => request<ImportPreview>('POST', '/cards/import/preview', { rawText, questionAnswerSeparator, cardSeparator }), listForHomework: (homeworkId: string) => request<Card[]>('GET', `/homeworks/${homeworkId}/cards`), createInHomework: (homeworkId: string, question: string, correctAnswer: string) => request<Card>('POST', `/homeworks/${homeworkId}/cards`, { question, correctAnswer }), importConfirmInHomework: (homeworkId: string, cards: ParsedCard[]) => request<Card[]>('POST', `/homeworks/${homeworkId}/cards/import`, { cards }) },
+  homeworks: { listForStudent: (studentId: string) => request<Homework[]>('GET', `/students/${studentId}/homeworks`), create: (studentId: string, startDate: string) => request<Homework>('POST', `/students/${studentId}/homeworks`, { startDate }), createPdf: (studentId: string, startDate: string, file: File) => createPdfHomework(studentId, startDate, file), remove: (homeworkId: string) => request<void>('DELETE', `/homeworks/${homeworkId}`), uploadWorksheet: (homeworkId: string, file: File) => uploadFile(`/homeworks/${homeworkId}/worksheet`, file), worksheet: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/worksheet`), worksheetPage: (homeworkId: string, pageIndex: number) => requestBlob(`/homeworks/${homeworkId}/worksheet/pages/${pageIndex}`), submission: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/submission`) },
+  study: { today: () => request<Today>('GET', '/study/today'), homeworks: () => request<Homework[]>('GET', '/study/homeworks'), homeworkCards: (homeworkId: string) => request<Card[]>('GET', `/study/homeworks/${homeworkId}/cards`), worksheetPage: (homeworkId: string, pageIndex: number) => requestBlob(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}`), worksheetPageDataUrl: (homeworkId: string, pageIndex: number) => requestText(`/study/homeworks/${homeworkId}/worksheet/pages/${pageIndex}/data-url`), submitPdfHomework: (homeworkId: string, overlays: HomeworkPageOverlay[]) => request<void>('POST', `/study/homeworks/${homeworkId}/submit-pdf`, { overlays }), submitHomeworkFile: (homeworkId: string, file: File) => uploadFile(`/study/homeworks/${homeworkId}/submit-file`, file), submitHomeworkFiles: (homeworkId: string, files: File[]) => uploadFiles(`/study/homeworks/${homeworkId}/submit-files`, files), myCards: () => request<Card[]>('GET', '/study/cards'), startSession: (type: SessionType, homeworkId?: string) => request<Session>('POST', '/study/sessions', homeworkId ? { type, homeworkId } : { type }), getSession: (sessionId: string) => request<Session>('GET', `/study/sessions/${sessionId}`), currentQuestion: (sessionId: string) => request<Question>('GET', `/study/sessions/${sessionId}/current-question`), answer: (sessionId: string, cardId: string, selectedAnswer: string) => request<AnswerResult>('POST', `/study/sessions/${sessionId}/answer`, { cardId, selectedAnswer }), result: (sessionId: string) => request<SessionResult>('GET', `/study/sessions/${sessionId}/result`) },
 };
