@@ -48,6 +48,11 @@ export interface GroupLesson {
   calendarUrl: string | null;
 }
 
+export interface GoogleCalendarConnection {
+  connected: boolean;
+  authorizationUrl: string | null;
+}
+
 export interface AuthResponse {
   accessToken: string;
   tokenType: string;
