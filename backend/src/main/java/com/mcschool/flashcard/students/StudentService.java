@@ -24,6 +24,7 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
 import com.mcschool.flashcard.users.UserStatus;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudentService {
 
     private static final Logger log = LoggerFactory.getLogger(StudentService.class);
+    private static final SecureRandom USERNAME_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final CardRepository cardRepository;
@@ -79,6 +81,7 @@ public class StudentService {
             notificationService.sendInvitation(student, token);
         }
 
+        ensureUsername(student);
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
     }
 
@@ -123,16 +126,19 @@ public class StudentService {
         return existing;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<StudentListResponse> listStudents(AuthenticatedUser teacher) {
         return userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()).stream()
+                .peek(this::ensureUsername)
                 .map(StudentListResponse::from)
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public StudentListResponse getStudent(AuthenticatedUser teacher, UUID studentId) {
-        return StudentListResponse.from(requireOwnedStudent(teacher.id(), studentId));
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        ensureUsername(student);
+        return StudentListResponse.from(student);
     }
 
     @Transactional
@@ -204,6 +210,33 @@ public class StudentService {
                 .filter(u -> !u.isArchived())
                 .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacherId))
                 .orElseThrow(() -> new ResourceNotFoundException("Active student not found"));
+    }
+
+    private void ensureUsername(User student) {
+        if (student.getRole() != Role.STUDENT || (student.getUsername() != null && !student.getUsername().isBlank())) {
+            return;
+        }
+        String base = usernameBase(student.getFullName());
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            String candidate = base + (100 + USERNAME_RANDOM.nextInt(900));
+            if (!userRepository.existsByUsernameIgnoreCase(candidate)) {
+                student.assignUsername(candidate);
+                return;
+            }
+        }
+        throw new IllegalStateException("Could not generate a unique student username");
+    }
+
+    private static String usernameBase(String fullName) {
+        String first = fullName == null ? "student" : fullName.trim().split("\\s+")[0];
+        String cleaned = first.replaceAll("[^\\p{L}\\p{N}]", "");
+        if (cleaned.isBlank()) {
+            cleaned = "student";
+        }
+        if (cleaned.length() > 40) {
+            cleaned = cleaned.substring(0, 40);
+        }
+        return cleaned;
     }
 
     private LocalDate reviewToday() {
