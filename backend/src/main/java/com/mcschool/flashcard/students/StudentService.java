@@ -24,6 +24,7 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
 import com.mcschool.flashcard.users.UserStatus;
+import com.mcschool.flashcard.users.dto.ChangePasswordRequest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,6 +35,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,16 +49,19 @@ public class StudentService {
     private final CardRepository cardRepository;
     private final NotificationService notificationService;
     private final DailyReviewHistoryService historyService;
+    private final PasswordEncoder passwordEncoder;
     private final ZoneId reviewReminderZone;
 
     public StudentService(UserRepository userRepository, CardRepository cardRepository,
                           NotificationService notificationService,
                           DailyReviewHistoryService historyService,
+                          PasswordEncoder passwordEncoder,
                           @Value("${app.notifications.review-reminders.zone}") String reviewReminderZone) {
         this.userRepository = userRepository;
         this.cardRepository = cardRepository;
         this.notificationService = notificationService;
         this.historyService = historyService;
+        this.passwordEncoder = passwordEncoder;
         this.reviewReminderZone = ZoneId.of(reviewReminderZone);
     }
 
@@ -147,6 +152,12 @@ public class StudentService {
         User student = requireOwnedStudent(teacher.id(), studentId);
         student.changeFullName(request.fullName().trim());
         return StudentListResponse.from(student);
+    }
+
+    @Transactional
+    public void resetStudentPassword(AuthenticatedUser teacher, UUID studentId, ChangePasswordRequest request) {
+        User student = requireOwnedActiveStudent(teacher.id(), studentId);
+        student.changePasswordHash(passwordEncoder.encode(request.password()));
     }
 
     @Transactional
