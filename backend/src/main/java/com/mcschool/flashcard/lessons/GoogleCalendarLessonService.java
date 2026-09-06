@@ -28,19 +28,28 @@ public class GoogleCalendarLessonService {
     private final ObjectMapper objectMapper;
     private final StudentGroupRepository groupRepository;
     private final GoogleCalendarOAuthService oauthService;
+    private final GoogleMeetEventsService meetEventsService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public GoogleCalendarLessonService(ObjectMapper objectMapper,
                                        StudentGroupRepository groupRepository,
-                                       GoogleCalendarOAuthService oauthService) {
+                                       GoogleCalendarOAuthService oauthService,
+                                       GoogleMeetEventsService meetEventsService) {
         this.objectMapper = objectMapper;
         this.groupRepository = groupRepository;
         this.oauthService = oauthService;
+        this.meetEventsService = meetEventsService;
     }
 
     public List<GroupLessonResponse> listGroupLessons(AuthenticatedUser teacher) {
         String accessToken = oauthService.accessTokenForTeacher(teacher.id());
         if (accessToken == null || accessToken.isBlank()) return List.of();
+
+        try {
+            meetEventsService.ensureSubscription(teacher);
+        } catch (RuntimeException ignored) {
+            // Calendar must keep working even if Meet event delivery is not configured yet.
+        }
 
         List<StudentGroup> groups = groupRepository.findAllByTeacherIdOrderByNameAsc(teacher.id());
         String connectedGoogleAccount = primaryCalendarId(accessToken);
