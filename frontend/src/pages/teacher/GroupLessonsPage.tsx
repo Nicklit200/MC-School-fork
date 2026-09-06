@@ -23,6 +23,12 @@ type LessonBrief = {
 
 type BriefMap = Record<string, LessonBrief>;
 
+type ScheduleDay = {
+  key: string;
+  date: Date;
+  lessons: GroupLesson[];
+};
+
 export function GroupLessonsPage() {
   const { language, t } = useI18n();
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
@@ -78,10 +84,31 @@ export function GroupLessonsPage() {
     void load();
   }, [t]);
 
-  const upcoming = useMemo(
-    () => lessons.filter((lesson) => new Date(lesson.endsAt).getTime() >= Date.now() - 3 * 60 * 60 * 1000),
-    [lessons],
-  );
+  const scheduleDays = useMemo<ScheduleDay[]>(() => {
+    const start = startOfLocalDay(new Date());
+    const endExclusive = addDays(start, 7);
+    const weekLessons = lessons
+      .filter((lesson) => {
+        const startsAt = new Date(lesson.startsAt);
+        return startsAt >= start && startsAt < endExclusive;
+      })
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+
+    return Array.from({ length: 7 }, (_, offset) => {
+      const date = addDays(start, offset);
+      const nextDate = addDays(date, 1);
+      return {
+        key: localDateKey(date),
+        date,
+        lessons: weekLessons.filter((lesson) => {
+          const startsAt = new Date(lesson.startsAt);
+          return startsAt >= date && startsAt < nextDate;
+        }),
+      };
+    });
+  }, [lessons]);
+
+  const hasWeekLessons = scheduleDays.some((day) => day.lessons.length > 0);
 
   async function disconnectCalendar() {
     if (!window.confirm(language === 'DE' ? 'Google Calendar trennen?' : 'Отключить Google Calendar от этого аккаунта преподавателя?')) return;
@@ -121,11 +148,81 @@ export function GroupLessonsPage() {
     localStorage.removeItem('mindcrafti.startedGroupLesson');
   }
 
+  function renderLesson(lesson: GroupLesson) {
+    const brief = briefs[lesson.groupId];
+    const isStarted = startedLessonId === lesson.eventId;
+    const isFinished = finishedLessonId === lesson.eventId;
+
+    return (
+      <section key={lesson.eventId} className="panel" style={{ padding: 20, margin: 0 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 420px' }}>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>{formatStartTime(lesson.startsAt, language)}</div>
+            <h3 style={{ margin: '4px 0 5px', fontSize: 22 }}>{lesson.groupName}</h3>
+            <div className="muted">{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
+          </div>
+          <Link className="btn btn--secondary" to={`/groups/${lesson.groupId}`}>{language === 'DE' ? 'Gruppe öffnen' : 'Открыть группу'}</Link>
+        </div>
+
+        {brief && (
+          <div style={{ marginTop: 18 }}>
+            <h3 style={{ marginBottom: 10 }}>{language === 'DE' ? 'Kurz vor dem Unterricht' : 'Кратко перед уроком'}</h3>
+            <div className="stack">
+              {brief.students.map((student) => (
+                <div key={student.studentId} style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 12 }}>
+                  <strong>{student.name}</strong>
+                  <div className="muted" style={{ marginTop: 5, fontSize: 13 }}>{student.homeworkText}</div>
+                  <div className="muted" style={{ marginTop: 3, fontSize: 13 }}>{student.cardText}</div>
+                  {student.errorText && <div style={{ marginTop: 6, fontSize: 13 }}>{student.errorText}</div>}
+                  <div style={{ marginTop: 6, fontSize: 13 }}><strong>{language === 'DE' ? 'Empfehlung:' : 'Рекомендация:'}</strong> {student.recommendation}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <strong>{language === 'DE' ? 'Arbeitsmaterial' : 'Рабочая тетрадь / материал'}</strong>
+          {brief?.recentWorksheet ? (
+            <div className="row" style={{ marginTop: 8, alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div className="muted" style={{ flex: '1 1 320px' }}>{brief.recentWorksheet.worksheetFilename}</div>
+              <Link className="btn btn--secondary" to={`/groups/${lesson.groupId}`}>{language === 'DE' ? 'Ansehen / bearbeiten' : 'Посмотреть / редактировать'}</Link>
+            </div>
+          ) : (
+            <div className="muted" style={{ marginTop: 6 }}>{language === 'DE' ? 'Noch kein PDF-Material gefunden.' : 'PDF-материал для группы пока не найден.'}</div>
+          )}
+        </div>
+
+        <div className="row" style={{ marginTop: 18, gap: 10, flexWrap: 'wrap' }}>
+          {!isStarted ? (
+            <button className="btn" type="button" onClick={() => startLesson(lesson)} disabled={!lesson.meetUrl}>
+              {language === 'DE' ? 'Unterricht starten' : 'Начать урок'}
+            </button>
+          ) : (
+            <>
+              <a className="btn" href={lesson.meetUrl ?? '#'} target="_blank" rel="noreferrer">Google Meet</a>
+              <button className="btn btn--secondary" type="button" onClick={() => finishLesson(lesson)}>{language === 'DE' ? 'Unterricht beenden' : 'Завершить урок'}</button>
+            </>
+          )}
+          {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
+        </div>
+
+        {isStarted && (
+          <div className="banner banner--info" style={{ marginTop: 14, marginBottom: 0 }}>
+            {language === 'DE' ? 'Soniox-Aufnahme sollte jetzt laufen.' : 'Запись Soniox должна сейчас идти. После урока нажми «Завершить урок».'}
+          </div>
+        )}
+
+        {isFinished && <TranscriptUpload groupId={lesson.groupId} language={language} />}
+      </section>
+    );
+  }
+
   return (
     <div className="teacher-lessons-page">
       <div className="teacher-page-heading">
         <h1>{language === 'DE' ? 'Gruppenunterricht' : 'Уроки групп'}</h1>
-        <p>{language === 'DE' ? 'Dein Google Kalender, Vorbereitung, Meet und Soniox an einem Ort.' : 'Твой Google Calendar, подготовка, Meet и Soniox в одном месте.'}</p>
+        <p>{language === 'DE' ? 'Dein Stundenplan für die nächsten 7 Tage.' : 'Расписание на ближайшие 7 дней: подготовка, Meet и Soniox в одном месте.'}</p>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
@@ -143,87 +240,35 @@ export function GroupLessonsPage() {
             </button>
           </div>
 
-          {upcoming.length === 0 ? (
-            <div className="teacher-empty-state">
-              <strong>{language === 'DE' ? 'Keine Gruppentermine gefunden.' : 'Групповые уроки пока не найдены.'}</strong>
-              <div className="muted" style={{ marginTop: 8 }}>
-                {language === 'DE'
-                  ? 'Der Terminname muss den Namen der Gruppe in Mindcrafti enthalten, z. B. „Gruppe 2 | Mathematik“.'
-                  : 'Чтобы связать событие с группой, в названии события Google Calendar должно быть название группы из Mindcrafti, например «Группа 2 | Математика».'}
-              </div>
-            </div>
-          ) : (
-            <div className="stack">
-              {upcoming.map((lesson) => {
-                const brief = briefs[lesson.groupId];
-                const isStarted = startedLessonId === lesson.eventId;
-                const isFinished = finishedLessonId === lesson.eventId;
-                return (
-                  <section key={lesson.eventId} className="panel" style={{ padding: 22 }}>
-                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
-                      <div style={{ flex: '1 1 420px' }}>
-                        <div className="muted" style={{ fontSize: 13 }}>{formatLessonDate(lesson.startsAt, language)}</div>
-                        <h2 style={{ margin: '4px 0 5px', fontSize: 24 }}>{lesson.groupName}</h2>
-                        <div className="muted">{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
-                      </div>
-                      <Link className="btn btn--secondary" to={`/groups/${lesson.groupId}`}>{language === 'DE' ? 'Gruppe öffnen' : 'Открыть группу'}</Link>
-                    </div>
-
-                    {brief && (
-                      <div style={{ marginTop: 20 }}>
-                        <h3 style={{ marginBottom: 10 }}>{language === 'DE' ? 'Kurz vor dem Unterricht' : 'Кратко перед уроком'}</h3>
-                        <div className="stack">
-                          {brief.students.map((student) => (
-                            <div key={student.studentId} style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 12 }}>
-                              <strong>{student.name}</strong>
-                              <div className="muted" style={{ marginTop: 5, fontSize: 13 }}>{student.homeworkText}</div>
-                              <div className="muted" style={{ marginTop: 3, fontSize: 13 }}>{student.cardText}</div>
-                              {student.errorText && <div style={{ marginTop: 6, fontSize: 13 }}>{student.errorText}</div>}
-                              <div style={{ marginTop: 6, fontSize: 13 }}><strong>{language === 'DE' ? 'Empfehlung:' : 'Рекомендация:'}</strong> {student.recommendation}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                      <strong>{language === 'DE' ? 'Arbeitsmaterial' : 'Рабочая тетрадь / материал'}</strong>
-                      {brief?.recentWorksheet ? (
-                        <div className="row" style={{ marginTop: 8, alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <div className="muted" style={{ flex: '1 1 320px' }}>{brief.recentWorksheet.worksheetFilename}</div>
-                          <Link className="btn btn--secondary" to={`/groups/${lesson.groupId}`}>{language === 'DE' ? 'Ansehen / bearbeiten' : 'Посмотреть / редактировать'}</Link>
-                        </div>
-                      ) : (
-                        <div className="muted" style={{ marginTop: 6 }}>{language === 'DE' ? 'Noch kein PDF-Material gefunden.' : 'PDF-материал для группы пока не найден.'}</div>
-                      )}
-                    </div>
-
-                    <div className="row" style={{ marginTop: 18, gap: 10, flexWrap: 'wrap' }}>
-                      {!isStarted ? (
-                        <button className="btn" type="button" onClick={() => startLesson(lesson)} disabled={!lesson.meetUrl}>
-                          {language === 'DE' ? 'Unterricht starten' : 'Начать урок'}
-                        </button>
-                      ) : (
-                        <>
-                          <a className="btn" href={lesson.meetUrl ?? '#'} target="_blank" rel="noreferrer">Google Meet</a>
-                          <button className="btn btn--secondary" type="button" onClick={() => finishLesson(lesson)}>{language === 'DE' ? 'Unterricht beenden' : 'Завершить урок'}</button>
-                        </>
-                      )}
-                      {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
-                    </div>
-
-                    {isStarted && (
-                      <div className="banner banner--info" style={{ marginTop: 14, marginBottom: 0 }}>
-                        {language === 'DE' ? 'Soniox-Aufnahme sollte jetzt laufen.' : 'Запись Soniox должна сейчас идти. После урока нажми «Завершить урок».'}
-                      </div>
-                    )}
-
-                    {isFinished && <TranscriptUpload groupId={lesson.groupId} language={language} />}
-                  </section>
-                );
-              })}
+          {!hasWeekLessons && (
+            <div className="banner banner--info" style={{ marginBottom: 16 }}>
+              {language === 'DE'
+                ? 'In den nächsten 7 Tagen wurden keine verknüpften Gruppentermine gefunden.'
+                : 'На ближайшие 7 дней связанных групповых уроков пока не найдено.'}
             </div>
           )}
+
+          <div className="stack" style={{ gap: 18 }}>
+            {scheduleDays.map((day, index) => (
+              <section key={day.key} className="panel" style={{ padding: 18 }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: day.lessons.length ? 14 : 0 }}>
+                  <h2 style={{ margin: 0, fontSize: 21 }}>{formatScheduleDay(day.date, index, language)}</h2>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {day.lessons.length === 0
+                      ? (language === 'DE' ? 'Kein Unterricht' : 'Уроков нет')
+                      : language === 'DE'
+                        ? `${day.lessons.length} Termin${day.lessons.length === 1 ? '' : 'e'}`
+                        : formatLessonCount(day.lessons.length)}
+                  </div>
+                </div>
+                {day.lessons.length > 0 && (
+                  <div className="stack" style={{ gap: 12 }}>
+                    {day.lessons.map(renderLesson)}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
         </>
       ) : (
         <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
@@ -366,12 +411,46 @@ function buildStudentBrief(studentId: string, name: string, homeworks: Homework[
   return { studentId, name, homeworkText, cardText, errorText, recommendation };
 }
 
-function formatLessonDate(value: string, language: 'DE' | 'RU') {
-  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date(value));
+function formatScheduleDay(date: Date, index: number, language: 'DE' | 'RU') {
+  const locale = language === 'DE' ? 'de-DE' : 'ru-RU';
+  const dateText = new Intl.DateTimeFormat(locale, { weekday: 'long', day: '2-digit', month: 'long' }).format(date);
+  const prefix = index === 0
+    ? (language === 'DE' ? 'Heute' : 'Сегодня')
+    : index === 1
+      ? (language === 'DE' ? 'Morgen' : 'Завтра')
+      : null;
+  return prefix ? `${prefix} · ${dateText}` : dateText;
+}
+
+function formatStartTime(value: string, language: 'DE' | 'RU') {
+  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') {
   const locale = language === 'DE' ? 'de-DE' : 'ru-RU';
   const formatter = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
   return `${formatter.format(new Date(start))}–${formatter.format(new Date(end))}`;
+}
+
+function formatLessonCount(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} урок`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} урока`;
+  return `${count} уроков`;
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
