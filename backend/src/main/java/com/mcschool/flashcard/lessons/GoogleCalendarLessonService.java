@@ -1,9 +1,13 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
+import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.users.User;
+import com.mcschool.flashcard.users.UserRepository;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -14,10 +18,13 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -27,20 +34,27 @@ public class GoogleCalendarLessonService {
 
     private final ObjectMapper objectMapper;
     private final StudentGroupRepository groupRepository;
+    private final UserRepository userRepository;
+    private final GoogleCalendarLessonBindingRepository bindingRepository;
     private final GoogleCalendarOAuthService oauthService;
     private final GoogleMeetEventsService meetEventsService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public GoogleCalendarLessonService(ObjectMapper objectMapper,
                                        StudentGroupRepository groupRepository,
+                                       UserRepository userRepository,
+                                       GoogleCalendarLessonBindingRepository bindingRepository,
                                        GoogleCalendarOAuthService oauthService,
                                        GoogleMeetEventsService meetEventsService) {
         this.objectMapper = objectMapper;
         this.groupRepository = groupRepository;
+        this.userRepository = userRepository;
+        this.bindingRepository = bindingRepository;
         this.oauthService = oauthService;
         this.meetEventsService = meetEventsService;
     }
 
+    @Transactional(readOnly = true)
     public List<GroupLessonResponse> listGroupLessons(AuthenticatedUser teacher) {
         String accessToken = oauthService.accessTokenForTeacher(teacher.id());
         if (accessToken == null || accessToken.isBlank()) return List.of();
@@ -52,6 +66,14 @@ public class GoogleCalendarLessonService {
         }
 
         List<StudentGroup> groups = groupRepository.findAllByTeacherIdOrderByNameAsc(teacher.id());
+        List<User> students = userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()).stream()
+                .filter(user -> user.getRole() == Role.STUDENT)
+                .toList();
+        Map<String, GoogleCalendarLessonBinding> bindings = new HashMap<>();
+        for (GoogleCalendarLessonBinding binding : bindingRepository.findAllByTeacherId(teacher.id())) {
+            bindings.put(binding.getEventKey(), binding);
+        }
+
         String connectedGoogleAccount = primaryCalendarId(accessToken);
 
         Instant now = Instant.now();
@@ -61,7 +83,7 @@ public class GoogleCalendarLessonService {
                 + "&timeMin=" + enc(now.minus(12, ChronoUnit.HOURS).toString())
                 + "&timeMax=" + enc(now.plus(21, ChronoUnit.DAYS).toString())
                 + "&maxResults=250"
-                + "&fields=" + enc("items(id,summary,start,end,hangoutLink,htmlLink,conferenceData(entryPoints(entryPointType,uri)))");
+                + "&fields=" + enc("items(id,recurringEventId,summary,start,end,hangoutLink,htmlLink,conferenceData(entryPoints(entryPointType,uri)))");
 
         Map<String, Object> payload = getJson(url, accessToken);
         Object rawItems = payload.get("items");
@@ -73,6 +95,12 @@ public class GoogleCalendarLessonService {
             Map<String, Object> event = asMap(rawMap);
             String title = stringValue(event.get("summary"));
             StudentGroup group = matchGroup(groups, title);
+
+            String eventId = stringValue(event.get("id"));
+            String recurringEventId = stringValue(event.get("recurringEventId"));
+            String bindingKey = recurringEventId.isBlank() ? eventId : recurringEventId;
+            GoogleCalendarLessonBinding savedBinding = bindings.get(bindingKey);
+            User student = savedBinding == null ? matchStudent(students, title) : savedBinding.getStudent();
 
             Instant startsAt = eventInstant(event.get("start"));
             Instant endsAt = eventInstant(event.get("end"));
@@ -91,9 +119,12 @@ public class GoogleCalendarLessonService {
             }
 
             result.add(new GroupLessonResponse(
-                    stringValue(event.get("id")),
+                    eventId,
+                    bindingKey,
                     group == null ? null : group.getId(),
                     group == null ? null : group.getName(),
+                    student == null ? null : student.getId(),
+                    student == null ? null : student.getFullName(),
                     displayTitle,
                     startsAt,
                     endsAt,
@@ -103,6 +134,25 @@ public class GoogleCalendarLessonService {
         }
 
         return result.stream().sorted(Comparator.comparing(GroupLessonResponse::startsAt)).toList();
+    }
+
+    @Transactional
+    public void bindStudent(AuthenticatedUser teacher, String bindingKey, UUID studentId) {
+        if (bindingKey == null || bindingKey.isBlank()) {
+            throw new IllegalArgumentException("Calendar event key is required");
+        }
+        User teacherEntity = userRepository.findById(teacher.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
+        User student = userRepository.findById(studentId)
+                .filter(user -> user.getRole() == Role.STUDENT)
+                .filter(user -> !user.isArchived())
+                .filter(user -> user.getTeacher() != null && user.getTeacher().getId().equals(teacher.id()))
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+
+        GoogleCalendarLessonBinding binding = bindingRepository.findByTeacherIdAndEventKey(teacher.id(), bindingKey)
+                .orElseGet(() -> GoogleCalendarLessonBinding.create(teacherEntity, bindingKey, student));
+        binding.changeStudent(student);
+        bindingRepository.save(binding);
     }
 
     private String primaryCalendarId(String accessToken) {
@@ -127,6 +177,20 @@ public class GoogleCalendarLessonService {
             String normalizedName = normalize(group.getName());
             if (!normalizedName.isBlank() && normalizedTitle.contains(normalizedName) && normalizedName.length() > bestLength) {
                 best = group;
+                bestLength = normalizedName.length();
+            }
+        }
+        return best;
+    }
+
+    private User matchStudent(List<User> students, String title) {
+        String normalizedTitle = normalize(title);
+        User best = null;
+        int bestLength = -1;
+        for (User student : students) {
+            String normalizedName = normalize(student.getFullName());
+            if (!normalizedName.isBlank() && normalizedTitle.contains(normalizedName) && normalizedName.length() > bestLength) {
+                best = student;
                 bestLength = normalizedName.length();
             }
         }
