@@ -224,6 +224,7 @@ export const api = {
     create: (studentId: string, startDate: string) => request<Homework>('POST', `/students/${studentId}/homeworks`, { startDate }),
     createPdf: (studentId: string, startDate: string, file: File) => createPdfHomework(studentId, startDate, file),
     uploadWorksheet: (homeworkId: string, file: File) => uploadFile(`/homeworks/${homeworkId}/worksheet`, file),
+    worksheet: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/worksheet`),
     submission: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/submission`),
   },
   study: {
