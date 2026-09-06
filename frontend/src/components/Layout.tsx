@@ -17,6 +17,7 @@ export function Layout({ children }: { children: ReactNode }) {
     const teacherLinks = [
       { to: '/students', label: 'Мои ученики', icon: '◉', end: true },
       { to: '/groups', label: 'Мои группы', icon: '◎' },
+      { to: '/teacher/settings', label: 'Настройки', icon: '⚙' },
       { to: '/students', label: 'Уроки', icon: '⌘', disabled: true },
       { to: '/students', label: 'Домашние задания', icon: '▣', disabled: true },
       { to: '/students', label: 'Материалы', icon: '▤', disabled: true },
@@ -24,7 +25,6 @@ export function Layout({ children }: { children: ReactNode }) {
       { to: '/students', label: 'Прогресс', icon: '⌁', disabled: true },
       { to: '/students', label: 'Сообщения', icon: '✉', disabled: true },
       { to: '/students', label: 'Уведомления', icon: '♧', disabled: true },
-      { to: '/students', label: 'Настройки', icon: '⚙', disabled: true },
     ];
 
     return (
@@ -73,10 +73,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   type="button"
                   className="teacher-profile__logout"
                   title={t('common.logout')}
-                  onClick={() => {
-                    logout();
-                    navigate('/login');
-                  }}
+                  onClick={() => navigate('/teacher/settings')}
                 >
                   ⌄
                 </button>
