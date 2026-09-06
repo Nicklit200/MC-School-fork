@@ -33,6 +33,9 @@ public class User {
     @Column(length = 255)
     private String email;
 
+    @Column(length = 60)
+    private String username;
+
     @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
@@ -103,6 +106,16 @@ public class User {
             throw new IllegalArgumentException("Full name is required");
         }
         this.fullName = fullName.trim();
+    }
+
+    public void assignUsername(String username) {
+        if (this.role != Role.STUDENT) {
+            throw new IllegalStateException("Only students can have a school username");
+        }
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Username is required");
+        }
+        this.username = username.trim();
     }
 
     public void linkParent(User parent) {
