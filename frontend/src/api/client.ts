@@ -87,6 +87,22 @@ async function uploadFile(path: string, file: File): Promise<void> {
   }
 }
 
+async function uploadFiles(path: string, files: File[]): Promise<void> {
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file));
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: any;
+    try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
+    throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
+  }
+}
+
 async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> {
   const form = new FormData();
   form.append('startDate', startDate);
@@ -220,6 +236,8 @@ export const api = {
       request<void>('POST', `/study/homeworks/${homeworkId}/submit-pdf`, { overlays }),
     submitHomeworkFile: (homeworkId: string, file: File) =>
       uploadFile(`/study/homeworks/${homeworkId}/submit-file`, file),
+    submitHomeworkFiles: (homeworkId: string, files: File[]) =>
+      uploadFiles(`/study/homeworks/${homeworkId}/submit-files`, files),
     myCards: () => request<Card[]>('GET', '/study/cards'),
     startSession: (type: SessionType, homeworkId?: string) =>
       request<Session>('POST', '/study/sessions', homeworkId ? { type, homeworkId } : { type }),
