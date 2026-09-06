@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
-/** Student settings: language and free PWA push notifications. */
+/** Student settings: language, password and free PWA push notifications. */
 export function SettingsPage() {
   const { t, language, setLanguage } = useI18n();
   const { user, setUser } = useAuth();
@@ -14,6 +14,9 @@ export function SettingsPage() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushConfigured, setPushConfigured] = useState<boolean | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
   const languages: Language[] = ['RU', 'DE'];
 
   useEffect(() => {
@@ -36,9 +39,6 @@ export function SettingsPage() {
           return;
         }
 
-        // A browser may still have a local subscription while the backend no longer
-        // has it (for example after a database reset) or while it is bound to an old
-        // account on the same device. Re-register it every time Settings is opened.
         const json = subscription.toJSON();
         if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
           setPushEnabled(false);
@@ -64,6 +64,25 @@ export function SettingsPage() {
       setSaved(true);
     } catch (e) {
       setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function changePassword() {
+    if (newPassword.length < 6) {
+      setError(language === 'DE' ? 'Das Passwort muss mindestens 6 Zeichen haben.' : 'Пароль должен содержать минимум 6 символов.');
+      return;
+    }
+    setPasswordBusy(true);
+    setPasswordSaved(false);
+    setError(null);
+    try {
+      await api.users.changePassword(newPassword);
+      setNewPassword('');
+      setPasswordSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : toErrorMessage(e, t));
+    } finally {
+      setPasswordBusy(false);
     }
   }
 
@@ -161,6 +180,42 @@ export function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {user?.role === 'STUDENT' && (
+        <div className="panel stack">
+          <div>
+            <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Passwort ändern' : 'Сменить пароль'}</h2>
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {language === 'DE'
+                ? 'Gib einfach ein neues Passwort ein. Das alte Passwort ist nicht nötig.'
+                : 'Просто введи новый пароль. Старый пароль подтверждать не нужно.'}
+            </p>
+          </div>
+          {passwordSaved && (
+            <div className="banner banner--success">
+              {language === 'DE' ? 'Passwort wurde geändert.' : 'Пароль изменён.'}
+            </div>
+          )}
+          <input
+            className="input"
+            type="password"
+            value={newPassword}
+            minLength={6}
+            maxLength={72}
+            autoComplete="new-password"
+            placeholder={language === 'DE' ? 'Neues Passwort' : 'Новый пароль'}
+            onChange={(event) => {
+              setNewPassword(event.target.value);
+              setPasswordSaved(false);
+            }}
+          />
+          <button className="btn btn--block" type="button" disabled={passwordBusy || newPassword.length < 6} onClick={changePassword}>
+            {passwordBusy
+              ? (language === 'DE' ? 'Wird gespeichert…' : 'Сохраняем…')
+              : (language === 'DE' ? 'Passwort speichern' : 'Сохранить пароль')}
+          </button>
+        </div>
+      )}
 
       <div className="panel stack">
         <div>
