@@ -39,8 +39,8 @@ export interface StudentGroup {
 
 export interface GroupLesson {
   eventId: string;
-  groupId: string;
-  groupName: string;
+  groupId: string | null;
+  groupName: string | null;
   title: string;
   startsAt: string;
   endsAt: string;
