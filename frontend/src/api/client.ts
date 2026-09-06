@@ -225,6 +225,7 @@ export const api = {
     listForStudent: (studentId: string) => request<Homework[]>('GET', `/students/${studentId}/homeworks`),
     create: (studentId: string, startDate: string) => request<Homework>('POST', `/students/${studentId}/homeworks`, { startDate }),
     createPdf: (studentId: string, startDate: string, file: File) => createPdfHomework(studentId, startDate, file),
+    remove: (homeworkId: string) => request<void>('DELETE', `/homeworks/${homeworkId}`),
     uploadWorksheet: (homeworkId: string, file: File) => uploadFile(`/homeworks/${homeworkId}/worksheet`, file),
     worksheet: (homeworkId: string) => requestBlob(`/homeworks/${homeworkId}/worksheet`),
     worksheetPage: (homeworkId: string, pageIndex: number) => requestBlob(`/homeworks/${homeworkId}/worksheet/pages/${pageIndex}`),
