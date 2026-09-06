@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.imageio.ImageIO;
@@ -38,6 +39,8 @@ import org.springframework.web.multipart.MultipartFile;
 public class HomeworkPdfService {
 
     private static final long MAX_PDF_BYTES = 25L * 1024L * 1024L;
+    private static final long MAX_SUBMISSION_BYTES = 60L * 1024L * 1024L;
+    private static final int MAX_SUBMISSION_FILES = 12;
     private static final float PAGE_RENDER_DPI = 144f;
     private static final ZoneId SCHOOL_ZONE = ZoneId.of("Europe/Berlin");
 
@@ -56,10 +59,6 @@ public class HomeworkPdfService {
         this.webPushService = webPushService;
     }
 
-    /**
-     * Creates a brand-new PDF homework. Even if the student already has one or more
-     * homeworks for the same date, this method always creates another row with a new UUID.
-     */
     @Transactional
     public HomeworkResponse createWorksheetHomework(AuthenticatedUser teacher,
                                                      UUID studentId,
@@ -67,14 +66,9 @@ public class HomeworkPdfService {
                                                      MultipartFile file) {
         User student = requireOwnedStudent(teacher.id(), studentId);
         PdfUpload pdf = readPdf(file);
-
         Homework homework = homeworkRepository.save(Homework.create(student, startDate));
         homework.attachWorksheet(pdf.filename(), pdf.bytes(), pdf.pageCount());
-
-        if (startDate.equals(LocalDate.now(SCHOOL_ZONE))) {
-            notifyTodayAssignment(homework);
-        }
-
+        if (startDate.equals(LocalDate.now(SCHOOL_ZONE))) notifyTodayAssignment(homework);
         return HomeworkResponse.from(homework, Map.of());
     }
 
@@ -84,22 +78,16 @@ public class HomeworkPdfService {
         boolean firstAssignment = !homework.hasWorksheet();
         PdfUpload pdf = readPdf(file);
         homework.attachWorksheet(pdf.filename(), pdf.bytes(), pdf.pageCount());
-
-        if (firstAssignment && homework.getStartDate().equals(LocalDate.now(SCHOOL_ZONE))) {
-            notifyTodayAssignment(homework);
-        }
+        if (firstAssignment && homework.getStartDate().equals(LocalDate.now(SCHOOL_ZONE))) notifyTodayAssignment(homework);
     }
 
     @Transactional(readOnly = true)
     public byte[] renderStudentPage(AuthenticatedUser student, UUID homeworkId, int pageIndex) {
         Homework homework = requireStudentHomework(student.id(), homeworkId);
         ensureWorksheet(homework);
-        if (pageIndex < 0 || pageIndex >= homework.getWorksheetPageCount()) {
-            throw new ResourceNotFoundException("Homework page not found");
-        }
+        if (pageIndex < 0 || pageIndex >= homework.getWorksheetPageCount()) throw new ResourceNotFoundException("Homework page not found");
         byte[] sourcePdf = homework.isSubmitted() ? homework.getSubmittedPdf() : homework.getWorksheetPdf();
-        try (PDDocument document = Loader.loadPDF(sourcePdf);
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        try (PDDocument document = Loader.loadPDF(sourcePdf); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, PAGE_RENDER_DPI, ImageType.RGB);
             ImageIO.write(image, "png", out);
@@ -114,70 +102,71 @@ public class HomeworkPdfService {
         Homework homework = requireStudentHomework(student.id(), homeworkId);
         ensureWorksheet(homework);
         if (homework.isSubmitted()) throw new IllegalArgumentException("Homework has already been submitted");
-        try (PDDocument document = Loader.loadPDF(homework.getWorksheetPdf());
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        try (PDDocument document = Loader.loadPDF(homework.getWorksheetPdf()); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             for (HomeworkPageOverlayRequest overlay : request.overlays()) {
-                if (overlay.pageIndex() < 0 || overlay.pageIndex() >= document.getNumberOfPages()) {
-                    throw new IllegalArgumentException("Invalid page index");
-                }
+                if (overlay.pageIndex() < 0 || overlay.pageIndex() >= document.getNumberOfPages()) throw new IllegalArgumentException("Invalid page index");
                 byte[] png = decodeBase64Image(overlay.imageBase64());
                 PDPage page = document.getPage(overlay.pageIndex());
                 PDRectangle box = page.getCropBox();
-                PDImageXObject image = PDImageXObject.createFromByteArray(document, png,
-                        "homework-overlay-" + overlay.pageIndex());
-                try (PDPageContentStream content = new PDPageContentStream(document, page,
-                        PDPageContentStream.AppendMode.APPEND, true, true)) {
+                PDImageXObject image = PDImageXObject.createFromByteArray(document, png, "homework-overlay-" + overlay.pageIndex());
+                try (PDPageContentStream content = new PDPageContentStream(document, page, PDPageContentStream.AppendMode.APPEND, true, true)) {
                     content.drawImage(image, box.getLowerLeftX(), box.getLowerLeftY(), box.getWidth(), box.getHeight());
                 }
             }
             document.save(out);
-            String baseName = homework.getWorksheetFilename() == null
-                    ? "homework" : homework.getWorksheetFilename().replaceFirst("(?i)\\.pdf$", "");
+            String baseName = homework.getWorksheetFilename() == null ? "homework" : homework.getWorksheetFilename().replaceFirst("(?i)\\.pdf$", "");
             homework.submitWorksheet(baseName + "-submitted.pdf", out.toByteArray(), Instant.now());
         } catch (IOException e) {
             throw new IllegalStateException("Could not create submitted PDF", e);
         }
     }
 
-    /**
-     * Alternative submission path for students who solved the worksheet on paper.
-     * The student's photo/PDF is converted to PDF when needed and APPENDED to the
-     * originally assigned worksheet. The teacher and Google Drive therefore receive
-     * one combined PDF: assigned homework first, student's paper solution afterwards.
-     */
     @Transactional
     public void submitFile(AuthenticatedUser student, UUID homeworkId, MultipartFile file) {
+        submitFiles(student, homeworkId, List.of(file));
+    }
+
+    @Transactional
+    public void submitFiles(AuthenticatedUser student, UUID homeworkId, List<MultipartFile> files) {
         Homework homework = requireStudentHomework(student.id(), homeworkId);
         ensureWorksheet(homework);
         if (homework.isSubmitted()) throw new IllegalArgumentException("Homework has already been submitted");
-        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Submission file is required");
-        if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("Submission file is too large");
+        if (files == null || files.isEmpty()) throw new IllegalArgumentException("At least one submission file is required");
+        if (files.size() > MAX_SUBMISSION_FILES) throw new IllegalArgumentException("Too many submission files");
 
-        String filename = file.getOriginalFilename() == null ? "homework" : file.getOriginalFilename();
-        String lower = filename.toLowerCase();
+        long totalBytes = files.stream().filter(file -> file != null).mapToLong(MultipartFile::getSize).sum();
+        if (totalBytes > MAX_SUBMISSION_BYTES) throw new IllegalArgumentException("Submission files are too large");
+
         try {
-            byte[] bytes = file.getBytes();
-            byte[] answerPdf;
-            if (lower.endsWith(".pdf") || "application/pdf".equalsIgnoreCase(file.getContentType())) {
-                try (PDDocument document = Loader.loadPDF(bytes)) {
-                    if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
-                }
-                answerPdf = bytes;
-            } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
-                    || "image/jpeg".equalsIgnoreCase(file.getContentType())
-                    || "image/png".equalsIgnoreCase(file.getContentType())) {
-                answerPdf = imageToPdf(bytes);
-            } else {
-                throw new IllegalArgumentException("Only PDF, JPG and PNG files are supported");
+            byte[] combinedPdf = homework.getWorksheetPdf();
+            for (MultipartFile file : files) {
+                byte[] answerPdf = submissionFileToPdf(file);
+                combinedPdf = appendPdf(combinedPdf, answerPdf);
             }
-
-            byte[] combinedPdf = appendPdf(homework.getWorksheetPdf(), answerPdf);
-            String baseName = homework.getWorksheetFilename() == null
-                    ? "homework" : homework.getWorksheetFilename().replaceFirst("(?i)\\.pdf$", "");
+            String baseName = homework.getWorksheetFilename() == null ? "homework" : homework.getWorksheetFilename().replaceFirst("(?i)\\.pdf$", "");
             homework.submitWorksheet(baseName + "-submitted.pdf", combinedPdf, Instant.now());
         } catch (IOException e) {
             throw new IllegalArgumentException("Could not read submission file", e);
         }
+    }
+
+    private byte[] submissionFileToPdf(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Submission file is required");
+        if (file.getSize() > MAX_PDF_BYTES) throw new IllegalArgumentException("One submission file is too large");
+        String filename = file.getOriginalFilename() == null ? "homework" : file.getOriginalFilename();
+        String lower = filename.toLowerCase();
+        byte[] bytes = file.getBytes();
+        if (lower.endsWith(".pdf") || "application/pdf".equalsIgnoreCase(file.getContentType())) {
+            try (PDDocument document = Loader.loadPDF(bytes)) {
+                if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages");
+            }
+            return bytes;
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
+                || "image/jpeg".equalsIgnoreCase(file.getContentType()) || "image/png".equalsIgnoreCase(file.getContentType())) {
+            return imageToPdf(bytes);
+        }
+        throw new IllegalArgumentException("Only PDF, JPG and PNG files are supported");
     }
 
     @Transactional(readOnly = true)
@@ -195,12 +184,8 @@ public class HomeworkPdfService {
     }
 
     private byte[] appendPdf(byte[] originalWorksheetPdf, byte[] studentAnswerPdf) throws IOException {
-        try (PDDocument worksheet = Loader.loadPDF(originalWorksheetPdf);
-             PDDocument answer = Loader.loadPDF(studentAnswerPdf);
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            for (PDPage page : answer.getPages()) {
-                worksheet.importPage(page);
-            }
+        try (PDDocument worksheet = Loader.loadPDF(originalWorksheetPdf); PDDocument answer = Loader.loadPDF(studentAnswerPdf); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            for (PDPage page : answer.getPages()) worksheet.importPage(page);
             worksheet.save(out);
             return out.toByteArray();
         }
@@ -209,18 +194,12 @@ public class HomeworkPdfService {
     private byte[] imageToPdf(byte[] imageBytes) throws IOException {
         BufferedImage imageInfo = ImageIO.read(new ByteArrayInputStream(imageBytes));
         if (imageInfo == null) throw new IllegalArgumentException("Could not read image");
-
         boolean landscape = imageInfo.getWidth() > imageInfo.getHeight();
-        PDRectangle pageSize = landscape
-                ? new PDRectangle(PDRectangle.A4.getHeight(), PDRectangle.A4.getWidth())
-                : PDRectangle.A4;
-
-        try (PDDocument document = new PDDocument();
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        PDRectangle pageSize = landscape ? new PDRectangle(PDRectangle.A4.getHeight(), PDRectangle.A4.getWidth()) : PDRectangle.A4;
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDPage page = new PDPage(pageSize);
             document.addPage(page);
             PDImageXObject image = PDImageXObject.createFromByteArray(document, imageBytes, "student-photo");
-
             float margin = 24f;
             float availableWidth = pageSize.getWidth() - margin * 2;
             float availableHeight = pageSize.getHeight() - margin * 2;
@@ -229,7 +208,6 @@ public class HomeworkPdfService {
             float height = image.getHeight() * scale;
             float x = (pageSize.getWidth() - width) / 2;
             float y = (pageSize.getHeight() - height) / 2;
-
             try (PDPageContentStream content = new PDPageContentStream(document, page)) {
                 content.drawImage(image, x, y, width, height);
             }
@@ -259,13 +237,8 @@ public class HomeworkPdfService {
         String url = "/student/homeworks/" + homework.getId() + "/worksheet";
         for (PushSubscription subscription : pushSubscriptionRepository.findAllByUserId(homework.getStudent().getId())) {
             try {
-                webPushService.send(
-                        subscription,
-                        "Mindcrafti School",
-                        "Тебе задана новая домашняя работа на сегодня 📝",
-                        url);
+                webPushService.send(subscription, "Mindcrafti School", "Тебе задана новая домашняя работа на сегодня 📝", url);
             } catch (RuntimeException ignored) {
-                // Assigning homework must still succeed even if one device subscription is broken.
             }
         }
     }
@@ -282,9 +255,7 @@ public class HomeworkPdfService {
     }
 
     private void ensureWorksheet(Homework homework) {
-        if (!homework.hasWorksheet() || homework.getWorksheetPageCount() == null) {
-            throw new ResourceNotFoundException("Homework PDF not found");
-        }
+        if (!homework.hasWorksheet() || homework.getWorksheetPageCount() == null) throw new ResourceNotFoundException("Homework PDF not found");
     }
 
     private User requireOwnedStudent(UUID teacherId, UUID studentId) {
@@ -296,18 +267,14 @@ public class HomeworkPdfService {
     }
 
     private Homework requireTeacherHomework(UUID teacherId, UUID homeworkId) {
-        Homework homework = homeworkRepository.findById(homeworkId)
-                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        Homework homework = homeworkRepository.findById(homeworkId).orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
         User student = homework.getStudent();
-        if (student.getTeacher() == null || !student.getTeacher().getId().equals(teacherId) || student.isArchived()) {
-            throw new ResourceNotFoundException("Homework not found");
-        }
+        if (student.getTeacher() == null || !student.getTeacher().getId().equals(teacherId) || student.isArchived()) throw new ResourceNotFoundException("Homework not found");
         return homework;
     }
 
     private Homework requireStudentHomework(UUID studentId, UUID homeworkId) {
-        Homework homework = homeworkRepository.findByIdAndStudentId(homeworkId, studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        Homework homework = homeworkRepository.findByIdAndStudentId(homeworkId, studentId).orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
         User student = userRepository.findById(studentId)
                 .filter(user -> user.getRole() == Role.STUDENT)
                 .filter(user -> !user.isArchived())
