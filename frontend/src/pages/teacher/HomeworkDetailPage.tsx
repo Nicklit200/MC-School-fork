@@ -143,8 +143,8 @@ export function HomeworkDetailPage() {
       await reload();
       await loadWorksheetPreview();
       setMessage(language === 'DE'
-        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Die Vorschau zeigt jetzt die aktuelle Version.'
-        : 'Готово: отредактированный PDF заменил предыдущий файл. Ниже уже показана текущая версия домашки.');
+        ? 'Die bearbeitete PDF wurde hochgeladen und hat die bisherige Datei ersetzt. Oben siehst du jetzt die aktuelle Version.'
+        : 'Готово: отредактированный PDF заменил предыдущий файл. Сверху уже показана текущая версия домашки.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -255,29 +255,8 @@ export function HomeworkDetailPage() {
 
         {homework?.hasWorksheet && (
           <div className="panel" style={{ margin: 0, padding: 16 }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 420px' }}>
-                <strong>{language === 'DE' ? 'Mit ChatGPT bearbeiten' : 'Редактировать в ChatGPT'}</strong>
-                <p className="muted" style={{ margin: '6px 0 0' }}>
-                  {language === 'DE'
-                    ? 'Die PDF wird heruntergeladen und ChatGPT wird geöffnet. Dort kannst du das passende Schüler-Projekt wählen und die Datei anhängen.'
-                    : 'PDF скачается, и откроется ChatGPT. Там можно выбрать нужный проект ученика и прикрепить скачанный файл.'}
-                </p>
-              </div>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
-                  {language === 'DE' ? 'Original-PDF herunterladen' : 'Скачать исходный PDF'}
-                </button>
-                <button className="btn" type="button" onClick={editInChatGpt} disabled={openingChatGpt}>
-                  {openingChatGpt
-                    ? (language === 'DE' ? 'Öffnen…' : 'Открываем…')
-                    : (language === 'DE' ? 'In ChatGPT bearbeiten' : 'Редактировать в ChatGPT')}
-                </button>
-              </div>
-            </div>
-
             {!homework.submitted ? (
-              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
+              <div>
                 <strong>{language === 'DE' ? 'Bearbeitete PDF zurückladen' : 'Загрузить отредактированный PDF обратно'}</strong>
                 <p className="muted" style={{ margin: '6px 0 10px' }}>
                   {language === 'DE'
@@ -306,12 +285,35 @@ export function HomeworkDetailPage() {
                 {replacing && <div className="muted" style={{ marginTop: 8 }}>{language === 'DE' ? 'PDF wird ersetzt…' : 'Заменяем PDF…'}</div>}
               </div>
             ) : (
-              <div className="banner banner--info" style={{ marginTop: 16 }}>
+              <div className="banner banner--info">
                 {language === 'DE'
                   ? 'Diese Hausaufgabe wurde bereits abgegeben. Die Aufgaben-PDF kann hier nicht mehr ersetzt werden, damit die Abgabehistorie erhalten bleibt.'
                   : 'Эта домашка уже сдана. Замену исходного PDF здесь отключили, чтобы не ломать историю выполненной работы.'}
               </div>
             )}
+
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 420px' }}>
+                  <strong>{language === 'DE' ? 'Mit ChatGPT bearbeiten' : 'Редактировать в ChatGPT'}</strong>
+                  <p className="muted" style={{ margin: '6px 0 0' }}>
+                    {language === 'DE'
+                      ? 'Die PDF wird heruntergeladen und ChatGPT wird geöffnet. Dort kannst du das passende Schüler-Projekt wählen und die Datei anhängen.'
+                      : 'PDF скачается, и откроется ChatGPT. Там можно выбрать нужный проект ученика и прикрепить скачанный файл.'}
+                  </p>
+                </div>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn--secondary" type="button" onClick={downloadWorksheet}>
+                    {language === 'DE' ? 'Original-PDF herunterladen' : 'Скачать исходный PDF'}
+                  </button>
+                  <button className="btn" type="button" onClick={editInChatGpt} disabled={openingChatGpt}>
+                    {openingChatGpt
+                      ? (language === 'DE' ? 'Öffnen…' : 'Открываем…')
+                      : (language === 'DE' ? 'In ChatGPT bearbeiten' : 'Редактировать в ChatGPT')}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
