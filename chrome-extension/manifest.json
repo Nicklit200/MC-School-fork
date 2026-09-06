@@ -1,12 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Mindcrafti Soniox Reminder",
-  "version": "1.0.0",
-  "description": "Shows a Mindcrafti reminder inside Google Meet after the teacher leaves a meeting.",
+  "version": "1.1.0",
+  "description": "Opens Soniox when a Mindcrafti lesson starts and reminds the teacher to stop it after leaving Google Meet.",
   "content_scripts": [
     {
       "matches": ["https://meet.google.com/*"],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.up.railway.app/*",
+        "https://mindcrafti.de/*",
+        "https://*.mindcrafti.de/*",
+        "http://localhost/*"
+      ],
+      "js": ["mindcrafti.js"],
       "run_at": "document_idle"
     }
   ]
