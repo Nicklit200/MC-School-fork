@@ -80,6 +80,10 @@ public class GoogleCalendarLessonService {
 
             String meetUrl = stringValue(event.get("hangoutLink"));
             if (meetUrl.isBlank()) meetUrl = conferenceMeetUrl(event.get("conferenceData"));
+            if (!meetUrl.isBlank() && connectedGoogleAccount != null && !connectedGoogleAccount.isBlank()) {
+                meetUrl = withAuthUser(meetUrl, connectedGoogleAccount);
+            }
+
             String displayTitle = title.isBlank() ? "Google Calendar" : title;
             String calendarUrl = blankToNull(stringValue(event.get("htmlLink")));
             if (calendarUrl != null && connectedGoogleAccount != null && !connectedGoogleAccount.isBlank()) {
