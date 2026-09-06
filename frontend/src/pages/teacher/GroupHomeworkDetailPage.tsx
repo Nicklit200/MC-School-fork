@@ -195,37 +195,6 @@ export function GroupHomeworkDetailPage() {
         {representative.worksheetPageCount ? ` · ${representative.worksheetPageCount} стр.` : ''}
       </div>
 
-      <h2>Кто сделал</h2>
-      <div className="panel stack">
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <strong>Сдали: {submittedCount}/{assignedCount}</strong>
-          {assignedCount < (group?.students.length ?? 0) && (
-            <span className="muted">Задание есть не у всех текущих участников группы.</span>
-          )}
-        </div>
-        <div className="stack" style={{ gap: 8 }}>
-          {assignments.map(({ student, homework }) => (
-            <div key={student.id} className="list-row" style={{ alignItems: 'center' }}>
-              <div>
-                <div className="list-row__title">{student.fullName}</div>
-                <div className="muted">
-                  {!homework ? 'Эта домашка не назначена' : homework.submitted ? 'Сдал' : 'Пока не сдал'}
-                </div>
-              </div>
-              {homework ? (
-                <Link
-                  className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`}
-                  to={`/teacher/students/${student.id}/homeworks/${homework.id}`}
-                  title="Открыть домашку этого ученика"
-                >
-                  {homework.submitted ? '✓' : '✕'}
-                </Link>
-              ) : <span className="muted">—</span>}
-            </div>
-          ))}
-        </div>
-      </div>
-
       <h2>Редактирование домашки</h2>
       <div className="panel stack">
         {hasAnySubmission ? (
