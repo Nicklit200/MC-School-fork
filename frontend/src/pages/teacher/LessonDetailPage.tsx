@@ -24,9 +24,11 @@ export function LessonDetailPage() {
   const [lessonPlan, setLessonPlan] = useState('');
   const [homeworkSummary, setHomeworkSummary] = useState<HomeworkSummary | null>(null);
   const [workbookUrl, setWorkbookUrl] = useState<string | null>(null);
+  const [answersUrl, setAnswersUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingWorkbook, setUploadingWorkbook] = useState(false);
+  const [uploadingAnswers, setUploadingAnswers] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,14 +51,11 @@ export function LessonDetailPage() {
         setLessonPlan(prep.lessonPlan ?? '');
 
         if (prep.hasWorkbook) {
-          try {
-            const url = await lessonPreparationApi.workbookUrl(eventId);
-            if (!cancelled) setWorkbookUrl(url);
-          } catch {
-            // The page remains usable even if the PDF preview is temporarily unavailable.
-          }
+          try { if (!cancelled) setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId)); } catch { /* page still works */ }
         }
-
+        if (prep.hasAnswers) {
+          try { if (!cancelled) setAnswersUrl(await lessonPreparationApi.answersUrl(eventId)); } catch { /* page still works */ }
+        }
         if (currentLesson) {
           const summary = await buildHomeworkSummary(currentLesson);
           if (!cancelled) setHomeworkSummary(summary);
@@ -70,9 +69,7 @@ export function LessonDetailPage() {
     void load();
     return () => {
       cancelled = true;
-      if (workbookUrl) URL.revokeObjectURL(workbookUrl);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, t]);
 
   const dateText = useMemo(() => {
@@ -90,7 +87,7 @@ export function LessonDetailPage() {
     try {
       const updated = await lessonPreparationApi.update(eventId, { homeworkNotes, difficulties, lessonPlan });
       setPreparation(updated);
-      setMessage('Подготовка урока сохранена.');
+      setMessage('Информация для урока сохранена.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -98,25 +95,28 @@ export function LessonDetailPage() {
     }
   }
 
-  async function uploadWorkbook(file: File) {
-    if (uploading) return;
-    if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Рабочая тетрадь должна быть PDF-файлом.');
+  async function uploadPdf(kind: 'workbook' | 'answers', file: File) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Нужен PDF-файл.');
       return;
     }
-    setUploading(true);
+    const isWorkbook = kind === 'workbook';
+    if (isWorkbook ? uploadingWorkbook : uploadingAnswers) return;
+    isWorkbook ? setUploadingWorkbook(true) : setUploadingAnswers(true);
     setError(null);
     setMessage(null);
     try {
-      const updated = await lessonPreparationApi.uploadWorkbook(eventId, file);
+      const updated = isWorkbook
+        ? await lessonPreparationApi.uploadWorkbook(eventId, file)
+        : await lessonPreparationApi.uploadAnswers(eventId, file);
       setPreparation(updated);
-      if (workbookUrl) URL.revokeObjectURL(workbookUrl);
-      setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId));
-      setMessage('Рабочая тетрадь обновлена.');
+      if (isWorkbook) setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId));
+      else setAnswersUrl(await lessonPreparationApi.answersUrl(eventId));
+      setMessage(isWorkbook ? 'Рабочая тетрадь обновлена.' : 'Ответы обновлены.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
-      setUploading(false);
+      isWorkbook ? setUploadingWorkbook(false) : setUploadingAnswers(false);
     }
   }
 
@@ -144,36 +144,25 @@ export function LessonDetailPage() {
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(320px, .9fr)', gap: 18, alignItems: 'start' }}>
-        <section className="panel" style={{ padding: 18, margin: 0 }}>
-          <div className="row" style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div>
-              <h2 style={{ margin: 0 }}>Рабочая тетрадь урока</h2>
-              <p className="muted" style={{ margin: '5px 0 0' }}>Учитель видит PDF прямо здесь и может заменить его перед уроком.</p>
-            </div>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <GoogleDrivePdfPicker disabled={uploading} onSelect={(file) => void uploadWorkbook(file)} />
-              <label className="btn btn--secondary" style={{ cursor: uploading ? 'default' : 'pointer' }}>
-                {uploading ? 'Загружаем…' : 'Заменить PDF'}
-                <input type="file" accept="application/pdf,.pdf" hidden disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadWorkbook(file); e.currentTarget.value = ''; }} />
-              </label>
-            </div>
-          </div>
-
-          {preparation?.hasWorkbook && workbookUrl ? (
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>{preparation.workbookFilename}</div>
-              <iframe title="Рабочая тетрадь урока" src={workbookUrl} style={{ width: '100%', height: '72vh', minHeight: 620, border: '1px solid var(--border)', borderRadius: 14, background: '#f8fafc' }} />
-            </div>
-          ) : (
-            <div style={{ marginTop: 14, minHeight: 360, border: '2px dashed #f0c7ad', borderRadius: 16, display: 'grid', placeItems: 'center', textAlign: 'center', padding: 30, background: '#fffaf7' }}>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 850 }}>Рабочая тетрадь ещё не добавлена</div>
-                <div className="muted" style={{ marginTop: 8 }}>Выбери PDF с компьютера или из Google Drive. После загрузки он будет постоянно привязан именно к этому уроку.</div>
-              </div>
-            </div>
-          )}
-        </section>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(340px, .95fr)', gap: 18, alignItems: 'start' }}>
+        <div className="stack" style={{ gap: 14 }}>
+          <MaterialPanel
+            title="Рабочая тетрадь"
+            filename={preparation?.workbookFilename}
+            url={workbookUrl}
+            emptyText="Рабочая тетрадь ещё не добавлена"
+            uploading={uploadingWorkbook}
+            onUpload={(file) => void uploadPdf('workbook', file)}
+          />
+          <MaterialPanel
+            title="Ответы для учителя"
+            filename={preparation?.answersFilename}
+            url={answersUrl}
+            emptyText="Ответы ещё не добавлены"
+            uploading={uploadingAnswers}
+            onUpload={(file) => void uploadPdf('answers', file)}
+          />
+        </div>
 
         <div className="stack" style={{ gap: 14 }}>
           <section className="panel" style={{ padding: 18, margin: 0 }}>
@@ -193,26 +182,60 @@ export function LessonDetailPage() {
               </>
             ) : <div className="muted">Нет привязанного ученика или группы.</div>}
             <label className="field" style={{ marginTop: 14 }}>
-              <span className="field__label">Комментарий к домашке перед уроком</span>
-              <textarea className="input" rows={4} value={homeworkNotes} onChange={(e) => setHomeworkNotes(e.target.value)} placeholder="Например: сделал 4 из 5 заданий, ошибки в дробях…" />
+              <span className="field__label">Что было с домашкой</span>
+              <textarea className="input" rows={4} value={homeworkNotes} onChange={(e) => setHomeworkNotes(e.target.value)} placeholder="Например: Марк сделал 4 из 5 заданий; в дробях были ошибки…" />
             </label>
           </section>
 
           <section className="panel" style={{ padding: 18, margin: 0 }}>
-            <h2 style={{ marginTop: 0 }}>Сложности</h2>
-            <textarea className="input" rows={6} value={difficulties} onChange={(e) => setDifficulties(e.target.value)} placeholder="Что было сложно на прошлых уроках, какие пробелы проверить…" />
+            <h2 style={{ marginTop: 0 }}>Проблемы и сложности</h2>
+            <textarea className="input" rows={6} value={difficulties} onChange={(e) => setDifficulties(e.target.value)} placeholder="У кого какие проблемы были, что не понял, какие пробелы проверить…" />
           </section>
 
           <section className="panel" style={{ padding: 18, margin: 0 }}>
-            <h2 style={{ marginTop: 0 }}>План урока</h2>
-            <textarea className="input" rows={7} value={lessonPlan} onChange={(e) => setLessonPlan(e.target.value)} placeholder="Что повторить, что объяснить, какие задания пройти…" />
+            <h2 style={{ marginTop: 0 }}>Рекомендованный план урока</h2>
+            <textarea className="input" rows={7} value={lessonPlan} onChange={(e) => setLessonPlan(e.target.value)} placeholder="Что повторить, что объяснить и какие задания пройти…" />
             <button className="btn" type="button" onClick={() => void savePreparation()} disabled={saving} style={{ width: '100%', marginTop: 12 }}>
-              {saving ? 'Сохраняем…' : 'Сохранить подготовку'}
+              {saving ? 'Сохраняем…' : 'Сохранить информацию'}
             </button>
           </section>
         </div>
       </div>
     </div>
+  );
+}
+
+function MaterialPanel({ title, filename, url, emptyText, uploading, onUpload }: {
+  title: string;
+  filename?: string | null;
+  url: string | null;
+  emptyText: string;
+  uploading: boolean;
+  onUpload: (file: File) => void;
+}) {
+  return (
+    <section className="panel" style={{ padding: 18, margin: 0 }}>
+      <div className="row" style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div><h2 style={{ margin: 0 }}>{title}</h2></div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <GoogleDrivePdfPicker disabled={uploading} onSelect={onUpload} />
+          <label className="btn btn--secondary" style={{ cursor: uploading ? 'default' : 'pointer' }}>
+            {uploading ? 'Загружаем…' : 'Заменить PDF'}
+            <input type="file" accept="application/pdf,.pdf" hidden disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) onUpload(file); e.currentTarget.value = ''; }} />
+          </label>
+        </div>
+      </div>
+      {url ? (
+        <div style={{ marginTop: 14 }}>
+          {filename && <div style={{ fontWeight: 700, marginBottom: 8 }}>{filename}</div>}
+          <iframe title={title} src={url} style={{ width: '100%', height: '60vh', minHeight: 480, border: '1px solid var(--border)', borderRadius: 14, background: '#f8fafc' }} />
+        </div>
+      ) : (
+        <div style={{ marginTop: 14, minHeight: 190, border: '2px dashed #f0c7ad', borderRadius: 16, display: 'grid', placeItems: 'center', textAlign: 'center', padding: 30, background: '#fffaf7' }}>
+          <div><div style={{ fontSize: 19, fontWeight: 850 }}>{emptyText}</div><div className="muted" style={{ marginTop: 8 }}>Можно выбрать PDF с компьютера или из Google Drive.</div></div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -238,10 +261,7 @@ async function buildHomeworkSummary(lesson: GroupLesson): Promise<HomeworkSummar
 }
 
 function studentHomeworkRow(id: string, name: string, homeworks: Homework[]) {
-  const recent = homeworks
-    .filter((item) => item.hasWorksheet)
-    .sort((a, b) => b.startDate.localeCompare(a.startDate))
-    .slice(0, 5);
+  const recent = homeworks.filter((item) => item.hasWorksheet).sort((a, b) => b.startDate.localeCompare(a.startDate)).slice(0, 5);
   return { id, name, assigned: recent.length, submitted: recent.filter((item) => item.submitted).length };
 }
 
