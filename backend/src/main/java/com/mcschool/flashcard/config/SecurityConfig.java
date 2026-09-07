@@ -84,11 +84,16 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
             @Value("${app.cors.allowed-origins}") String allowedOrigins,
-            @Value("${PUBLIC_BASE_URL:${MINDCRAFTI_PUBLIC_BASE_URL:https://mindcrafti-school-production.up.railway.app}}") String publicBaseUrl) {
+            @Value("${PUBLIC_BASE_URL:${MINDCRAFTI_PUBLIC_BASE_URL:https://mindcrafti-school-production.up.railway.app}}") String publicBaseUrl,
+            @Value("${RAILWAY_PUBLIC_DOMAIN:}") String railwayPublicDomain) {
         CorsConfiguration configuration = new CorsConfiguration();
+        String railwayOrigin = normalizeOrigin(railwayPublicDomain);
         List<String> origins = Stream.concat(
                         Arrays.stream(allowedOrigins.split(",")),
-                        Stream.of(publicBaseUrl))
+                        Stream.of(
+                                publicBaseUrl,
+                                railwayOrigin,
+                                "https://mindcrafti-school-production.up.railway.app"))
                 .map(String::trim)
                 .map(SecurityConfig::stripTrailingSlash)
                 .filter(origin -> !origin.isBlank())
@@ -101,6 +106,15 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/api/**", configuration);
         source.registerCorsConfiguration("/.well-known/**", configuration);
         return source;
+    }
+
+    private static String normalizeOrigin(String value) {
+        if (value == null || value.isBlank()) return "";
+        String result = value.trim();
+        if (!result.startsWith("http://") && !result.startsWith("https://")) {
+            result = "https://" + result;
+        }
+        return stripTrailingSlash(result);
     }
 
     private static String stripTrailingSlash(String value) {
