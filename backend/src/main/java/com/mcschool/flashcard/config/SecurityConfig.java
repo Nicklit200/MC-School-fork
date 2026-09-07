@@ -51,6 +51,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/google-meet/events").permitAll()
+                        .requestMatchers("/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/**", "/.well-known/oauth-authorization-server").permitAll()
                         .requestMatchers("/api/v1/integrations/**").permitAll()
                         .requestMatchers("/api/v1/mcp/**").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
@@ -79,6 +80,7 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Mindcrafti-Api-Key", "MCP-Protocol-Version", "MCP-Session-Id"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/.well-known/**", configuration);
         return source;
     }
 
