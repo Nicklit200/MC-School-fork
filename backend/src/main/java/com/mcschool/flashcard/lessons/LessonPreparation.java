@@ -52,6 +52,12 @@ public class LessonPreparation {
     @Column(name = "workbook_filename", length = 255)
     private String workbookFilename;
 
+    @Column(name = "answers_pdf", columnDefinition = "bytea")
+    private byte[] answersPdf;
+
+    @Column(name = "answers_filename", length = 255)
+    private String answersFilename;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -84,8 +90,17 @@ public class LessonPreparation {
         this.workbookPdf = pdf;
     }
 
+    public void attachAnswers(String filename, byte[] pdf) {
+        this.answersFilename = filename;
+        this.answersPdf = pdf;
+    }
+
     public boolean hasWorkbook() {
         return workbookPdf != null && workbookPdf.length > 0;
+    }
+
+    public boolean hasAnswers() {
+        return answersPdf != null && answersPdf.length > 0;
     }
 
     private String normalize(String value) {
