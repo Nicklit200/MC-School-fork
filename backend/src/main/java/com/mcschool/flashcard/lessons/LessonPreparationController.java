@@ -54,9 +54,29 @@ public class LessonPreparationController {
         LessonPreparation preparation = service.require(teacher, eventId);
         if (!preparation.hasWorkbook()) return ResponseEntity.notFound().build();
         String filename = preparation.getWorkbookFilename() == null ? "lesson-workbook.pdf" : preparation.getWorkbookFilename();
+        return pdf(filename, preparation.getWorkbookPdf());
+    }
+
+    @PostMapping(value = "/{eventId}/answers", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public LessonPreparationResponse uploadAnswers(@AuthenticationPrincipal AuthenticatedUser teacher,
+                                                   @PathVariable String eventId,
+                                                   @RequestParam("file") MultipartFile file) throws Exception {
+        return service.uploadAnswers(teacher, eventId, file.getOriginalFilename(), file.getBytes());
+    }
+
+    @GetMapping("/{eventId}/answers")
+    public ResponseEntity<byte[]> answers(@AuthenticationPrincipal AuthenticatedUser teacher,
+                                          @PathVariable String eventId) {
+        LessonPreparation preparation = service.require(teacher, eventId);
+        if (!preparation.hasAnswers()) return ResponseEntity.notFound().build();
+        String filename = preparation.getAnswersFilename() == null ? "lesson-answers.pdf" : preparation.getAnswersFilename();
+        return pdf(filename, preparation.getAnswersPdf());
+    }
+
+    private ResponseEntity<byte[]> pdf(String filename, byte[] body) {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename.replace("\"", "") + "\"")
-                .body(preparation.getWorkbookPdf());
+                .body(body);
     }
 }
