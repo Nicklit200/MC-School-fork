@@ -37,7 +37,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.2.0";
+    private static final String SERVER_VERSION = "1.3.0";
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -154,7 +154,7 @@ public class MindcraftiMcpController {
 
         tools.add(tool(
                 "get_lesson_preparation",
-                "Read the workbook status and preparation notes currently stored for one concrete lesson.",
+                "Read the workbook and teacher-answer status plus preparation notes currently stored for one concrete lesson.",
                 schema(
                         Map.of(
                                 "teacherId", property("string", "Teacher UUID returned by find_lessons."),
@@ -169,11 +169,13 @@ public class MindcraftiMcpController {
         prepareProperties.put("difficulties", property("string", "Observed gaps, recurring errors, or difficulties to address."));
         prepareProperties.put("lessonPlan", property("string", "Concise plan for the lesson."));
         prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF file ID. If supplied, Mindcrafti copies that PDF into this lesson as its workbook."));
-        prepareProperties.put("workbookFilename", property("string", "Optional PDF filename shown on the lesson page, for example Christian_2026-09-07.pdf."));
+        prepareProperties.put("workbookFilename", property("string", "Optional workbook PDF filename shown on the lesson page, for example Christian_2026-09-07.pdf."));
+        prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF file ID containing teacher answers/solutions. If supplied, Mindcrafti copies that PDF into this lesson as teacher answers."));
+        prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename shown on the lesson page, for example Christian_2026-09-07_answers.pdf."));
 
         tools.add(tool(
                 "prepare_lesson",
-                "Create or update a concrete lesson preparation. Only supplied text fields change; omitted text fields are preserved. Optionally copy a PDF workbook from Google Drive into the lesson.",
+                "Create or update a concrete lesson preparation. Only supplied text fields change; omitted text fields are preserved. Optionally copy workbook and teacher-answer PDFs from Google Drive into the lesson.",
                 schema(prepareProperties, List.of("teacherId", "eventId")),
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
@@ -280,14 +282,24 @@ public class MindcraftiMcpController {
                 eventId,
                 new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan));
 
-        String driveFileId = string(arguments.get("driveWorkbookFileId"));
-        if (!driveFileId.isBlank()) {
-            byte[] pdf = googleDriveService.downloadFile(driveFileId);
+        String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
+        if (!driveWorkbookFileId.isBlank()) {
+            byte[] pdf = googleDriveService.downloadFile(driveWorkbookFileId);
             if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
             String filename = string(arguments.get("workbookFilename"));
             if (filename.isBlank()) filename = "lesson-workbook.pdf";
             if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
             result = preparationService.uploadWorkbook(teacher, eventId, filename, pdf);
+        }
+
+        String driveAnswersFileId = string(arguments.get("driveAnswersFileId"));
+        if (!driveAnswersFileId.isBlank()) {
+            byte[] pdf = googleDriveService.downloadFile(driveAnswersFileId);
+            if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveAnswersFileId does not point to a PDF file");
+            String filename = string(arguments.get("answersFilename"));
+            if (filename.isBlank()) filename = "lesson-answers.pdf";
+            if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
+            result = preparationService.uploadAnswers(teacher, eventId, filename, pdf);
         }
         return result;
     }
