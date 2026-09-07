@@ -112,7 +112,7 @@ export function LessonDetailPage() {
       setPreparation(updated);
       if (isWorkbook) setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId));
       else setAnswersUrl(await lessonPreparationApi.answersUrl(eventId));
-      setMessage(isWorkbook ? 'Рабочая тетрадь обновлена.' : 'Ответы обновлены.');
+      setMessage(isWorkbook ? 'Рабочая тетрадь обновлена.' : 'Ответы для учителя обновлены.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -153,6 +153,7 @@ export function LessonDetailPage() {
             emptyText="Рабочая тетрадь ещё не добавлена"
             uploading={uploadingWorkbook}
             onUpload={(file) => void uploadPdf('workbook', file)}
+            defaultOpen
           />
           <MaterialPanel
             title="Ответы для учителя"
@@ -205,27 +206,41 @@ export function LessonDetailPage() {
   );
 }
 
-function MaterialPanel({ title, filename, url, emptyText, uploading, onUpload }: {
+function MaterialPanel({ title, filename, url, emptyText, uploading, onUpload, defaultOpen = false }: {
   title: string;
   filename?: string | null;
   url: string | null;
   emptyText: string;
   uploading: boolean;
   onUpload: (file: File) => void;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const hasPdf = Boolean(url);
+  const uploadLabel = hasPdf ? 'Заменить PDF' : 'Загрузить PDF';
+
   return (
     <section className="panel" style={{ padding: 18, margin: 0 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div><h2 style={{ margin: 0 }}>{title}</h2></div>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, border: 0, background: 'transparent', padding: 0, cursor: 'pointer', color: 'inherit' }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
+          <h2 style={{ margin: 0 }}>{title}</h2>
+          {filename && !open && <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{filename}</span>}
+        </button>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           <GoogleDrivePdfPicker disabled={uploading} onSelect={onUpload} />
           <label className="btn btn--secondary" style={{ cursor: uploading ? 'default' : 'pointer' }}>
-            {uploading ? 'Загружаем…' : 'Заменить PDF'}
+            {uploading ? 'Загружаем…' : uploadLabel}
             <input type="file" accept="application/pdf,.pdf" hidden disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) onUpload(file); e.currentTarget.value = ''; }} />
           </label>
         </div>
       </div>
-      {url ? (
+      {open && (url ? (
         <div style={{ marginTop: 14 }}>
           {filename && <div style={{ fontWeight: 700, marginBottom: 8 }}>{filename}</div>}
           <iframe title={title} src={url} style={{ width: '100%', height: '60vh', minHeight: 480, border: '1px solid var(--border)', borderRadius: 14, background: '#f8fafc' }} />
@@ -234,7 +249,7 @@ function MaterialPanel({ title, filename, url, emptyText, uploading, onUpload }:
         <div style={{ marginTop: 14, minHeight: 190, border: '2px dashed #f0c7ad', borderRadius: 16, display: 'grid', placeItems: 'center', textAlign: 'center', padding: 30, background: '#fffaf7' }}>
           <div><div style={{ fontSize: 19, fontWeight: 850 }}>{emptyText}</div><div className="muted" style={{ marginTop: 8 }}>Можно выбрать PDF с компьютера или из Google Drive.</div></div>
         </div>
-      )}
+      ))}
     </section>
   );
 }
