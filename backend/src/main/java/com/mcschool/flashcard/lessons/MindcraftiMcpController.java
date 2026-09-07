@@ -27,12 +27,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Small remote MCP server for the Mindcrafti ChatGPT app.
- * It intentionally uses the existing lesson-import API key instead of a teacher JWT.
+ * Remote MCP server for the Mindcrafti ChatGPT app.
+ *
+ * The MCP handshake and one diagnostic tool are intentionally available without
+ * authentication so ChatGPT can register the connector in "no authentication"
+ * mode. All lesson/calendar data tools remain protected by the existing
+ * Mindcrafti integration API key until per-user OAuth is enabled.
  */
 @RestController
 @RequestMapping("/api/v1/mcp")
@@ -40,7 +43,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.0.0";
+    private static final String SERVER_VERSION = "1.1.0";
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -77,7 +80,7 @@ public class MindcraftiMcpController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestHeader(value = API_KEY_HEADER, required = false) String suppliedApiKey,
             @RequestBody Map<String, Object> body) {
-        requireApiKey(authorization, suppliedApiKey);
+        boolean authenticated = hasValidApiKey(authorization, suppliedApiKey);
 
         String method = string(body.get("method"));
         Object id = body.get("id");
@@ -89,11 +92,11 @@ public class MindcraftiMcpController {
 
         try {
             Object result = switch (method) {
-                case "initialize" -> initialize(body);
-                case "server/discover" -> discover();
+                case "initialize" -> initialize(body, authenticated);
+                case "server/discover" -> discover(authenticated);
                 case "ping" -> Map.of();
-                case "tools/list" -> Map.of("tools", tools());
-                case "tools/call" -> callTool(body);
+                case "tools/list" -> Map.of("tools", tools(authenticated));
+                case "tools/call" -> callTool(body, authenticated);
                 default -> null;
             };
             if (result == null) {
@@ -102,14 +105,12 @@ public class MindcraftiMcpController {
             return ResponseEntity.ok(success(id, result));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.ok(error(id, -32602, ex.getMessage()));
-        } catch (ResponseStatusException ex) {
-            return ResponseEntity.ok(error(id, -32000, ex.getReason() == null ? ex.getMessage() : ex.getReason()));
         } catch (Exception ex) {
             return ResponseEntity.ok(error(id, -32603, ex.getMessage() == null ? "Internal error" : ex.getMessage()));
         }
     }
 
-    private Map<String, Object> initialize(Map<String, Object> request) {
+    private Map<String, Object> initialize(Map<String, Object> request, boolean authenticated) {
         Map<String, Object> params = map(request.get("params"));
         String requested = string(params.get("protocolVersion"));
         String protocolVersion = requested.isBlank() ? "2025-11-25" : requested;
@@ -117,22 +118,36 @@ public class MindcraftiMcpController {
         result.put("protocolVersion", protocolVersion);
         result.put("capabilities", Map.of("tools", Map.of("listChanged", false)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
-        result.put("instructions", "Use find_lessons to resolve the exact calendar event before reading or writing lesson preparation data.");
+        result.put("instructions", authenticated
+                ? "Use find_lessons to resolve the exact calendar event before reading or writing lesson preparation data."
+                : "The connector is in diagnostic mode. Only mindcrafti_status is available until Mindcrafti authentication is configured.");
         return result;
     }
 
-    private Map<String, Object> discover() {
+    private Map<String, Object> discover(boolean authenticated) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("resultType", "complete");
         result.put("supportedVersions", List.of("2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"));
         result.put("capabilities", Map.of("tools", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
-        result.put("instructions", "Mindcrafti lesson preparation tools. Resolve a lesson first, then update only the intended calendar event.");
+        result.put("instructions", authenticated
+                ? "Mindcrafti lesson preparation tools. Resolve a lesson first, then update only the intended calendar event."
+                : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         return result;
     }
 
-    private List<Map<String, Object>> tools() {
+    private List<Map<String, Object>> tools(boolean authenticated) {
         List<Map<String, Object>> tools = new ArrayList<>();
+
+        tools.add(tool(
+                "mindcrafti_status",
+                "Check that the Mindcrafti MCP server is reachable. This diagnostic tool does not expose student, teacher, lesson, calendar, or Google Drive data.",
+                schema(Map.of(), List.of()),
+                Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
+
+        if (!authenticated) {
+            return tools;
+        }
 
         tools.add(tool(
                 "find_lessons",
@@ -170,10 +185,24 @@ public class MindcraftiMcpController {
         return tools;
     }
 
-    private Map<String, Object> callTool(Map<String, Object> request) throws Exception {
+    private Map<String, Object> callTool(Map<String, Object> request, boolean authenticated) throws Exception {
         Map<String, Object> params = map(request.get("params"));
         String name = string(params.get("name"));
         Map<String, Object> arguments = map(params.get("arguments"));
+
+        if ("mindcrafti_status".equals(name)) {
+            Map<String, Object> status = new LinkedHashMap<>();
+            status.put("status", "ok");
+            status.put("service", SERVER_NAME);
+            status.put("version", SERVER_VERSION);
+            status.put("authenticated", authenticated);
+            status.put("mode", authenticated ? "full" : "diagnostic");
+            return toolResult(status);
+        }
+
+        if (!authenticated) {
+            throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
+        }
 
         return switch (name) {
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query"))));
@@ -292,19 +321,18 @@ public class MindcraftiMcpController {
                 && bytes[4] == '-';
     }
 
-    private void requireApiKey(String authorization, String suppliedApiKey) {
-        if (apiKey.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Mindcrafti MCP is not configured");
-        }
+    private boolean hasValidApiKey(String authorization, String suppliedApiKey) {
+        if (apiKey.isBlank()) return false;
+
         String candidate = suppliedApiKey == null ? "" : suppliedApiKey.trim();
         if (candidate.isBlank() && authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
             candidate = authorization.substring(7).trim();
         }
+        if (candidate.isBlank()) return false;
+
         byte[] expected = apiKey.getBytes(StandardCharsets.UTF_8);
         byte[] supplied = candidate.getBytes(StandardCharsets.UTF_8);
-        if (!MessageDigest.isEqual(expected, supplied)) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid Mindcrafti API key");
-        }
+        return MessageDigest.isEqual(expected, supplied);
     }
 
     private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) {
