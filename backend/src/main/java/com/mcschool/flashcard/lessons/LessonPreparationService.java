@@ -44,13 +44,15 @@ public class LessonPreparationService {
 
     @Transactional
     public LessonPreparationResponse uploadWorkbook(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
-        LessonPreparation preparation = repository.findByTeacherIdAndEventId(teacher.id(), eventId)
-                .orElseGet(() -> {
-                    User teacherEntity = userRepository.findById(teacher.id())
-                            .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
-                    return LessonPreparation.create(teacherEntity, eventId);
-                });
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
         preparation.attachWorkbook(filename, pdf);
+        return response(repository.save(preparation));
+    }
+
+    @Transactional
+    public LessonPreparationResponse uploadAnswers(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
+        preparation.attachAnswers(filename, pdf);
         return response(repository.save(preparation));
     }
 
@@ -60,6 +62,15 @@ public class LessonPreparationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson preparation not found"));
     }
 
+    private LessonPreparation getOrCreateEntity(AuthenticatedUser teacher, String eventId) {
+        return repository.findByTeacherIdAndEventId(teacher.id(), eventId)
+                .orElseGet(() -> {
+                    User teacherEntity = userRepository.findById(teacher.id())
+                            .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
+                    return LessonPreparation.create(teacherEntity, eventId);
+                });
+    }
+
     private LessonPreparationResponse response(LessonPreparation preparation) {
         return new LessonPreparationResponse(
                 preparation.getEventId(),
@@ -67,6 +78,8 @@ public class LessonPreparationService {
                 preparation.getDifficulties(),
                 preparation.getLessonPlan(),
                 preparation.hasWorkbook(),
-                preparation.getWorkbookFilename());
+                preparation.getWorkbookFilename(),
+                preparation.hasAnswers(),
+                preparation.getAnswersFilename());
     }
 }
