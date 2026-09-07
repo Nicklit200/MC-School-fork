@@ -102,10 +102,18 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Mindcrafti-Api-Key", "MCP-Protocol-Version", "MCP-Session-Id"));
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
         source.registerCorsConfiguration("/.well-known/**", configuration);
-        return source;
+
+        return request -> {
+            if ("/api/v1/mcp/oauth/authorize".equals(request.getRequestURI())
+                    && "POST".equalsIgnoreCase(request.getMethod())) {
+                return null;
+            }
+            return source.getCorsConfiguration(request);
+        };
     }
 
     private static String normalizeOrigin(String value) {
