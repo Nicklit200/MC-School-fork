@@ -60,6 +60,8 @@ export interface LessonPreparation {
   lessonPlan: string | null;
   hasWorkbook: boolean;
   workbookFilename: string | null;
+  hasAnswers: boolean;
+  answersFilename: string | null;
 }
 
 export interface GoogleCalendarConnection {
