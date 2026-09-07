@@ -6,5 +6,7 @@ public record LessonPreparationResponse(
         String difficulties,
         String lessonPlan,
         boolean hasWorkbook,
-        String workbookFilename
+        String workbookFilename,
+        boolean hasAnswers,
+        String answersFilename
 ) {}
