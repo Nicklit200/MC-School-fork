@@ -11,6 +11,7 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,7 +38,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.4.0";
+    private static final String SERVER_VERSION = "1.5.0";
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -46,6 +47,7 @@ public class MindcraftiMcpController {
     private final GoogleCalendarLessonService calendarLessonService;
     private final LessonPreparationService preparationService;
     private final GoogleDriveService googleDriveService;
+    private final McpHomeworkSeriesService homeworkSeriesService;
 
     public MindcraftiMcpController(
             @Value("${MINDCRAFTI_LESSON_IMPORT_API_KEY:}") String apiKey,
@@ -54,7 +56,8 @@ public class MindcraftiMcpController {
             McpOAuthService oauthService,
             GoogleCalendarLessonService calendarLessonService,
             LessonPreparationService preparationService,
-            GoogleDriveService googleDriveService) {
+            GoogleDriveService googleDriveService,
+            McpHomeworkSeriesService homeworkSeriesService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
@@ -62,9 +65,9 @@ public class MindcraftiMcpController {
         this.calendarLessonService = calendarLessonService;
         this.preparationService = preparationService;
         this.googleDriveService = googleDriveService;
+        this.homeworkSeriesService = homeworkSeriesService;
     }
 
-    /** Streamable HTTP clients may probe GET for SSE. We do not need server-initiated messages. */
     @GetMapping
     public ResponseEntity<Void> get() {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
@@ -78,14 +81,11 @@ public class MindcraftiMcpController {
             @RequestHeader(value = API_KEY_HEADER, required = false) String suppliedApiKey,
             @RequestBody Map<String, Object> body) {
         AuthContext auth = authenticationContext(authorization, suppliedApiKey);
-
         String method = string(body.get("method"));
         Object id = body.get("id");
         boolean notification = id == null;
 
-        if (notification) {
-            return ResponseEntity.accepted().build();
-        }
+        if (notification) return ResponseEntity.accepted().build();
 
         try {
             Object result = switch (method) {
@@ -96,9 +96,7 @@ public class MindcraftiMcpController {
                 case "tools/call" -> callTool(body, auth);
                 default -> null;
             };
-            if (result == null) {
-                return ResponseEntity.status(HttpStatus.OK).body(error(id, -32601, "Method not found: " + method));
-            }
+            if (result == null) return ResponseEntity.ok(error(id, -32601, "Method not found: " + method));
             return ResponseEntity.ok(success(id, result));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.ok(error(id, -32602, ex.getMessage()));
@@ -116,7 +114,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Use find_lessons to resolve the exact calendar event before reading or writing lesson preparation data. Use attach_lesson_answers when a teacher-answer PDF must be copied from Google Drive into a lesson."
+                ? "Mindcrafti school tools: resolve lessons before preparing them; use find_homework_targets then assign_homework_series to schedule PDF homework for an individual student or whole group."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -128,38 +126,32 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti lesson preparation tools. Resolve a lesson first, then update only the intended calendar event."
+                ? "Mindcrafti lesson and homework tools. Resolve the exact target before writing data."
                 : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         return result;
     }
 
     private List<Map<String, Object>> tools(boolean authenticated) {
         List<Map<String, Object>> tools = new ArrayList<>();
-
         tools.add(tool(
                 "mindcrafti_status",
-                "Check that the Mindcrafti MCP server is reachable. This diagnostic tool does not expose student, teacher, lesson, calendar, or Google Drive data.",
+                "Check that the Mindcrafti MCP server is reachable.",
                 schema(Map.of(), List.of()),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
-
         if (!authenticated) return tools;
 
         tools.add(tool(
                 "find_lessons",
                 "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.",
-                schema(
-                        Map.of("query", property("string", "Optional student, group, or event title filter. Leave blank to list all upcoming lessons you can access.")),
-                        List.of()),
+                schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
         tools.add(tool(
                 "get_lesson_preparation",
-                "Read the workbook and teacher-answer status plus preparation notes currently stored for one concrete lesson.",
-                schema(
-                        Map.of(
-                                "teacherId", property("string", "Teacher UUID returned by find_lessons."),
-                                "eventId", property("string", "Google Calendar event ID returned by find_lessons.")),
-                        List.of("teacherId", "eventId")),
+                "Read workbook, teacher answers, homework notes, difficulties and lesson plan for one lesson.",
+                schema(Map.of(
+                        "teacherId", property("string", "Teacher UUID returned by find_lessons."),
+                        "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
         Map<String, Object> prepareProperties = new LinkedHashMap<>();
@@ -168,27 +160,48 @@ public class MindcraftiMcpController {
         prepareProperties.put("homeworkNotes", property("string", "Homework completion/status and relevant notes for the teacher."));
         prepareProperties.put("difficulties", property("string", "Observed gaps, recurring errors, or difficulties to address."));
         prepareProperties.put("lessonPlan", property("string", "Concise plan for the lesson."));
-        prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF file ID. If supplied, Mindcrafti copies that PDF into this lesson as its workbook."));
-        prepareProperties.put("workbookFilename", property("string", "Optional workbook PDF filename shown on the lesson page, for example Christian_2026-09-07.pdf."));
-        prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF file ID containing teacher answers/solutions. If supplied, Mindcrafti copies that PDF into this lesson as teacher answers."));
-        prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename shown on the lesson page, for example Christian_2026-09-07_answers.pdf."));
-
+        prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF file ID for the workbook."));
+        prepareProperties.put("workbookFilename", property("string", "Optional workbook PDF filename."));
+        prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF file ID for teacher answers."));
+        prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename."));
         tools.add(tool(
                 "prepare_lesson",
-                "Create or update a concrete lesson preparation. Only supplied text fields change; omitted text fields are preserved. Optionally copy workbook and teacher-answer PDFs from Google Drive into the lesson.",
+                "Create or update lesson preparation, optionally copying workbook and teacher-answer PDFs from Google Drive.",
                 schema(prepareProperties, List.of("teacherId", "eventId")),
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
         Map<String, Object> answerProperties = new LinkedHashMap<>();
         answerProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
         answerProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
-        answerProperties.put("driveFileId", property("string", "Google Drive PDF file ID containing the teacher answers or solutions."));
-        answerProperties.put("filename", property("string", "Optional PDF filename shown in the lesson's teacher-answer section."));
-
+        answerProperties.put("driveFileId", property("string", "Google Drive PDF file ID containing teacher answers."));
+        answerProperties.put("filename", property("string", "Optional PDF filename."));
         tools.add(tool(
                 "attach_lesson_answers",
-                "Copy a teacher-answer or solution PDF from Google Drive into one concrete Mindcrafti lesson. Use this when the workbook is already attached and only the answers need to be added or replaced.",
+                "Copy a teacher-answer PDF from Google Drive into one concrete lesson.",
                 schema(answerProperties, List.of("teacherId", "eventId", "driveFileId")),
+                Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
+
+        Map<String, Object> targetProperties = new LinkedHashMap<>();
+        targetProperties.put("query", property("string", "Optional student or group name filter, for example Christian or Группа 1."));
+        targetProperties.put("teacherId", property("string", "Optional teacher UUID. Not needed when signed in as a teacher."));
+        tools.add(tool(
+                "find_homework_targets",
+                "Find students and groups that can receive homework. Returns target type, ID, name, and group members.",
+                schema(targetProperties, List.of()),
+                Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
+
+        Map<String, Object> seriesProperties = new LinkedHashMap<>();
+        seriesProperties.put("teacherId", property("string", "Optional teacher UUID. Not needed when signed in as a teacher."));
+        seriesProperties.put("targetType", property("string", "Target type: student or group."));
+        seriesProperties.put("targetId", property("string", "Student or group UUID returned by find_homework_targets."));
+        seriesProperties.put("startDate", property("string", "First homework date in YYYY-MM-DD format."));
+        seriesProperties.put("days", property("integer", "Number of consecutive calendar days to assign, from 1 to 31."));
+        seriesProperties.put("driveFileIds", arrayProperty("Google Drive PDF file IDs. Supply one PDF for all days or exactly one PDF per day."));
+        seriesProperties.put("filenames", arrayProperty("Optional display filenames: empty, one filename for all days, or one filename per day."));
+        tools.add(tool(
+                "assign_homework_series",
+                "Assign dated PDF homework for several consecutive days to one student or every active student in a group. Existing PDF homework on the same student/date is skipped to avoid duplicates.",
+                schema(seriesProperties, List.of("targetType", "targetId", "startDate", "days", "driveFileIds")),
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
         return tools;
@@ -210,16 +223,15 @@ public class MindcraftiMcpController {
             if (auth.user() != null) status.put("role", auth.user().getRole().name());
             return toolResult(status);
         }
-
-        if (!auth.authenticated()) {
-            throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
-        }
+        if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
 
         return switch (name) {
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
+            case "find_homework_targets" -> toolResult(findHomeworkTargets(arguments, auth));
+            case "assign_homework_series" -> toolResult(assignHomeworkSeries(arguments, auth));
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
         };
     }
@@ -228,9 +240,7 @@ public class MindcraftiMcpController {
         String normalizedQuery = normalize(query);
         List<Map<String, Object>> result = new ArrayList<>();
         for (User teacher : accessibleTeachers(auth)) {
-            if (teacher.isArchived() || teacher.getGoogleCalendarRefreshToken() == null || teacher.getGoogleCalendarRefreshToken().isBlank()) {
-                continue;
-            }
+            if (teacher.isArchived() || teacher.getGoogleCalendarRefreshToken() == null || teacher.getGoogleCalendarRefreshToken().isBlank()) continue;
             AuthenticatedUser principal = principal(teacher);
             List<GroupLessonResponse> lessons;
             try {
@@ -244,7 +254,6 @@ public class MindcraftiMcpController {
                         lesson.groupName() == null ? "" : lesson.groupName(),
                         lesson.studentName() == null ? "" : lesson.studentName()));
                 if (!normalizedQuery.isBlank() && !haystack.contains(normalizedQuery)) continue;
-
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("teacherId", teacher.getId().toString());
                 item.put("teacherName", teacher.getFullName());
@@ -264,12 +273,8 @@ public class MindcraftiMcpController {
     }
 
     private List<User> accessibleTeachers(AuthContext auth) {
-        if (auth.apiKey() || (auth.user() != null && auth.user().getRole() == Role.ADMIN)) {
-            return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER);
-        }
-        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) {
-            return List.of(auth.user());
-        }
+        if (auth.apiKey() || (auth.user() != null && auth.user().getRole() == Role.ADMIN)) return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER);
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return List.of(auth.user());
         return List.of();
     }
 
@@ -284,15 +289,11 @@ public class MindcraftiMcpController {
         AuthenticatedUser teacher = requireTeacher(arguments, auth);
         String eventId = required(arguments, "eventId");
         requireLesson(teacher, eventId);
-
         LessonPreparationResponse current = preparationService.getOrCreate(teacher, eventId);
         String homeworkNotes = optional(arguments, "homeworkNotes", current.homeworkNotes());
         String difficulties = optional(arguments, "difficulties", current.difficulties());
         String lessonPlan = optional(arguments, "lessonPlan", current.lessonPlan());
-
-        LessonPreparationResponse result = preparationService.update(
-                teacher,
-                eventId,
+        LessonPreparationResponse result = preparationService.update(teacher, eventId,
                 new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan));
 
         String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
@@ -321,31 +322,53 @@ public class MindcraftiMcpController {
         AuthenticatedUser teacher = requireTeacher(arguments, auth);
         String eventId = required(arguments, "eventId");
         requireLesson(teacher, eventId);
-
         String driveFileId = required(arguments, "driveFileId");
         byte[] pdf = googleDriveService.downloadFile(driveFileId);
         if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
-
         String filename = string(arguments.get("filename"));
         if (filename.isBlank()) filename = "lesson-answers.pdf";
         if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
-
         return preparationService.uploadAnswers(teacher, eventId, filename, pdf);
+    }
+
+    private Map<String, Object> findHomeworkTargets(Map<String, Object> arguments, AuthContext auth) {
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth);
+        return homeworkSeriesService.findTargets(teacher, string(arguments.get("query")));
+    }
+
+    private Map<String, Object> assignHomeworkSeries(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth);
+        String targetType = required(arguments, "targetType");
+        UUID targetId = uuid(required(arguments, "targetId"), "targetId");
+        LocalDate startDate;
+        try {
+            startDate = LocalDate.parse(required(arguments, "startDate"));
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException("startDate must use YYYY-MM-DD format");
+        }
+        int days = integer(arguments.get("days"), "days");
+        List<String> driveFileIds = stringList(arguments.get("driveFileIds"), "driveFileIds");
+        List<String> filenames = arguments.containsKey("filenames") ? stringList(arguments.get("filenames"), "filenames") : List.of();
+        return homeworkSeriesService.assignSeries(teacher, targetType, targetId, startDate, days, driveFileIds, filenames);
+    }
+
+    private AuthenticatedUser homeworkTeacher(Map<String, Object> arguments, AuthContext auth) {
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return principal(auth.user());
+        String teacherId = required(arguments, "teacherId");
+        UUID id = uuid(teacherId, "teacherId");
+        User teacher = userRepository.findById(id)
+                .filter(user -> user.getRole() == Role.TEACHER)
+                .filter(user -> !user.isArchived())
+                .orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
+        return principal(teacher);
     }
 
     private AuthenticatedUser requireTeacher(Map<String, Object> arguments, AuthContext auth) {
         String teacherId = required(arguments, "teacherId");
-        UUID id;
-        try {
-            id = UUID.fromString(teacherId);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("teacherId must be a UUID");
-        }
-
+        UUID id = uuid(teacherId, "teacherId");
         if (!auth.apiKey() && auth.user() != null && auth.user().getRole() == Role.TEACHER && !auth.user().getId().equals(id)) {
             throw new IllegalArgumentException("You can access only your own lessons");
         }
-
         User teacher = userRepository.findById(id)
                 .filter(user -> user.getRole() == Role.TEACHER)
                 .filter(user -> !user.isArchived())
@@ -358,30 +381,21 @@ public class MindcraftiMcpController {
     }
 
     private void requireLesson(AuthenticatedUser teacher, String eventId) {
-        boolean exists = calendarLessonService.listGroupLessons(teacher).stream()
-                .anyMatch(lesson -> lesson.eventId().equals(eventId));
+        boolean exists = calendarLessonService.listGroupLessons(teacher).stream().anyMatch(lesson -> lesson.eventId().equals(eventId));
         if (!exists) throw new IllegalArgumentException("Lesson event was not found in the current calendar window");
     }
 
     private boolean looksLikePdf(byte[] bytes) {
-        return bytes != null && bytes.length >= 5
-                && bytes[0] == '%'
-                && bytes[1] == 'P'
-                && bytes[2] == 'D'
-                && bytes[3] == 'F'
-                && bytes[4] == '-';
+        return bytes != null && bytes.length >= 5 && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F' && bytes[4] == '-';
     }
 
     private AuthContext authenticationContext(String authorization, String suppliedApiKey) {
         String explicitApiKey = suppliedApiKey == null ? "" : suppliedApiKey.trim();
         if (hasValidApiKey(explicitApiKey)) return new AuthContext(true, true, null);
-
         if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
             String bearer = authorization.substring(7).trim();
             User oauthUser = oauthService.resolveAccessToken(bearer).orElse(null);
-            if (oauthUser != null && (oauthUser.getRole() == Role.ADMIN || oauthUser.getRole() == Role.TEACHER)) {
-                return new AuthContext(true, false, oauthUser);
-            }
+            if (oauthUser != null && (oauthUser.getRole() == Role.ADMIN || oauthUser.getRole() == Role.TEACHER)) return new AuthContext(true, false, oauthUser);
             if (hasValidApiKey(bearer)) return new AuthContext(true, true, null);
         }
         return new AuthContext(false, false, null);
@@ -389,9 +403,7 @@ public class MindcraftiMcpController {
 
     private boolean hasValidApiKey(String candidate) {
         if (apiKey.isBlank() || candidate == null || candidate.isBlank()) return false;
-        byte[] expected = apiKey.getBytes(StandardCharsets.UTF_8);
-        byte[] supplied = candidate.getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(expected, supplied);
+        return MessageDigest.isEqual(apiKey.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8));
     }
 
     private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) {
@@ -414,6 +426,14 @@ public class MindcraftiMcpController {
 
     private Map<String, Object> property(String type, String description) {
         return Map.of("type", type, "description", description);
+    }
+
+    private Map<String, Object> arrayProperty(String description) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("type", "array");
+        value.put("description", description);
+        value.put("items", Map.of("type", "string"));
+        return value;
     }
 
     private Map<String, Object> toolResult(Object value) throws Exception {
@@ -464,6 +484,34 @@ public class MindcraftiMcpController {
 
     private String normalize(String value) {
         return string(value).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    private UUID uuid(String value, String field) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(field + " must be a UUID");
+        }
+    }
+
+    private int integer(Object value, String field) {
+        if (value instanceof Number number) return number.intValue();
+        try {
+            return Integer.parseInt(string(value));
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException(field + " must be an integer");
+        }
+    }
+
+    private List<String> stringList(Object value, String field) {
+        if (!(value instanceof List<?> list)) throw new IllegalArgumentException(field + " must be an array of strings");
+        List<String> result = new ArrayList<>();
+        for (Object item : list) {
+            String text = string(item).trim();
+            if (text.isBlank()) throw new IllegalArgumentException(field + " cannot contain blank values");
+            result.add(text);
+        }
+        return result;
     }
 
     private record AuthContext(boolean authenticated, boolean apiKey, User user) {}
