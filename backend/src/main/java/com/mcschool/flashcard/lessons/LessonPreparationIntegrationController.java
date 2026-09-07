@@ -23,10 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- * Dedicated machine-to-machine endpoint used by ChatGPT/automation to prepare a lesson.
- * It intentionally does not reuse a teacher JWT: the integration has its own revocable API key.
- */
 @RestController
 @RequestMapping("/api/v1/integrations")
 public class LessonPreparationIntegrationController {
@@ -49,7 +45,6 @@ public class LessonPreparationIntegrationController {
         this.preparationService = preparationService;
     }
 
-    /** Lets the integration resolve the exact Google Calendar event before uploading a prepared lesson. */
     @GetMapping("/lessons")
     public List<GroupLessonResponse> lessons(
             @RequestHeader(value = API_KEY_HEADER, required = false) String suppliedApiKey,
@@ -59,10 +54,6 @@ public class LessonPreparationIntegrationController {
         return calendarLessonService.listGroupLessons(teacher);
     }
 
-    /**
-     * Writes generated notes and, optionally, a generated PDF workbook into one concrete lesson.
-     * Missing note fields preserve whatever the teacher already entered manually.
-     */
     @PostMapping(value = "/lesson-preparations/{eventId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public LessonPreparationResponse prepare(
             @RequestHeader(value = API_KEY_HEADER, required = false) String suppliedApiKey,
@@ -71,7 +62,8 @@ public class LessonPreparationIntegrationController {
             @RequestParam(required = false) String homeworkNotes,
             @RequestParam(required = false) String difficulties,
             @RequestParam(required = false) String lessonPlan,
-            @RequestParam(value = "workbook", required = false) MultipartFile workbook) throws Exception {
+            @RequestParam(value = "workbook", required = false) MultipartFile workbook,
+            @RequestParam(value = "answers", required = false) MultipartFile answers) throws Exception {
         requireApiKey(suppliedApiKey);
         AuthenticatedUser teacher = requireTeacher(teacherEmail);
         requireUpcomingEvent(teacher, eventId);
@@ -84,16 +76,23 @@ public class LessonPreparationIntegrationController {
 
         LessonPreparationResponse result = preparationService.update(teacher, eventId, merged);
         if (workbook != null && !workbook.isEmpty()) {
-            String originalFilename = workbook.getOriginalFilename();
-            String filename = originalFilename == null || originalFilename.isBlank()
-                    ? "lesson-workbook.pdf"
-                    : originalFilename;
-            if (!filename.toLowerCase().endsWith(".pdf")) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workbook must be a PDF file");
-            }
+            String filename = pdfFilename(workbook, "lesson-workbook.pdf");
             result = preparationService.uploadWorkbook(teacher, eventId, filename, workbook.getBytes());
         }
+        if (answers != null && !answers.isEmpty()) {
+            String filename = pdfFilename(answers, "lesson-answers.pdf");
+            result = preparationService.uploadAnswers(teacher, eventId, filename, answers.getBytes());
+        }
         return result;
+    }
+
+    private String pdfFilename(MultipartFile file, String fallback) {
+        String originalFilename = file.getOriginalFilename();
+        String filename = originalFilename == null || originalFilename.isBlank() ? fallback : originalFilename;
+        if (!filename.toLowerCase().endsWith(".pdf")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lesson files must be PDF");
+        }
+        return filename;
     }
 
     private AuthenticatedUser requireTeacher(String teacherEmail) {
@@ -111,20 +110,16 @@ public class LessonPreparationIntegrationController {
         boolean exists = calendarLessonService.listGroupLessons(teacher).stream()
                 .anyMatch(lesson -> lesson.eventId().equals(eventId));
         if (!exists) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Calendar lesson not found in the current lesson window");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Calendar lesson not found in the current lesson window");
         }
     }
 
     private void requireApiKey(String suppliedApiKey) {
         if (apiKey.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Lesson import integration is not configured");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Lesson import integration is not configured");
         }
         byte[] expected = apiKey.getBytes(StandardCharsets.UTF_8);
-        byte[] supplied = suppliedApiKey == null
-                ? new byte[0]
-                : suppliedApiKey.getBytes(StandardCharsets.UTF_8);
+        byte[] supplied = suppliedApiKey == null ? new byte[0] : suppliedApiKey.getBytes(StandardCharsets.UTF_8);
         if (!MessageDigest.isEqual(expected, supplied)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid integration API key");
         }
