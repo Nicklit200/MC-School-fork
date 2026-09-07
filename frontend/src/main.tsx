@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
 import { I18nProvider } from './i18n/I18nContext';
+import { installLessonStartFlow } from './lesson-start-flow';
 import './index.css';
 import './teacher-groups.css';
 import './teacher-detail.css';
@@ -12,6 +13,8 @@ import './login-page.css';
 import './pdf-homework.css';
 import './student-menu.css';
 import './student-today-status.css';
+
+installLessonStartFlow();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
