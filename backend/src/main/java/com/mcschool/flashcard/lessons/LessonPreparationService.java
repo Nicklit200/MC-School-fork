@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LessonPreparationService {
+    private static final String ANSWERS_COMPAT_PREFIX = "__answers__:";
+
     private final LessonPreparationRepository repository;
     private final UserRepository userRepository;
 
@@ -45,7 +47,13 @@ public class LessonPreparationService {
     @Transactional
     public LessonPreparationResponse uploadWorkbook(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
-        preparation.attachWorkbook(filename, pdf);
+        if (filename != null && filename.startsWith(ANSWERS_COMPAT_PREFIX)) {
+            String answersFilename = filename.substring(ANSWERS_COMPAT_PREFIX.length()).trim();
+            if (answersFilename.isBlank()) answersFilename = "lesson-answers.pdf";
+            preparation.attachAnswers(answersFilename, pdf);
+        } else {
+            preparation.attachWorkbook(filename, pdf);
+        }
         return response(repository.save(preparation));
     }
 
