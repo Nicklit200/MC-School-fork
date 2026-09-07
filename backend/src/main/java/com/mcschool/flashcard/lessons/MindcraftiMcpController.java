@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.auth.McpOAuthService;
 import com.mcschool.flashcard.drive.GoogleDriveService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
@@ -29,25 +30,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Remote MCP server for the Mindcrafti ChatGPT app.
- *
- * The MCP handshake and one diagnostic tool are intentionally available without
- * authentication so ChatGPT can register the connector in "no authentication"
- * mode. All lesson/calendar data tools remain protected by the existing
- * Mindcrafti integration API key until per-user OAuth is enabled.
- */
+/** Remote MCP server for the Mindcrafti ChatGPT app. */
 @RestController
 @RequestMapping("/api/v1/mcp")
 public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.1.0";
+    private static final String SERVER_VERSION = "1.2.0";
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final McpOAuthService oauthService;
     private final GoogleCalendarLessonService calendarLessonService;
     private final LessonPreparationService preparationService;
     private final GoogleDriveService googleDriveService;
@@ -56,12 +51,14 @@ public class MindcraftiMcpController {
             @Value("${MINDCRAFTI_LESSON_IMPORT_API_KEY:}") String apiKey,
             ObjectMapper objectMapper,
             UserRepository userRepository,
+            McpOAuthService oauthService,
             GoogleCalendarLessonService calendarLessonService,
             LessonPreparationService preparationService,
             GoogleDriveService googleDriveService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
+        this.oauthService = oauthService;
         this.calendarLessonService = calendarLessonService;
         this.preparationService = preparationService;
         this.googleDriveService = googleDriveService;
@@ -80,7 +77,7 @@ public class MindcraftiMcpController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestHeader(value = API_KEY_HEADER, required = false) String suppliedApiKey,
             @RequestBody Map<String, Object> body) {
-        boolean authenticated = hasValidApiKey(authorization, suppliedApiKey);
+        AuthContext auth = authenticationContext(authorization, suppliedApiKey);
 
         String method = string(body.get("method"));
         Object id = body.get("id");
@@ -92,11 +89,11 @@ public class MindcraftiMcpController {
 
         try {
             Object result = switch (method) {
-                case "initialize" -> initialize(body, authenticated);
-                case "server/discover" -> discover(authenticated);
+                case "initialize" -> initialize(body, auth.authenticated());
+                case "server/discover" -> discover(auth.authenticated());
                 case "ping" -> Map.of();
-                case "tools/list" -> Map.of("tools", tools(authenticated));
-                case "tools/call" -> callTool(body, authenticated);
+                case "tools/list" -> Map.of("tools", tools(auth.authenticated()));
+                case "tools/call" -> callTool(body, auth);
                 default -> null;
             };
             if (result == null) {
@@ -120,7 +117,7 @@ public class MindcraftiMcpController {
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
                 ? "Use find_lessons to resolve the exact calendar event before reading or writing lesson preparation data."
-                : "The connector is in diagnostic mode. Only mindcrafti_status is available until Mindcrafti authentication is configured.");
+                : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
 
@@ -145,15 +142,13 @@ public class MindcraftiMcpController {
                 schema(Map.of(), List.of()),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
-        if (!authenticated) {
-            return tools;
-        }
+        if (!authenticated) return tools;
 
         tools.add(tool(
                 "find_lessons",
-                "Find upcoming Mindcrafti lessons across connected teacher calendars. Use a student, group, or calendar-title query such as 'Кристиан' or 'Группа 2'.",
+                "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.",
                 schema(
-                        Map.of("query", property("string", "Optional student, group, or event title filter. Leave blank to list all upcoming lessons.")),
+                        Map.of("query", property("string", "Optional student, group, or event title filter. Leave blank to list all upcoming lessons you can access.")),
                         List.of()),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
@@ -185,7 +180,7 @@ public class MindcraftiMcpController {
         return tools;
     }
 
-    private Map<String, Object> callTool(Map<String, Object> request, boolean authenticated) throws Exception {
+    private Map<String, Object> callTool(Map<String, Object> request, AuthContext auth) throws Exception {
         Map<String, Object> params = map(request.get("params"));
         String name = string(params.get("name"));
         Map<String, Object> arguments = map(params.get("arguments"));
@@ -195,27 +190,29 @@ public class MindcraftiMcpController {
             status.put("status", "ok");
             status.put("service", SERVER_NAME);
             status.put("version", SERVER_VERSION);
-            status.put("authenticated", authenticated);
-            status.put("mode", authenticated ? "full" : "diagnostic");
+            status.put("authenticated", auth.authenticated());
+            status.put("mode", auth.authenticated() ? "full" : "diagnostic");
+            status.put("authentication", auth.apiKey() ? "api_key" : auth.user() != null ? "oauth" : "none");
+            if (auth.user() != null) status.put("role", auth.user().getRole().name());
             return toolResult(status);
         }
 
-        if (!authenticated) {
+        if (!auth.authenticated()) {
             throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
         }
 
         return switch (name) {
-            case "find_lessons" -> toolResult(findLessons(string(arguments.get("query"))));
-            case "get_lesson_preparation" -> toolResult(getPreparation(arguments));
-            case "prepare_lesson" -> toolResult(prepareLesson(arguments));
+            case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
+            case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
+            case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
         };
     }
 
-    private List<Map<String, Object>> findLessons(String query) {
+    private List<Map<String, Object>> findLessons(String query, AuthContext auth) {
         String normalizedQuery = normalize(query);
         List<Map<String, Object>> result = new ArrayList<>();
-        for (User teacher : userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER)) {
+        for (User teacher : accessibleTeachers(auth)) {
             if (teacher.isArchived() || teacher.getGoogleCalendarRefreshToken() == null || teacher.getGoogleCalendarRefreshToken().isBlank()) {
                 continue;
             }
@@ -251,15 +248,25 @@ public class MindcraftiMcpController {
         return result;
     }
 
-    private LessonPreparationResponse getPreparation(Map<String, Object> arguments) {
-        AuthenticatedUser teacher = requireTeacher(arguments);
+    private List<User> accessibleTeachers(AuthContext auth) {
+        if (auth.apiKey() || (auth.user() != null && auth.user().getRole() == Role.ADMIN)) {
+            return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER);
+        }
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) {
+            return List.of(auth.user());
+        }
+        return List.of();
+    }
+
+    private LessonPreparationResponse getPreparation(Map<String, Object> arguments, AuthContext auth) {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
         String eventId = required(arguments, "eventId");
         requireLesson(teacher, eventId);
         return preparationService.getOrCreate(teacher, eventId);
     }
 
-    private LessonPreparationResponse prepareLesson(Map<String, Object> arguments) throws Exception {
-        AuthenticatedUser teacher = requireTeacher(arguments);
+    private LessonPreparationResponse prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
         String eventId = required(arguments, "eventId");
         requireLesson(teacher, eventId);
 
@@ -276,9 +283,7 @@ public class MindcraftiMcpController {
         String driveFileId = string(arguments.get("driveWorkbookFileId"));
         if (!driveFileId.isBlank()) {
             byte[] pdf = googleDriveService.downloadFile(driveFileId);
-            if (!looksLikePdf(pdf)) {
-                throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
-            }
+            if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
             String filename = string(arguments.get("workbookFilename"));
             if (filename.isBlank()) filename = "lesson-workbook.pdf";
             if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
@@ -287,7 +292,7 @@ public class MindcraftiMcpController {
         return result;
     }
 
-    private AuthenticatedUser requireTeacher(Map<String, Object> arguments) {
+    private AuthenticatedUser requireTeacher(Map<String, Object> arguments, AuthContext auth) {
         String teacherId = required(arguments, "teacherId");
         UUID id;
         try {
@@ -295,6 +300,11 @@ public class MindcraftiMcpController {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("teacherId must be a UUID");
         }
+
+        if (!auth.apiKey() && auth.user() != null && auth.user().getRole() == Role.TEACHER && !auth.user().getId().equals(id)) {
+            throw new IllegalArgumentException("You can access only your own lessons");
+        }
+
         User teacher = userRepository.findById(id)
                 .filter(user -> user.getRole() == Role.TEACHER)
                 .filter(user -> !user.isArchived())
@@ -321,15 +331,23 @@ public class MindcraftiMcpController {
                 && bytes[4] == '-';
     }
 
-    private boolean hasValidApiKey(String authorization, String suppliedApiKey) {
-        if (apiKey.isBlank()) return false;
+    private AuthContext authenticationContext(String authorization, String suppliedApiKey) {
+        String explicitApiKey = suppliedApiKey == null ? "" : suppliedApiKey.trim();
+        if (hasValidApiKey(explicitApiKey)) return new AuthContext(true, true, null);
 
-        String candidate = suppliedApiKey == null ? "" : suppliedApiKey.trim();
-        if (candidate.isBlank() && authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            candidate = authorization.substring(7).trim();
+        if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            String bearer = authorization.substring(7).trim();
+            User oauthUser = oauthService.resolveAccessToken(bearer).orElse(null);
+            if (oauthUser != null && (oauthUser.getRole() == Role.ADMIN || oauthUser.getRole() == Role.TEACHER)) {
+                return new AuthContext(true, false, oauthUser);
+            }
+            if (hasValidApiKey(bearer)) return new AuthContext(true, true, null);
         }
-        if (candidate.isBlank()) return false;
+        return new AuthContext(false, false, null);
+    }
 
+    private boolean hasValidApiKey(String candidate) {
+        if (apiKey.isBlank() || candidate == null || candidate.isBlank()) return false;
         byte[] expected = apiKey.getBytes(StandardCharsets.UTF_8);
         byte[] supplied = candidate.getBytes(StandardCharsets.UTF_8);
         return MessageDigest.isEqual(expected, supplied);
@@ -406,4 +424,6 @@ public class MindcraftiMcpController {
     private String normalize(String value) {
         return string(value).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
+
+    private record AuthContext(boolean authenticated, boolean apiKey, User user) {}
 }
