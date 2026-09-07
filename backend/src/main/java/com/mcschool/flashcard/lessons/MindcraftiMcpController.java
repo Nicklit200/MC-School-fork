@@ -37,7 +37,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.3.0";
+    private static final String SERVER_VERSION = "1.4.0";
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -113,10 +113,10 @@ public class MindcraftiMcpController {
         String protocolVersion = requested.isBlank() ? "2025-11-25" : requested;
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("protocolVersion", protocolVersion);
-        result.put("capabilities", Map.of("tools", Map.of("listChanged", false)));
+        result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Use find_lessons to resolve the exact calendar event before reading or writing lesson preparation data."
+                ? "Use find_lessons to resolve the exact calendar event before reading or writing lesson preparation data. Use attach_lesson_answers when a teacher-answer PDF must be copied from Google Drive into a lesson."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -179,6 +179,18 @@ public class MindcraftiMcpController {
                 schema(prepareProperties, List.of("teacherId", "eventId")),
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
+        Map<String, Object> answerProperties = new LinkedHashMap<>();
+        answerProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
+        answerProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
+        answerProperties.put("driveFileId", property("string", "Google Drive PDF file ID containing the teacher answers or solutions."));
+        answerProperties.put("filename", property("string", "Optional PDF filename shown in the lesson's teacher-answer section."));
+
+        tools.add(tool(
+                "attach_lesson_answers",
+                "Copy a teacher-answer or solution PDF from Google Drive into one concrete Mindcrafti lesson. Use this when the workbook is already attached and only the answers need to be added or replaced.",
+                schema(answerProperties, List.of("teacherId", "eventId", "driveFileId")),
+                Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
+
         return tools;
     }
 
@@ -207,6 +219,7 @@ public class MindcraftiMcpController {
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
+            case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
         };
     }
@@ -302,6 +315,22 @@ public class MindcraftiMcpController {
             result = preparationService.uploadAnswers(teacher, eventId, filename, pdf);
         }
         return result;
+    }
+
+    private LessonPreparationResponse attachLessonAnswers(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+
+        String driveFileId = required(arguments, "driveFileId");
+        byte[] pdf = googleDriveService.downloadFile(driveFileId);
+        if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
+
+        String filename = string(arguments.get("filename"));
+        if (filename.isBlank()) filename = "lesson-answers.pdf";
+        if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
+
+        return preparationService.uploadAnswers(teacher, eventId, filename, pdf);
     }
 
     private AuthenticatedUser requireTeacher(Map<String, Object> arguments, AuthContext auth) {
