@@ -38,13 +38,15 @@ function enhanceLessonDetailMeetButton() {
   });
   if (!meetAnchor) return;
 
+  // Important: check before mutating the DOM. Otherwise our MutationObserver
+  // observes its own textContent change and can enter a render loop.
+  if (meetAnchor.getAttribute(DETAIL_START_ATTRIBUTE) === '1') return;
+  meetAnchor.setAttribute(DETAIL_START_ATTRIBUTE, '1');
+
   const language = currentLanguage();
   meetAnchor.textContent = language === 'DE' ? 'Unterricht starten' : 'Начать урок';
   meetAnchor.removeAttribute('target');
   meetAnchor.setAttribute('role', 'button');
-
-  if (meetAnchor.getAttribute(DETAIL_START_ATTRIBUTE) === '1') return;
-  meetAnchor.setAttribute(DETAIL_START_ATTRIBUTE, '1');
 
   meetAnchor.addEventListener('click', async (event) => {
     event.preventDefault();
