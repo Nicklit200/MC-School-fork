@@ -2,18 +2,53 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n/I18nContext';
+import { api, setAccessToken } from '../api/client';
 import type { TranslationKey } from '../i18n/translations';
 
+const ADMIN_TOKEN_KEY = 'mindcrafti.impersonation.adminToken';
+const ADMIN_TEACHER_ID_KEY = 'mindcrafti.impersonation.teacherId';
+const ADMIN_TEACHER_NAME_KEY = 'mindcrafti.impersonation.teacherName';
+
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, setUser } = useAuth();
   const { language, t } = useI18n();
   const navigate = useNavigate();
   const [teacherMenuOpen, setTeacherMenuOpen] = useState(true);
+  const [returningToAdmin, setReturningToAdmin] = useState(false);
 
   const isStudent = user?.role === 'STUDENT';
   const isTeacher = user?.role === 'TEACHER';
   const isParent = user?.role === 'PARENT';
   const isAdmin = user?.role === 'ADMIN';
+  const adminToken = isTeacher ? sessionStorage.getItem(ADMIN_TOKEN_KEY) : null;
+  const impersonatedTeacherId = isTeacher ? sessionStorage.getItem(ADMIN_TEACHER_ID_KEY) : null;
+  const impersonatedTeacherName = isTeacher ? sessionStorage.getItem(ADMIN_TEACHER_NAME_KEY) : null;
+  const isImpersonatingTeacher = Boolean(isTeacher && adminToken);
+
+  async function returnToAdmin() {
+    const savedAdminToken = sessionStorage.getItem(ADMIN_TOKEN_KEY);
+    if (!savedAdminToken || returningToAdmin) return;
+    setReturningToAdmin(true);
+    try {
+      setAccessToken(savedAdminToken);
+      const admin = await api.auth.me();
+      setUser(admin);
+      clearImpersonation();
+      navigate(impersonatedTeacherId ? `/admin/lessons?teacherId=${impersonatedTeacherId}` : '/teachers');
+    } catch {
+      clearImpersonation();
+      logout();
+      navigate('/login');
+    } finally {
+      setReturningToAdmin(false);
+    }
+  }
+
+  function fullLogout() {
+    clearImpersonation();
+    logout();
+    navigate('/login');
+  }
 
   if (isTeacher) {
     const teacherLinks = [
@@ -84,6 +119,17 @@ export function Layout({ children }: { children: ReactNode }) {
           className="teacher-workspace"
           style={{ borderRadius: teacherMenuOpen ? undefined : 28 }}
         >
+          {isImpersonatingTeacher && (
+            <div style={{ background: '#fff3ec', borderBottom: '1px solid #ffd5bd', padding: '10px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontWeight: 750, color: '#9a3e00' }}>
+                Режим администратора: вы смотрите школу как {impersonatedTeacherName || user.fullName}.
+              </div>
+              <button className="btn" type="button" disabled={returningToAdmin} onClick={() => void returnToAdmin()}>
+                {returningToAdmin ? 'Возвращаемся…' : 'Вернуться в админку'}
+              </button>
+            </div>
+          )}
+
           <header className="teacher-topbar">
             <button
               type="button"
@@ -109,16 +155,13 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="teacher-profile__avatar">{initials(user.fullName)}</div>
                 <div className="teacher-profile__text">
                   <strong>{user.fullName}</strong>
-                  <span>Преподаватель</span>
+                  <span>{isImpersonatingTeacher ? 'Преподаватель · просмотр администратором' : 'Преподаватель'}</span>
                 </div>
                 <button
                   type="button"
                   className="teacher-profile__logout"
                   title={t('common.logout')}
-                  onClick={() => {
-                    logout();
-                    navigate('/login');
-                  }}
+                  onClick={fullLogout}
                 >
                   {t('common.logout')}
                 </button>
@@ -169,7 +212,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </nav>
         <div className="topbar__spacer" />
         {user && (
-          <button type="button" className="btn btn--ghost" onClick={() => { logout(); navigate('/login'); }}>
+          <button type="button" className="btn btn--ghost" onClick={fullLogout}>
             {t('common.logout')}
           </button>
         )}
@@ -177,6 +220,12 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="content">{children}</main>
     </div>
   );
+}
+
+function clearImpersonation() {
+  sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  sessionStorage.removeItem(ADMIN_TEACHER_ID_KEY);
+  sessionStorage.removeItem(ADMIN_TEACHER_NAME_KEY);
 }
 
 function initials(name: string) {
