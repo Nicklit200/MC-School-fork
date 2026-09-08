@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
-import type { DailyReviewHistoryItem, GoogleCalendarConnection, GroupLesson, Homework, StudentGroup, StudentListItem } from '../../api/types';
+import type { DailyReviewHistoryItem, GoogleCalendarConnection, GroupLesson, Homework, StudentGroup, StudentListItem, User } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
 
@@ -30,6 +30,7 @@ const SONIOX_NOTIFICATION_PREFIX = 'mindcrafti.sonioxStopNotification.';
 export function GroupLessonsPage() {
   const { language, t } = useI18n();
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
+  const [teacher, setTeacher] = useState<User | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [briefs, setBriefs] = useState<BriefMap>({});
@@ -61,9 +62,13 @@ export function GroupLessonsPage() {
     setLoading(true);
     setError(null);
     try {
-      const googleConnection = await api.lessons.googleCalendarConnection();
+      const [googleConnection, currentTeacher, studentList] = await Promise.all([
+        api.lessons.googleCalendarConnection(),
+        api.auth.me(),
+        api.students.list(),
+      ]);
       setConnection(googleConnection);
-      const studentList = await api.students.list();
+      setTeacher(currentTeacher);
       setStudents(studentList);
       if (!googleConnection.connected) {
         setLessons([]);
@@ -224,11 +229,9 @@ export function GroupLessonsPage() {
             <TranscriptUpload target={{ kind: 'group', id: returnedGroup.id, initialFolderId: returnedGroup.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
           ) : returnedStudent ? (
             <TranscriptUpload target={{ kind: 'student', id: returnedStudent.id, initialFolderId: returnedStudent.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
-          ) : (
-            <div className="banner banner--info">
-              {language === 'DE' ? 'Ordne diesen Termin zuerst einem Schüler zu.' : 'Сначала привяжи это событие календаря к ученику. После этого транскрипция попадёт в его папку.'}
-            </div>
-          )}
+          ) : teacher ? (
+            <TranscriptUpload target={{ kind: 'trial', id: teacher.id, initialFolderId: teacher.googleDriveTrialTranscriptFolderId ?? null }} language={language} prominent />
+          ) : null}
         </div>
       )}
 
@@ -271,7 +274,7 @@ export function GroupLessonsPage() {
                             <label className="field" style={{ marginTop: 8, marginBottom: 0 }}>
                               <span className="field__label" style={{ fontSize: 12 }}>{language === 'DE' ? 'Schüler für diesen Termin' : 'Ученик для этого события'}</span>
                               <select className="select" value={lesson.studentId ?? ''} onChange={(e) => void bindStudent(lesson, e.target.value)}>
-                                <option value="">{language === 'DE' ? 'Schüler auswählen' : 'Выбрать ученика'}</option>
+                                <option value="">{language === 'DE' ? 'Probeunterricht / kein Schüler' : 'Пробный урок / без ученика'}</option>
                                 {students.map((student) => <option key={student.id} value={student.id}>{student.fullName}</option>)}
                               </select>
                             </label>
@@ -296,6 +299,7 @@ export function GroupLessonsPage() {
 
                           {finished && !returnedLessonId && linkedGroup && lesson.groupId && <TranscriptUpload target={{ kind: 'group', id: lesson.groupId, initialFolderId: brief?.group.googleDriveTranscriptFolderId ?? null }} language={language} />}
                           {finished && !returnedLessonId && !linkedGroup && lesson.studentId && <TranscriptUpload target={{ kind: 'student', id: lesson.studentId, initialFolderId: students.find((student) => student.id === lesson.studentId)?.googleDriveTranscriptFolderId ?? null }} language={language} />}
+                          {finished && !returnedLessonId && !linkedGroup && !lesson.studentId && teacher && <TranscriptUpload target={{ kind: 'trial', id: teacher.id, initialFolderId: teacher.googleDriveTrialTranscriptFolderId ?? null }} language={language} />}
                         </div>
                       );
                     })}
@@ -391,12 +395,17 @@ async function closeSonioxBrowserNotification(lessonId: string) {
   } catch { /* no-op */ }
 }
 
-type TranscriptTarget = { kind: 'group' | 'student'; id: string; initialFolderId: string | null };
+type TranscriptTarget = { kind: 'group' | 'student' | 'trial'; id: string; initialFolderId: string | null };
 
 function TranscriptUpload({ target, language, prominent = false }: { target: TranscriptTarget; language: 'DE' | 'RU'; prominent?: boolean }) {
-  const storageKey = target.kind === 'group' ? `mindcrafti.groupTranscriptFolder.${target.id}` : `mindcrafti.studentTranscriptFolder.${target.id}`;
-  const [folderId, setFolderId] = useState(target.initialFolderId ?? localStorage.getItem(storageKey) ?? '');
-  const [folderPickerOpen, setFolderPickerOpen] = useState(!(target.initialFolderId ?? localStorage.getItem(storageKey)));
+  const storageKey = target.kind === 'group'
+    ? `mindcrafti.groupTranscriptFolder.${target.id}`
+    : target.kind === 'student'
+      ? `mindcrafti.studentTranscriptFolder.${target.id}`
+      : `mindcrafti.trialTranscriptFolder.${target.id}`;
+  const configuredFolderId = target.initialFolderId ?? localStorage.getItem(storageKey) ?? '';
+  const [folderId, setFolderId] = useState(configuredFolderId);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(target.kind !== 'trial' && !configuredFolderId);
   const [drives, setDrives] = useState<DriveItem[]>([]);
   const [driveId, setDriveId] = useState('');
   const [folders, setFolders] = useState<DriveItem[]>([]);
@@ -407,6 +416,13 @@ function TranscriptUpload({ target, language, prominent = false }: { target: Tra
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (target.initialFolderId) {
+      setFolderId(target.initialFolderId);
+      localStorage.setItem(storageKey, target.initialFolderId);
+    }
+  }, [target.initialFolderId, storageKey]);
+
+  useEffect(() => {
     if (!folderPickerOpen || drives.length > 0) return;
     driveApi.listSharedDrives().then(setDrives).catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [folderPickerOpen, drives.length]);
@@ -415,6 +431,7 @@ function TranscriptUpload({ target, language, prominent = false }: { target: Tra
   async function enter(folder: DriveItem) { setPath((current) => [...current, folder]); setFolders(await driveApi.listFolders(driveId, folder.id)); }
 
   async function saveCurrentFolder() {
+    if (target.kind === 'trial') return;
     const current = path.length > 0 ? path[path.length - 1].id : driveId;
     if (!current) return;
     setError(null);
@@ -432,19 +449,29 @@ function TranscriptUpload({ target, language, prominent = false }: { target: Tra
     setUploading(true); setError(null); setMessage(null);
     try {
       const result = await driveApi.upload(folderId, file);
-      setMessage(language === 'DE' ? `Transkription gespeichert: ${result.name}` : `Транскрипция загружена в нужную папку Google Drive: ${result.name}`);
+      setMessage(target.kind === 'trial'
+        ? (language === 'DE' ? `Probeunterricht-Transkription gespeichert: ${result.name}` : `Транскрипция пробного урока загружена: ${result.name}`)
+        : (language === 'DE' ? `Transkription gespeichert: ${result.name}` : `Транскрипция загружена в нужную папку Google Drive: ${result.name}`));
       setFile(null);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setUploading(false); }
   }
 
+  if (target.kind === 'trial' && !folderId) {
+    return <div className="banner banner--info" style={{ marginTop: 10 }}>
+      {language === 'DE'
+        ? 'Für Probeunterricht ist noch kein Google-Drive-Ordner eingerichtet. Der Administrator kann ihn bei diesem Lehrer unter „Google Drive“ auswählen.'
+        : 'Для пробных уроков у этого преподавателя ещё не настроена папка Google Drive. Администратор может выбрать её в разделе «Учителя» → «Google Drive».'}
+    </div>;
+  }
+
   return (
     <div style={prominent ? { marginTop: 8 } : { marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-      <strong style={{ fontSize: prominent ? 16 : 12 }}>{language === 'DE' ? 'Soniox-Transkription' : 'Транскрипция Soniox'}</strong>
-      {folderId && !folderPickerOpen && <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{language === 'DE' ? 'Zielordner ist gespeichert.' : 'Папка для транскрипций уже настроена.'}</div>}
+      <strong style={{ fontSize: prominent ? 16 : 12 }}>{target.kind === 'trial' ? (language === 'DE' ? 'Probeunterricht · Soniox-Transkription' : 'Пробный урок · транскрипция Soniox') : (language === 'DE' ? 'Soniox-Transkription' : 'Транскрипция Soniox')}</strong>
+      {folderId && <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{target.kind === 'trial' ? (language === 'DE' ? 'Der Ordner für Probeunterricht ist eingerichtet.' : 'Папка пробных уроков уже настроена администратором.') : (language === 'DE' ? 'Zielordner ist gespeichert.' : 'Папка для транскрипций уже настроена.')}</div>}
       {error && <div className="banner banner--error" style={{ marginTop: 8 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginTop: 8 }}>{message}</div>}
-      {!folderId || folderPickerOpen ? (
+      {target.kind !== 'trial' && (!folderId || folderPickerOpen) ? (
         <div className="stack" style={{ gap: 7, marginTop: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>{language === 'DE' ? 'Zielordner auswählen:' : 'Выбери папку для транскрипций:'}</div>
           <select className="select" value={driveId} onChange={(e) => void selectDrive(e.target.value)}>
@@ -453,7 +480,7 @@ function TranscriptUpload({ target, language, prominent = false }: { target: Tra
           </select>
           {driveId && <>{path.length > 0 && <div className="muted" style={{ fontSize: 12 }}>{path.map((item) => item.name).join(' / ')}</div>}{folders.map((folder) => <button key={folder.id} className="btn btn--ghost" type="button" onClick={() => void enter(folder)}>{folder.name}</button>)}<button className="btn btn--secondary" type="button" onClick={() => void saveCurrentFolder()}>{language === 'DE' ? 'Ordner speichern' : 'Сохранить эту папку'}</button></>}
         </div>
-      ) : <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 8 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button>}
+      ) : target.kind !== 'trial' ? <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 8 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button> : null}
       <input className="input" type="file" style={{ marginTop: 10 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       <button className="btn" type="button" disabled={!file || !folderId || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 8, minHeight: prominent ? 50 : undefined }}>{uploading ? (language === 'DE' ? 'Speichern…' : 'Загружаем…') : (language === 'DE' ? 'Transkription speichern' : 'Загрузить транскрипцию')}</button>
     </div>
