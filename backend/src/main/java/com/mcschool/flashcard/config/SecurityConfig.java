@@ -49,6 +49,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
+                        .requestMatchers("/api/v1/public/trials/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/google-meet/events").permitAll()
@@ -93,7 +94,8 @@ public class SecurityConfig {
                         Stream.of(
                                 publicBaseUrl,
                                 railwayOrigin,
-                                "https://mindcrafti-school-production.up.railway.app"))
+                                "https://mindcrafti-school-production.up.railway.app",
+                                "https://mindcrafti.de"))
                 .map(String::trim)
                 .map(SecurityConfig::stripTrailingSlash)
                 .filter(origin -> !origin.isBlank())
