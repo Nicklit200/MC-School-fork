@@ -38,16 +38,30 @@ function handleDocumentClick(event: MouseEvent) {
   }
 
   // React Router changes the URL without a full page load. Re-check shortly
-  // after ordinary clicks so the Meet link on a newly opened lesson page can
-  // be relabelled. No MutationObserver is used, so this cannot loop on itself.
+  // after ordinary clicks. No MutationObserver is used, so this cannot loop.
   scheduleEnhance();
 }
 
 function scheduleEnhance() {
-  window.setTimeout(enhanceLessonDetailButton, 0);
-  window.setTimeout(enhanceLessonDetailButton, 150);
-  window.setTimeout(enhanceLessonDetailButton, 600);
-  window.setTimeout(enhanceLessonDetailButton, 1400);
+  const enhance = () => {
+    enhanceLessonDetailButton();
+    hidePreparationButtons();
+  };
+  window.setTimeout(enhance, 0);
+  window.setTimeout(enhance, 150);
+  window.setTimeout(enhance, 600);
+  window.setTimeout(enhance, 1400);
+}
+
+function hidePreparationButtons() {
+  if (!window.location.pathname.startsWith('/teacher/lessons')) return;
+  const buttons = document.querySelectorAll<HTMLButtonElement>('.teacher-lessons-page button.btn--secondary');
+  buttons.forEach((button) => {
+    const label = button.textContent?.trim() ?? '';
+    if (label === 'Подготовка' || label === 'Vorbereitung' || label === 'Скрыть детали' || label === 'Details schließen') {
+      button.style.display = 'none';
+    }
+  });
 }
 
 function enhanceLessonDetailButton() {
