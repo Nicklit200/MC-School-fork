@@ -13,6 +13,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const isStudent = user?.role === 'STUDENT';
   const isTeacher = user?.role === 'TEACHER';
   const isParent = user?.role === 'PARENT';
+  const isAdmin = user?.role === 'ADMIN';
 
   if (isTeacher) {
     const teacherLinks = [
@@ -141,7 +142,12 @@ export function Layout({ children }: { children: ReactNode }) {
           { to: '/parent', label: language === 'DE' ? 'Mein Kind' : 'Мой ребёнок' },
           { to: '/parent/settings', label: language === 'DE' ? 'Einstellungen' : 'Настройки' },
         ]
-      : [{ to: '/teachers', label: 'nav.teachers' }];
+      : isAdmin
+        ? [
+            { to: '/teachers', label: language === 'DE' ? 'Lehrer' : 'Учителя' },
+            { to: '/admin/lessons', label: language === 'DE' ? 'Unterricht' : 'Уроки школы' },
+          ]
+        : [{ to: '/teachers', label: 'nav.teachers' }];
 
   return (
     <div className="app" data-variant={isStudent ? 'student' : 'staff'}>
