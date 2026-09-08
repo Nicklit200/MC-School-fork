@@ -7,7 +7,9 @@ import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -36,14 +38,17 @@ public class AdminLessonManagementController {
     private final UserRepository userRepository;
     private final GoogleCalendarLessonService lessonService;
     private final LessonPreparationService preparationService;
+    private final McpHomeworkSeriesService homeworkSeriesService;
 
     public AdminLessonManagementController(
             UserRepository userRepository,
             GoogleCalendarLessonService lessonService,
-            LessonPreparationService preparationService) {
+            LessonPreparationService preparationService,
+            McpHomeworkSeriesService homeworkSeriesService) {
         this.userRepository = userRepository;
         this.lessonService = lessonService;
         this.preparationService = preparationService;
+        this.homeworkSeriesService = homeworkSeriesService;
     }
 
     @GetMapping("/lessons")
@@ -108,6 +113,26 @@ public class AdminLessonManagementController {
         return pdf(filename, preparation.getAnswersPdf());
     }
 
+    @PostMapping(value = "/lesson-preparations/{eventId}/homework-series", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> assignHomeworkSeries(
+            @PathVariable UUID teacherId,
+            @PathVariable String eventId,
+            @RequestParam LocalDate startDate,
+            @RequestParam int days,
+            @RequestParam("files") List<MultipartFile> files) throws Exception {
+        AuthenticatedUser teacher = teacherPrincipal(teacherId);
+        GroupLessonResponse lesson = requireLesson(teacher, eventId);
+        if (lesson.groupId() != null) {
+            return homeworkSeriesService.assignUploadedSeries(
+                    teacher, "group", lesson.groupId(), startDate, days, files);
+        }
+        if (lesson.studentId() != null) {
+            return homeworkSeriesService.assignUploadedSeries(
+                    teacher, "student", lesson.studentId(), startDate, days, files);
+        }
+        throw new IllegalArgumentException("Lesson must be linked to a group or student before assigning homework");
+    }
+
     private AuthenticatedUser teacherPrincipal(UUID teacherId) {
         User teacher = userRepository.findById(teacherId)
                 .filter(user -> user.getRole() == Role.TEACHER)
@@ -116,10 +141,11 @@ public class AdminLessonManagementController {
         return new AuthenticatedUser(teacher.getId(), teacher.getEmail(), teacher.getRole());
     }
 
-    private void requireLesson(AuthenticatedUser teacher, String eventId) {
-        boolean exists = lessonService.listGroupLessons(teacher).stream()
-                .anyMatch(lesson -> lesson.eventId().equals(eventId));
-        if (!exists) throw new IllegalArgumentException("Lesson event was not found for this teacher");
+    private GroupLessonResponse requireLesson(AuthenticatedUser teacher, String eventId) {
+        return lessonService.listGroupLessons(teacher).stream()
+                .filter(lesson -> lesson.eventId().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Lesson event was not found for this teacher"));
     }
 
     private ResponseEntity<byte[]> pdf(String filename, byte[] body) {
