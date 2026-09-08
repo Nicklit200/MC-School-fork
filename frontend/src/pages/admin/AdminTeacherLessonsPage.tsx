@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
+import { adminLessonsApi } from '../../api/adminLessons';
 import type { GroupLesson, User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
@@ -31,7 +32,7 @@ export function AdminTeacherLessonsPage() {
     }
     setLoading(true);
     setError(null);
-    api.adminLessons.list(teacherId)
+    adminLessonsApi.list(teacherId)
       .then(setLessons)
       .catch((e) => setError(toErrorMessage(e, t)))
       .finally(() => setLoading(false));
