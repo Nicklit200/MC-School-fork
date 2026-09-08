@@ -10,10 +10,11 @@ public record UserResponse(
         String username,
         Role role,
         UserStatus status,
-        Language preferredLanguage
+        Language preferredLanguage,
+        String googleDriveTrialTranscriptFolderId
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(user.getId(), user.getFullName(), user.getEmail(), user.getUsername(),
-                user.getRole(), user.getStatus(), user.getPreferredLanguage());
+                user.getRole(), user.getStatus(), user.getPreferredLanguage(), user.getGoogleDriveTrialTranscriptFolderId());
     }
 }
