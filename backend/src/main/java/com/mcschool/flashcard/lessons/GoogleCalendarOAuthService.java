@@ -27,6 +27,7 @@ public class GoogleCalendarOAuthService {
     private static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
     private static final String MEET_SCOPE = "https://www.googleapis.com/auth/meetings.space.readonly";
     private static final String PROFILE_SCOPE = "https://www.googleapis.com/auth/userinfo.profile";
+    private static final String ADMIN_STATE_PREFIX = "admin:";
 
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
@@ -52,7 +53,16 @@ public class GoogleCalendarOAuthService {
 
     @Transactional
     public GoogleCalendarConnectionResponse connection(AuthenticatedUser caller) {
-        User teacher = requireTeacher(caller.id());
+        return beginConnection(requireTeacher(caller.id()), false);
+    }
+
+    /** Admin starts OAuth for a selected teacher, but Google credentials are still entered only on Google. */
+    @Transactional
+    public GoogleCalendarConnectionResponse adminConnection(UUID teacherId) {
+        return beginConnection(requireTeacher(teacherId), true);
+    }
+
+    private GoogleCalendarConnectionResponse beginConnection(User teacher, boolean adminFlow) {
         if (teacher.getGoogleCalendarRefreshToken() != null && !teacher.getGoogleCalendarRefreshToken().isBlank()) {
             return new GoogleCalendarConnectionResponse(true, null);
         }
@@ -61,32 +71,40 @@ public class GoogleCalendarOAuthService {
             return new GoogleCalendarConnectionResponse(false, null);
         }
 
-        String state = UUID.randomUUID().toString();
+        String random = UUID.randomUUID().toString();
+        String state = adminFlow
+                ? ADMIN_STATE_PREFIX + teacher.getId() + ":" + random
+                : random;
         teacher.beginGoogleCalendarOauth(state, Instant.now().plus(15, ChronoUnit.MINUTES));
-        return new GoogleCalendarConnectionResponse(false, authorizationUrl(state));
+        return new GoogleCalendarConnectionResponse(false, authorizationUrl(state, teacher.getEmail()));
     }
 
     @Transactional
     public String handleCallback(String state, String code, String error) {
-        if (error != null && !error.isBlank()) return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
-        if (state == null || state.isBlank() || code == null || code.isBlank()) return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
+        if (error != null && !error.isBlank()) return callbackRedirect(state, "error");
+        if (state == null || state.isBlank() || code == null || code.isBlank()) return callbackRedirect(state, "error");
 
         User teacher = userRepository.findByGoogleCalendarOauthState(state).orElse(null);
         if (teacher == null || !teacher.isGoogleCalendarOauthStateValid(state, Instant.now())) {
-            return frontendBaseUrl + "/teacher/lessons?googleCalendar=error";
+            return callbackRedirect(state, "error");
         }
 
         ensureConfigured();
         Map<String, Object> token = exchangeCode(code);
         String refreshToken = stringValue(token.get("refresh_token"));
-        if (refreshToken.isBlank()) return frontendBaseUrl + "/teacher/lessons?googleCalendar=missing_refresh_token";
+        if (refreshToken.isBlank()) return callbackRedirect(state, "missing_refresh_token");
         teacher.connectGoogleCalendar(refreshToken);
-        return frontendBaseUrl + "/teacher/lessons?googleCalendar=connected";
+        return callbackRedirect(state, "connected");
     }
 
     @Transactional
     public void disconnect(AuthenticatedUser caller) {
         requireTeacher(caller.id()).disconnectGoogleCalendar();
+    }
+
+    @Transactional
+    public void adminDisconnect(UUID teacherId) {
+        requireTeacher(teacherId).disconnectGoogleCalendar();
     }
 
     public String accessTokenForTeacher(UUID teacherId) {
@@ -97,9 +115,9 @@ public class GoogleCalendarOAuthService {
         return refreshAccessToken(refreshToken);
     }
 
-    private String authorizationUrl(String state) {
+    private String authorizationUrl(String state, String loginHint) {
         String scopes = String.join(" ", CALENDAR_SCOPE, MEET_SCOPE, PROFILE_SCOPE);
-        return AUTH_URL
+        String url = AUTH_URL
                 + "?client_id=" + enc(clientId)
                 + "&redirect_uri=" + enc(redirectUri)
                 + "&response_type=code"
@@ -108,6 +126,30 @@ public class GoogleCalendarOAuthService {
                 + "&prompt=consent"
                 + "&include_granted_scopes=true"
                 + "&state=" + enc(state);
+        if (loginHint != null && !loginHint.isBlank()) {
+            url += "&login_hint=" + enc(loginHint.trim());
+        }
+        return url;
+    }
+
+    private String callbackRedirect(String state, String status) {
+        UUID teacherId = adminTeacherIdFromState(state);
+        if (teacherId != null) {
+            return frontendBaseUrl + "/admin/lessons?teacherId=" + teacherId + "&googleCalendar=" + status;
+        }
+        return frontendBaseUrl + "/teacher/lessons?googleCalendar=" + status;
+    }
+
+    private UUID adminTeacherIdFromState(String state) {
+        if (state == null || !state.startsWith(ADMIN_STATE_PREFIX)) return null;
+        String remainder = state.substring(ADMIN_STATE_PREFIX.length());
+        int separator = remainder.indexOf(':');
+        if (separator <= 0) return null;
+        try {
+            return UUID.fromString(remainder.substring(0, separator));
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private Map<String, Object> exchangeCode(String code) {
