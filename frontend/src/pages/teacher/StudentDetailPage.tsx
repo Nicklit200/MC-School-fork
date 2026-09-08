@@ -20,6 +20,8 @@ export function StudentDetailPage() {
   const [reviewHistory, setReviewHistory] = useState<DailyReviewHistoryItem[]>([]);
   const [openHistoryDate, setOpenHistoryDate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
   const [pilotMessage, setPilotMessage] = useState<string | null>(null);
   const [pilotBusy, setPilotBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,32 @@ export function StudentDetailPage() {
       navigate(`/teacher/students/${studentId}/cards/${batch.id}`);
     } catch (e) {
       setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function deleteCardBatch(batch: Homework) {
+    const confirmation = language === 'DE'
+      ? `Kartensatz vom ${formatDate(batch.startDate, language)} mit ${batch.totalCards} Karten löschen?\n\nDie bisherige Antwort- und Wiederholungshistorie bleibt erhalten.`
+      : `Удалить набор от ${formatDate(batch.startDate, language)} (${batch.totalCards} карточек)?\n\nИстория ответов и повторений ученика сохранится.`;
+    if (!window.confirm(confirmation)) return;
+
+    setDeletingBatchId(batch.id);
+    setBatchMessage(null);
+    setError(null);
+    try {
+      const batchCards = await api.cards.listForHomework(batch.id);
+      const chunkSize = 20;
+      for (let index = 0; index < batchCards.length; index += chunkSize) {
+        const chunk = batchCards.slice(index, index + chunkSize);
+        await Promise.all(chunk.map((card) => api.cards.remove(card.id)));
+      }
+      setBatchMessage(language === 'DE' ? 'Kartensatz gelöscht.' : 'Набор карточек удалён.');
+      await reload();
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+      await reload().catch(() => undefined);
+    } finally {
+      setDeletingBatchId(null);
     }
   }
 
@@ -153,6 +181,7 @@ export function StudentDetailPage() {
       </div>
 
       <h2>{historyText(language, 'Наборы карточек', 'Kartensätze')}</h2>
+      {batchMessage && <div className="banner banner--success">{batchMessage}</div>}
       <div className="panel stack">
         {loading ? (
           <p className="muted">{t('common.loading')}</p>
@@ -160,23 +189,47 @@ export function StudentDetailPage() {
           <p className="muted">{t('cards.empty')}</p>
         ) : (
           cardBatches.map((batch) => (
-            <Link
+            <div
               key={batch.id}
               className="list-row"
-              to={`/teacher/students/${studentId}/cards/${batch.id}`}
-              style={{ textDecoration: 'none' }}
+              style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}
             >
-              <div>
-                <div className="list-row__title">{formatDate(batch.startDate, language)}</div>
-                <div className="muted">
-                  {t('homeworks.total')}: {batch.totalCards} · {t('homeworks.notStarted')}: {batch.notStarted} ·{' '}
-                  {t('homeworks.inProgress')}: {batch.inProgress} · {t('homeworks.learned')}: {batch.learned}
+              <Link
+                to={`/teacher/students/${studentId}/cards/${batch.id}`}
+                style={{
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  flex: '1 1 560px',
+                  minWidth: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div className="list-row__title">{formatDate(batch.startDate, language)}</div>
+                  <div className="muted">
+                    {t('homeworks.total')}: {batch.totalCards} · {t('homeworks.notStarted')}: {batch.notStarted} ·{' '}
+                    {t('homeworks.inProgress')}: {batch.inProgress} · {t('homeworks.learned')}: {batch.learned}
+                  </div>
                 </div>
-              </div>
-              <span className={`pill ${homeworkStatusClass(batch.status)}`}>
-                {t(`homeworks.status.${batch.status}`)}
-              </span>
-            </Link>
+                <span className={`pill ${homeworkStatusClass(batch.status)}`}>
+                  {t(`homeworks.status.${batch.status}`)}
+                </span>
+              </Link>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                style={{ color: '#dc2626', flex: '0 0 auto' }}
+                disabled={deletingBatchId === batch.id}
+                onClick={() => void deleteCardBatch(batch)}
+              >
+                {deletingBatchId === batch.id
+                  ? historyText(language, 'Удаляем…', 'Löschen…')
+                  : historyText(language, 'Удалить', 'Löschen')}
+              </button>
+            </div>
           ))
         )}
       </div>
