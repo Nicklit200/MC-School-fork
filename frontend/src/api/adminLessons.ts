@@ -1,4 +1,5 @@
 import type { GroupLesson, LessonPreparation } from './types';
+import type { HomeworkSeriesResult } from './lessonPreparation';
 import { ApiRequestError, getAccessToken } from './client';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
@@ -34,6 +35,19 @@ async function upload<T>(path: string, file: File): Promise<T> {
   return payload as T;
 }
 
+async function uploadSeries(path: string, startDate: string, days: number, files: File[]): Promise<HomeworkSeriesResult> {
+  const form = new FormData();
+  form.append('startDate', startDate);
+  form.append('days', String(days));
+  files.forEach((file) => form.append('files', file));
+  const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form });
+  const text = await response.text();
+  let payload: any;
+  try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
+  if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
+  return payload as HomeworkSeriesResult;
+}
+
 async function blob(path: string): Promise<Blob> {
   const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
   if (!response.ok) {
@@ -57,4 +71,6 @@ export const adminLessonsApi = {
   uploadAnswers: (teacherId: string, eventId: string, file: File) => upload<LessonPreparation>(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/answers`, file),
   workbook: (teacherId: string, eventId: string) => blob(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/workbook`),
   answers: (teacherId: string, eventId: string) => blob(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/answers`),
+  assignHomeworkSeries: (teacherId: string, eventId: string, startDate: string, days: number, files: File[]) =>
+    uploadSeries(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/homework-series`, startDate, days, files),
 };
