@@ -17,6 +17,7 @@ export interface User {
   role: Role;
   status: UserStatus;
   preferredLanguage: Language;
+  googleDriveTrialTranscriptFolderId: string | null;
 }
 
 export interface StudentListItem extends User {
@@ -62,6 +63,7 @@ export interface LessonPreparation {
   workbookFilename: string | null;
   hasAnswers: boolean;
   answersFilename: string | null;
+  answersUploadHint?: string | null;
 }
 
 export interface GoogleCalendarConnection {
@@ -100,88 +102,30 @@ export interface ParentInvitation {
   invitationExpiresAt: string | null;
 }
 
-export interface ParentChildStatus {
-  studentId: string;
-  studentName: string;
-  homeworkAssignedToday: number;
-  homeworkCompletedToday: number;
-  homeworkOpenToday: number;
-  cardsDueToday: number;
-}
-
 export interface Card {
   id: string;
-  homeworkId: string;
+  homeworkId: string | null;
   question: string;
   correctAnswer: string;
+  wrongAnswer1: string | null;
+  wrongAnswer2: string | null;
+  wrongAnswer3: string | null;
   status: CardStatus;
-  repetitionNumber: number;
-  dueDate: string | null;
-}
-
-export interface Homework {
-  id: string;
-  studentId: string;
-  startDate: string;
+  nextReviewOn: string | null;
+  repetitions: number;
+  intervalDays: number;
+  easeFactor: number;
+  mistakes: number;
   createdAt: string;
-  totalCards: number;
-  notStarted: number;
-  inProgress: number;
-  learned: number;
-  status: HomeworkStatus;
-  hasWorksheet: boolean;
-  worksheetFilename: string | null;
-  worksheetPageCount: number | null;
-  submitted: boolean;
-  submittedAt: string | null;
-}
-
-export interface HomeworkPageOverlay {
-  pageIndex: number;
-  imageBase64: string;
-}
-
-export interface CardSummary {
-  total: number;
-  dueNow: number;
-  awaitingRepetition: number;
-  learned: number;
-}
-
-export interface DailyReviewAnswer {
-  cardId: string;
-  question: string;
-  selectedAnswer: string | null;
-  correctAnswer: string;
-  correct: boolean;
-}
-
-export interface DailyReviewHistoryItem {
-  date: string;
-  dueCount: number;
-  completedCount: number;
-  status: DailyReviewStatus;
-  answers: DailyReviewAnswer[];
-}
-
-export interface TestReviewReminderResult {
-  studentId: string;
-  dueCount: number;
-  reminderAttempted: boolean;
-}
-
-export interface PilotDueCardResult {
-  id: string;
-  question: string;
-  dueDate: string;
+  updatedAt: string;
 }
 
 export interface ParsedCard {
   question: string;
   correctAnswer: string;
-  wrongAnswer1: string;
-  wrongAnswer2: string;
-  wrongAnswer3: string;
+  wrongAnswer1?: string | null;
+  wrongAnswer2?: string | null;
+  wrongAnswer3?: string | null;
 }
 
 export interface ImportPreview {
@@ -189,51 +133,93 @@ export interface ImportPreview {
   warnings: string[];
 }
 
+export interface HomeworkPageOverlay {
+  pageIndex: number;
+  imageDataUrl: string;
+}
+
+export interface Homework {
+  id: string;
+  studentId: string;
+  startDate: string;
+  status: HomeworkStatus;
+  hasWorksheet: boolean;
+  worksheetFilename: string | null;
+  submitted: boolean;
+  submissionFilename: string | null;
+  createdAt: string;
+}
+
+export interface CardSummary {
+  total: number;
+  active: number;
+  learned: number;
+  dueNow: number;
+  awaitingRepetition: number;
+}
+
+export interface DailyReviewHistoryAnswer {
+  cardId: string;
+  question: string;
+  correct: boolean;
+  selectedAnswer: string | null;
+  correctAnswer: string | null;
+}
+
+export interface DailyReviewHistoryItem {
+  date: string;
+  dueCount: number;
+  reviewedCount: number;
+  correctCount: number;
+  wrongCount: number;
+  status: DailyReviewStatus;
+  answers: DailyReviewHistoryAnswer[];
+}
+
+export interface PilotDueCardResult {
+  cardId: string;
+  nextReviewOn: string;
+  status: CardStatus;
+}
+
+export interface TestReviewReminderResult {
+  studentId: string;
+  dueCount: number;
+  sent: boolean;
+}
+
 export interface Today {
-  totalCards: number;
-  dueCardCount: number;
-  learnedCount: number;
-  minCardsToStart: number;
-  canStartScheduled: boolean;
-  canPractice: boolean;
-  inProgressSessionId: string | null;
+  date: string;
+  dueCards: number;
+  availableHomeworks: number;
 }
 
 export interface Session {
   id: string;
-  sessionType: SessionType;
+  type: SessionType;
   status: SessionStatus;
-  totalCards: number;
-  answeredCards: number;
+  homeworkId: string | null;
+  startedAt: string;
+  completedAt: string | null;
 }
 
 export interface Question {
   cardId: string;
   question: string;
   options: string[];
-  answeredCount: number;
-  totalCards: number;
 }
 
 export interface AnswerResult {
   correct: boolean;
   correctAnswer: string;
-  sessionCompleted: boolean;
-  remaining: number;
-}
-
-export interface SessionReviewItem {
-  cardId: string;
-  question: string;
-  selectedAnswer: string | null;
-  correctAnswer: string;
-  correct: boolean;
+  completed: boolean;
 }
 
 export interface SessionResult {
-  type: SessionType;
-  totalCards: number;
-  correctFirstTry: number;
-  nextReviewDate: string | null;
-  review: SessionReviewItem[];
+  sessionId: string;
+  reviewed: number;
+  correct: number;
+  wrong: number;
+  percent: number;
+  elapsedSeconds: number;
 }
