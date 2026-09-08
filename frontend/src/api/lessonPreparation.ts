@@ -3,6 +3,25 @@ import type { LessonPreparation } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
+export type HomeworkSeriesResult = {
+  targetType: 'student' | 'group';
+  targetId: string;
+  targetName: string;
+  startDate: string;
+  days: number;
+  studentCount: number;
+  created: number;
+  skippedExisting: number;
+  assignments: Array<{
+    date: string;
+    studentId: string;
+    studentName: string;
+    filename: string;
+    status: 'created' | 'skipped_existing';
+    homeworkId?: string;
+  }>;
+};
+
 function authHeaders(): Record<string, string> {
   const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -32,6 +51,18 @@ function uploadPdf(eventId: string, kind: 'workbook' | 'answers', file: File) {
   }).then(parse<LessonPreparation>);
 }
 
+function uploadHomeworkSeries(eventId: string, startDate: string, days: number, files: File[]) {
+  const form = new FormData();
+  form.append('startDate', startDate);
+  form.append('days', String(days));
+  files.forEach((file) => form.append('files', file));
+  return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/homework-series`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  }).then(parse<HomeworkSeriesResult>);
+}
+
 export const lessonPreparationApi = {
   get(eventId: string) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}`, { headers: authHeaders() }).then(parse<LessonPreparation>);
@@ -54,5 +85,8 @@ export const lessonPreparationApi = {
   },
   answersUrl(eventId: string) {
     return pdfUrl(eventId, 'answers');
+  },
+  assignHomeworkSeries(eventId: string, startDate: string, days: number, files: File[]) {
+    return uploadHomeworkSeries(eventId, startDate, days, files);
   },
 };
