@@ -93,6 +93,7 @@ public class McpHomeworkSeriesService {
         return Map.of("targets", targets);
     }
 
+    /** Existing MCP/Google Drive workflow. */
     public Map<String, Object> assignSeries(
             AuthenticatedUser teacher,
             String targetType,
@@ -102,16 +103,12 @@ public class McpHomeworkSeriesService {
             List<String> driveFileIds,
             List<String> filenames) throws Exception {
 
-        if (days < 1 || days > MAX_DAYS) {
-            throw new IllegalArgumentException("days must be between 1 and " + MAX_DAYS);
-        }
+        validateDays(days);
         if (driveFileIds == null || driveFileIds.isEmpty()) {
             throw new IllegalArgumentException("driveFileIds must contain at least one Google Drive PDF file ID");
         }
         List<String> files = driveFileIds.stream().map(this::clean).filter(value -> !value.isBlank()).toList();
-        if (files.size() != 1 && files.size() != days) {
-            throw new IllegalArgumentException("Provide either one PDF for all days or exactly one PDF per day");
-        }
+        validateFileCount(days, files.size());
 
         List<String> names = filenames == null
                 ? List.of()
@@ -120,15 +117,64 @@ public class McpHomeworkSeriesService {
             throw new IllegalArgumentException("filenames must be empty, contain one name, or contain one name per day");
         }
 
-        Target target = resolveTarget(teacher, targetType, targetId);
-        if (target.students().isEmpty()) throw new IllegalArgumentException("The selected group has no active students");
-
-        Map<String, byte[]> pdfCache = new HashMap<>();
+        Map<String, PreparedPdf> cache = new HashMap<>();
         for (String fileId : new HashSet<>(files)) {
             byte[] bytes = googleDriveService.downloadFile(fileId);
             validatePdf(bytes, fileId);
-            pdfCache.put(fileId, bytes);
+            cache.put(fileId, new PreparedPdf(fileId, bytes));
         }
+
+        List<PreparedPdf> prepared = new ArrayList<>();
+        for (int dayIndex = 0; dayIndex < files.size(); dayIndex++) {
+            String fileId = files.get(dayIndex);
+            PreparedPdf cached = cache.get(fileId);
+            String filename = chooseFilename(names, dayIndex, startDate.plusDays(Math.min(dayIndex, days - 1)));
+            prepared.add(new PreparedPdf(filename, cached.bytes()));
+        }
+        return assignPreparedSeries(teacher, targetType, targetId, startDate, days, prepared, files);
+    }
+
+    /**
+     * Website workflow used directly from lesson preparation. Accepts either
+     * one PDF for all requested days or exactly one PDF per day.
+     */
+    public Map<String, Object> assignUploadedSeries(
+            AuthenticatedUser teacher,
+            String targetType,
+            UUID targetId,
+            LocalDate startDate,
+            int days,
+            List<MultipartFile> files) throws Exception {
+
+        validateDays(days);
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("At least one homework PDF is required");
+        }
+        validateFileCount(days, files.size());
+
+        List<PreparedPdf> prepared = new ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            byte[] bytes = file.getBytes();
+            String original = clean(file.getOriginalFilename());
+            String label = original.isBlank() ? "uploaded-homework-" + (i + 1) + ".pdf" : original;
+            validatePdf(bytes, label);
+            prepared.add(new PreparedPdf(ensurePdfName(label), bytes));
+        }
+        return assignPreparedSeries(teacher, targetType, targetId, startDate, days, prepared, null);
+    }
+
+    private Map<String, Object> assignPreparedSeries(
+            AuthenticatedUser teacher,
+            String targetType,
+            UUID targetId,
+            LocalDate startDate,
+            int days,
+            List<PreparedPdf> files,
+            List<String> sourceIds) throws Exception {
+
+        Target target = resolveTarget(teacher, targetType, targetId);
+        if (target.students().isEmpty()) throw new IllegalArgumentException("The selected group has no active students");
 
         Map<UUID, Set<LocalDate>> existingDates = new HashMap<>();
         for (User student : target.students()) {
@@ -145,17 +191,20 @@ public class McpHomeworkSeriesService {
 
         for (int dayIndex = 0; dayIndex < days; dayIndex++) {
             LocalDate date = startDate.plusDays(dayIndex);
-            String fileId = files.size() == 1 ? files.get(0) : files.get(dayIndex);
-            String filename = chooseFilename(names, dayIndex, date);
-            byte[] pdf = pdfCache.get(fileId);
+            PreparedPdf pdf = files.size() == 1 ? files.get(0) : files.get(dayIndex);
+            String filename = files.size() == 1 && days > 1
+                    ? datedFilename(pdf.filename(), date)
+                    : pdf.filename();
 
             for (User student : target.students()) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("date", date.toString());
                 row.put("studentId", student.getId().toString());
                 row.put("studentName", student.getFullName());
-                row.put("driveFileId", fileId);
                 row.put("filename", filename);
+                if (sourceIds != null && !sourceIds.isEmpty()) {
+                    row.put("driveFileId", sourceIds.size() == 1 ? sourceIds.get(0) : sourceIds.get(dayIndex));
+                }
 
                 if (existingDates.get(student.getId()).contains(date)) {
                     row.put("status", "skipped_existing");
@@ -168,7 +217,7 @@ public class McpHomeworkSeriesService {
                         teacher,
                         student.getId(),
                         date,
-                        new ByteArrayPdfMultipartFile(filename, pdf));
+                        new ByteArrayPdfMultipartFile(filename, pdf.bytes()));
                 existingDates.get(student.getId()).add(date);
                 row.put("status", "created");
                 row.put("homeworkId", homework.id().toString());
@@ -188,6 +237,18 @@ public class McpHomeworkSeriesService {
         result.put("skippedExisting", skipped);
         result.put("assignments", assignments);
         return result;
+    }
+
+    private void validateDays(int days) {
+        if (days < 1 || days > MAX_DAYS) {
+            throw new IllegalArgumentException("days must be between 1 and " + MAX_DAYS);
+        }
+    }
+
+    private void validateFileCount(int days, int count) {
+        if (count != 1 && count != days) {
+            throw new IllegalArgumentException("Provide either one PDF for all days or exactly one PDF per day");
+        }
     }
 
     private Target resolveTarget(AuthenticatedUser teacher, String type, UUID targetId) {
@@ -221,16 +282,28 @@ public class McpHomeworkSeriesService {
         String value;
         if (names.isEmpty()) value = "homework-" + date + ".pdf";
         else value = names.size() == 1 ? names.get(0) : names.get(dayIndex);
-        return value.toLowerCase(Locale.ROOT).endsWith(".pdf") ? value : value + ".pdf";
+        return ensurePdfName(value);
+    }
+
+    private String datedFilename(String filename, LocalDate date) {
+        String base = ensurePdfName(filename);
+        int dot = base.toLowerCase(Locale.ROOT).lastIndexOf(".pdf");
+        return base.substring(0, dot) + "_" + date + ".pdf";
+    }
+
+    private String ensurePdfName(String value) {
+        String cleaned = clean(value);
+        if (cleaned.isBlank()) cleaned = "homework.pdf";
+        return cleaned.toLowerCase(Locale.ROOT).endsWith(".pdf") ? cleaned : cleaned + ".pdf";
     }
 
     private void validatePdf(byte[] bytes, String fileId) {
-        if (bytes == null || bytes.length == 0) throw new IllegalArgumentException("Google Drive file is empty: " + fileId);
+        if (bytes == null || bytes.length == 0) throw new IllegalArgumentException("PDF is empty: " + fileId);
         if (bytes.length > MAX_PDF_BYTES) throw new IllegalArgumentException("PDF is too large: " + fileId);
         try (PDDocument document = Loader.loadPDF(bytes)) {
             if (document.getNumberOfPages() == 0) throw new IllegalArgumentException("PDF has no pages: " + fileId);
         } catch (IOException e) {
-            throw new IllegalArgumentException("Google Drive file is not a readable PDF: " + fileId, e);
+            throw new IllegalArgumentException("File is not a readable PDF: " + fileId, e);
         }
     }
 
@@ -243,6 +316,7 @@ public class McpHomeworkSeriesService {
     }
 
     private record Target(String type, UUID id, String name, List<User> students) {}
+    private record PreparedPdf(String filename, byte[] bytes) {}
 
     private static final class ByteArrayPdfMultipartFile implements MultipartFile {
         private final String filename;
