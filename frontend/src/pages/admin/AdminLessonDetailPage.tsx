@@ -5,6 +5,7 @@ import { adminLessonsApi } from '../../api/adminLessons';
 import type { GroupLesson, LessonPreparation, User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { GoogleDrivePdfPicker } from '../teacher/GoogleDrivePdfPicker';
 
 type MaterialKind = 'workbook' | 'answers';
 
@@ -76,9 +77,13 @@ export function AdminLessonDetailPage() {
     setError(null);
     setMessage(null);
     try {
-      const updated = await adminLessonsApi.updatePreparation(teacherId, decodedEventId, { homeworkNotes, difficulties, lessonPlan });
+      const updated = await adminLessonsApi.updatePreparation(teacherId, decodedEventId, {
+        homeworkNotes,
+        difficulties,
+        lessonPlan,
+      });
       setPreparation(updated);
-      setMessage('Подготовка сохранена. Учитель увидит эти изменения в своём аккаунте.');
+      setMessage(`Информация сохранена прямо в урок преподавателя ${teacher?.fullName ?? ''}.`);
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -91,6 +96,7 @@ export function AdminLessonDetailPage() {
       setError('Нужен PDF-файл.');
       return;
     }
+    if (uploading) return;
     setUploading(kind);
     setError(null);
     setMessage(null);
@@ -99,12 +105,19 @@ export function AdminLessonDetailPage() {
         ? await adminLessonsApi.uploadWorkbook(teacherId, decodedEventId, file)
         : await adminLessonsApi.uploadAnswers(teacherId, decodedEventId, file);
       setPreparation(updated);
+
       const blob = kind === 'workbook'
         ? await adminLessonsApi.workbook(teacherId, decodedEventId)
         : await adminLessonsApi.answers(teacherId, decodedEventId);
       const url = URL.createObjectURL(blob);
-      if (kind === 'workbook') setWorkbookUrl(url); else setAnswersUrl(url);
-      setMessage(kind === 'workbook' ? 'Рабочая тетрадь обновлена.' : 'Ответы для учителя обновлены.');
+      if (kind === 'workbook') setWorkbookUrl(url);
+      else setAnswersUrl(url);
+
+      setMessage(
+        kind === 'workbook'
+          ? `Рабочая тетрадь загружена в урок ${teacher?.fullName ?? 'преподавателя'}.`
+          : `Ответы для учителя загружены в урок ${teacher?.fullName ?? 'преподавателя'}.`,
+      );
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -128,7 +141,16 @@ export function AdminLessonDetailPage() {
             </div>
           )}
         </div>
-        {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" type="button" onClick={() => void save()} disabled={saving}>
+            {saving ? 'Сохраняем…' : 'Сохранить информацию'}
+          </button>
+          {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
+        </div>
+      </div>
+
+      <div className="banner banner--info" style={{ marginBottom: 14 }}>
+        Вы редактируете настоящий урок преподавателя <strong>{teacher?.fullName ?? '—'}</strong>. Загруженные PDF и сохранённая информация сразу будут видны в его аккаунте.
       </div>
 
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
@@ -137,6 +159,7 @@ export function AdminLessonDetailPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, marginBottom: 16 }}>
         <AdminMaterialCard
           title="Рабочая тетрадь"
+          description="PDF, по которому преподаватель ведёт урок"
           filename={preparation?.workbookFilename}
           url={workbookUrl}
           uploading={uploading === 'workbook'}
@@ -144,6 +167,7 @@ export function AdminLessonDetailPage() {
         />
         <AdminMaterialCard
           title="Ответы для учителя"
+          description="Подробные решения и подсказки для преподавателя"
           filename={preparation?.answersFilename}
           url={answersUrl}
           uploading={uploading === 'answers'}
@@ -152,14 +176,32 @@ export function AdminLessonDetailPage() {
       </div>
 
       <div className="stack" style={{ gap: 14 }}>
-        <EditorCard title="Что было с домашкой" value={homeworkNotes} onChange={setHomeworkNotes} rows={7} />
-        <EditorCard title="Проблемы и сложности" value={difficulties} onChange={setDifficulties} rows={10} />
-        <EditorCard title="Рекомендованный план урока" value={lessonPlan} onChange={setLessonPlan} rows={12} />
+        <EditorCard
+          title="Что было с домашкой"
+          hint="Что сдано, что не сдано, результаты карточек и важные наблюдения перед уроком."
+          value={homeworkNotes}
+          onChange={setHomeworkNotes}
+          rows={7}
+        />
+        <EditorCard
+          title="Проблемы и сложности"
+          hint="Отдельно укажите, что не понял каждый ученик и какие ошибки повторяются."
+          value={difficulties}
+          onChange={setDifficulties}
+          rows={10}
+        />
+        <EditorCard
+          title="Рекомендованный план урока"
+          hint="Что делать на уроке, в каком порядке и на что обратить внимание преподавателю."
+          value={lessonPlan}
+          onChange={setLessonPlan}
+          rows={12}
+        />
 
         <section className="panel" style={{ padding: 16, margin: 0, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="muted" style={{ fontSize: 13 }}>Сохраняется прямо в подготовку преподавателя — отдельной админской копии нет.</div>
+          <div className="muted" style={{ fontSize: 13 }}>Отдельной админской копии нет — вы меняете именно подготовку преподавателя.</div>
           <button className="btn" type="button" onClick={() => void save()} disabled={saving} style={{ minWidth: 230 }}>
-            {saving ? 'Сохраняем…' : 'Сохранить подготовку'}
+            {saving ? 'Сохраняем…' : 'Сохранить информацию'}
           </button>
         </section>
       </div>
@@ -167,8 +209,9 @@ export function AdminLessonDetailPage() {
   );
 }
 
-function AdminMaterialCard({ title, filename, url, uploading, onUpload }: {
+function AdminMaterialCard({ title, description, filename, url, uploading, onUpload }: {
   title: string;
+  description: string;
   filename?: string | null;
   url: string | null;
   uploading: boolean;
@@ -177,26 +220,52 @@ function AdminMaterialCard({ title, filename, url, uploading, onUpload }: {
   return (
     <section className="panel" style={{ padding: 18, margin: 0 }}>
       <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
+      <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>{description}</div>
+
       {url ? (
         <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 12, padding: 13, background: '#fff' }}>
           <div style={{ fontWeight: 800, overflowWrap: 'anywhere' }}>{filename || 'PDF-файл'}</div>
           <a className="btn" href={url} target="_blank" rel="noopener noreferrer" style={{ marginTop: 10 }}>Открыть PDF ↗</a>
         </div>
       ) : (
-        <div className="muted" style={{ marginTop: 14 }}>Файл ещё не добавлен.</div>
+        <div style={{ marginTop: 14, border: '2px dashed #f0c7ad', borderRadius: 12, padding: 16, background: '#fffaf7' }}>
+          <strong>PDF ещё не добавлен</strong>
+          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>Можно загрузить с компьютера или выбрать из Google Drive.</div>
+        </div>
       )}
-      <label className="btn btn--ghost" style={{ marginTop: 12, cursor: uploading ? 'default' : 'pointer' }}>
-        {uploading ? 'Загружаем…' : url ? 'Заменить PDF' : 'Загрузить PDF'}
-        <input type="file" accept="application/pdf,.pdf" hidden disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) onUpload(file); e.currentTarget.value = ''; }} />
-      </label>
+
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+        <GoogleDrivePdfPicker disabled={uploading} onSelect={onUpload} />
+        <label className="btn btn--ghost" style={{ cursor: uploading ? 'default' : 'pointer' }}>
+          {uploading ? 'Загружаем…' : url ? 'Заменить PDF' : 'Загрузить PDF'}
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            disabled={uploading}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUpload(file);
+              e.currentTarget.value = '';
+            }}
+          />
+        </label>
+      </div>
     </section>
   );
 }
 
-function EditorCard({ title, value, onChange, rows }: { title: string; value: string; onChange: (value: string) => void; rows: number }) {
+function EditorCard({ title, hint, value, onChange, rows }: {
+  title: string;
+  hint: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows: number;
+}) {
   return (
     <section className="panel" style={{ padding: 18, margin: 0 }}>
-      <h2 style={{ margin: '0 0 12px' }}>{title}</h2>
+      <h2 style={{ margin: 0 }}>{title}</h2>
+      <div className="muted" style={{ margin: '4px 0 12px', fontSize: 13 }}>{hint}</div>
       <textarea className="input" rows={rows} value={value} onChange={(e) => onChange(e.target.value)} />
     </section>
   );
