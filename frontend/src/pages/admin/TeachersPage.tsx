@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, getAccessToken, setAccessToken } from '../../api/client';
 import type { TeacherInvitation, User } from '../../api/types';
@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { useAuth } from '../../auth/AuthContext';
 import { toErrorMessage } from '../../lib/errors';
 import { InvitationNotice } from '../../components/InvitationNotice';
+import { TeacherTrialTranscriptFolderPicker } from './TeacherTrialTranscriptFolderPicker';
 
 const ADMIN_TOKEN_KEY = 'mindcrafti.impersonation.adminToken';
 const ADMIN_TEACHER_ID_KEY = 'mindcrafti.impersonation.teacherId';
@@ -23,6 +24,7 @@ export function TeachersPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [enteringTeacherId, setEnteringTeacherId] = useState<string | null>(null);
+  const [driveTeacherId, setDriveTeacherId] = useState<string | null>(null);
 
   async function reload() {
     setTeachers(await api.teachers.list());
@@ -73,6 +75,10 @@ export function TeachersPage() {
     }
   }
 
+  function updateTeacher(updated: User) {
+    setTeachers((current) => current.map((teacher) => teacher.id === updated.id ? updated : teacher));
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -110,24 +116,31 @@ export function TeachersPage() {
         <p className="muted">{t('teachers.empty')}</p>
       ) : (
         teachers.map((teacher) => (
-          <div key={teacher.id} className="list-row" style={{ gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 260px' }}>
-              <div className="list-row__title">{teacher.fullName}</div>
-              <div className="muted">{teacher.email}</div>
+          <Fragment key={teacher.id}>
+            <div className="list-row" style={{ gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 260px' }}>
+                <div className="list-row__title">{teacher.fullName}</div>
+                <div className="muted">{teacher.email}</div>
+                {teacher.googleDriveTrialTranscriptFolderId && <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: '#0f766e' }}>Папка пробных настроена</div>}
+              </div>
+              <Link className="btn btn--ghost" to={`/admin/lessons?teacherId=${teacher.id}`}>Уроки</Link>
+              <button className="btn btn--ghost" type="button" onClick={() => setDriveTeacherId((current) => current === teacher.id ? null : teacher.id)}>
+                Google Drive
+              </button>
+              <button
+                className="btn"
+                type="button"
+                disabled={Boolean(enteringTeacherId)}
+                onClick={() => void enterAsTeacher(teacher)}
+              >
+                {enteringTeacherId === teacher.id ? 'Входим…' : 'Войти как учитель'}
+              </button>
+              <span className={`pill ${teacher.status === 'ACTIVE' ? 'pill--learned' : 'pill--active'}`}>
+                {teacher.status}
+              </span>
             </div>
-            <Link className="btn btn--ghost" to={`/admin/lessons?teacherId=${teacher.id}`}>Уроки</Link>
-            <button
-              className="btn"
-              type="button"
-              disabled={Boolean(enteringTeacherId)}
-              onClick={() => void enterAsTeacher(teacher)}
-            >
-              {enteringTeacherId === teacher.id ? 'Входим…' : 'Войти как учитель'}
-            </button>
-            <span className={`pill ${teacher.status === 'ACTIVE' ? 'pill--learned' : 'pill--active'}`}>
-              {teacher.status}
-            </span>
-          </div>
+            {driveTeacherId === teacher.id && <TeacherTrialTranscriptFolderPicker teacher={teacher} onSaved={updateTeacher} />}
+          </Fragment>
         ))
       )}
     </div>
