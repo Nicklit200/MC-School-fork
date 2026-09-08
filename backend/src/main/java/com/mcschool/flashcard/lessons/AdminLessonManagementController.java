@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.lessons.dto.GoogleCalendarConnectionResponse;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,16 +41,31 @@ public class AdminLessonManagementController {
     private final GoogleCalendarLessonService lessonService;
     private final LessonPreparationService preparationService;
     private final McpHomeworkSeriesService homeworkSeriesService;
+    private final GoogleCalendarOAuthService calendarOAuthService;
 
     public AdminLessonManagementController(
             UserRepository userRepository,
             GoogleCalendarLessonService lessonService,
             LessonPreparationService preparationService,
-            McpHomeworkSeriesService homeworkSeriesService) {
+            McpHomeworkSeriesService homeworkSeriesService,
+            GoogleCalendarOAuthService calendarOAuthService) {
         this.userRepository = userRepository;
         this.lessonService = lessonService;
         this.preparationService = preparationService;
         this.homeworkSeriesService = homeworkSeriesService;
+        this.calendarOAuthService = calendarOAuthService;
+    }
+
+    @GetMapping("/google-calendar/connection")
+    public GoogleCalendarConnectionResponse calendarConnection(@PathVariable UUID teacherId) {
+        teacherPrincipal(teacherId);
+        return calendarOAuthService.adminConnection(teacherId);
+    }
+
+    @DeleteMapping("/google-calendar/connection")
+    public void disconnectCalendar(@PathVariable UUID teacherId) {
+        teacherPrincipal(teacherId);
+        calendarOAuthService.adminDisconnect(teacherId);
     }
 
     @GetMapping("/lessons")
