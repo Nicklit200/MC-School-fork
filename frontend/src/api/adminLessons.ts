@@ -1,4 +1,4 @@
-import type { GroupLesson, LessonPreparation } from './types';
+import type { GoogleCalendarConnection, GroupLesson, LessonPreparation } from './types';
 import type { HomeworkSeriesResult } from './lessonPreparation';
 import { ApiRequestError, getAccessToken } from './client';
 
@@ -65,6 +65,8 @@ function root(teacherId: string) {
 
 export const adminLessonsApi = {
   list: (teacherId: string) => request<GroupLesson[]>('GET', `${root(teacherId)}/lessons`),
+  calendarConnection: (teacherId: string) => request<GoogleCalendarConnection>('GET', `${root(teacherId)}/google-calendar/connection`),
+  disconnectCalendar: (teacherId: string) => request<void>('DELETE', `${root(teacherId)}/google-calendar/connection`),
   getPreparation: (teacherId: string, eventId: string) => request<LessonPreparation>('GET', `${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}`),
   updatePreparation: (teacherId: string, eventId: string, body: { homeworkNotes: string; difficulties: string; lessonPlan: string }) => request<LessonPreparation>('PUT', `${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}`, body),
   uploadWorkbook: (teacherId: string, eventId: string, file: File) => upload<LessonPreparation>(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/workbook`, file),
