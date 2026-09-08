@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { DailyReviewHistoryItem, Homework, ImportPreview, StudentGroup } from '../../api/types';
+import type { DailyReviewHistoryItem, GroupLesson, Homework, ImportPreview, StudentGroup } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
@@ -29,6 +29,7 @@ export function GroupDetailPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [group, setGroup] = useState<StudentGroup | null>(null);
+  const [groupLessons, setGroupLessons] = useState<GroupLesson[]>([]);
   const [pageTab, setPageTab] = useState<PageTab>('overview');
   const [memberEmails, setMemberEmails] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
@@ -51,12 +52,23 @@ export function GroupDetailPage() {
 
   useEffect(() => {
     if (!groupId) return;
-    api.groups.get(groupId)
-      .then(async (payload) => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [payload, lessons] = await Promise.all([
+          api.groups.get(groupId!),
+          api.lessons.groupLessons().catch(() => [] as GroupLesson[]),
+        ]);
+        if (cancelled) return;
         setGroup(payload);
+        setGroupLessons(lessons);
         await loadHomeworkStatuses(payload);
-      })
-      .catch((e) => setError(toErrorMessage(e, t)));
+      } catch (e) {
+        if (!cancelled) setError(toErrorMessage(e, t));
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, t]);
 
@@ -116,9 +128,6 @@ export function GroupDetailPage() {
     if (!group || group.students.length === 0) return [];
     const rows = new Map<string, GroupCardRow>();
 
-    // Daily review history is the source of truth for repeated card practice.
-    // One assigned set can generate reviews on many different days, so grouping only
-    // by homework.startDate hides almost all of the actual work pupils do.
     for (const student of group.students) {
       for (const history of reviewHistoryByStudent[student.id] ?? []) {
         if (history.dueCount <= 0) continue;
@@ -129,8 +138,6 @@ export function GroupDetailPage() {
       }
     }
 
-    // Keep the original assignment day visible even before a daily history snapshot
-    // has been created (for example immediately after the teacher assigns a set).
     for (const student of group.students) {
       for (const homework of homeworkByStudent[student.id] ?? []) {
         if (homework.totalCards <= 0 || rows.has(homework.startDate)) continue;
@@ -149,6 +156,14 @@ export function GroupDetailPage() {
     const today = localDateString(new Date());
     return groupHomeworkRows.filter((row) => row.startDate >= today).length;
   }, [groupHomeworkRows]);
+
+  const nextLesson = useMemo(() => {
+    if (!groupId) return null;
+    const now = Date.now();
+    return groupLessons
+      .filter((lesson) => lesson.groupId === groupId && new Date(lesson.endsAt).getTime() > now)
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ?? null;
+  }, [groupLessons, groupId]);
 
   const studentSlots = useMemo(() => {
     const students = group?.students ?? [];
@@ -325,8 +340,15 @@ export function GroupDetailPage() {
         </button>
         <div className="group-summary-card group-summary-card--lesson">
           <div className="group-summary-card__icon group-summary-card__icon--green">▣</div>
-          <div><span>Следующий урок</span><strong className="group-summary-card__lesson">—</strong></div>
-          <small>Расписание появится позже →</small>
+          <div>
+            <span>Следующий урок</span>
+            <strong className="group-summary-card__lesson">{nextLesson ? formatNextLesson(nextLesson.startsAt) : '—'}</strong>
+          </div>
+          {nextLesson ? (
+            <small><Link to={`/teacher/lessons/${encodeURIComponent(nextLesson.eventId)}`}>{nextLesson.title} · открыть урок →</Link></small>
+          ) : (
+            <small>Ближайших уроков группы в календаре нет</small>
+          )}
         </div>
       </div>
 
@@ -613,4 +635,15 @@ function localDateString(date: Date) {
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${date}T00:00:00`));
+}
+
+function formatNextLesson(value: string) {
+  const lessonDate = new Date(value);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const lessonKey = localDateString(lessonDate);
+  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(lessonDate);
+  if (lessonKey === localDateString(today)) return `Сегодня, ${time}`;
+  if (lessonKey === localDateString(tomorrow)) return `Завтра, ${time}`;
+  return new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(lessonDate);
 }
