@@ -74,6 +74,9 @@ public class User {
     @Column(name = "google_drive_transcript_folder_id", length = 1000)
     private String googleDriveTranscriptFolderId;
 
+    @Column(name = "google_drive_trial_transcript_folder_id", length = 1000)
+    private String googleDriveTrialTranscriptFolderId;
+
     @Column(name = "chatgpt_project_url", length = 2000)
     private String chatGptProjectUrl;
 
@@ -136,6 +139,7 @@ public class User {
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) { this.googleDriveFolderUrl = normalizeOptionalValue(googleDriveFolderUrl); }
     public void changeGoogleDriveHomeworkFolderId(String folderId) { this.googleDriveHomeworkFolderId = normalizeOptionalValue(folderId); }
     public void changeGoogleDriveTranscriptFolderId(String folderId) { this.googleDriveTranscriptFolderId = normalizeOptionalValue(folderId); }
+    public void changeGoogleDriveTrialTranscriptFolderId(String folderId) { this.googleDriveTrialTranscriptFolderId = normalizeOptionalValue(folderId); }
 
     public void changeChatGptProjectUrl(String projectUrl) {
         String normalized = normalizeOptionalValue(projectUrl);
