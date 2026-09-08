@@ -17,7 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/drive")
-@PreAuthorize("hasRole('TEACHER')")
+@PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
 public class GoogleDriveController {
 
     private final GoogleDriveService googleDriveService;
