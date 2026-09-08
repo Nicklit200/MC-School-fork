@@ -12,6 +12,7 @@ import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.UUID;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -91,6 +92,15 @@ public class AuthService {
                 .filter(user -> !user.isArchived())
                 .map(UserResponse::from)
                 .orElseThrow(() -> new ResourceNotFoundException("Account no longer exists"));
+    }
+
+    @Transactional(readOnly = true)
+    public AuthResponse impersonateTeacher(UUID teacherId) {
+        User teacher = userRepository.findById(teacherId)
+                .filter(user -> !user.isArchived())
+                .filter(user -> user.getRole() == Role.TEACHER)
+                .orElseThrow(() -> new ResourceNotFoundException("Teacher account not found"));
+        return issueToken(teacher);
     }
 
     private AuthResponse issueToken(User user) {
