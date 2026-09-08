@@ -59,7 +59,12 @@ async function requestBlob(path: string): Promise<Blob> { const response = await
 async function requestText(path: string): Promise<string> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); const text = await response.text(); if (!response.ok) { let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return text; }
 
 export const api = {
-  auth: { login: (email: string, password: string) => request<AuthResponse>('POST', '/auth/login', { email, password }), activate: (invitationToken: string, email: string, password: string) => request<AuthResponse>('POST', '/auth/activate', { invitationToken, email: email.trim() || null, password }), me: () => request<User>('GET', '/auth/me') },
+  auth: {
+    login: (email: string, password: string) => request<AuthResponse>('POST', '/auth/login', { email, password }),
+    activate: (invitationToken: string, email: string, password: string) => request<AuthResponse>('POST', '/auth/activate', { invitationToken, email: email.trim() || null, password }),
+    me: () => request<User>('GET', '/auth/me'),
+    impersonateTeacher: (teacherId: string) => request<AuthResponse>('POST', `/auth/impersonate/teacher/${teacherId}`),
+  },
   users: { updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }), changePassword: (password: string) => request<void>('PUT', '/users/me/password', { password }) },
   push: { config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'), subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('POST', '/push/subscriptions', subscription), unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('DELETE', '/push/subscriptions', subscription), test: () => request<void>('POST', '/push/test') },
   teachers: { list: () => request<User[]>('GET', '/teachers'), create: (fullName: string, email: string) => request<TeacherInvitation>('POST', '/teachers', { fullName, email }) },
