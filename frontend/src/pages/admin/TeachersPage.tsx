@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { TeacherInvitation, User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { InvitationNotice } from '../../components/InvitationNotice';
 
-/** Admin home: create teacher accounts and see the existing ones (PRD: admin's only job). */
+/** Admin home: create teacher accounts and manage their school lessons. */
 export function TeachersPage() {
   const { t } = useI18n();
   const [teachers, setTeachers] = useState<User[]>([]);
@@ -41,7 +42,10 @@ export function TeachersPage() {
 
   return (
     <div>
-      <h1>{t('teachers.title')}</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <h1>{t('teachers.title')}</h1>
+        <Link className="btn" to="/admin/lessons">Уроки школы</Link>
+      </div>
       {error && <div className="banner banner--error">{error}</div>}
 
       <div className="panel">
@@ -73,11 +77,12 @@ export function TeachersPage() {
         <p className="muted">{t('teachers.empty')}</p>
       ) : (
         teachers.map((teacher) => (
-          <div key={teacher.id} className="list-row">
-            <div>
+          <div key={teacher.id} className="list-row" style={{ gap: 12 }}>
+            <div style={{ flex: 1 }}>
               <div className="list-row__title">{teacher.fullName}</div>
               <div className="muted">{teacher.email}</div>
             </div>
+            <Link className="btn btn--ghost" to={`/admin/lessons?teacherId=${teacher.id}`}>Уроки</Link>
             <span className={`pill ${teacher.status === 'ACTIVE' ? 'pill--learned' : 'pill--active'}`}>
               {teacher.status}
             </span>
