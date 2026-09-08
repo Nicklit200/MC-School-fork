@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Homework, ImportPreview, StudentGroup } from '../../api/types';
+import type { DailyReviewHistoryItem, Homework, ImportPreview, StudentGroup } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
@@ -9,6 +9,7 @@ import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 type CardTab = 'manual' | 'import';
 type PageTab = 'overview' | 'students' | 'homework' | 'cards';
 type HomeworkByStudent = Record<string, Homework[]>;
+type ReviewHistoryByStudent = Record<string, DailyReviewHistoryItem[]>;
 
 type GroupHomeworkRow = {
   key: string;
@@ -45,6 +46,7 @@ export function GroupDetailPage() {
   const [creatingHomework, setCreatingHomework] = useState(false);
   const [deletingHomeworkKey, setDeletingHomeworkKey] = useState<string | null>(null);
   const [homeworkByStudent, setHomeworkByStudent] = useState<HomeworkByStudent>({});
+  const [reviewHistoryByStudent, setReviewHistoryByStudent] = useState<ReviewHistoryByStudent>({});
   const [loadingHomeworkStatus, setLoadingHomeworkStatus] = useState(false);
 
   useEffect(() => {
@@ -61,14 +63,22 @@ export function GroupDetailPage() {
   async function loadHomeworkStatuses(currentGroup: StudentGroup | null = group) {
     if (!currentGroup || currentGroup.students.length === 0) {
       setHomeworkByStudent({});
+      setReviewHistoryByStudent({});
       return;
     }
     setLoadingHomeworkStatus(true);
     try {
       const entries = await Promise.all(
-        currentGroup.students.map(async (student) => [student.id, await api.homeworks.listForStudent(student.id)] as const),
+        currentGroup.students.map(async (student) => {
+          const [homeworks, reviewHistory] = await Promise.all([
+            api.homeworks.listForStudent(student.id),
+            api.students.reviewHistory(student.id),
+          ]);
+          return [student.id, homeworks, reviewHistory] as const;
+        }),
       );
-      setHomeworkByStudent(Object.fromEntries(entries));
+      setHomeworkByStudent(Object.fromEntries(entries.map(([studentId, homeworks]) => [studentId, homeworks])));
+      setReviewHistoryByStudent(Object.fromEntries(entries.map(([studentId, , history]) => [studentId, history])));
     } finally {
       setLoadingHomeworkStatus(false);
     }
@@ -105,23 +115,35 @@ export function GroupDetailPage() {
   const groupCardRows = useMemo<GroupCardRow[]>(() => {
     if (!group || group.students.length === 0) return [];
     const rows = new Map<string, GroupCardRow>();
+
+    // Daily review history is the source of truth for repeated card practice.
+    // One assigned set can generate reviews on many different days, so grouping only
+    // by homework.startDate hides almost all of the actual work pupils do.
     for (const student of group.students) {
-      for (const homework of homeworkByStudent[student.id] ?? []) {
-        if (homework.totalCards <= 0) continue;
-        const key = homework.startDate;
-        const existing = rows.get(key);
-        if (!existing || homework.totalCards > existing.totalCards) {
-          rows.set(key, { key, startDate: homework.startDate, totalCards: homework.totalCards });
+      for (const history of reviewHistoryByStudent[student.id] ?? []) {
+        if (history.dueCount <= 0) continue;
+        const existing = rows.get(history.date);
+        if (!existing || history.dueCount > existing.totalCards) {
+          rows.set(history.date, { key: history.date, startDate: history.date, totalCards: history.dueCount });
         }
       }
     }
-    return Array.from(rows.values())
-      .filter((row) => {
-        const matches = group.students.filter((student) => findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row)).length;
-        return group.students.length === 1 || matches >= 2;
-      })
-      .sort((a, b) => b.startDate.localeCompare(a.startDate));
-  }, [group, homeworkByStudent]);
+
+    // Keep the original assignment day visible even before a daily history snapshot
+    // has been created (for example immediately after the teacher assigns a set).
+    for (const student of group.students) {
+      for (const homework of homeworkByStudent[student.id] ?? []) {
+        if (homework.totalCards <= 0 || rows.has(homework.startDate)) continue;
+        rows.set(homework.startDate, {
+          key: homework.startDate,
+          startDate: homework.startDate,
+          totalCards: homework.totalCards,
+        });
+      }
+    }
+
+    return Array.from(rows.values()).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }, [group, homeworkByStudent, reviewHistoryByStudent]);
 
   const activeHomeworkCount = useMemo(() => {
     const today = localDateString(new Date());
@@ -406,7 +428,7 @@ export function GroupDetailPage() {
               <div className="group-overview-card__header">
                 <div>
                   <h2>Обзор карточек</h2>
-                  <p>✓ — ученик выучил весь набор, ✕ — ещё не завершил.</p>
+                  <p>Каждая строка — день повторения. ✓ — дневные карточки выполнены, ✕ — не завершены.</p>
                 </div>
               </div>
 
@@ -419,8 +441,8 @@ export function GroupDetailPage() {
                   <table className="group-homework-table group-homework-table--compact">
                     <thead>
                       <tr>
-                        <th>Название набора</th>
-                        <th>Дата задания</th>
+                        <th>Карточки на день</th>
+                        <th>Дата повторения</th>
                         {studentSlots.map((student, index) => student ? (
                           <th key={student.id}>
                             <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
@@ -435,20 +457,27 @@ export function GroupDetailPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {groupCardRows.slice(0, 3).map((row) => (
+                      {groupCardRows.map((row) => (
                         <tr key={row.key}>
                           <td><span className="group-card-set-icon">▥</span><span>Карточки · {row.totalCards} шт.</span></td>
                           <td>{formatDate(row.startDate)}</td>
                           {studentSlots.map((student, index) => {
                             if (!student) return <td key={`empty-card-status-${index}`}><span className="muted">—</span></td>;
-                            const homework = findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
-                            const completed = homework?.status === 'COMPLETED';
+                            const history = findReviewHistoryForRow(reviewHistoryByStudent[student.id] ?? [], row);
+                            const fallbackHomework = findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
+                            const completed = history ? history.status === 'COMPLETED' : fallbackHomework?.status === 'COMPLETED';
+                            const hasData = Boolean(history || fallbackHomework);
+                            const title = history
+                              ? `Выполнено ${history.completedCount} из ${history.dueCount}`
+                              : fallbackHomework
+                                ? `Набор назначен: ${fallbackHomework.totalCards} карточек`
+                                : undefined;
                             return (
                               <td key={student.id}>
-                                {homework ? (
-                                  <Link className={`group-status-dot ${completed ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/cards/${homework.id}`}>
+                                {hasData ? (
+                                  <span className={`group-status-dot ${completed ? 'is-done' : 'is-missed'}`} title={title}>
                                     {completed ? '✓' : '✕'}
-                                  </Link>
+                                  </span>
                                 ) : <span className="muted">—</span>}
                               </td>
                             );
@@ -562,6 +591,10 @@ function findHomeworkForRow(homeworks: Homework[], row: GroupHomeworkRow) {
 
 function findCardHomeworkForRow(homeworks: Homework[], row: GroupCardRow) {
   return homeworks.find((homework) => homework.totalCards > 0 && homework.startDate === row.startDate);
+}
+
+function findReviewHistoryForRow(history: DailyReviewHistoryItem[], row: GroupCardRow) {
+  return history.find((item) => item.date === row.startDate && item.dueCount > 0);
 }
 
 function addDays(dateString: string, days: number) {
