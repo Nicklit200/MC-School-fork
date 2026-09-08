@@ -5,57 +5,63 @@ const STARTED_LESSON_AT_KEY = 'mindcrafti.startedGroupLessonOpenedAt';
 const SONIOX_NOTIFICATION_PREFIX = 'mindcrafti.sonioxStopNotification.';
 const DETAIL_START_ATTRIBUTE = 'data-mindcrafti-detail-start';
 
-let observer: MutationObserver | null = null;
+let installed = false;
 let activeModal: HTMLElement | null = null;
 
 export function installLessonStartFlow() {
-  if (observer) return;
+  if (installed) return;
+  installed = true;
 
-  const style = document.createElement('style');
-  style.dataset.mindcraftiLessonStart = 'true';
-  style.textContent = `
-    .teacher-lessons-page button[data-mindcrafti-lesson-id] {
-      display: none !important;
-    }
-  `;
-  document.head.appendChild(style);
+  document.addEventListener('click', handleDocumentClick, true);
+  window.addEventListener('popstate', scheduleEnhance);
+  window.addEventListener('pageshow', scheduleEnhance);
+  window.addEventListener('focus', scheduleEnhance);
 
-  const enhance = () => enhanceLessonDetailMeetButton();
-  observer = new MutationObserver(enhance);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('popstate', enhance);
-  enhance();
+  scheduleEnhance();
 }
 
-function enhanceLessonDetailMeetButton() {
-  if (!isLessonDetailPath()) return;
+function handleDocumentClick(event: MouseEvent) {
+  const target = event.target instanceof Element ? event.target : null;
+  const meetAnchor = target?.closest<HTMLAnchorElement>('a[href*="meet.google.com"]');
 
-  const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a.btn[href]'));
-  const meetAnchor = anchors.find((anchor) => {
-    const href = anchor.getAttribute('href') ?? '';
-    const text = anchor.textContent?.trim() ?? '';
-    return href.includes('meet.google.com') || text === 'Google Meet';
-  });
-  if (!meetAnchor) return;
-
-  // Important: check before mutating the DOM. Otherwise our MutationObserver
-  // observes its own textContent change and can enter a render loop.
-  if (meetAnchor.getAttribute(DETAIL_START_ATTRIBUTE) === '1') return;
-  meetAnchor.setAttribute(DETAIL_START_ATTRIBUTE, '1');
-
-  const language = currentLanguage();
-  meetAnchor.textContent = language === 'DE' ? 'Unterricht starten' : 'Начать урок';
-  meetAnchor.removeAttribute('target');
-  meetAnchor.setAttribute('role', 'button');
-
-  meetAnchor.addEventListener('click', async (event) => {
+  if (meetAnchor && isLessonDetailPath()) {
     event.preventDefault();
     event.stopPropagation();
     const meetUrl = meetAnchor.href;
     if (!meetUrl) return;
-    await prepareBrowserNotifications();
+
+    // Notification setup may require network access. Do not make the lesson
+    // button feel frozen while that happens.
+    void prepareBrowserNotifications();
     showSonioxReminder(meetUrl);
-  });
+    return;
+  }
+
+  // React Router changes the URL without a full page load. Re-check shortly
+  // after ordinary clicks so the Meet link on a newly opened lesson page can
+  // be relabelled. No MutationObserver is used, so this cannot loop on itself.
+  scheduleEnhance();
+}
+
+function scheduleEnhance() {
+  window.setTimeout(enhanceLessonDetailButton, 0);
+  window.setTimeout(enhanceLessonDetailButton, 150);
+  window.setTimeout(enhanceLessonDetailButton, 600);
+  window.setTimeout(enhanceLessonDetailButton, 1400);
+}
+
+function enhanceLessonDetailButton() {
+  if (!isLessonDetailPath()) return;
+
+  const meetAnchor = document.querySelector<HTMLAnchorElement>('a.btn[href*="meet.google.com"]');
+  if (!meetAnchor) return;
+
+  const language = currentLanguage();
+  const label = language === 'DE' ? 'Unterricht starten' : 'Начать урок';
+  if (meetAnchor.textContent?.trim() !== label) meetAnchor.textContent = label;
+  meetAnchor.setAttribute(DETAIL_START_ATTRIBUTE, '1');
+  meetAnchor.removeAttribute('target');
+  meetAnchor.setAttribute('role', 'button');
 }
 
 function showSonioxReminder(meetUrl: string) {
@@ -121,6 +127,11 @@ function showSonioxReminder(meetUrl: string) {
 }
 
 async function openMeetAfterSoniox(meetUrl: string) {
+  // Open the tab synchronously from the user's click so popup blockers do not
+  // discard it while we refresh the Meet event subscription.
+  const tab = window.open('about:blank', '_blank');
+  if (tab) tab.opener = null;
+
   try {
     await api.lessons.ensureGoogleMeetEvents();
   } catch {
@@ -135,8 +146,8 @@ async function openMeetAfterSoniox(meetUrl: string) {
     localStorage.removeItem(`${SONIOX_NOTIFICATION_PREFIX}${lessonId}`);
   }
 
-  const tab = window.open(meetUrl, '_blank');
-  if (tab) tab.opener = null;
+  if (tab) tab.location.href = meetUrl;
+  else window.location.href = meetUrl;
 }
 
 function closeModal() {
