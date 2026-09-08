@@ -6,6 +6,8 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { ActivatePage } from './pages/ActivatePage';
 import { TeachersPage } from './pages/admin/TeachersPage';
+import { AdminTeacherLessonsPage } from './pages/admin/AdminTeacherLessonsPage';
+import { AdminLessonDetailPage } from './pages/admin/AdminLessonDetailPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
 import { StudentHomeworksPage } from './pages/teacher/StudentHomeworksPage';
@@ -39,6 +41,9 @@ export function App() {
       <Route path="/activate" element={<ActivatePage />} />
 
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/lessons" element={<ProtectedRoute role="ADMIN"><Layout><AdminTeacherLessonsPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailPage /></Layout></ProtectedRoute>} />
+
       <Route path="/students" element={<ProtectedRoute role="TEACHER"><Layout><StudentsPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId/homeworks" element={<ProtectedRoute role="TEACHER"><Layout><StudentHomeworksPage /></Layout></ProtectedRoute>} />
