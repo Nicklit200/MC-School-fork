@@ -7,7 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { ActivatePage } from './pages/ActivatePage';
 import { TeachersPage } from './pages/admin/TeachersPage';
 import { AdminTeacherLessonsPage } from './pages/admin/AdminTeacherLessonsPage';
-import { AdminLessonDetailPage } from './pages/admin/AdminLessonDetailPage';
+import { AdminLessonDetailWithHomeworkSeries } from './pages/admin/AdminLessonDetailWithHomeworkSeries';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
 import { StudentHomeworksPage } from './pages/teacher/StudentHomeworksPage';
@@ -19,7 +19,7 @@ import { GroupDetailWithHomeworkLinks } from './pages/teacher/GroupDetailWithHom
 import { GroupHomeworkDetailPage } from './pages/teacher/GroupHomeworkDetailPage';
 import { GroupCardsDetailPage } from './pages/teacher/GroupCardsDetailPage';
 import { GroupLessonsWithDetailLinks } from './pages/teacher/GroupLessonsWithDetailLinks';
-import { LessonDetailPage } from './pages/teacher/LessonDetailPage';
+import { LessonDetailWithHomeworkSeries } from './pages/teacher/LessonDetailWithHomeworkSeries';
 import { TodayPage } from './pages/student/TodayPage';
 import { SessionPage } from './pages/student/SessionPage';
 import { ResultPage } from './pages/student/ResultPage';
@@ -42,7 +42,7 @@ export function App() {
 
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/lessons" element={<ProtectedRoute role="ADMIN"><Layout><AdminTeacherLessonsPage /></Layout></ProtectedRoute>} />
-      <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
 
       <Route path="/students" element={<ProtectedRoute role="TEACHER"><Layout><StudentsPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentDetailPage /></Layout></ProtectedRoute>} />
@@ -55,7 +55,7 @@ export function App() {
       <Route path="/groups/:groupId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><GroupHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId/cards/:startDate" element={<ProtectedRoute role="TEACHER"><Layout><GroupCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons" element={<ProtectedRoute role="TEACHER"><Layout><GroupLessonsWithDetailLinks /></Layout></ProtectedRoute>} />
-      <Route path="/teacher/lessons/:eventId" element={<ProtectedRoute role="TEACHER"><Layout><LessonDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/teacher/lessons/:eventId" element={<ProtectedRoute role="TEACHER"><Layout><LessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
       <Route path="/teacher/settings" element={<ProtectedRoute role="TEACHER"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="/today" element={<ProtectedRoute role="STUDENT"><Layout><TodayPage /></Layout></ProtectedRoute>} />
