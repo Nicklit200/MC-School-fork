@@ -8,5 +8,6 @@ public record LessonPreparationResponse(
         boolean hasWorkbook,
         String workbookFilename,
         boolean hasAnswers,
-        String answersFilename
+        String answersFilename,
+        String answersUploadHint
 ) {}
