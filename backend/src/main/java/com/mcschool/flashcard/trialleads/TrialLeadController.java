@@ -25,6 +25,22 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/v1")
 public class TrialLeadController {
 
+    private static final List<String> ALLOWED_STATUSES = List.of(
+            "NEW",
+            "GRADE_SELECTED",
+            "SCHOOL_SELECTED",
+            "SUBJECT_SELECTED",
+            "GOAL_SELECTED",
+            "PRIORITY_SELECTED",
+            "FORM_COMPLETED",
+            "TEACHER_SELECTED",
+            "CALENDAR_OPENED",
+            "BOOKED",
+            "CONTACTED",
+            "CONTRACT",
+            "DECLINED"
+    );
+
     private final JdbcTemplate jdbc;
 
     public TrialLeadController(JdbcTemplate jdbc) {
@@ -47,6 +63,11 @@ public class TrialLeadController {
     public PublicLeadResponse updatePublic(@PathVariable UUID token, @Valid @RequestBody UpdateLeadRequest request) {
         String event = request.event() == null ? "" : request.event().strip().toUpperCase();
         String status = switch (event) {
+            case "GRADE_SELECTED" -> "GRADE_SELECTED";
+            case "SCHOOL_SELECTED" -> "SCHOOL_SELECTED";
+            case "SUBJECT_SELECTED" -> "SUBJECT_SELECTED";
+            case "GOAL_SELECTED" -> "GOAL_SELECTED";
+            case "PRIORITY_SELECTED" -> "PRIORITY_SELECTED";
             case "FORM_COMPLETED" -> "FORM_COMPLETED";
             case "TEACHER_SELECTED" -> "TEACHER_SELECTED";
             case "CALENDAR_OPENED" -> "CALENDAR_OPENED";
@@ -105,7 +126,7 @@ public class TrialLeadController {
     @PreAuthorize("hasRole('ADMIN')")
     public Map<String, String> setStatus(@PathVariable UUID id, @RequestBody Map<String, String> body) {
         String status = body.getOrDefault("status", "").strip().toUpperCase();
-        if (!List.of("NEW", "FORM_COMPLETED", "TEACHER_SELECTED", "CALENDAR_OPENED", "BOOKED", "CONTACTED", "CONTRACT", "DECLINED").contains(status)) {
+        if (!ALLOWED_STATUSES.contains(status)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown status");
         }
         int changed = jdbc.update(
