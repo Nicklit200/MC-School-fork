@@ -74,6 +74,8 @@ function enhanceLessonDetailButton() {
   const label = language === 'DE' ? 'Unterricht starten' : 'Начать урок';
   if (meetAnchor.textContent?.trim() !== label) meetAnchor.textContent = label;
   meetAnchor.setAttribute(DETAIL_START_ATTRIBUTE, '1');
+  const lessonId = currentLessonEventId();
+  if (lessonId) meetAnchor.setAttribute('data-mindcrafti-lesson-id', lessonId);
   meetAnchor.removeAttribute('target');
   meetAnchor.setAttribute('role', 'button');
 }
