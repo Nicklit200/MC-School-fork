@@ -4,6 +4,11 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api
 
 export type TrialLeadStatus =
   | 'NEW'
+  | 'GRADE_SELECTED'
+  | 'SCHOOL_SELECTED'
+  | 'SUBJECT_SELECTED'
+  | 'GOAL_SELECTED'
+  | 'PRIORITY_SELECTED'
   | 'FORM_COMPLETED'
   | 'TEACHER_SELECTED'
   | 'CALENDAR_OPENED'
