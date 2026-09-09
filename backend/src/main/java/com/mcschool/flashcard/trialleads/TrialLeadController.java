@@ -1,5 +1,10 @@
 package com.mcschool.flashcard.trialleads;
 
+import com.mcschool.flashcard.notifications.PushSubscription;
+import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
+import com.mcschool.flashcard.notifications.WebPushService;
+import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.users.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,6 +13,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/v1")
 public class TrialLeadController {
 
+    private static final Logger log = LoggerFactory.getLogger(TrialLeadController.class);
     private static final List<String> ALLOWED_STATUSES = List.of(
             "NEW",
             "GRADE_SELECTED",
@@ -42,9 +50,19 @@ public class TrialLeadController {
     );
 
     private final JdbcTemplate jdbc;
+    private final UserRepository userRepository;
+    private final PushSubscriptionRepository subscriptionRepository;
+    private final WebPushService webPushService;
 
-    public TrialLeadController(JdbcTemplate jdbc) {
+    public TrialLeadController(
+            JdbcTemplate jdbc,
+            UserRepository userRepository,
+            PushSubscriptionRepository subscriptionRepository,
+            WebPushService webPushService) {
         this.jdbc = jdbc;
+        this.userRepository = userRepository;
+        this.subscriptionRepository = subscriptionRepository;
+        this.webPushService = webPushService;
     }
 
     @PostMapping("/public/trial-leads")
@@ -52,11 +70,34 @@ public class TrialLeadController {
     public PublicLeadResponse create(@Valid @RequestBody CreateLeadRequest request) {
         UUID id = UUID.randomUUID();
         UUID token = UUID.randomUUID();
+        String phone = request.phone().strip();
         jdbc.update("""
                 INSERT INTO trial_leads (id, tracking_token, phone, source, status)
                 VALUES (?, ?, ?, ?, 'NEW')
-                """, id, token, request.phone().strip(), clean(request.source()));
+                """, id, token, phone, clean(request.source()));
+        notifyAdminsAboutNewLead(phone);
         return new PublicLeadResponse(token, "NEW");
+    }
+
+    private void notifyAdminsAboutNewLead(String phone) {
+        if (!webPushService.isConfigured()) return;
+        try {
+            for (var admin : userRepository.findAllByRoleOrderByFullNameAsc(Role.ADMIN)) {
+                for (PushSubscription subscription : subscriptionRepository.findAllByUserId(admin.getId())) {
+                    try {
+                        webPushService.send(
+                                subscription,
+                                "Новая заявка Mindcrafti",
+                                "Новый лид оставил номер: " + phone,
+                                "/admin/leads");
+                    } catch (Exception e) {
+                        log.warn("Failed to send new trial lead push to admin {}", admin.getId(), e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to dispatch new trial lead push notifications", e);
+        }
     }
 
     @PatchMapping("/public/trial-leads/{token}")
