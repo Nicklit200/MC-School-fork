@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -38,7 +39,8 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.5.1";
+    private static final String SERVER_VERSION = "1.6.0";
+    private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -114,7 +116,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools: resolve lessons before preparing them; admins can search homework targets across all active teachers without supplying teacherId."
+                ? "Mindcrafti school tools: resolve lessons before preparing them. PDF materials can be uploaded directly as base64 without Google Drive, or copied from Drive when preferred."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -126,7 +128,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti lesson and homework tools. Resolve the exact target before writing data. Admin target search spans all accessible teachers by default."
+                ? "Mindcrafti lesson and homework tools. Resolve the exact target before writing data. Lesson PDFs support direct upload/download without Google Drive."
                 : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         return result;
     }
@@ -154,19 +156,30 @@ public class MindcraftiMcpController {
                         "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
+        tools.add(tool(
+                "download_lesson_pdf",
+                "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.",
+                schema(Map.of(
+                        "teacherId", property("string", "Teacher UUID returned by find_lessons."),
+                        "eventId", property("string", "Google Calendar event ID returned by find_lessons."),
+                        "kind", property("string", "PDF kind: workbook or answers.")), List.of("teacherId", "eventId", "kind")),
+                Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
+
         Map<String, Object> prepareProperties = new LinkedHashMap<>();
         prepareProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
         prepareProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
         prepareProperties.put("homeworkNotes", property("string", "Homework completion/status and relevant notes for the teacher."));
         prepareProperties.put("difficulties", property("string", "Observed gaps, recurring errors, or difficulties to address."));
         prepareProperties.put("lessonPlan", property("string", "Concise plan for the lesson."));
-        prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF file ID for the workbook."));
+        prepareProperties.put("workbookBase64", property("string", "Optional workbook PDF bytes encoded as base64. Use this for direct upload without Google Drive."));
         prepareProperties.put("workbookFilename", property("string", "Optional workbook PDF filename."));
-        prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF file ID for teacher answers."));
+        prepareProperties.put("answersBase64", property("string", "Optional teacher-answers PDF bytes encoded as base64. Use this for direct upload without Google Drive."));
         prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename."));
+        prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF file ID for the workbook. Do not combine with workbookBase64."));
+        prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF file ID for teacher answers. Do not combine with answersBase64."));
         tools.add(tool(
                 "prepare_lesson",
-                "Create or update lesson preparation, optionally copying workbook and teacher-answer PDFs from Google Drive.",
+                "Create or update lesson preparation. Workbook and answer PDFs can be uploaded directly as base64 or copied from Google Drive.",
                 schema(prepareProperties, List.of("teacherId", "eventId")),
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
@@ -228,6 +241,7 @@ public class MindcraftiMcpController {
         return switch (name) {
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
+            case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
             case "find_homework_targets" -> toolResult(findHomeworkTargets(arguments, auth));
@@ -285,6 +299,37 @@ public class MindcraftiMcpController {
         return preparationService.getOrCreate(teacher, eventId);
     }
 
+    private Map<String, Object> downloadLessonPdf(Map<String, Object> arguments, AuthContext auth) {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        String kind = normalize(required(arguments, "kind"));
+        LessonPreparation preparation = preparationService.require(teacher, eventId);
+
+        byte[] pdf;
+        String filename;
+        if ("workbook".equals(kind)) {
+            if (!preparation.hasWorkbook()) throw new IllegalArgumentException("This lesson does not have a workbook PDF");
+            pdf = preparation.getWorkbookPdf();
+            filename = preparation.getWorkbookFilename();
+            if (filename == null || filename.isBlank()) filename = "lesson-workbook.pdf";
+        } else if ("answers".equals(kind)) {
+            if (!preparation.hasAnswers()) throw new IllegalArgumentException("This lesson does not have an answers PDF");
+            pdf = preparation.getAnswersPdf();
+            filename = preparation.getAnswersFilename();
+            if (filename == null || filename.isBlank()) filename = "lesson-answers.pdf";
+        } else {
+            throw new IllegalArgumentException("kind must be workbook or answers");
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("filename", filename);
+        result.put("mimeType", MediaType.APPLICATION_PDF_VALUE);
+        result.put("sizeBytes", pdf.length);
+        result.put("base64", Base64.getEncoder().encodeToString(pdf));
+        return result;
+    }
+
     private LessonPreparationResponse prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {
         AuthenticatedUser teacher = requireTeacher(arguments, auth);
         String eventId = required(arguments, "eventId");
@@ -296,23 +341,35 @@ public class MindcraftiMcpController {
         LessonPreparationResponse result = preparationService.update(teacher, eventId,
                 new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan));
 
+        String workbookBase64 = string(arguments.get("workbookBase64"));
         String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
-        if (!driveWorkbookFileId.isBlank()) {
+        if (!workbookBase64.isBlank() && !driveWorkbookFileId.isBlank()) {
+            throw new IllegalArgumentException("Use either workbookBase64 or driveWorkbookFileId, not both");
+        }
+        if (!workbookBase64.isBlank()) {
+            byte[] pdf = decodePdfBase64(workbookBase64, "workbookBase64");
+            String filename = normalizedPdfFilename(string(arguments.get("workbookFilename")), "lesson-workbook.pdf");
+            result = preparationService.uploadWorkbook(teacher, eventId, filename, pdf);
+        } else if (!driveWorkbookFileId.isBlank()) {
             byte[] pdf = googleDriveService.downloadFile(driveWorkbookFileId);
             if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
-            String filename = string(arguments.get("workbookFilename"));
-            if (filename.isBlank()) filename = "lesson-workbook.pdf";
-            if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
+            String filename = normalizedPdfFilename(string(arguments.get("workbookFilename")), "lesson-workbook.pdf");
             result = preparationService.uploadWorkbook(teacher, eventId, filename, pdf);
         }
 
+        String answersBase64 = string(arguments.get("answersBase64"));
         String driveAnswersFileId = string(arguments.get("driveAnswersFileId"));
-        if (!driveAnswersFileId.isBlank()) {
+        if (!answersBase64.isBlank() && !driveAnswersFileId.isBlank()) {
+            throw new IllegalArgumentException("Use either answersBase64 or driveAnswersFileId, not both");
+        }
+        if (!answersBase64.isBlank()) {
+            byte[] pdf = decodePdfBase64(answersBase64, "answersBase64");
+            String filename = normalizedPdfFilename(string(arguments.get("answersFilename")), "lesson-answers.pdf");
+            result = preparationService.uploadAnswers(teacher, eventId, filename, pdf);
+        } else if (!driveAnswersFileId.isBlank()) {
             byte[] pdf = googleDriveService.downloadFile(driveAnswersFileId);
             if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveAnswersFileId does not point to a PDF file");
-            String filename = string(arguments.get("answersFilename"));
-            if (filename.isBlank()) filename = "lesson-answers.pdf";
-            if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
+            String filename = normalizedPdfFilename(string(arguments.get("answersFilename")), "lesson-answers.pdf");
             result = preparationService.uploadAnswers(teacher, eventId, filename, pdf);
         }
         return result;
@@ -325,9 +382,7 @@ public class MindcraftiMcpController {
         String driveFileId = required(arguments, "driveFileId");
         byte[] pdf = googleDriveService.downloadFile(driveFileId);
         if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
-        String filename = string(arguments.get("filename"));
-        if (filename.isBlank()) filename = "lesson-answers.pdf";
-        if (!filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) filename += ".pdf";
+        String filename = normalizedPdfFilename(string(arguments.get("filename")), "lesson-answers.pdf");
         return preparationService.uploadAnswers(teacher, eventId, filename, pdf);
     }
 
@@ -454,6 +509,29 @@ public class MindcraftiMcpController {
     private void requireLesson(AuthenticatedUser teacher, String eventId) {
         boolean exists = calendarLessonService.listGroupLessons(teacher).stream().anyMatch(lesson -> lesson.eventId().equals(eventId));
         if (!exists) throw new IllegalArgumentException("Lesson event was not found in the current calendar window");
+    }
+
+    private byte[] decodePdfBase64(String value, String field) {
+        try {
+            String encoded = value == null ? "" : value.trim();
+            int comma = encoded.indexOf(',');
+            if (encoded.regionMatches(true, 0, "data:", 0, 5) && comma >= 0) encoded = encoded.substring(comma + 1);
+            byte[] bytes = Base64.getDecoder().decode(encoded);
+            if (!looksLikePdf(bytes)) throw new IllegalArgumentException(field + " does not contain a valid PDF file");
+            if (bytes.length > MAX_DIRECT_PDF_BYTES) throw new IllegalArgumentException(field + " exceeds the 15 MB direct-upload limit");
+            return bytes;
+        } catch (IllegalArgumentException ex) {
+            if (ex.getMessage() != null && ex.getMessage().startsWith(field)) throw ex;
+            throw new IllegalArgumentException(field + " must be valid base64 PDF data");
+        }
+    }
+
+    private String normalizedPdfFilename(String filename, String fallback) {
+        String value = filename == null ? "" : filename.trim();
+        if (value.isBlank()) value = fallback;
+        value = value.replace("/", "_").replace("\\", "_").replace("\"", "");
+        if (!value.toLowerCase(Locale.ROOT).endsWith(".pdf")) value += ".pdf";
+        return value;
     }
 
     private boolean looksLikePdf(byte[] bytes) {
