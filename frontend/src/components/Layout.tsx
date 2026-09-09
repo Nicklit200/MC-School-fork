@@ -189,6 +189,7 @@ export function Layout({ children }: { children: ReactNode }) {
         ? [
             { to: '/teachers', label: language === 'DE' ? 'Lehrer' : 'Учителя' },
             { to: '/admin/lessons', label: language === 'DE' ? 'Unterricht' : 'Уроки школы' },
+            { to: '/admin/leads', label: language === 'DE' ? 'Anfragen' : 'Заявки' },
           ]
         : [{ to: '/teachers', label: 'nav.teachers' }];
 
