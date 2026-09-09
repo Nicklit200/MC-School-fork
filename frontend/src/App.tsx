@@ -44,6 +44,7 @@ export function App() {
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/lessons" element={<ProtectedRoute role="ADMIN"><Layout><AdminTeacherLessonsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/leads" element={<ProtectedRoute role="ADMIN"><Layout><TrialLeadsPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/settings" element={<ProtectedRoute role="ADMIN"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
 
       <Route path="/students" element={<ProtectedRoute role="TEACHER"><Layout><StudentsPage /></Layout></ProtectedRoute>} />
