@@ -30,6 +30,7 @@ import java.util.UUID;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -60,6 +61,13 @@ public class McpHomeworkSeriesService {
         this.googleDriveService = googleDriveService;
     }
 
+    /**
+     * Keep the persistence context open while group members and their teacher
+     * relations are converted to the MCP response. StudentGroupMember.student and
+     * User.teacher are lazy JPA relations, so doing this work after the repository
+     * call has closed its session causes LazyInitializationException.
+     */
+    @Transactional(readOnly = true)
     public Map<String, Object> findTargets(AuthenticatedUser teacher, String query) {
         String q = normalize(query);
         List<Map<String, Object>> targets = new ArrayList<>();
@@ -94,6 +102,7 @@ public class McpHomeworkSeriesService {
     }
 
     /** Existing MCP/Google Drive workflow. */
+    @Transactional
     public Map<String, Object> assignSeries(
             AuthenticatedUser teacher,
             String targetType,
@@ -138,6 +147,7 @@ public class McpHomeworkSeriesService {
      * Website workflow used directly from lesson preparation. Accepts either
      * one PDF for all requested days or exactly one PDF per day.
      */
+    @Transactional
     public Map<String, Object> assignUploadedSeries(
             AuthenticatedUser teacher,
             String targetType,
