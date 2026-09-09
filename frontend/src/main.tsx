@@ -14,6 +14,22 @@ import './pdf-homework.css';
 import './student-menu.css';
 import './student-today-status.css';
 
+// mindcrafti.de is served by a host that can return its root document but does
+// not consistently fall back to index.html for direct client-side routes such
+// as /teacher/lessons. The Meet extension therefore returns through `/` and we
+// move to the React route before BrowserRouter is mounted.
+function restoreLessonReturnRoute() {
+  if (window.location.pathname !== '/') return;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('mindcraftiReturn') !== 'lesson') return;
+
+  params.delete('mindcraftiReturn');
+  params.set('fromMeet', '1');
+  const query = params.toString();
+  window.history.replaceState({}, '', `/teacher/lessons${query ? `?${query}` : ''}`);
+}
+
+restoreLessonReturnRoute();
 installLessonStartFlow();
 
 createRoot(document.getElementById('root')!).render(
