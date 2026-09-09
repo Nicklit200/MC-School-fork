@@ -95,7 +95,9 @@ public class SecurityConfig {
                         Stream.of(
                                 publicBaseUrl,
                                 railwayOrigin,
-                                "https://mindcrafti-school-production.up.railway.app"))
+                                "https://mindcrafti-school-production.up.railway.app",
+                                "https://mindcrafti.de",
+                                "https://www.mindcrafti.de"))
                 .map(String::trim)
                 .map(SecurityConfig::stripTrailingSlash)
                 .filter(origin -> !origin.isBlank())
