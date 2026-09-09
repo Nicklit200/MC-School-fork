@@ -3,7 +3,12 @@ import { trialLeadsApi, type TrialLead, type TrialLeadStatus } from '../../api/t
 import '../../trial-leads.css';
 
 const STATUS_LABELS: Record<TrialLeadStatus, string> = {
-  NEW: 'Новая заявка',
+  NEW: 'Оставил телефон',
+  GRADE_SELECTED: 'Ответил: класс',
+  SCHOOL_SELECTED: 'Ответил: школа',
+  SUBJECT_SELECTED: 'Ответил: предмет',
+  GOAL_SELECTED: 'Ответил: задача',
+  PRIORITY_SELECTED: 'Ответил: что важно',
   FORM_COMPLETED: 'Анкета заполнена',
   TEACHER_SELECTED: 'Выбран преподаватель',
   CALENDAR_OPENED: 'Открыл календарь',
@@ -37,7 +42,7 @@ export function TrialLeadsPage() {
 
   const summary = useMemo(() => ({
     total: leads.length,
-    newCount: leads.filter((lead) => lead.status === 'NEW' || lead.status === 'FORM_COMPLETED').length,
+    newCount: leads.filter((lead) => !['CALENDAR_OPENED', 'BOOKED', 'CONTACTED', 'CONTRACT', 'DECLINED'].includes(lead.status)).length,
     calendar: leads.filter((lead) => lead.status === 'CALENDAR_OPENED').length,
     booked: leads.filter((lead) => lead.status === 'BOOKED').length,
   }), [leads]);
@@ -61,14 +66,14 @@ export function TrialLeadsPage() {
         <div>
           <p className="trial-leads-eyebrow">Продажи</p>
           <h1>Заявки на пробный урок</h1>
-          <p>Телефон сохраняется до анкеты. Здесь видно, насколько далеко человек дошёл по воронке.</p>
+          <p>Телефон сохраняется до анкеты. Статус показывает последний этап, до которого человек дошёл.</p>
         </div>
         <button type="button" className="btn" onClick={() => void load()} disabled={loading}>Обновить</button>
       </div>
 
       <div className="trial-leads-summary">
         <div><span>Всего</span><strong>{summary.total}</strong></div>
-        <div><span>Новые</span><strong>{summary.newCount}</strong></div>
+        <div><span>В процессе</span><strong>{summary.newCount}</strong></div>
         <div><span>Открыли календарь</span><strong>{summary.calendar}</strong></div>
         <div><span>Забронировано</span><strong>{summary.booked}</strong></div>
       </div>
