@@ -419,7 +419,7 @@ public class MindcraftiMcpController {
         String expectedId = targetId.toString();
         for (Object rawTarget : list) {
             if (!(rawTarget instanceof Map<?, ?> rawMap)) continue;
-            String type = normalize(rawMap.get("type"));
+            String type = normalize(string(rawMap.get("type")));
             String id = string(rawMap.get("id"));
             if (normalizedType.equals(type) && expectedId.equals(id)) return true;
         }
