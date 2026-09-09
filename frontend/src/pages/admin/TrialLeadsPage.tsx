@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { trialLeadsApi, type TrialLead, type TrialLeadStatus } from '../../api/trialLeads';
 import '../../trial-leads.css';
 
@@ -68,7 +69,10 @@ export function TrialLeadsPage() {
           <h1>Заявки на пробный урок</h1>
           <p>Телефон сохраняется до анкеты. Статус показывает последний этап, до которого человек дошёл.</p>
         </div>
-        <button type="button" className="btn" onClick={() => void load()} disabled={loading}>Обновить</button>
+        <div className="trial-lead-actions">
+          <Link className="btn btn--secondary" to="/admin/settings">Уведомления</Link>
+          <button type="button" className="btn" onClick={() => void load()} disabled={loading}>Обновить</button>
+        </div>
       </div>
 
       <div className="trial-leads-summary">
