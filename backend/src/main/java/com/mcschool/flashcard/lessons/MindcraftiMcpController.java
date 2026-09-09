@@ -38,7 +38,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.5.0";
+    private static final String SERVER_VERSION = "1.5.1";
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -114,7 +114,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools: resolve lessons before preparing them; use find_homework_targets then assign_homework_series to schedule PDF homework for an individual student or whole group."
+                ? "Mindcrafti school tools: resolve lessons before preparing them; admins can search homework targets across all active teachers without supplying teacherId."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -126,7 +126,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti lesson and homework tools. Resolve the exact target before writing data."
+                ? "Mindcrafti lesson and homework tools. Resolve the exact target before writing data. Admin target search spans all accessible teachers by default."
                 : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         return result;
     }
@@ -182,16 +182,16 @@ public class MindcraftiMcpController {
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
         Map<String, Object> targetProperties = new LinkedHashMap<>();
-        targetProperties.put("query", property("string", "Optional student or group name filter, for example Christian or Группа 1."));
-        targetProperties.put("teacherId", property("string", "Optional teacher UUID. Not needed when signed in as a teacher."));
+        targetProperties.put("query", property("string", "Optional student or group name filter, for example Виталина, Christian or Группа 1."));
+        targetProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it to search across every active teacher."));
         tools.add(tool(
                 "find_homework_targets",
-                "Find students and groups that can receive homework. Returns target type, ID, name, and group members.",
+                "Find students and groups that can receive homework. Admins search all active teachers by default. Every result includes teacherId and teacherName so it can be used directly for follow-up actions.",
                 schema(targetProperties, List.of()),
                 Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
         Map<String, Object> seriesProperties = new LinkedHashMap<>();
-        seriesProperties.put("teacherId", property("string", "Optional teacher UUID. Not needed when signed in as a teacher."));
+        seriesProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it and Mindcrafti will infer the teacher from targetId when the target is unique."));
         seriesProperties.put("targetType", property("string", "Target type: student or group."));
         seriesProperties.put("targetId", property("string", "Student or group UUID returned by find_homework_targets."));
         seriesProperties.put("startDate", property("string", "First homework date in YYYY-MM-DD format."));
@@ -200,7 +200,7 @@ public class MindcraftiMcpController {
         seriesProperties.put("filenames", arrayProperty("Optional display filenames: empty, one filename for all days, or one filename per day."));
         tools.add(tool(
                 "assign_homework_series",
-                "Assign dated PDF homework for several consecutive days to one student or every active student in a group. Existing PDF homework on the same student/date is skipped to avoid duplicates.",
+                "Assign dated PDF homework for several consecutive days to one student or every active student in a group. Admins may omit teacherId when targetId identifies one teacher uniquely. Existing PDF homework on the same student/date is skipped to avoid duplicates.",
                 schema(seriesProperties, List.of("targetType", "targetId", "startDate", "days", "driveFileIds")),
                 Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false)));
 
@@ -332,14 +332,52 @@ public class MindcraftiMcpController {
     }
 
     private Map<String, Object> findHomeworkTargets(Map<String, Object> arguments, AuthContext auth) {
-        AuthenticatedUser teacher = homeworkTeacher(arguments, auth);
-        return homeworkSeriesService.findTargets(teacher, string(arguments.get("query")));
+        String query = string(arguments.get("query"));
+
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) {
+            return homeworkTargetsForTeacher(auth.user(), query);
+        }
+
+        String requestedTeacherId = string(arguments.get("teacherId")).trim();
+        if (!requestedTeacherId.isBlank()) {
+            return homeworkTargetsForTeacher(requireHomeworkTeacher(requestedTeacherId), query);
+        }
+
+        List<Map<String, Object>> targets = new ArrayList<>();
+        for (User teacher : accessibleTeachers(auth)) {
+            if (teacher.isArchived()) continue;
+            targets.addAll(homeworkTargetListForTeacher(teacher, query));
+        }
+        return Map.of("targets", targets);
+    }
+
+    private Map<String, Object> homeworkTargetsForTeacher(User teacher, String query) {
+        return Map.of("targets", homeworkTargetListForTeacher(teacher, query));
+    }
+
+    private List<Map<String, Object>> homeworkTargetListForTeacher(User teacher, String query) {
+        Map<String, Object> result = homeworkSeriesService.findTargets(principal(teacher), query);
+        List<Map<String, Object>> targets = new ArrayList<>();
+        Object rawTargets = result.get("targets");
+        if (!(rawTargets instanceof List<?> list)) return targets;
+
+        for (Object rawTarget : list) {
+            if (!(rawTarget instanceof Map<?, ?> rawMap)) continue;
+            Map<String, Object> item = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                item.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            item.put("teacherId", teacher.getId().toString());
+            item.put("teacherName", teacher.getFullName());
+            targets.add(item);
+        }
+        return targets;
     }
 
     private Map<String, Object> assignHomeworkSeries(Map<String, Object> arguments, AuthContext auth) throws Exception {
-        AuthenticatedUser teacher = homeworkTeacher(arguments, auth);
         String targetType = required(arguments, "targetType");
         UUID targetId = uuid(required(arguments, "targetId"), "targetId");
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth, targetType, targetId);
         LocalDate startDate;
         try {
             startDate = LocalDate.parse(required(arguments, "startDate"));
@@ -352,15 +390,48 @@ public class MindcraftiMcpController {
         return homeworkSeriesService.assignSeries(teacher, targetType, targetId, startDate, days, driveFileIds, filenames);
     }
 
-    private AuthenticatedUser homeworkTeacher(Map<String, Object> arguments, AuthContext auth) {
+    private AuthenticatedUser homeworkTeacher(Map<String, Object> arguments, AuthContext auth, String targetType, UUID targetId) {
         if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return principal(auth.user());
-        String teacherId = required(arguments, "teacherId");
+
+        String requestedTeacherId = string(arguments.get("teacherId")).trim();
+        if (!requestedTeacherId.isBlank()) return principal(requireHomeworkTeacher(requestedTeacherId));
+
+        List<User> matches = new ArrayList<>();
+        for (User teacher : accessibleTeachers(auth)) {
+            if (teacher.isArchived()) continue;
+            Map<String, Object> result = homeworkSeriesService.findTargets(principal(teacher), "");
+            if (containsHomeworkTarget(result, targetType, targetId)) matches.add(teacher);
+        }
+
+        if (matches.isEmpty()) {
+            throw new IllegalArgumentException("Homework target was not found under any accessible teacher");
+        }
+        if (matches.size() > 1) {
+            throw new IllegalArgumentException("Homework target is ambiguous across teachers; pass teacherId returned by find_homework_targets");
+        }
+        return principal(matches.get(0));
+    }
+
+    private boolean containsHomeworkTarget(Map<String, Object> result, String targetType, UUID targetId) {
+        Object rawTargets = result.get("targets");
+        if (!(rawTargets instanceof List<?> list)) return false;
+        String normalizedType = normalize(targetType);
+        String expectedId = targetId.toString();
+        for (Object rawTarget : list) {
+            if (!(rawTarget instanceof Map<?, ?> rawMap)) continue;
+            String type = normalize(rawMap.get("type"));
+            String id = string(rawMap.get("id"));
+            if (normalizedType.equals(type) && expectedId.equals(id)) return true;
+        }
+        return false;
+    }
+
+    private User requireHomeworkTeacher(String teacherId) {
         UUID id = uuid(teacherId, "teacherId");
-        User teacher = userRepository.findById(id)
+        return userRepository.findById(id)
                 .filter(user -> user.getRole() == Role.TEACHER)
                 .filter(user -> !user.isArchived())
                 .orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
-        return principal(teacher);
     }
 
     private AuthenticatedUser requireTeacher(Map<String, Object> arguments, AuthContext auth) {
