@@ -58,20 +58,28 @@
     return hasRejoin && !hasActiveLeaveControl;
   }
 
+  function buildSafeReturnUrl(origin, context) {
+    const params = new URLSearchParams();
+    if (context?.lessonId) params.set('completedLesson', context.lessonId);
+    if (context?.groupId) params.set('groupId', context.groupId);
+    if (context?.studentId) params.set('studentId', context.studentId);
+    params.set('mindcraftiReturn', 'lesson');
+    return `${origin}/?${params.toString()}`;
+  }
+
   async function resolveReturnUrl() {
     try {
       const stored = await chrome.storage.local.get(['mindcraftiActiveLesson', 'mindcraftiReturnOrigin']);
       const context = stored?.mindcraftiActiveLesson;
-      if (context?.returnUrl) return context.returnUrl;
-
       const origin = stored?.mindcraftiReturnOrigin;
-      if (origin) {
-        const params = new URLSearchParams();
-        if (context?.lessonId) params.set('completedLesson', context.lessonId);
-        if (context?.groupId) params.set('groupId', context.groupId);
-        if (context?.studentId) params.set('studentId', context.studentId);
-        params.set('fromMeet', '1');
-        return `${origin}/teacher/lessons?${params.toString()}`;
+      if (origin) return buildSafeReturnUrl(origin, context);
+      if (context?.returnUrl) {
+        try {
+          const url = new URL(context.returnUrl);
+          return buildSafeReturnUrl(url.origin, context);
+        } catch {
+          return context.returnUrl;
+        }
       }
     } catch {
       // Keep fallback below.
