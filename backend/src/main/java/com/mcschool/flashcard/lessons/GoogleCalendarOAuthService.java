@@ -26,6 +26,7 @@ public class GoogleCalendarOAuthService {
     private static final String TOKEN_URL = "https://oauth2.googleapis.com/token";
     private static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
     private static final String MEET_SCOPE = "https://www.googleapis.com/auth/meetings.space.readonly";
+    private static final String DRIVE_READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
     private static final String PROFILE_SCOPE = "https://www.googleapis.com/auth/userinfo.profile";
     private static final String ADMIN_STATE_PREFIX = "admin:";
 
@@ -116,7 +117,7 @@ public class GoogleCalendarOAuthService {
     }
 
     private String authorizationUrl(String state, String loginHint) {
-        String scopes = String.join(" ", CALENDAR_SCOPE, MEET_SCOPE, PROFILE_SCOPE);
+        String scopes = String.join(" ", CALENDAR_SCOPE, MEET_SCOPE, DRIVE_READ_SCOPE, PROFILE_SCOPE);
         String url = AUTH_URL
                 + "?client_id=" + enc(clientId)
                 + "&redirect_uri=" + enc(redirectUri)
