@@ -1,5 +1,7 @@
 package com.mcschool.flashcard.lessons.dto;
 
+import java.time.Instant;
+
 public record LessonPreparationResponse(
         String eventId,
         String homeworkNotes,
@@ -9,5 +11,6 @@ public record LessonPreparationResponse(
         String workbookFilename,
         boolean hasAnswers,
         String answersFilename,
-        String answersUploadHint
+        String answersUploadHint,
+        Instant siteOpenedAt
 ) {}
