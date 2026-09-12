@@ -6,6 +6,7 @@ import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import java.time.Instant;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,24 +26,21 @@ public class LessonPreparationService {
 
     @Transactional
     public LessonPreparationResponse getOrCreate(AuthenticatedUser teacher, String eventId) {
-        LessonPreparation preparation = repository.findByTeacherIdAndEventId(teacher.id(), eventId)
-                .orElseGet(() -> {
-                    User teacherEntity = userRepository.findById(teacher.id())
-                            .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
-                    return repository.save(LessonPreparation.create(teacherEntity, eventId));
-                });
-        return response(preparation);
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
+        return response(repository.save(preparation));
     }
 
     @Transactional
     public LessonPreparationResponse update(AuthenticatedUser teacher, String eventId, UpdateLessonPreparationRequest request) {
-        LessonPreparation preparation = repository.findByTeacherIdAndEventId(teacher.id(), eventId)
-                .orElseGet(() -> {
-                    User teacherEntity = userRepository.findById(teacher.id())
-                            .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
-                    return LessonPreparation.create(teacherEntity, eventId);
-                });
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
         preparation.updateNotes(request.homeworkNotes(), request.difficulties(), request.lessonPlan());
+        return response(repository.save(preparation));
+    }
+
+    @Transactional
+    public LessonPreparationResponse markSiteOpened(AuthenticatedUser teacher, String eventId) {
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
+        preparation.markSiteOpened(Instant.now());
         return response(repository.save(preparation));
     }
 
@@ -110,6 +108,7 @@ public class LessonPreparationService {
                 preparation.getWorkbookFilename(),
                 preparation.hasAnswers(),
                 preparation.getAnswersFilename(),
-                preparation.hasAnswers() ? null : ANSWERS_UPLOAD_HINT);
+                preparation.hasAnswers() ? null : ANSWERS_UPLOAD_HINT,
+                preparation.getSiteOpenedAt());
     }
 }

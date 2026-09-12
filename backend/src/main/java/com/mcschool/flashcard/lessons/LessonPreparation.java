@@ -58,6 +58,9 @@ public class LessonPreparation {
     @Column(name = "answers_filename", length = 255)
     private String answersFilename;
 
+    @Column(name = "site_opened_at")
+    private Instant siteOpenedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -93,6 +96,10 @@ public class LessonPreparation {
     public void attachAnswers(String filename, byte[] pdf) {
         this.answersFilename = filename;
         this.answersPdf = pdf;
+    }
+
+    public void markSiteOpened(Instant openedAt) {
+        this.siteOpenedAt = openedAt;
     }
 
     public boolean hasWorkbook() {
