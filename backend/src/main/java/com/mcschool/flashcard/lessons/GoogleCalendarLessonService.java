@@ -31,6 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 public class GoogleCalendarLessonService {
 
     private static final String CALENDAR_API = "https://www.googleapis.com/calendar/v3";
+    private static final long HISTORY_DAYS = 90;
 
     private final ObjectMapper objectMapper;
     private final StudentGroupRepository groupRepository;
@@ -80,7 +81,7 @@ public class GoogleCalendarLessonService {
         String url = CALENDAR_API + "/calendars/primary/events"
                 + "?singleEvents=true"
                 + "&orderBy=startTime"
-                + "&timeMin=" + enc(now.minus(12, ChronoUnit.HOURS).toString())
+                + "&timeMin=" + enc(now.minus(HISTORY_DAYS, ChronoUnit.DAYS).toString())
                 + "&timeMax=" + enc(now.plus(21, ChronoUnit.DAYS).toString())
                 + "&maxResults=250"
                 + "&fields=" + enc("items(id,recurringEventId,summary,start,end,hangoutLink,htmlLink,conferenceData(entryPoints(entryPointType,uri)))");
