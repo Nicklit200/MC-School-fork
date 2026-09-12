@@ -1,9 +1,10 @@
-import { api } from './api/client';
+import { api, getAccessToken } from './api/client';
 
 const STARTED_LESSON_KEY = 'mindcrafti.startedGroupLesson';
 const STARTED_LESSON_AT_KEY = 'mindcrafti.startedGroupLessonOpenedAt';
 const SONIOX_NOTIFICATION_PREFIX = 'mindcrafti.sonioxStopNotification.';
 const DETAIL_START_ATTRIBUTE = 'data-mindcrafti-detail-start';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 let installed = false;
 let activeModal: HTMLElement | null = null;
@@ -30,15 +31,11 @@ function handleDocumentClick(event: MouseEvent) {
     const meetUrl = meetAnchor.href;
     if (!meetUrl) return;
 
-    // Notification setup may require network access. Do not make the lesson
-    // button feel frozen while that happens.
     void prepareBrowserNotifications();
     showSonioxReminder(meetUrl);
     return;
   }
 
-  // React Router changes the URL without a full page load. Re-check shortly
-  // after ordinary clicks. No MutationObserver is used, so this cannot loop.
   scheduleEnhance();
 }
 
@@ -143,8 +140,6 @@ function showSonioxReminder(meetUrl: string) {
 }
 
 async function openMeetAfterSoniox(meetUrl: string) {
-  // Open the tab synchronously from the user's click so popup blockers do not
-  // discard it while we refresh the Meet event subscription.
   const tab = window.open('about:blank', '_blank');
   if (tab) tab.opener = null;
 
@@ -160,10 +155,24 @@ async function openMeetAfterSoniox(meetUrl: string) {
     localStorage.setItem(STARTED_LESSON_KEY, lessonId);
     localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
     localStorage.removeItem(`${SONIOX_NOTIFICATION_PREFIX}${lessonId}`);
+    await markLessonOpenedOnSite(lessonId);
   }
 
   if (tab) tab.location.href = meetUrl;
   else window.location.href = meetUrl;
+}
+
+async function markLessonOpenedOnSite(lessonId: string) {
+  const token = getAccessToken();
+  if (!token) return;
+  try {
+    await fetch(`${API_BASE_URL}/lessons/${encodeURIComponent(lessonId)}/site-opened`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // Opening Meet must never be blocked by audit logging.
+  }
 }
 
 function closeModal() {
