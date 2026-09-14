@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -174,6 +175,14 @@ public class TrialLeadController {
                 "UPDATE trial_leads SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", status, id);
         if (changed == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found");
         return Map.of("status", status);
+    }
+
+    @DeleteMapping("/admin/trial-leads/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        int changed = jdbc.update("DELETE FROM trial_leads WHERE id = ?", id);
+        if (changed == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found");
     }
 
     private static String clean(String value) {
