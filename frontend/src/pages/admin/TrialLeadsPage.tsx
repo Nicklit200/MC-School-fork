@@ -26,6 +26,7 @@ export function TrialLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState('');
+  const [deletingId, setDeletingId] = useState('');
 
   async function load() {
     setLoading(true);
@@ -51,6 +52,7 @@ export function TrialLeadsPage() {
   async function changeStatus(lead: TrialLead, status: TrialLeadStatus) {
     if (lead.status === status) return;
     setSavingId(lead.id);
+    setError('');
     try {
       await trialLeadsApi.setStatus(lead.id, status);
       setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, status } : item));
@@ -58,6 +60,22 @@ export function TrialLeadsPage() {
       setError(err instanceof Error ? err.message : 'Не удалось изменить статус');
     } finally {
       setSavingId('');
+    }
+  }
+
+  async function deleteLead(lead: TrialLead) {
+    const confirmed = window.confirm(`Удалить заявку ${lead.phone}?\n\nЭто действие нельзя отменить.`);
+    if (!confirmed) return;
+
+    setDeletingId(lead.id);
+    setError('');
+    try {
+      await trialLeadsApi.delete(lead.id);
+      setLeads((current) => current.filter((item) => item.id !== lead.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить заявку');
+    } finally {
+      setDeletingId('');
     }
   }
 
@@ -89,6 +107,7 @@ export function TrialLeadsPage() {
       {!loading && leads.length > 0 && <div className="trial-leads-list">
         {leads.map((lead) => {
           const whatsapp = `https://wa.me/${lead.phone.replace(/\D/g, '')}`;
+          const busy = savingId === lead.id || deletingId === lead.id;
           return <article className="trial-lead-card" key={lead.id}>
             <div className="trial-lead-card__top">
               <div>
@@ -112,12 +131,20 @@ export function TrialLeadsPage() {
               <a className="btn btn--primary" href={whatsapp} target="_blank" rel="noreferrer">WhatsApp</a>
               <select
                 value={lead.status}
-                disabled={savingId === lead.id}
+                disabled={busy}
                 onChange={(event) => void changeStatus(lead, event.target.value as TrialLeadStatus)}
                 aria-label={`Статус заявки ${lead.phone}`}
               >
                 {STATUS_OPTIONS.map((status) => <option value={status} key={status}>{STATUS_LABELS[status]}</option>)}
               </select>
+              <button
+                type="button"
+                className="btn trial-lead-delete"
+                disabled={busy}
+                onClick={() => void deleteLead(lead)}
+              >
+                {deletingId === lead.id ? 'Удаляем…' : 'Удалить'}
+              </button>
             </div>
           </article>;
         })}
