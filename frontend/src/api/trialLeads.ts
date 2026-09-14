@@ -58,4 +58,10 @@ export const trialLeadsApi = {
       body: JSON.stringify({ status }),
     }));
   },
+  delete: async (id: string): Promise<void> => {
+    await parse(await fetch(`${BASE_URL}/admin/trial-leads/${id}`, {
+      method: 'DELETE',
+      headers: headers(),
+    }));
+  },
 };
