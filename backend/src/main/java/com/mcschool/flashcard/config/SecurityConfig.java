@@ -107,7 +107,20 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Mindcrafti-Api-Key", "MCP-Protocol-Version", "MCP-Session-Id"));
 
+        // Trial leads are intentionally public. Embedded browsers (notably social-media
+        // in-app browsers) may add their own request headers or expose a non-site Origin,
+        // which used to make Spring reject the CORS preflight before the POST reached us.
+        // Keep this permissive rule scoped to the public lead endpoint only; authenticated
+        // API routes continue to use the restricted origin/header configuration above.
+        CorsConfiguration publicTrialLeadConfiguration = new CorsConfiguration();
+        publicTrialLeadConfiguration.setAllowedOriginPatterns(List.of("*"));
+        publicTrialLeadConfiguration.setAllowedMethods(List.of("POST", "PATCH", "OPTIONS"));
+        publicTrialLeadConfiguration.setAllowedHeaders(List.of("*"));
+        publicTrialLeadConfiguration.setMaxAge(3600L);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/v1/public/trial-leads", publicTrialLeadConfiguration);
+        source.registerCorsConfiguration("/api/v1/public/trial-leads/**", publicTrialLeadConfiguration);
         source.registerCorsConfiguration("/api/**", configuration);
         source.registerCorsConfiguration("/.well-known/**", configuration);
 
