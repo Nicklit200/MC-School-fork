@@ -20,27 +20,52 @@ const STATUS_LABELS: Record<TrialLeadStatus, string> = {
 };
 
 const STATUS_OPTIONS = Object.keys(STATUS_LABELS) as TrialLeadStatus[];
+const AUTO_REFRESH_MS = 10_000;
 
 export function TrialLeadsPage() {
   const [leads, setLeads] = useState<TrialLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState('');
   const [deletingId, setDeletingId] = useState('');
 
-  async function load() {
-    setLoading(true);
+  async function load({ silent = false }: { silent?: boolean } = {}) {
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     setError('');
     try {
       setLeads(await trialLeadsApi.list());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить заявки');
     } finally {
-      setLoading(false);
+      if (silent) setRefreshing(false);
+      else setLoading(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void load({ silent: true });
+    };
+
+    const intervalId = window.setInterval(refresh, AUTO_REFRESH_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const onFocus = () => refresh();
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
 
   const summary = useMemo(() => ({
     total: leads.length,
@@ -85,11 +110,11 @@ export function TrialLeadsPage() {
         <div>
           <p className="trial-leads-eyebrow">Продажи</p>
           <h1>Заявки на пробный урок</h1>
-          <p>Телефон сохраняется до анкеты. Статус показывает последний этап, до которого человек дошёл.</p>
+          <p>Телефон сохраняется до анкеты. Статус показывает последний этап, до которого человек дошёл. Список обновляется автоматически каждые 10 секунд.</p>
         </div>
         <div className="trial-lead-actions">
           <Link className="btn btn--secondary" to="/admin/settings">Уведомления</Link>
-          <button type="button" className="btn" onClick={() => void load()} disabled={loading}>Обновить</button>
+          <button type="button" className="btn" onClick={() => void load({ silent: true })} disabled={loading || refreshing}>{refreshing ? 'Обновляем…' : 'Обновить'}</button>
         </div>
       </div>
 
