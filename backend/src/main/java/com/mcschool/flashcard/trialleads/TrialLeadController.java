@@ -108,7 +108,7 @@ public class TrialLeadController {
                 rs.getObject("tracking_token", UUID.class),
                 rs.getString("status")
         ), clientId);
-        return matches.isEmpty() ? null : matches.getFirst();
+        return matches.isEmpty() ? null : matches.get(0);
     }
 
     private void notifyAdminsAboutNewLead(String phone) {
