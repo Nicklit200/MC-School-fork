@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -69,15 +70,45 @@ public class TrialLeadController {
     @PostMapping("/public/trial-leads")
     @ResponseStatus(HttpStatus.CREATED)
     public PublicLeadResponse create(@Valid @RequestBody CreateLeadRequest request) {
+        String phone = request.phone().strip();
+        String source = clean(request.source());
+        String clientId = cleanOrNull(request.clientId());
+
+        if (clientId != null) {
+            PublicLeadResponse existing = findByClientId(clientId);
+            if (existing != null) return existing;
+        }
+
         UUID id = UUID.randomUUID();
         UUID token = UUID.randomUUID();
-        String phone = request.phone().strip();
-        jdbc.update("""
-                INSERT INTO trial_leads (id, tracking_token, phone, source, status)
-                VALUES (?, ?, ?, ?, 'NEW')
-                """, id, token, phone, clean(request.source()));
+        try {
+            jdbc.update("""
+                    INSERT INTO trial_leads (id, tracking_token, phone, source, status, client_id)
+                    VALUES (?, ?, ?, ?, 'NEW', ?)
+                    """, id, token, phone, source, clientId);
+        } catch (DuplicateKeyException e) {
+            if (clientId != null) {
+                PublicLeadResponse existing = findByClientId(clientId);
+                if (existing != null) return existing;
+            }
+            throw e;
+        }
+
         notifyAdminsAboutNewLead(phone);
         return new PublicLeadResponse(token, "NEW");
+    }
+
+    private PublicLeadResponse findByClientId(String clientId) {
+        List<PublicLeadResponse> matches = jdbc.query("""
+                SELECT tracking_token, status
+                FROM trial_leads
+                WHERE client_id = ?
+                LIMIT 1
+                """, (rs, rowNum) -> new PublicLeadResponse(
+                rs.getObject("tracking_token", UUID.class),
+                rs.getString("status")
+        ), clientId);
+        return matches.isEmpty() ? null : matches.getFirst();
     }
 
     private void notifyAdminsAboutNewLead(String phone) {
@@ -201,7 +232,8 @@ public class TrialLeadController {
 
     public record CreateLeadRequest(
             @NotBlank @Size(max = 40) String phone,
-            @Size(max = 500) String source
+            @Size(max = 500) String source,
+            @Size(max = 80) String clientId
     ) {}
 
     public record UpdateLeadRequest(
