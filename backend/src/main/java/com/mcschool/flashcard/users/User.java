@@ -158,6 +158,12 @@ public class User {
         this.parent = parent;
     }
 
+    public void assignTeacher(User teacher) {
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can be assigned to a teacher");
+        if (teacher == null || teacher.getRole() != Role.TEACHER) throw new IllegalArgumentException("Teacher account is required");
+        this.teacher = teacher;
+    }
+
     public void changeGoogleDriveFolderUrl(String googleDriveFolderUrl) { this.googleDriveFolderUrl = normalizeOptionalValue(googleDriveFolderUrl); }
     public void changeGoogleDriveHomeworkFolderId(String folderId) { this.googleDriveHomeworkFolderId = normalizeOptionalValue(folderId); }
     public void changeGoogleDriveTranscriptFolderId(String folderId) { this.googleDriveTranscriptFolderId = normalizeOptionalValue(folderId); }
