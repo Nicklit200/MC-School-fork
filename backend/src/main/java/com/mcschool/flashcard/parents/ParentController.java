@@ -12,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -43,10 +44,10 @@ public class ParentController {
     @PostMapping("/parents")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('TEACHER')")
-    public ParentService.ParentCredentialsResponse createParent(
+    public ParentService.ManagedParentResponse createParent(
             @AuthenticationPrincipal AuthenticatedUser caller,
             @Valid @RequestBody CreateParentRequest request) {
-        return parentService.createParent(caller, request.fullName());
+        return parentService.createParent(caller, request.fullName(), request.password());
     }
 
     @PostMapping("/parents/{parentId}/students/{studentId}")
@@ -58,15 +59,21 @@ public class ParentController {
         return parentService.linkStudent(caller, parentId, studentId);
     }
 
-    @PostMapping("/parents/{parentId}/reset-password")
+    @PutMapping("/parents/{parentId}/password")
     @PreAuthorize("hasRole('TEACHER')")
-    public ParentService.ParentCredentialsResponse resetPassword(
+    public ParentService.ManagedParentResponse changePassword(
             @AuthenticationPrincipal AuthenticatedUser caller,
-            @PathVariable UUID parentId) {
-        return parentService.resetParentPassword(caller, parentId);
+            @PathVariable UUID parentId,
+            @Valid @RequestBody ChangeParentPasswordRequest request) {
+        return parentService.resetParentPassword(caller, parentId, request.password());
     }
 
     public record CreateParentRequest(
-            @NotBlank @Size(max = 100) String fullName
+            @NotBlank @Size(max = 100) String fullName,
+            @NotBlank @Size(min = 6, max = 100) String password
+    ) {}
+
+    public record ChangeParentPasswordRequest(
+            @NotBlank @Size(min = 6, max = 100) String password
     ) {}
 }
