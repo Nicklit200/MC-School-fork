@@ -1,7 +1,5 @@
 package com.mcschool.flashcard.homeworks;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
@@ -24,14 +22,11 @@ public class HomeworkService {
 
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
-    private final ObjectMapper objectMapper;
 
     public HomeworkService(HomeworkRepository homeworkRepository,
-                           UserRepository userRepository,
-                           ObjectMapper objectMapper) {
+                           UserRepository userRepository) {
         this.homeworkRepository = homeworkRepository;
         this.userRepository = userRepository;
-        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -58,11 +53,7 @@ public class HomeworkService {
                                  SaveHomeworkFinalAnswersRequest request) {
         Homework homework = requireStudentHomework(student, homeworkId);
         if (homework.isSubmitted()) throw new ConflictException("Homework is already submitted");
-        try {
-            homework.changeFinalAnswersJson(objectMapper.writeValueAsString(request.answers()));
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Could not save final answers", e);
-        }
+        homework.changeFinalAnswersJson(toJson(request.answers()));
     }
 
     @Transactional(readOnly = true)
@@ -111,5 +102,20 @@ public class HomeworkService {
                 .filter(u -> !u.isArchived())
                 .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacherId))
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+    }
+
+    private String toJson(List<SaveHomeworkFinalAnswersRequest.FinalAnswer> answers) {
+        return answers.stream()
+                .map(answer -> "{\"label\":\"" + jsonEscape(answer.label().trim())
+                        + "\",\"answer\":\"" + jsonEscape(answer.answer().trim()) + "\"}")
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    private String jsonEscape(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+                .replace("\t", "\\t");
     }
 }
