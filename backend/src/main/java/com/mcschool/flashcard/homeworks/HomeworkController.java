@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -115,6 +116,26 @@ public class HomeworkController {
                                                         @PathVariable UUID homeworkId,
                                                         @PathVariable int pageIndex) {
         byte[] png = homeworkPdfService.renderTeacherPage(caller, homeworkId, pageIndex);
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .contentLength(png.length)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(png);
+    }
+
+    @GetMapping(value = "/homeworks/{homeworkId}/submission/page-count", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole('TEACHER')")
+    public Map<String, Integer> submissionPageCount(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                     @PathVariable UUID homeworkId) {
+        return Map.of("pageCount", homeworkPdfService.teacherSubmissionPageCount(caller, homeworkId));
+    }
+
+    @GetMapping(value = "/homeworks/{homeworkId}/submission/pages/{pageIndex}", produces = MediaType.IMAGE_PNG_VALUE)
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<byte[]> teacherSubmissionPage(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                         @PathVariable UUID homeworkId,
+                                                         @PathVariable int pageIndex) {
+        byte[] png = homeworkPdfService.renderTeacherSubmissionPage(caller, homeworkId, pageIndex);
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_PNG)
                 .contentLength(png.length)
