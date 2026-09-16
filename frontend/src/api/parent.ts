@@ -1,5 +1,5 @@
 import { getAccessToken } from './client';
-import type { ParentAccount, ParentChildStatus, ParentCredentials, ParentInvitation } from './types';
+import type { ParentAccount, ParentChildStatus, ParentInvitation } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
@@ -29,9 +29,10 @@ export const parentApi = {
 
 export const teacherParentApi = {
   list: () => jsonRequest<ParentAccount[]>('GET', '/parents'),
-  create: (fullName: string) => jsonRequest<ParentCredentials>('POST', '/parents', { fullName }),
+  create: (fullName: string, password: string) =>
+    jsonRequest<ParentAccount>('POST', '/parents', { fullName, password }),
   linkStudent: (parentId: string, studentId: string) =>
     jsonRequest<ParentAccount>('POST', `/parents/${parentId}/students/${studentId}`),
-  resetPassword: (parentId: string) =>
-    jsonRequest<ParentCredentials>('POST', `/parents/${parentId}/reset-password`),
+  changePassword: (parentId: string, password: string) =>
+    jsonRequest<ParentAccount>('PUT', `/parents/${parentId}/password`, { password }),
 };
