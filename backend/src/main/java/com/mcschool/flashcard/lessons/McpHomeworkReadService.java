@@ -6,6 +6,7 @@ import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkDeadlinePolicy;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
+import com.mcschool.flashcard.notifications.AppLinks;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -32,16 +33,19 @@ public class McpHomeworkReadService {
     private final HomeworkRepository homeworkRepository;
     private final StudentGroupMemberRepository groupMemberRepository;
     private final GoogleCalendarLessonService calendarLessonService;
+    private final AppLinks appLinks;
 
     public McpHomeworkReadService(
             UserRepository userRepository,
             HomeworkRepository homeworkRepository,
             StudentGroupMemberRepository groupMemberRepository,
-            GoogleCalendarLessonService calendarLessonService) {
+            GoogleCalendarLessonService calendarLessonService,
+            AppLinks appLinks) {
         this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.calendarLessonService = calendarLessonService;
+        this.appLinks = appLinks;
     }
 
     /**
@@ -126,6 +130,7 @@ public class McpHomeworkReadService {
         result.put("mimeType", "application/pdf");
         result.put("sizeBytes", pdf.length);
         result.put("base64", Base64.getEncoder().encodeToString(pdf));
+        result.put("teacherSiteUrl", appLinks.teacherHomeworkLink(student.getId(), homework.getId()));
         result.put("source", "mindcrafti_database");
         return result;
     }
@@ -170,8 +175,7 @@ public class McpHomeworkReadService {
         row.put("submittedAtSchoolTime", homework.getSubmittedAt().atZone(SCHOOL_ZONE).toString());
         row.put("submittedAfterLatestLesson", latestLesson != null
                 && !homework.getSubmittedAt().isBefore(latestLesson.endsAt()));
-        row.put("teacherSitePath", "/teacher/students/" + homework.getStudent().getId()
-                + "/homeworks/" + homework.getId());
+        row.put("teacherSiteUrl", appLinks.teacherHomeworkLink(homework.getStudent().getId(), homework.getId()));
         row.put("submissionApiPath", "/api/v1/homeworks/" + homework.getId() + "/submission");
         row.put("mcpDownloadTool", "download_homework_submission_pdf");
         return row;
