@@ -3,6 +3,8 @@ import type {
   AuthResponse,
   Card,
   CardSummary,
+  DriveItem,
+  DriveUploadResult,
   ImportPreview,
   Language,
   ParsedCard,
@@ -61,6 +63,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+  return parseResponse<T>(response);
+}
+
+async function multipartRequest<T>(path: string, formData: FormData): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  return parseResponse<T>(response);
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
@@ -117,6 +138,20 @@ export const api = {
       }),
     importConfirm: (studentId: string, cards: ParsedCard[]) =>
       request<Card[]>('POST', `/students/${studentId}/cards/import`, { cards }),
+  },
+  drive: {
+    listSharedDrives: () => request<DriveItem[]>('GET', '/drive/shared-drives'),
+    listFolders: (driveId: string, parentId?: string) => {
+      const query = new URLSearchParams({ driveId });
+      if (parentId) query.set('parentId', parentId);
+      return request<DriveItem[]>('GET', `/drive/folders?${query.toString()}`);
+    },
+    upload: (folderId: string, file: File) => {
+      const formData = new FormData();
+      formData.append('folderId', folderId);
+      formData.append('file', file);
+      return multipartRequest<DriveUploadResult>('/drive/upload', formData);
+    },
   },
   study: {
     today: () => request<Today>('GET', '/study/today'),

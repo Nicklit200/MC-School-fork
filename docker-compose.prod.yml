@@ -45,6 +45,10 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      # Google Drive service-account JSON. Keep the real value only in .env / secret storage.
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      MAX_UPLOAD_FILE_SIZE: ${MAX_UPLOAD_FILE_SIZE:-20MB}
+      MAX_UPLOAD_REQUEST_SIZE: ${MAX_UPLOAD_REQUEST_SIZE:-20MB}
       # Email (optional). Leave MAIL_ENABLED=false to log instead of send.
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       MAIL_FROM: ${MAIL_FROM:-no-reply@example.com}

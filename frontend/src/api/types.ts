@@ -61,6 +61,17 @@ export interface ImportPreview {
   warnings: string[];
 }
 
+export interface DriveItem {
+  id: string;
+  name: string;
+}
+
+export interface DriveUploadResult {
+  id: string;
+  name: string;
+  webViewLink: string;
+}
+
 export interface Today {
   totalCards: number;
   dueCardCount: number;
