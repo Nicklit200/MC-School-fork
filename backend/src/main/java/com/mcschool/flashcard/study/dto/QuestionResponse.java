@@ -13,6 +13,7 @@ public record QuestionResponse(
         String question,
         List<String> options,
         int answeredCount,
-        int totalCards
+        int totalCards,
+        Integer timeLimitSeconds
 ) {
 }

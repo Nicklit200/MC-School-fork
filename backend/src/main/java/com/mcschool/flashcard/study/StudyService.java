@@ -158,7 +158,8 @@ public class StudyService {
                         .map(StudySessionItem::getCard)
                         .toList());
         int answered = (int) itemRepository.countBySessionIdAndState(sessionId, ItemState.ANSWERED_CORRECT);
-        return new QuestionResponse(card.getId(), card.getQuestion(), options, answered, session.getTotalCards());
+        return new QuestionResponse(card.getId(), card.getQuestion(), options, answered, session.getTotalCards(),
+                card.getTimeLimitSeconds());
     }
 
     @Transactional
@@ -173,9 +174,10 @@ public class StudyService {
                         "Card is not part of this session or has already been answered"));
 
         Card card = item.getCard();
-        String selectedAnswer = request.selectedAnswer().strip();
+        boolean timedOut = Boolean.TRUE.equals(request.timedOut());
+        String selectedAnswer = request.selectedAnswer() == null ? "" : request.selectedAnswer().strip();
         item.recordSelectedAnswer(selectedAnswer);
-        boolean correct = card.getCorrectAnswer().equals(selectedAnswer);
+        boolean correct = !timedOut && card.getCorrectAnswer().equals(selectedAnswer);
         if (correct) {
             if (item.isFirstTryClean()) {
                 session.recordCorrectFirstTry();

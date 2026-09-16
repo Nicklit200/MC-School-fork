@@ -76,6 +76,13 @@ public class Card {
     private LocalDate dueDate;
 
     /**
+     * Optional time limit (seconds) the teacher sets for answering this card in a
+     * session. {@code null} means no limit. Enforced by the study UI as a countdown.
+     */
+    @Column(name = "time_limit_seconds")
+    private Integer timeLimitSeconds;
+
+    /**
      * Soft-delete flag. An archived card is hidden from all lists and study, but the
      * row is kept so study-session history that references it stays intact.
      */
@@ -125,6 +132,11 @@ public class Card {
     public void edit(String question, String correctAnswer) {
         this.question = question.strip();
         this.correctAnswer = correctAnswer.strip();
+    }
+
+    /** Sets (or clears, with {@code null}) the per-card answer time limit in seconds. */
+    public void changeTimeLimit(Integer timeLimitSeconds) {
+        this.timeLimitSeconds = timeLimitSeconds;
     }
 
     /** Soft-deletes the card: it disappears from lists and study but the row is kept. */

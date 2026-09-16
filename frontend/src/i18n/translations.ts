@@ -85,6 +85,9 @@ const ru = {
   'cards.deletePrompt': 'Удалить карточку?',
   'cards.deleted': 'Карточка удалена',
   'cards.tooFew': 'Меньше {min} карточек — ученик пока не сможет начать сессию. Добавьте ещё карточки.',
+  'cards.timeLimit': 'Лимит времени на ответ (сек)',
+  'cards.noLimit': 'Без лимита',
+  'cards.secondsShort': 'с',
 
   'homeworks.title': 'Домашние задания',
   'homeworks.create': 'Создать домашку',
@@ -132,6 +135,9 @@ const ru = {
   'session.feedbackWrong': 'Неправильно',
   'session.next': 'Дальше',
   'session.finish': 'Завершить',
+  'session.timeUp': 'Время вышло!',
+  'session.secondsLeft': 'Осталось секунд',
+  'session.noScreenshotHint': 'Скриншоты отключены во время сессии',
 
   'result.title': 'Сессия завершена',
   'result.correctFirstTry': 'Правильно с первого раза',
@@ -241,6 +247,9 @@ const de: Record<keyof typeof ru, string> = {
   'cards.deletePrompt': 'Karte löschen?',
   'cards.deleted': 'Karte gelöscht',
   'cards.tooFew': 'Weniger als {min} Karten — der Schüler kann noch keine Sitzung starten. Füge weitere Karten hinzu.',
+  'cards.timeLimit': 'Zeitlimit zum Antworten (Sek.)',
+  'cards.noLimit': 'Kein Limit',
+  'cards.secondsShort': 's',
 
   'homeworks.title': 'Hausaufgaben',
   'homeworks.create': 'Hausaufgabe erstellen',
@@ -288,6 +297,9 @@ const de: Record<keyof typeof ru, string> = {
   'session.feedbackWrong': 'Falsch',
   'session.next': 'Weiter',
   'session.finish': 'Beenden',
+  'session.timeUp': 'Zeit abgelaufen!',
+  'session.secondsLeft': 'Sekunden übrig',
+  'session.noScreenshotHint': 'Screenshots sind während der Sitzung deaktiviert',
 
   'result.title': 'Sitzung beendet',
   'result.correctFirstTry': 'Beim ersten Versuch richtig',

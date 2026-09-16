@@ -46,6 +46,7 @@ function ManualForm({ homeworkId, onChanged }: { homeworkId: string; onChanged: 
   const { t } = useI18n();
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
+  const [timeLimit, setTimeLimit] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,9 +55,11 @@ function ManualForm({ homeworkId, onChanged }: { homeworkId: string; onChanged: 
     setError(null);
     setSaved(false);
     try {
-      await api.cards.createInHomework(homeworkId, question.trim(), answer.trim());
+      const seconds = timeLimit.trim() === '' ? null : Number(timeLimit);
+      await api.cards.createInHomework(homeworkId, question.trim(), answer.trim(), seconds);
       setQuestion('');
       setAnswer('');
+      setTimeLimit('');
       setSaved(true);
       onChanged();
     } catch (e) {
@@ -75,6 +78,18 @@ function ManualForm({ homeworkId, onChanged }: { homeworkId: string; onChanged: 
       <label className="field">
         <span className="field__label">{t('cards.answer')}</span>
         <input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
+      </label>
+      <label className="field">
+        <span className="field__label">{t('cards.timeLimit')}</span>
+        <input
+          className="input"
+          type="number"
+          min={1}
+          max={3600}
+          value={timeLimit}
+          onChange={(e) => setTimeLimit(e.target.value)}
+          placeholder={t('cards.noLimit')}
+        />
       </label>
       <button className="btn" type="submit">{t('createCards.addOne')}</button>
     </form>

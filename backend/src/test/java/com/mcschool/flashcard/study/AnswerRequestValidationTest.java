@@ -20,7 +20,7 @@ class AnswerRequestValidationTest {
 
     @Test
     void selectedAnswerCannotExceedDatabaseColumnLength() {
-        AnswerRequest request = new AnswerRequest(UUID.randomUUID(), "x".repeat(501));
+        AnswerRequest request = new AnswerRequest(UUID.randomUUID(), "x".repeat(501), false);
 
         assertThat(validator.validate(request))
                 .anyMatch(violation -> violation.getPropertyPath().toString().equals("selectedAnswer"));

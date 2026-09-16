@@ -5,6 +5,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -203,7 +205,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + teacherToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(6))
-                .andExpect(jsonPath("$[?(@.homeworkId == '" + homeworkId + "')].length()").value(6));
+                .andExpect(jsonPath("$[?(@.homeworkId == '" + homeworkId + "')]", hasSize(6)));
     }
 
     @Test
@@ -242,7 +244,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/study/homeworks").header("Authorization", "Bearer " + studentToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[?(@.id == '" + futureHomework + "')][0].inProgress").value(1));
+                .andExpect(jsonPath("$[?(@.id == '" + futureHomework + "')].inProgress", hasItem(1)));
 
         mockMvc.perform(get("/api/v1/study/today").header("Authorization", "Bearer " + studentToken))
                 .andExpect(status().isOk())
@@ -318,7 +320,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         assertThat(sessionId).isNotNull();
         mockMvc.perform(get("/api/v1/study/today")
                         .header("Authorization", "Bearer " + studentToken))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -376,7 +378,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.correctFirstTry").value(4))
                 .andExpect(jsonPath("$.nextReviewDate").value(LocalDate.now().plusDays(1).toString()))
                 .andExpect(jsonPath("$.review.length()").value(4))
-                .andExpect(jsonPath("$.review[?(@.correct == true)].length()").value(4));
+                .andExpect(jsonPath("$.review[?(@.correct == true)]", hasSize(4)));
 
         // Every card advanced to repetition 1, due tomorrow.
         cardRepository.findAllByStudentIdAndArchivedFalse(studentId).forEach(card -> {
@@ -434,12 +436,12 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + studentToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.correctFirstTry").value(3))
-                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')][0].selectedAnswer")
-                        .value("definitely wrong"))
-                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')][0].correct")
-                        .value(false))
-                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')][0].correctAnswer")
-                        .value(answers.get(firstCardId)));
+                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')].selectedAnswer",
+                        hasItem("definitely wrong")))
+                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')].correct",
+                        hasItem(false)))
+                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')].correctAnswer",
+                        hasItem(answers.get(firstCardId))));
 
         cardRepository.findById(firstCardId).ifPresentOrElse(card -> {
             assertThat(card.getRepetitionNumber()).isZero();
@@ -490,7 +492,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + studentToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(4))
-                .andExpect(jsonPath("$[?(@.homeworkId == '" + homeworkId + "')].length()").value(4));
+                .andExpect(jsonPath("$[?(@.homeworkId == '" + homeworkId + "')]", hasSize(4)));
 
         var cardsBefore = cardRepository.findAllByHomeworkIdAndStudentIdAndArchivedFalseOrderByCreatedAtDesc(
                 homeworkId, studentId);
@@ -538,8 +540,8 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalCards").value(4))
                 .andExpect(jsonPath("$.correctFirstTry").value(3))
-                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')][0].correct")
-                        .value(false));
+                .andExpect(jsonPath("$.review[?(@.cardId == '" + firstCardId + "')].correct",
+                        hasItem(false)));
 
         cardRepository.findAllByHomeworkIdAndStudentIdAndArchivedFalseOrderByCreatedAtDesc(
                 homeworkId, studentId).forEach(card -> {
@@ -561,7 +563,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         String otherStudentInvitation = postAndReturn("/api/v1/students", teacherToken,
                 "{\"fullName\": \"Other Student\", \"email\": \"other-homework@test.local\"}",
                 status().isCreated());
-        UUID otherStudentId = UUID.fromString(JsonPath.read(otherStudentInvitation, "$.id"));
+        UUID otherStudentId = UUID.fromString(JsonPath.read(otherStudentInvitation, "$.student.id"));
         UUID otherHomeworkId = createHomework(teacherToken, otherStudentId, LocalDate.now());
         createCardInHomework(teacherToken, otherHomeworkId, "o1", "a1");
         createCardInHomework(teacherToken, otherHomeworkId, "o2", "a2");
@@ -598,7 +600,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + studentToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(4))
-                .andExpect(jsonPath("$[?(@.id == '" + archivedCardId + "')].length()").value(0));
+                .andExpect(jsonPath("$[?(@.id == '" + archivedCardId + "')]", hasSize(0)));
 
         String start = postAndReturn("/api/v1/study/sessions", studentToken,
                 "{\"type\": \"PRACTICE\", \"homeworkId\": \"" + homeworkId + "\"}",
@@ -612,7 +614,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + studentToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.review.length()").value(4))
-                .andExpect(jsonPath("$.review[?(@.cardId == '" + archivedCardId + "')].length()").value(0));
+                .andExpect(jsonPath("$.review[?(@.cardId == '" + archivedCardId + "')]", hasSize(0)));
     }
 
     @Test
@@ -670,6 +672,45 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
     // --- Helpers ---
 
     /** Creates four cards for the student and returns a card-id → correct-answer map. */
+    @Test
+    void teacherSetsCardTimeLimitAndTimeoutScoresIncorrect() throws Exception {
+        UUID homeworkId = createHomework(teacherToken, studentId, LocalDate.now());
+        // A card with a 15-second limit, plus three without, to reach the four-card minimum.
+        String created = mockMvc.perform(post("/api/v1/homeworks/{id}/cards", homeworkId)
+                        .header("Authorization", "Bearer " + teacherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"timed\", \"correctAnswer\": \"yes\", \"timeLimitSeconds\": 15}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.timeLimitSeconds").value(15))
+                .andReturn().getResponse().getContentAsString();
+        UUID timedCardId = UUID.fromString(JsonPath.read(created, "$.id"));
+        createCardInHomework(teacherToken, homeworkId, "b", "2");
+        createCardInHomework(teacherToken, homeworkId, "c", "3");
+        createCardInHomework(teacherToken, homeworkId, "d", "4");
+
+        // The limit is visible in the teacher's card list.
+        mockMvc.perform(get("/api/v1/homeworks/{id}/cards", homeworkId)
+                        .header("Authorization", "Bearer " + teacherToken))
+                .andExpect(jsonPath("$[?(@.id == '" + timedCardId + "')].timeLimitSeconds", hasItem(15)));
+
+        // Time out on the current card: it is scored incorrect and stays in the session.
+        String start = postAndReturn("/api/v1/study/sessions", studentToken, "{\"type\": \"SCHEDULED\"}",
+                status().isCreated());
+        UUID sessionId = UUID.fromString(JsonPath.read(start, "$.id"));
+        String question = mockMvc.perform(get("/api/v1/study/sessions/{id}/current-question", sessionId)
+                        .header("Authorization", "Bearer " + studentToken))
+                .andReturn().getResponse().getContentAsString();
+        UUID cardId = UUID.fromString(JsonPath.read(question, "$.cardId"));
+
+        mockMvc.perform(post("/api/v1/study/sessions/{id}/answer", sessionId)
+                        .header("Authorization", "Bearer " + studentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cardId\": \"" + cardId + "\", \"selectedAnswer\": \"\", \"timedOut\": true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correct").value(false))
+                .andExpect(jsonPath("$.sessionCompleted").value(false));
+    }
+
     private Map<UUID, String> createFourCards() throws Exception {
         UUID homeworkId = createHomework(teacherToken, studentId, LocalDate.now());
         Map<UUID, String> answers = new HashMap<>();

@@ -19,13 +19,17 @@ export function CardRow({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [question, setQuestion] = useState(card.question);
   const [answer, setAnswer] = useState(card.correctAnswer);
+  const [timeLimit, setTimeLimit] = useState(
+    card.timeLimitSeconds != null ? String(card.timeLimitSeconds) : '',
+  );
   const [error, setError] = useState<string | null>(null);
 
   async function onSave(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      await api.cards.update(card.id, question.trim(), answer.trim());
+      const seconds = timeLimit.trim() === '' ? null : Number(timeLimit);
+      await api.cards.update(card.id, question.trim(), answer.trim(), seconds);
       setEditing(false);
       onChanged();
     } catch (e) {
@@ -57,6 +61,18 @@ export function CardRow({
           <span className="field__label">{t('cards.answer')}</span>
           <input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
         </label>
+        <label className="field">
+          <span className="field__label">{t('cards.timeLimit')}</span>
+          <input
+            className="input"
+            type="number"
+            min={1}
+            max={3600}
+            value={timeLimit}
+            onChange={(e) => setTimeLimit(e.target.value)}
+            placeholder={t('cards.noLimit')}
+          />
+        </label>
         <div className="row">
           <button className="btn" type="submit">{t('common.save')}</button>
           <button className="btn btn--ghost" type="button" onClick={() => setEditing(false)}>
@@ -71,7 +87,10 @@ export function CardRow({
     <div className="list-row">
       <div>
         <div className="list-row__title">{card.question}</div>
-        <div className="muted">{card.correctAnswer}</div>
+        <div className="muted">
+          {card.correctAnswer}
+          {card.timeLimitSeconds != null && ` · ⏱ ${card.timeLimitSeconds}${t('cards.secondsShort')}`}
+        </div>
       </div>
       <div className="row" style={{ alignItems: 'center', flex: '0 0 auto' }}>
         <span className={`pill ${card.status === 'LEARNED' ? 'pill--learned' : 'pill--active'}`}>

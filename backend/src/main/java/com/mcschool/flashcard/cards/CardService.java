@@ -78,8 +78,9 @@ public class CardService {
                                              CreateCardRequest request) {
         User teacherEntity = requireTeacher(teacher.id());
         Homework homework = requireOwnedHomework(teacher.id(), homeworkId);
-        Card card = cardRepository.save(
-                Card.create(homework, teacherEntity, request.question(), request.correctAnswer()));
+        Card card = Card.create(homework, teacherEntity, request.question(), request.correctAnswer());
+        card.changeTimeLimit(request.timeLimitSeconds());
+        card = cardRepository.save(card);
         cardPushNotificationService.notifyCardsAssigned(
                 homework.getStudent().getId(), homework.getId(), homework.getStartDate());
         return CardResponse.from(card);
@@ -116,6 +117,7 @@ public class CardService {
     public CardResponse updateCard(AuthenticatedUser teacher, UUID cardId, UpdateCardRequest request) {
         Card card = requireOwnedCard(teacher.id(), cardId);
         card.edit(request.question(), request.correctAnswer());
+        card.changeTimeLimit(request.timeLimitSeconds());
         return CardResponse.from(card);
     }
 
