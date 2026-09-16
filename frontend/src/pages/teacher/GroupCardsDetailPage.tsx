@@ -83,7 +83,7 @@ export function GroupCardsDetailPage() {
     setSaving(true);
     setError(null);
     try {
-      await Promise.all(card.copies.map((copy) => api.cards.update(copy.id, nextQuestion, nextAnswer)));
+      await Promise.all(card.copies.map((copy) => api.cards.update(copy.id, nextQuestion, nextAnswer, copy.timeLimitSeconds)));
       setEditingKey(null);
       setMessage(language === 'DE' ? 'Karte für die ganze Gruppe aktualisiert.' : 'Карточка обновлена у всей группы.');
       await reload();
