@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { parentApi } from '../../api/parent';
 import type { ParentChildStatus, ParentHomeworkStatus } from '../../api/types';
+import { ParentTeacherChat } from '../../components/ParentTeacherChat';
 import { useI18n } from '../../i18n/I18nContext';
 
 export function ParentPage() {
@@ -22,8 +23,8 @@ export function ParentPage() {
         <h1>{language === 'DE' ? 'Meine Kinder' : 'Мои дети'}</h1>
         <p className="muted">
           {language === 'DE'
-            ? 'Hier siehst du den aktuellen Stand und den vollständigen Hausaufgaben-Verlauf.'
-            : 'Здесь видно, что ребёнок должен сделать сегодня, и вся история домашней работы.'}
+            ? 'Hier siehst du den aktuellen Stand, die Hausaufgaben und kannst der Lehrkraft schreiben.'
+            : 'Здесь видно состояние домашней работы и можно написать учителю.'}
         </p>
       </div>
 
@@ -75,6 +76,13 @@ export function ParentPage() {
               </div>
             )}
           </div>
+
+          <ParentTeacherChat
+            studentId={child.studentId}
+            studentName={child.studentName}
+            language={language}
+            viewerRole="PARENT"
+          />
         </div>
       ))}
     </div>
