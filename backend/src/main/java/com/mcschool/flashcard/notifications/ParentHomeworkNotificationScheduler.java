@@ -1,15 +1,13 @@
 package com.mcschool.flashcard.notifications;
 
-import com.mcschool.flashcard.homeworks.Homework;
+import com.mcschool.flashcard.cards.CardRepository;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
-import java.time.Instant;
+import com.mcschool.flashcard.users.UserRepository;
+import com.mcschool.flashcard.users.UserStatus;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,8 +17,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Evening check: once homework is still unfinished at the configured cutoff,
- * notify the linked parent once by email/logging and Web Push.
+ * Evening parent-control check. At the configured cutoff, notify the linked parent
+ * when the child still has unfinished PDF homework and/or due flashcards for today.
+ *
+ * The scheduler runs once per day, so one child produces at most one evening push
+ * containing the complete current status instead of separate notifications for each
+ * homework/card.
  */
 @Component
 @ConditionalOnProperty(name = "app.parent-homework-reminders.enabled", havingValue = "true")
@@ -28,19 +30,25 @@ public class ParentHomeworkNotificationScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ParentHomeworkNotificationScheduler.class);
 
+    private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
+    private final CardRepository cardRepository;
     private final NotificationService notificationService;
     private final PushSubscriptionRepository subscriptionRepository;
     private final WebPushService webPushService;
     private final ZoneId zone;
 
     public ParentHomeworkNotificationScheduler(
+            UserRepository userRepository,
             HomeworkRepository homeworkRepository,
+            CardRepository cardRepository,
             NotificationService notificationService,
             PushSubscriptionRepository subscriptionRepository,
             WebPushService webPushService,
             @Value("${app.parent-homework-reminders.zone:Europe/Berlin}") String zone) {
+        this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
+        this.cardRepository = cardRepository;
         this.notificationService = notificationService;
         this.subscriptionRepository = subscriptionRepository;
         this.webPushService = webPushService;
@@ -48,45 +56,59 @@ public class ParentHomeworkNotificationScheduler {
     }
 
     @Scheduled(
-            cron = "${app.parent-homework-reminders.cron:0 0 20 * * *}",
+            cron = "${app.parent-homework-reminders.cron:0 0 19 * * *}",
             zone = "${app.parent-homework-reminders.zone:Europe/Berlin}")
-    @Transactional
+    @Transactional(readOnly = true)
     public void notifyParents() {
         LocalDate today = LocalDate.now(zone);
-        List<Homework> open = homeworkRepository.findOpenForParentNotification(today);
-        if (open.isEmpty()) return;
 
-        Map<UUID, List<Homework>> byStudent = open.stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        homework -> homework.getStudent().getId(), LinkedHashMap::new, java.util.stream.Collectors.toList()));
-
-        Instant now = Instant.now();
-        for (List<Homework> studentHomeworks : byStudent.values()) {
-            Homework first = studentHomeworks.get(0);
-            User student = first.getStudent();
+        for (User student : userRepository.findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(
+                Role.STUDENT, UserStatus.ACTIVE)) {
             User parent = student.getParent();
-            if (parent == null) continue;
+            if (parent == null || parent.isArchived() || parent.getStatus() != UserStatus.ACTIVE) {
+                continue;
+            }
 
-            long count = studentHomeworks.size();
-            notificationService.sendParentMissedHomework(parent, student, count);
+            long openHomeworks = homeworkRepository.countOpenWorksheetsForDay(student.getId(), today);
+            long dueCards = cardRepository.countDueCards(student.getId(), today);
+            if (openHomeworks == 0 && dueCards == 0) {
+                continue;
+            }
 
+            // Keep the existing email/logging fallback for unfinished PDF homework.
+            if (openHomeworks > 0) {
+                notificationService.sendParentMissedHomework(parent, student, openHomeworks);
+            }
+
+            String body = buildPushBody(student.getFullName(), dueCards, openHomeworks);
+            int subscriptions = 0;
+            int delivered = 0;
             if (webPushService.isConfigured()) {
-                String body = student.getFullName() + " ещё не выполнил(а) домашнюю работу на сегодня.";
                 for (PushSubscription subscription : subscriptionRepository.findAllByUserId(parent.getId())) {
+                    subscriptions++;
                     try {
                         webPushService.send(subscription, "Mindcrafti School", body, "/parent");
+                        delivered++;
                     } catch (RuntimeException ex) {
-                        log.warn("Parent push failed: parentId={} studentId={} endpoint={}",
+                        log.warn("Parent progress push failed: parentId={} studentId={} endpoint={}",
                                 parent.getId(), student.getId(), subscription.getEndpoint(), ex);
                     }
                 }
             }
 
-            for (Homework homework : studentHomeworks) {
-                homework.markParentNotified(now);
-            }
-            log.info("Parent notified about unfinished homework: parentId={} studentId={} count={}",
-                    parent.getId(), student.getId(), count);
+            log.info(
+                    "Parent progress check: parentId={} studentId={} openHomeworks={} dueCards={} subscriptions={} delivered={}",
+                    parent.getId(), student.getId(), openHomeworks, dueCards, subscriptions, delivered);
         }
+    }
+
+    static String buildPushBody(String studentName, long dueCards, long openHomeworks) {
+        if (dueCards > 0 && openHomeworks > 0) {
+            return studentName + ": не выполнены " + dueCards + " карточек и " + openHomeworks + " домашняя работа.";
+        }
+        if (dueCards > 0) {
+            return studentName + ": не выполнены карточки на сегодня — " + dueCards + ".";
+        }
+        return studentName + ": домашняя работа на сегодня ещё не выполнена.";
     }
 }
