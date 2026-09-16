@@ -2,33 +2,48 @@ package com.mcschool.flashcard.parents;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.cards.CardRepository;
+import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import com.mcschool.flashcard.users.UserResponse;
+import com.mcschool.flashcard.users.UserStatus;
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ParentService {
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
     private final CardRepository cardRepository;
+    private final PasswordEncoder passwordEncoder;
     private final ZoneId zone;
 
     public ParentService(UserRepository userRepository,
                          HomeworkRepository homeworkRepository,
                          CardRepository cardRepository,
+                         PasswordEncoder passwordEncoder,
                          @Value("${app.parent-homework-reminders.zone:Europe/Berlin}") String zone) {
         this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
         this.cardRepository = cardRepository;
+        this.passwordEncoder = passwordEncoder;
         this.zone = ZoneId.of(zone);
     }
 
@@ -43,6 +58,142 @@ public class ParentService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ManagedParentResponse> managedParents(AuthenticatedUser teacher) {
+        requireTeacher(teacher);
+        return visibleParents(teacher.id()).values().stream()
+                .sorted(Comparator.comparing(User::getFullName, String.CASE_INSENSITIVE_ORDER))
+                .map(parent -> toManagedParent(parent, teacher.id()))
+                .toList();
+    }
+
+    @Transactional
+    public ParentCredentialsResponse createParent(AuthenticatedUser teacher, String fullName) {
+        requireTeacher(teacher);
+        User teacherEntity = userRepository.findById(teacher.id())
+                .filter(user -> !user.isArchived() && user.getRole() == Role.TEACHER)
+                .orElseThrow(() -> new ResourceNotFoundException("Teacher account not found"));
+
+        String normalizedName = fullName == null ? "" : fullName.trim();
+        if (normalizedName.isBlank()) {
+            throw new IllegalArgumentException("Parent name is required");
+        }
+
+        String username = generateUsername(normalizedName);
+        String temporaryPassword = generateTemporaryPassword();
+        User parent = User.activeParent(
+                normalizedName,
+                username,
+                passwordEncoder.encode(temporaryPassword),
+                teacherEntity);
+        userRepository.save(parent);
+        return new ParentCredentialsResponse(UserResponse.from(parent), temporaryPassword);
+    }
+
+    @Transactional
+    public ManagedParentResponse linkStudent(AuthenticatedUser teacher, UUID parentId, UUID studentId) {
+        requireTeacher(teacher);
+        User parent = requireVisibleParent(teacher.id(), parentId);
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.linkParent(parent);
+        return toManagedParent(parent, teacher.id());
+    }
+
+    @Transactional
+    public ParentCredentialsResponse resetParentPassword(AuthenticatedUser teacher, UUID parentId) {
+        requireTeacher(teacher);
+        User parent = requireVisibleParent(teacher.id(), parentId);
+        String username = parent.getUsername();
+        if (username == null || username.isBlank()) {
+            username = generateUsername(parent.getFullName());
+        }
+        String temporaryPassword = generateTemporaryPassword();
+        parent.setParentSchoolCredentials(username, passwordEncoder.encode(temporaryPassword));
+        return new ParentCredentialsResponse(UserResponse.from(parent), temporaryPassword);
+    }
+
+    private Map<UUID, User> visibleParents(UUID teacherId) {
+        Map<UUID, User> parents = new LinkedHashMap<>();
+        for (User user : userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacherId)) {
+            if (user.getRole() == Role.PARENT) {
+                parents.put(user.getId(), user);
+            } else if (user.getRole() == Role.STUDENT && user.getParent() != null && !user.getParent().isArchived()) {
+                parents.put(user.getParent().getId(), user.getParent());
+            }
+        }
+        return parents;
+    }
+
+    private User requireVisibleParent(UUID teacherId, UUID parentId) {
+        User parent = userRepository.findById(parentId)
+                .filter(user -> user.getRole() == Role.PARENT)
+                .filter(user -> !user.isArchived())
+                .orElseThrow(() -> new ResourceNotFoundException("Parent account not found"));
+
+        boolean directlyManaged = parent.getTeacher() != null && parent.getTeacher().getId().equals(teacherId);
+        boolean linkedToOwnedStudent = userRepository.findAllByParentIdAndArchivedFalseOrderByFullNameAsc(parentId).stream()
+                .anyMatch(student -> student.getTeacher() != null && student.getTeacher().getId().equals(teacherId));
+        if (!directlyManaged && !linkedToOwnedStudent) {
+            throw new ResourceNotFoundException("Parent account not found");
+        }
+        return parent;
+    }
+
+    private User requireOwnedStudent(UUID teacherId, UUID studentId) {
+        return userRepository.findById(studentId)
+                .filter(user -> user.getRole() == Role.STUDENT)
+                .filter(user -> !user.isArchived())
+                .filter(user -> user.getTeacher() != null && user.getTeacher().getId().equals(teacherId))
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+    }
+
+    private ManagedParentResponse toManagedParent(User parent, UUID teacherId) {
+        List<ManagedChildResponse> linkedChildren = userRepository
+                .findAllByParentIdAndArchivedFalseOrderByFullNameAsc(parent.getId()).stream()
+                .filter(student -> student.getTeacher() != null && student.getTeacher().getId().equals(teacherId))
+                .map(student -> new ManagedChildResponse(student.getId(), student.getFullName()))
+                .toList();
+        return new ManagedParentResponse(
+                parent.getId(),
+                parent.getFullName(),
+                parent.getEmail(),
+                parent.getUsername(),
+                parent.getStatus(),
+                linkedChildren);
+    }
+
+    private String generateUsername(String fullName) {
+        String first = fullName.trim().split("\\s+")[0];
+        String base = first.replaceAll("[^\\p{L}\\p{N}]", "");
+        if (base.isBlank()) {
+            base = "parent";
+        }
+        if (base.length() > 40) {
+            base = base.substring(0, 40);
+        }
+        for (int attempt = 0; attempt < 2000; attempt++) {
+            String candidate = base + (100 + RANDOM.nextInt(900));
+            if (!userRepository.existsByUsernameIgnoreCase(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Could not generate a unique parent username");
+    }
+
+    private String generateTemporaryPassword() {
+        StringBuilder password = new StringBuilder(10);
+        for (int i = 0; i < 10; i++) {
+            password.append(PASSWORD_ALPHABET.charAt(RANDOM.nextInt(PASSWORD_ALPHABET.length())));
+        }
+        return password.toString();
+    }
+
+    private static void requireTeacher(AuthenticatedUser caller) {
+        if (caller.role() != Role.TEACHER) {
+            throw new IllegalStateException("Teacher role required");
+        }
+    }
+
     private ParentChildStatusResponse toStatus(User student, LocalDate today) {
         List<Homework> todayHomeworks = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId())
                 .stream()
@@ -55,4 +206,17 @@ public class ParentService {
         return new ParentChildStatusResponse(
                 student.getId(), student.getFullName(), todayHomeworks.size(), completed, open, cardsDue);
     }
+
+    public record ManagedChildResponse(UUID id, String fullName) {}
+
+    public record ManagedParentResponse(
+            UUID id,
+            String fullName,
+            String email,
+            String username,
+            UserStatus status,
+            List<ManagedChildResponse> children
+    ) {}
+
+    public record ParentCredentialsResponse(UserResponse parent, String temporaryPassword) {}
 }
