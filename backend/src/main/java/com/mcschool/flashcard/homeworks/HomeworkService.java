@@ -56,14 +56,20 @@ public class HomeworkService {
     @Transactional
     public void saveFinalAnswers(AuthenticatedUser student, UUID homeworkId,
                                  SaveHomeworkFinalAnswersRequest request) {
-        if (student.role() != Role.STUDENT) throw new IllegalStateException("Student role required");
-        Homework homework = homeworkRepository.findByIdAndStudentId(homeworkId, student.id())
-                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        Homework homework = requireStudentHomework(student, homeworkId);
         if (homework.isSubmitted()) throw new ConflictException("Homework is already submitted");
         try {
             homework.changeFinalAnswersJson(objectMapper.writeValueAsString(request.answers()));
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Could not save final answers", e);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public void requireFinalAnswers(AuthenticatedUser student, UUID homeworkId) {
+        Homework homework = requireStudentHomework(student, homeworkId);
+        if (homework.getFinalAnswersJson() == null || homework.getFinalAnswersJson().isBlank()) {
+            throw new ConflictException("Enter and save final answers before submitting homework");
         }
     }
 
@@ -82,6 +88,12 @@ public class HomeworkService {
             throw new ConflictException("Homework with cards cannot be deleted from the PDF overview");
         }
         homeworkRepository.delete(homework);
+    }
+
+    private Homework requireStudentHomework(AuthenticatedUser student, UUID homeworkId) {
+        if (student.role() != Role.STUDENT) throw new IllegalStateException("Student role required");
+        return homeworkRepository.findByIdAndStudentId(homeworkId, student.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
     }
 
     private List<HomeworkResponse> listForStudent(UUID studentId) {
