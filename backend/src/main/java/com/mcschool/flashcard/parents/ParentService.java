@@ -6,6 +6,7 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkDeadlinePolicy;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.homeworks.HomeworkStats;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -18,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -192,28 +195,42 @@ public class ParentService {
     }
 
     private ParentChildStatusResponse toStatus(User student, LocalDate today) {
-        List<Homework> allHomeworks = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId())
-                .stream()
-                .filter(Homework::hasWorksheet)
-                .toList();
+        List<Homework> allHomeworks = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId());
+        Map<UUID, HomeworkStats> statsByHomework = homeworkRepository.statsByStudentId(student.getId()).stream()
+                .collect(Collectors.toMap(HomeworkStats::homeworkId, Function.identity()));
+
         List<Homework> todayHomeworks = allHomeworks.stream()
+                .filter(Homework::hasWorksheet)
                 .filter(homework -> homework.getStartDate().equals(today))
                 .toList();
         long completed = todayHomeworks.stream().filter(Homework::isSubmitted).count();
         long open = todayHomeworks.size() - completed;
         long cardsDue = cardRepository.countDueCards(student.getId(), today);
+
         List<ParentHomeworkStatusResponse> history = allHomeworks.stream()
-                .limit(30)
-                .map(homework -> new ParentHomeworkStatusResponse(
-                        homework.getId(),
-                        homework.getStartDate(),
-                        homework.getWorksheetFilename(),
-                        homework.isSubmitted(),
-                        homework.getSubmittedAt(),
-                        HomeworkDeadlinePolicy.deadlineAt(homework.getStartDate()),
-                        HomeworkDeadlinePolicy.isOverdue(homework),
-                        HomeworkDeadlinePolicy.wasSubmittedLate(homework)))
+                .filter(homework -> {
+                    HomeworkStats stats = statsByHomework.get(homework.getId());
+                    return homework.hasWorksheet() || (stats != null && stats.totalCards() > 0);
+                })
+                .map(homework -> {
+                    HomeworkStats stats = statsByHomework.getOrDefault(
+                            homework.getId(),
+                            new HomeworkStats(homework.getId(), 0, 0, 0, 0));
+                    return new ParentHomeworkStatusResponse(
+                            homework.getId(),
+                            homework.getStartDate(),
+                            homework.hasWorksheet(),
+                            homework.getWorksheetFilename(),
+                            homework.isSubmitted(),
+                            homework.getSubmittedAt(),
+                            HomeworkDeadlinePolicy.deadlineAt(homework.getStartDate()),
+                            homework.hasWorksheet() && HomeworkDeadlinePolicy.isOverdue(homework),
+                            homework.hasWorksheet() && HomeworkDeadlinePolicy.wasSubmittedLate(homework),
+                            stats.totalCards(),
+                            stats.learned());
+                })
                 .toList();
+
         return new ParentChildStatusResponse(
                 student.getId(), student.getFullName(), todayHomeworks.size(), completed, open, cardsDue, history);
     }
