@@ -113,9 +113,35 @@ public class HomeworkPdfService {
         return renderPdfPage(sourcePdf, pageIndex);
     }
 
+    @Transactional(readOnly = true)
+    public int teacherSubmissionPageCount(AuthenticatedUser teacher, UUID homeworkId) {
+        Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
+        ensureSubmission(homework);
+        return pdfPageCount(homework.getSubmittedPdf());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] renderTeacherSubmissionPage(AuthenticatedUser teacher, UUID homeworkId, int pageIndex) {
+        Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
+        ensureSubmission(homework);
+        int pageCount = pdfPageCount(homework.getSubmittedPdf());
+        if (pageIndex < 0 || pageIndex >= pageCount) {
+            throw new ResourceNotFoundException("Homework submission page not found");
+        }
+        return renderPdfPage(homework.getSubmittedPdf(), pageIndex);
+    }
+
     private void validatePageIndex(Homework homework, int pageIndex) {
         if (pageIndex < 0 || pageIndex >= homework.getWorksheetPageCount()) {
             throw new ResourceNotFoundException("Homework page not found");
+        }
+    }
+
+    private int pdfPageCount(byte[] sourcePdf) {
+        try (PDDocument document = Loader.loadPDF(sourcePdf)) {
+            return document.getNumberOfPages();
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read homework PDF", e);
         }
     }
 
@@ -205,14 +231,14 @@ public class HomeworkPdfService {
     @Transactional(readOnly = true)
     public byte[] teacherSubmission(AuthenticatedUser teacher, UUID homeworkId) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
-        if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
+        ensureSubmission(homework);
         return homework.getSubmittedPdf();
     }
 
     @Transactional(readOnly = true)
     public String submissionFilename(AuthenticatedUser teacher, UUID homeworkId) {
         Homework homework = requireTeacherHomework(teacher.id(), homeworkId);
-        if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
+        ensureSubmission(homework);
         return homework.getSubmittedFilename();
     }
 
@@ -289,6 +315,10 @@ public class HomeworkPdfService {
 
     private void ensureWorksheet(Homework homework) {
         if (!homework.hasWorksheet() || homework.getWorksheetPageCount() == null) throw new ResourceNotFoundException("Homework PDF not found");
+    }
+
+    private void ensureSubmission(Homework homework) {
+        if (!homework.isSubmitted()) throw new ResourceNotFoundException("Homework has not been submitted yet");
     }
 
     private User requireOwnedStudent(UUID teacherId, UUID studentId) {
