@@ -20,12 +20,13 @@ export interface AuthResponse { accessToken: string; tokenType: string; expiresA
 export interface TeacherInvitation { teacher: User; invitationToken: string; invitationExpiresAt: string; }
 export interface StudentInvitation { student: User; invitationToken: string; invitationExpiresAt: string; }
 export interface ParentInvitation { parent: User; invitationToken: string | null; invitationExpiresAt: string | null; }
-export interface ParentChildStatus { studentId: string; studentName: string; homeworkAssignedToday: number; homeworkCompletedToday: number; homeworkOpenToday: number; cardsDueToday: number; }
+export interface ParentHomeworkStatus { homeworkId: string; startDate: string; filename: string | null; submitted: boolean; submittedAt: string | null; deadlineAt: string; overdue: boolean; submittedLate: boolean; }
+export interface ParentChildStatus { studentId: string; studentName: string; homeworkAssignedToday: number; homeworkCompletedToday: number; homeworkOpenToday: number; cardsDueToday: number; homeworks: ParentHomeworkStatus[]; }
 export interface ParentAccountChild { id: string; fullName: string; }
 export interface ParentAccount { id: string; fullName: string; username: string | null; email: string | null; status: UserStatus; children: ParentAccountChild[]; }
 export interface ParentCredentials { parent: User; temporaryPassword: string; }
 export interface Card { id: string; homeworkId: string; question: string; correctAnswer: string; status: CardStatus; repetitionNumber: number; dueDate: string | null; timeLimitSeconds: number | null; }
-export interface Homework { id: string; studentId: string; startDate: string; createdAt: string; totalCards: number; notStarted: number; inProgress: number; learned: number; status: HomeworkStatus; hasWorksheet: boolean; worksheetFilename: string | null; worksheetPageCount: number | null; submitted: boolean; submittedAt: string | null; }
+export interface Homework { id: string; studentId: string; startDate: string; createdAt: string; totalCards: number; notStarted: number; inProgress: number; learned: number; status: HomeworkStatus; hasWorksheet: boolean; worksheetFilename: string | null; worksheetPageCount: number | null; submitted: boolean; submittedAt: string | null; deadlineAt: string; overdue: boolean; submittedLate: boolean; }
 export interface HomeworkPageOverlay { pageIndex: number; imageBase64: string; }
 export interface CardSummary { total: number; dueNow: number; awaitingRepetition: number; learned: number; }
 export interface DailyReviewAnswer { cardId: string; question: string; selectedAnswer: string | null; correctAnswer: string; correct: boolean; }
