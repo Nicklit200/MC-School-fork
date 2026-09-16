@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.homeworks.dto;
 
 import com.mcschool.flashcard.homeworks.Homework;
+import com.mcschool.flashcard.homeworks.HomeworkDeadlinePolicy;
 import com.mcschool.flashcard.homeworks.HomeworkStats;
 import com.mcschool.flashcard.homeworks.HomeworkStatus;
 import java.time.Instant;
@@ -22,7 +23,10 @@ public record HomeworkResponse(
         String worksheetFilename,
         Integer worksheetPageCount,
         boolean submitted,
-        Instant submittedAt
+        Instant submittedAt,
+        Instant deadlineAt,
+        boolean overdue,
+        boolean submittedLate
 ) {
     public static HomeworkResponse from(Homework homework, Map<UUID, HomeworkStats> statsByHomework) {
         HomeworkStats stats = statsByHomework.getOrDefault(homework.getId(),
@@ -32,14 +36,17 @@ public record HomeworkResponse(
                 homework.getStartDate(), homework.getCreatedAt(), stats.totalCards(),
                 stats.notStarted(), stats.inProgress(), stats.learned(), status,
                 homework.hasWorksheet(), homework.getWorksheetFilename(), homework.getWorksheetPageCount(),
-                homework.isSubmitted(), homework.getSubmittedAt());
+                homework.isSubmitted(), homework.getSubmittedAt(),
+                HomeworkDeadlinePolicy.deadlineAt(homework.getStartDate()),
+                HomeworkDeadlinePolicy.isOverdue(homework),
+                HomeworkDeadlinePolicy.wasSubmittedLate(homework));
     }
 
     private static HomeworkStatus statusFor(Homework homework, HomeworkStats stats) {
         if (stats.totalCards() > 0 && stats.learned() == stats.totalCards()) {
             return HomeworkStatus.COMPLETED;
         }
-        if (homework.getStartDate().isAfter(LocalDate.now())) {
+        if (homework.getStartDate().isAfter(LocalDate.now(HomeworkDeadlinePolicy.SCHOOL_ZONE))) {
             return HomeworkStatus.PENDING;
         }
         return HomeworkStatus.ACTIVE;
