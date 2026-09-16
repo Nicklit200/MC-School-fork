@@ -39,7 +39,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.8.0";
+    private static final String SERVER_VERSION = "1.9.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -122,7 +122,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools include lessons, homework assignment, direct access to submitted homework PDFs and read-only student analytics. For phrases such as latest homework or homework after the last lesson, use get_recent_homework_submissions and then download_homework_submission_pdf when the actual file is needed. Admins can read all teachers and students; teachers are restricted to their own students. For morning reports, use get_school_day_summary with yesterday's date."
+                ? "Mindcrafti school tools include lessons, homework assignment, direct access to submitted homework PDFs, rendered submission pages and read-only student analytics. For a student's homework over a week or other date range, use find_student_homeworks. Use get_homework_submission for the actual submitted PDF and get_homework_submission_pages when handwriting or images must be inspected visually. Admins can read all teachers and students; teachers are restricted to their own students. For morning reports, use get_school_day_summary with yesterday's date."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -191,14 +191,27 @@ public class MindcraftiMcpController {
         studentSearchProperties.put("teacherId", property("string", "Optional teacher UUID. Admins can filter by teacher. Teachers can only use their own teacher ID."));
         tools.add(tool("find_students", "Find students for analytics and homework-file access. Returns studentId and teacher details for follow-up tools. Admins can search every student; teachers are restricted to their own students.", schema(studentSearchProperties, List.of()), readOnlyAnnotations()));
 
+        Map<String, Object> homeworkRangeProperties = new LinkedHashMap<>();
+        homeworkRangeProperties.put("studentId", property("string", "Student UUID returned by find_students."));
+        homeworkRangeProperties.put("fromDate", property("string", "First assigned-homework date in YYYY-MM-DD."));
+        homeworkRangeProperties.put("toDate", property("string", "Last assigned-homework date in YYYY-MM-DD. Maximum range is 366 days."));
+        tools.add(tool("find_student_homeworks", "Find all homework buckets for one student in an inclusive date range. Returns submission status and homeworkId values that can be passed directly to get_homework_submission or get_homework_submission_pages.", schema(homeworkRangeProperties, List.of("studentId", "fromDate", "toDate")), readOnlyAnnotations()));
+
         Map<String, Object> recentHomeworkProperties = new LinkedHashMap<>();
         recentHomeworkProperties.put("studentId", property("string", "Student UUID returned by find_students."));
         recentHomeworkProperties.put("limit", property("integer", "Optional number of submitted homework PDFs to return, 1 to 10. Defaults to 5."));
         tools.add(tool("get_recent_homework_submissions", "Get the newest submitted PDF homeworks directly from Mindcrafti, newest first. Also identifies the student's latest completed lesson from the connected teacher calendar and separately returns submissions made after that lesson. Use this for requests such as latest homework, last 3 or 5 homeworks, or homework submitted after the last lesson.", schema(recentHomeworkProperties, List.of("studentId")), readOnlyAnnotations()));
 
         Map<String, Object> homeworkPdfProperties = new LinkedHashMap<>();
-        homeworkPdfProperties.put("homeworkId", property("string", "Homework UUID returned by get_recent_homework_submissions or get_student_homework_history."));
-        tools.add(tool("download_homework_submission_pdf", "Download the student's actual submitted homework PDF directly from the Mindcrafti database, without Google Drive. Returns filename, submission time and PDF bytes as base64.", schema(homeworkPdfProperties, List.of("homeworkId")), readOnlyAnnotations()));
+        homeworkPdfProperties.put("homeworkId", property("string", "Homework UUID returned by find_student_homeworks, get_recent_homework_submissions or get_student_homework_history."));
+        tools.add(tool("get_homework_submission", "Get the student's actual submitted homework PDF directly from the Mindcrafti database, without Google Drive. Returns filename, submission time and PDF bytes as base64.", schema(homeworkPdfProperties, List.of("homeworkId")), readOnlyAnnotations()));
+        tools.add(tool("download_homework_submission_pdf", "Backward-compatible alias for get_homework_submission. Downloads the student's actual submitted homework PDF directly from the Mindcrafti database.", schema(homeworkPdfProperties, List.of("homeworkId")), readOnlyAnnotations()));
+
+        Map<String, Object> homeworkPageProperties = new LinkedHashMap<>();
+        homeworkPageProperties.put("homeworkId", property("string", "Homework UUID returned by find_student_homeworks or get_recent_homework_submissions."));
+        homeworkPageProperties.put("startPage", property("integer", "Optional 1-based first page to render. Defaults to 1."));
+        homeworkPageProperties.put("pageCount", property("integer", "Optional number of pages to render, 1 to 8. Defaults to 1. Use nextStartPage to continue."));
+        tools.add(tool("get_homework_submission_pages", "Render pages of the student's actual submitted PDF as PNG images for visual inspection of handwriting, photos and annotations. Returns image bytes as base64 plus page dimensions and nextStartPage for pagination.", schema(homeworkPageProperties, List.of("homeworkId")), readOnlyAnnotations()));
 
         Map<String, Object> dayProperties = new LinkedHashMap<>();
         dayProperties.put("date", property("string", "School date in YYYY-MM-DD. Use yesterday for a morning report about the previous day."));
@@ -244,11 +257,18 @@ public class MindcraftiMcpController {
             case "assign_homework_series" -> toolResult(assignHomeworkSeries(arguments, auth));
             case "list_school_teachers" -> toolResult(analyticsService.listTeachers(auth.user(), auth.apiKey()));
             case "find_students" -> toolResult(analyticsService.findStudents(auth.user(), auth.apiKey(), string(arguments.get("query")), string(arguments.get("teacherId"))));
+            case "find_student_homeworks" -> toolResult(homeworkReadService.findStudentHomeworks(
+                    auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"),
+                    date(arguments, "fromDate"), date(arguments, "toDate")));
             case "get_recent_homework_submissions" -> toolResult(homeworkReadService.recentSubmissions(
                     auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"),
                     arguments.containsKey("limit") ? integer(arguments.get("limit"), "limit") : 5));
-            case "download_homework_submission_pdf" -> toolResult(homeworkReadService.submissionPdf(
+            case "get_homework_submission", "download_homework_submission_pdf" -> toolResult(homeworkReadService.submissionPdf(
                     auth.user(), auth.apiKey(), uuid(required(arguments, "homeworkId"), "homeworkId")));
+            case "get_homework_submission_pages" -> toolResult(homeworkReadService.submissionPages(
+                    auth.user(), auth.apiKey(), uuid(required(arguments, "homeworkId"), "homeworkId"),
+                    arguments.containsKey("startPage") ? integer(arguments.get("startPage"), "startPage") : 1,
+                    arguments.containsKey("pageCount") ? integer(arguments.get("pageCount"), "pageCount") : 1));
             case "get_school_day_summary" -> toolResult(analyticsService.dailySummary(auth.user(), auth.apiKey(), date(arguments, "date"), string(arguments.get("teacherId"))));
             case "get_student_activity" -> toolResult(analyticsService.studentActivity(auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"), date(arguments, "fromDate"), date(arguments, "toDate")));
             case "get_student_homework_history" -> toolResult(analyticsService.homeworkHistory(auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"), date(arguments, "fromDate"), date(arguments, "toDate")));
