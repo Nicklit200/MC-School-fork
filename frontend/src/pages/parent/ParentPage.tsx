@@ -101,7 +101,7 @@ function statusText(homework: ParentHomeworkStatus, language: 'RU' | 'DE') {
       ? `Rechtzeitig abgegeben · ${formatDateTime(homework.submittedAt, language)}`
       : `Сдано вовремя · ${formatDateTime(homework.submittedAt, language)}`;
   }
-  return language === 'DE' ? 'Offen · bis 19:00' : 'Не сдано · до 19:00';
+  return language === 'DE' ? 'Heute noch offen' : 'Сегодня ещё не сдано';
 }
 
 function formatDate(date: string, language: 'RU' | 'DE') {
