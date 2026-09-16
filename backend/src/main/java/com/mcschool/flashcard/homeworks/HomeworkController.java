@@ -3,6 +3,7 @@ package com.mcschool.flashcard.homeworks;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
+import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
@@ -83,6 +84,15 @@ public class HomeworkController {
     @PreAuthorize("hasRole('STUDENT')")
     public List<HomeworkResponse> listForStudent(@AuthenticationPrincipal AuthenticatedUser caller) {
         return homeworkService.listForStudent(caller);
+    }
+
+    @PostMapping("/study/homeworks/{homeworkId}/final-answers")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('STUDENT')")
+    public void saveFinalAnswers(@AuthenticationPrincipal AuthenticatedUser caller,
+                                 @PathVariable UUID homeworkId,
+                                 @Valid @RequestBody SaveHomeworkFinalAnswersRequest request) {
+        homeworkService.saveFinalAnswers(caller, homeworkId, request);
     }
 
     @PostMapping(value = "/homeworks/{homeworkId}/worksheet", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
