@@ -56,6 +56,9 @@ public class Homework {
     @Column(name = "parent_notified_at")
     private Instant parentNotifiedAt;
 
+    @Column(name = "final_answers_json", columnDefinition = "text")
+    private String finalAnswersJson;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -86,12 +89,17 @@ public class Homework {
         this.submittedFilename = null;
         this.submittedAt = null;
         this.parentNotifiedAt = null;
+        this.finalAnswersJson = null;
     }
 
     public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
         this.submittedFilename = filename;
         this.submittedPdf = pdf;
         this.submittedAt = submittedAt;
+    }
+
+    public void changeFinalAnswersJson(String finalAnswersJson) {
+        this.finalAnswersJson = finalAnswersJson;
     }
 
     public void markParentNotified(Instant notifiedAt) {
