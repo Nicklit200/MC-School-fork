@@ -1,5 +1,6 @@
 package com.mcschool.flashcard.parents;
 
+import java.util.List;
 import java.util.UUID;
 
 public record ParentChildStatusResponse(
@@ -8,5 +9,6 @@ public record ParentChildStatusResponse(
         long homeworkAssignedToday,
         long homeworkCompletedToday,
         long homeworkOpenToday,
-        long cardsDueToday
+        long cardsDueToday,
+        List<ParentHomeworkStatusResponse> homeworks
 ) {}
