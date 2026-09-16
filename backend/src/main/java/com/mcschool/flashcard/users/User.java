@@ -132,6 +132,26 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
+    public void assignParentOwner(User teacher) {
+        if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can have a managing teacher");
+        if (teacher == null || teacher.getRole() != Role.TEACHER) throw new IllegalArgumentException("Teacher account is required");
+        if (this.teacher != null && !this.teacher.getId().equals(teacher.getId())) {
+            throw new IllegalStateException("Parent account is already managed by another teacher");
+        }
+        this.teacher = teacher;
+    }
+
+    public void setParentSchoolCredentials(String username, String passwordHash) {
+        if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can receive parent credentials");
+        if (username == null || username.isBlank()) throw new IllegalArgumentException("Username is required");
+        if (passwordHash == null || passwordHash.isBlank()) throw new IllegalArgumentException("Password hash is required");
+        this.username = username.trim();
+        this.passwordHash = passwordHash;
+        this.status = UserStatus.ACTIVE;
+        this.invitationToken = null;
+        this.invitationExpiresAt = null;
+    }
+
     public void linkParent(User parent) {
         if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can have a parent account");
         if (parent == null || parent.getRole() != Role.PARENT) throw new IllegalArgumentException("Parent account is required");
@@ -215,11 +235,12 @@ public class User {
         return user;
     }
 
-    public static User activeParent(String fullName, String username, String passwordHash) {
+    public static User activeParent(String fullName, String username, String passwordHash, User teacher) {
         User user = new User(fullName, null, Role.PARENT);
         user.username = username;
         user.passwordHash = passwordHash;
         user.status = UserStatus.ACTIVE;
+        user.teacher = teacher;
         return user;
     }
 
