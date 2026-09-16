@@ -127,28 +127,11 @@ export function StudentHomeworksPage() {
           <div className="row" style={{ alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
             <label className="field" style={{ margin: 0, flex: '1 1 220px' }}>
               <span className="field__label">{language === 'DE' ? 'Erster Tag' : 'Первый день'}</span>
-              <input
-                className="input"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={creating}
-                required
-              />
+              <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={creating} required />
             </label>
-
             <label className="field" style={{ margin: 0, flex: '0 1 180px' }}>
               <span className="field__label">{language === 'DE' ? 'Anzahl Tage' : 'На сколько дней'}</span>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={31}
-                value={daysCount}
-                onChange={(e) => changeDaysCount(Number(e.target.value))}
-                disabled={creating}
-                required
-              />
+              <input className="input" type="number" min={1} max={31} value={daysCount} onChange={(e) => changeDaysCount(Number(e.target.value))} disabled={creating} required />
             </label>
           </div>
 
@@ -159,19 +142,7 @@ export function StudentHomeworksPage() {
                 ? 'Jede Zeile gehört zu einem Datum. Dateien können ersetzt, gelöscht oder nach oben/unten verschoben werden.'
                 : 'Каждая строка привязана к своей дате. Файл можно заменить, удалить или передвинуть выше/ниже на другую дату.'}
             </p>
-
-            <div
-              className="panel"
-              style={{
-                padding: 12,
-                margin: '0 0 12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
+            <div className="panel" style={{ padding: 12, margin: '0 0 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 360px' }}>
                 <strong>{language === 'DE' ? 'Mehrere Tage schnell ausfüllen' : 'Быстро заполнить несколько дней'}</strong>
                 <p className="muted" style={{ margin: '5px 0 0', fontSize: 13 }}>
@@ -180,88 +151,33 @@ export function StudentHomeworksPage() {
                     : 'Выберите несколько PDF в Google Drive в нужном порядке. Первый файл станет Днём 1, второй — Днём 2 и так далее.'}
                 </p>
               </div>
-              <GoogleDriveMultiPdfPicker
-                disabled={creating}
-                maxFiles={31}
-                buttonLabel={language === 'DE' ? 'Mehrere PDFs aus Google Drive' : 'Выбрать несколько PDF из Google Drive'}
-                onSelect={applyPdfBatch}
-              />
+              <GoogleDriveMultiPdfPicker disabled={creating} maxFiles={31} buttonLabel={language === 'DE' ? 'Mehrere PDFs aus Google Drive' : 'Выбрать несколько PDF из Google Drive'} onSelect={applyPdfBatch} />
             </div>
 
             <div style={{ display: 'grid', gap: 12 }}>
               {plannedDates.map((date, index) => {
                 const file = pdfFiles[index];
                 return (
-                  <div
-                    key={`${date}-${index}`}
-                    className="panel"
-                    style={{ padding: 12, margin: 0, border: '1px solid var(--border-color, #ddd)' }}
-                  >
+                  <div key={`${date}-${index}`} className="panel" style={{ padding: 12, margin: 0, border: '1px solid var(--border-color, #ddd)' }}>
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <div>
-                        <strong>{language === 'DE' ? `Tag ${index + 1}` : `День ${index + 1}`}</strong>
-                        <div className="muted">{formatDate(date, language)}</div>
-                      </div>
-
+                      <div><strong>{language === 'DE' ? `Tag ${index + 1}` : `День ${index + 1}`}</strong><div className="muted">{formatDate(date, language)}</div></div>
                       {file && (
                         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="btn btn--secondary"
-                            disabled={creating || index === 0}
-                            onClick={() => movePdf(index, -1)}
-                            title={language === 'DE' ? 'Eine Position nach oben' : 'Перенести на предыдущую дату'}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--secondary"
-                            disabled={creating || index === daysCount - 1}
-                            onClick={() => movePdf(index, 1)}
-                            title={language === 'DE' ? 'Eine Position nach unten' : 'Перенести на следующую дату'}
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--danger"
-                            disabled={creating}
-                            onClick={() => removePdf(index)}
-                          >
-                            {language === 'DE' ? 'Löschen' : 'Удалить'}
-                          </button>
+                          <button type="button" className="btn btn--secondary" disabled={creating || index === 0} onClick={() => movePdf(index, -1)} title={language === 'DE' ? 'Eine Position nach oben' : 'Перенести на предыдущую дату'}>↑</button>
+                          <button type="button" className="btn btn--secondary" disabled={creating || index === daysCount - 1} onClick={() => movePdf(index, 1)} title={language === 'DE' ? 'Eine Position nach unten' : 'Перенести на следующую дату'}>↓</button>
+                          <button type="button" className="btn btn--danger" disabled={creating} onClick={() => removePdf(index)}>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
                         </div>
                       )}
                     </div>
-
                     <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
                       <label className="field" style={{ margin: 0, flex: '1 1 360px' }}>
-                        <span className="field__label">
-                          {file
-                            ? (language === 'DE' ? 'PDF vom Computer ersetzen' : 'Заменить PDF с компьютера')
-                            : (language === 'DE' ? 'PDF vom Computer auswählen' : 'Выбрать PDF с компьютера')}
-                        </span>
-                        <input
-                          id={`homework-pdf-${index}`}
-                          className="input"
-                          type="file"
-                          accept="application/pdf,.pdf"
-                          disabled={creating}
-                          onChange={(event) => setPdfForDay(index, event.target.files?.[0] ?? null)}
-                        />
+                        <span className="field__label">{file ? (language === 'DE' ? 'PDF vom Computer ersetzen' : 'Заменить PDF с компьютера') : (language === 'DE' ? 'PDF vom Computer auswählen' : 'Выбрать PDF с компьютера')}</span>
+                        <input id={`homework-pdf-${index}`} className="input" type="file" accept="application/pdf,.pdf" disabled={creating} onChange={(event) => setPdfForDay(index, event.target.files?.[0] ?? null)} />
                       </label>
-                      <div style={{ paddingBottom: 1 }}>
-                        <GoogleDrivePdfPicker disabled={creating} onSelect={(driveFile) => setPdfForDay(index, driveFile)} />
-                      </div>
+                      <div style={{ paddingBottom: 1 }}><GoogleDrivePdfPicker disabled={creating} onSelect={(driveFile) => setPdfForDay(index, driveFile)} /></div>
                     </div>
-
                     <div style={{ marginTop: 8, overflowWrap: 'anywhere' }}>
-                      {file ? (
-                        <span><strong>{file.name}</strong> <span className="pill pill--learned">PDF ✓</span></span>
-                      ) : (
-                        <span className="muted">{language === 'DE' ? 'Noch keine Datei' : 'Файл пока не выбран'}</span>
-                      )}
+                      {file ? <span><strong>{file.name}</strong> <span className="pill pill--learned">PDF ✓</span></span> : <span className="muted">{language === 'DE' ? 'Noch keine Datei' : 'Файл пока не выбран'}</span>}
                     </div>
                   </div>
                 );
@@ -269,54 +185,29 @@ export function StudentHomeworksPage() {
             </div>
           </div>
 
-          {!allFilesSelected && (
-            <div className="banner banner--info">
-              {language === 'DE'
-                ? `Bitte für alle ${daysCount} Tage eine PDF vom Computer oder aus Google Drive auswählen.`
-                : `Нужно выбрать PDF для каждого из ${daysCount} дней — с компьютера или из Google Drive.`}
-            </div>
-          )}
-
+          {!allFilesSelected && <div className="banner banner--info">{language === 'DE' ? `Bitte für alle ${daysCount} Tage eine PDF vom Computer oder aus Google Drive auswählen.` : `Нужно выбрать PDF для каждого из ${daysCount} дней — с компьютера или из Google Drive.`}</div>}
           <button className="btn" type="submit" disabled={!allFilesSelected || creating} style={{ minWidth: 220, alignSelf: 'flex-start' }}>
-            {creating
-              ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём домашки…')
-              : (language === 'DE' ? `${daysCount} Hausaufgaben erstellen` : `Создать на ${daysCount} дн.`)}
+            {creating ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём домашки…') : (language === 'DE' ? `${daysCount} Hausaufgaben erstellen` : `Создать на ${daysCount} дн.`)}
           </button>
         </form>
       </div>
 
       <h2>{language === 'DE' ? 'Hausaufgaben-Historie' : 'История домашки'}</h2>
-      {loading ? (
-        <p className="muted">{t('common.loading')}</p>
-      ) : worksheetHomeworks.length === 0 ? (
+      {loading ? <p className="muted">{t('common.loading')}</p> : worksheetHomeworks.length === 0 ? (
         <div className="panel"><p className="muted" style={{ margin: 0 }}>{language === 'DE' ? 'Noch keine PDF-Hausaufgaben.' : 'PDF-домашек пока нет.'}</p></div>
       ) : (
-        <div className="panel">
-          <div className="history-list">
-            {worksheetHomeworks.map((homework) => {
-              const status = resolveHomeworkHistoryStatus(homework);
-              return (
-                <Link
-                  key={homework.id}
-                  className="history-row"
-                  to={`/teacher/students/${studentId}/homeworks/${homework.id}`}
-                  style={{ textDecoration: 'none', color: 'inherit' }}
-                >
-                  <span>{formatDate(homework.startDate, language)}</span>
-                  <span>
-                    {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
-                    {homework.worksheetPageCount
-                      ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}`
-                      : ''}
-                  </span>
-                  <span className={`pill ${homeworkHistoryClass(status)}`}>
-                    {homeworkHistoryText(status, language)}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+        <div className="panel"><div className="history-list">
+          {worksheetHomeworks.map((homework) => {
+            const status = resolveHomeworkHistoryStatus(homework);
+            return (
+              <Link key={homework.id} className="history-row" to={`/teacher/students/${studentId}/homeworks/${homework.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <span>{formatDate(homework.startDate, language)}</span>
+                <span>{homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}{homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}</span>
+                <span className={`pill ${homeworkHistoryClass(status)}`}>{homeworkHistoryText(status, language)}</span>
+              </Link>
+            );
+          })}
+        </div></div>
       )}
     </div>
   );
@@ -347,7 +238,7 @@ function homeworkHistoryText(status: HomeworkHistoryStatus, language: 'DE' | 'RU
       case 'DONE': return 'Rechtzeitig abgegeben';
       case 'LATE': return 'Verspätet abgegeben';
       case 'MISSED': return 'Überfällig';
-      case 'TODAY': return 'Heute bis 19:00';
+      case 'TODAY': return 'Heute fällig';
       case 'UPCOMING': return 'Geplant';
     }
   }
@@ -355,7 +246,7 @@ function homeworkHistoryText(status: HomeworkHistoryStatus, language: 'DE' | 'RU
     case 'DONE': return 'Сдано вовремя';
     case 'LATE': return 'Сдано с опозданием';
     case 'MISSED': return 'Просрочено';
-    case 'TODAY': return 'Сдать сегодня до 19:00';
+    case 'TODAY': return 'Нужно сделать сегодня';
     case 'UPCOMING': return 'Запланировано';
   }
 }
@@ -375,7 +266,5 @@ function localDateString(date: Date) {
 }
 
 function formatDate(date: string, language: 'DE' | 'RU') {
-  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  }).format(new Date(`${date}T00:00:00`));
+  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${date}T00:00:00`));
 }
