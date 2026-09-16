@@ -120,7 +120,9 @@ public class User {
     }
 
     public void assignUsername(String username) {
-        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can have a school username");
+        if (this.role != Role.STUDENT && this.role != Role.PARENT) {
+            throw new IllegalStateException("Only students and parents can have a school username");
+        }
         if (username == null || username.isBlank()) throw new IllegalArgumentException("Username is required");
         this.username = username.trim();
     }
@@ -210,6 +212,14 @@ public class User {
         user.status = UserStatus.INVITED;
         user.invitationToken = invitationToken;
         user.invitationExpiresAt = invitationExpiresAt;
+        return user;
+    }
+
+    public static User activeParent(String fullName, String username, String passwordHash) {
+        User user = new User(fullName, null, Role.PARENT);
+        user.username = username;
+        user.passwordHash = passwordHash;
+        user.status = UserStatus.ACTIVE;
         return user;
     }
 
