@@ -2,6 +2,7 @@ package com.mcschool.flashcard.notifications;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -27,5 +28,9 @@ public class AppLinks {
 
     public String parentLink() {
         return frontendBaseUrl + "/parent";
+    }
+
+    public String teacherHomeworkLink(UUID studentId, UUID homeworkId) {
+        return frontendBaseUrl + "/teacher/students/" + studentId + "/homeworks/" + homeworkId;
     }
 }
