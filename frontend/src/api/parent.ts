@@ -28,10 +28,10 @@ export const parentApi = {
 };
 
 export const teacherParentApi = {
-  list: () => jsonRequest<ParentAccount[]>('GET', '/teacher/parents'),
-  create: (fullName: string) => jsonRequest<ParentCredentials>('POST', '/teacher/parents', { fullName }),
+  list: () => jsonRequest<ParentAccount[]>('GET', '/parents'),
+  create: (fullName: string) => jsonRequest<ParentCredentials>('POST', '/parents', { fullName }),
   linkStudent: (parentId: string, studentId: string) =>
-    jsonRequest<ParentAccount>('POST', `/teacher/parents/${parentId}/students/${studentId}`),
+    jsonRequest<ParentAccount>('POST', `/parents/${parentId}/students/${studentId}`),
   resetPassword: (parentId: string) =>
-    jsonRequest<ParentCredentials>('POST', `/teacher/parents/${parentId}/reset-password`),
+    jsonRequest<ParentCredentials>('POST', `/parents/${parentId}/reset-password`),
 };
