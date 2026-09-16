@@ -23,7 +23,7 @@ export interface ParentInvitation { parent: User; invitationToken: string | null
 export interface ParentChildStatus { studentId: string; studentName: string; homeworkAssignedToday: number; homeworkCompletedToday: number; homeworkOpenToday: number; cardsDueToday: number; }
 export interface ParentAccountChild { id: string; fullName: string; }
 export interface ParentAccount { id: string; fullName: string; username: string | null; email: string | null; status: UserStatus; children: ParentAccountChild[]; }
-export interface ParentCredentials { parent: ParentAccount; temporaryPassword: string; }
+export interface ParentCredentials { parent: User; temporaryPassword: string; }
 export interface Card { id: string; homeworkId: string; question: string; correctAnswer: string; status: CardStatus; repetitionNumber: number; dueDate: string | null; timeLimitSeconds: number | null; }
 export interface Homework { id: string; studentId: string; startDate: string; createdAt: string; totalCards: number; notStarted: number; inProgress: number; learned: number; status: HomeworkStatus; hasWorksheet: boolean; worksheetFilename: string | null; worksheetPageCount: number | null; submitted: boolean; submittedAt: string | null; }
 export interface HomeworkPageOverlay { pageIndex: number; imageBase64: string; }
