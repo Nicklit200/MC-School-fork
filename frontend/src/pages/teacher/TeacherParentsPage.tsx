@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import { teacherParentApi } from '../../api/parent';
 import type { ParentAccount, StudentListItem } from '../../api/types';
+import { ParentTeacherChat } from '../../components/ParentTeacherChat';
 import { useI18n } from '../../i18n/I18nContext';
 
 export function TeacherParentsPage() {
@@ -13,6 +14,7 @@ export function TeacherParentsPage() {
   const [createdAccess, setCreatedAccess] = useState<{ username: string; password: string } | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [openChatStudentId, setOpenChatStudentId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,8 +126,8 @@ export function TeacherParentsPage() {
         <h1>{language === 'DE' ? 'Eltern' : 'Родители'}</h1>
         <p>
           {language === 'DE'
-            ? 'Erstelle Elternkonten separat und verknüpfe sie nur mit den Schülern, für die sie benötigt werden.'
-            : 'Создавайте аккаунты родителей отдельно и привязывайте их только к тем ученикам, кому это нужно.'}
+            ? 'Erstelle Elternkonten, verknüpfe Kinder und schreibe direkt mit den Eltern.'
+            : 'Создавайте аккаунты родителей, привязывайте учеников и общайтесь с родителями прямо здесь.'}
         </p>
       </div>
 
@@ -214,8 +216,9 @@ export function TeacherParentsPage() {
         <div className="teacher-student-list">
           {parents.map((parent, index) => {
             const availableStudents = students.filter((student) => student.parentId !== parent.id);
+            const openChild = parent.children.find((child) => child.id === openChatStudentId) ?? null;
             return (
-              <article key={parent.id} className="teacher-student-card">
+              <article key={parent.id} className="teacher-student-card" style={{ flexWrap: 'wrap' }}>
                 <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>
                   {initial(parent.fullName)}
                 </div>
@@ -231,6 +234,20 @@ export function TeacherParentsPage() {
                       ? `${language === 'DE' ? 'Kinder' : 'Дети'}: ${parent.children.map((child) => child.fullName).join(', ')}`
                       : (language === 'DE' ? 'Noch kein Schüler verknüpft' : 'Ученик ещё не привязан')}
                   </div>
+                  {parent.children.length > 0 && (
+                    <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                      {parent.children.map((child) => (
+                        <button
+                          key={child.id}
+                          type="button"
+                          className={openChatStudentId === child.id ? 'btn' : 'btn btn--secondary'}
+                          onClick={() => setOpenChatStudentId((current) => current === child.id ? null : child.id)}
+                        >
+                          {language === 'DE' ? `Chat: ${child.fullName}` : `Чат: ${child.fullName}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="teacher-student-stats" style={{ minWidth: 260 }}>
@@ -272,6 +289,17 @@ export function TeacherParentsPage() {
                     {language === 'DE' ? 'Passwort ändern' : 'Изменить пароль'}
                   </button>
                 </div>
+
+                {openChild && (
+                  <div style={{ width: '100%', flexBasis: '100%', gridColumn: '1 / -1', marginTop: 14 }}>
+                    <ParentTeacherChat
+                      studentId={openChild.id}
+                      studentName={openChild.fullName}
+                      language={language}
+                      viewerRole="TEACHER"
+                    />
+                  </div>
+                )}
               </article>
             );
           })}
