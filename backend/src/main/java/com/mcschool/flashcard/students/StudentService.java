@@ -134,7 +134,7 @@ public class StudentService {
 
     @Transactional
     public List<StudentListResponse> listStudents(AuthenticatedUser teacher) {
-        return userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()).stream()
+        return userRepository.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(teacher.id(), Role.STUDENT).stream()
                 .peek(this::ensureUsername)
                 .map(StudentListResponse::from)
                 .toList();
