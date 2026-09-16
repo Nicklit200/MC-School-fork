@@ -8,7 +8,6 @@ import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
-import com.mcschool.flashcard.users.UserResponse;
 import com.mcschool.flashcard.users.UserStatus;
 import java.security.SecureRandom;
 import java.time.LocalDate;
@@ -27,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class ParentService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final String PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
@@ -68,7 +66,7 @@ public class ParentService {
     }
 
     @Transactional
-    public ParentCredentialsResponse createParent(AuthenticatedUser teacher, String fullName) {
+    public ManagedParentResponse createParent(AuthenticatedUser teacher, String fullName, String password) {
         requireTeacher(teacher);
         User teacherEntity = userRepository.findById(teacher.id())
                 .filter(user -> !user.isArchived() && user.getRole() == Role.TEACHER)
@@ -78,16 +76,16 @@ public class ParentService {
         if (normalizedName.isBlank()) {
             throw new IllegalArgumentException("Parent name is required");
         }
+        validatePassword(password);
 
         String username = generateUsername(normalizedName);
-        String temporaryPassword = generateTemporaryPassword();
         User parent = User.activeParent(
                 normalizedName,
                 username,
-                passwordEncoder.encode(temporaryPassword),
+                passwordEncoder.encode(password),
                 teacherEntity);
         userRepository.save(parent);
-        return new ParentCredentialsResponse(UserResponse.from(parent), temporaryPassword);
+        return toManagedParent(parent, teacher.id());
     }
 
     @Transactional
@@ -100,16 +98,16 @@ public class ParentService {
     }
 
     @Transactional
-    public ParentCredentialsResponse resetParentPassword(AuthenticatedUser teacher, UUID parentId) {
+    public ManagedParentResponse resetParentPassword(AuthenticatedUser teacher, UUID parentId, String password) {
         requireTeacher(teacher);
+        validatePassword(password);
         User parent = requireVisibleParent(teacher.id(), parentId);
         String username = parent.getUsername();
         if (username == null || username.isBlank()) {
             username = generateUsername(parent.getFullName());
         }
-        String temporaryPassword = generateTemporaryPassword();
-        parent.setParentSchoolCredentials(username, passwordEncoder.encode(temporaryPassword));
-        return new ParentCredentialsResponse(UserResponse.from(parent), temporaryPassword);
+        parent.setParentSchoolCredentials(username, passwordEncoder.encode(password));
+        return toManagedParent(parent, teacher.id());
     }
 
     private Map<UUID, User> visibleParents(UUID teacherId) {
@@ -180,12 +178,10 @@ public class ParentService {
         throw new IllegalStateException("Could not generate a unique parent username");
     }
 
-    private String generateTemporaryPassword() {
-        StringBuilder password = new StringBuilder(10);
-        for (int i = 0; i < 10; i++) {
-            password.append(PASSWORD_ALPHABET.charAt(RANDOM.nextInt(PASSWORD_ALPHABET.length())));
+    private static void validatePassword(String password) {
+        if (password == null || password.length() < 6 || password.length() > 100) {
+            throw new IllegalArgumentException("Password must contain between 6 and 100 characters");
         }
-        return password.toString();
     }
 
     private static void requireTeacher(AuthenticatedUser caller) {
@@ -217,6 +213,4 @@ public class ParentService {
             UserStatus status,
             List<ManagedChildResponse> children
     ) {}
-
-    public record ParentCredentialsResponse(UserResponse parent, String temporaryPassword) {}
 }
