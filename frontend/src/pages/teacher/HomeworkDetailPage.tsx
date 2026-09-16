@@ -23,8 +23,11 @@ export function HomeworkDetailPage() {
   const [projectUrlInput, setProjectUrlInput] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [submissionPreviewUrl, setSubmissionPreviewUrl] = useState<string | null>(null);
+  const [submissionPreviewLoading, setSubmissionPreviewLoading] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(null);
   const previewUrlsRef = useRef<string[]>([]);
+  const submissionPreviewUrlRef = useRef<string | null>(null);
 
   const homework = useMemo(
     () => homeworks.find((item) => item.id === homeworkId) ?? null,
@@ -51,6 +54,12 @@ export function HomeworkDetailPage() {
     setPreviewUrls([]);
   }, []);
 
+  const clearSubmissionPreviewUrl = useCallback(() => {
+    if (submissionPreviewUrlRef.current) URL.revokeObjectURL(submissionPreviewUrlRef.current);
+    submissionPreviewUrlRef.current = null;
+    setSubmissionPreviewUrl(null);
+  }, []);
+
   const loadWorksheetPreview = useCallback(async (pageCount: number) => {
     setPreviewLoading(true);
     try {
@@ -65,6 +74,21 @@ export function HomeworkDetailPage() {
       setError(toErrorMessage(e, t));
     } finally {
       setPreviewLoading(false);
+    }
+  }, [homeworkId, t]);
+
+  const loadSubmissionPreview = useCallback(async () => {
+    setSubmissionPreviewLoading(true);
+    try {
+      const blob = await api.homeworks.submission(homeworkId);
+      const nextUrl = URL.createObjectURL(blob);
+      if (submissionPreviewUrlRef.current) URL.revokeObjectURL(submissionPreviewUrlRef.current);
+      submissionPreviewUrlRef.current = nextUrl;
+      setSubmissionPreviewUrl(nextUrl);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setSubmissionPreviewLoading(false);
     }
   }, [homeworkId, t]);
 
@@ -83,8 +107,17 @@ export function HomeworkDetailPage() {
     }
   }, [homework?.hasWorksheet, homework?.worksheetPageCount, loadWorksheetPreview, clearPreviewUrls]);
 
+  useEffect(() => {
+    if (homework?.submitted && openSection === 'preview') {
+      void loadSubmissionPreview();
+    } else if (!homework?.submitted) {
+      clearSubmissionPreviewUrl();
+    }
+  }, [homework?.submitted, openSection, loadSubmissionPreview, clearSubmissionPreviewUrl]);
+
   useEffect(() => () => {
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    if (submissionPreviewUrlRef.current) URL.revokeObjectURL(submissionPreviewUrlRef.current);
   }, []);
 
   function downloadBlob(blob: Blob, filename: string) {
@@ -199,6 +232,10 @@ export function HomeworkDetailPage() {
   const toggleSection = (section: Exclude<OpenSection, null>) => {
     setOpenSection((current) => current === section ? null : section);
   };
+
+  const submittedPreviewSrc = submissionPreviewUrl
+    ? `${submissionPreviewUrl}#page=${Math.max(1, (homework?.worksheetPageCount ?? 0) + 1)}&view=FitH`
+    : null;
 
   return (
     <div>
@@ -353,31 +390,72 @@ export function HomeworkDetailPage() {
         )}
 
         {homework?.hasWorksheet && openSection === 'preview' && (
-          <div className="panel" style={{ margin: 0, padding: 16 }}>
-            {previewLoading && previewUrls.length === 0 ? (
-              <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
-                {language === 'DE' ? 'Vorschau wird geladen…' : 'Загружаем предпросмотр…'}
-              </div>
-            ) : previewUrls.length > 0 ? (
-              <div style={{ display: 'grid', gap: 16, justifyItems: 'center' }}>
-                {previewUrls.map((url, index) => (
-                  <div key={url} style={{ width: '100%', maxWidth: 1100 }}>
-                    {previewUrls.length > 1 && (
-                      <div className="muted" style={{ marginBottom: 6, fontSize: 13 }}>
-                        {language === 'DE' ? `Seite ${index + 1}` : `Страница ${index + 1}`}
-                      </div>
-                    )}
-                    <img
-                      src={url}
-                      alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
-                      style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
-                    />
+          <div className="panel stack" style={{ margin: 0, padding: 16 }}>
+            <div>
+              <strong style={{ display: 'block', marginBottom: 10 }}>
+                {language === 'DE' ? 'Aufgegebene Hausaufgabe' : 'Заданное задание'}
+              </strong>
+              {previewLoading && previewUrls.length === 0 ? (
+                <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
+                  {language === 'DE' ? 'Vorschau wird geladen…' : 'Загружаем предпросмотр…'}
+                </div>
+              ) : previewUrls.length > 0 ? (
+                <div style={{ display: 'grid', gap: 16, justifyItems: 'center' }}>
+                  {previewUrls.map((url, index) => (
+                    <div key={url} style={{ width: '100%', maxWidth: 1100 }}>
+                      {previewUrls.length > 1 && (
+                        <div className="muted" style={{ marginBottom: 6, fontSize: 13 }}>
+                          {language === 'DE' ? `Seite ${index + 1}` : `Страница ${index + 1}`}
+                        </div>
+                      )}
+                      <img
+                        src={url}
+                        alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
+                        style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="banner banner--info">
+                  {language === 'DE' ? 'Die Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр.'}
+                </div>
+              )}
+            </div>
+
+            {homework.submitted && (
+              <div style={{ paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+                <div style={{ marginBottom: 10 }}>
+                  <strong>{language === 'DE' ? 'Lösung des Schülers' : 'Решение ученика'}</strong>
+                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                    {language === 'DE'
+                      ? 'Hier siehst du die hochgeladenen Fotos oder die abgegebene PDF direkt im Browser.'
+                      : 'Здесь показываются фото или PDF, которые ученик отправил как решение.'}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="banner banner--info">
-                {language === 'DE' ? 'Die Vorschau konnte nicht geladen werden.' : 'Не удалось загрузить предпросмотр.'}
+                </div>
+
+                {submissionPreviewLoading && !submissionPreviewUrl ? (
+                  <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
+                    {language === 'DE' ? 'Abgabe wird geladen…' : 'Загружаем решение ученика…'}
+                  </div>
+                ) : submittedPreviewSrc ? (
+                  <div>
+                    <iframe
+                      title={language === 'DE' ? 'Abgegebene Hausaufgabe' : 'Решение ученика'}
+                      src={submittedPreviewSrc}
+                      style={{ width: '100%', minHeight: '72vh', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
+                    />
+                    <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                      {language === 'DE'
+                        ? 'Bei Foto-Uploads öffnet die Vorschau direkt bei den Seiten, die der Schüler hinzugefügt hat. Falls direkt auf dem Arbeitsblatt geschrieben wurde, kann der PDF-Viewer zur ersten Seite navigiert werden.'
+                        : 'Если ученик загрузил фото, просмотр открывается сразу на добавленных им страницах. Если он писал прямо на листе, в просмотрщике PDF можно перейти на первую страницу.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="banner banner--info">
+                    {language === 'DE' ? 'Die Abgabe konnte nicht geladen werden.' : 'Не удалось загрузить решение ученика.'}
+                  </div>
+                )}
               </div>
             )}
           </div>
