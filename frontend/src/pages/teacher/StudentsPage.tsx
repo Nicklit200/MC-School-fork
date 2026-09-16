@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import { parentApi } from '../../api/parent';
 import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
@@ -77,45 +76,6 @@ export function StudentsPage() {
     setCopiedStudentId(student.id);
     setOpenMenuId(null);
     window.setTimeout(() => setCopiedStudentId((current) => (current === student.id ? null : current)), 2000);
-  }
-
-  async function copyParentInvitationLink(student: StudentListItem) {
-    if (!student.parentInvitationToken) return;
-    await copyActivationToken(student.parentInvitationToken);
-    setOpenMenuId(null);
-    window.alert(language === 'DE' ? 'Eltern-Link kopiert.' : 'Ссылка для родителя скопирована.');
-  }
-
-  async function linkParent(student: StudentListItem) {
-    const parentName = window.prompt(
-      language === 'DE' ? 'Name des Elternteils' : 'Имя родителя',
-      student.parentFullName ?? '',
-    );
-    if (!parentName?.trim()) return;
-    const parentEmail = window.prompt(
-      language === 'DE' ? 'E-Mail des Elternteils' : 'Email родителя',
-      student.parentEmail ?? '',
-    );
-    if (!parentEmail?.trim()) return;
-
-    setError(null);
-    try {
-      const linked = await parentApi.linkToStudent(student.id, parentName.trim(), parentEmail.trim());
-      setOpenMenuId(null);
-      if (linked.invitationToken) {
-        await copyActivationToken(linked.invitationToken);
-        window.alert(language === 'DE'
-          ? 'Elternkonto erstellt. Einladungslink wurde kopiert.'
-          : 'Родитель добавлен. Ссылка-приглашение скопирована.');
-      } else {
-        window.alert(language === 'DE'
-          ? 'Bestehendes Elternkonto wurde mit dem Kind verknüpft.'
-          : 'Существующий аккаунт родителя привязан к ученику.');
-      }
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : toErrorMessage(e, t));
-    }
   }
 
   async function renameStudent(student: StudentListItem) {
@@ -226,7 +186,7 @@ export function StudentsPage() {
                   <div className="teacher-student-meta">
                     {student.parentFullName
                       ? `${language === 'DE' ? 'Elternteil' : 'Родитель'}: ${student.parentFullName}`
-                      : (language === 'DE' ? 'Kein Elternkonto' : 'Родитель не добавлен')}
+                      : (language === 'DE' ? 'Elternteil im Bereich „Eltern“ verknüpfen' : 'Родителя можно привязать в разделе «Родители»')}
                   </div>
                 </div>
 
@@ -253,14 +213,6 @@ export function StudentsPage() {
                           <button type="button" onClick={() => void resetStudentPassword(student)}>
                             <span>⌘</span>{language === 'DE' ? 'Passwort ändern' : 'Сбросить пароль'}
                           </button>
-                          <button type="button" onClick={() => void linkParent(student)}>
-                            <span>♙</span>{student.parentId ? (language === 'DE' ? 'Elternteil ändern' : 'Изменить родителя') : (language === 'DE' ? 'Elternteil hinzufügen' : 'Добавить родителя')}
-                          </button>
-                          {student.parentInvitationToken && (
-                            <button type="button" onClick={() => void copyParentInvitationLink(student)}>
-                              <span>⌁</span>{language === 'DE' ? 'Eltern-Link kopieren' : 'Скопировать ссылку родителя'}
-                            </button>
-                          )}
                           <button type="button" onClick={() => void renameStudent(student)}><span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}</button>
                           <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}><span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
                         </div>
