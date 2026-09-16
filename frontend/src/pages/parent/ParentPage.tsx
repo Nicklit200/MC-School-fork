@@ -22,8 +22,8 @@ export function ParentPage() {
         <h1>{language === 'DE' ? 'Meine Kinder' : 'Мои дети'}</h1>
         <p className="muted">
           {language === 'DE'
-            ? 'Hier siehst du den aktuellen Stand und ob Hausaufgaben rechtzeitig abgegeben wurden.'
-            : 'Здесь видно, что выполнено сегодня и сдавалась ли домашка вовремя.'}
+            ? 'Hier siehst du den aktuellen Stand und den vollständigen Hausaufgaben-Verlauf.'
+            : 'Здесь видно, что ребёнок должен сделать сегодня, и вся история домашней работы.'}
         </p>
       </div>
 
@@ -45,16 +45,31 @@ export function ParentPage() {
           />
 
           <div>
-            <h3 style={{ marginBottom: 8 }}>{language === 'DE' ? 'Hausaufgaben-Verlauf' : 'История домашки'}</h3>
+            <h3 style={{ marginBottom: 8 }}>{language === 'DE' ? 'Gesamter Hausaufgaben-Verlauf' : 'Вся домашка'}</h3>
             {child.homeworks.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>{language === 'DE' ? 'Noch keine PDF-Hausaufgaben.' : 'Домашек пока нет.'}</p>
+              <p className="muted" style={{ margin: 0 }}>{language === 'DE' ? 'Noch keine Hausaufgaben.' : 'Домашек пока нет.'}</p>
             ) : (
               <div className="history-list">
                 {child.homeworks.map((homework) => (
                   <div className="history-row" key={homework.homeworkId}>
                     <span>{formatDate(homework.startDate, language)}</span>
-                    <span>{homework.filename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}</span>
-                    <span className={`pill ${statusClass(homework)}`}>{statusText(homework, language)}</span>
+                    <span>
+                      {homework.hasWorksheet && (
+                        <span>
+                          {homework.filename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
+                          {' · '}{pdfStatusText(homework, language)}
+                        </span>
+                      )}
+                      {homework.hasWorksheet && homework.totalCards > 0 ? <br /> : null}
+                      {homework.totalCards > 0 && (
+                        <span>
+                          {language === 'DE' ? 'Karten' : 'Карточки'}: {homework.learnedCards}/{homework.totalCards}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`pill ${overallStatusClass(homework)}`}>
+                      {overallStatusText(homework, language)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -82,26 +97,36 @@ function ParentStatusRow({ label, status, language }: { label: string; status: '
   );
 }
 
-function statusClass(homework: ParentHomeworkStatus) {
-  if (homework.submittedLate) return 'pill--danger';
-  if (homework.overdue) return 'pill--danger';
-  if (homework.submitted) return 'pill--learned';
+function pdfStatusText(homework: ParentHomeworkStatus, language: 'RU' | 'DE') {
+  if (homework.submittedLate) {
+    return language === 'DE'
+      ? `verspätet abgegeben ${formatDateTime(homework.submittedAt, language)}`
+      : `сдано с опозданием ${formatDateTime(homework.submittedAt, language)}`;
+  }
+  if (homework.overdue) return language === 'DE' ? 'überfällig' : 'просрочено';
+  if (homework.submitted) {
+    return language === 'DE'
+      ? `rechtzeitig abgegeben ${formatDateTime(homework.submittedAt, language)}`
+      : `сдано вовремя ${formatDateTime(homework.submittedAt, language)}`;
+  }
+  return language === 'DE' ? 'noch offen' : 'ещё не сдано';
+}
+
+function overallStatusClass(homework: ParentHomeworkStatus) {
+  const cardsDone = homework.totalCards === 0 || homework.learnedCards >= homework.totalCards;
+  const pdfDone = !homework.hasWorksheet || homework.submitted;
+  if (homework.submittedLate || homework.overdue) return 'pill--danger';
+  if (cardsDone && pdfDone) return 'pill--learned';
   return 'pill--pending';
 }
 
-function statusText(homework: ParentHomeworkStatus, language: 'RU' | 'DE') {
-  if (homework.submittedLate) {
-    return language === 'DE'
-      ? `Verspätet abgegeben · ${formatDateTime(homework.submittedAt, language)}`
-      : `Сдано с опозданием · ${formatDateTime(homework.submittedAt, language)}`;
-  }
+function overallStatusText(homework: ParentHomeworkStatus, language: 'RU' | 'DE') {
+  if (homework.submittedLate) return language === 'DE' ? 'Verspätet' : 'С опозданием';
   if (homework.overdue) return language === 'DE' ? 'Überfällig' : 'Просрочено';
-  if (homework.submitted) {
-    return language === 'DE'
-      ? `Rechtzeitig abgegeben · ${formatDateTime(homework.submittedAt, language)}`
-      : `Сдано вовремя · ${formatDateTime(homework.submittedAt, language)}`;
-  }
-  return language === 'DE' ? 'Heute noch offen' : 'Сегодня ещё не сдано';
+  const cardsDone = homework.totalCards === 0 || homework.learnedCards >= homework.totalCards;
+  const pdfDone = !homework.hasWorksheet || homework.submitted;
+  if (cardsDone && pdfDone) return language === 'DE' ? 'Erledigt' : 'Выполнено';
+  return language === 'DE' ? 'Offen' : 'Не выполнено';
 }
 
 function formatDate(date: string, language: 'RU' | 'DE') {
