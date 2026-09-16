@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import { teacherParentApi } from '../../api/parent';
-import type { ParentAccount, ParentCredentials, StudentListItem } from '../../api/types';
+import type { ParentAccount, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 
 export function TeacherParentsPage() {
@@ -9,8 +9,9 @@ export function TeacherParentsPage() {
   const [parents, setParents] = useState<ParentAccount[]>([]);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
+  const [createdAccess, setCreatedAccess] = useState<{ username: string; password: string } | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
-  const [credentials, setCredentials] = useState<ParentCredentials | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -35,13 +36,15 @@ export function TeacherParentsPage() {
 
   async function createParent(event: FormEvent) {
     event.preventDefault();
-    if (!fullName.trim()) return;
+    if (!fullName.trim() || password.length < 6) return;
     setCreating(true);
     setError(null);
     try {
-      const created = await teacherParentApi.create(fullName.trim());
-      setCredentials(created);
+      const chosenPassword = password;
+      const created = await teacherParentApi.create(fullName.trim(), chosenPassword);
+      setCreatedAccess({ username: created.username ?? '', password: chosenPassword });
       setFullName('');
+      setPassword('');
       await reload();
     } catch (e) {
       setError(errorMessage(e));
@@ -78,23 +81,26 @@ export function TeacherParentsPage() {
     }
   }
 
-  async function resetPassword(parent: ParentAccount) {
-    const confirmed = window.confirm(
-      parent.username
-        ? (language === 'DE'
-          ? `Neues Passwort für ${parent.fullName} erstellen? Das bisherige Passwort funktioniert danach nicht mehr.`
-          : `Создать новый пароль для ${parent.fullName}? Старый пароль после этого перестанет работать.`)
-        : (language === 'DE'
-          ? `Schul-Login und Passwort für ${parent.fullName} erstellen?`
-          : `Создать школьный логин и пароль для ${parent.fullName}?`),
+  async function changePassword(parent: ParentAccount) {
+    const nextPassword = window.prompt(
+      language === 'DE'
+        ? `Neues Passwort für ${parent.fullName} (mindestens 6 Zeichen)`
+        : `Новый пароль для ${parent.fullName} (минимум 6 символов)`,
+      '',
     );
-    if (!confirmed) return;
+    if (nextPassword == null) return;
+    if (nextPassword.length < 6) {
+      window.alert(language === 'DE'
+        ? 'Das Passwort muss mindestens 6 Zeichen haben.'
+        : 'Пароль должен содержать минимум 6 символов.');
+      return;
+    }
 
     setBusyId(parent.id);
     setError(null);
     try {
-      const result = await teacherParentApi.resetPassword(parent.id);
-      setCredentials(result);
+      const updated = await teacherParentApi.changePassword(parent.id, nextPassword);
+      setCreatedAccess({ username: updated.username ?? '', password: nextPassword });
       await reload();
     } catch (e) {
       setError(errorMessage(e));
@@ -103,11 +109,11 @@ export function TeacherParentsPage() {
     }
   }
 
-  async function copyCredentials() {
-    if (!credentials?.parent.username) return;
+  async function copyAccess() {
+    if (!createdAccess?.username) return;
     const text = language === 'DE'
-      ? `MindCrafti School\nLogin: ${credentials.parent.username}\nPasswort: ${credentials.temporaryPassword}`
-      : `MindCrafti School\nЛогин: ${credentials.parent.username}\nПароль: ${credentials.temporaryPassword}`;
+      ? `MindCrafti School\nLogin: ${createdAccess.username}\nPasswort: ${createdAccess.password}`
+      : `MindCrafti School\nЛогин: ${createdAccess.username}\nПароль: ${createdAccess.password}`;
     await navigator.clipboard.writeText(text);
     window.alert(language === 'DE' ? 'Zugangsdaten kopiert.' : 'Логин и пароль скопированы.');
   }
@@ -125,31 +131,31 @@ export function TeacherParentsPage() {
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      {credentials && (
+      {createdAccess && (
         <section className="panel stack" style={{ marginBottom: 24, border: '2px solid #ffb37f' }}>
           <div>
             <strong>{language === 'DE' ? 'Zugangsdaten für Eltern' : 'Данные для входа родителя'}</strong>
             <div className="muted" style={{ marginTop: 4 }}>
               {language === 'DE'
-                ? 'Das temporäre Passwort wird nur jetzt angezeigt. Bitte kopiere es und sende es dem Elternteil.'
-                : 'Временный пароль показывается только сейчас. Скопируйте и отправьте его родителю.'}
+                ? 'Du hast das Passwort selbst festgelegt. Kopiere die Zugangsdaten und sende sie dem Elternteil.'
+                : 'Пароль задан вами. Скопируйте логин и пароль и отправьте их родителю.'}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <div className="panel" style={{ margin: 0 }}>
               <div className="muted">{language === 'DE' ? 'Login' : 'Логин'}</div>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>{credentials.parent.username}</div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>{createdAccess.username}</div>
             </div>
             <div className="panel" style={{ margin: 0 }}>
-              <div className="muted">{language === 'DE' ? 'Temporäres Passwort' : 'Временный пароль'}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>{credentials.temporaryPassword}</div>
+              <div className="muted">{language === 'DE' ? 'Passwort' : 'Пароль'}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>{createdAccess.password}</div>
             </div>
           </div>
           <div className="row">
-            <button type="button" className="btn" onClick={() => void copyCredentials()}>
+            <button type="button" className="btn" onClick={() => void copyAccess()}>
               {language === 'DE' ? 'Login + Passwort kopieren' : 'Скопировать логин + пароль'}
             </button>
-            <button type="button" className="btn btn--ghost" onClick={() => setCredentials(null)}>
+            <button type="button" className="btn btn--ghost" onClick={() => setCreatedAccess(null)}>
               {language === 'DE' ? 'Schließen' : 'Закрыть'}
             </button>
           </div>
@@ -170,12 +176,24 @@ export function TeacherParentsPage() {
                 required
               />
             </label>
+            <label className="field">
+              <span className="field__label">{language === 'DE' ? 'Passwort' : 'Пароль'}</span>
+              <input
+                className="input"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={language === 'DE' ? 'Mindestens 6 Zeichen' : 'Минимум 6 символов'}
+                minLength={6}
+                required
+              />
+            </label>
           </div>
           <p className="teacher-form-hint">
             <span>ⓘ</span>
             {language === 'DE'
-              ? 'Login und temporäres Passwort werden automatisch erstellt. E-Mail ist nicht erforderlich.'
-              : 'Логин и временный пароль создадутся автоматически. Email не нужен.'}
+              ? 'Der Login wird automatisch erstellt. Das Passwort legst du selbst fest. E-Mail ist nicht erforderlich.'
+              : 'Логин создаётся автоматически. Пароль вы задаёте сами. Email не нужен.'}
           </p>
           <button className="btn teacher-primary-btn" type="submit" disabled={creating}>
             {creating
@@ -249,11 +267,9 @@ export function TeacherParentsPage() {
                     type="button"
                     className="btn btn--ghost"
                     disabled={busyId === parent.id}
-                    onClick={() => void resetPassword(parent)}
+                    onClick={() => void changePassword(parent)}
                   >
-                    {parent.username
-                      ? (language === 'DE' ? 'Neues Passwort' : 'Новый пароль')
-                      : (language === 'DE' ? 'Login + Passwort erstellen' : 'Создать логин + пароль')}
+                    {language === 'DE' ? 'Passwort ändern' : 'Изменить пароль'}
                   </button>
                 </div>
               </article>
