@@ -10,14 +10,24 @@ import com.mcschool.flashcard.notifications.AppLinks;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.imageio.ImageIO;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +38,9 @@ public class McpHomeworkReadService {
     private static final ZoneId SCHOOL_ZONE = HomeworkDeadlinePolicy.SCHOOL_ZONE;
     private static final int MAX_RECENT_SUBMISSIONS = 10;
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
+    private static final int MAX_HOMEWORK_RANGE_DAYS = 366;
+    private static final int MAX_SUBMISSION_PAGE_BATCH = 8;
+    private static final float PAGE_RENDER_DPI = 144f;
 
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
@@ -46,6 +59,48 @@ public class McpHomeworkReadService {
         this.groupMemberRepository = groupMemberRepository;
         this.calendarLessonService = calendarLessonService;
         this.appLinks = appLinks;
+    }
+
+    /**
+     * Returns every homework bucket assigned to one student inside an inclusive date range.
+     * This is intentionally independent of Google Drive: the database is the source of truth.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> findStudentHomeworks(
+            User actor, boolean adminLike, UUID studentId, LocalDate fromDate, LocalDate toDate) {
+        if (fromDate == null || toDate == null) {
+            throw new IllegalArgumentException("fromDate and toDate are required");
+        }
+        if (toDate.isBefore(fromDate)) {
+            throw new IllegalArgumentException("toDate must be on or after fromDate");
+        }
+        long inclusiveDays = ChronoUnit.DAYS.between(fromDate, toDate) + 1;
+        if (inclusiveDays > MAX_HOMEWORK_RANGE_DAYS) {
+            throw new IllegalArgumentException("Homework date range cannot exceed " + MAX_HOMEWORK_RANGE_DAYS + " days");
+        }
+
+        User student = requireAccessibleStudent(actor, adminLike, studentId);
+        List<Homework> homeworks = homeworkRepository
+                .findAllByStudentIdOrderByStartDateDescCreatedAtDesc(studentId).stream()
+                .filter(homework -> !homework.getStartDate().isBefore(fromDate))
+                .filter(homework -> !homework.getStartDate().isAfter(toDate))
+                .toList();
+
+        List<Map<String, Object>> rows = homeworks.stream()
+                .map(this::homeworkRow)
+                .toList();
+        long submittedCount = homeworks.stream().filter(Homework::isSubmitted).count();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("student", studentIdentity(student));
+        result.put("timezone", SCHOOL_ZONE.getId());
+        result.put("fromDate", fromDate.toString());
+        result.put("toDate", toDate.toString());
+        result.put("homeworkCount", homeworks.size());
+        result.put("submittedCount", submittedCount);
+        result.put("homeworks", rows);
+        result.put("source", "mindcrafti_database");
+        return result;
     }
 
     /**
@@ -106,12 +161,8 @@ public class McpHomeworkReadService {
     @Transactional(readOnly = true)
     public Map<String, Object> submissionPdf(
             User actor, boolean adminLike, UUID homeworkId) {
-        Homework homework = homeworkRepository.findById(homeworkId)
-                .orElseThrow(() -> new IllegalArgumentException("Homework not found"));
-        User student = requireAccessibleStudent(actor, adminLike, homework.getStudent().getId());
-        if (!homework.isSubmitted() || homework.getSubmittedPdf() == null || homework.getSubmittedPdf().length == 0) {
-            throw new IllegalArgumentException("This homework does not have a submitted PDF");
-        }
+        Homework homework = requireSubmittedHomework(actor, adminLike, homeworkId);
+        User student = homework.getStudent();
         byte[] pdf = homework.getSubmittedPdf();
         if (pdf.length > MAX_DIRECT_PDF_BYTES) {
             throw new IllegalArgumentException("Submitted PDF exceeds the 15 MB MCP download limit");
@@ -133,6 +184,68 @@ public class McpHomeworkReadService {
         result.put("teacherSiteUrl", appLinks.teacherHomeworkLink(student.getId(), homework.getId()));
         result.put("source", "mindcrafti_database");
         return result;
+    }
+
+    /**
+     * Render pages from the student's actual submitted PDF as PNG images.
+     * Page numbers are 1-based for MCP callers. At most eight pages are returned per call.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> submissionPages(
+            User actor, boolean adminLike, UUID homeworkId, int startPage, int pageCount) {
+        if (startPage < 1) throw new IllegalArgumentException("startPage must be at least 1");
+        if (pageCount < 1 || pageCount > MAX_SUBMISSION_PAGE_BATCH) {
+            throw new IllegalArgumentException("pageCount must be between 1 and " + MAX_SUBMISSION_PAGE_BATCH);
+        }
+
+        Homework homework = requireSubmittedHomework(actor, adminLike, homeworkId);
+        User student = homework.getStudent();
+        byte[] pdf = homework.getSubmittedPdf();
+
+        try (PDDocument document = Loader.loadPDF(pdf)) {
+            int totalPageCount = document.getNumberOfPages();
+            if (startPage > totalPageCount) {
+                throw new IllegalArgumentException("startPage exceeds the submitted PDF page count");
+            }
+            int endPage = Math.min(totalPageCount, startPage + pageCount - 1);
+            PDFRenderer renderer = new PDFRenderer(document);
+            List<Map<String, Object>> pages = new java.util.ArrayList<>();
+
+            for (int pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
+                BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, PAGE_RENDER_DPI, ImageType.RGB);
+                try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    ImageIO.write(image, "png", out);
+                    byte[] png = out.toByteArray();
+                    Map<String, Object> page = new LinkedHashMap<>();
+                    page.put("pageNumber", pageNumber);
+                    page.put("pageIndex", pageNumber - 1);
+                    page.put("mimeType", "image/png");
+                    page.put("widthPx", image.getWidth());
+                    page.put("heightPx", image.getHeight());
+                    page.put("sizeBytes", png.length);
+                    page.put("base64", Base64.getEncoder().encodeToString(png));
+                    pages.add(page);
+                }
+            }
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("homeworkId", homework.getId().toString());
+            result.put("student", studentIdentity(student));
+            result.put("assignedDate", homework.getStartDate().toString());
+            result.put("submittedAt", homework.getSubmittedAt().toString());
+            result.put("submittedAtSchoolTime", homework.getSubmittedAt().atZone(SCHOOL_ZONE).toString());
+            result.put("filename", homework.getSubmittedFilename());
+            result.put("totalPageCount", totalPageCount);
+            result.put("startPage", startPage);
+            result.put("renderedPageCount", pages.size());
+            result.put("nextStartPage", endPage < totalPageCount ? endPage + 1 : null);
+            result.put("pages", pages);
+            result.put("teacherSiteUrl", appLinks.teacherHomeworkLink(student.getId(), homework.getId()));
+            result.put("source", "mindcrafti_database");
+            return result;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Could not render submitted homework PDF", ex);
+        }
     }
 
     private GroupLessonResponse latestCompletedLesson(User student) {
@@ -165,6 +278,26 @@ public class McpHomeworkReadService {
                 && groupMemberRepository.existsByGroupIdAndStudentId(lesson.groupId(), studentId);
     }
 
+    private Map<String, Object> homeworkRow(Homework homework) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("homeworkId", homework.getId().toString());
+        row.put("assignedDate", homework.getStartDate().toString());
+        row.put("worksheetFilename", homework.getWorksheetFilename());
+        row.put("hasWorksheet", homework.hasWorksheet());
+        row.put("submitted", homework.isSubmitted());
+        row.put("submittedFilename", homework.getSubmittedFilename());
+        row.put("submittedAt", homework.getSubmittedAt() == null ? null : homework.getSubmittedAt().toString());
+        row.put("submittedAtSchoolTime", homework.getSubmittedAt() == null
+                ? null : homework.getSubmittedAt().atZone(SCHOOL_ZONE).toString());
+        row.put("submissionSizeBytes", homework.getSubmittedPdf() == null ? null : homework.getSubmittedPdf().length);
+        row.put("teacherSiteUrl", appLinks.teacherHomeworkLink(homework.getStudent().getId(), homework.getId()));
+        row.put("submissionApiPath", homework.isSubmitted()
+                ? "/api/v1/homeworks/" + homework.getId() + "/submission" : null);
+        row.put("mcpSubmissionTool", homework.isSubmitted() ? "get_homework_submission" : null);
+        row.put("mcpPagesTool", homework.isSubmitted() ? "get_homework_submission_pages" : null);
+        return row;
+    }
+
     private Map<String, Object> submissionRow(Homework homework, GroupLessonResponse latestLesson) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("homeworkId", homework.getId().toString());
@@ -177,6 +310,8 @@ public class McpHomeworkReadService {
                 && !homework.getSubmittedAt().isBefore(latestLesson.endsAt()));
         row.put("teacherSiteUrl", appLinks.teacherHomeworkLink(homework.getStudent().getId(), homework.getId()));
         row.put("submissionApiPath", "/api/v1/homeworks/" + homework.getId() + "/submission");
+        row.put("mcpSubmissionTool", "get_homework_submission");
+        row.put("mcpPagesTool", "get_homework_submission_pages");
         row.put("mcpDownloadTool", "download_homework_submission_pdf");
         return row;
     }
@@ -205,6 +340,16 @@ public class McpHomeworkReadService {
         row.put("teacherId", teacher == null ? null : teacher.getId().toString());
         row.put("teacherName", teacher == null ? null : teacher.getFullName());
         return row;
+    }
+
+    private Homework requireSubmittedHomework(User actor, boolean adminLike, UUID homeworkId) {
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new IllegalArgumentException("Homework not found"));
+        requireAccessibleStudent(actor, adminLike, homework.getStudent().getId());
+        if (!homework.isSubmitted() || homework.getSubmittedPdf() == null || homework.getSubmittedPdf().length == 0) {
+            throw new IllegalArgumentException("This homework does not have a submitted PDF");
+        }
+        return homework;
     }
 
     private User requireAccessibleStudent(User actor, boolean adminLike, UUID studentId) {
