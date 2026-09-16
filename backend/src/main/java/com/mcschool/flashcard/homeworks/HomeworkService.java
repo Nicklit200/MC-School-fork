@@ -1,10 +1,13 @@
 package com.mcschool.flashcard.homeworks;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
+import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -21,11 +24,14 @@ public class HomeworkService {
 
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
     public HomeworkService(HomeworkRepository homeworkRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           ObjectMapper objectMapper) {
         this.homeworkRepository = homeworkRepository;
         this.userRepository = userRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -45,6 +51,20 @@ public class HomeworkService {
     @Transactional(readOnly = true)
     public List<HomeworkResponse> listForStudent(AuthenticatedUser student) {
         return listForStudent(student.id());
+    }
+
+    @Transactional
+    public void saveFinalAnswers(AuthenticatedUser student, UUID homeworkId,
+                                 SaveHomeworkFinalAnswersRequest request) {
+        if (student.role() != Role.STUDENT) throw new IllegalStateException("Student role required");
+        Homework homework = homeworkRepository.findByIdAndStudentId(homeworkId, student.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        if (homework.isSubmitted()) throw new ConflictException("Homework is already submitted");
+        try {
+            homework.changeFinalAnswersJson(objectMapper.writeValueAsString(request.answers()));
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Could not save final answers", e);
+        }
     }
 
     @Transactional
