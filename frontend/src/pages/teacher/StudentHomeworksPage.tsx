@@ -7,7 +7,7 @@ import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 import { GoogleDriveMultiPdfPicker } from './GoogleDriveMultiPdfPicker';
 
-type HomeworkHistoryStatus = 'DONE' | 'MISSED' | 'TODAY' | 'UPCOMING';
+type HomeworkHistoryStatus = 'DONE' | 'LATE' | 'MISSED' | 'TODAY' | 'UPCOMING';
 
 export function StudentHomeworksPage() {
   const { studentId = '' } = useParams();
@@ -323,9 +323,10 @@ export function StudentHomeworksPage() {
 }
 
 function resolveHomeworkHistoryStatus(homework: Homework): HomeworkHistoryStatus {
+  if (homework.submittedLate) return 'LATE';
   if (homework.submitted) return 'DONE';
+  if (homework.overdue) return 'MISSED';
   const today = localDateString(new Date());
-  if (homework.startDate < today) return 'MISSED';
   if (homework.startDate === today) return 'TODAY';
   return 'UPCOMING';
 }
@@ -333,6 +334,7 @@ function resolveHomeworkHistoryStatus(homework: Homework): HomeworkHistoryStatus
 function homeworkHistoryClass(status: HomeworkHistoryStatus) {
   switch (status) {
     case 'DONE': return 'pill--learned';
+    case 'LATE': return 'pill--danger';
     case 'MISSED': return 'pill--danger';
     case 'TODAY': return 'pill--pending';
     case 'UPCOMING': return 'pill--active';
@@ -342,16 +344,18 @@ function homeworkHistoryClass(status: HomeworkHistoryStatus) {
 function homeworkHistoryText(status: HomeworkHistoryStatus, language: 'DE' | 'RU') {
   if (language === 'DE') {
     switch (status) {
-      case 'DONE': return 'Erledigt';
-      case 'MISSED': return 'Nicht erledigt';
-      case 'TODAY': return 'Heute fällig';
+      case 'DONE': return 'Rechtzeitig abgegeben';
+      case 'LATE': return 'Verspätet abgegeben';
+      case 'MISSED': return 'Überfällig';
+      case 'TODAY': return 'Heute bis 19:00';
       case 'UPCOMING': return 'Geplant';
     }
   }
   switch (status) {
-    case 'DONE': return 'Сделано';
-    case 'MISSED': return 'Не сделано';
-    case 'TODAY': return 'Нужно сделать сегодня';
+    case 'DONE': return 'Сдано вовремя';
+    case 'LATE': return 'Сдано с опозданием';
+    case 'MISSED': return 'Просрочено';
+    case 'TODAY': return 'Сдать сегодня до 19:00';
     case 'UPCOMING': return 'Запланировано';
   }
 }
