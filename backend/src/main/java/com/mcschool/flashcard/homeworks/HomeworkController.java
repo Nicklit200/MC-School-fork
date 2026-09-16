@@ -185,6 +185,7 @@ public class HomeworkController {
     public void submitPdf(@AuthenticationPrincipal AuthenticatedUser caller,
                           @PathVariable UUID homeworkId,
                           @Valid @RequestBody SubmitHomeworkRequest request) {
+        homeworkService.requireFinalAnswers(caller, homeworkId);
         homeworkPdfService.submit(caller, homeworkId, request);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
@@ -195,6 +196,7 @@ public class HomeworkController {
     public void submitFile(@AuthenticationPrincipal AuthenticatedUser caller,
                            @PathVariable UUID homeworkId,
                            @RequestParam("file") MultipartFile file) {
+        homeworkService.requireFinalAnswers(caller, homeworkId);
         homeworkPdfService.submitFile(caller, homeworkId, file);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
@@ -205,6 +207,7 @@ public class HomeworkController {
     public void submitFiles(@AuthenticationPrincipal AuthenticatedUser caller,
                             @PathVariable UUID homeworkId,
                             @RequestParam("files") List<MultipartFile> files) {
+        homeworkService.requireFinalAnswers(caller, homeworkId);
         homeworkPdfService.submitFiles(caller, homeworkId, files);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
