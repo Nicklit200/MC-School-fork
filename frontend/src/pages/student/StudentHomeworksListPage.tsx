@@ -21,8 +21,8 @@ export function StudentHomeworksListPage() {
   const today = localDateString(new Date());
   const homeworks = useMemo(
     () => (items ?? [])
-      .filter((item) => item.hasWorksheet && item.startDate === today)
-      .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
+      .filter((item) => item.hasWorksheet && (item.startDate === today || item.overdue))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
     [items, today],
   );
 
@@ -31,10 +31,10 @@ export function StudentHomeworksListPage() {
 
   return (
     <div>
-      <h1>{language === 'DE' ? 'Hausaufgaben für heute' : 'Домашка на сегодня'}</h1>
+      <h1>{language === 'DE' ? 'Hausaufgaben' : 'Домашние задания'}</h1>
       {homeworks.length === 0 ? (
         <p className="muted">
-          {language === 'DE' ? 'Für heute gibt es keine Hausaufgabe.' : 'На сегодня домашки нет.'}
+          {language === 'DE' ? 'Es gibt keine offenen Hausaufgaben.' : 'Нет невыполненной домашки.'}
         </p>
       ) : (
         <div className="panel stack">
@@ -54,10 +54,12 @@ export function StudentHomeworksListPage() {
                     : ''}
                 </div>
               </div>
-              <span className={`pill ${homework.submitted ? 'pill--learned' : 'pill--active'}`}>
-                {homework.submitted
-                  ? (language === 'DE' ? 'Abgegeben' : 'Сдано')
-                  : (language === 'DE' ? 'Heute erledigen' : 'Сделать сегодня')}
+              <span className={`pill ${homework.overdue ? 'pill--danger' : homework.submitted ? 'pill--learned' : 'pill--active'}`}>
+                {homework.overdue
+                  ? (language === 'DE' ? 'Überfällig — trotzdem erledigen' : 'Просрочено — всё равно нужно сдать')
+                  : homework.submitted
+                    ? (language === 'DE' ? 'Abgegeben' : 'Сдано')
+                    : (language === 'DE' ? 'Heute bis 19:00' : 'Сдать сегодня до 19:00')}
               </span>
             </Link>
           ))}
