@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../../api/client';
+import { api, getAccessToken } from '../../api/client';
 import type { Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type OpenSection = 'edit' | 'preview' | null;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 /** Teacher view of one PDF homework. Flashcards are managed on separate card pages. */
 export function HomeworkDetailPage() {
@@ -23,11 +24,11 @@ export function HomeworkDetailPage() {
   const [projectUrlInput, setProjectUrlInput] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [submissionPreviewUrl, setSubmissionPreviewUrl] = useState<string | null>(null);
+  const [submissionPreviewUrls, setSubmissionPreviewUrls] = useState<string[]>([]);
   const [submissionPreviewLoading, setSubmissionPreviewLoading] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(null);
   const previewUrlsRef = useRef<string[]>([]);
-  const submissionPreviewUrlRef = useRef<string | null>(null);
+  const submissionPreviewUrlsRef = useRef<string[]>([]);
 
   const homework = useMemo(
     () => homeworks.find((item) => item.id === homeworkId) ?? null,
@@ -54,10 +55,10 @@ export function HomeworkDetailPage() {
     setPreviewUrls([]);
   }, []);
 
-  const clearSubmissionPreviewUrl = useCallback(() => {
-    if (submissionPreviewUrlRef.current) URL.revokeObjectURL(submissionPreviewUrlRef.current);
-    submissionPreviewUrlRef.current = null;
-    setSubmissionPreviewUrl(null);
+  const clearSubmissionPreviewUrls = useCallback(() => {
+    submissionPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    submissionPreviewUrlsRef.current = [];
+    setSubmissionPreviewUrls([]);
   }, []);
 
   const loadWorksheetPreview = useCallback(async (pageCount: number) => {
@@ -77,14 +78,20 @@ export function HomeworkDetailPage() {
     }
   }, [homeworkId, t]);
 
-  const loadSubmissionPreview = useCallback(async () => {
+  const loadSubmissionPreview = useCallback(async (worksheetPageCount: number) => {
     setSubmissionPreviewLoading(true);
     try {
-      const blob = await api.homeworks.submission(homeworkId);
-      const nextUrl = URL.createObjectURL(blob);
-      if (submissionPreviewUrlRef.current) URL.revokeObjectURL(submissionPreviewUrlRef.current);
-      submissionPreviewUrlRef.current = nextUrl;
-      setSubmissionPreviewUrl(nextUrl);
+      const totalPageCount = await fetchSubmissionPageCount(homeworkId);
+      const firstSolutionPage = totalPageCount > worksheetPageCount ? worksheetPageCount : 0;
+      const pageIndexes = Array.from(
+        { length: Math.max(0, totalPageCount - firstSolutionPage) },
+        (_, index) => firstSolutionPage + index,
+      );
+      const blobs = await Promise.all(pageIndexes.map((pageIndex) => fetchSubmissionPage(homeworkId, pageIndex)));
+      const nextUrls = blobs.map((blob) => URL.createObjectURL(blob));
+      submissionPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      submissionPreviewUrlsRef.current = nextUrls;
+      setSubmissionPreviewUrls(nextUrls);
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -108,16 +115,16 @@ export function HomeworkDetailPage() {
   }, [homework?.hasWorksheet, homework?.worksheetPageCount, loadWorksheetPreview, clearPreviewUrls]);
 
   useEffect(() => {
-    if (homework?.submitted && openSection === 'preview') {
-      void loadSubmissionPreview();
+    if (homework?.submitted && homework.worksheetPageCount && openSection === 'preview') {
+      void loadSubmissionPreview(homework.worksheetPageCount);
     } else if (!homework?.submitted) {
-      clearSubmissionPreviewUrl();
+      clearSubmissionPreviewUrls();
     }
-  }, [homework?.submitted, openSection, loadSubmissionPreview, clearSubmissionPreviewUrl]);
+  }, [homework?.submitted, homework?.worksheetPageCount, openSection, loadSubmissionPreview, clearSubmissionPreviewUrls]);
 
   useEffect(() => () => {
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    if (submissionPreviewUrlRef.current) URL.revokeObjectURL(submissionPreviewUrlRef.current);
+    submissionPreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
   function downloadBlob(blob: Blob, filename: string) {
@@ -232,10 +239,6 @@ export function HomeworkDetailPage() {
   const toggleSection = (section: Exclude<OpenSection, null>) => {
     setOpenSection((current) => current === section ? null : section);
   };
-
-  const submittedPreviewSrc = submissionPreviewUrl
-    ? `${submissionPreviewUrl}#page=${Math.max(1, (homework?.worksheetPageCount ?? 0) + 1)}&view=FitH`
-    : null;
 
   return (
     <div>
@@ -425,31 +428,29 @@ export function HomeworkDetailPage() {
 
             {homework.submitted && (
               <div style={{ paddingTop: 18, borderTop: '1px solid var(--border)' }}>
-                <div style={{ marginBottom: 10 }}>
-                  <strong>{language === 'DE' ? 'Lösung des Schülers' : 'Решение ученика'}</strong>
-                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                    {language === 'DE'
-                      ? 'Hier siehst du die hochgeladenen Fotos oder die abgegebene PDF direkt im Browser.'
-                      : 'Здесь показываются фото или PDF, которые ученик отправил как решение.'}
-                  </div>
-                </div>
-
-                {submissionPreviewLoading && !submissionPreviewUrl ? (
+                <strong style={{ display: 'block', marginBottom: 10 }}>
+                  {language === 'DE' ? 'Lösung des Schülers' : 'Решение ученика'}
+                </strong>
+                {submissionPreviewLoading && submissionPreviewUrls.length === 0 ? (
                   <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>
                     {language === 'DE' ? 'Abgabe wird geladen…' : 'Загружаем решение ученика…'}
                   </div>
-                ) : submittedPreviewSrc ? (
-                  <div>
-                    <iframe
-                      title={language === 'DE' ? 'Abgegebene Hausaufgabe' : 'Решение ученика'}
-                      src={submittedPreviewSrc}
-                      style={{ width: '100%', minHeight: '72vh', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
-                    />
-                    <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-                      {language === 'DE'
-                        ? 'Bei Foto-Uploads öffnet die Vorschau direkt bei den Seiten, die der Schüler hinzugefügt hat. Falls direkt auf dem Arbeitsblatt geschrieben wurde, kann der PDF-Viewer zur ersten Seite navigiert werden.'
-                        : 'Если ученик загрузил фото, просмотр открывается сразу на добавленных им страницах. Если он писал прямо на листе, в просмотрщике PDF можно перейти на первую страницу.'}
-                    </div>
+                ) : submissionPreviewUrls.length > 0 ? (
+                  <div style={{ display: 'grid', gap: 16, justifyItems: 'center' }}>
+                    {submissionPreviewUrls.map((url, index) => (
+                      <div key={url} style={{ width: '100%', maxWidth: 1100 }}>
+                        {submissionPreviewUrls.length > 1 && (
+                          <div className="muted" style={{ marginBottom: 6, fontSize: 13 }}>
+                            {language === 'DE' ? `Lösung ${index + 1}` : `Решение ${index + 1}`}
+                          </div>
+                        )}
+                        <img
+                          src={url}
+                          alt={language === 'DE' ? `Schülerlösung ${index + 1}` : `Решение ученика ${index + 1}`}
+                          style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
+                        />
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="banner banner--info">
@@ -463,6 +464,28 @@ export function HomeworkDetailPage() {
       </div>
     </div>
   );
+}
+
+async function fetchSubmissionPageCount(homeworkId: string): Promise<number> {
+  const response = await fetch(`${API_BASE_URL}/homeworks/${homeworkId}/submission/page-count`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`Could not load submission page count (${response.status})`);
+  const payload = await response.json() as { pageCount: number };
+  return payload.pageCount;
+}
+
+async function fetchSubmissionPage(homeworkId: string, pageIndex: number): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/homeworks/${homeworkId}/submission/pages/${pageIndex}`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`Could not load submission page (${response.status})`);
+  return response.blob();
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function formatHomeworkDate(date: string, language: 'DE' | 'RU') {
