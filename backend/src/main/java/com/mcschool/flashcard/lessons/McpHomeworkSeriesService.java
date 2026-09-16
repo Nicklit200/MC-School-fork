@@ -197,6 +197,7 @@ public class McpHomeworkSeriesService {
 
         List<Map<String, Object>> assignments = new ArrayList<>();
         int created = 0;
+        int replaced = 0;
         int skipped = 0;
 
         for (int dayIndex = 0; dayIndex < days; dayIndex++) {
@@ -217,6 +218,24 @@ public class McpHomeworkSeriesService {
                 }
 
                 if (existingDates.get(student.getId()).contains(date)) {
+                    if ("student".equals(target.type())) {
+                        Homework existingHomework = homeworkRepository
+                                .findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId()).stream()
+                                .filter(homework -> homework.hasWorksheet() && homework.getStartDate().equals(date))
+                                .findFirst()
+                                .orElse(null);
+                        if (existingHomework != null && !existingHomework.isSubmitted()) {
+                            homeworkPdfService.uploadWorksheet(
+                                    teacher,
+                                    existingHomework.getId(),
+                                    new ByteArrayPdfMultipartFile(filename, pdf.bytes()));
+                            row.put("status", "replaced_existing");
+                            row.put("homeworkId", existingHomework.getId().toString());
+                            replaced++;
+                            assignments.add(row);
+                            continue;
+                        }
+                    }
                     row.put("status", "skipped_existing");
                     skipped++;
                     assignments.add(row);
@@ -244,6 +263,7 @@ public class McpHomeworkSeriesService {
         result.put("days", days);
         result.put("studentCount", target.students().size());
         result.put("created", created);
+        result.put("replacedExisting", replaced);
         result.put("skippedExisting", skipped);
         result.put("assignments", assignments);
         return result;
