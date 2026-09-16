@@ -53,6 +53,7 @@ export function Layout({ children }: { children: ReactNode }) {
   if (isTeacher) {
     const teacherLinks = [
       { to: '/students', label: 'Мои ученики', end: true },
+      { to: '/parents', label: 'Родители' },
       { to: '/groups', label: 'Мои группы' },
       { to: '/teacher/lessons', label: 'Уроки' },
       { to: '/teacher/settings', label: 'Настройки' },
