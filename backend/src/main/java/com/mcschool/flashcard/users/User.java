@@ -132,6 +132,19 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
+    /**
+     * Students are managed by the school from the moment they are created.
+     * ACTIVE here means the teacher can fully work with the account. A null password
+     * simply means the student cannot log in yet.
+     */
+    public void enableManagedStudent() {
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can be managed this way");
+        if (this.archived) throw new IllegalStateException("Archived accounts cannot be enabled");
+        this.status = UserStatus.ACTIVE;
+        this.invitationToken = null;
+        this.invitationExpiresAt = null;
+    }
+
     public void assignParentOwner(User teacher) {
         if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can have a managing teacher");
         if (teacher == null || teacher.getRole() != Role.TEACHER) throw new IllegalArgumentException("Teacher account is required");
@@ -218,6 +231,14 @@ public class User {
         return user;
     }
 
+    public static User managedStudent(String fullName, User teacher) {
+        User user = new User(fullName, null, Role.STUDENT);
+        user.status = UserStatus.ACTIVE;
+        user.teacher = teacher;
+        return user;
+    }
+
+    /** Legacy factory kept for compatibility with old data/tests. New student creation uses managedStudent. */
     public static User invitedStudent(String fullName, String email, User teacher, String invitationToken, Instant invitationExpiresAt) {
         User user = new User(fullName, email, Role.STUDENT);
         user.status = UserStatus.INVITED;
