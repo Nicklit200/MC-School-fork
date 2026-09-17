@@ -33,6 +33,7 @@ export function GroupLessonsPage() {
   const [teacher, setTeacher] = useState<User | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
   const [students, setStudents] = useState<StudentListItem[]>([]);
+  const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [briefs, setBriefs] = useState<BriefMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,14 +63,16 @@ export function GroupLessonsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [googleConnection, currentTeacher, studentList] = await Promise.all([
+      const [googleConnection, currentTeacher, studentList, groupList] = await Promise.all([
         api.lessons.googleCalendarConnection(),
         api.auth.me(),
         api.students.list(),
+        api.groups.list(),
       ]);
       setConnection(googleConnection);
       setTeacher(currentTeacher);
       setStudents(studentList);
+      setGroups(groupList);
       if (!googleConnection.connected) {
         setLessons([]);
         setBriefs({});
@@ -80,7 +83,7 @@ export function GroupLessonsPage() {
       setLessons(lessonList);
       const groupIds = Array.from(new Set(lessonList.map((lesson) => lesson.groupId).filter((id): id is string => Boolean(id))));
       const entries = await Promise.all(groupIds.map(async (groupId) => {
-        const group = await api.groups.get(groupId);
+        const group = groupList.find((item) => item.id === groupId) ?? await api.groups.get(groupId);
         const studentBriefs = await Promise.all(group.students.map(async (student) => {
           const [homeworks, history, summary] = await Promise.all([
             api.homeworks.listForStudent(student.id),
@@ -142,18 +145,21 @@ export function GroupLessonsPage() {
   }, [lessons]);
 
   const returnedLesson = returnedLessonId ? lessons.find((lesson) => lesson.eventId === returnedLessonId) ?? null : null;
-  const returnedGroup = returnedLesson?.groupId ? briefs[returnedLesson.groupId]?.group ?? null : null;
+  const returnedGroup = returnedLesson?.groupId
+    ? groups.find((group) => group.id === returnedLesson.groupId) ?? briefs[returnedLesson.groupId]?.group ?? null
+    : null;
   const returnedStudent = returnedLesson?.studentId ? students.find((student) => student.id === returnedLesson.studentId) ?? null : null;
 
-  async function bindStudent(lesson: GroupLesson, studentId: string) {
-    if (!studentId) return;
+  async function bindTarget(lesson: GroupLesson, value: string) {
+    if (!value) return;
     setError(null);
     try {
-      await api.lessons.bindStudent(lesson.bindingKey, studentId);
-      const selected = students.find((student) => student.id === studentId);
-      setLessons((current) => current.map((item) => item.bindingKey === lesson.bindingKey
-        ? { ...item, studentId, studentName: selected?.fullName ?? item.studentName }
-        : item));
+      if (value.startsWith('group:')) {
+        await api.lessons.bindGroup(lesson.bindingKey, value.slice('group:'.length));
+      } else if (value.startsWith('student:')) {
+        await api.lessons.bindStudent(lesson.bindingKey, value.slice('student:'.length));
+      }
+      await loadAll();
     } catch (e) {
       setError(toErrorMessage(e, t));
     }
@@ -260,6 +266,7 @@ export function GroupLessonsPage() {
                     {day.lessons.map((lesson) => {
                       const brief = lesson.groupId ? briefs[lesson.groupId] : undefined;
                       const linkedGroup = Boolean(lesson.groupId && lesson.groupName);
+                      const selectedTarget = lesson.groupId ? `group:${lesson.groupId}` : lesson.studentId ? `student:${lesson.studentId}` : '';
                       const expanded = expandedLessonId === lesson.eventId;
                       const finished = finishedLessonId === lesson.eventId;
                       return (
@@ -268,17 +275,18 @@ export function GroupLessonsPage() {
                           <div style={{ fontWeight: 750, marginTop: 4 }}>{lesson.title}</div>
                           <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
 
-                          {linkedGroup ? (
+                          {linkedGroup && (
                             <div className="banner banner--info" style={{ marginTop: 8, padding: 8, fontSize: 12 }}>{language === 'DE' ? `Gruppe: ${lesson.groupName}` : `Группа: ${lesson.groupName}`}</div>
-                          ) : (
-                            <label className="field" style={{ marginTop: 8, marginBottom: 0 }}>
-                              <span className="field__label" style={{ fontSize: 12 }}>{language === 'DE' ? 'Schüler für diesen Termin' : 'Ученик для этого события'}</span>
-                              <select className="select" value={lesson.studentId ?? ''} onChange={(e) => void bindStudent(lesson, e.target.value)}>
-                                <option value="">{language === 'DE' ? 'Probeunterricht / kein Schüler' : 'Пробный урок / без ученика'}</option>
-                                {students.map((student) => <option key={student.id} value={student.id}>{student.fullName}</option>)}
-                              </select>
-                            </label>
                           )}
+
+                          <label className="field" style={{ marginTop: 8, marginBottom: 0 }}>
+                            <span className="field__label" style={{ fontSize: 12 }}>{language === 'DE' ? 'Gruppe oder Schüler für diesen Termin' : 'Группа или ученик для этого события'}</span>
+                            <select className="select" value={selectedTarget} onChange={(e) => void bindTarget(lesson, e.target.value)}>
+                              <option value="">{language === 'DE' ? 'Probeunterricht / keine Zuordnung' : 'Пробный урок / без привязки'}</option>
+                              {groups.length > 0 && <optgroup label={language === 'DE' ? 'Gruppen' : 'Группы'}>{groups.map((group) => <option key={group.id} value={`group:${group.id}`}>{group.name}</option>)}</optgroup>}
+                              {students.length > 0 && <optgroup label={language === 'DE' ? 'Schüler' : 'Ученики'}>{students.map((student) => <option key={student.id} value={`student:${student.id}`}>{student.fullName}</option>)}</optgroup>}
+                            </select>
+                          </label>
 
                           <div className="stack" style={{ gap: 6, marginTop: 10 }}>
                             <button className="btn" type="button" data-mindcrafti-lesson-id={lesson.eventId} data-mindcrafti-group-id={lesson.groupId ?? ''} data-mindcrafti-student-id={lesson.studentId ?? ''} onClick={() => void requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>
@@ -297,7 +305,7 @@ export function GroupLessonsPage() {
                             </div>
                           )}
 
-                          {finished && !returnedLessonId && linkedGroup && lesson.groupId && <TranscriptUpload target={{ kind: 'group', id: lesson.groupId, initialFolderId: brief?.group.googleDriveTranscriptFolderId ?? null }} language={language} />}
+                          {finished && !returnedLessonId && linkedGroup && lesson.groupId && <TranscriptUpload target={{ kind: 'group', id: lesson.groupId, initialFolderId: brief?.group.googleDriveTranscriptFolderId ?? groups.find((group) => group.id === lesson.groupId)?.googleDriveTranscriptFolderId ?? null }} language={language} />}
                           {finished && !returnedLessonId && !linkedGroup && lesson.studentId && <TranscriptUpload target={{ kind: 'student', id: lesson.studentId, initialFolderId: students.find((student) => student.id === lesson.studentId)?.googleDriveTranscriptFolderId ?? null }} language={language} />}
                           {finished && !returnedLessonId && !linkedGroup && !lesson.studentId && teacher && <TranscriptUpload target={{ kind: 'trial', id: teacher.id, initialFolderId: teacher.googleDriveTrialTranscriptFolderId ?? null }} language={language} />}
                         </div>
