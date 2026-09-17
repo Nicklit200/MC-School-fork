@@ -95,13 +95,18 @@ public class GoogleCalendarLessonService {
             if (!(item instanceof Map<?, ?> rawMap)) continue;
             Map<String, Object> event = asMap(rawMap);
             String title = stringValue(event.get("summary"));
-            StudentGroup group = matchGroup(groups, title);
 
             String eventId = stringValue(event.get("id"));
             String recurringEventId = stringValue(event.get("recurringEventId"));
             String bindingKey = recurringEventId.isBlank() ? eventId : recurringEventId;
             GoogleCalendarLessonBinding savedBinding = bindings.get(bindingKey);
-            User student = savedBinding == null ? matchStudent(students, title) : savedBinding.getStudent();
+
+            StudentGroup group = savedBinding != null && savedBinding.getGroup() != null
+                    ? savedBinding.getGroup()
+                    : savedBinding == null ? matchGroup(groups, title) : null;
+            User student = savedBinding != null && savedBinding.getStudent() != null
+                    ? savedBinding.getStudent()
+                    : savedBinding == null ? matchStudent(students, title) : null;
 
             Instant startsAt = eventInstant(event.get("start"));
             Instant endsAt = eventInstant(event.get("end"));
@@ -153,6 +158,22 @@ public class GoogleCalendarLessonService {
         GoogleCalendarLessonBinding binding = bindingRepository.findByTeacherIdAndEventKey(teacher.id(), bindingKey)
                 .orElseGet(() -> GoogleCalendarLessonBinding.create(teacherEntity, bindingKey, student));
         binding.changeStudent(student);
+        bindingRepository.save(binding);
+    }
+
+    @Transactional
+    public void bindGroup(AuthenticatedUser teacher, String bindingKey, UUID groupId) {
+        if (bindingKey == null || bindingKey.isBlank()) {
+            throw new IllegalArgumentException("Calendar event key is required");
+        }
+        User teacherEntity = userRepository.findById(teacher.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
+        StudentGroup group = groupRepository.findByIdAndTeacherId(groupId, teacher.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+
+        GoogleCalendarLessonBinding binding = bindingRepository.findByTeacherIdAndEventKey(teacher.id(), bindingKey)
+                .orElseGet(() -> GoogleCalendarLessonBinding.createForGroup(teacherEntity, bindingKey, group));
+        binding.changeGroup(group);
         bindingRepository.save(binding);
     }
 
