@@ -4,7 +4,6 @@ import { api } from '../../api/client';
 import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
-import { InvitationNotice } from '../../components/InvitationNotice';
 
 type TodayCompletion = {
   cards: 'done' | 'pending' | 'none';
@@ -17,8 +16,7 @@ export function StudentsPage() {
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
   const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
   const [fullName, setFullName] = useState('');
-  const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
-  const [copiedStudentId, setCopiedStudentId] = useState<string | null>(null);
+  const [createdStudent, setCreatedStudent] = useState<StudentInvitation | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +54,7 @@ export function StudentsPage() {
     setError(null);
     try {
       const created = await api.students.create(fullName.trim(), '');
-      setInvitation(created);
+      setCreatedStudent(created);
       setFullName('');
       await reload();
     } catch (e) {
@@ -66,14 +64,6 @@ export function StudentsPage() {
 
   function activeCount(summary?: CardSummary): number {
     return summary ? summary.dueNow + summary.awaitingRepetition : 0;
-  }
-
-  async function copyInvitationLink(student: StudentListItem) {
-    if (!student.invitationToken) return;
-    await copyActivationToken(student.invitationToken);
-    setCopiedStudentId(student.id);
-    setOpenMenuId(null);
-    window.setTimeout(() => setCopiedStudentId((current) => (current === student.id ? null : current)), 2000);
   }
 
   async function renameStudent(student: StudentListItem) {
@@ -128,11 +118,6 @@ export function StudentsPage() {
     }
   }
 
-  async function copyActivationToken(token: string) {
-    const link = `${window.location.origin}/activate?token=${encodeURIComponent(token)}`;
-    await navigator.clipboard.writeText(link);
-  }
-
   return (
     <div className="teacher-students-page" onClick={() => openMenuId && setOpenMenuId(null)}>
       <div className="teacher-page-heading">
@@ -151,15 +136,13 @@ export function StudentsPage() {
               <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={language === 'DE' ? 'Name eingeben' : 'Введите имя ученика'} required />
             </label>
           </div>
-          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Für jeden Schüler wird automatisch ein eigener Schul-Login erstellt. E-Mail ist nicht nötig.' : 'Для каждого ученика автоматически создаётся отдельный школьный логин. Email не нужен.'}</p>
+          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Der Schüler ist sofort vollständig im System verfügbar. Login und Passwort können später weitergegeben werden.' : 'Ученик сразу полностью доступен в системе. Логин и пароль можно передать ему позже.'}</p>
           <button className="btn teacher-primary-btn" type="submit">{language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
         </form>
-        {invitation && (
-          <div className="stack">
-            <div className="banner banner--success">
-              {language === 'DE' ? 'Schüler-Login' : 'Логин ученика'}: <strong>{invitation.student.username}</strong>
-            </div>
-            <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />
+        {createdStudent && (
+          <div className="banner banner--success" style={{ marginTop: 16 }}>
+            {language === 'DE' ? 'Schüler erstellt. Login' : 'Ученик создан. Логин'}: <strong>{createdStudent.student.username}</strong>.{' '}
+            {language === 'DE' ? 'Das Passwort kann über das Menü festgelegt werden.' : 'Пароль можно задать через меню ученика.'}
           </div>
         )}
       </section>
@@ -200,11 +183,8 @@ export function StudentsPage() {
                       <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия" aria-expanded={openMenuId === student.id} onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}>⋮</button>
                       {openMenuId === student.id && (
                         <div className="teacher-student-menu">
-                          <button type="button" disabled={!student.invitationToken} onClick={() => void copyInvitationLink(student)}>
-                            <span>⌁</span>{copiedStudentId === student.id ? (language === 'DE' ? 'Link kopiert' : 'Ссылка скопирована') : (language === 'DE' ? 'Schüler-Link' : 'Ссылка ученика')}
-                          </button>
                           <button type="button" onClick={() => void resetStudentPassword(student)}>
-                            <span>⌘</span>{language === 'DE' ? 'Passwort ändern' : 'Сбросить пароль'}
+                            <span>⌘</span>{language === 'DE' ? 'Passwort festlegen/ändern' : 'Задать/изменить пароль'}
                           </button>
                           <button type="button" onClick={() => void renameStudent(student)}><span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}</button>
                           <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}><span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
