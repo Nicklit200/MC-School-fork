@@ -56,27 +56,63 @@ public class HomeworkService {
         return listForStudent(studentId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public HomeworkAnswerReviewResponse reviewFinalAnswers(AuthenticatedUser teacher, UUID homeworkId) {
         Homework homework = homeworkRepository.findById(homeworkId)
                 .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
         requireOwnedStudent(teacher.id(), homework.getStudent().getId());
 
         int total = homework.getFinalAnswerCount() == null ? 0 : homework.getFinalAnswerCount();
-        int correct = homework.getFinalCorrectCount() == null ? 0 : homework.getFinalCorrectCount();
-        List<HomeworkAnswerReviewResponse.Item> storedItems = readAnswerResults(homework.getFinalAnswerResultsJson());
         List<AnswerKeyItem> answerKey = homework.hasFinalAnswerPrompt()
                 ? readAnswerKey(homework.getAnswerKeyJson())
                 : List.of();
-        List<HomeworkAnswerReviewResponse.Item> items = new ArrayList<>();
+        List<SaveHomeworkFinalAnswersRequest.FinalAnswer> submittedAnswers =
+                readSubmittedAnswers(homework.getFinalAnswersJson());
+
+        if (!submittedAnswers.isEmpty() && submittedAnswers.size() == answerKey.size()) {
+            int correctCount = 0;
+            List<HomeworkFinalAnswersResult.Item> resultItems = new ArrayList<>();
+            List<HomeworkAnswerReviewResponse.Item> reviewItems = new ArrayList<>();
+
+            for (int index = 0; index < submittedAnswers.size(); index++) {
+                SaveHomeworkFinalAnswersRequest.FinalAnswer submitted = submittedAnswers.get(index);
+                AnswerKeyItem correct = answerKey.get(index);
+                boolean matches = answersEquivalent(submitted.answer(), correct.answer());
+                if (matches) correctCount += 1;
+                String label = submitted.label().isBlank() ? correct.label() : submitted.label().trim();
+                resultItems.add(new HomeworkFinalAnswersResult.Item(label, matches));
+                reviewItems.add(new HomeworkAnswerReviewResponse.Item(
+                        label,
+                        submitted.answer().trim(),
+                        correct.answer(),
+                        matches));
+            }
+
+            boolean allCorrect = correctCount == total;
+            if (!Integer.valueOf(correctCount).equals(homework.getFinalCorrectCount())
+                    || !Boolean.valueOf(allCorrect).equals(homework.getFinalAnswersCorrect())) {
+                homework.changeFinalAnswers(
+                        homework.getFinalAnswersJson(),
+                        correctCount,
+                        allCorrect,
+                        toResultsJson(submittedAnswers, resultItems));
+            }
+
+            double percent = total == 0 ? 0.0 : Math.round((correctCount * 10000.0) / total) / 100.0;
+            return new HomeworkAnswerReviewResponse(correctCount, total, percent, reviewItems);
+        }
+
+        int storedCorrect = homework.getFinalCorrectCount() == null ? 0 : homework.getFinalCorrectCount();
+        List<HomeworkAnswerReviewResponse.Item> storedItems = readAnswerResults(homework.getFinalAnswerResultsJson());
+        List<HomeworkAnswerReviewResponse.Item> reviewItems = new ArrayList<>();
         for (int index = 0; index < storedItems.size(); index++) {
             HomeworkAnswerReviewResponse.Item stored = storedItems.get(index);
             String correctAnswer = index < answerKey.size() ? answerKey.get(index).answer() : null;
-            items.add(new HomeworkAnswerReviewResponse.Item(
+            reviewItems.add(new HomeworkAnswerReviewResponse.Item(
                     stored.label(), stored.answer(), correctAnswer, stored.correct()));
         }
-        double percent = total == 0 ? 0.0 : Math.round((correct * 10000.0) / total) / 100.0;
-        return new HomeworkAnswerReviewResponse(correct, total, percent, items);
+        double percent = total == 0 ? 0.0 : Math.round((storedCorrect * 10000.0) / total) / 100.0;
+        return new HomeworkAnswerReviewResponse(storedCorrect, total, percent, reviewItems);
     }
 
     @Transactional(readOnly = true)
@@ -185,6 +221,18 @@ public class HomeworkService {
         return items;
     }
 
+    private List<SaveHomeworkFinalAnswersRequest.FinalAnswer> readSubmittedAnswers(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<SaveHomeworkFinalAnswersRequest.FinalAnswer> items = new ArrayList<>();
+        Matcher matcher = ANSWER_KEY_ITEM.matcher(value);
+        while (matcher.find()) {
+            items.add(new SaveHomeworkFinalAnswersRequest.FinalAnswer(
+                    jsonUnescape(matcher.group(1)),
+                    jsonUnescape(matcher.group(2))));
+        }
+        return items;
+    }
+
     private List<HomeworkAnswerReviewResponse.Item> readAnswerResults(String value) {
         if (value == null || value.isBlank()) return List.of();
         List<HomeworkAnswerReviewResponse.Item> items = new ArrayList<>();
@@ -208,8 +256,14 @@ public class HomeworkService {
         NumericValue rightNumeric = parseNumeric(right);
         return leftNumeric != null
                 && rightNumeric != null
-                && leftNumeric.unit().equals(rightNumeric.unit())
+                && unitsEquivalent(leftNumeric.unit(), rightNumeric.unit())
                 && leftNumeric.value().compareTo(rightNumeric.value()) == 0;
+    }
+
+    private boolean unitsEquivalent(String left, String right) {
+        if (left.equals(right)) return true;
+        return (left.isEmpty() && "€".equals(right))
+                || (right.isEmpty() && "€".equals(left));
     }
 
     private String normalizeText(String value) {
