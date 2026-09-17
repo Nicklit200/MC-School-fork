@@ -40,6 +40,9 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     private static final String SECOND_SAMPLE_FILENAME = "staging-answer-input-test-v3.pdf";
     private static final String SECOND_SAMPLE_ANSWER_KEY = "[{\"label\":\"1\",\"answer\":\"5/6\"},{\"label\":\"2\",\"answer\":\"90€\"}]";
 
+    private static final String THIRD_SAMPLE_FILENAME = "staging-answer-input-test-v4.pdf";
+    private static final String THIRD_SAMPLE_ANSWER_KEY = "[{\"label\":\"1\",\"answer\":\"7/10\"},{\"label\":\"2\",\"answer\":\"120€\"}]";
+
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
     private final PasswordEncoder passwordEncoder;
@@ -73,6 +76,7 @@ public class StagingFixturesInitializer implements ApplicationRunner {
         User student = upsertStudent(teacher);
         ensureSampleHomework(student);
         ensureSecondSampleHomework(student);
+        ensureThirdSampleHomework(student);
     }
 
     private User upsertTeacher() {
@@ -140,6 +144,15 @@ public class StagingFixturesInitializer implements ApplicationRunner {
                 SECOND_SAMPLE_ANSWER_KEY,
                 "1. Calculate: 1/2 + 1/3",
                 "2. An item costs 120 EUR. After a 25% discount, what is the final price?");
+    }
+
+    private void ensureThirdSampleHomework(User student) throws Exception {
+        ensureHomework(
+                student,
+                THIRD_SAMPLE_FILENAME,
+                THIRD_SAMPLE_ANSWER_KEY,
+                "1. Calculate: 3/5 + 1/10",
+                "2. An item costs 150 EUR. After a 20% discount, what is the final price?");
     }
 
     private void ensureHomework(User student,
