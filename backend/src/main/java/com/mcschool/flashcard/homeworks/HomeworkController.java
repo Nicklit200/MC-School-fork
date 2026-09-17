@@ -2,6 +2,7 @@ package com.mcschool.flashcard.homeworks;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
+import com.mcschool.flashcard.homeworks.dto.HomeworkAnswerReviewResponse;
 import com.mcschool.flashcard.homeworks.dto.HomeworkFinalAnswersResult;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
 import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
@@ -71,6 +72,13 @@ public class HomeworkController {
     public List<HomeworkResponse> listForTeacher(@AuthenticationPrincipal AuthenticatedUser caller,
                                                  @PathVariable UUID studentId) {
         return homeworkService.listForTeacher(caller, studentId);
+    }
+
+    @GetMapping("/homeworks/{homeworkId}/final-answers-review")
+    @PreAuthorize("hasRole('TEACHER')")
+    public HomeworkAnswerReviewResponse finalAnswersReview(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                           @PathVariable UUID homeworkId) {
+        return homeworkService.reviewFinalAnswers(caller, homeworkId);
     }
 
     @DeleteMapping("/homeworks/{homeworkId}")
