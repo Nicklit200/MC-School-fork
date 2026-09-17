@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { homePathForRole } from '../auth/roleRoutes';
@@ -9,17 +9,18 @@ import { LanguageToggle } from '../components/LanguageToggle';
 import '../login-page.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
-
-type StagingProfile = {
-  id: string;
-  name: string;
-  role: string;
-};
+const IS_STAGING_HOST = typeof window !== 'undefined'
+  && window.location.hostname === 'staging-web-production.up.railway.app';
 
 type StagingAuthResponse = {
   accessToken: string;
   user: User;
 };
+
+const STAGING_PROFILES = [
+  { id: 'teacher', role: 'TEACHER' },
+  { id: 'student', role: 'STUDENT' },
+] as const;
 
 export function LoginPage() {
   const { user, login, setUser } = useAuth();
@@ -30,26 +31,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [stagingProfiles, setStagingProfiles] = useState<StagingProfile[]>([]);
   const [stagingSubmitting, setStagingSubmitting] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE_URL}/auth/staging-profiles`)
-      .then(async (response) => {
-        if (!response.ok) return [];
-        return await response.json() as StagingProfile[];
-      })
-      .then((profiles) => {
-        if (!cancelled) setStagingProfiles(profiles);
-      })
-      .catch(() => {
-        if (!cancelled) setStagingProfiles([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   if (user) {
     return <Navigate to={homePathForRole(user.role)} replace />;
@@ -110,7 +92,7 @@ export function LoginPage() {
 
         {error && <div className="banner banner--error">{t('login.error')}</div>}
 
-        {stagingProfiles.length > 0 && (
+        {IS_STAGING_HOST && (
           <div style={{ marginBottom: 20, padding: 14, borderRadius: 14, background: '#f5f8ff', border: '1px solid #dde7ff' }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>
               {language === 'DE' ? 'Testzugang ohne Passwort' : 'Тестовый вход без пароля'}
@@ -121,7 +103,7 @@ export function LoginPage() {
                 : 'Работает только на тестовом сайте.'}
             </div>
             <div style={{ display: 'grid', gap: 8 }}>
-              {stagingProfiles.map((profile) => (
+              {STAGING_PROFILES.map((profile) => (
                 <button
                   key={profile.id}
                   className="login-submit"
