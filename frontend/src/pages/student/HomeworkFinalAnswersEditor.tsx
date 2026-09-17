@@ -282,7 +282,18 @@ export function HomeworkFinalAnswersEditor({
 
   function handleKey(key: Key) {
     if (key.action === 'fraction') {
-      setMode('fraction');
+      if (activeDraft?.mode === 'text' && /^-?\d+(?:[.,]\d+)?$/.test(activeDraft.text.trim())) {
+        updateDraft(activeIndex, {
+          mode: 'mixed',
+          whole: activeDraft.text.trim(),
+          text: '',
+          numerator: '',
+          denominator: '',
+        });
+        setActivePart('numerator');
+      } else {
+        setMode('fraction');
+      }
       return;
     }
     if (key.action === 'mixed') {
@@ -444,18 +455,6 @@ export function HomeworkFinalAnswersEditor({
             onKey={handleKey}
           />
         )}
-
-        <div className="math-keyboard__special-row">
-          <button type="button" className={activeDraft?.mode === 'fraction' ? 'is-active' : ''} onClick={() => setMode('fraction')}>
-            <span className="mini-fraction"><span>□</span><span>□</span></span>
-            <small>{language === 'DE' ? 'Bruch' : 'Дробь'}</small>
-          </button>
-          <button type="button" className={activeDraft?.mode === 'mixed' ? 'is-active' : ''} onClick={() => setMode('mixed')}>
-            <span className="mini-mixed"><b>2</b><span className="mini-fraction"><span>□</span><span>□</span></span></span>
-            <small>{language === 'DE' ? 'Gemischt' : 'Смешанная'}</small>
-          </button>
-          <button type="button" onClick={() => appendValue('€')}>€</button>
-        </div>
       </div>
 
       <div className="math-answer-editor__submit-wrap">
@@ -484,7 +483,13 @@ function KeyGrid({ keys, tab, onKey }: { keys: Key[]; tab: Exclude<KeyboardTab, 
           className={key.className ?? ''}
           onClick={() => onKey(key)}
         >
-          {key.label.split('\n').map((line, lineIndex) => (
+          {key.action === 'fraction' ? (
+            <span className="math-keyboard__fraction-icon" aria-label="fraction">
+              <span>□</span>
+              <span className="math-keyboard__fraction-bar" />
+              <span>□</span>
+            </span>
+          ) : key.label.split('\n').map((line, lineIndex) => (
             <span key={`${line}-${lineIndex}`}>{line}</span>
           ))}
         </button>
