@@ -19,18 +19,22 @@ import org.springframework.stereotype.Service;
  * <p>The service is intentionally idempotent: existing folders are reused even when
  * their names contain extra spaces (for example the legacy "Карточки " folders) or
  * a group name is written as "Группа1" instead of "Группа 1".</p>
+ *
+ * <p>Structure entry points are synchronized because Google Drive permits sibling
+ * folders with identical names. Without serialization, two simultaneous requests
+ * can both observe a missing folder and create the same folder twice.</p>
  */
 @Service
 public class GoogleDriveStructureService {
 
     private static final List<String> INDIVIDUAL_FOLDERS = List.of(
-            "Чистые документы",
-            "Домашнее задание",
-            "Таблица",
-            "Транскрипции",
+            "Чистые рабочие листы",
+            "Заполненные после урока",
             "Карточки",
             "Сделанная домашка",
-            "Заполненные после урока"
+            "Транскрипции",
+            "Домашнее задание",
+            "Таблица"
     );
 
     // Keep the established group layout exactly as it exists in the school Drive.
@@ -47,7 +51,7 @@ public class GoogleDriveStructureService {
     // Older student folders use these names. Reuse them instead of creating a
     // second folder that means the same thing.
     private static final Map<String, List<String>> LEGACY_FOLDER_ALIASES = Map.of(
-            "Чистые документы", List.of("Чистые документы", "Чистые листы"),
+            "Чистые рабочие листы", List.of("Чистые рабочие листы", "Чистые документы", "Чистые листы"),
             "Домашнее задание", List.of("Домашнее задание", "Домашние задания"),
             "Заполненные после урока", List.of("Заполненные после урока", "Пройденные листы")
     );
@@ -67,7 +71,7 @@ public class GoogleDriveStructureService {
         this.userRepository = userRepository;
     }
 
-    public void provisionIndividualStudent(User teacher, User student) {
+    public synchronized void provisionIndividualStudent(User teacher, User student) {
         FolderContext teacherRoot = teacherRoot(teacher);
         DriveItemResponse studentRoot = ensureNamedEntityFolder(
                 teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
@@ -79,12 +83,12 @@ public class GoogleDriveStructureService {
         student.changeGoogleDriveTranscriptFolderId(folders.get("Транскрипции").id());
     }
 
-    public void provisionGroup(User teacher, StudentGroup group) {
+    public synchronized void provisionGroup(User teacher, StudentGroup group) {
         GroupFolders folders = ensureGroup(teacher, group.getName());
         group.updateTranscriptFolder(folders.folders().get("Транскрипции").id());
     }
 
-    public void provisionGroupMember(User teacher, StudentGroup group, User student) {
+    public synchronized void provisionGroupMember(User teacher, StudentGroup group, User student) {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
         group.updateTranscriptFolder(groupFolders.folders().get("Транскрипции").id());
 
@@ -102,14 +106,14 @@ public class GoogleDriveStructureService {
      * Returns semantic destinations so MCP/ChatGPT can save generated files without
      * the user ever writing or knowing a Google Drive path.
      */
-    public Map<String, String> resolveStudentDocumentFolders(User teacher, User student) {
+    public synchronized Map<String, String> resolveStudentDocumentFolders(User teacher, User student) {
         FolderContext teacherRoot = teacherRoot(teacher);
         DriveItemResponse studentRoot = ensureNamedEntityFolder(
                 teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
         Map<String, DriveItemResponse> folders = ensureFolders(
                 teacherRoot.driveId(), studentRoot.id(), INDIVIDUAL_FOLDERS);
         return semanticDestinations(
-                folders.get("Чистые документы"),
+                folders.get("Чистые рабочие листы"),
                 folders.get("Домашнее задание"),
                 folders.get("Таблица"),
                 folders.get("Транскрипции"),
@@ -119,7 +123,7 @@ public class GoogleDriveStructureService {
     }
 
     /** Same semantic keys as the individual map, backed by the established group layout. */
-    public Map<String, String> resolveGroupDocumentFolders(User teacher, StudentGroup group) {
+    public synchronized Map<String, String> resolveGroupDocumentFolders(User teacher, StudentGroup group) {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
         Map<String, DriveItemResponse> folders = groupFolders.folders();
         return semanticDestinations(
@@ -132,7 +136,7 @@ public class GoogleDriveStructureService {
                 folders.get("Заполненные после урока"));
     }
 
-    public String resolveStudentDocumentFolder(User teacher, User student, String documentType) {
+    public synchronized String resolveStudentDocumentFolder(User teacher, User student, String documentType) {
         FolderContext teacherRoot = teacherRoot(teacher);
         DriveItemResponse studentRoot = ensureNamedEntityFolder(
                 teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
@@ -141,7 +145,7 @@ public class GoogleDriveStructureService {
         return folders.get(individualFolderName(documentType)).id();
     }
 
-    public String resolveGroupDocumentFolder(User teacher, StudentGroup group, String documentType) {
+    public synchronized String resolveGroupDocumentFolder(User teacher, StudentGroup group, String documentType) {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
         return groupFolders.folders().get(groupFolderName(documentType)).id();
     }
@@ -260,6 +264,14 @@ public class GoogleDriveStructureService {
         for (String requiredName : requiredNames) {
             DriveItemResponse item = findByAliases(byKey, requiredName);
             if (item == null) {
+                // Re-read immediately before creating. This also catches a folder
+                // created by another process between the initial list and this step.
+                for (DriveItemResponse refreshed : googleDriveService.listFolders(driveId, parentId)) {
+                    byKey.putIfAbsent(nameKey(refreshed.name()), refreshed);
+                }
+                item = findByAliases(byKey, requiredName);
+            }
+            if (item == null) {
                 item = googleDriveService.createFolder(parentId, requiredName);
                 byKey.put(nameKey(requiredName), item);
             }
@@ -278,6 +290,8 @@ public class GoogleDriveStructureService {
 
     private DriveItemResponse ensureFolder(String driveId, String parentId, String name) {
         DriveItemResponse existing = findFolder(googleDriveService.listFolders(driveId, parentId), name);
+        if (existing != null) return existing;
+        existing = findFolder(googleDriveService.listFolders(driveId, parentId), name);
         return existing == null ? googleDriveService.createFolder(parentId, name.trim()) : existing;
     }
 
@@ -287,6 +301,14 @@ public class GoogleDriveStructureService {
         if (exact != null) return exact;
 
         DriveItemResponse near = findUniqueOneEditMatch(folders, name);
+        if (near != null) return near;
+
+        // Check once more immediately before creation so a concurrent request that
+        // just created the student/group folder is reused instead of duplicated.
+        folders = googleDriveService.listFolders(driveId, parentId);
+        exact = findFolder(folders, name);
+        if (exact != null) return exact;
+        near = findUniqueOneEditMatch(folders, name);
         return near == null ? googleDriveService.createFolder(parentId, name.trim()) : near;
     }
 
@@ -348,7 +370,7 @@ public class GoogleDriveStructureService {
 
     private String individualFolderName(String documentType) {
         return switch (normalizeDocumentType(documentType)) {
-            case "clean", "clean_document", "clean_documents", "worksheet", "workbook" -> "Чистые документы";
+            case "clean", "clean_document", "clean_documents", "worksheet", "workbook" -> "Чистые рабочие листы";
             case "homework", "homework_assignment", "assignment" -> "Домашнее задание";
             case "table" -> "Таблица";
             case "transcript", "transcription" -> "Транскрипции";
