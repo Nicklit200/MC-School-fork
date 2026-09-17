@@ -64,7 +64,17 @@ public class HomeworkService {
 
         int total = homework.getFinalAnswerCount() == null ? 0 : homework.getFinalAnswerCount();
         int correct = homework.getFinalCorrectCount() == null ? 0 : homework.getFinalCorrectCount();
-        List<HomeworkAnswerReviewResponse.Item> items = readAnswerResults(homework.getFinalAnswerResultsJson());
+        List<HomeworkAnswerReviewResponse.Item> storedItems = readAnswerResults(homework.getFinalAnswerResultsJson());
+        List<AnswerKeyItem> answerKey = homework.hasFinalAnswerPrompt()
+                ? readAnswerKey(homework.getAnswerKeyJson())
+                : List.of();
+        List<HomeworkAnswerReviewResponse.Item> items = new ArrayList<>();
+        for (int index = 0; index < storedItems.size(); index++) {
+            HomeworkAnswerReviewResponse.Item stored = storedItems.get(index);
+            String correctAnswer = index < answerKey.size() ? answerKey.get(index).answer() : null;
+            items.add(new HomeworkAnswerReviewResponse.Item(
+                    stored.label(), stored.answer(), correctAnswer, stored.correct()));
+        }
         double percent = total == 0 ? 0.0 : Math.round((correct * 10000.0) / total) / 100.0;
         return new HomeworkAnswerReviewResponse(correct, total, percent, items);
     }
@@ -183,6 +193,7 @@ public class HomeworkService {
             items.add(new HomeworkAnswerReviewResponse.Item(
                     jsonUnescape(matcher.group(1)),
                     jsonUnescape(matcher.group(2)),
+                    null,
                     Boolean.parseBoolean(matcher.group(3))));
         }
         return items;
