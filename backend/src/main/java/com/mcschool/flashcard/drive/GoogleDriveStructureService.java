@@ -44,6 +44,14 @@ public class GoogleDriveStructureService {
             "Сделанная домашка"
     );
 
+    // Older student folders use these names. Reuse them instead of creating a
+    // second folder that means the same thing.
+    private static final Map<String, List<String>> LEGACY_FOLDER_ALIASES = Map.of(
+            "Чистые документы", List.of("Чистые документы", "Чистые листы"),
+            "Домашнее задание", List.of("Домашнее задание", "Домашние задания"),
+            "Заполненные после урока", List.of("Заполненные после урока", "Пройденные листы")
+    );
+
     private final GoogleDriveService googleDriveService;
     private final UserRepository userRepository;
 
@@ -61,7 +69,7 @@ public class GoogleDriveStructureService {
 
     public void provisionIndividualStudent(User teacher, User student) {
         FolderContext teacherRoot = teacherRoot(teacher);
-        DriveItemResponse studentRoot = ensureFolder(
+        DriveItemResponse studentRoot = ensureNamedEntityFolder(
                 teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
         Map<String, DriveItemResponse> folders = ensureFolders(
                 teacherRoot.driveId(), studentRoot.id(), INDIVIDUAL_FOLDERS);
@@ -80,9 +88,9 @@ public class GoogleDriveStructureService {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
         group.updateTranscriptFolder(groupFolders.folders().get("Транскрипции").id());
 
-        DriveItemResponse cardsFolder = ensureFolder(
+        DriveItemResponse cardsFolder = ensureNamedEntityFolder(
                 groupFolders.driveId(), groupFolders.folders().get("Карточки").id(), student.getFullName());
-        DriveItemResponse submittedHomeworkFolder = ensureFolder(
+        DriveItemResponse submittedHomeworkFolder = ensureNamedEntityFolder(
                 groupFolders.driveId(), groupFolders.folders().get("Сделанная домашка").id(), student.getFullName());
 
         // These are the destinations already consumed by StudyService and HomeworkDriveExportService.
@@ -96,7 +104,7 @@ public class GoogleDriveStructureService {
      */
     public Map<String, String> resolveStudentDocumentFolders(User teacher, User student) {
         FolderContext teacherRoot = teacherRoot(teacher);
-        DriveItemResponse studentRoot = ensureFolder(
+        DriveItemResponse studentRoot = ensureNamedEntityFolder(
                 teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
         Map<String, DriveItemResponse> folders = ensureFolders(
                 teacherRoot.driveId(), studentRoot.id(), INDIVIDUAL_FOLDERS);
@@ -126,7 +134,7 @@ public class GoogleDriveStructureService {
 
     public String resolveStudentDocumentFolder(User teacher, User student, String documentType) {
         FolderContext teacherRoot = teacherRoot(teacher);
-        DriveItemResponse studentRoot = ensureFolder(
+        DriveItemResponse studentRoot = ensureNamedEntityFolder(
                 teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
         Map<String, DriveItemResponse> folders = ensureFolders(
                 teacherRoot.driveId(), studentRoot.id(), INDIVIDUAL_FOLDERS);
@@ -250,7 +258,7 @@ public class GoogleDriveStructureService {
 
         Map<String, DriveItemResponse> result = new LinkedHashMap<>();
         for (String requiredName : requiredNames) {
-            DriveItemResponse item = byKey.get(nameKey(requiredName));
+            DriveItemResponse item = findByAliases(byKey, requiredName);
             if (item == null) {
                 item = googleDriveService.createFolder(parentId, requiredName);
                 byKey.put(nameKey(requiredName), item);
@@ -260,9 +268,26 @@ public class GoogleDriveStructureService {
         return result;
     }
 
+    private DriveItemResponse findByAliases(Map<String, DriveItemResponse> byKey, String requiredName) {
+        for (String alias : LEGACY_FOLDER_ALIASES.getOrDefault(requiredName, List.of(requiredName))) {
+            DriveItemResponse match = byKey.get(nameKey(alias));
+            if (match != null) return match;
+        }
+        return null;
+    }
+
     private DriveItemResponse ensureFolder(String driveId, String parentId, String name) {
         DriveItemResponse existing = findFolder(googleDriveService.listFolders(driveId, parentId), name);
         return existing == null ? googleDriveService.createFolder(parentId, name.trim()) : existing;
+    }
+
+    private DriveItemResponse ensureNamedEntityFolder(String driveId, String parentId, String name) {
+        List<DriveItemResponse> folders = googleDriveService.listFolders(driveId, parentId);
+        DriveItemResponse exact = findFolder(folders, name);
+        if (exact != null) return exact;
+
+        DriveItemResponse near = findUniqueOneEditMatch(folders, name);
+        return near == null ? googleDriveService.createFolder(parentId, name.trim()) : near;
     }
 
     private DriveItemResponse findFolder(List<DriveItemResponse> folders, String expectedName) {
@@ -271,6 +296,54 @@ public class GoogleDriveStructureService {
                 .filter(folder -> nameKey(folder.name()).equals(expectedKey))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Reuses a single legacy typo such as Меллисса/Мелисса, but refuses an
+     * ambiguous fuzzy match if two sibling folders are equally close.
+     */
+    private DriveItemResponse findUniqueOneEditMatch(List<DriveItemResponse> folders, String expectedName) {
+        String expectedKey = nameKey(expectedName);
+        if (expectedKey.length() < 4) return null;
+
+        DriveItemResponse match = null;
+        for (DriveItemResponse folder : folders) {
+            String candidateKey = nameKey(folder.name());
+            if (!isAtMostOneEditAway(expectedKey, candidateKey)) continue;
+            if (match != null) return null;
+            match = folder;
+        }
+        return match;
+    }
+
+    private boolean isAtMostOneEditAway(String first, String second) {
+        if (first.equals(second)) return true;
+        if (Math.abs(first.length() - second.length()) > 1) return false;
+
+        if (first.length() == second.length()) {
+            int mismatches = 0;
+            for (int i = 0; i < first.length(); i++) {
+                if (first.charAt(i) != second.charAt(i) && ++mismatches > 1) return false;
+            }
+            return true;
+        }
+
+        String shorter = first.length() < second.length() ? first : second;
+        String longer = first.length() < second.length() ? second : first;
+        int shortIndex = 0;
+        int longIndex = 0;
+        boolean skipped = false;
+        while (shortIndex < shorter.length() && longIndex < longer.length()) {
+            if (shorter.charAt(shortIndex) == longer.charAt(longIndex)) {
+                shortIndex++;
+                longIndex++;
+                continue;
+            }
+            if (skipped) return false;
+            skipped = true;
+            longIndex++;
+        }
+        return true;
     }
 
     private String individualFolderName(String documentType) {
