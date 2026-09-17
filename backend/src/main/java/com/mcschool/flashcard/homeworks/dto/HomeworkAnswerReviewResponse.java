@@ -8,5 +8,13 @@ public record HomeworkAnswerReviewResponse(
         double percent,
         List<Item> items
 ) {
-    public record Item(String label, String answer, String correctAnswer, boolean correct) {}
+    public record Item(String label, String answer, String correctAnswer, boolean correct) {
+        @Override
+        public String answer() {
+            if (!correct && correctAnswer != null && !correctAnswer.isBlank()) {
+                return this.answer + " → ✓ " + correctAnswer;
+            }
+            return this.answer;
+        }
+    }
 }
