@@ -229,6 +229,45 @@ public class McpHomeworkSeriesService {
         return assignPreparedSeries(teacher, targetType, targetId, startDate, days, prepared, null);
     }
 
+    /**
+     * Direct MCP/ChatGPT workflow. The PDFs are already available in ChatGPT, so
+     * they can be sent straight to Mindcrafti without first uploading them to Drive.
+     * Accepts either one PDF for every requested day or one PDF per day.
+     */
+    @Transactional
+    public Map<String, Object> assignDirectSeries(
+            AuthenticatedUser teacher,
+            String targetType,
+            UUID targetId,
+            LocalDate startDate,
+            int days,
+            List<byte[]> pdfs,
+            List<String> filenames) throws Exception {
+
+        validateDays(days);
+        if (pdfs == null || pdfs.isEmpty()) {
+            throw new IllegalArgumentException("pdfBase64 must contain at least one PDF");
+        }
+        validateFileCount(days, pdfs.size());
+
+        List<String> names = filenames == null
+                ? List.of()
+                : filenames.stream().map(this::clean).filter(value -> !value.isBlank()).toList();
+        if (!names.isEmpty() && names.size() != 1 && names.size() != days) {
+            throw new IllegalArgumentException("filenames must be empty, contain one name, or contain one name per day");
+        }
+
+        List<PreparedPdf> prepared = new ArrayList<>();
+        for (int i = 0; i < pdfs.size(); i++) {
+            LocalDate date = startDate.plusDays(Math.min(i, days - 1));
+            String filename = chooseFilename(names, i, date);
+            byte[] bytes = pdfs.get(i);
+            validatePdf(bytes, filename);
+            prepared.add(new PreparedPdf(filename, bytes));
+        }
+        return assignPreparedSeries(teacher, targetType, targetId, startDate, days, prepared, null);
+    }
+
     private Map<String, Object> assignPreparedSeries(
             AuthenticatedUser teacher,
             String targetType,
