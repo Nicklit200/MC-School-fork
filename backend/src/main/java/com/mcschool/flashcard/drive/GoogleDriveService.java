@@ -69,6 +69,36 @@ public class GoogleDriveService {
         return toItems(payload.get("files"));
     }
 
+    public DriveItemResponse createFolder(String parentId, String name) {
+        if (parentId == null || parentId.isBlank()) {
+            throw new IllegalArgumentException("Parent folder id is required");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Folder name is required");
+        }
+        try {
+            String metadata = objectMapper.writeValueAsString(Map.of(
+                    "name", name.trim(),
+                    "mimeType", "application/vnd.google-apps.folder",
+                    "parents", List.of(parentId)
+            ));
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(DRIVE_API + "/files?supportsAllDrives=true&fields=id,name"))
+                    .header("Authorization", "Bearer " + accessToken())
+                    .header("Content-Type", "application/json; charset=UTF-8")
+                    .POST(HttpRequest.BodyPublishers.ofString(metadata, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = send(request);
+            Map<String, Object> payload = asMap(objectMapper.readValue(response.body(), Map.class));
+            return new DriveItemResponse(stringValue(payload.get("id")), stringValue(payload.get("name")));
+        } catch (Exception ex) {
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Google Drive folder creation failed", ex);
+        }
+    }
+
     public List<DriveItemResponse> listPdfFiles(String driveId, String parentId) {
         String effectiveParent = parentId == null || parentId.isBlank() ? driveId : parentId;
         String q = "'" + effectiveParent.replace("'", "\\'")
