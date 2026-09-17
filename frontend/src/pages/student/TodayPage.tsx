@@ -61,19 +61,13 @@ export function TodayPage() {
       </div>
 
       {today.inProgressSessionId && (
-        <button
-          className="btn btn--block"
-          type="button"
-          onClick={() => navigate(`/session/${today.inProgressSessionId}`)}
-        >
+        <button className="btn btn--block" type="button" onClick={() => navigate(`/session/${today.inProgressSessionId}`)}>
           {t('today.resume')}
         </button>
       )}
 
       {notEnoughCards ? (
-        <div className="banner banner--info">
-          {t('today.needMoreCards', { min: today.minCardsToStart })}
-        </div>
+        <div className="banner banner--info">{t('today.needMoreCards', { min: today.minCardsToStart })}</div>
       ) : (
         <>
           {today.canStartScheduled ? (
@@ -84,21 +78,14 @@ export function TodayPage() {
             !today.inProgressSessionId && <div className="banner banner--success">{t('today.nothingDue')}</div>
           )}
           {today.canPractice && (
-            <button
-              className="btn btn--secondary btn--block"
-              type="button"
-              disabled={busy}
-              onClick={() => start('PRACTICE')}
-            >
+            <button className="btn btn--secondary btn--block" type="button" disabled={busy} onClick={() => start('PRACTICE')}>
               {t('today.practice')}
             </button>
           )}
         </>
       )}
 
-      <p className="muted center">
-        {t('today.learned')}: {today.learnedCount}
-      </p>
+      <p className="muted center">{t('today.learned')}: {today.learnedCount}</p>
 
       <h2 style={{ marginBottom: 0 }}>{language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'}</h2>
       {todayHomeworks.length === 0 ? (
@@ -113,28 +100,33 @@ export function TodayPage() {
               {language === 'DE' ? 'Offene Hausaufgaben für heute' : 'Домашних заданий осталось на сегодня'}
             </div>
           </div>
-          {todayHomeworks.map((homework) => (
-            <Link
-              key={homework.id}
-              className="list-row"
-              to={`/student/homeworks/${homework.id}/worksheet`}
-              style={{ textDecoration: 'none' }}
-            >
-              <div>
-                <div className="list-row__title">
-                  {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
+          {todayHomeworks.map((homework) => {
+            const awaitingAnswers = homework.pdfUploaded && !homework.submitted;
+            return (
+              <Link
+                key={homework.id}
+                className="list-row"
+                to={`/student/homeworks/${homework.id}/worksheet`}
+                style={{ textDecoration: 'none' }}
+              >
+                <div>
+                  <div className="list-row__title">
+                    {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
+                  </div>
+                  <div className="muted">
+                    {homework.worksheetPageCount
+                      ? `${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}`
+                      : ''}
+                  </div>
                 </div>
-                <div className="muted">
-                  {homework.worksheetPageCount
-                    ? `${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}`
-                    : ''}
-                </div>
-              </div>
-              <span className="pill pill--pending">
-                {language === 'DE' ? 'Zu erledigen' : 'Нужно сделать'}
-              </span>
-            </Link>
-          ))}
+                <span className="pill pill--pending">
+                  {awaitingAnswers
+                    ? (language === 'DE' ? 'Antworten eingeben' : 'Ввести ответы')
+                    : (language === 'DE' ? 'Zu erledigen' : 'Нужно сделать')}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
