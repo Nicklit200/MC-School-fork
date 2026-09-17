@@ -6,35 +6,82 @@ import {
 } from '../../api/homeworkAnswers';
 import { useI18n } from '../../i18n/I18nContext';
 
+type EntryMode = 'text' | 'fraction' | 'mixed';
+type Draft = {
+  label: string;
+  mode: EntryMode;
+  text: string;
+  whole: string;
+  numerator: string;
+  denominator: string;
+};
+type FractionPart = 'whole' | 'numerator' | 'denominator';
+
 const KEYS = [
-  '7', '8', '9', '/', '%', '€',
+  '7', '8', '9', '%', '€', '⌫',
   '4', '5', '6', '−', '+', '×',
   '1', '2', '3', '.', ',', '÷',
   '0', '(', ')', 'x', '=', '√',
 ];
 
 function storageKey(homeworkId: string) {
-  return `mindcrafti-final-answers:${homeworkId}`;
+  return `mindcrafti-final-answers-v2:${homeworkId}`;
 }
 
-function emptyAnswers(answerCount: number): HomeworkFinalAnswer[] {
-  return Array.from({ length: answerCount }, (_, index) => ({ label: String(index + 1), answer: '' }));
+function emptyDrafts(answerCount: number): Draft[] {
+  return Array.from({ length: answerCount }, (_, index) => ({
+    label: String(index + 1),
+    mode: 'text',
+    text: '',
+    whole: '',
+    numerator: '',
+    denominator: '',
+  }));
 }
 
-function loadInitial(homeworkId: string, answerCount: number): HomeworkFinalAnswer[] {
-  const fallback = emptyAnswers(answerCount);
+function loadInitial(homeworkId: string, answerCount: number): Draft[] {
+  const fallback = emptyDrafts(answerCount);
   try {
     const raw = localStorage.getItem(storageKey(homeworkId));
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return fallback;
-    return fallback.map((row, index) => ({
-      ...row,
-      answer: typeof parsed[index]?.answer === 'string' ? parsed[index].answer : '',
-    }));
+    return fallback.map((row, index) => {
+      const source = parsed[index];
+      if (!source || typeof source !== 'object') return row;
+      const mode: EntryMode = source.mode === 'fraction' || source.mode === 'mixed' ? source.mode : 'text';
+      return {
+        ...row,
+        mode,
+        text: typeof source.text === 'string' ? source.text : '',
+        whole: typeof source.whole === 'string' ? source.whole : '',
+        numerator: typeof source.numerator === 'string' ? source.numerator : '',
+        denominator: typeof source.denominator === 'string' ? source.denominator : '',
+      };
+    });
   } catch {
     return fallback;
   }
+}
+
+function isFilled(draft: Draft) {
+  if (draft.mode === 'text') return draft.text.trim().length > 0;
+  if (draft.mode === 'fraction') return draft.numerator.trim().length > 0 && draft.denominator.trim().length > 0;
+  return draft.whole.trim().length > 0 && draft.numerator.trim().length > 0 && draft.denominator.trim().length > 0;
+}
+
+function serializeDraft(draft: Draft): string {
+  if (draft.mode === 'text') return draft.text.trim();
+  const numerator = Number(draft.numerator.replace(',', '.'));
+  const denominator = Number(draft.denominator.replace(',', '.'));
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return '';
+  if (draft.mode === 'fraction') return `${draft.numerator}/${draft.denominator}`;
+
+  const whole = Number(draft.whole.replace(',', '.'));
+  if (!Number.isFinite(whole)) return '';
+  const sign = whole < 0 ? -1 : 1;
+  const improper = Math.abs(whole) * denominator + numerator;
+  return `${sign * improper}/${denominator}`;
 }
 
 export function HomeworkFinalAnswersEditor({
@@ -47,47 +94,80 @@ export function HomeworkFinalAnswersEditor({
   onCompleted?: () => void;
 }) {
   const { language } = useI18n();
-  const [answers, setAnswers] = useState<HomeworkFinalAnswer[]>(() => loadInitial(homeworkId, answerCount));
+  const [drafts, setDrafts] = useState<Draft[]>(() => loadInitial(homeworkId, answerCount));
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activePart, setActivePart] = useState<FractionPart>('numerator');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<HomeworkFinalAnswersResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const allFilled = useMemo(() => answers.every((item) => item.answer.trim().length > 0), [answers]);
+  const allFilled = useMemo(() => drafts.every(isFilled), [drafts]);
+  const activeDraft = drafts[activeIndex] ?? drafts[0];
 
-  function persist(next: HomeworkFinalAnswer[]) {
-    setAnswers(next);
+  function persist(next: Draft[]) {
+    setDrafts(next);
     setResult(null);
+    setError(null);
     localStorage.setItem(storageKey(homeworkId), JSON.stringify(next));
   }
 
-  function changeAnswer(index: number, value: string) {
-    persist(answers.map((row, rowIndex) => rowIndex === index ? { ...row, answer: value } : row));
+  function updateDraft(index: number, patch: Partial<Draft>) {
+    persist(drafts.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+  }
+
+  function activate(index: number) {
+    setActiveIndex(index);
+    const mode = drafts[index]?.mode ?? 'text';
+    setActivePart(mode === 'mixed' ? 'whole' : 'numerator');
+  }
+
+  function setMode(mode: EntryMode) {
+    updateDraft(activeIndex, { mode });
+    setActivePart(mode === 'mixed' ? 'whole' : 'numerator');
   }
 
   function appendKey(key: string) {
+    if (key === '⌫') {
+      backspace();
+      return;
+    }
     const normalized = key === '−' ? '-' : key;
-    persist(answers.map((row, index) => index === activeIndex
-      ? { ...row, answer: `${row.answer}${normalized}` }
-      : row));
+    if (!activeDraft) return;
+    if (activeDraft.mode === 'text') {
+      updateDraft(activeIndex, { text: `${activeDraft.text}${normalized}` });
+      return;
+    }
+    if (!/^[0-9.,-]$/.test(normalized)) return;
+    const field = activePart;
+    updateDraft(activeIndex, { [field]: `${activeDraft[field]}${normalized}` });
   }
 
   function backspace() {
-    persist(answers.map((row, index) => index === activeIndex
-      ? { ...row, answer: row.answer.slice(0, -1) }
-      : row));
+    if (!activeDraft) return;
+    if (activeDraft.mode === 'text') {
+      updateDraft(activeIndex, { text: activeDraft.text.slice(0, -1) });
+      return;
+    }
+    const field = activePart;
+    updateDraft(activeIndex, { [field]: activeDraft[field].slice(0, -1) });
   }
 
   function clearActive() {
-    changeAnswer(activeIndex, '');
+    if (!activeDraft) return;
+    if (activeDraft.mode === 'text') updateDraft(activeIndex, { text: '' });
+    else updateDraft(activeIndex, { whole: '', numerator: '', denominator: '' });
   }
 
-  async function save() {
+  async function submit() {
     setError(null);
     if (!allFilled) {
-      setError(language === 'DE'
-        ? `Bitte alle ${answerCount} Antworten ausfüllen.`
-        : `Заполни все ${answerCount} ответа.`);
+      setError(language === 'DE' ? 'Bitte alle Antworten ausfüllen.' : 'Заполни все ответы.');
+      return;
+    }
+
+    const answers: HomeworkFinalAnswer[] = drafts.map((draft) => ({ label: draft.label, answer: serializeDraft(draft) }));
+    if (answers.some((answer) => !answer.answer)) {
+      setError(language === 'DE' ? 'Prüfe die Brüche.' : 'Проверь введённые дроби.');
       return;
     }
 
@@ -95,7 +175,10 @@ export function HomeworkFinalAnswersEditor({
     try {
       const graded = await saveHomeworkFinalAnswers(homeworkId, answers);
       setResult(graded);
-      if (graded.allCorrect) localStorage.removeItem(storageKey(homeworkId));
+      if (graded.allCorrect) {
+        localStorage.removeItem(storageKey(homeworkId));
+        onCompleted?.();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -104,93 +187,135 @@ export function HomeworkFinalAnswersEditor({
   }
 
   return (
-    <section className="panel stack" style={{ margin: 0, border: '2px solid #8b5cf6', boxShadow: '0 22px 60px rgba(15,23,42,.22)' }}>
-      <div>
-        <div className="pill" style={{ display: 'inline-flex', marginBottom: 8 }}>TEST</div>
-        <h2 style={{ margin: 0 }}>{language === 'DE' ? 'Endantworten eingeben' : 'Введи ответы по домашке'}</h2>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          {language === 'DE'
-            ? `Die PDF ist abgegeben. Trage jetzt ${answerCount} Endantworten ein. Brüche: 3/4, Prozent: 25%, Euro: 60€, Dezimalzahl: 2.5.`
-            : `PDF уже сдан. Теперь введи ${answerCount} конечных ответа. Дробь: 3/4, процент: 25%, евро: 60€, десятичное число: 2.5.`}
-        </p>
-      </div>
+    <section className="panel stack" style={{ margin: 0, border: 0, borderRadius: 22, boxShadow: '0 22px 60px rgba(15,23,42,.22)' }}>
+      <h2 style={{ margin: 0 }}>{language === 'DE' ? 'Antworten' : 'Ответы'}</h2>
 
-      <div style={{ display: 'grid', gap: 12 }}>
-        {answers.map((row, index) => {
+      <div style={{ display: 'grid', gap: 14 }}>
+        {drafts.map((draft, index) => {
           const gradedItem = result?.items[index];
           return (
-            <label key={row.label} className="field" style={{ margin: 0 }}>
+            <div key={draft.label} className="field" style={{ margin: 0 }}>
               <span className="field__label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {language === 'DE' ? `Aufgabe ${index + 1}` : `Задание ${index + 1}`}
-                {gradedItem && <span aria-label={gradedItem.correct ? 'correct' : 'wrong'}>{gradedItem.correct ? '✓' : '✕'}</span>}
+                {gradedItem && <span>{gradedItem.correct ? '✓' : '✕'}</span>}
               </span>
-              <input
-                className="input"
-                value={row.answer}
-                placeholder={language === 'DE' ? 'Antwort' : 'Ответ'}
-                onFocus={() => setActiveIndex(index)}
-                onChange={(event) => changeAnswer(index, event.target.value)}
-                inputMode="text"
-                autoComplete="off"
-                style={gradedItem ? { borderColor: gradedItem.correct ? '#16a34a' : '#dc2626', fontSize: 18 } : { fontSize: 18 }}
-              />
-            </label>
+              <button
+                type="button"
+                onClick={() => activate(index)}
+                style={{
+                  width: '100%', minHeight: 72, borderRadius: 14, padding: '10px 14px', background: '#fff',
+                  border: `2px solid ${activeIndex === index ? '#0f8b66' : gradedItem ? (gradedItem.correct ? '#16a34a' : '#dc2626') : '#dce3ea'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-start', fontSize: 24, color: '#111827',
+                }}
+              >
+                {draft.mode === 'text' ? (
+                  <span style={{ color: draft.text ? '#111827' : '#94a3b8' }}>{draft.text || (language === 'DE' ? 'Antwort' : 'Ответ')}</span>
+                ) : (
+                  <MathFractionInput
+                    draft={draft}
+                    active={activeIndex === index}
+                    activePart={activePart}
+                    onPart={(part) => { activate(index); setActivePart(part); }}
+                  />
+                )}
+              </button>
+            </div>
           );
         })}
       </div>
 
-      <div>
-        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
-          {language === 'DE'
-            ? `Mathe-Tastatur · Aufgabe ${activeIndex + 1}`
-            : `Математическая клавиатура · задание ${activeIndex + 1}`}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(40px, 1fr))', gap: 7 }}>
-          {KEYS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className="btn btn--secondary"
-              style={{ minHeight: 46, minWidth: 0, padding: '8px 4px', fontSize: 18 }}
-              onClick={() => appendKey(key)}
-            >
-              {key}
-            </button>
-          ))}
-          <button type="button" className="btn btn--secondary" style={{ minHeight: 46, gridColumn: 'span 2' }} onClick={backspace}>⌫</button>
-          <button type="button" className="btn btn--ghost" style={{ minHeight: 46, gridColumn: 'span 4' }} onClick={clearActive}>
-            {language === 'DE' ? 'Aktive Antwort löschen' : 'Очистить выбранный ответ'}
-          </button>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        <button type="button" className={`btn ${activeDraft?.mode === 'text' ? '' : 'btn--secondary'}`} onClick={() => setMode('text')}>
+          {language === 'DE' ? 'Normal' : 'Обычный'}
+        </button>
+        <button type="button" className={`btn ${activeDraft?.mode === 'fraction' ? '' : 'btn--secondary'}`} onClick={() => setMode('fraction')}>
+          <FractionIcon mixed={false} />
+        </button>
+        <button type="button" className={`btn ${activeDraft?.mode === 'mixed' ? '' : 'btn--secondary'}`} onClick={() => setMode('mixed')}>
+          <FractionIcon mixed />
+        </button>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(42px, 1fr))', gap: 7 }}>
+        {KEYS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            className="btn btn--secondary"
+            style={{ minHeight: 52, minWidth: 0, padding: '8px 3px', fontSize: 20 }}
+            onClick={() => appendKey(key)}
+          >
+            {key}
+          </button>
+        ))}
+      </div>
+
+      <button type="button" className="btn btn--ghost" onClick={clearActive}>
+        {language === 'DE' ? 'Löschen' : 'Очистить'}
+      </button>
+
       {error && <div className="banner banner--error">{error}</div>}
-      {result && (
-        <div className={result.allCorrect ? 'banner banner--success' : 'banner banner--error'}>
-          <strong>
-            {language === 'DE'
-              ? `${result.correctCount} von ${result.totalCount} richtig.`
-              : `Правильно: ${result.correctCount} из ${result.totalCount}.`}
-          </strong>
-          {!result.allCorrect && (
-            <div style={{ marginTop: 4 }}>
-              {language === 'DE' ? 'Prüfe die rot markierten Antworten und versuche es noch einmal.' : 'Проверь ответы, отмеченные красным, и попробуй ещё раз.'}
-            </div>
-          )}
+      {result && !result.allCorrect && (
+        <div className="banner banner--error">
+          {language === 'DE'
+            ? `${result.correctCount} von ${result.totalCount} richtig. Korrigiere die markierten Antworten.`
+            : `Правильно: ${result.correctCount} из ${result.totalCount}. Исправь отмеченные ответы.`}
         </div>
       )}
 
-      {!result?.allCorrect ? (
-        <button className="btn btn--block" type="button" onClick={() => void save()} disabled={saving || !allFilled}>
-          {saving
-            ? (language === 'DE' ? 'Wird geprüft…' : 'Проверяем…')
-            : (language === 'DE' ? 'Antworten prüfen' : 'Проверить ответы')}
-        </button>
-      ) : (
-        <button className="btn btn--block" type="button" onClick={onCompleted}>
-          {language === 'DE' ? 'Fertig' : 'Готово'}
-        </button>
-      )}
+      <button className="btn btn--block" type="button" onClick={() => void submit()} disabled={saving || !allFilled} style={{ minHeight: 58, fontSize: 20 }}>
+        {saving ? (language === 'DE' ? 'Wird abgegeben…' : 'Сдаём…') : (language === 'DE' ? 'Abgeben' : 'Сдать')}
+      </button>
     </section>
+  );
+}
+
+function MathFractionInput({
+  draft,
+  active,
+  activePart,
+  onPart,
+}: {
+  draft: Draft;
+  active: boolean;
+  activePart: FractionPart;
+  onPart: (part: FractionPart) => void;
+}) {
+  const cellStyle = (part: FractionPart) => ({
+    minWidth: 34,
+    minHeight: 30,
+    padding: '2px 7px',
+    borderRadius: 7,
+    background: active && activePart === part ? '#dcf7ee' : 'transparent',
+    color: (part === 'whole' ? draft.whole : part === 'numerator' ? draft.numerator : draft.denominator) ? '#111827' : '#94a3b8',
+  });
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+      {draft.mode === 'mixed' && (
+        <span style={cellStyle('whole')} onClick={(e) => { e.stopPropagation(); onPart('whole'); }}>
+          {draft.whole || '□'}
+        </span>
+      )}
+      <span style={{ display: 'inline-grid', gridTemplateRows: '1fr 2px 1fr', alignItems: 'center', minWidth: 50 }}>
+        <span style={cellStyle('numerator')} onClick={(e) => { e.stopPropagation(); onPart('numerator'); }}>
+          {draft.numerator || '□'}
+        </span>
+        <span style={{ height: 2, background: '#111827', width: '100%' }} />
+        <span style={cellStyle('denominator')} onClick={(e) => { e.stopPropagation(); onPart('denominator'); }}>
+          {draft.denominator || '□'}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function FractionIcon({ mixed }: { mixed: boolean }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 18 }}>
+      {mixed && <span>□</span>}
+      <span style={{ display: 'inline-grid', gridTemplateRows: '1fr 1px 1fr', minWidth: 20, alignItems: 'center' }}>
+        <span>□</span><span style={{ height: 1, background: 'currentColor' }} /><span>□</span>
+      </span>
+    </span>
   );
 }
