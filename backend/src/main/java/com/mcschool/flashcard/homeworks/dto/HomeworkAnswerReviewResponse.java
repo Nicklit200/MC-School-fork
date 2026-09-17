@@ -8,5 +8,5 @@ public record HomeworkAnswerReviewResponse(
         double percent,
         List<Item> items
 ) {
-    public record Item(String label, String answer, boolean correct) {}
+    public record Item(String label, String answer, String correctAnswer, boolean correct) {}
 }
