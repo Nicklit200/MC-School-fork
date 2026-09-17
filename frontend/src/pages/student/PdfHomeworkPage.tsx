@@ -8,7 +8,6 @@ import { toErrorMessage } from '../../lib/errors';
 type Tool = 'pen' | 'eraser';
 type PenColor = '#111111' | '#2563eb' | '#dc2626' | '#16a34a';
 type ViewportState = { scale: number; offsetLeft: number; offsetTop: number; width: number; height: number };
-type StrokeGeometry = { left: number; top: number; width: number; height: number; canvasWidth: number; canvasHeight: number };
 
 const PEN_COLORS: Array<{ value: PenColor; labelRu: string; labelDe: string }> = [
   { value: '#2563eb', labelRu: 'Синий', labelDe: 'Blau' },
@@ -68,7 +67,7 @@ export function PdfHomeworkPage() {
     if (!homework?.hasWorksheet || pageUrls[pageIndex]) return;
     let cancelled = false;
     api.study.worksheetPageDataUrl(homeworkId, pageIndex)
-      .then((dataUrl) => { if (!cancelled) setPageUrls((current) => ({ ...current, [pageIndex]: dataUrl.trim() })); })
+      .then((dataUrl: string) => { if (!cancelled) setPageUrls((current) => ({ ...current, [pageIndex]: dataUrl.trim() })); })
       .catch((e) => setError(toErrorMessage(e, t)));
     return () => { cancelled = true; };
   }, [homework, homeworkId, pageIndex, pageUrls, t]);
@@ -130,7 +129,7 @@ export function PdfHomeworkPage() {
           <div style={{ width: documentWidth, maxWidth: desktopControls ? 1500 : 1000, margin: '0 auto', background: '#fff' }}><img src={pageUrl} alt="Submitted homework PDF page" style={{ display: 'block', width: '100%', height: 'auto' }} /></div>
         </div>
       ) : (
-        <WorksheetCanvas key={pageIndex} pageUrl={pageUrl} initialDrawing={drawings[pageIndex]} tool={tool} setTool={setTool} penColor={penColor} setPenColor={setPenColor} penSize={penSize} setPenSize={setPenSize} language={language} desktopControls={desktopControls} desktopZoom={desktopZoom} viewport={viewport} toolbarScale={toolbarScale} pageIndex={pageIndex} pageCount={pageCount} setPageIndex={setPageIndex} onDesktopZoomChange={setDesktopZoom} onChange={(dataUrl) => setDrawings((current) => ({ ...current, [pageIndex]: dataUrl }))} />
+        <WorksheetCanvas key={pageIndex} pageUrl={pageUrl} initialDrawing={drawings[pageIndex]} tool={tool} setTool={setTool} penColor={penColor} setPenColor={setPenColor} penSize={penSize} setPenSize={setPenSize} desktopControls={desktopControls} desktopZoom={desktopZoom} viewport={viewport} toolbarScale={toolbarScale} pageIndex={pageIndex} pageCount={pageCount} setPageIndex={setPageIndex} onDesktopZoomChange={setDesktopZoom} onChange={(dataUrl: string) => setDrawings((current) => ({ ...current, [pageIndex]: dataUrl }))} />
       )}
 
       {!homework.pdfUploaded && <div className="panel" style={{ marginTop: 12 }}><button className="btn btn--block" type="button" onClick={submitHomework} disabled={busy}>{busy ? (language === 'DE' ? 'Wird gespeichert…' : 'Сохраняем…') : (language === 'DE' ? 'PDF speichern' : 'Сдать PDF')}</button><p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>{language === 'DE' ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; Farbe und Stiftbreite kannst du in der Werkzeugleiste ändern.' : 'Apple Pencil пишет. Двумя пальцами масштабируется страница. Цвет и толщину ручки можно менять в панели инструментов.'}</p></div>}
@@ -143,7 +142,7 @@ function SizePicker({ language, value, onChange }: { language: 'DE' | 'RU'; valu
 function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (value: number) => void }) { return <div style={{ position: 'absolute', right: 12, top: 12, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 6 }}><button className="btn btn--secondary" type="button" onClick={() => onChange(Math.min(200, zoom + 20))} disabled={zoom >= 200}>+</button><button className="btn btn--secondary" type="button" onClick={() => onChange(Math.max(60, zoom - 20))} disabled={zoom <= 60}>−</button></div>; }
 
 function WorksheetCanvas(props: any) {
-  const { pageUrl, initialDrawing, tool, penColor, penSize, language, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange } = props;
+  const { pageUrl, initialDrawing, tool, penColor, penSize, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const drawing = useRef(false);
