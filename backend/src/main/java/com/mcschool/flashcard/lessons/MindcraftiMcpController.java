@@ -39,7 +39,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.9.0";
+    private static final String SERVER_VERSION = "1.10.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -122,7 +122,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools include lessons, homework assignment, direct access to submitted homework PDFs, rendered submission pages and read-only student analytics. For a student's homework over a week or other date range, use find_student_homeworks. Use get_homework_submission for the actual submitted PDF and get_homework_submission_pages when handwriting or images must be inspected visually. Admins can read all teachers and students; teachers are restricted to their own students. For morning reports, use get_school_day_summary with yesterday's date."
+                ? "Mindcrafti school tools include lessons, homework assignment, direct PDF homework upload, submitted homework PDFs, rendered submission pages and read-only student analytics. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional. For a student's homework over a week or other date range, use find_student_homeworks. Use get_homework_submission for the actual submitted PDF and get_homework_submission_pages when handwriting or images must be inspected visually. Admins can read all teachers and students; teachers are restricted to their own students."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -134,7 +134,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti lesson, homework-file and school analytics tools. Admins can target all teachers; teachers can access only their own students."
+                ? "Mindcrafti lesson, homework-file and school analytics tools. Homework PDFs created in ChatGPT can be assigned directly without Google Drive. Admins can target all teachers; teachers can access only their own students."
                 : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         return result;
     }
@@ -180,9 +180,10 @@ public class MindcraftiMcpController {
         seriesProperties.put("targetId", property("string", "Student or group UUID returned by find_homework_targets."));
         seriesProperties.put("startDate", property("string", "First homework date in YYYY-MM-DD format."));
         seriesProperties.put("days", property("integer", "Number of consecutive calendar days to assign, from 1 to 31."));
-        seriesProperties.put("driveFileIds", arrayProperty("Google Drive PDF file IDs. Supply one PDF for all days or exactly one PDF per day."));
+        seriesProperties.put("pdfBase64", arrayProperty("Preferred when the PDFs are already in ChatGPT: PDF bytes encoded as base64. Supply one PDF for all days or exactly one PDF per day. Maximum 15 MB per PDF. Do not also pass driveFileIds."));
+        seriesProperties.put("driveFileIds", arrayProperty("Optional legacy/fallback Google Drive PDF file IDs. Supply one PDF for all days or exactly one PDF per day. Do not also pass pdfBase64."));
         seriesProperties.put("filenames", arrayProperty("Optional display filenames: empty, one filename for all days, or one filename per day."));
-        tools.add(tool("assign_homework_series", "Assign dated PDF homework for several consecutive days to one student or every active student in a group. Admins may omit teacherId when targetId identifies one teacher uniquely. Existing PDF homework on the same student/date is skipped to avoid duplicates.", schema(seriesProperties, List.of("targetType", "targetId", "startDate", "days", "driveFileIds")), writeAnnotations()));
+        tools.add(tool("assign_homework_series", "Assign dated PDF homework for several consecutive days to one student or every active student in a group. Prefer pdfBase64 for PDFs created or already available in ChatGPT, so no intermediate Google Drive upload is needed. driveFileIds remains available as a fallback. Admins may omit teacherId when targetId identifies one teacher uniquely. Existing PDF homework on the same student/date is skipped to avoid duplicates.", schema(seriesProperties, List.of("targetType", "targetId", "startDate", "days")), writeAnnotations()));
 
         tools.add(tool("list_school_teachers", "List teachers visible to the signed-in account, including each teacher's student count. Admins see the whole school; a teacher sees only themselves.", schema(Map.of(), List.of()), readOnlyAnnotations()));
 
@@ -430,8 +431,21 @@ public class MindcraftiMcpController {
         LocalDate startDate;
         try { startDate = LocalDate.parse(required(arguments, "startDate")); } catch (RuntimeException ex) { throw new IllegalArgumentException("startDate must use YYYY-MM-DD format"); }
         int days = integer(arguments.get("days"), "days");
-        List<String> driveFileIds = stringList(arguments.get("driveFileIds"), "driveFileIds");
         List<String> filenames = arguments.containsKey("filenames") ? stringList(arguments.get("filenames"), "filenames") : List.of();
+        boolean hasDirect = arguments.containsKey("pdfBase64");
+        boolean hasDrive = arguments.containsKey("driveFileIds");
+        if (hasDirect == hasDrive) {
+            throw new IllegalArgumentException("Provide exactly one PDF source: pdfBase64 or driveFileIds");
+        }
+        if (hasDirect) {
+            List<String> encodedPdfs = stringList(arguments.get("pdfBase64"), "pdfBase64");
+            List<byte[]> pdfs = new ArrayList<>();
+            for (int i = 0; i < encodedPdfs.size(); i++) {
+                pdfs.add(decodePdfBase64(encodedPdfs.get(i), "pdfBase64[" + i + "]"));
+            }
+            return homeworkSeriesService.assignDirectSeries(teacher, targetType, targetId, startDate, days, pdfs, filenames);
+        }
+        List<String> driveFileIds = stringList(arguments.get("driveFileIds"), "driveFileIds");
         return homeworkSeriesService.assignSeries(teacher, targetType, targetId, startDate, days, driveFileIds, filenames);
     }
 
