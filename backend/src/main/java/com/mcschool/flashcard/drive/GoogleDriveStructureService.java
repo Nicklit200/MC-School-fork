@@ -77,6 +77,41 @@ public class GoogleDriveStructureService {
         student.changeGoogleDriveHomeworkFolderId(submittedHomeworkFolder.id());
     }
 
+    /**
+     * Returns semantic destinations so MCP/ChatGPT can save generated files without
+     * the user ever writing or knowing a Google Drive path.
+     */
+    public Map<String, String> resolveStudentDocumentFolders(User teacher, User student) {
+        FolderContext teacherRoot = teacherRoot(teacher);
+        DriveItemResponse studentRoot = ensureFolder(
+                teacherRoot.driveId(), teacherRoot.folderId(), student.getFullName());
+        Map<String, DriveItemResponse> folders = ensureFolders(
+                teacherRoot.driveId(), studentRoot.id(), INDIVIDUAL_FOLDERS);
+        return semanticDestinations(
+                folders.get("Чистые документы"),
+                folders.get("Домашнее задание"),
+                folders.get("Таблица"),
+                folders.get("Транскрипции"),
+                folders.get("Карточки"),
+                folders.get("Сделанная домашка"),
+                folders.get("Заполненные после урока"));
+    }
+
+    /** Same semantic keys as the individual map, backed by the established group layout. */
+    public Map<String, String> resolveGroupDocumentFolders(User teacher, StudentGroup group) {
+        GroupFolders groupFolders = ensureGroup(teacher, group.getName());
+        group.updateTranscriptFolder(groupFolders.folders().get("Транскрипции").id());
+        Map<String, DriveItemResponse> folders = groupFolders.folders();
+        return semanticDestinations(
+                folders.get("Чистые листы"),
+                folders.get("Домашнаяя работа"),
+                folders.get("Таблица"),
+                folders.get("Транскрипции"),
+                folders.get("Карточки"),
+                folders.get("Сделанная домашка"),
+                folders.get("Заполненные после урока"));
+    }
+
     public String resolveStudentDocumentFolder(User teacher, User student, String documentType) {
         FolderContext teacherRoot = teacherRoot(teacher);
         DriveItemResponse studentRoot = ensureFolder(
@@ -90,6 +125,24 @@ public class GoogleDriveStructureService {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
         group.updateTranscriptFolder(groupFolders.folders().get("Транскрипции").id());
         return groupFolders.folders().get(groupFolderName(documentType)).id();
+    }
+
+    private Map<String, String> semanticDestinations(DriveItemResponse clean,
+                                                     DriveItemResponse homework,
+                                                     DriveItemResponse table,
+                                                     DriveItemResponse transcript,
+                                                     DriveItemResponse cards,
+                                                     DriveItemResponse submittedHomework,
+                                                     DriveItemResponse lessonCompleted) {
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("clean", clean.id());
+        result.put("homework", homework.id());
+        result.put("table", table.id());
+        result.put("transcript", transcript.id());
+        result.put("cards", cards.id());
+        result.put("submitted_homework", submittedHomework.id());
+        result.put("lesson_completed", lessonCompleted.id());
+        return result;
     }
 
     private GroupFolders ensureGroup(User teacher, String groupName) {
