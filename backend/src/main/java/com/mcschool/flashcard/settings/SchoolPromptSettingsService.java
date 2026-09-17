@@ -2,7 +2,6 @@ package com.mcschool.flashcard.settings;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.users.Role;
-import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,7 @@ public class SchoolPromptSettingsService {
     public SchoolPromptSettingsResponse update(AuthenticatedUser caller,
                                                UpdateSchoolPromptSettingsRequest request) {
         if (caller == null || caller.role() != Role.ADMIN) {
-            throw new AuthorizationDeniedException("Admin role required");
+            throw new IllegalArgumentException("Admin role required");
         }
         validate(request.groupLessonPrompt(), "Group lesson prompt");
         validate(request.individualLessonPrompt(), "Individual lesson prompt");
@@ -49,7 +48,7 @@ public class SchoolPromptSettingsService {
 
     private void requireStaff(AuthenticatedUser caller) {
         if (caller == null || (caller.role() != Role.ADMIN && caller.role() != Role.TEACHER)) {
-            throw new AuthorizationDeniedException("Staff role required");
+            throw new IllegalArgumentException("Staff role required");
         }
     }
 
