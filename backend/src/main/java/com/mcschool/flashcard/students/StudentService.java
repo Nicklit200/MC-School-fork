@@ -176,8 +176,14 @@ public class StudentService {
 
     @Transactional
     public void resetStudentPassword(AuthenticatedUser teacher, UUID studentId, ChangePasswordRequest request) {
-        User student = requireOwnedActiveStudent(teacher.id(), studentId);
-        student.changePasswordHash(passwordEncoder.encode(request.password()));
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        ensureUsername(student);
+        String passwordHash = passwordEncoder.encode(request.password());
+        if (student.getStatus() == UserStatus.INVITED) {
+            student.activate(passwordHash);
+        } else {
+            student.changePasswordHash(passwordHash);
+        }
     }
 
     @Transactional
