@@ -36,7 +36,7 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
     };
 
     void poll();
-    timer = window.setInterval(() => void poll(), 1200);
+    timer = window.setInterval(() => void poll(), 900);
     return () => {
       cancelled = true;
       if (timer) window.clearInterval(timer);
@@ -44,36 +44,34 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
   }, [homeworkId]);
 
   const answerCount = homework?.finalAnswerCount ?? 0;
-  const showAnswerWindow = Boolean(homework?.pdfUploaded && answerCount > 0 && homework?.submitted !== true);
+  const awaitingAnswers = Boolean(homework?.pdfUploaded && answerCount > 0 && homework?.submitted !== true);
 
-  return (
-    <>
-      <PdfHomeworkWithSubmissionPage />
-
-      {showAnswerWindow && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={language === 'DE' ? 'Antworten' : 'Ответы'}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 3000,
-            overflowY: 'auto',
-            background: 'rgba(15, 23, 42, .58)',
-            backdropFilter: 'blur(4px)',
-            padding: 'max(18px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom))',
-          }}
-        >
-          <div style={{ width: 'min(100%, 620px)', margin: '0 auto' }}>
-            <HomeworkFinalAnswersEditor
-              homeworkId={homeworkId}
-              answerCount={answerCount}
-              onCompleted={() => void refresh()}
-            />
-          </div>
+  if (awaitingAnswers) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={language === 'DE' ? 'Antworten' : 'Ответы'}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 3000,
+          overflowY: 'auto',
+          background: 'rgba(15, 23, 42, .58)',
+          backdropFilter: 'blur(4px)',
+          padding: 'max(18px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom))',
+        }}
+      >
+        <div style={{ width: 'min(100%, 620px)', margin: '0 auto' }}>
+          <HomeworkFinalAnswersEditor
+            homeworkId={homeworkId}
+            answerCount={answerCount}
+            onCompleted={() => void refresh()}
+          />
         </div>
-      )}
-    </>
-  );
+      </div>
+    );
+  }
+
+  return <PdfHomeworkWithSubmissionPage />;
 }
