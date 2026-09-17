@@ -101,7 +101,8 @@ public class SecurityConfig {
                                 railwayOrigin,
                                 "https://mindcrafti-school-production.up.railway.app",
                                 "https://mindcrafti.de",
-                                "https://www.mindcrafti.de"))
+                                "https://www.mindcrafti.de",
+                                "https://staging-web-production.up.railway.app"))
                 .map(String::trim)
                 .map(SecurityConfig::stripTrailingSlash)
                 .filter(origin -> !origin.isBlank())
