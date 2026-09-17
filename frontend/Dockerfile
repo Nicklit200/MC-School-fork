@@ -4,11 +4,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-# The app calls the API at this base path; nginx (below) proxies it to the backend,
-# so the browser talks to the same origin and no CORS is needed.
-ARG VITE_API_BASE_URL=/api/v1
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-RUN npm run build
+# Staging web must always call its own same-origin /api path. Do not allow a
+# Railway VITE_API_BASE_URL variable to bake an external API origin into the JS.
+RUN VITE_API_BASE_URL=/api/v1 npm run build
 
 # --- Runtime stage: serve the bundle with nginx ---
 FROM nginx:1.29-alpine
