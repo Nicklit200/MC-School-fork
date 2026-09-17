@@ -1,7 +1,5 @@
 package com.mcschool.flashcard.homeworks;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
@@ -20,6 +18,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class HomeworkService {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Pattern ANSWER_KEY_ITEM = Pattern.compile(
+            "\\{\\\"label\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"answer\\\":\\\"((?:\\\\.|[^\\\"])*)\\\"\\}");
 
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
@@ -142,11 +143,15 @@ public class HomeworkService {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("Homework answer key is missing");
         }
-        try {
-            return JSON.readValue(value, new TypeReference<List<AnswerKeyItem>>() {});
-        } catch (Exception exception) {
-            throw new IllegalStateException("Homework answer key is invalid", exception);
+        List<AnswerKeyItem> items = new ArrayList<>();
+        Matcher matcher = ANSWER_KEY_ITEM.matcher(value);
+        while (matcher.find()) {
+            items.add(new AnswerKeyItem(jsonUnescape(matcher.group(1)), jsonUnescape(matcher.group(2))));
         }
+        if (items.isEmpty()) {
+            throw new IllegalStateException("Homework answer key is invalid");
+        }
+        return items;
     }
 
     private boolean answersEquivalent(String submitted, String correct) {
@@ -184,18 +189,18 @@ public class HomeworkService {
             }
             if (number.isBlank()) return null;
 
-            BigDecimal value;
+            BigDecimal result;
             int slash = number.indexOf('/');
             if (slash >= 0) {
                 if (slash == 0 || slash == number.length() - 1 || number.indexOf('/', slash + 1) >= 0) return null;
                 BigDecimal numerator = new BigDecimal(number.substring(0, slash));
                 BigDecimal denominator = new BigDecimal(number.substring(slash + 1));
                 if (denominator.compareTo(BigDecimal.ZERO) == 0) return null;
-                value = numerator.divide(denominator, MathContext.DECIMAL128);
+                result = numerator.divide(denominator, MathContext.DECIMAL128);
             } else {
-                value = new BigDecimal(number);
+                result = new BigDecimal(number);
             }
-            return new NumericValue(value, unit);
+            return new NumericValue(result, unit);
         } catch (NumberFormatException exception) {
             return null;
         }
@@ -214,6 +219,28 @@ public class HomeworkService {
                 .replace("\r", "\\r")
                 .replace("\n", "\\n")
                 .replace("\t", "\\t");
+    }
+
+    private String jsonUnescape(String value) {
+        StringBuilder result = new StringBuilder();
+        boolean escaped = false;
+        for (int i = 0; i < value.length(); i++) {
+            char current = value.charAt(i);
+            if (!escaped) {
+                if (current == '\\') escaped = true;
+                else result.append(current);
+                continue;
+            }
+            result.append(switch (current) {
+                case 'n' -> '\n';
+                case 'r' -> '\r';
+                case 't' -> '\t';
+                default -> current;
+            });
+            escaped = false;
+        }
+        if (escaped) result.append('\\');
+        return result.toString();
     }
 
     private record AnswerKeyItem(String label, String answer) {}
