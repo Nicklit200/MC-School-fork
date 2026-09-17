@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -35,7 +36,9 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     public static final String TEACHER_EMAIL = "test-teacher@mindcrafti.local";
     public static final String STUDENT_EMAIL = "test-student@mindcrafti.local";
     public static final String STUDENT_USERNAME = "test-student";
-    private static final String SAMPLE_FILENAME = "staging-answer-input-test.pdf";
+    private static final String SAMPLE_FILENAME = "staging-answer-input-test-v2.pdf";
+    private static final String SAMPLE_PREFIX = "staging-answer-input-test";
+    private static final String SAMPLE_ANSWER_KEY = "[{\"label\":\"1\",\"answer\":\"3/4\"},{\"label\":\"2\",\"answer\":\"60€\"}]";
 
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
@@ -122,12 +125,29 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     }
 
     private void ensureSampleHomework(User student) throws Exception {
-        boolean exists = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId()).stream()
-                .anyMatch(homework -> SAMPLE_FILENAME.equals(homework.getWorksheetFilename()) && !homework.isSubmitted());
-        if (exists) return;
+        List<Homework> existing = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId());
+
+        // Remove only obsolete, unfinished fixture PDFs so the test account shows one clear assignment.
+        existing.stream()
+                .filter(homework -> !homework.isSubmitted())
+                .filter(homework -> homework.getWorksheetFilename() != null)
+                .filter(homework -> homework.getWorksheetFilename().startsWith(SAMPLE_PREFIX))
+                .filter(homework -> !SAMPLE_FILENAME.equals(homework.getWorksheetFilename()))
+                .forEach(homeworkRepository::delete);
+
+        Homework current = existing.stream()
+                .filter(homework -> SAMPLE_FILENAME.equals(homework.getWorksheetFilename()))
+                .filter(homework -> !homework.isSubmitted())
+                .findFirst()
+                .orElse(null);
+        if (current != null) {
+            current.configureFinalAnswerKey(2, SAMPLE_ANSWER_KEY);
+            return;
+        }
 
         Homework homework = Homework.create(student, LocalDate.now(ZoneId.of("Europe/Berlin")));
         homework.attachWorksheet(SAMPLE_FILENAME, samplePdf(), 1);
+        homework.configureFinalAnswerKey(2, SAMPLE_ANSWER_KEY);
         homeworkRepository.save(homework);
     }
 
@@ -143,21 +163,17 @@ public class StagingFixturesInitializer implements ApplicationRunner {
                 content.beginText();
                 content.setFont(title, 18);
                 content.newLineAtOffset(60, 780);
-                content.showText("Mindcrafti staging - answer input test");
+                content.showText("Mindcrafti staging - final answer test");
                 content.setFont(text, 13);
-                content.setLeading(30);
+                content.setLeading(34);
                 content.newLine();
                 content.newLine();
                 content.showText("1. Calculate: 1/2 + 1/4");
                 content.newLine();
-                content.showText("2. Calculate: 25% of 80");
-                content.newLine();
-                content.showText("3. Calculate: -7 + 3");
-                content.newLine();
-                content.showText("4. Solve: x + 5 = 35");
+                content.showText("2. An item costs 80 EUR. After a 25% discount, what is the final price?");
                 content.newLine();
                 content.newLine();
-                content.showText("Write your work here, then enter the final answers at the bottom of the page.");
+                content.showText("Solve both tasks in the PDF. After submitting, enter two final answers.");
                 content.endText();
             }
             document.save(output);
