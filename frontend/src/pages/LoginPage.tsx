@@ -10,9 +10,7 @@ import '../login-page.css';
 
 const IS_STAGING_HOST = typeof window !== 'undefined'
   && window.location.hostname === 'staging-web-production.up.railway.app';
-const API_BASE_URL = IS_STAGING_HOST
-  ? 'https://staging-api-production-4c59.up.railway.app/api/v1'
-  : (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 type StagingAuthResponse = {
   accessToken: string;
