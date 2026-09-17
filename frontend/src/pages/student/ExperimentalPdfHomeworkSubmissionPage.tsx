@@ -2,13 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
-import { useI18n } from '../../i18n/I18nContext';
 import { PdfHomeworkWithSubmissionPage } from './PdfHomeworkWithSubmissionPage';
 import { HomeworkFinalAnswersEditor } from './HomeworkFinalAnswersEditor';
 
 export function ExperimentalPdfHomeworkSubmissionPage() {
   const { homeworkId = '' } = useParams();
-  const { language } = useI18n();
   const [homework, setHomework] = useState<Homework | null>(null);
 
   async function refresh() {
@@ -31,7 +29,7 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
           return;
         }
       } catch {
-        // The regular homework screen displays API errors.
+        // The regular homework workspace displays API errors.
       }
     };
 
@@ -46,32 +44,25 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
   const answerCount = homework?.finalAnswerCount ?? 0;
   const awaitingAnswers = Boolean(homework?.pdfUploaded && answerCount > 0 && homework?.submitted !== true);
 
-  if (awaitingAnswers) {
-    return (
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={language === 'DE' ? 'Antworten' : 'Ответы'}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 3000,
-          overflowY: 'auto',
-          background: 'rgba(15, 23, 42, .58)',
-          backdropFilter: 'blur(4px)',
-          padding: 'max(18px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom))',
-        }}
-      >
-        <div style={{ width: 'min(100%, 620px)', margin: '0 auto' }}>
+  return (
+    <>
+      <PdfHomeworkWithSubmissionPage />
+
+      {awaitingAnswers && (
+        <div
+          id="final-homework-answers"
+          style={{
+            width: 'min(100%, 760px)',
+            margin: '22px auto max(32px, env(safe-area-inset-bottom))',
+          }}
+        >
           <HomeworkFinalAnswersEditor
             homeworkId={homeworkId}
             answerCount={answerCount}
             onCompleted={() => void refresh()}
           />
         </div>
-      </div>
-    );
-  }
-
-  return <PdfHomeworkWithSubmissionPage />;
+      )}
+    </>
+  );
 }
