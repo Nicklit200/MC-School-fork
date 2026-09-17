@@ -10,8 +10,7 @@ export function GroupsPage() {
   const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [name, setName] = useState('');
-  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
-  const [emailInput, setEmailInput] = useState('');
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -35,8 +34,13 @@ export function GroupsPage() {
   }, []);
 
   const availableStudents = useMemo(
-    () => students.filter((student) => student.email && !selectedEmails.includes(student.email)),
-    [students, selectedEmails],
+    () => students.filter((student) => !selectedStudentIds.includes(student.id)),
+    [students, selectedStudentIds],
+  );
+
+  const selectedStudents = useMemo(
+    () => selectedStudentIds.map((id) => students.find((student) => student.id === id)).filter((student): student is StudentListItem => Boolean(student)),
+    [students, selectedStudentIds],
   );
 
   const totalStudentsInGroups = useMemo(() => {
@@ -47,14 +51,13 @@ export function GroupsPage() {
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim() || selectedEmails.length === 0 || creating) return;
+    if (!name.trim() || selectedStudentIds.length === 0 || creating) return;
     setCreating(true);
     setError(null);
     try {
-      await api.groups.create(name.trim(), selectedEmails);
+      await api.groups.create(name.trim(), selectedStudentIds);
       setName('');
-      setSelectedEmails([]);
-      setEmailInput('');
+      setSelectedStudentIds([]);
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
@@ -63,22 +66,13 @@ export function GroupsPage() {
     }
   }
 
-  function addEmail(raw: string) {
-    const email = raw.trim().toLowerCase();
-    if (!email || selectedEmails.includes(email)) return;
-    setSelectedEmails((current) => [...current, email]);
-    setEmailInput('');
+  function addStudent(studentId: string) {
+    if (!studentId || selectedStudentIds.includes(studentId)) return;
+    setSelectedStudentIds((current) => [...current, studentId]);
   }
 
-  function removeEmail(email: string) {
-    setSelectedEmails((current) => current.filter((item) => item !== email));
-  }
-
-  function handleEmailKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
-      event.preventDefault();
-      addEmail(emailInput);
-    }
+  function removeStudent(studentId: string) {
+    setSelectedStudentIds((current) => current.filter((item) => item !== studentId));
   }
 
   return (
@@ -107,39 +101,29 @@ export function GroupsPage() {
 
           <div className="field">
             <span className="field__label">Ученики</span>
-            {selectedEmails.length > 0 && (
+            {selectedStudents.length > 0 && (
               <div className="teacher-group-chips">
-                {selectedEmails.map((email) => (
-                  <span className="teacher-group-chip" key={email}>
-                    {email}
-                    <button type="button" onClick={() => removeEmail(email)} aria-label={`Удалить ${email}`}>×</button>
+                {selectedStudents.map((student) => (
+                  <span className="teacher-group-chip" key={student.id}>
+                    {student.fullName}
+                    <button type="button" onClick={() => removeStudent(student.id)} aria-label={`Удалить ${student.fullName}`}>×</button>
                   </span>
                 ))}
               </div>
             )}
 
             <div className="teacher-student-picker">
-              <input
-                className="input"
-                type="email"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                onKeyDown={handleEmailKeyDown}
-                onBlur={() => { if (emailInput.trim()) addEmail(emailInput); }}
-                placeholder="Введите email или выберите существующего ученика"
-                disabled={creating}
-              />
               <select
                 className="select teacher-student-picker__select"
                 value=""
-                onChange={(e) => addEmail(e.target.value)}
+                onChange={(e) => addStudent(e.target.value)}
                 disabled={creating || availableStudents.length === 0}
                 aria-label="Выбрать существующего ученика"
               >
                 <option value="">Выбрать ученика</option>
                 {availableStudents.map((student) => (
-                  <option key={student.id} value={student.email ?? ''}>
-                    {student.fullName}{student.email ? ` — ${student.email}` : ''}
+                  <option key={student.id} value={student.id}>
+                    {student.fullName}{student.username ? ` — ${student.username}` : ''}
                   </option>
                 ))}
               </select>
@@ -148,10 +132,10 @@ export function GroupsPage() {
 
           <p className="teacher-form-hint">
             <span>ⓘ</span>
-            Существующие ученики будут добавлены в группу. Для новых аккаунтов автоматически отправится приглашение.
+            Выберите существующих учеников преподавателя. Email для добавления в группу не нужен.
           </p>
 
-          <button className="btn teacher-primary-btn" type="submit" disabled={creating || selectedEmails.length === 0}>
+          <button className="btn teacher-primary-btn" type="submit" disabled={creating || selectedStudentIds.length === 0}>
             {creating ? 'Создаём…' : 'Создать группу'}
           </button>
         </form>
