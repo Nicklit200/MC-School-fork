@@ -5,14 +5,13 @@ import { homePathForRole } from '../auth/roleRoutes';
 import { useI18n } from '../i18n/I18nContext';
 import { LanguageToggle } from '../components/LanguageToggle';
 
-/** Invitation acceptance. Students may use the generated school login without email. */
+/** Invitation acceptance. Students use the generated school login; email is not required. */
 export function ActivatePage() {
   const { activate } = useAuth();
   const { language, t } = useI18n();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [token, setToken] = useState(searchParams.get('token') ?? '');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +21,7 @@ export function ActivatePage() {
     setError(false);
     setSubmitting(true);
     try {
-      const activated = await activate(token.trim(), email.trim(), password);
+      const activated = await activate(token.trim(), '', password);
       navigate(homePathForRole(activated.role), { replace: true });
     } catch {
       setError(true);
@@ -38,8 +37,8 @@ export function ActivatePage() {
         <h1>{t('activate.title')}</h1>
         <p className="muted">
           {language === 'DE'
-            ? 'Schüler können die E-Mail leer lassen und später mit ihrem Schul-Login anmelden.'
-            : 'Ученику email можно не указывать: после активации он сможет входить по школьному логину.'}
+            ? 'Nach der Aktivierung meldet sich der Schüler mit seinem Schul-Login an. Eine E-Mail ist nicht erforderlich.'
+            : 'После активации ученик входит по школьному логину. Email не нужен.'}
         </p>
         {error && <div className="banner banner--error">{t('activate.error')}</div>}
         <label className="field">
@@ -50,16 +49,6 @@ export function ActivatePage() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             required
-          />
-        </label>
-        <label className="field">
-          <span className="field__label">{language === 'DE' ? 'E-Mail (für Schüler optional)' : 'Email (для ученика необязательно)'}</span>
-          <input
-            className="input"
-            type="email"
-            value={email}
-            autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)}
           />
         </label>
         <label className="field">
