@@ -6,6 +6,7 @@ import com.mcschool.flashcard.cards.CardRepository;
 import com.mcschool.flashcard.cards.dto.ParsedCard;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.drive.GoogleDriveStructureService;
 import com.mcschool.flashcard.groups.dto.AddGroupMembersRequest;
 import com.mcschool.flashcard.groups.dto.CreateGroupCardRequest;
 import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,7 +44,9 @@ public class StudentGroupService {
     private final NotificationService notificationService;
     private final CardPushNotificationService cardPushNotificationService;
     private final HomeworkPdfService homeworkPdfService;
+    private final GoogleDriveStructureService googleDriveStructureService;
 
+    // Kept for unit tests and older construction sites. Spring uses the annotated constructor below.
     public StudentGroupService(StudentGroupRepository groupRepository,
                                StudentGroupMemberRepository memberRepository,
                                UserRepository userRepository,
@@ -51,6 +55,20 @@ public class StudentGroupService {
                                NotificationService notificationService,
                                CardPushNotificationService cardPushNotificationService,
                                HomeworkPdfService homeworkPdfService) {
+        this(groupRepository, memberRepository, userRepository, homeworkRepository, cardRepository,
+                notificationService, cardPushNotificationService, homeworkPdfService, null);
+    }
+
+    @Autowired
+    public StudentGroupService(StudentGroupRepository groupRepository,
+                               StudentGroupMemberRepository memberRepository,
+                               UserRepository userRepository,
+                               HomeworkRepository homeworkRepository,
+                               CardRepository cardRepository,
+                               NotificationService notificationService,
+                               CardPushNotificationService cardPushNotificationService,
+                               HomeworkPdfService homeworkPdfService,
+                               GoogleDriveStructureService googleDriveStructureService) {
         this.groupRepository = groupRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
@@ -59,6 +77,7 @@ public class StudentGroupService {
         this.notificationService = notificationService;
         this.cardPushNotificationService = cardPushNotificationService;
         this.homeworkPdfService = homeworkPdfService;
+        this.googleDriveStructureService = googleDriveStructureService;
     }
 
     @Transactional
@@ -66,6 +85,9 @@ public class StudentGroupService {
         User teacherEntity = userRepository.findById(teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
         StudentGroup group = groupRepository.save(StudentGroup.create(teacherEntity, request.name()));
+        if (googleDriveStructureService != null) {
+            googleDriveStructureService.provisionGroup(teacherEntity, group);
+        }
 
         request.emails().stream()
                 .map(email -> email.trim().toLowerCase(Locale.ROOT))
@@ -162,6 +184,9 @@ public class StudentGroupService {
         }
         if (!memberRepository.existsByGroupIdAndStudentId(group.getId(), student.getId())) {
             memberRepository.save(StudentGroupMember.create(group, student));
+        }
+        if (googleDriveStructureService != null) {
+            googleDriveStructureService.provisionGroupMember(teacher, group, student);
         }
     }
 
