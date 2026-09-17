@@ -33,9 +33,12 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     public static final String TEACHER_EMAIL = "test-teacher@mindcrafti.local";
     public static final String STUDENT_EMAIL = "test-student@mindcrafti.local";
     public static final String STUDENT_USERNAME = "test-student";
+
     private static final String SAMPLE_FILENAME = "staging-answer-input-test-v2.pdf";
-    private static final String SAMPLE_PREFIX = "staging-answer-input-test";
     private static final String SAMPLE_ANSWER_KEY = "[{\"label\":\"1\",\"answer\":\"3/4\"},{\"label\":\"2\",\"answer\":\"60€\"}]";
+
+    private static final String SECOND_SAMPLE_FILENAME = "staging-answer-input-test-v3.pdf";
+    private static final String SECOND_SAMPLE_ANSWER_KEY = "[{\"label\":\"1\",\"answer\":\"5/6\"},{\"label\":\"2\",\"answer\":\"90€\"}]";
 
     private final UserRepository userRepository;
     private final HomeworkRepository homeworkRepository;
@@ -69,6 +72,7 @@ public class StagingFixturesInitializer implements ApplicationRunner {
         User teacher = upsertTeacher();
         User student = upsertStudent(teacher);
         ensureSampleHomework(student);
+        ensureSecondSampleHomework(student);
     }
 
     private User upsertTeacher() {
@@ -121,32 +125,50 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     }
 
     private void ensureSampleHomework(User student) throws Exception {
+        ensureHomework(
+                student,
+                SAMPLE_FILENAME,
+                SAMPLE_ANSWER_KEY,
+                "1. Calculate: 1/2 + 1/4",
+                "2. An item costs 80 EUR. After a 25% discount, what is the final price?");
+    }
+
+    private void ensureSecondSampleHomework(User student) throws Exception {
+        ensureHomework(
+                student,
+                SECOND_SAMPLE_FILENAME,
+                SECOND_SAMPLE_ANSWER_KEY,
+                "1. Calculate: 1/2 + 1/3",
+                "2. An item costs 120 EUR. After a 25% discount, what is the final price?");
+    }
+
+    private void ensureHomework(User student,
+                                String filename,
+                                String answerKey,
+                                String taskOne,
+                                String taskTwo) throws Exception {
         List<Homework> existing = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId());
-
-        existing.stream()
-                .filter(homework -> !homework.isSubmitted())
-                .filter(homework -> homework.getWorksheetFilename() != null)
-                .filter(homework -> homework.getWorksheetFilename().startsWith(SAMPLE_PREFIX))
-                .filter(homework -> !SAMPLE_FILENAME.equals(homework.getWorksheetFilename()))
-                .forEach(homeworkRepository::delete);
-
         Homework current = existing.stream()
-                .filter(homework -> SAMPLE_FILENAME.equals(homework.getWorksheetFilename()))
-                .filter(homework -> !homework.isSubmitted())
+                .filter(homework -> filename.equals(homework.getWorksheetFilename()))
+                .filter(homework -> !homework.isSubmissionComplete())
                 .findFirst()
                 .orElse(null);
         if (current != null) {
-            current.configureFinalAnswerKey(2, SAMPLE_ANSWER_KEY);
+            current.configureFinalAnswerKey(2, answerKey);
             return;
         }
 
+        boolean alreadyExists = existing.stream()
+                .anyMatch(homework -> filename.equals(homework.getWorksheetFilename()));
+        if (alreadyExists) return;
+
         Homework homework = Homework.create(student, LocalDate.now(ZoneId.of("Europe/Berlin")));
-        homework.attachWorksheet(SAMPLE_FILENAME, samplePdf(), 1);
-        homework.configureFinalAnswerKey(2, SAMPLE_ANSWER_KEY);
+        homework.attachWorksheet(filename, samplePdf(taskOne, taskTwo), 1);
+        homework.configureFinalAnswerKey(2, answerKey);
         homeworkRepository.save(homework);
     }
 
-    private byte[] samplePdf() throws Exception {
+    private byte[] samplePdf(String taskOne, String taskTwo) throws Exception {
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PDPage page = new PDPage(PDRectangle.A4);
@@ -163,12 +185,12 @@ public class StagingFixturesInitializer implements ApplicationRunner {
                 content.setLeading(34);
                 content.newLine();
                 content.newLine();
-                content.showText("1. Calculate: 1/2 + 1/4");
+                content.showText(taskOne);
                 content.newLine();
-                content.showText("2. An item costs 80 EUR. After a 25% discount, what is the final price?");
+                content.showText(taskTwo);
                 content.newLine();
                 content.newLine();
-                content.showText("Solve both tasks in the PDF. After submitting, enter two final answers.");
+                content.showText("Solve both tasks. Submit the PDF, then enter the two final answers below it.");
                 content.endText();
             }
             document.save(output);
