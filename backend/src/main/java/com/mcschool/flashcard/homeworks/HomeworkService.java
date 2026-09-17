@@ -4,6 +4,7 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
+import com.mcschool.flashcard.homeworks.dto.HomeworkAnswerReviewResponse;
 import com.mcschool.flashcard.homeworks.dto.HomeworkFinalAnswersResult;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
 import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
@@ -29,6 +30,8 @@ public class HomeworkService {
 
     private static final Pattern ANSWER_KEY_ITEM = Pattern.compile(
             "\\{\\\"label\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"answer\\\":\\\"((?:\\\\.|[^\\\"])*)\\\"\\}");
+    private static final Pattern ANSWER_RESULT_ITEM = Pattern.compile(
+            "\\{\\\"label\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"answer\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"correct\\\":(true|false)\\}");
 
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
@@ -51,6 +54,19 @@ public class HomeworkService {
     public List<HomeworkResponse> listForTeacher(AuthenticatedUser teacher, UUID studentId) {
         requireOwnedStudent(teacher.id(), studentId);
         return listForStudent(studentId);
+    }
+
+    @Transactional(readOnly = true)
+    public HomeworkAnswerReviewResponse reviewFinalAnswers(AuthenticatedUser teacher, UUID homeworkId) {
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        requireOwnedStudent(teacher.id(), homework.getStudent().getId());
+
+        int total = homework.getFinalAnswerCount() == null ? 0 : homework.getFinalAnswerCount();
+        int correct = homework.getFinalCorrectCount() == null ? 0 : homework.getFinalCorrectCount();
+        List<HomeworkAnswerReviewResponse.Item> items = readAnswerResults(homework.getFinalAnswerResultsJson());
+        double percent = total == 0 ? 0.0 : Math.round((correct * 10000.0) / total) / 100.0;
+        return new HomeworkAnswerReviewResponse(correct, total, percent, items);
     }
 
     @Transactional(readOnly = true)
@@ -155,6 +171,19 @@ public class HomeworkService {
         }
         if (items.isEmpty()) {
             throw new IllegalStateException("Homework answer key is invalid");
+        }
+        return items;
+    }
+
+    private List<HomeworkAnswerReviewResponse.Item> readAnswerResults(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<HomeworkAnswerReviewResponse.Item> items = new ArrayList<>();
+        Matcher matcher = ANSWER_RESULT_ITEM.matcher(value);
+        while (matcher.find()) {
+            items.add(new HomeworkAnswerReviewResponse.Item(
+                    jsonUnescape(matcher.group(1)),
+                    jsonUnescape(matcher.group(2)),
+                    Boolean.parseBoolean(matcher.group(3))));
         }
         return items;
     }
