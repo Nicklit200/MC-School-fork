@@ -99,6 +99,24 @@ public class GoogleDriveService {
         }
     }
 
+    public List<String> getParentIds(String fileId) {
+        if (fileId == null || fileId.isBlank()) {
+            return List.of();
+        }
+        Map<String, Object> payload = getJson(DRIVE_API + "/files/" + enc(fileId)
+                + "?supportsAllDrives=true&fields=parents");
+        Object rawParents = payload.get("parents");
+        if (!(rawParents instanceof List<?> parents)) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (Object parent : parents) {
+            String value = stringValue(parent);
+            if (!value.isBlank()) result.add(value);
+        }
+        return result;
+    }
+
     public List<DriveItemResponse> listPdfFiles(String driveId, String parentId) {
         String effectiveParent = parentId == null || parentId.isBlank() ? driveId : parentId;
         String q = "'" + effectiveParent.replace("'", "\\'")
