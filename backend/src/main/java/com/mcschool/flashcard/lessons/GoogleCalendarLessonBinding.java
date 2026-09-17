@@ -1,5 +1,6 @@
 package com.mcschool.flashcard.lessons;
 
+import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.users.User;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -31,22 +32,39 @@ public class GoogleCalendarLessonBinding {
     @Id
     private String eventKey;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "student_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id")
     private User student;
 
-    private GoogleCalendarLessonBinding(User teacher, String eventKey, User student) {
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private StudentGroup group;
+
+    private GoogleCalendarLessonBinding(User teacher, String eventKey, User student, StudentGroup group) {
         this.teacher = teacher;
         this.eventKey = eventKey;
         this.student = student;
+        this.group = group;
     }
 
     public static GoogleCalendarLessonBinding create(User teacher, String eventKey, User student) {
-        return new GoogleCalendarLessonBinding(teacher, eventKey, student);
+        return new GoogleCalendarLessonBinding(teacher, eventKey, student, null);
+    }
+
+    public static GoogleCalendarLessonBinding createForGroup(User teacher, String eventKey, StudentGroup group) {
+        return new GoogleCalendarLessonBinding(teacher, eventKey, null, group);
     }
 
     public void changeStudent(User student) {
+        if (student == null) throw new IllegalArgumentException("Student is required");
         this.student = student;
+        this.group = null;
+    }
+
+    public void changeGroup(StudentGroup group) {
+        if (group == null) throw new IllegalArgumentException("Group is required");
+        this.group = group;
+        this.student = null;
     }
 
     @Getter
