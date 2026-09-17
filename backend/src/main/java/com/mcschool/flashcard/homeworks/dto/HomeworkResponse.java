@@ -22,6 +22,7 @@ public record HomeworkResponse(
         boolean hasWorksheet,
         String worksheetFilename,
         Integer worksheetPageCount,
+        boolean pdfUploaded,
         boolean submitted,
         Instant submittedAt,
         Integer finalAnswerCount,
@@ -39,8 +40,8 @@ public record HomeworkResponse(
                 homework.getStartDate(), homework.getCreatedAt(), stats.totalCards(),
                 stats.notStarted(), stats.inProgress(), stats.learned(), status,
                 homework.hasWorksheet(), homework.getWorksheetFilename(), homework.getWorksheetPageCount(),
-                homework.isSubmitted(), homework.getSubmittedAt(), homework.getFinalAnswerCount(),
-                homework.hasSubmittedFinalAnswers(), homework.getFinalAnswersCorrect(),
+                homework.isSubmitted(), homework.isSubmissionComplete(), homework.getSubmittedAt(),
+                homework.getFinalAnswerCount(), homework.hasSubmittedFinalAnswers(), homework.getFinalAnswersCorrect(),
                 HomeworkDeadlinePolicy.deadlineAt(homework.getStartDate()),
                 HomeworkDeadlinePolicy.isOverdue(homework),
                 HomeworkDeadlinePolicy.wasSubmittedLate(homework));
