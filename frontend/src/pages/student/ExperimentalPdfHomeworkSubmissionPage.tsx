@@ -21,7 +21,7 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
     let cancelled = false;
     let timer = 0;
 
-    const pollUntilSubmitted = async () => {
+    const poll = async () => {
       try {
         const current = (await api.study.homeworks()).find((item) => item.id === homeworkId) ?? null;
         if (cancelled) return;
@@ -35,8 +35,8 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
       }
     };
 
-    void pollUntilSubmitted();
-    timer = window.setInterval(() => void pollUntilSubmitted(), 1200);
+    void poll();
+    timer = window.setInterval(() => void poll(), 1200);
     return () => {
       cancelled = true;
       if (timer) window.clearInterval(timer);
@@ -44,28 +44,17 @@ export function ExperimentalPdfHomeworkSubmissionPage() {
   }, [homeworkId]);
 
   const answerCount = homework?.finalAnswerCount ?? 0;
-  const showAnswerWindow = Boolean(homework?.submitted && answerCount > 0 && homework?.finalAnswersCorrect !== true);
+  const showAnswerWindow = Boolean(homework?.pdfUploaded && answerCount > 0 && homework?.submitted !== true);
 
   return (
     <>
-      {!homework?.submitted && answerCount > 0 && (
-        <div className="banner banner--info" style={{ marginBottom: 14 }}>
-          <strong>{language === 'DE' ? 'Testmodus: Antworten nach der Abgabe' : 'Тестовый режим: ответы после сдачи'}</strong>
-          <div style={{ marginTop: 4 }}>
-            {language === 'DE'
-              ? `Löse die PDF wie gewohnt und gib sie ab. Direkt danach öffnet sich ein Fenster mit ${answerCount} Endantworten.`
-              : `Реши PDF как обычно и сдай его. Сразу после сдачи откроется окно, где нужно ввести ${answerCount} конечных ответа.`}
-          </div>
-        </div>
-      )}
-
       <PdfHomeworkWithSubmissionPage />
 
       {showAnswerWindow && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={language === 'DE' ? 'Endantworten' : 'Ответы по домашке'}
+          aria-label={language === 'DE' ? 'Antworten' : 'Ответы'}
           style={{
             position: 'fixed',
             inset: 0,
