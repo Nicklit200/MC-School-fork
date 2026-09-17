@@ -7,7 +7,19 @@ export interface HomeworkFinalAnswer {
   answer: string;
 }
 
-export async function saveHomeworkFinalAnswers(homeworkId: string, answers: HomeworkFinalAnswer[]): Promise<void> {
+export interface HomeworkFinalAnswerResultItem {
+  label: string;
+  correct: boolean;
+}
+
+export interface HomeworkFinalAnswersResult {
+  correctCount: number;
+  totalCount: number;
+  allCorrect: boolean;
+  items: HomeworkFinalAnswerResultItem[];
+}
+
+export async function saveHomeworkFinalAnswers(homeworkId: string, answers: HomeworkFinalAnswer[]): Promise<HomeworkFinalAnswersResult> {
   const token = getAccessToken();
   const response = await fetch(`${BASE_URL}/study/homeworks/${homeworkId}/final-answers`, {
     method: 'POST',
@@ -18,7 +30,7 @@ export async function saveHomeworkFinalAnswers(homeworkId: string, answers: Home
     body: JSON.stringify({ answers }),
   });
 
-  if (response.ok) return;
+  if (response.ok) return response.json() as Promise<HomeworkFinalAnswersResult>;
   const text = await response.text();
   let payload: any;
   try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; }
