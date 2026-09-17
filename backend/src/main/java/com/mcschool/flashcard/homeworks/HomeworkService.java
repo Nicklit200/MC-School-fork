@@ -61,6 +61,7 @@ public class HomeworkService {
     /**
      * Grades the compact final-answer form that appears after the PDF itself has been submitted.
      * The answer key remains server-side; the response only tells the student which rows matched.
+     * Incorrect answers never block submission: grading is persisted for teacher analytics.
      */
     @Transactional
     public HomeworkFinalAnswersResult saveFinalAnswers(AuthenticatedUser student, UUID homeworkId,
@@ -95,7 +96,11 @@ public class HomeworkService {
         }
 
         boolean allCorrect = correctCount == expectedCount;
-        homework.changeFinalAnswersJson(toJson(request.answers()), allCorrect);
+        homework.changeFinalAnswers(
+                toJson(request.answers()),
+                correctCount,
+                allCorrect,
+                toResultsJson(request.answers(), items));
         return new HomeworkFinalAnswersResult(correctCount, expectedCount, allCorrect, items);
     }
 
@@ -211,6 +216,19 @@ public class HomeworkService {
                 .map(answer -> "{\"label\":\"" + jsonEscape(answer.label().trim())
                         + "\",\"answer\":\"" + jsonEscape(answer.answer().trim()) + "\"}")
                 .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    private String toResultsJson(List<SaveHomeworkFinalAnswersRequest.FinalAnswer> answers,
+                                 List<HomeworkFinalAnswersResult.Item> items) {
+        List<String> rows = new ArrayList<>();
+        for (int index = 0; index < answers.size(); index++) {
+            SaveHomeworkFinalAnswersRequest.FinalAnswer answer = answers.get(index);
+            HomeworkFinalAnswersResult.Item item = items.get(index);
+            rows.add("{\"label\":\"" + jsonEscape(item.label())
+                    + "\",\"answer\":\"" + jsonEscape(answer.answer().trim())
+                    + "\",\"correct\":" + item.correct() + "}");
+        }
+        return rows.stream().collect(Collectors.joining(",", "[", "]"));
     }
 
     private String jsonEscape(String value) {
