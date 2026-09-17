@@ -4,9 +4,12 @@ import {
   type HomeworkFinalAnswer,
 } from '../../api/homeworkAnswers';
 import { useI18n } from '../../i18n/I18nContext';
+import './homework-final-answers.css';
 
 type EntryMode = 'text' | 'fraction' | 'mixed';
-type KeyboardTab = 'basic' | 'functions' | 'trig' | 'advanced';
+type KeyboardTab = 'letters' | 'basic' | 'functions' | 'trig' | 'advanced';
+type FractionPart = 'whole' | 'numerator' | 'denominator';
+
 type Draft = {
   label: string;
   mode: EntryMode;
@@ -15,70 +18,124 @@ type Draft = {
   numerator: string;
   denominator: string;
 };
-type FractionPart = 'whole' | 'numerator' | 'denominator';
 
 type Key = {
   label: string;
   value?: string;
-  action?: 'backspace' | 'fraction' | 'mixed' | 'clear';
+  action?: 'fraction' | 'mixed';
+  className?: string;
 };
 
-const MAIN_GRID: Key[][] = [
-  [
-    { label: '(□)', value: '()' },
-    { label: '>', value: '>' },
-    { label: '7', value: '7' },
-    { label: '8', value: '8' },
-    { label: '9', value: '9' },
-    { label: '÷', value: '÷' },
-  ],
-  [
-    { label: '□⁄□', action: 'fraction' },
-    { label: '√□', value: '√' },
-    { label: '4', value: '4' },
-    { label: '5', value: '5' },
-    { label: '6', value: '6' },
-    { label: '×', value: '×' },
-  ],
-  [
-    { label: '□²', value: '^2' },
-    { label: 'x', value: 'x' },
-    { label: '1', value: '1' },
-    { label: '2', value: '2' },
-    { label: '3', value: '3' },
-    { label: '−', value: '−' },
-  ],
-  [
-    { label: 'π', value: 'π' },
-    { label: '%', value: '%' },
-    { label: '0', value: '0' },
-    { label: ',', value: ',' },
-    { label: '=', value: '=' },
-    { label: '+', value: '+' },
-  ],
+const BASIC_KEYS: Key[] = [
+  { label: '(□)', value: '()' },
+  { label: '>', value: '>' },
+  { label: '7', value: '7' },
+  { label: '8', value: '8' },
+  { label: '9', value: '9' },
+  { label: '÷', value: '÷' },
+  { label: '□⁄□', action: 'fraction' },
+  { label: '√□', value: '√(' },
+  { label: '4', value: '4' },
+  { label: '5', value: '5' },
+  { label: '6', value: '6' },
+  { label: '×', value: '×' },
+  { label: '□²', value: '^2' },
+  { label: 'x', value: 'x' },
+  { label: '1', value: '1' },
+  { label: '2', value: '2' },
+  { label: '3', value: '3' },
+  { label: '−', value: '−' },
+  { label: 'π', value: 'π' },
+  { label: '%', value: '%' },
+  { label: '0', value: '0' },
+  { label: ',', value: ',' },
+  { label: '=', value: '=' },
+  { label: '+', value: '+' },
 ];
 
-const TAB_KEYS: Record<KeyboardTab, Key[]> = {
-  basic: [
-    { label: '+', value: '+' }, { label: '−', value: '−' }, { label: '×', value: '×' }, { label: '÷', value: '÷' },
-    { label: '(', value: '(' }, { label: ')', value: ')' }, { label: '€', value: '€' }, { label: '<', value: '<' },
-  ],
-  functions: [
-    { label: 'f(x)', value: 'f(' }, { label: 'e', value: 'e' }, { label: 'log', value: 'log(' }, { label: 'ln', value: 'ln(' },
-    { label: 'x²', value: '^2' }, { label: 'x³', value: '^3' }, { label: 'xʸ', value: '^' }, { label: '|x|', value: 'abs(' },
-  ],
-  trig: [
-    { label: 'sin', value: 'sin(' }, { label: 'cos', value: 'cos(' }, { label: 'tan', value: 'tan(' }, { label: 'cot', value: 'cot(' },
-    { label: 'asin', value: 'asin(' }, { label: 'acos', value: 'acos(' }, { label: 'atan', value: 'atan(' }, { label: '°', value: '°' },
-  ],
-  advanced: [
-    { label: 'lim', value: 'lim(' }, { label: 'dx', value: 'dx' }, { label: '∫', value: '∫' }, { label: 'Σ', value: 'Σ' },
-    { label: '∞', value: '∞' }, { label: '√', value: '√' }, { label: '∛', value: '∛' }, { label: '!', value: '!' },
-  ],
-};
+const FUNCTION_KEYS: Key[] = [
+  { label: '|□|', value: 'abs(' },
+  { label: 'f(x)', value: 'f(' },
+  { label: 'log₁₀', value: 'log(' },
+  { label: 'A▧', value: 'A(' },
+  { label: 'i', value: 'i' },
+  { label: '▧,▧,▧', value: ',' },
+  { label: '□₍□₎', value: '_' },
+  { label: '▧(▧)', value: '(' },
+  { label: 'log₂', value: 'log2(' },
+  { label: '□P□', value: 'P(' },
+  { label: 'z', value: 'z' },
+  { label: '!', value: '!' },
+  { label: 'e', value: 'e' },
+  { label: 'f(x,y)', value: 'f(' },
+  { label: 'log▧', value: 'log_(' },
+  { label: '□C□', value: 'C(' },
+  { label: 'z̄', value: 'z̄' },
+  { label: '[▧]', value: '[' },
+  { label: 'exp', value: 'exp(' },
+  { label: 'n((x,y))', value: 'n(' },
+  { label: 'ln', value: 'ln(' },
+  { label: '(▧⁄▧)', action: 'fraction' },
+  { label: 'sign', value: 'sign(' },
+  { label: '▦', value: 'matrix(' },
+];
+
+const TRIG_KEYS: Key[] = [
+  { label: 'rad', value: 'rad' },
+  { label: 'sin', value: 'sin(' },
+  { label: 'cos', value: 'cos(' },
+  { label: 'tan', value: 'tan(' },
+  { label: 'cot', value: 'cot(' },
+  { label: 'sec', value: 'sec(' },
+  { label: '□°', value: '°' },
+  { label: 'arcsin', value: 'arcsin(' },
+  { label: 'arccos', value: 'arccos(' },
+  { label: 'arctan', value: 'arctan(' },
+  { label: 'arccot', value: 'arccot(' },
+  { label: 'arcsec', value: 'arcsec(' },
+  { label: '□°□′', value: '°' },
+  { label: 'sinh', value: 'sinh(' },
+  { label: 'cosh', value: 'cosh(' },
+  { label: 'tanh', value: 'tanh(' },
+  { label: 'coth', value: 'coth(' },
+  { label: 'sech', value: 'sech(' },
+  { label: '□°□′□″', value: '°' },
+  { label: 'arsinh', value: 'arsinh(' },
+  { label: 'arcosh', value: 'arcosh(' },
+  { label: 'artanh', value: 'artanh(' },
+  { label: 'arcoth', value: 'arcoth(' },
+  { label: 'arsech', value: 'arsech(' },
+];
+
+const ADVANCED_KEYS: Key[] = [
+  { label: 'lim\n□→□', value: 'lim(' },
+  { label: 'd/dx □', value: 'd/dx(' },
+  { label: '∫□dx', value: '∫' },
+  { label: 'dy/dx', value: 'dy/dx' },
+  { label: 'aₙ', value: 'a_n' },
+  { label: 'lim⁺\n□→□', value: 'lim+(' },
+  { label: 'd/d□ □', value: 'd/d(' },
+  { label: '∫□d□', value: '∫' },
+  { label: 'dx', value: 'dx' },
+  { label: '▧,▧,▧…', value: ',' },
+  { label: 'lim⁻\n□→□', value: 'lim-(' },
+  { label: 'dⁿ/d□ⁿ', value: 'd^n/d(' },
+  { label: '∫∫', value: '∫∫' },
+  { label: 'dy', value: 'dy' },
+  { label: '∞', value: '∞' },
+  { label: 'Σ', value: 'Σ(' },
+  { label: "y′", value: "y'" },
+];
+
+const LETTER_KEYS = [
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
+  'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+  'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
+  'y', 'z', 'α', 'β', 'θ', 'ρ', 'Φ',
+];
 
 function storageKey(homeworkId: string) {
-  return `mindcrafti-final-answers-v3:${homeworkId}`;
+  return `mindcrafti-final-answers-v4:${homeworkId}`;
 }
 
 function emptyDrafts(answerCount: number): Draft[] {
@@ -90,6 +147,10 @@ function emptyDrafts(answerCount: number): Draft[] {
     numerator: '',
     denominator: '',
   }));
+}
+
+function cloneDrafts(drafts: Draft[]) {
+  return drafts.map((draft) => ({ ...draft }));
 }
 
 function loadInitial(homeworkId: string, answerCount: number): Draft[] {
@@ -125,9 +186,11 @@ function isFilled(draft: Draft) {
 
 function serializeDraft(draft: Draft): string {
   if (draft.mode === 'text') return draft.text.trim();
+
   const numerator = Number(draft.numerator.replace(',', '.'));
   const denominator = Number(draft.denominator.replace(',', '.'));
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return '';
+
   if (draft.mode === 'fraction') return `${draft.numerator}/${draft.denominator}`;
 
   const whole = Number(draft.whole.replace(',', '.'));
@@ -135,6 +198,12 @@ function serializeDraft(draft: Draft): string {
   const sign = whole < 0 ? -1 : 1;
   const improper = Math.abs(whole) * denominator + numerator;
   return `${sign * improper}/${denominator}`;
+}
+
+function visibleDraft(draft: Draft) {
+  if (draft.mode === 'text') return draft.text;
+  if (draft.mode === 'fraction') return `${draft.numerator || '□'}/${draft.denominator || '□'}`;
+  return `${draft.whole || '□'} ${draft.numerator || '□'}/${draft.denominator || '□'}`;
 }
 
 export function HomeworkFinalAnswersEditor({
@@ -148,6 +217,7 @@ export function HomeworkFinalAnswersEditor({
 }) {
   const { language } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>(() => loadInitial(homeworkId, answerCount));
+  const [history, setHistory] = useState<Draft[][]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activePart, setActivePart] = useState<FractionPart>('numerator');
   const [keyboardTab, setKeyboardTab] = useState<KeyboardTab>('basic');
@@ -157,25 +227,39 @@ export function HomeworkFinalAnswersEditor({
   const allFilled = useMemo(() => drafts.every(isFilled), [drafts]);
   const activeDraft = drafts[activeIndex] ?? drafts[0];
 
-  function persist(next: Draft[]) {
+  function commit(next: Draft[], keepHistory = true) {
+    if (keepHistory) {
+      setHistory((current) => [...current.slice(-24), cloneDrafts(drafts)]);
+    }
     setDrafts(next);
     setError(null);
     localStorage.setItem(storageKey(homeworkId), JSON.stringify(next));
   }
 
   function updateDraft(index: number, patch: Partial<Draft>) {
-    persist(drafts.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+    commit(drafts.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
   }
 
   function activate(index: number) {
+    if (index < 0 || index >= drafts.length) return;
     setActiveIndex(index);
     const mode = drafts[index]?.mode ?? 'text';
     setActivePart(mode === 'mixed' ? 'whole' : 'numerator');
   }
 
   function setMode(mode: EntryMode) {
+    if (!activeDraft) return;
     updateDraft(activeIndex, { mode });
     setActivePart(mode === 'mixed' ? 'whole' : 'numerator');
+  }
+
+  function switchToTextAndAppend(value: string) {
+    if (!activeDraft) return;
+    const current = serializeDraft(activeDraft);
+    updateDraft(activeIndex, {
+      mode: 'text',
+      text: `${current}${value}`,
+    });
   }
 
   function appendValue(value: string) {
@@ -187,29 +271,22 @@ export function HomeworkFinalAnswersEditor({
       return;
     }
 
-    if (!/^[0-9.,-]$/.test(normalized)) {
-      if (value === '%') setMode('text');
+    if (/^[0-9.,-]$/.test(normalized)) {
+      const field = activePart;
+      updateDraft(activeIndex, { [field]: `${activeDraft[field]}${normalized}` });
       return;
     }
-    const field = activePart;
-    updateDraft(activeIndex, { [field]: `${activeDraft[field]}${normalized}` });
+
+    switchToTextAndAppend(normalized);
   }
 
   function handleKey(key: Key) {
-    if (key.action === 'backspace') {
-      backspace();
-      return;
-    }
     if (key.action === 'fraction') {
       setMode('fraction');
       return;
     }
     if (key.action === 'mixed') {
       setMode('mixed');
-      return;
-    }
-    if (key.action === 'clear') {
-      clearActive();
       return;
     }
     if (key.value != null) appendValue(key.value);
@@ -225,10 +302,32 @@ export function HomeworkFinalAnswersEditor({
     updateDraft(activeIndex, { [field]: activeDraft[field].slice(0, -1) });
   }
 
-  function clearActive() {
+  function undo() {
+    const previous = history[history.length - 1];
+    if (!previous) return;
+    setHistory((current) => current.slice(0, -1));
+    commit(cloneDrafts(previous), false);
+  }
+
+  function enterNext() {
     if (!activeDraft) return;
-    if (activeDraft.mode === 'text') updateDraft(activeIndex, { text: '' });
-    else updateDraft(activeIndex, { whole: '', numerator: '', denominator: '' });
+    if (activeDraft.mode === 'mixed') {
+      if (activePart === 'whole') setActivePart('numerator');
+      else if (activePart === 'numerator') setActivePart('denominator');
+      else if (activeIndex < drafts.length - 1) activate(activeIndex + 1);
+      return;
+    }
+    if (activeDraft.mode === 'fraction') {
+      if (activePart === 'numerator') setActivePart('denominator');
+      else if (activeIndex < drafts.length - 1) activate(activeIndex + 1);
+      return;
+    }
+    if (activeIndex < drafts.length - 1) activate(activeIndex + 1);
+  }
+
+  function useTab(tab: KeyboardTab) {
+    setKeyboardTab(tab);
+    if (tab === 'letters') setMode('text');
   }
 
   async function submit() {
@@ -238,7 +337,11 @@ export function HomeworkFinalAnswersEditor({
       return;
     }
 
-    const answers: HomeworkFinalAnswer[] = drafts.map((draft) => ({ label: draft.label, answer: serializeDraft(draft) }));
+    const answers: HomeworkFinalAnswer[] = drafts.map((draft) => ({
+      label: draft.label,
+      answer: serializeDraft(draft),
+    }));
+
     if (answers.some((answer) => !answer.answer)) {
       setError(language === 'DE' ? 'Prüfe die Brüche.' : 'Проверь введённые дроби.');
       return;
@@ -257,190 +360,176 @@ export function HomeworkFinalAnswersEditor({
   }
 
   return (
-    <section
-      className="panel"
-      style={{
-        margin: 0,
-        padding: 0,
-        overflow: 'hidden',
-        border: 0,
-        borderRadius: 24,
-        background: '#fff',
-        boxShadow: '0 22px 60px rgba(15,23,42,.22)',
-      }}
-    >
-      <div style={{ padding: '20px 18px 14px' }}>
-        <h2 style={{ margin: '0 0 16px', textAlign: 'center' }}>{language === 'DE' ? 'Antworten' : 'Ответы'}</h2>
-
-        <div style={{ display: 'grid', gap: 12 }}>
-          {drafts.map((draft, index) => (
-            <button
-              key={draft.label}
-              type="button"
-              onClick={() => activate(index)}
-              style={{
-                width: '100%',
-                minHeight: 70,
-                borderRadius: 14,
-                padding: '10px 14px',
-                background: '#fff',
-                border: `2px solid ${activeIndex === index ? '#111827' : '#dce3ea'}`,
-                display: 'grid',
-                gridTemplateColumns: '80px 1fr',
-                alignItems: 'center',
-                gap: 12,
-                textAlign: 'left',
-                fontSize: 24,
-                color: '#111827',
-              }}
-            >
-              <span style={{ fontSize: 14, color: '#64748b' }}>
-                {language === 'DE' ? `Aufgabe ${index + 1}` : `Задание ${index + 1}`}
-              </span>
-              {draft.mode === 'text' ? (
-                <span style={{ color: draft.text ? '#111827' : '#94a3b8', overflowWrap: 'anywhere' }}>
-                  {draft.text || (language === 'DE' ? 'Antwort' : 'Ответ')}
-                </span>
-              ) : (
-                <MathFractionInput
-                  draft={draft}
-                  active={activeIndex === index}
-                  activePart={activePart}
-                  onPart={(part) => { activate(index); setActivePart(part); }}
-                />
-              )}
-            </button>
-          ))}
+    <section className="math-answer-editor">
+      <div className="math-answer-editor__header">
+        <div className="math-answer-editor__title">
+          {language === 'DE' ? 'Rechner' : 'Калькулятор'}
+        </div>
+        <div className="math-answer-editor__counter">
+          {language === 'DE' ? 'Aufgabe' : 'Задание'} {activeIndex + 1} / {drafts.length}
         </div>
       </div>
 
-      <div style={{ borderTop: '1px solid #e5e7eb', background: '#fff' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', alignItems: 'center', padding: '10px 8px 8px', gap: 6 }}>
-          <button type="button" onClick={() => setMode('text')} style={toolbarButton(activeDraft?.mode === 'text')}>abc</button>
-          <button type="button" onClick={() => setMode('mixed')} style={toolbarButton(activeDraft?.mode === 'mixed')}>□ ¹⁄₂</button>
-          <button type="button" onClick={() => activeIndex > 0 && activate(activeIndex - 1)} style={toolbarButton(false)}>←</button>
-          <button type="button" onClick={() => activeIndex < drafts.length - 1 && activate(activeIndex + 1)} style={toolbarButton(false)}>→</button>
-          <button type="button" onClick={() => activeDraft?.mode !== 'text' && setActivePart(activePart === 'numerator' ? 'denominator' : 'numerator')} style={toolbarButton(false)}>↵</button>
-          <button type="button" onClick={backspace} style={toolbarButton(false)}>⌫</button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, padding: '0 8px 10px' }}>
-          <button type="button" onClick={() => setKeyboardTab('basic')} style={tabButton(keyboardTab === 'basic')}>+ −<br />× ÷</button>
-          <button type="button" onClick={() => setKeyboardTab('functions')} style={tabButton(keyboardTab === 'functions')}>f(x)&nbsp; e<br />log&nbsp; ln</button>
-          <button type="button" onClick={() => setKeyboardTab('trig')} style={tabButton(keyboardTab === 'trig')}>sin&nbsp; cos<br />tan&nbsp; cot</button>
-          <button type="button" onClick={() => setKeyboardTab('advanced')} style={tabButton(keyboardTab === 'advanced')}>lim&nbsp; dx<br />∫ Σ ∞</button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: '#e5e7eb', borderTop: '1px solid #e5e7eb' }}>
-          {TAB_KEYS[keyboardTab].map((key) => (
-            <button key={`${keyboardTab}-${key.label}`} type="button" onClick={() => handleKey(key)} style={symbolKeyStyle}>
-              {key.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1, background: '#e5e7eb', borderTop: '1px solid #e5e7eb' }}>
-          {MAIN_GRID.flat().map((key, index) => (
-            <button key={`${key.label}-${index}`} type="button" onClick={() => handleKey(key)} style={mainKeyStyle}>
-              {key.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 10 }}>
-          <button type="button" className="btn btn--secondary" onClick={clearActive}>
-            {language === 'DE' ? 'Löschen' : 'Очистить'}
+      <div className="math-answer-editor__answers">
+        {drafts.map((draft, index) => (
+          <button
+            key={draft.label}
+            type="button"
+            className={`math-answer-editor__answer-tab ${activeIndex === index ? 'is-active' : ''}`}
+            onClick={() => activate(index)}
+          >
+            <span>{index + 1}</span>
+            <strong>{visibleDraft(draft) || (language === 'DE' ? 'Antwort' : 'Ответ')}</strong>
           </button>
-          <button className="btn" type="button" onClick={() => void submit()} disabled={saving || !allFilled} style={{ minHeight: 54, fontSize: 19 }}>
-            {saving ? (language === 'DE' ? 'Wird abgegeben…' : 'Сдаём…') : (language === 'DE' ? 'Abgeben' : 'Сдать')}
+        ))}
+      </div>
+
+      <div className="math-answer-editor__display" onClick={() => activate(activeIndex)}>
+        {activeDraft?.mode === 'text' ? (
+          <div className={`math-answer-editor__text-value ${activeDraft.text ? '' : 'is-placeholder'}`}>
+            {activeDraft.text || (language === 'DE' ? 'Antwort eingeben…' : 'Введите ответ…')}
+          </div>
+        ) : (
+          <MathFractionInput
+            draft={activeDraft}
+            activePart={activePart}
+            onPart={setActivePart}
+          />
+        )}
+      </div>
+
+      {error && <div className="math-answer-editor__error">{error}</div>}
+
+      <div className="math-keyboard">
+        <div className="math-keyboard__utility-row">
+          <button type="button" className={keyboardTab === 'letters' ? 'is-selected' : ''} onClick={() => useTab('letters')}>abc</button>
+          <button type="button" onClick={undo} disabled={history.length === 0}>↶</button>
+          <button type="button" onClick={() => activate(activeIndex - 1)} disabled={activeIndex === 0}>←</button>
+          <button type="button" onClick={() => activate(activeIndex + 1)} disabled={activeIndex === drafts.length - 1}>→</button>
+          <button type="button" onClick={enterNext}>↵</button>
+          <button type="button" onClick={backspace}>⌫</button>
+        </div>
+
+        <div className="math-keyboard__tabs">
+          <button type="button" className={keyboardTab === 'basic' ? 'is-active' : ''} onClick={() => useTab('basic')}>
+            <span>+ −</span><span>× ÷</span>
+          </button>
+          <button type="button" className={keyboardTab === 'functions' ? 'is-active' : ''} onClick={() => useTab('functions')}>
+            <span>f(x)&nbsp; e</span><span>log&nbsp; ln</span>
+          </button>
+          <button type="button" className={keyboardTab === 'trig' ? 'is-active' : ''} onClick={() => useTab('trig')}>
+            <span>sin&nbsp; cos</span><span>tan&nbsp; cot</span>
+          </button>
+          <button type="button" className={keyboardTab === 'advanced' ? 'is-active' : ''} onClick={() => useTab('advanced')}>
+            <span>lim&nbsp; dx</span><span>∫ Σ ∞</span>
           </button>
         </div>
 
-        {error && <div className="banner banner--error" style={{ margin: '0 10px 10px' }}>{error}</div>}
+        {keyboardTab === 'letters' ? (
+          <div className="math-keyboard__letters">
+            {LETTER_KEYS.map((letter) => (
+              <button key={letter} type="button" onClick={() => appendValue(letter)}>{letter}</button>
+            ))}
+          </div>
+        ) : (
+          <KeyGrid
+            keys={keyboardTab === 'basic'
+              ? BASIC_KEYS
+              : keyboardTab === 'functions'
+                ? FUNCTION_KEYS
+                : keyboardTab === 'trig'
+                  ? TRIG_KEYS
+                  : ADVANCED_KEYS}
+            tab={keyboardTab}
+            onKey={handleKey}
+          />
+        )}
+
+        <div className="math-keyboard__special-row">
+          <button type="button" className={activeDraft?.mode === 'fraction' ? 'is-active' : ''} onClick={() => setMode('fraction')}>
+            <span className="mini-fraction"><span>□</span><span>□</span></span>
+            <small>{language === 'DE' ? 'Bruch' : 'Дробь'}</small>
+          </button>
+          <button type="button" className={activeDraft?.mode === 'mixed' ? 'is-active' : ''} onClick={() => setMode('mixed')}>
+            <span className="mini-mixed"><b>2</b><span className="mini-fraction"><span>□</span><span>□</span></span></span>
+            <small>{language === 'DE' ? 'Gemischt' : 'Смешанная'}</small>
+          </button>
+          <button type="button" onClick={() => appendValue('€')}>€</button>
+        </div>
+      </div>
+
+      <div className="math-answer-editor__submit-wrap">
+        <button
+          className="math-answer-editor__submit"
+          type="button"
+          onClick={() => void submit()}
+          disabled={!allFilled || saving}
+        >
+          {saving
+            ? (language === 'DE' ? 'Wird abgegeben…' : 'Сдаём…')
+            : (language === 'DE' ? 'Abgeben' : 'Сдать')}
+        </button>
       </div>
     </section>
   );
 }
 
+function KeyGrid({ keys, tab, onKey }: { keys: Key[]; tab: Exclude<KeyboardTab, 'letters'>; onKey: (key: Key) => void }) {
+  return (
+    <div className={`math-keyboard__grid math-keyboard__grid--${tab}`}>
+      {keys.map((key, index) => (
+        <button
+          key={`${key.label}-${index}`}
+          type="button"
+          className={key.className ?? ''}
+          onClick={() => onKey(key)}
+        >
+          {key.label.split('\n').map((line, lineIndex) => (
+            <span key={`${line}-${lineIndex}`}>{line}</span>
+          ))}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function MathFractionInput({
   draft,
-  active,
   activePart,
   onPart,
 }: {
   draft: Draft;
-  active: boolean;
   activePart: FractionPart;
   onPart: (part: FractionPart) => void;
 }) {
-  const cellStyle = (part: FractionPart) => ({
-    minWidth: 38,
-    minHeight: 32,
-    padding: '2px 7px',
-    borderRadius: 7,
-    background: active && activePart === part ? '#fff4f0' : 'transparent',
-    color: (part === 'whole' ? draft.whole : part === 'numerator' ? draft.numerator : draft.denominator) ? '#111827' : '#94a3b8',
-  });
-
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, justifySelf: 'start' }}>
+    <div className={`structured-number ${draft.mode === 'mixed' ? 'structured-number--mixed' : ''}`}>
       {draft.mode === 'mixed' && (
-        <span style={cellStyle('whole')} onClick={(e) => { e.stopPropagation(); onPart('whole'); }}>
+        <button
+          type="button"
+          className={`structured-number__whole ${activePart === 'whole' ? 'is-active' : ''}`}
+          onClick={(event) => { event.stopPropagation(); onPart('whole'); }}
+        >
           {draft.whole || '□'}
-        </span>
+        </button>
       )}
-      <span style={{ display: 'inline-grid', gridTemplateRows: '1fr 2px 1fr', alignItems: 'center', minWidth: 52 }}>
-        <span style={cellStyle('numerator')} onClick={(e) => { e.stopPropagation(); onPart('numerator'); }}>
+      <span className="structured-number__fraction">
+        <button
+          type="button"
+          className={activePart === 'numerator' ? 'is-active' : ''}
+          onClick={(event) => { event.stopPropagation(); onPart('numerator'); }}
+        >
           {draft.numerator || '□'}
-        </span>
-        <span style={{ height: 2, background: '#111827', width: '100%' }} />
-        <span style={cellStyle('denominator')} onClick={(e) => { e.stopPropagation(); onPart('denominator'); }}>
+        </button>
+        <span className="structured-number__bar" />
+        <button
+          type="button"
+          className={activePart === 'denominator' ? 'is-active' : ''}
+          onClick={(event) => { event.stopPropagation(); onPart('denominator'); }}
+        >
           {draft.denominator || '□'}
-        </span>
+        </button>
       </span>
-    </span>
+    </div>
   );
 }
-
-function toolbarButton(active: boolean): React.CSSProperties {
-  return {
-    minHeight: 42,
-    border: 0,
-    borderRadius: 10,
-    background: active ? '#111' : '#fff',
-    color: active ? '#fff' : '#111',
-    fontSize: 17,
-    fontWeight: 700,
-  };
-}
-
-function tabButton(active: boolean): React.CSSProperties {
-  return {
-    minHeight: 54,
-    border: '1px solid #d7dce2',
-    borderRadius: 999,
-    background: active ? '#111' : '#fff',
-    color: active ? '#fff' : '#111',
-    fontSize: 14,
-    lineHeight: 1.15,
-    fontWeight: 600,
-  };
-}
-
-const symbolKeyStyle: React.CSSProperties = {
-  minHeight: 50,
-  border: 0,
-  background: '#fff',
-  color: '#111',
-  fontSize: 19,
-  fontWeight: 600,
-};
-
-const mainKeyStyle: React.CSSProperties = {
-  minHeight: 62,
-  border: 0,
-  background: '#fff',
-  color: '#111',
-  fontSize: 25,
-  fontWeight: 500,
-};
