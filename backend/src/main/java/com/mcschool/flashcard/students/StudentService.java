@@ -6,6 +6,7 @@ import com.mcschool.flashcard.cards.CardRepository;
 import com.mcschool.flashcard.cards.CardStatus;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.drive.GoogleDriveStructureService;
 import com.mcschool.flashcard.notifications.NotificationService;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.students.dto.CreateStudentRequest;
@@ -35,6 +36,7 @@ import java.util.Locale;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -51,18 +53,32 @@ public class StudentService {
     private final NotificationService notificationService;
     private final DailyReviewHistoryService historyService;
     private final PasswordEncoder passwordEncoder;
+    private final GoogleDriveStructureService googleDriveStructureService;
     private final ZoneId reviewReminderZone;
 
+    // Kept for unit tests and older construction sites. Spring uses the annotated constructor below.
     public StudentService(UserRepository userRepository, CardRepository cardRepository,
                           NotificationService notificationService,
                           DailyReviewHistoryService historyService,
                           PasswordEncoder passwordEncoder,
+                          String reviewReminderZone) {
+        this(userRepository, cardRepository, notificationService, historyService,
+                passwordEncoder, null, reviewReminderZone);
+    }
+
+    @Autowired
+    public StudentService(UserRepository userRepository, CardRepository cardRepository,
+                          NotificationService notificationService,
+                          DailyReviewHistoryService historyService,
+                          PasswordEncoder passwordEncoder,
+                          GoogleDriveStructureService googleDriveStructureService,
                           @Value("${app.notifications.review-reminders.zone}") String reviewReminderZone) {
         this.userRepository = userRepository;
         this.cardRepository = cardRepository;
         this.notificationService = notificationService;
         this.historyService = historyService;
         this.passwordEncoder = passwordEncoder;
+        this.googleDriveStructureService = googleDriveStructureService;
         this.reviewReminderZone = ZoneId.of(reviewReminderZone);
     }
 
@@ -88,6 +104,9 @@ public class StudentService {
         }
 
         ensureUsername(student);
+        if (googleDriveStructureService != null) {
+            googleDriveStructureService.provisionIndividualStudent(teacherEntity, student);
+        }
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
     }
 
