@@ -2,6 +2,7 @@ package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.drive.GoogleDriveService;
+import com.mcschool.flashcard.drive.GoogleDriveStructureService;
 import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
@@ -29,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,7 +47,9 @@ public class McpHomeworkSeriesService {
     private final HomeworkRepository homeworkRepository;
     private final HomeworkPdfService homeworkPdfService;
     private final GoogleDriveService googleDriveService;
+    private final GoogleDriveStructureService googleDriveStructureService;
 
+    // Kept for existing unit tests and older direct construction sites.
     public McpHomeworkSeriesService(
             UserRepository userRepository,
             StudentGroupRepository groupRepository,
@@ -53,12 +57,26 @@ public class McpHomeworkSeriesService {
             HomeworkRepository homeworkRepository,
             HomeworkPdfService homeworkPdfService,
             GoogleDriveService googleDriveService) {
+        this(userRepository, groupRepository, groupMemberRepository, homeworkRepository,
+                homeworkPdfService, googleDriveService, null);
+    }
+
+    @Autowired
+    public McpHomeworkSeriesService(
+            UserRepository userRepository,
+            StudentGroupRepository groupRepository,
+            StudentGroupMemberRepository groupMemberRepository,
+            HomeworkRepository homeworkRepository,
+            HomeworkPdfService homeworkPdfService,
+            GoogleDriveService googleDriveService,
+            GoogleDriveStructureService googleDriveStructureService) {
         this.userRepository = userRepository;
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.homeworkRepository = homeworkRepository;
         this.homeworkPdfService = homeworkPdfService;
         this.googleDriveService = googleDriveService;
+        this.googleDriveStructureService = googleDriveStructureService;
     }
 
     /**
@@ -66,10 +84,15 @@ public class McpHomeworkSeriesService {
      * relations are converted to the MCP response. StudentGroupMember.student and
      * User.teacher are lazy JPA relations, so doing this work after the repository
      * call has closed its session causes LazyInitializationException.
+     *
+     * <p>When a specific query is provided, the response also contains semantic
+     * Google Drive destinations. This lets ChatGPT choose a destination such as
+     * homework, clean, table or lesson_completed without the user supplying a path.</p>
      */
     @Transactional(readOnly = true)
     public Map<String, Object> findTargets(AuthenticatedUser teacher, String query) {
         String q = normalize(query);
+        boolean resolveDriveDestinations = !q.isBlank() && googleDriveStructureService != null;
         List<Map<String, Object>> targets = new ArrayList<>();
 
         for (User student : userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id())) {
@@ -79,6 +102,9 @@ public class McpHomeworkSeriesService {
             item.put("type", "student");
             item.put("id", student.getId().toString());
             item.put("name", student.getFullName());
+            if (resolveDriveDestinations) {
+                addStudentDriveDestinations(item, student);
+            }
             targets.add(item);
         }
 
@@ -95,10 +121,39 @@ public class McpHomeworkSeriesService {
             item.put("students", members.stream().map(student -> Map.of(
                     "id", student.getId().toString(),
                     "name", student.getFullName())).toList());
+            if (resolveDriveDestinations) {
+                addGroupDriveDestinations(item, group);
+            }
             targets.add(item);
         }
 
-        return Map.of("targets", targets);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("targets", targets);
+        if (q.isBlank()) {
+            response.put("driveDestinationsHint",
+                    "Search by a specific student or group name to receive automatic Google Drive destinations.");
+        }
+        return response;
+    }
+
+    private void addStudentDriveDestinations(Map<String, Object> item, User student) {
+        try {
+            item.put("driveDestinations",
+                    googleDriveStructureService.resolveStudentDocumentFolders(student.getTeacher(), student));
+        } catch (RuntimeException ex) {
+            item.put("driveDestinations", Map.of());
+            item.put("driveDestinationsStatus", "unavailable");
+        }
+    }
+
+    private void addGroupDriveDestinations(Map<String, Object> item, StudentGroup group) {
+        try {
+            item.put("driveDestinations",
+                    googleDriveStructureService.resolveGroupDocumentFolders(group.getTeacher(), group));
+        } catch (RuntimeException ex) {
+            item.put("driveDestinations", Map.of());
+            item.put("driveDestinationsStatus", "unavailable");
+        }
     }
 
     /** Existing MCP/Google Drive workflow. */
