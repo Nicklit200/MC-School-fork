@@ -33,11 +33,11 @@ export function PdfHomeworkWithSubmissionPage() {
   useEffect(() => {
     refresh().catch((e) => setError(toErrorMessage(e, t)));
     const timer = window.setInterval(() => {
-      if (!homework?.submitted) refresh().catch(() => undefined);
+      if (!homework?.pdfUploaded) refresh().catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeworkId, homework?.submitted]);
+  }, [homeworkId, homework?.pdfUploaded]);
 
   async function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []);
@@ -101,11 +101,11 @@ export function PdfHomeworkWithSubmissionPage() {
   }
 
   async function submitFiles() {
-    if (files.length === 0 || homework?.submitted || preparingFile) return;
+    if (files.length === 0 || homework?.pdfUploaded || preparingFile) return;
     const confirmed = window.confirm(
       language === 'DE'
-        ? `${files.length} Datei(en) als Hausaufgabe abgeben? Danach kann die Abgabe nicht mehr geändert werden.`
-        : `Сдать ${files.length} файл(а) как домашнюю работу? После сдачи изменить ответ уже нельзя.`,
+        ? `${files.length} Datei(en) hochladen? Danach kann die PDF nicht mehr geändert werden.`
+        : `Загрузить ${files.length} файл(а)? После этого PDF уже нельзя будет изменить.`,
     );
     if (!confirmed) return;
 
@@ -118,7 +118,7 @@ export function PdfHomeworkWithSubmissionPage() {
     } catch (e) {
       try {
         const current = await refresh();
-        if (current?.submitted) {
+        if (current?.pdfUploaded) {
           await finishSuccessfulUpload(false);
           return;
         }
@@ -135,11 +135,7 @@ export function PdfHomeworkWithSubmissionPage() {
     if (refreshFirst) await refresh();
     setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    setMessage(
-      language === 'DE'
-        ? 'Die Dateien wurden abgegeben. Der Lehrer erhält alles in einer PDF-Datei.'
-        : 'Файлы сданы. Учитель получит все фотографии одним PDF-документом.',
-    );
+    setMessage(language === 'DE' ? 'PDF gespeichert.' : 'PDF сохранён.');
   }
 
   const totalSize = files.reduce((sum, item) => sum + item.size, 0);
@@ -148,7 +144,7 @@ export function PdfHomeworkWithSubmissionPage() {
     <>
       <PdfHomeworkPage />
 
-      {!homework?.submitted && (
+      {!homework?.pdfUploaded && (
         <div className="panel" style={{ marginTop: 18, marginBottom: 32 }}>
           <div style={{ textAlign: 'center', marginBottom: 14 }}>
             <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
@@ -217,22 +213,16 @@ export function PdfHomeworkWithSubmissionPage() {
           >
             {busy
               ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
-              : (language === 'DE' ? `${files.length || ''} Datei(en) abgeben` : `Сдать ${files.length || ''} фото/файлов`)}
+              : (language === 'DE' ? 'PDF speichern' : 'Сохранить PDF')}
           </button>
 
           {busy && (
             <div className="banner banner--info" style={{ marginTop: 10 }}>
               {language === 'DE'
-                ? 'Bitte diese Seite geöffnet lassen, bis die Abgabe bestätigt ist.'
-                : 'Не закрывай страницу до подтверждения сдачи. Несколько фото могут загружаться немного дольше.'}
+                ? 'Bitte diese Seite geöffnet lassen, bis die PDF gespeichert ist.'
+                : 'Не закрывай страницу, пока PDF не сохранится.'}
             </div>
           )}
-
-          <p className="muted" style={{ marginBottom: 0, marginTop: 10, fontSize: 12 }}>
-            {language === 'DE'
-              ? `Bis zu ${MAX_FILES} Dateien. Handy-Fotos werden automatisch verkleinert. Alles wird zu einer PDF zusammengefügt.`
-              : `До ${MAX_FILES} файлов. Фото с телефона автоматически уменьшаются. Все страницы будут объединены в один PDF.`}
-          </p>
         </div>
       )}
     </>
