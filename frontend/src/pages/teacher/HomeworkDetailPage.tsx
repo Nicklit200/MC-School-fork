@@ -137,12 +137,12 @@ export function HomeworkDetailPage() {
   }, [homework?.submitted, homework?.worksheetPageCount, openSection, loadSubmissionPreview, clearSubmissionPreviewUrls]);
 
   useEffect(() => {
-    if (homework?.finalAnswersSubmitted) {
+    if (homework?.submitted || homework?.pdfUploaded) {
       void loadAnswerReview();
     } else {
       setAnswerReview(null);
     }
-  }, [homework?.finalAnswersSubmitted, loadAnswerReview]);
+  }, [homework?.submitted, homework?.pdfUploaded, loadAnswerReview]);
 
   useEffect(() => () => {
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -325,7 +325,7 @@ export function HomeworkDetailPage() {
               </button>
             </div>
 
-            {homework.finalAnswerCount != null && homework.finalAnswerCount > 0 && (
+            {(answerReviewLoading || (answerReview?.totalCount ?? 0) > 0) && (
               <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                   <strong>{language === 'DE' ? 'Antworten des Schülers' : 'Ответы ученика'}</strong>
@@ -364,15 +364,7 @@ export function HomeworkDetailPage() {
                       </div>
                     ))}
                   </div>
-                ) : homework.finalAnswersSubmitted ? (
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    {language === 'DE' ? 'Antwortdetails sind noch nicht verfügbar.' : 'Детали ответов пока недоступны.'}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    {language === 'DE' ? 'PDF wurde hochgeladen, die finalen Antworten fehlen noch.' : 'PDF загружен, но финальные ответы ещё не сданы.'}
-                  </div>
-                )}
+                ) : null}
               </div>
             )}
           </div>
