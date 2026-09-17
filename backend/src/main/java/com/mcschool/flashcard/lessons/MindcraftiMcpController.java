@@ -6,6 +6,8 @@ import com.mcschool.flashcard.drive.TeacherGoogleDriveDownloadService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
+import com.mcschool.flashcard.settings.SchoolPromptSettingsResponse;
+import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -39,7 +41,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.10.0";
+    private static final String SERVER_VERSION = "1.11.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -52,6 +54,7 @@ public class MindcraftiMcpController {
     private final McpHomeworkSeriesService homeworkSeriesService;
     private final McpAnalyticsService analyticsService;
     private final McpHomeworkReadService homeworkReadService;
+    private final SchoolPromptSettingsService schoolPromptSettingsService;
 
     public MindcraftiMcpController(
             @Value("${MINDCRAFTI_LESSON_IMPORT_API_KEY:}") String apiKey,
@@ -63,7 +66,8 @@ public class MindcraftiMcpController {
             TeacherGoogleDriveDownloadService teacherDriveDownloadService,
             McpHomeworkSeriesService homeworkSeriesService,
             McpAnalyticsService analyticsService,
-            McpHomeworkReadService homeworkReadService) {
+            McpHomeworkReadService homeworkReadService,
+            SchoolPromptSettingsService schoolPromptSettingsService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
@@ -74,6 +78,7 @@ public class MindcraftiMcpController {
         this.homeworkSeriesService = homeworkSeriesService;
         this.analyticsService = analyticsService;
         this.homeworkReadService = homeworkReadService;
+        this.schoolPromptSettingsService = schoolPromptSettingsService;
     }
 
     @GetMapping
@@ -122,7 +127,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools include lessons, homework assignment, direct PDF homework upload, submitted homework PDFs, rendered submission pages and read-only student analytics. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional. For a student's homework over a week or other date range, use find_student_homeworks. Use get_homework_submission for the actual submitted PDF and get_homework_submission_pages when handwriting or images must be inspected visually. Admins can read all teachers and students; teachers are restricted to their own students."
+                ? "Mindcrafti school tools include lessons, school prompts, homework assignment, direct PDF homework upload, submitted homework PDFs, rendered submission pages and read-only student analytics. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group or individual and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -134,7 +139,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti lesson, homework-file and school analytics tools. Homework PDFs created in ChatGPT can be assigned directly without Google Drive. Admins can target all teachers; teachers can access only their own students."
+                ? "Mindcrafti lesson, school-prompt, homework-file and school analytics tools. If the teacher says to make a lesson or homework 'по промту', fetch the current school prompt with get_school_prompt before generating. Extra teacher instructions override or refine the prompt for that request. If the teacher says 'без промта', do not fetch it."
                 : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         return result;
     }
@@ -144,6 +149,7 @@ public class MindcraftiMcpController {
         tools.add(tool("mindcrafti_status", "Check that the Mindcrafti MCP server is reachable.", schema(Map.of(), List.of()), readOnlyAnnotations()));
         if (!authenticated) return tools;
 
+        tools.add(tool("get_school_prompt", "Get the current administrator-managed Mindcrafti school prompt. Use this whenever the teacher asks to create a lesson, homework or teaching material 'по промту' / 'по школьному промту' / 'using the prompt'. Choose group for a group lesson and individual for a one-to-one lesson. Always fetch it fresh instead of relying on a prompt remembered from earlier chat messages. Teacher-specific extra instructions may be applied on top of the returned prompt.", schema(Map.of("lessonType", property("string", "Prompt type: group or individual.")), List.of("lessonType")), readOnlyAnnotations()));
         tools.add(tool("find_lessons", "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.", schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()), readOnlyAnnotations()));
         tools.add(tool("get_lesson_preparation", "Read workbook, teacher answers, homework notes, difficulties and lesson plan for one lesson.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
         tools.add(tool("download_lesson_pdf", "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons."), "kind", property("string", "PDF kind: workbook or answers.")), List.of("teacherId", "eventId", "kind")), readOnlyAnnotations()));
@@ -249,6 +255,7 @@ public class MindcraftiMcpController {
         }
         if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
         return switch (name) {
+            case "get_school_prompt" -> toolResult(getSchoolPrompt(arguments));
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
             case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
@@ -276,6 +283,23 @@ public class MindcraftiMcpController {
             case "get_card_session_details" -> toolResult(analyticsService.cardSessionDetails(auth.user(), auth.apiKey(), uuid(required(arguments, "sessionId"), "sessionId")));
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
         };
+    }
+
+    private Map<String, Object> getSchoolPrompt(Map<String, Object> arguments) {
+        String lessonType = normalize(required(arguments, "lessonType"));
+        SchoolPromptSettingsResponse settings = schoolPromptSettingsService.readForMcp();
+        String prompt;
+        if ("group".equals(lessonType)) prompt = settings.groupLessonPrompt();
+        else if ("individual".equals(lessonType)) prompt = settings.individualLessonPrompt();
+        else throw new IllegalArgumentException("lessonType must be group or individual");
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("lessonType", lessonType);
+        result.put("prompt", prompt == null ? "" : prompt);
+        result.put("updatedAt", settings.updatedAt() == null ? null : settings.updatedAt().toString());
+        result.put("usage", "Use this prompt as the base instruction for the current request. Apply the teacher's additional instructions on top of it. If an additional instruction conflicts with the school prompt for this one request, follow the teacher's explicit request unless it would make the task unsafe or impossible.");
+        result.put("configured", prompt != null && !prompt.isBlank());
+        return result;
     }
 
     private List<Map<String, Object>> findLessons(String query, AuthContext auth) {
