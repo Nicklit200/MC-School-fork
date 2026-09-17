@@ -17,7 +17,6 @@ export function StudentsPage() {
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
   const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
   const [copiedStudentId, setCopiedStudentId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -56,10 +55,9 @@ export function StudentsPage() {
     event.preventDefault();
     setError(null);
     try {
-      const created = await api.students.create(fullName.trim(), email.trim());
+      const created = await api.students.create(fullName.trim(), '');
       setInvitation(created);
       setFullName('');
-      setEmail('');
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
@@ -111,8 +109,8 @@ export function StudentsPage() {
       await api.students.resetPassword(student.id, password);
       setOpenMenuId(null);
       window.alert(language === 'DE'
-        ? `Passwort geändert. Login: ${student.username ?? student.email ?? '—'}`
-        : `Пароль изменён. Логин: ${student.username ?? student.email ?? '—'}`);
+        ? `Passwort geändert. Login: ${student.username ?? '—'}`
+        : `Пароль изменён. Логин: ${student.username ?? '—'}`);
     } catch (e) {
       setError(toErrorMessage(e, t));
     }
@@ -152,12 +150,8 @@ export function StudentsPage() {
               <span className="field__label">{language === 'DE' ? 'Name des Schülers' : 'Имя ученика'}</span>
               <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={language === 'DE' ? 'Name eingeben' : 'Введите имя ученика'} required />
             </label>
-            <label className="field">
-              <span className="field__label">{language === 'DE' ? 'E-Mail (optional)' : 'Эл. почта (необязательно)'}</span>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="example@email.com" />
-            </label>
           </div>
-          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Für jeden Schüler wird automatisch ein eigener Schul-Login erstellt.' : 'Для каждого ученика автоматически создаётся отдельный школьный логин.'}</p>
+          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Für jeden Schüler wird automatisch ein eigener Schul-Login erstellt. E-Mail ist nicht nötig.' : 'Для каждого ученика автоматически создаётся отдельный школьный логин. Email не нужен.'}</p>
           <button className="btn teacher-primary-btn" type="submit">{language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
         </form>
         {invitation && (
@@ -182,7 +176,6 @@ export function StudentsPage() {
                 <div className="teacher-student-main">
                   <div className="teacher-student-name">{student.fullName}</div>
                   <div className="teacher-student-email">{language === 'DE' ? 'Login' : 'Логин'}: <strong>{student.username ?? '—'}</strong></div>
-                  <div className="teacher-student-email">{student.email ?? (language === 'DE' ? 'E-Mail nicht erforderlich' : 'Email не требуется')}</div>
                   <div className="teacher-student-meta">
                     {student.parentFullName
                       ? `${language === 'DE' ? 'Elternteil' : 'Родитель'}: ${student.parentFullName}`
