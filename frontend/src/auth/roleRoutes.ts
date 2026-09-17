@@ -9,5 +9,7 @@ export function homePathForRole(role: Role): string {
       return '/students';
     case 'STUDENT':
       return '/today';
+    case 'PARENT':
+      return '/parent';
   }
 }

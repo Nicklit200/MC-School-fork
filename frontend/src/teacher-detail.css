@@ -1,0 +1,222 @@
+/* Shared visual treatment for teacher detail/work pages inside the new dashboard shell. */
+.teacher-shell .teacher-content > div > .row:first-child {
+  margin-bottom: 24px;
+  align-items: flex-start !important;
+}
+
+.teacher-shell .teacher-content > div > .row:first-child h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  color: #172033;
+  margin: 0 0 5px;
+}
+
+.teacher-shell .teacher-content > div > .row:first-child .muted {
+  color: #7b869d;
+  font-size: 14px;
+}
+
+.teacher-shell .teacher-content > div > .row:first-child > .btn,
+.teacher-shell .teacher-content > div > p:first-child .btn,
+.teacher-shell .teacher-content > div > p:first-child a {
+  background: #fff;
+  color: #ff5b00;
+  border: 1px solid #ffc6a5;
+  border-radius: 10px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.teacher-shell .teacher-content .panel {
+  border: 1px solid #ffe0cf;
+  border-radius: 17px;
+  background: #fff;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 16px rgba(255,91,0,.025);
+}
+
+.teacher-shell .teacher-content .panel .panel {
+  border-color: #edf0f5;
+  border-radius: 13px;
+  box-shadow: none;
+  background: #fff;
+}
+
+.teacher-shell .teacher-content h2 {
+  font-size: 18px;
+  color: #18223a;
+  margin-bottom: 14px;
+}
+
+.teacher-shell .teacher-content h3 {
+  color: #18223a;
+}
+
+.teacher-shell .teacher-content .field__label {
+  color: #66728a;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.teacher-shell .teacher-content .input,
+.teacher-shell .teacher-content .textarea,
+.teacher-shell .teacher-content .select {
+  border: 1px solid #dce2ec;
+  border-radius: 10px;
+  background: #fff;
+  color: #273653;
+  font-size: 13px;
+}
+
+.teacher-shell .teacher-content .input {
+  min-height: 42px;
+}
+
+.teacher-shell .teacher-content .textarea {
+  min-height: 96px;
+}
+
+.teacher-shell .teacher-content .input:focus,
+.teacher-shell .teacher-content .textarea:focus,
+.teacher-shell .teacher-content .select:focus {
+  border-color: #ff9b63;
+  outline: 2px solid #fff0e7;
+}
+
+.teacher-shell .teacher-content .btn {
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 650;
+  min-height: 38px;
+  padding: 0 15px;
+  background: linear-gradient(180deg, #ff650e, #ff5400);
+}
+
+.teacher-shell .teacher-content .btn:hover:not(:disabled) {
+  background: #e84f00;
+}
+
+.teacher-shell .teacher-content .btn--secondary {
+  background: #fff4ed;
+  color: #e85608;
+  border: 1px solid #ffd9c2;
+}
+
+.teacher-shell .teacher-content .btn--secondary:hover:not(:disabled) {
+  background: #ffeadc;
+}
+
+.teacher-shell .teacher-content .btn--ghost {
+  background: transparent;
+  color: #66728a;
+}
+
+.teacher-shell .teacher-content .btn--danger {
+  background: transparent;
+  color: #e52e20;
+  border: none;
+}
+
+.teacher-shell .teacher-content .banner {
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+.teacher-shell .teacher-content .banner--info {
+  background: #fff8f3;
+  color: #9b4c1e;
+  border-color: #ffd9c2;
+}
+
+.teacher-shell .teacher-content .banner--success {
+  background: #eef9f4;
+  color: #187158;
+  border-color: #cdebdc;
+}
+
+.teacher-shell .teacher-content .list-row {
+  border: 1px solid #edf0f5;
+  border-radius: 13px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+
+.teacher-shell .teacher-content .list-row:hover {
+  border-color: #ffd2b8;
+  background: #fffdfb;
+}
+
+/* Homework completion matrix */
+.teacher-shell .teacher-content table {
+  width: 100%;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  color: #273653;
+  font-size: 12px;
+}
+
+.teacher-shell .teacher-content table thead th {
+  background: #fff8f3;
+  color: #65718a;
+  font-size: 11px;
+  font-weight: 700;
+  border-bottom: 1px solid #ffe0cf !important;
+}
+
+.teacher-shell .teacher-content table thead th:first-child {
+  border-radius: 10px 0 0 0;
+}
+
+.teacher-shell .teacher-content table thead th:last-child {
+  border-radius: 0 10px 0 0;
+}
+
+.teacher-shell .teacher-content table tbody td {
+  border-bottom: 1px solid #edf0f5 !important;
+  background: #fff;
+}
+
+.teacher-shell .teacher-content table tbody tr:hover td {
+  background: #fffdfb;
+}
+
+/* PDF day cards */
+.teacher-shell .teacher-content input[type='file'] {
+  padding: 8px 10px;
+  min-height: 42px;
+  background: #fbfcfe;
+}
+
+.teacher-shell .teacher-content input[type='file']::file-selector-button {
+  border: 1px solid #ffd1b6;
+  background: #fff3eb;
+  color: #d85208;
+  border-radius: 8px;
+  padding: 7px 11px;
+  margin-right: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+/* Card manual/import tabs */
+.teacher-shell .teacher-content .row > .btn {
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+@media (max-width: 820px) {
+  .teacher-shell .teacher-content .panel {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .teacher-shell .teacher-content > div > .row:first-child h1 {
+    font-size: 23px;
+  }
+}

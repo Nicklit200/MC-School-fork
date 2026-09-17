@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Mindcrafti Soniox Reminder",
+  "version": "1.2.0",
+  "description": "Opens Soniox when a Mindcrafti lesson starts, reminds the teacher to stop it after Google Meet, and returns to transcript upload.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.up.railway.app/*",
+        "https://mindcrafti.de/*",
+        "https://*.mindcrafti.de/*",
+        "http://localhost/*"
+      ],
+      "js": ["mindcrafti.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+.teacher-today-statuses {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.teacher-today-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #5f6b82;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.teacher-today-status__icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.teacher-today-status--done .teacher-today-status__icon {
+  background: #ddf8e8;
+  color: #12a150;
+}
+
+.teacher-today-status--pending .teacher-today-status__icon {
+  background: #ffe2e2;
+  color: #ef4444;
+}
+
+.teacher-today-status--none .teacher-today-status__icon {
+  background: #f0f2f5;
+  color: #8b95a7;
+}
+
+.teacher-today-status--done {
+  color: #23734a;
+}
+
+.teacher-today-status--pending {
+  color: #b64040;
+}
+
+.teacher-today-status--none {
+  color: #7d8799;
+}
+
+@media (max-width: 900px) {
+  .teacher-today-status {
+    white-space: normal;
+  }
+}

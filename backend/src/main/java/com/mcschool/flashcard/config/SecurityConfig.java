@@ -5,6 +5,7 @@ import com.mcschool.flashcard.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,12 +25,6 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Stateless API security: every request is authenticated by the JWT filter,
- * there is no HTTP session. Only login, invitation activation and the health
- * check are public; role rules for the individual endpoints live on the
- * controllers as {@code @PreAuthorize}.
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -46,21 +41,30 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                // CSRF protection targets cookie/session auth; this API is
-                // stateless and authenticates via the Authorization header.
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
-                // Hardened response headers. This is a JSON API that references no
-                // resources and must never be framed, so lock CSP down to nothing.
-                // X-Content-Type-Options: nosniff and X-Frame-Options: DENY are on by
-                // default; HSTS is added automatically on HTTPS requests.
                 .headers(headers -> headers
-                        .contentSecurityPolicy(csp ->
-                                csp.policyDirectives("default-src 'none'; frame-ancestors 'none'"))
+                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'none'; frame-ancestors 'none'"))
                         .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER)))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/public/trial-leads").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/public/trial-leads/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/google-meet/events").permitAll()
+                        .requestMatchers(
+                                "/.well-known/oauth-protected-resource",
+                                "/.well-known/oauth-protected-resource/**",
+                                "/.well-known/oauth-authorization-server",
+                                "/.well-known/oauth-authorization-server/**",
+                                "/.well-known/openid-configuration",
+                                "/.well-known/openid-configuration/**",
+                                "/api/v1/mcp/.well-known/oauth-authorization-server",
+                                "/api/v1/mcp/.well-known/openid-configuration").permitAll()
+                        .requestMatchers("/api/v1/integrations/**").permitAll()
+                        .requestMatchers("/api/v1/mcp/**").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
@@ -81,18 +85,71 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
-            @Value("${app.cors.allowed-origins}") String allowedOrigins) {
+            @Value("${app.cors.allowed-origins}") String allowedOrigins,
+            @Value("${PUBLIC_BASE_URL:${MINDCRAFTI_PUBLIC_BASE_URL:https://mindcrafti-school-production.up.railway.app}}") String publicBaseUrl,
+            @Value("${RAILWAY_PUBLIC_DOMAIN:}") String railwayPublicDomain) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
+        String railwayOrigin = normalizeOrigin(railwayPublicDomain);
+        List<String> origins = Stream.concat(
+                        Arrays.stream(allowedOrigins.split(",")),
+                        Stream.of(
+                                publicBaseUrl,
+                                railwayOrigin,
+                                "https://mindcrafti-school-production.up.railway.app",
+                                "https://mindcrafti.de",
+                                "https://www.mindcrafti.de"))
+                .map(String::trim)
+                .map(SecurityConfig::stripTrailingSlash)
+                .filter(origin -> !origin.isBlank())
+                .distinct()
+                .toList();
+        configuration.setAllowedOrigins(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Mindcrafti-Api-Key", "MCP-Protocol-Version", "MCP-Session-Id"));
+
+        // Trial leads are intentionally public. Embedded browsers (notably social-media
+        // in-app browsers) may add their own request headers or expose a non-site Origin,
+        // which used to make Spring reject the CORS preflight before the POST reached us.
+        // Keep this permissive rule scoped to the public lead endpoint only; authenticated
+        // API routes continue to use the restricted origin/header configuration above.
+        CorsConfiguration publicTrialLeadConfiguration = new CorsConfiguration();
+        publicTrialLeadConfiguration.setAllowedOriginPatterns(List.of("*"));
+        publicTrialLeadConfiguration.setAllowedMethods(List.of("POST", "PATCH", "OPTIONS"));
+        publicTrialLeadConfiguration.setAllowedHeaders(List.of("*"));
+        publicTrialLeadConfiguration.setMaxAge(3600L);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/v1/public/trial-leads", publicTrialLeadConfiguration);
+        source.registerCorsConfiguration("/api/v1/public/trial-leads/**", publicTrialLeadConfiguration);
         source.registerCorsConfiguration("/api/**", configuration);
-        return source;
+        source.registerCorsConfiguration("/.well-known/**", configuration);
+
+        return request -> {
+            if ("/api/v1/mcp/oauth/authorize".equals(request.getRequestURI())
+                    && "POST".equalsIgnoreCase(request.getMethod())) {
+                return null;
+            }
+            return source.getCorsConfiguration(request);
+        };
     }
 
-    private void writeError(HttpServletResponse response, int status, String code, String message,
-                            String path) throws java.io.IOException {
+    private static String normalizeOrigin(String value) {
+        if (value == null || value.isBlank()) return "";
+        String result = value.trim();
+        if (!result.startsWith("http://") && !result.startsWith("https://")) {
+            result = "https://" + result;
+        }
+        return stripTrailingSlash(result);
+    }
+
+    private static String stripTrailingSlash(String value) {
+        if (value == null) return "";
+        String result = value.trim();
+        while (result.endsWith("/")) result = result.substring(0, result.length() - 1);
+        return result;
+    }
+
+    private void writeError(HttpServletResponse response, int status, String code, String message, String path) throws java.io.IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(), ApiErrorResponse.of(status, code, message, path));

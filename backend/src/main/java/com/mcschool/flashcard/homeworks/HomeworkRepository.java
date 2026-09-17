@@ -14,7 +14,8 @@ public interface HomeworkRepository extends JpaRepository<Homework, UUID> {
 
     Optional<Homework> findByIdAndStudentId(UUID id, UUID studentId);
 
-    Optional<Homework> findByStudentIdAndStartDate(UUID studentId, LocalDate startDate);
+    Optional<Homework> findFirstByStudentIdAndStartDateAndWorksheetPdfIsNullOrderByCreatedAtAsc(
+            UUID studentId, LocalDate startDate);
 
     @Query("""
             SELECT new com.mcschool.flashcard.homeworks.HomeworkStats(
@@ -46,4 +47,29 @@ public interface HomeworkRepository extends JpaRepository<Homework, UUID> {
     boolean isStartedForStudent(@Param("homeworkId") UUID homeworkId,
                                 @Param("studentId") UUID studentId,
                                 @Param("day") LocalDate day);
+
+    @Query("""
+            SELECT COUNT(h) FROM Homework h
+            WHERE h.student.id = :studentId
+              AND h.startDate = :day
+              AND h.worksheetPdf IS NOT NULL
+              AND h.submittedAt IS NULL
+            """)
+    long countOpenWorksheetsForDay(@Param("studentId") UUID studentId,
+                                   @Param("day") LocalDate day);
+
+    @Query("""
+            SELECT h FROM Homework h
+            JOIN FETCH h.student s
+            JOIN FETCH s.parent p
+            WHERE h.startDate = :day
+              AND h.worksheetPdf IS NOT NULL
+              AND h.submittedAt IS NULL
+              AND h.parentNotifiedAt IS NULL
+              AND s.archived = false
+              AND p.archived = false
+              AND p.status = com.mcschool.flashcard.users.UserStatus.ACTIVE
+            ORDER BY s.id, h.createdAt
+            """)
+    List<Homework> findOpenForParentNotification(@Param("day") LocalDate day);
 }

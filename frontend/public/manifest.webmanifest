@@ -1,0 +1,10 @@
+{
+  "name": "Mindcrafti School",
+  "short_name": "Mindcrafti",
+  "start_url": "/today",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "description": "Mindcrafti School — карточки и домашние задания"
+}

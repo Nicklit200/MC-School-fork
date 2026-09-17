@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN google_drive_homework_folder_id VARCHAR(1000);

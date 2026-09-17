@@ -1,0 +1,43 @@
+/* PDF homework editor: keep tablet/mobile behavior, use the available desktop width. */
+@media (min-width: 900px) and (pointer: fine) {
+  .app[data-variant='student'] .content:has(.pdf-homework-page) {
+    max-width: none;
+    width: 100%;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  .pdf-homework-page {
+    width: min(1400px, calc(100vw - 64px));
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .pdf-homework-page > .panel {
+    width: 100%;
+  }
+
+  .pdf-homework-page .panel .row {
+    flex-wrap: nowrap;
+  }
+
+  .pdf-homework-page .panel .row > * {
+    flex: 0 0 auto;
+  }
+
+  .pdf-homework-page .panel .row > div:first-child {
+    min-width: max-content;
+  }
+
+  .pdf-homework-page canvas,
+  .pdf-homework-page img {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 1200px) and (pointer: fine) {
+  .pdf-homework-page {
+    width: min(1500px, calc(100vw - 96px));
+    max-width: 1500px;
+  }
+}

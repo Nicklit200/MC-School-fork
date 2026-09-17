@@ -1,0 +1,540 @@
+package com.mcschool.flashcard.lessons;
+
+import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.auth.McpOAuthService;
+import com.mcschool.flashcard.drive.TeacherGoogleDriveDownloadService;
+import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
+import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
+import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
+import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.users.User;
+import com.mcschool.flashcard.users.UserRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.ObjectMapper;
+
+/** Remote MCP server for the Mindcrafti ChatGPT app. */
+@RestController
+@RequestMapping("/api/v1/mcp")
+public class MindcraftiMcpController {
+
+    private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
+    private static final String SERVER_NAME = "mindcrafti-lessons";
+    private static final String SERVER_VERSION = "1.9.0";
+    private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
+
+    private final String apiKey;
+    private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
+    private final McpOAuthService oauthService;
+    private final GoogleCalendarLessonService calendarLessonService;
+    private final LessonPreparationService preparationService;
+    private final TeacherGoogleDriveDownloadService teacherDriveDownloadService;
+    private final McpHomeworkSeriesService homeworkSeriesService;
+    private final McpAnalyticsService analyticsService;
+    private final McpHomeworkReadService homeworkReadService;
+
+    public MindcraftiMcpController(
+            @Value("${MINDCRAFTI_LESSON_IMPORT_API_KEY:}") String apiKey,
+            ObjectMapper objectMapper,
+            UserRepository userRepository,
+            McpOAuthService oauthService,
+            GoogleCalendarLessonService calendarLessonService,
+            LessonPreparationService preparationService,
+            TeacherGoogleDriveDownloadService teacherDriveDownloadService,
+            McpHomeworkSeriesService homeworkSeriesService,
+            McpAnalyticsService analyticsService,
+            McpHomeworkReadService homeworkReadService) {
+        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
+        this.oauthService = oauthService;
+        this.calendarLessonService = calendarLessonService;
+        this.preparationService = preparationService;
+        this.teacherDriveDownloadService = teacherDriveDownloadService;
+        this.homeworkSeriesService = homeworkSeriesService;
+        this.analyticsService = analyticsService;
+        this.homeworkReadService = homeworkReadService;
+    }
+
+    @GetMapping
+    public ResponseEntity<Void> get() {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .header(HttpHeaders.ALLOW, "POST")
+                .build();
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> post(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestHeader(value = API_KEY_HEADER, required = false) String suppliedApiKey,
+            @RequestBody Map<String, Object> body) {
+        AuthContext auth = authenticationContext(authorization, suppliedApiKey);
+        String method = string(body.get("method"));
+        Object id = body.get("id");
+        boolean notification = id == null;
+
+        if (notification) return ResponseEntity.accepted().build();
+
+        try {
+            Object result = switch (method) {
+                case "initialize" -> initialize(body, auth.authenticated());
+                case "server/discover" -> discover(auth.authenticated());
+                case "ping" -> Map.of();
+                case "tools/list" -> Map.of("tools", tools(auth.authenticated()));
+                case "tools/call" -> callTool(body, auth);
+                default -> null;
+            };
+            if (result == null) return ResponseEntity.ok(error(id, -32601, "Method not found: " + method));
+            return ResponseEntity.ok(success(id, result));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.ok(error(id, -32602, ex.getMessage()));
+        } catch (Exception ex) {
+            return ResponseEntity.ok(error(id, -32603, ex.getMessage() == null ? "Internal error" : ex.getMessage()));
+        }
+    }
+
+    private Map<String, Object> initialize(Map<String, Object> request, boolean authenticated) {
+        Map<String, Object> params = map(request.get("params"));
+        String requested = string(params.get("protocolVersion"));
+        String protocolVersion = requested.isBlank() ? "2025-11-25" : requested;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("protocolVersion", protocolVersion);
+        result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
+        result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
+        result.put("instructions", authenticated
+                ? "Mindcrafti school tools include lessons, homework assignment, direct access to submitted homework PDFs, rendered submission pages and read-only student analytics. For a student's homework over a week or other date range, use find_student_homeworks. Use get_homework_submission for the actual submitted PDF and get_homework_submission_pages when handwriting or images must be inspected visually. Admins can read all teachers and students; teachers are restricted to their own students. For morning reports, use get_school_day_summary with yesterday's date."
+                : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
+        return result;
+    }
+
+    private Map<String, Object> discover(boolean authenticated) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("resultType", "complete");
+        result.put("supportedVersions", List.of("2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"));
+        result.put("capabilities", Map.of("tools", Map.of()));
+        result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
+        result.put("instructions", authenticated
+                ? "Mindcrafti lesson, homework-file and school analytics tools. Admins can target all teachers; teachers can access only their own students."
+                : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
+        return result;
+    }
+
+    private List<Map<String, Object>> tools(boolean authenticated) {
+        List<Map<String, Object>> tools = new ArrayList<>();
+        tools.add(tool("mindcrafti_status", "Check that the Mindcrafti MCP server is reachable.", schema(Map.of(), List.of()), readOnlyAnnotations()));
+        if (!authenticated) return tools;
+
+        tools.add(tool("find_lessons", "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.", schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()), readOnlyAnnotations()));
+        tools.add(tool("get_lesson_preparation", "Read workbook, teacher answers, homework notes, difficulties and lesson plan for one lesson.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
+        tools.add(tool("download_lesson_pdf", "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons."), "kind", property("string", "PDF kind: workbook or answers.")), List.of("teacherId", "eventId", "kind")), readOnlyAnnotations()));
+
+        Map<String, Object> prepareProperties = new LinkedHashMap<>();
+        prepareProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
+        prepareProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
+        prepareProperties.put("homeworkNotes", property("string", "Homework completion/status and relevant notes for the teacher."));
+        prepareProperties.put("difficulties", property("string", "Observed gaps, recurring errors, or difficulties to address."));
+        prepareProperties.put("lessonPlan", property("string", "Concise plan for the lesson."));
+        prepareProperties.put("workbookBase64", property("string", "Optional workbook PDF bytes encoded as base64. Use this for direct upload without Google Drive."));
+        prepareProperties.put("workbookFilename", property("string", "Optional workbook PDF filename. Also used to find the file in the selected teacher's Drive if a connector file id is not directly readable."));
+        prepareProperties.put("answersBase64", property("string", "Optional teacher-answers PDF bytes encoded as base64. Use this for direct upload without Google Drive."));
+        prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename. Also used for Drive fallback lookup."));
+        prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for the workbook. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
+        prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for teacher answers. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
+        tools.add(tool("prepare_lesson", "Create or update lesson preparation for the selected teacher. Admins can write to any teacher lesson. PDFs may be uploaded directly as base64 or imported from Google Drive using the selected teacher's access.", schema(prepareProperties, List.of("teacherId", "eventId")), writeAnnotations()));
+
+        Map<String, Object> answerProperties = new LinkedHashMap<>();
+        answerProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
+        answerProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
+        answerProperties.put("driveFileId", property("string", "Google Drive raw file ID or Drive URL containing teacher answers."));
+        answerProperties.put("filename", property("string", "Optional PDF filename. Used for Drive fallback lookup."));
+        tools.add(tool("attach_lesson_answers", "Copy a teacher-answer PDF from Google Drive into one concrete lesson, using the selected teacher's Drive access when needed.", schema(answerProperties, List.of("teacherId", "eventId", "driveFileId")), writeAnnotations()));
+
+        Map<String, Object> targetProperties = new LinkedHashMap<>();
+        targetProperties.put("query", property("string", "Optional student or group name filter, for example Виталина, Christian or Группа 1."));
+        targetProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it to search across every active teacher."));
+        tools.add(tool("find_homework_targets", "Find students and groups that can receive homework. Admins search all active teachers by default. Every result includes teacherId and teacherName so it can be used directly for follow-up actions.", schema(targetProperties, List.of()), readOnlyAnnotations()));
+
+        Map<String, Object> seriesProperties = new LinkedHashMap<>();
+        seriesProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it and Mindcrafti will infer the teacher from targetId when the target is unique."));
+        seriesProperties.put("targetType", property("string", "Target type: student or group."));
+        seriesProperties.put("targetId", property("string", "Student or group UUID returned by find_homework_targets."));
+        seriesProperties.put("startDate", property("string", "First homework date in YYYY-MM-DD format."));
+        seriesProperties.put("days", property("integer", "Number of consecutive calendar days to assign, from 1 to 31."));
+        seriesProperties.put("driveFileIds", arrayProperty("Google Drive PDF file IDs. Supply one PDF for all days or exactly one PDF per day."));
+        seriesProperties.put("filenames", arrayProperty("Optional display filenames: empty, one filename for all days, or one filename per day."));
+        tools.add(tool("assign_homework_series", "Assign dated PDF homework for several consecutive days to one student or every active student in a group. Admins may omit teacherId when targetId identifies one teacher uniquely. Existing PDF homework on the same student/date is skipped to avoid duplicates.", schema(seriesProperties, List.of("targetType", "targetId", "startDate", "days", "driveFileIds")), writeAnnotations()));
+
+        tools.add(tool("list_school_teachers", "List teachers visible to the signed-in account, including each teacher's student count. Admins see the whole school; a teacher sees only themselves.", schema(Map.of(), List.of()), readOnlyAnnotations()));
+
+        Map<String, Object> studentSearchProperties = new LinkedHashMap<>();
+        studentSearchProperties.put("query", property("string", "Optional student name, username, email or teacher-name search."));
+        studentSearchProperties.put("teacherId", property("string", "Optional teacher UUID. Admins can filter by teacher. Teachers can only use their own teacher ID."));
+        tools.add(tool("find_students", "Find students for analytics and homework-file access. Returns studentId and teacher details for follow-up tools. Admins can search every student; teachers are restricted to their own students.", schema(studentSearchProperties, List.of()), readOnlyAnnotations()));
+
+        Map<String, Object> homeworkRangeProperties = new LinkedHashMap<>();
+        homeworkRangeProperties.put("studentId", property("string", "Student UUID returned by find_students."));
+        homeworkRangeProperties.put("fromDate", property("string", "First assigned-homework date in YYYY-MM-DD."));
+        homeworkRangeProperties.put("toDate", property("string", "Last assigned-homework date in YYYY-MM-DD. Maximum range is 366 days."));
+        tools.add(tool("find_student_homeworks", "Find all homework buckets for one student in an inclusive date range. Returns submission status and homeworkId values that can be passed directly to get_homework_submission or get_homework_submission_pages.", schema(homeworkRangeProperties, List.of("studentId", "fromDate", "toDate")), readOnlyAnnotations()));
+
+        Map<String, Object> recentHomeworkProperties = new LinkedHashMap<>();
+        recentHomeworkProperties.put("studentId", property("string", "Student UUID returned by find_students."));
+        recentHomeworkProperties.put("limit", property("integer", "Optional number of submitted homework PDFs to return, 1 to 10. Defaults to 5."));
+        tools.add(tool("get_recent_homework_submissions", "Get the newest submitted PDF homeworks directly from Mindcrafti, newest first. Also identifies the student's latest completed lesson from the connected teacher calendar and separately returns submissions made after that lesson. Use this for requests such as latest homework, last 3 or 5 homeworks, or homework submitted after the last lesson.", schema(recentHomeworkProperties, List.of("studentId")), readOnlyAnnotations()));
+
+        Map<String, Object> homeworkPdfProperties = new LinkedHashMap<>();
+        homeworkPdfProperties.put("homeworkId", property("string", "Homework UUID returned by find_student_homeworks, get_recent_homework_submissions or get_student_homework_history."));
+        tools.add(tool("get_homework_submission", "Get the student's actual submitted homework PDF directly from the Mindcrafti database, without Google Drive. Returns filename, submission time and PDF bytes as base64.", schema(homeworkPdfProperties, List.of("homeworkId")), readOnlyAnnotations()));
+        tools.add(tool("download_homework_submission_pdf", "Backward-compatible alias for get_homework_submission. Downloads the student's actual submitted homework PDF directly from the Mindcrafti database.", schema(homeworkPdfProperties, List.of("homeworkId")), readOnlyAnnotations()));
+
+        Map<String, Object> homeworkPageProperties = new LinkedHashMap<>();
+        homeworkPageProperties.put("homeworkId", property("string", "Homework UUID returned by find_student_homeworks or get_recent_homework_submissions."));
+        homeworkPageProperties.put("startPage", property("integer", "Optional 1-based first page to render. Defaults to 1."));
+        homeworkPageProperties.put("pageCount", property("integer", "Optional number of pages to render, 1 to 8. Defaults to 1. Use nextStartPage to continue."));
+        tools.add(tool("get_homework_submission_pages", "Render pages of the student's actual submitted PDF as PNG images for visual inspection of handwriting, photos and annotations. Returns image bytes as base64 plus page dimensions and nextStartPage for pagination.", schema(homeworkPageProperties, List.of("homeworkId")), readOnlyAnnotations()));
+
+        Map<String, Object> dayProperties = new LinkedHashMap<>();
+        dayProperties.put("date", property("string", "School date in YYYY-MM-DD. Use yesterday for a morning report about the previous day."));
+        dayProperties.put("teacherId", property("string", "Optional teacher UUID. Admins can filter the school report by one teacher. Teachers are always restricted to themselves."));
+        tools.add(tool("get_school_day_summary", "Get a school-day summary of homework and card activity: who had assigned work, who worked, who missed work, PDF submissions, card sessions, time spent, first-try accuracy and concrete wrong answers. Admins see all accessible students; teachers see only their own.", schema(dayProperties, List.of("date")), readOnlyAnnotations()));
+
+        Map<String, Object> studentPeriodProperties = new LinkedHashMap<>();
+        studentPeriodProperties.put("studentId", property("string", "Student UUID returned by find_students."));
+        studentPeriodProperties.put("fromDate", property("string", "First date in YYYY-MM-DD."));
+        studentPeriodProperties.put("toDate", property("string", "Last date in YYYY-MM-DD. Maximum range is 366 days."));
+        tools.add(tool("get_student_activity", "Get a detailed student summary for a date range: homework assignments, PDF submissions and lateness, completed card sessions, study time, first-try accuracy, missed/partial/completed review days and concrete errors. Teachers can only read their own students.", schema(studentPeriodProperties, List.of("studentId", "fromDate", "toDate")), readOnlyAnnotations()));
+        tools.add(tool("get_student_homework_history", "Get every homework bucket for one student in a date range, including PDF status/submission time, card counts and related completed card sessions. Teachers can only read their own students.", schema(studentPeriodProperties, List.of("studentId", "fromDate", "toDate")), readOnlyAnnotations()));
+
+        Map<String, Object> sessionProperties = new LinkedHashMap<>();
+        sessionProperties.put("sessionId", property("string", "Card study-session UUID returned by a summary or student activity tool."));
+        tools.add(tool("get_card_session_details", "Inspect one card session in detail: start/end time, duration, every question, the student's first answer, correct answer and whether the first attempt was wrong. Teachers can only inspect sessions belonging to their own students.", schema(sessionProperties, List.of("sessionId")), readOnlyAnnotations()));
+        return tools;
+    }
+
+    private Map<String, Object> callTool(Map<String, Object> request, AuthContext auth) throws Exception {
+        Map<String, Object> params = map(request.get("params"));
+        String name = string(params.get("name"));
+        Map<String, Object> arguments = map(params.get("arguments"));
+        if ("mindcrafti_status".equals(name)) {
+            Map<String, Object> status = new LinkedHashMap<>();
+            status.put("status", "ok");
+            status.put("service", SERVER_NAME);
+            status.put("version", SERVER_VERSION);
+            status.put("authenticated", auth.authenticated());
+            status.put("mode", auth.authenticated() ? "full" : "diagnostic");
+            status.put("authentication", auth.apiKey() ? "api_key" : auth.user() != null ? "oauth" : "none");
+            if (auth.user() != null) status.put("role", auth.user().getRole().name());
+            return toolResult(status);
+        }
+        if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
+        return switch (name) {
+            case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
+            case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
+            case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
+            case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
+            case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
+            case "find_homework_targets" -> toolResult(findHomeworkTargets(arguments, auth));
+            case "assign_homework_series" -> toolResult(assignHomeworkSeries(arguments, auth));
+            case "list_school_teachers" -> toolResult(analyticsService.listTeachers(auth.user(), auth.apiKey()));
+            case "find_students" -> toolResult(analyticsService.findStudents(auth.user(), auth.apiKey(), string(arguments.get("query")), string(arguments.get("teacherId"))));
+            case "find_student_homeworks" -> toolResult(homeworkReadService.findStudentHomeworks(
+                    auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"),
+                    date(arguments, "fromDate"), date(arguments, "toDate")));
+            case "get_recent_homework_submissions" -> toolResult(homeworkReadService.recentSubmissions(
+                    auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"),
+                    arguments.containsKey("limit") ? integer(arguments.get("limit"), "limit") : 5));
+            case "get_homework_submission", "download_homework_submission_pdf" -> toolResult(homeworkReadService.submissionPdf(
+                    auth.user(), auth.apiKey(), uuid(required(arguments, "homeworkId"), "homeworkId")));
+            case "get_homework_submission_pages" -> toolResult(homeworkReadService.submissionPages(
+                    auth.user(), auth.apiKey(), uuid(required(arguments, "homeworkId"), "homeworkId"),
+                    arguments.containsKey("startPage") ? integer(arguments.get("startPage"), "startPage") : 1,
+                    arguments.containsKey("pageCount") ? integer(arguments.get("pageCount"), "pageCount") : 1));
+            case "get_school_day_summary" -> toolResult(analyticsService.dailySummary(auth.user(), auth.apiKey(), date(arguments, "date"), string(arguments.get("teacherId"))));
+            case "get_student_activity" -> toolResult(analyticsService.studentActivity(auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"), date(arguments, "fromDate"), date(arguments, "toDate")));
+            case "get_student_homework_history" -> toolResult(analyticsService.homeworkHistory(auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"), date(arguments, "fromDate"), date(arguments, "toDate")));
+            case "get_card_session_details" -> toolResult(analyticsService.cardSessionDetails(auth.user(), auth.apiKey(), uuid(required(arguments, "sessionId"), "sessionId")));
+            default -> throw new IllegalArgumentException("Unknown tool: " + name);
+        };
+    }
+
+    private List<Map<String, Object>> findLessons(String query, AuthContext auth) {
+        String normalizedQuery = normalize(query);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (User teacher : accessibleTeachers(auth)) {
+            if (teacher.isArchived() || teacher.getGoogleCalendarRefreshToken() == null || teacher.getGoogleCalendarRefreshToken().isBlank()) continue;
+            AuthenticatedUser principal = principal(teacher);
+            List<GroupLessonResponse> lessons;
+            try { lessons = calendarLessonService.listGroupLessons(principal); } catch (RuntimeException ignored) { continue; }
+            for (GroupLessonResponse lesson : lessons) {
+                String haystack = normalize(String.join(" ", lesson.title() == null ? "" : lesson.title(), lesson.groupName() == null ? "" : lesson.groupName(), lesson.studentName() == null ? "" : lesson.studentName()));
+                if (!normalizedQuery.isBlank() && !haystack.contains(normalizedQuery)) continue;
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("teacherId", teacher.getId().toString());
+                item.put("teacherName", teacher.getFullName());
+                item.put("eventId", lesson.eventId());
+                item.put("bindingKey", lesson.bindingKey());
+                item.put("title", lesson.title());
+                item.put("groupId", lesson.groupId() == null ? null : lesson.groupId().toString());
+                item.put("groupName", lesson.groupName());
+                item.put("studentId", lesson.studentId() == null ? null : lesson.studentId().toString());
+                item.put("studentName", lesson.studentName());
+                item.put("startsAt", lesson.startsAt() == null ? null : lesson.startsAt().toString());
+                item.put("endsAt", lesson.endsAt() == null ? null : lesson.endsAt().toString());
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    private List<User> accessibleTeachers(AuthContext auth) {
+        if (auth.apiKey() || (auth.user() != null && auth.user().getRole() == Role.ADMIN)) return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER);
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return List.of(auth.user());
+        return List.of();
+    }
+
+    private LessonPreparationResponse getPreparation(Map<String, Object> arguments, AuthContext auth) {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        return preparationService.getOrCreate(teacher, eventId);
+    }
+
+    private Map<String, Object> downloadLessonPdf(Map<String, Object> arguments, AuthContext auth) {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        String kind = normalize(required(arguments, "kind"));
+        LessonPreparation preparation = preparationService.require(teacher, eventId);
+        byte[] pdf;
+        String filename;
+        if ("workbook".equals(kind)) {
+            if (!preparation.hasWorkbook()) throw new IllegalArgumentException("This lesson does not have a workbook PDF");
+            pdf = preparation.getWorkbookPdf();
+            filename = preparation.getWorkbookFilename();
+            if (filename == null || filename.isBlank()) filename = "lesson-workbook.pdf";
+        } else if ("answers".equals(kind)) {
+            if (!preparation.hasAnswers()) throw new IllegalArgumentException("This lesson does not have an answers PDF");
+            pdf = preparation.getAnswersPdf();
+            filename = preparation.getAnswersFilename();
+            if (filename == null || filename.isBlank()) filename = "lesson-answers.pdf";
+        } else throw new IllegalArgumentException("kind must be workbook or answers");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("filename", filename);
+        result.put("mimeType", MediaType.APPLICATION_PDF_VALUE);
+        result.put("sizeBytes", pdf.length);
+        result.put("base64", Base64.getEncoder().encodeToString(pdf));
+        return result;
+    }
+
+    private LessonPreparationResponse prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        LessonPreparationResponse current = preparationService.getOrCreate(teacher, eventId);
+        String homeworkNotes = optional(arguments, "homeworkNotes", current.homeworkNotes());
+        String difficulties = optional(arguments, "difficulties", current.difficulties());
+        String lessonPlan = optional(arguments, "lessonPlan", current.lessonPlan());
+        LessonPreparationResponse result = preparationService.update(teacher, eventId, new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan));
+
+        String workbookBase64 = string(arguments.get("workbookBase64"));
+        String workbookFilename = normalizedPdfFilename(string(arguments.get("workbookFilename")), "lesson-workbook.pdf");
+        String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
+        if (!workbookBase64.isBlank() && !driveWorkbookFileId.isBlank()) throw new IllegalArgumentException("Use either workbookBase64 or driveWorkbookFileId, not both");
+        if (!workbookBase64.isBlank()) {
+            byte[] pdf = decodePdfBase64(workbookBase64, "workbookBase64");
+            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+        } else if (!driveWorkbookFileId.isBlank()) {
+            byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveWorkbookFileId, workbookFilename);
+            if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
+            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+        }
+
+        String answersBase64 = string(arguments.get("answersBase64"));
+        String answersFilename = normalizedPdfFilename(string(arguments.get("answersFilename")), "lesson-answers.pdf");
+        String driveAnswersFileId = string(arguments.get("driveAnswersFileId"));
+        if (!answersBase64.isBlank() && !driveAnswersFileId.isBlank()) throw new IllegalArgumentException("Use either answersBase64 or driveAnswersFileId, not both");
+        if (!answersBase64.isBlank()) {
+            byte[] pdf = decodePdfBase64(answersBase64, "answersBase64");
+            result = preparationService.uploadAnswers(teacher, eventId, answersFilename, pdf);
+        } else if (!driveAnswersFileId.isBlank()) {
+            byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveAnswersFileId, answersFilename);
+            if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveAnswersFileId does not point to a PDF file");
+            result = preparationService.uploadAnswers(teacher, eventId, answersFilename, pdf);
+        }
+        return result;
+    }
+
+    private LessonPreparationResponse attachLessonAnswers(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        String driveFileId = required(arguments, "driveFileId");
+        String filename = normalizedPdfFilename(string(arguments.get("filename")), "lesson-answers.pdf");
+        byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveFileId, filename);
+        if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
+        return preparationService.uploadAnswers(teacher, eventId, filename, pdf);
+    }
+
+    private Map<String, Object> findHomeworkTargets(Map<String, Object> arguments, AuthContext auth) {
+        String query = string(arguments.get("query"));
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return homeworkTargetsForTeacher(auth.user(), query);
+        String requestedTeacherId = string(arguments.get("teacherId")).trim();
+        if (!requestedTeacherId.isBlank()) return homeworkTargetsForTeacher(requireHomeworkTeacher(requestedTeacherId), query);
+        List<Map<String, Object>> targets = new ArrayList<>();
+        for (User teacher : accessibleTeachers(auth)) if (!teacher.isArchived()) targets.addAll(homeworkTargetListForTeacher(teacher, query));
+        return Map.of("targets", targets);
+    }
+
+    private Map<String, Object> homeworkTargetsForTeacher(User teacher, String query) { return Map.of("targets", homeworkTargetListForTeacher(teacher, query)); }
+
+    private List<Map<String, Object>> homeworkTargetListForTeacher(User teacher, String query) {
+        Map<String, Object> result = homeworkSeriesService.findTargets(principal(teacher), query);
+        List<Map<String, Object>> targets = new ArrayList<>();
+        Object rawTargets = result.get("targets");
+        if (!(rawTargets instanceof List<?> list)) return targets;
+        for (Object rawTarget : list) {
+            if (!(rawTarget instanceof Map<?, ?> rawMap)) continue;
+            Map<String, Object> item = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) item.put(String.valueOf(entry.getKey()), entry.getValue());
+            item.put("teacherId", teacher.getId().toString());
+            item.put("teacherName", teacher.getFullName());
+            targets.add(item);
+        }
+        return targets;
+    }
+
+    private Map<String, Object> assignHomeworkSeries(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        String targetType = required(arguments, "targetType");
+        UUID targetId = uuid(required(arguments, "targetId"), "targetId");
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth, targetType, targetId);
+        LocalDate startDate;
+        try { startDate = LocalDate.parse(required(arguments, "startDate")); } catch (RuntimeException ex) { throw new IllegalArgumentException("startDate must use YYYY-MM-DD format"); }
+        int days = integer(arguments.get("days"), "days");
+        List<String> driveFileIds = stringList(arguments.get("driveFileIds"), "driveFileIds");
+        List<String> filenames = arguments.containsKey("filenames") ? stringList(arguments.get("filenames"), "filenames") : List.of();
+        return homeworkSeriesService.assignSeries(teacher, targetType, targetId, startDate, days, driveFileIds, filenames);
+    }
+
+    private AuthenticatedUser homeworkTeacher(Map<String, Object> arguments, AuthContext auth, String targetType, UUID targetId) {
+        if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return principal(auth.user());
+        String requestedTeacherId = string(arguments.get("teacherId")).trim();
+        if (!requestedTeacherId.isBlank()) return principal(requireHomeworkTeacher(requestedTeacherId));
+        List<User> matches = new ArrayList<>();
+        for (User teacher : accessibleTeachers(auth)) {
+            if (teacher.isArchived()) continue;
+            Map<String, Object> result = homeworkSeriesService.findTargets(principal(teacher), "");
+            if (containsHomeworkTarget(result, targetType, targetId)) matches.add(teacher);
+        }
+        if (matches.isEmpty()) throw new IllegalArgumentException("Homework target was not found under any accessible teacher");
+        if (matches.size() > 1) throw new IllegalArgumentException("Homework target is ambiguous across teachers; pass teacherId returned by find_homework_targets");
+        return principal(matches.get(0));
+    }
+
+    private boolean containsHomeworkTarget(Map<String, Object> result, String targetType, UUID targetId) {
+        Object rawTargets = result.get("targets");
+        if (!(rawTargets instanceof List<?> list)) return false;
+        String normalizedType = normalize(targetType);
+        String expectedId = targetId.toString();
+        for (Object rawTarget : list) {
+            if (!(rawTarget instanceof Map<?, ?> rawMap)) continue;
+            String type = normalize(string(rawMap.get("type")));
+            String id = string(rawMap.get("id"));
+            if (normalizedType.equals(type) && expectedId.equals(id)) return true;
+        }
+        return false;
+    }
+
+    private User requireHomeworkTeacher(String teacherId) {
+        UUID id = uuid(teacherId, "teacherId");
+        return userRepository.findById(id).filter(user -> user.getRole() == Role.TEACHER).filter(user -> !user.isArchived()).orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
+    }
+
+    private AuthenticatedUser requireTeacher(Map<String, Object> arguments, AuthContext auth) {
+        String teacherId = required(arguments, "teacherId");
+        UUID id = uuid(teacherId, "teacherId");
+        if (!auth.apiKey() && auth.user() != null && auth.user().getRole() == Role.TEACHER && !auth.user().getId().equals(id)) throw new IllegalArgumentException("You can access only your own lessons");
+        User teacher = userRepository.findById(id).filter(user -> user.getRole() == Role.TEACHER).filter(user -> !user.isArchived()).orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
+        return principal(teacher);
+    }
+
+    private AuthenticatedUser principal(User teacher) { return new AuthenticatedUser(teacher.getId(), teacher.getEmail(), teacher.getRole()); }
+    private void requireLesson(AuthenticatedUser teacher, String eventId) { if (calendarLessonService.listGroupLessons(teacher).stream().noneMatch(lesson -> lesson.eventId().equals(eventId))) throw new IllegalArgumentException("Lesson event was not found in the current calendar window"); }
+
+    private byte[] decodePdfBase64(String value, String field) {
+        try {
+            String encoded = value == null ? "" : value.trim();
+            int comma = encoded.indexOf(',');
+            if (encoded.regionMatches(true, 0, "data:", 0, 5) && comma >= 0) encoded = encoded.substring(comma + 1);
+            byte[] bytes = Base64.getDecoder().decode(encoded);
+            if (!looksLikePdf(bytes)) throw new IllegalArgumentException(field + " does not contain a valid PDF file");
+            if (bytes.length > MAX_DIRECT_PDF_BYTES) throw new IllegalArgumentException(field + " exceeds the 15 MB direct-upload limit");
+            return bytes;
+        } catch (IllegalArgumentException ex) {
+            if (ex.getMessage() != null && ex.getMessage().startsWith(field)) throw ex;
+            throw new IllegalArgumentException(field + " must be valid base64 PDF data");
+        }
+    }
+
+    private String normalizedPdfFilename(String filename, String fallback) {
+        String value = filename == null ? "" : filename.trim();
+        if (value.isBlank()) value = fallback;
+        value = value.replace("/", "_").replace("\\", "_").replace("\"", "");
+        if (!value.toLowerCase(Locale.ROOT).endsWith(".pdf")) value += ".pdf";
+        return value;
+    }
+
+    private boolean looksLikePdf(byte[] bytes) { return bytes != null && bytes.length >= 5 && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F' && bytes[4] == '-'; }
+
+    private AuthContext authenticationContext(String authorization, String suppliedApiKey) {
+        String explicitApiKey = suppliedApiKey == null ? "" : suppliedApiKey.trim();
+        if (hasValidApiKey(explicitApiKey)) return new AuthContext(true, true, null);
+        if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            String bearer = authorization.substring(7).trim();
+            User oauthUser = oauthService.resolveAccessToken(bearer).orElse(null);
+            if (oauthUser != null && (oauthUser.getRole() == Role.ADMIN || oauthUser.getRole() == Role.TEACHER)) return new AuthContext(true, false, oauthUser);
+            if (hasValidApiKey(bearer)) return new AuthContext(true, true, null);
+        }
+        return new AuthContext(false, false, null);
+    }
+
+    private boolean hasValidApiKey(String candidate) { return !apiKey.isBlank() && candidate != null && !candidate.isBlank() && MessageDigest.isEqual(apiKey.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8)); }
+    private Map<String, Object> readOnlyAnnotations() { return Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
+    private Map<String, Object> writeAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
+    private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) { Map<String, Object> tool = new LinkedHashMap<>(); tool.put("name", name); tool.put("description", description); tool.put("inputSchema", inputSchema); tool.put("annotations", annotations); return tool; }
+    private Map<String, Object> schema(Map<String, Object> properties, List<String> required) { Map<String, Object> schema = new LinkedHashMap<>(); schema.put("type", "object"); schema.put("properties", properties); if (!required.isEmpty()) schema.put("required", required); schema.put("additionalProperties", false); return schema; }
+    private Map<String, Object> property(String type, String description) { return Map.of("type", type, "description", description); }
+    private Map<String, Object> arrayProperty(String description) { Map<String, Object> value = new LinkedHashMap<>(); value.put("type", "array"); value.put("description", description); value.put("items", Map.of("type", "string")); return value; }
+    private Map<String, Object> toolResult(Object value) throws Exception { Map<String, Object> result = new LinkedHashMap<>(); result.put("content", List.of(Map.of("type", "text", "text", objectMapper.writeValueAsString(value)))); result.put("structuredContent", value); result.put("isError", false); return result; }
+    private Map<String, Object> success(Object id, Object result) { Map<String, Object> response = new LinkedHashMap<>(); response.put("jsonrpc", "2.0"); response.put("id", id); response.put("result", result); return response; }
+    private Map<String, Object> error(Object id, int code, String message) { Map<String, Object> response = new LinkedHashMap<>(); response.put("jsonrpc", "2.0"); response.put("id", id); response.put("error", Map.of("code", code, "message", message == null ? "Error" : message)); return response; }
+    @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { if (value instanceof Map<?, ?> map) return (Map<String, Object>) map; return Map.of(); }
+    private String required(Map<String, Object> values, String key) { String value = string(values.get(key)); if (value.isBlank()) throw new IllegalArgumentException(key + " is required"); return value; }
+    private String optional(Map<String, Object> values, String key, String fallback) { if (!values.containsKey(key)) return fallback; Object raw = values.get(key); return raw == null ? null : String.valueOf(raw); }
+    private String string(Object value) { return value == null ? "" : String.valueOf(value); }
+    private String normalize(String value) { return string(value).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim(); }
+    private UUID uuid(String value, String field) { try { return UUID.fromString(value); } catch (IllegalArgumentException ex) { throw new IllegalArgumentException(field + " must be a UUID"); } }
+    private LocalDate date(Map<String, Object> values, String field) { try { return LocalDate.parse(required(values, field)); } catch (RuntimeException ex) { throw new IllegalArgumentException(field + " must use YYYY-MM-DD format"); } }
+    private int integer(Object value, String field) { if (value instanceof Number number) return number.intValue(); try { return Integer.parseInt(string(value)); } catch (RuntimeException ex) { throw new IllegalArgumentException(field + " must be an integer"); } }
+    private List<String> stringList(Object value, String field) { if (!(value instanceof List<?> list)) throw new IllegalArgumentException(field + " must be an array of strings"); List<String> result = new ArrayList<>(); for (Object item : list) { String text = string(item).trim(); if (text.isBlank()) throw new IllegalArgumentException(field + " cannot contain blank values"); result.add(text); } return result; }
+    private record AuthContext(boolean authenticated, boolean apiKey, User user) {}
+}

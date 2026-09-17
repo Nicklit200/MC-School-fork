@@ -1,0 +1,649 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api } from '../../api/client';
+import type { DailyReviewHistoryItem, GroupLesson, Homework, ImportPreview, StudentGroup } from '../../api/types';
+import { useI18n } from '../../i18n/I18nContext';
+import { toErrorMessage } from '../../lib/errors';
+import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
+
+type CardTab = 'manual' | 'import';
+type PageTab = 'overview' | 'students' | 'homework' | 'cards';
+type HomeworkByStudent = Record<string, Homework[]>;
+type ReviewHistoryByStudent = Record<string, DailyReviewHistoryItem[]>;
+
+type GroupHomeworkRow = {
+  key: string;
+  startDate: string;
+  filename: string;
+  pageCount: number | null;
+};
+
+type GroupCardRow = {
+  key: string;
+  startDate: string;
+  totalCards: number;
+};
+
+export function GroupDetailPage() {
+  const { groupId } = useParams<{ groupId: string }>();
+  const navigate = useNavigate();
+  const { t } = useI18n();
+  const [group, setGroup] = useState<StudentGroup | null>(null);
+  const [groupLessons, setGroupLessons] = useState<GroupLesson[]>([]);
+  const [pageTab, setPageTab] = useState<PageTab>('overview');
+  const [memberEmails, setMemberEmails] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [cardTab, setCardTab] = useState<CardTab>('manual');
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [rawText, setRawText] = useState('');
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [homeworkStartDate, setHomeworkStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [homeworkDays, setHomeworkDays] = useState(1);
+  const [homeworkFiles, setHomeworkFiles] = useState<Array<File | null>>([null]);
+  const [creatingHomework, setCreatingHomework] = useState(false);
+  const [deletingHomeworkKey, setDeletingHomeworkKey] = useState<string | null>(null);
+  const [homeworkByStudent, setHomeworkByStudent] = useState<HomeworkByStudent>({});
+  const [reviewHistoryByStudent, setReviewHistoryByStudent] = useState<ReviewHistoryByStudent>({});
+  const [loadingHomeworkStatus, setLoadingHomeworkStatus] = useState(false);
+
+  useEffect(() => {
+    if (!groupId) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        const [payload, lessons] = await Promise.all([
+          api.groups.get(groupId!),
+          api.lessons.groupLessons().catch(() => [] as GroupLesson[]),
+        ]);
+        if (cancelled) return;
+        setGroup(payload);
+        setGroupLessons(lessons);
+        await loadHomeworkStatuses(payload);
+      } catch (e) {
+        if (!cancelled) setError(toErrorMessage(e, t));
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, t]);
+
+  async function loadHomeworkStatuses(currentGroup: StudentGroup | null = group) {
+    if (!currentGroup || currentGroup.students.length === 0) {
+      setHomeworkByStudent({});
+      setReviewHistoryByStudent({});
+      return;
+    }
+    setLoadingHomeworkStatus(true);
+    try {
+      const entries = await Promise.all(
+        currentGroup.students.map(async (student) => {
+          const [homeworks, reviewHistory] = await Promise.all([
+            api.homeworks.listForStudent(student.id),
+            api.students.reviewHistory(student.id),
+          ]);
+          return [student.id, homeworks, reviewHistory] as const;
+        }),
+      );
+      setHomeworkByStudent(Object.fromEntries(entries.map(([studentId, homeworks]) => [studentId, homeworks])));
+      setReviewHistoryByStudent(Object.fromEntries(entries.map(([studentId, , history]) => [studentId, history])));
+    } finally {
+      setLoadingHomeworkStatus(false);
+    }
+  }
+
+  const homeworkDates = useMemo(
+    () => Array.from({ length: homeworkDays }, (_, index) => addDays(homeworkStartDate, index)),
+    [homeworkStartDate, homeworkDays],
+  );
+
+  const allHomeworkFilesSelected = homeworkFiles.length === homeworkDays && homeworkFiles.every((file) => file !== null);
+
+  const groupHomeworkRows = useMemo<GroupHomeworkRow[]>(() => {
+    if (!group || group.students.length === 0) return [];
+    const rows = new Map<string, GroupHomeworkRow>();
+    for (const student of group.students) {
+      for (const homework of homeworkByStudent[student.id] ?? []) {
+        if (!homework.hasWorksheet) continue;
+        const filename = homework.worksheetFilename ?? 'Домашка в PDF';
+        const key = `${homework.startDate}::${filename}::${homework.worksheetPageCount ?? ''}`;
+        if (!rows.has(key)) {
+          rows.set(key, { key, startDate: homework.startDate, filename, pageCount: homework.worksheetPageCount ?? null });
+        }
+      }
+    }
+    return Array.from(rows.values())
+      .filter((row) => {
+        const matches = group.students.filter((student) => findHomeworkForRow(homeworkByStudent[student.id] ?? [], row)).length;
+        return group.students.length === 1 || matches >= 2;
+      })
+      .sort((a, b) => b.startDate.localeCompare(a.startDate) || a.filename.localeCompare(b.filename));
+  }, [group, homeworkByStudent]);
+
+  const groupCardRows = useMemo<GroupCardRow[]>(() => {
+    if (!group || group.students.length === 0) return [];
+    const rows = new Map<string, GroupCardRow>();
+
+    for (const student of group.students) {
+      for (const history of reviewHistoryByStudent[student.id] ?? []) {
+        if (history.dueCount <= 0) continue;
+        const existing = rows.get(history.date);
+        if (!existing || history.dueCount > existing.totalCards) {
+          rows.set(history.date, { key: history.date, startDate: history.date, totalCards: history.dueCount });
+        }
+      }
+    }
+
+    for (const student of group.students) {
+      for (const homework of homeworkByStudent[student.id] ?? []) {
+        if (homework.totalCards <= 0 || rows.has(homework.startDate)) continue;
+        rows.set(homework.startDate, {
+          key: homework.startDate,
+          startDate: homework.startDate,
+          totalCards: homework.totalCards,
+        });
+      }
+    }
+
+    return Array.from(rows.values()).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }, [group, homeworkByStudent, reviewHistoryByStudent]);
+
+  const activeHomeworkCount = useMemo(() => {
+    const today = localDateString(new Date());
+    return groupHomeworkRows.filter((row) => row.startDate >= today).length;
+  }, [groupHomeworkRows]);
+
+  const nextLesson = useMemo(() => {
+    if (!groupId) return null;
+    const now = Date.now();
+    return groupLessons
+      .filter((lesson) => lesson.groupId === groupId && new Date(lesson.endsAt).getTime() > now)
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ?? null;
+  }, [groupLessons, groupId]);
+
+  const studentSlots = useMemo(() => {
+    const students = group?.students ?? [];
+    return Array.from({ length: Math.max(4, students.length) }, (_, index) => students[index] ?? null);
+  }, [group]);
+
+  if (!groupId) return <div className="banner banner--error">Группа не найдена</div>;
+
+  function goBack() {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/groups');
+    }
+  }
+
+  async function addMembers(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    const emails = memberEmails.split(/[\n,;]+/).map((email) => email.trim()).filter(Boolean);
+    if (emails.length === 0) return;
+    try {
+      const updated = await api.groups.addMembers(groupId!, emails);
+      setGroup(updated);
+      setMemberEmails('');
+      setMessage(`Добавлено учеников: ${updated.students.length}.`);
+      await loadHomeworkStatuses(updated);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  function changeHomeworkDays(value: number) {
+    const next = Math.max(1, Math.min(31, value || 1));
+    setHomeworkDays(next);
+    setHomeworkFiles((current) => Array.from({ length: next }, (_, index) => current[index] ?? null));
+  }
+
+  function setHomeworkFile(index: number, file: File | null) {
+    setHomeworkFiles((current) => current.map((existing, currentIndex) => currentIndex === index ? file : existing));
+  }
+
+  function removeHomeworkFile(index: number) {
+    setHomeworkFile(index, null);
+    const input = document.getElementById(`group-homework-pdf-${index}`) as HTMLInputElement | null;
+    if (input) input.value = '';
+  }
+
+  function moveHomeworkFile(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= homeworkFiles.length) return;
+    setHomeworkFiles((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  async function createGroupHomework(event: FormEvent) {
+    event.preventDefault();
+    if (!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework) return;
+    setCreatingHomework(true);
+    setError(null);
+    setMessage(null);
+    try {
+      for (let index = 0; index < homeworkFiles.length; index += 1) {
+        const file = homeworkFiles[index];
+        if (!file) continue;
+        await api.groups.createPdfHomework(groupId!, homeworkDates[index], file);
+      }
+      setHomeworkFiles(Array.from({ length: homeworkDays }, () => null));
+      setMessage(`Готово: ${homeworkDays} домашних работ выдано всей группе.`);
+      await loadHomeworkStatuses(group);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setCreatingHomework(false);
+    }
+  }
+
+  async function deleteGroupHomework(row: GroupHomeworkRow) {
+    if (!group || deletingHomeworkKey) return;
+    const homeworks = group.students
+      .map((student) => findHomeworkForRow(homeworkByStudent[student.id] ?? [], row))
+      .filter((homework): homework is Homework => Boolean(homework));
+    if (homeworks.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Удалить «${row.filename}» у всей группы? Домашка исчезнет у ${homeworks.length} учеников. Если кто-то уже сдал её, сданная работа тоже будет удалена.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingHomeworkKey(row.key);
+    setError(null);
+    setMessage(null);
+    try {
+      await Promise.all(homeworks.map((homework) => api.homeworks.remove(homework.id)));
+      setMessage(`Домашка «${row.filename}» удалена у всей группы.`);
+      await loadHomeworkStatuses(group);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setDeletingHomeworkKey(null);
+    }
+  }
+
+  async function createCard(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    try {
+      const count = await api.groups.createCard(groupId!, startDate, question.trim(), answer.trim());
+      setQuestion('');
+      setAnswer('');
+      setMessage(`Карточка создана для ${count} учеников.`);
+      await loadHomeworkStatuses(group);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function makePreview(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    try {
+      setPreview(await api.cards.importPreview(rawText, '->', '\n'));
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function importCards() {
+    if (!preview || preview.cards.length === 0) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const created = await api.groups.importCards(groupId!, startDate, preview.cards);
+      const studentCount = group?.students.length ?? 0;
+      setMessage(`Готово: ${preview.cards.length} карточек выдано ${studentCount} ученикам (${created} индивидуальных карточек).`);
+      setPreview(null);
+      setRawText('');
+      await loadHomeworkStatuses(group);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  return (
+    <div className="group-detail-dashboard">
+      <button className="group-detail-back" type="button" onClick={goBack}>← <span>Назад</span></button>
+
+      <div className="group-detail-heading">
+        <div>
+          <h1>{group?.name ?? 'Группа'}</h1>
+          <p>Управляйте учениками, домашними заданиями и карточками для всей группы.</p>
+        </div>
+      </div>
+
+      {error && <div className="banner banner--error">{error}</div>}
+      {message && <div className="banner banner--success">{message}</div>}
+
+      <div className="group-summary-grid">
+        <button type="button" className="group-summary-card" onClick={() => setPageTab('students')}>
+          <div className="group-summary-card__icon group-summary-card__icon--orange">♙</div>
+          <div><strong>{group?.students.length ?? 0}</strong><span>ученика</span></div>
+          <small>Перейти к ученикам →</small>
+        </button>
+        <button type="button" className="group-summary-card" onClick={() => setPageTab('homework')}>
+          <div className="group-summary-card__icon group-summary-card__icon--yellow">▤</div>
+          <div><strong>{activeHomeworkCount}</strong><span>активное ДЗ</span></div>
+          <small>Перейти к домашним заданиям →</small>
+        </button>
+        <div className="group-summary-card group-summary-card--lesson">
+          <div className="group-summary-card__icon group-summary-card__icon--green">▣</div>
+          <div>
+            <span>Следующий урок</span>
+            <strong className="group-summary-card__lesson">{nextLesson ? formatNextLesson(nextLesson.startsAt) : '—'}</strong>
+          </div>
+          {nextLesson ? (
+            <small><Link to={`/teacher/lessons/${encodeURIComponent(nextLesson.eventId)}`}>{nextLesson.title} · открыть урок →</Link></small>
+          ) : (
+            <small>Ближайших уроков группы в календаре нет</small>
+          )}
+        </div>
+      </div>
+
+      <div className="group-detail-tabs">
+        <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>▤ <span>Обзор</span></button>
+        <button className={pageTab === 'students' ? 'active' : ''} onClick={() => setPageTab('students')}>♙ <span>Ученики</span></button>
+        <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}>▣ <span>Домашние задания</span></button>
+        <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}>▥ <span>Карточки</span></button>
+        <div className="group-detail-tabs__spacer" />
+        <button className="group-message-btn" type="button" disabled>✉ <span>Написать группе</span></button>
+        <button className="teacher-more-btn" type="button" title="Дополнительно">⋮</button>
+      </div>
+
+      {pageTab === 'overview' && (
+        <>
+          <div className="group-overview-grid">
+            <section className="group-overview-card">
+              <div className="group-overview-card__header">
+                <div>
+                  <h2>Обзор домашних заданий</h2>
+                  <p>✓ — ученик сдал PDF, ✕ — ещё не сдал.</p>
+                </div>
+                <button className="group-refresh-btn" type="button" onClick={() => loadHomeworkStatuses()} disabled={loadingHomeworkStatus}>
+                  {loadingHomeworkStatus ? 'Обновляем…' : 'Обновить'}
+                </button>
+              </div>
+
+              {!group || loadingHomeworkStatus ? (
+                <p className="muted">{t('common.loading')}</p>
+              ) : groupHomeworkRows.length === 0 ? (
+                <div className="teacher-empty-state">Групповых PDF-домашек пока нет.</div>
+              ) : (
+                <div className="group-homework-table-wrap">
+                  <table className="group-homework-table group-homework-table--compact">
+                    <thead>
+                      <tr>
+                        <th>Название задания</th>
+                        <th>Дата задания</th>
+                        {studentSlots.map((student, index) => student ? (
+                          <th key={student.id}>
+                            <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
+                            <span>{student.fullName}</span>
+                          </th>
+                        ) : (
+                          <th key={`empty-homework-slot-${index}`}>
+                            <span className="group-table-avatar" style={{ opacity: 0.45 }}>+</span>
+                            <span className="muted">Свободно</span>
+                          </th>
+                        ))}
+                        <th aria-label="Действия" style={{ width: 54 }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupHomeworkRows.map((row) => (
+                        <tr key={row.key}>
+                          <td><span className="group-pdf-icon">PDF</span><span>{row.filename}</span></td>
+                          <td>{formatDate(row.startDate)}</td>
+                          {studentSlots.map((student, index) => {
+                            if (!student) return <td key={`empty-homework-status-${index}`}><span className="muted">—</span></td>;
+                            const homework = findHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
+                            return (
+                              <td key={student.id}>
+                                {homework ? (
+                                  <Link className={`group-status-dot ${homework.submitted ? 'is-done' : 'is-missed'}`} to={`/teacher/students/${student.id}/homeworks/${homework.id}`}>
+                                    {homework.submitted ? '✓' : '✕'}
+                                  </Link>
+                                ) : <span className="muted">—</span>}
+                              </td>
+                            );
+                          })}
+                          <td style={{ position: 'relative', textAlign: 'right' }}>
+                            <details style={{ position: 'relative', display: 'inline-block' }}>
+                              <summary
+                                aria-label="Действия с домашкой"
+                                title="Действия"
+                                style={{ cursor: 'pointer', listStyle: 'none', fontSize: 24, lineHeight: 1, padding: '8px 10px', userSelect: 'none' }}
+                              >⋮</summary>
+                              <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, minWidth: 170, padding: 6, background: '#fff', border: '1px solid #eadfd8', borderRadius: 12, boxShadow: '0 10px 30px rgba(15,23,42,.12)' }}>
+                                <button
+                                  type="button"
+                                  disabled={deletingHomeworkKey === row.key}
+                                  onClick={() => void deleteGroupHomework(row)}
+                                  style={{ width: '100%', border: 0, background: 'transparent', color: '#c2410c', fontWeight: 700, textAlign: 'left', padding: '10px 12px', cursor: 'pointer' }}
+                                >
+                                  {deletingHomeworkKey === row.key ? 'Удаляем…' : 'Удалить домашку'}
+                                </button>
+                              </div>
+                            </details>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="group-overview-card">
+              <div className="group-overview-card__header">
+                <div>
+                  <h2>Обзор карточек</h2>
+                  <p>Каждая строка — день повторения. ✓ — дневные карточки выполнены, ✕ — не завершены.</p>
+                </div>
+              </div>
+
+              {!group || loadingHomeworkStatus ? (
+                <p className="muted">{t('common.loading')}</p>
+              ) : groupCardRows.length === 0 ? (
+                <div className="teacher-empty-state">Групповых карточек пока нет.</div>
+              ) : (
+                <div className="group-homework-table-wrap">
+                  <table className="group-homework-table group-homework-table--compact">
+                    <thead>
+                      <tr>
+                        <th>Карточки на день</th>
+                        <th>Дата повторения</th>
+                        {studentSlots.map((student, index) => student ? (
+                          <th key={student.id}>
+                            <span className="group-table-avatar">{student.fullName.charAt(0).toUpperCase()}</span>
+                            <span>{student.fullName}</span>
+                          </th>
+                        ) : (
+                          <th key={`empty-card-slot-${index}`}>
+                            <span className="group-table-avatar" style={{ opacity: 0.45 }}>+</span>
+                            <span className="muted">Свободно</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupCardRows.map((row) => (
+                        <tr key={row.key}>
+                          <td><span className="group-card-set-icon">▥</span><span>Карточки · {row.totalCards} шт.</span></td>
+                          <td>{formatDate(row.startDate)}</td>
+                          {studentSlots.map((student, index) => {
+                            if (!student) return <td key={`empty-card-status-${index}`}><span className="muted">—</span></td>;
+                            const history = findReviewHistoryForRow(reviewHistoryByStudent[student.id] ?? [], row);
+                            const fallbackHomework = findCardHomeworkForRow(homeworkByStudent[student.id] ?? [], row);
+                            const completed = history ? history.status === 'COMPLETED' : fallbackHomework?.status === 'COMPLETED';
+                            const hasData = Boolean(history || fallbackHomework);
+                            const title = history
+                              ? `Выполнено ${history.completedCount} из ${history.dueCount}`
+                              : fallbackHomework
+                                ? `Набор назначен: ${fallbackHomework.totalCards} карточек`
+                                : undefined;
+                            return (
+                              <td key={student.id}>
+                                {hasData ? (
+                                  <span className={`group-status-dot ${completed ? 'is-done' : 'is-missed'}`} title={title}>
+                                    {completed ? '✓' : '✕'}
+                                  </span>
+                                ) : <span className="muted">—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="group-tip">💡 <strong>Совет:</strong>&nbsp; используйте вкладки выше, чтобы управлять учениками, домашними заданиями и карточками отдельно.</div>
+        </>
+      )}
+
+      {pageTab === 'students' && (
+        <section className="group-members-card">
+          <div className="group-members-card__header">
+            <div>
+              <h2>Ученики группы</h2>
+              <p>Все ученики этой группы. Здесь можно открыть профиль ученика или добавить нового.</p>
+            </div>
+            <span>{group?.students.length ?? 0} учеников</span>
+          </div>
+          <div className="group-member-list">
+            {group?.students.map((student, index) => (
+              <div className="group-member-row" key={student.id}>
+                <span className={`teacher-member-avatar teacher-member-avatar--${index % 4}`}>{student.fullName.charAt(0).toUpperCase()}</span>
+                <div><strong>{student.fullName}</strong><span>{student.email ?? 'Email не указан'}</span></div>
+                <Link to={`/students/${student.id}`} className="group-member-open">Открыть ученика</Link>
+              </div>
+            ))}
+          </div>
+          <form className="group-add-member" onSubmit={addMembers}>
+            <input className="input" value={memberEmails} onChange={(e) => setMemberEmails(e.target.value)} placeholder="Email нового ученика" required />
+            <button className="btn" type="submit">Добавить</button>
+          </form>
+        </section>
+      )}
+
+      {pageTab === 'homework' && (
+        <section className="group-work-card">
+          <h2>Задать PDF-домашку всей группе</h2>
+          <form className="stack" onSubmit={createGroupHomework}>
+            <div className="group-homework-options">
+              <label className="field"><span className="field__label">Первый день</span><input className="input" type="date" value={homeworkStartDate} onChange={(e) => setHomeworkStartDate(e.target.value)} disabled={creatingHomework} required /></label>
+              <label className="field"><span className="field__label">На сколько дней</span><input className="input" type="number" min={1} max={31} value={homeworkDays} onChange={(e) => changeHomeworkDays(Number(e.target.value))} disabled={creatingHomework} required /></label>
+            </div>
+            <div className="group-day-grid">
+              {homeworkDates.map((date, index) => {
+                const file = homeworkFiles[index];
+                return (
+                  <div key={`${date}-${index}`} className="group-day-card">
+                    <div className="group-day-card__head">
+                      <div><strong>День {index + 1}</strong><span>{formatDate(date)}</span></div>
+                      {file && <div><button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button><button type="button" className="mini-icon-btn" disabled={index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button><button type="button" className="mini-delete-btn" onClick={() => removeHomeworkFile(index)}>Удалить</button></div>}
+                    </div>
+                    <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 360px' }}>
+                        <input
+                          id={`group-homework-pdf-${index}`}
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          disabled={creatingHomework}
+                          onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)}
+                          style={{ display: 'none' }}
+                        />
+                        <label
+                          htmlFor={`group-homework-pdf-${index}`}
+                          className="input"
+                          style={{ display: 'flex', alignItems: 'center', minHeight: 46, cursor: creatingHomework ? 'default' : 'pointer', color: file ? '#172033' : '#6d7890' }}
+                        >
+                          {file ? file.name : 'Выбрать PDF с компьютера'}
+                        </label>
+                      </div>
+                      <div style={{ paddingBottom: 1 }}>
+                        <GoogleDrivePdfPicker disabled={creatingHomework} onSelect={(driveFile) => setHomeworkFile(index, driveFile)} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {!allHomeworkFilesSelected && <div className="banner banner--info">Нужно выбрать PDF для каждого дня — с компьютера или из Google Drive.</div>}
+            <button className="btn group-submit-btn" type="submit" disabled={!group || group.students.length === 0 || !allHomeworkFilesSelected || creatingHomework}>{creatingHomework ? 'Создаём домашки…' : `Задать группе на ${homeworkDays} дн.`}</button>
+          </form>
+        </section>
+      )}
+
+      {pageTab === 'cards' && (
+        <section className="group-work-card">
+          <h2>Выдать карточки всей группе</h2>
+          <label className="field"><span className="field__label">Дата начала</span><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required /></label>
+          <div className="group-card-tabs"><button type="button" className={cardTab === 'manual' ? 'active' : ''} onClick={() => setCardTab('manual')}>Вручную</button><button type="button" className={cardTab === 'import' ? 'active' : ''} onClick={() => setCardTab('import')}>Импорт</button></div>
+          {cardTab === 'manual' ? (
+            <form onSubmit={createCard}><label className="field"><span className="field__label">Вопрос</span><input className="input" value={question} onChange={(e) => setQuestion(e.target.value)} required /></label><label className="field"><span className="field__label">Правильный ответ</span><input className="input" value={answer} onChange={(e) => setAnswer(e.target.value)} required /></label><button className="btn" type="submit" disabled={!group || group.students.length === 0}>Добавить всей группе</button></form>
+          ) : (
+            <div><form onSubmit={makePreview}><label className="field"><span className="field__label">Текст для импорта</span><textarea className="textarea" value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder={'2 + 2 -> 4 | 3 | 5 | 6\n3 + 3 -> 6 | 5 | 7 | 9'} required /></label><button className="btn btn--secondary" type="submit">Предпросмотр</button></form>{preview && <div className="group-preview"><h3>Карточек: {preview.cards.length}</h3>{preview.cards.map((card, index) => <div className="list-row" key={index}><div><div className="list-row__title">{card.question}</div><div className="muted">Ответ: {card.correctAnswer}</div></div></div>)}<button className="btn" type="button" onClick={importCards} disabled={!group || group.students.length === 0 || preview.cards.length === 0}>Выдать {preview.cards.length} карточек всей группе</button></div>}</div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function findHomeworkForRow(homeworks: Homework[], row: GroupHomeworkRow) {
+  return homeworks.find((homework) => homework.hasWorksheet && homework.startDate === row.startDate && (homework.worksheetFilename ?? 'Домашка в PDF') === row.filename && (homework.worksheetPageCount ?? null) === row.pageCount);
+}
+
+function findCardHomeworkForRow(homeworks: Homework[], row: GroupCardRow) {
+  return homeworks.find((homework) => homework.totalCards > 0 && homework.startDate === row.startDate);
+}
+
+function findReviewHistoryForRow(history: DailyReviewHistoryItem[], row: GroupCardRow) {
+  return history.find((item) => item.date === row.startDate && item.dueCount > 0);
+}
+
+function addDays(dateString: string, days: number) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
+}
+
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDate(date: string) {
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${date}T00:00:00`));
+}
+
+function formatNextLesson(value: string) {
+  const lessonDate = new Date(value);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const lessonKey = localDateString(lessonDate);
+  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(lessonDate);
+  if (lessonKey === localDateString(today)) return `Сегодня, ${time}`;
+  if (lessonKey === localDateString(tomorrow)) return `Завтра, ${time}`;
+  return new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(lessonDate);
+}

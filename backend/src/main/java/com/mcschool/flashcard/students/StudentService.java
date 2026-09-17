@@ -9,16 +9,24 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.notifications.NotificationService;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.students.dto.CreateStudentRequest;
+import com.mcschool.flashcard.students.dto.LinkParentRequest;
+import com.mcschool.flashcard.students.dto.ParentInvitationResponse;
 import com.mcschool.flashcard.students.dto.PilotDueCardResponse;
 import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
+import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentTranscriptDriveFolderRequest;
 import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
 import com.mcschool.flashcard.users.UserStatus;
+import com.mcschool.flashcard.users.dto.ChangePasswordRequest;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -28,60 +36,153 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Student accounts are always owned by the teacher who created them; every
- * operation here is scoped to the calling teacher.
- */
 @Service
 public class StudentService {
 
     private static final Logger log = LoggerFactory.getLogger(StudentService.class);
+    private static final SecureRandom USERNAME_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final CardRepository cardRepository;
     private final NotificationService notificationService;
     private final DailyReviewHistoryService historyService;
+    private final PasswordEncoder passwordEncoder;
     private final ZoneId reviewReminderZone;
 
     public StudentService(UserRepository userRepository, CardRepository cardRepository,
                           NotificationService notificationService,
                           DailyReviewHistoryService historyService,
+                          PasswordEncoder passwordEncoder,
                           @Value("${app.notifications.review-reminders.zone}") String reviewReminderZone) {
         this.userRepository = userRepository;
         this.cardRepository = cardRepository;
         this.notificationService = notificationService;
         this.historyService = historyService;
+        this.passwordEncoder = passwordEncoder;
         this.reviewReminderZone = ZoneId.of(reviewReminderZone);
     }
 
     @Transactional
     public StudentInvitationResponse createStudent(AuthenticatedUser teacher, CreateStudentRequest request) {
-        String email = request.email().trim().toLowerCase(Locale.ROOT);
-        if (userRepository.existsByEmail(email)) {
-            throw new ConflictException("An account with this email already exists");
-        }
+        String email = normalizeOptionalEmail(request.email());
         User teacherEntity = userRepository.findById(teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
         String token = Invitations.newToken();
         Instant expiresAt = Invitations.expiry(Instant.now());
-        User student = userRepository.save(
-                User.invitedStudent(request.fullName().trim(), email, teacherEntity, token, expiresAt));
-        log.info("Sending student invitation email for studentId={} email={}", student.getId(), student.getEmail());
-        notificationService.sendInvitation(student, token);
-        log.info("Finished student invitation email attempt for studentId={} email={}",
-                student.getId(), student.getEmail());
+        String fullName = request.fullName().trim();
+
+        User student;
+        if (email == null) {
+            student = userRepository.save(User.invitedStudent(fullName, null, teacherEntity, token, expiresAt));
+        } else {
+            student = userRepository.findByEmail(email)
+                    .map(existing -> restoreDeletedStudent(existing, teacherEntity, fullName, token, expiresAt))
+                    .orElseGet(() -> userRepository.save(
+                            User.invitedStudent(fullName, email, teacherEntity, token, expiresAt)));
+
+            notificationService.sendInvitation(student, token);
+        }
+
+        ensureUsername(student);
         return new StudentInvitationResponse(UserResponse.from(student), token, expiresAt);
     }
 
-    /** Lists only the calling teacher's own students — teachers never see each other's students. */
-    @Transactional(readOnly = true)
+    @Transactional
+    public ParentInvitationResponse linkParent(AuthenticatedUser teacher, UUID studentId, LinkParentRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        String email = normalizeOptionalEmail(request.email());
+        if (email == null) {
+            throw new IllegalArgumentException("Parent email is required");
+        }
+
+        User parent = userRepository.findByEmail(email).orElse(null);
+        String token = null;
+        Instant expiresAt = null;
+
+        if (parent == null) {
+            token = Invitations.newToken();
+            expiresAt = Invitations.expiry(Instant.now());
+            parent = userRepository.save(User.invitedParent(request.fullName().trim(), email, token, expiresAt));
+            notificationService.sendInvitation(parent, token);
+        } else {
+            if (parent.getRole() != Role.PARENT || parent.isArchived()) {
+                throw new ConflictException("An account with this email already exists and is not a parent account");
+            }
+            if (parent.getStatus() == UserStatus.INVITED) {
+                token = parent.getInvitationToken();
+                expiresAt = parent.getInvitationExpiresAt();
+            }
+        }
+
+        student.linkParent(parent);
+        return new ParentInvitationResponse(UserResponse.from(parent), token, expiresAt);
+    }
+
+    private User restoreDeletedStudent(User existing, User teacher, String fullName,
+                                       String token, Instant expiresAt) {
+        if (existing.getRole() != Role.STUDENT || !existing.isArchived()
+                || existing.getTeacher() == null || !existing.getTeacher().getId().equals(teacher.getId())) {
+            throw new ConflictException("An account with this email already exists");
+        }
+        existing.restoreAsInvitedStudent(fullName, teacher, token, expiresAt);
+        return existing;
+    }
+
+    @Transactional
     public List<StudentListResponse> listStudents(AuthenticatedUser teacher) {
-        return userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()).stream()
+        return userRepository.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(teacher.id(), Role.STUDENT).stream()
+                .peek(this::ensureUsername)
                 .map(StudentListResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public StudentListResponse getStudent(AuthenticatedUser teacher, UUID studentId) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        ensureUsername(student);
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
+    public StudentListResponse updateStudentName(AuthenticatedUser teacher, UUID studentId,
+                                                 UpdateStudentNameRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.changeFullName(request.fullName().trim());
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
+    public void resetStudentPassword(AuthenticatedUser teacher, UUID studentId, ChangePasswordRequest request) {
+        User student = requireOwnedActiveStudent(teacher.id(), studentId);
+        student.changePasswordHash(passwordEncoder.encode(request.password()));
+    }
+
+    @Transactional
+    public StudentListResponse updateGoogleDriveFolder(AuthenticatedUser teacher, UUID studentId,
+                                                       UpdateStudentDriveFolderRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.changeGoogleDriveFolderUrl(request.googleDriveFolderUrl());
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
+    public StudentListResponse updateGoogleDriveHomeworkFolder(AuthenticatedUser teacher, UUID studentId,
+                                                               UpdateStudentHomeworkDriveFolderRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.changeGoogleDriveHomeworkFolderId(request.googleDriveHomeworkFolderId());
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
+    public StudentListResponse updateGoogleDriveTranscriptFolder(AuthenticatedUser teacher, UUID studentId,
+                                                                  UpdateStudentTranscriptDriveFolderRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        student.changeGoogleDriveTranscriptFolderId(request.googleDriveTranscriptFolderId());
+        return StudentListResponse.from(student);
     }
 
     @Transactional
@@ -91,7 +192,7 @@ public class StudentService {
         long dueCount = cardRepository.countDueCards(studentId, today);
         if (dueCount > 0) {
             historyService.recordDueSnapshot(student, today, dueCount);
-            notificationService.sendReviewReminder(student, dueCount);
+            notificationService.sendDailyTaskReminder(student, dueCount, 0);
             return new TestReviewReminderResponse(studentId, dueCount, true);
         }
         return new TestReviewReminderResponse(studentId, 0, false);
@@ -107,20 +208,19 @@ public class StudentService {
         return PilotDueCardResponse.from(cardRepository.save(card));
     }
 
-    /**
-     * Soft-deletes only a student owned by the calling teacher. Cards are archived
-     * so they disappear from active study/teacher screens, while the student row,
-     * cards, and study-session rows remain available for historical references.
-     */
     @Transactional
     public void deleteStudent(AuthenticatedUser teacher, UUID studentId) {
-        User student = userRepository.findById(studentId)
-                .filter(u -> u.getRole() == Role.STUDENT)
-                .filter(u -> !u.isArchived())
-                .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacher.id()))
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        User student = requireOwnedStudent(teacher.id(), studentId);
         cardRepository.archiveAllByStudentId(studentId);
         student.archive();
+    }
+
+    private User requireOwnedStudent(UUID teacherId, UUID studentId) {
+        return userRepository.findById(studentId)
+                .filter(u -> u.getRole() == Role.STUDENT)
+                .filter(u -> !u.isArchived())
+                .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacherId))
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
     }
 
     private User requireOwnedActiveStudent(UUID teacherId, UUID studentId) {
@@ -132,7 +232,41 @@ public class StudentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Active student not found"));
     }
 
+    private void ensureUsername(User student) {
+        if (student.getRole() != Role.STUDENT || (student.getUsername() != null && !student.getUsername().isBlank())) {
+            return;
+        }
+        String base = usernameBase(student.getFullName());
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            String candidate = base + (100 + USERNAME_RANDOM.nextInt(900));
+            if (!userRepository.existsByUsernameIgnoreCase(candidate)) {
+                student.assignUsername(candidate);
+                return;
+            }
+        }
+        throw new IllegalStateException("Could not generate a unique student username");
+    }
+
+    private static String usernameBase(String fullName) {
+        String first = fullName == null ? "student" : fullName.trim().split("\\s+")[0];
+        String cleaned = first.replaceAll("[^\\p{L}\\p{N}]", "");
+        if (cleaned.isBlank()) {
+            cleaned = "student";
+        }
+        if (cleaned.length() > 40) {
+            cleaned = cleaned.substring(0, 40);
+        }
+        return cleaned;
+    }
+
     private LocalDate reviewToday() {
         return LocalDate.now(reviewReminderZone);
+    }
+
+    private static String normalizeOptionalEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

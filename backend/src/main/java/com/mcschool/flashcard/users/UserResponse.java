@@ -7,12 +7,14 @@ public record UserResponse(
         UUID id,
         String fullName,
         String email,
+        String username,
         Role role,
         UserStatus status,
-        Language preferredLanguage
+        Language preferredLanguage,
+        String googleDriveTrialTranscriptFolderId
 ) {
     public static UserResponse from(User user) {
-        return new UserResponse(user.getId(), user.getFullName(), user.getEmail(),
-                user.getRole(), user.getStatus(), user.getPreferredLanguage());
+        return new UserResponse(user.getId(), user.getFullName(), user.getEmail(), user.getUsername(),
+                user.getRole(), user.getStatus(), user.getPreferredLanguage(), user.getGoogleDriveTrialTranscriptFolderId());
     }
 }

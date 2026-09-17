@@ -5,29 +5,24 @@ import { homePathForRole } from '../auth/roleRoutes';
 import { useI18n } from '../i18n/I18nContext';
 import { LanguageToggle } from '../components/LanguageToggle';
 
-/**
- * Invitation acceptance. The invitation link carries the token as ?token=…,
- * but it can also be pasted manually (until invitation emails are wired up the
- * teacher/admin shares the token by hand).
- */
+/** Invitation acceptance. Students may use the generated school login without email. */
 export function ActivatePage() {
   const { activate } = useAuth();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [token, setToken] = useState(searchParams.get('token') ?? '');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(false);
     setSubmitting(true);
     try {
-      const activated = await activate(token.trim(), password);
+      const activated = await activate(token.trim(), email.trim(), password);
       navigate(homePathForRole(activated.role), { replace: true });
     } catch {
       setError(true);
@@ -41,7 +36,11 @@ export function ActivatePage() {
       <form className="auth__card" onSubmit={onSubmit}>
         <div className="auth__brand">{t('app.name')}</div>
         <h1>{t('activate.title')}</h1>
-        <p className="muted">{t('activate.subtitle')}</p>
+        <p className="muted">
+          {language === 'DE'
+            ? 'Schüler können die E-Mail leer lassen und später mit ihrem Schul-Login anmelden.'
+            : 'Ученику email можно не указывать: после активации он сможет входить по школьному логину.'}
+        </p>
         {error && <div className="banner banner--error">{t('activate.error')}</div>}
         <label className="field">
           <span className="field__label">{t('activate.tokenLabel')}</span>
@@ -51,6 +50,16 @@ export function ActivatePage() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             required
+          />
+        </label>
+        <label className="field">
+          <span className="field__label">{language === 'DE' ? 'E-Mail (für Schüler optional)' : 'Email (для ученика необязательно)'}</span>
+          <input
+            className="input"
+            type="email"
+            value={email}
+            autoComplete="email"
+            onChange={(e) => setEmail(e.target.value)}
           />
         </label>
         <label className="field">

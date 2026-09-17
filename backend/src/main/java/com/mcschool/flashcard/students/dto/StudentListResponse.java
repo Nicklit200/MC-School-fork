@@ -6,22 +6,46 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserStatus;
 import java.util.UUID;
 
-/**
- * Teacher-owned student row. Includes the invitation token only while the
- * student is still invited so the owning teacher can copy an activation link.
- */
+/** Teacher-owned student row, including optional linked parent account. */
 public record StudentListResponse(
         UUID id,
         String fullName,
         String email,
+        String username,
         Role role,
         UserStatus status,
         Language preferredLanguage,
-        String invitationToken
+        String invitationToken,
+        String googleDriveFolderUrl,
+        String googleDriveHomeworkFolderId,
+        String googleDriveTranscriptFolderId,
+        String chatGptProjectUrl,
+        UUID parentId,
+        String parentFullName,
+        String parentEmail,
+        UserStatus parentStatus,
+        String parentInvitationToken
 ) {
     public static StudentListResponse from(User student) {
-        return new StudentListResponse(student.getId(), student.getFullName(), student.getEmail(),
-                student.getRole(), student.getStatus(), student.getPreferredLanguage(),
-                student.getStatus() == UserStatus.INVITED ? student.getInvitationToken() : null);
+        User parent = student.getParent();
+        return new StudentListResponse(
+                student.getId(),
+                student.getFullName(),
+                student.getEmail(),
+                student.getUsername(),
+                student.getRole(),
+                student.getStatus(),
+                student.getPreferredLanguage(),
+                student.getStatus() == UserStatus.INVITED ? student.getInvitationToken() : null,
+                student.getGoogleDriveFolderUrl(),
+                student.getGoogleDriveHomeworkFolderId(),
+                student.getGoogleDriveTranscriptFolderId(),
+                student.getChatGptProjectUrl(),
+                parent == null ? null : parent.getId(),
+                parent == null ? null : parent.getFullName(),
+                parent == null ? null : parent.getEmail(),
+                parent == null ? null : parent.getStatus(),
+                parent != null && parent.getStatus() == UserStatus.INVITED ? parent.getInvitationToken() : null
+        );
     }
 }

@@ -30,6 +30,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 class StudentServiceTest {
 
@@ -37,8 +38,10 @@ class StudentServiceTest {
     private final CardRepository cardRepository = mock(CardRepository.class);
     private final NotificationService notificationService = mock(NotificationService.class);
     private final DailyReviewHistoryService historyService = mock(DailyReviewHistoryService.class);
+    private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final StudentService studentService =
-            new StudentService(userRepository, cardRepository, notificationService, historyService, "Europe/Berlin");
+            new StudentService(userRepository, cardRepository, notificationService, historyService,
+                    passwordEncoder, "Europe/Berlin");
 
     private final User teacherEntity = User.invitedTeacher("Teacher", "teacher@test.local",
             "token", Instant.now().plusSeconds(3600));
@@ -59,7 +62,6 @@ class StudentServiceTest {
         assertThat(response.student().email()).isEqualTo("student@test.local");
         assertThat(response.invitationToken()).isNotBlank();
         assertThat(response.invitationExpiresAt()).isAfter(Instant.now());
-        // The invited student is notified so they can set a password.
         verify(notificationService).sendInvitation(any(User.class), any(String.class));
     }
 
@@ -130,7 +132,7 @@ class StudentServiceTest {
         assertThat(response.dueCount()).isEqualTo(2L);
         assertThat(response.reminderAttempted()).isTrue();
         verify(historyService).recordDueSnapshot(student, today, 2L);
-        verify(notificationService).sendReviewReminder(student, 2L);
+        verify(notificationService).sendDailyTaskReminder(student, 2L, 0L);
     }
 
     @Test
@@ -145,7 +147,7 @@ class StudentServiceTest {
         assertThat(response.dueCount()).isZero();
         assertThat(response.reminderAttempted()).isFalse();
         verify(historyService, never()).recordDueSnapshot(any(), any(), anyLong());
-        verify(notificationService, never()).sendReviewReminder(any(), anyLong());
+        verify(notificationService, never()).sendDailyTaskReminder(any(), anyLong(), anyLong());
     }
 
     @Test

@@ -9,9 +9,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmail(String email);
 
+    Optional<User> findByUsernameIgnoreCase(String username);
+
     Optional<User> findByInvitationToken(String invitationToken);
 
+    Optional<User> findByGoogleCalendarOauthState(String googleCalendarOauthState);
+
     boolean existsByEmail(String email);
+
+    boolean existsByUsernameIgnoreCase(String username);
 
     boolean existsByRole(Role role);
 
@@ -20,4 +26,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(Role role, UserStatus status);
 
     List<User> findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(UUID teacherId);
+
+    List<User> findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(UUID teacherId, Role role);
+
+    List<User> findAllByParentIdAndArchivedFalseOrderByFullNameAsc(UUID parentId);
 }

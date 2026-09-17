@@ -1,30 +1,49 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { CardSummary, StudentInvitation, StudentListItem } from '../../api/types';
+import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { InvitationNotice } from '../../components/InvitationNotice';
 
-/** Teacher home: the list of their students with each student's active-card count. */
+type TodayCompletion = {
+  cards: 'done' | 'pending' | 'none';
+  homework: 'done' | 'pending' | 'none';
+};
+
 export function StudentsPage() {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
+  const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
   const [copiedStudentId, setCopiedStudentId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function reload() {
     const list = await api.students.list();
     setStudents(list);
-    const entries = await Promise.all(
-      list.map(async (s) => [s.id, await api.cards.summaryForStudent(s.id)] as const),
+    const today = localDateString(new Date());
+    const details = await Promise.all(
+      list.map(async (student) => {
+        const [summary, homeworks, reviewHistory] = await Promise.all([
+          api.cards.summaryForStudent(student.id),
+          api.homeworks.listForStudent(student.id),
+          api.students.reviewHistory(student.id),
+        ]);
+        return {
+          studentId: student.id,
+          summary,
+          completion: buildTodayCompletion(today, summary, homeworks, reviewHistory),
+        };
+      }),
     );
-    setSummaries(Object.fromEntries(entries));
+    setSummaries(Object.fromEntries(details.map((item) => [item.studentId, item.summary])));
+    setTodayCompletion(Object.fromEntries(details.map((item) => [item.studentId, item.completion])));
     setLoading(false);
   }
 
@@ -52,84 +71,189 @@ export function StudentsPage() {
   }
 
   async function copyInvitationLink(student: StudentListItem) {
-    if (!student.invitationToken) {
-      return;
-    }
-    const link = `${window.location.origin}/activate?token=${encodeURIComponent(student.invitationToken)}`;
-    await navigator.clipboard.writeText(link);
+    if (!student.invitationToken) return;
+    await copyActivationToken(student.invitationToken);
     setCopiedStudentId(student.id);
+    setOpenMenuId(null);
     window.setTimeout(() => setCopiedStudentId((current) => (current === student.id ? null : current)), 2000);
   }
 
-  async function deleteStudent(student: StudentListItem) {
-    if (!window.confirm(t('students.deleteConfirm', { name: student.fullName }))) {
+  async function renameStudent(student: StudentListItem) {
+    const nextName = window.prompt(language === 'DE' ? 'Neuer Schülername' : 'Новое имя ученика', student.fullName);
+    if (!nextName || nextName.trim() === student.fullName) {
+      setOpenMenuId(null);
       return;
     }
     setError(null);
     try {
-      await api.students.remove(student.id);
+      await api.students.rename(student.id, nextName.trim());
+      setOpenMenuId(null);
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
     }
   }
 
-  return (
-    <div>
-      <h1>{t('students.title')}</h1>
-      {error && <div className="banner banner--error">{error}</div>}
+  async function resetStudentPassword(student: StudentListItem) {
+    const password = window.prompt(
+      language === 'DE'
+        ? `Neues Passwort für ${student.fullName} (mindestens 6 Zeichen)`
+        : `Новый пароль для ${student.fullName} (минимум 6 символов)`,
+      '',
+    );
+    if (password == null) return;
+    if (password.length < 6) {
+      window.alert(language === 'DE' ? 'Das Passwort muss mindestens 6 Zeichen haben.' : 'Пароль должен содержать минимум 6 символов.');
+      return;
+    }
+    setError(null);
+    try {
+      await api.students.resetPassword(student.id, password);
+      setOpenMenuId(null);
+      window.alert(language === 'DE'
+        ? `Passwort geändert. Login: ${student.username ?? student.email ?? '—'}`
+        : `Пароль изменён. Логин: ${student.username ?? student.email ?? '—'}`);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
 
-      <div className="panel">
-        <h2>{t('students.create')}</h2>
-        <form onSubmit={onCreate}>
-          <div className="row">
-            <label className="field">
-              <span className="field__label">{t('common.name')}</span>
-              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-            </label>
-            <label className="field">
-              <span className="field__label">{t('common.email')}</span>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </label>
-          </div>
-          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>{t('students.emailHint')}</p>
-          <button className="btn" type="submit">{t('students.create')}</button>
-        </form>
-        {invitation && (
-          <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />
-        )}
+  async function deleteStudent(student: StudentListItem) {
+    if (!window.confirm(t('students.deleteConfirm', { name: student.fullName }))) return;
+    setError(null);
+    try {
+      await api.students.remove(student.id);
+      setOpenMenuId(null);
+      await reload();
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function copyActivationToken(token: string) {
+    const link = `${window.location.origin}/activate?token=${encodeURIComponent(token)}`;
+    await navigator.clipboard.writeText(link);
+  }
+
+  return (
+    <div className="teacher-students-page" onClick={() => openMenuId && setOpenMenuId(null)}>
+      <div className="teacher-page-heading">
+        <h1>{language === 'DE' ? 'Meine Schüler' : 'Мои ученики'}</h1>
+        <p>{language === 'DE' ? 'Verwalte Schüler und ihren Zugriff auf Materialien' : 'Управляйте своими учениками и их доступом к материалам'}</p>
       </div>
 
-      {loading ? (
-        <p className="muted">{t('common.loading')}</p>
-      ) : students.length === 0 ? (
-        <p className="muted">{t('students.empty')}</p>
-      ) : (
-        students.map((student) => (
-          <div key={student.id} className="list-row">
-            <div>
-              <div className="list-row__title">{student.fullName}</div>
-              <div className="muted">{student.email}</div>
-            </div>
-            <div className="muted">
-              {activeCount(summaries[student.id])} {t('students.activeCards')}
-            </div>
-            <div className="list-row__actions">
-              <Link to={`/students/${student.id}`} className="btn btn--secondary">
-                {t('students.cardsButton')}
-              </Link>
-              {student.status === 'INVITED' && student.invitationToken && (
-                <button className="btn btn--ghost" type="button" onClick={() => copyInvitationLink(student)}>
-                  {copiedStudentId === student.id ? t('students.inviteCopied') : t('students.copyInvite')}
-                </button>
-              )}
-              <button className="btn btn--danger" type="button" onClick={() => deleteStudent(student)}>
-                {t('common.delete')}
-              </button>
-            </div>
+      {error && <div className="banner banner--error">{error}</div>}
+
+      <section className="teacher-create-student">
+        <h2>{language === 'DE' ? 'Neuen Schüler hinzufügen' : 'Добавить нового ученика'}</h2>
+        <form onSubmit={onCreate}>
+          <div className="teacher-create-grid">
+            <label className="field">
+              <span className="field__label">{language === 'DE' ? 'Name des Schülers' : 'Имя ученика'}</span>
+              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={language === 'DE' ? 'Name eingeben' : 'Введите имя ученика'} required />
+            </label>
+            <label className="field">
+              <span className="field__label">{language === 'DE' ? 'E-Mail (optional)' : 'Эл. почта (необязательно)'}</span>
+              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="example@email.com" />
+            </label>
           </div>
-        ))
+          <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Für jeden Schüler wird automatisch ein eigener Schul-Login erstellt.' : 'Для каждого ученика автоматически создаётся отдельный школьный логин.'}</p>
+          <button className="btn teacher-primary-btn" type="submit">{language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
+        </form>
+        {invitation && (
+          <div className="stack">
+            <div className="banner banner--success">
+              {language === 'DE' ? 'Schüler-Login' : 'Логин ученика'}: <strong>{invitation.student.username}</strong>
+            </div>
+            <InvitationNotice message={t('students.inviteCreated')} token={invitation.invitationToken} />
+          </div>
+        )}
+      </section>
+
+      {loading ? <p className="muted">{t('common.loading')}</p> : students.length === 0 ? (
+        <div className="teacher-empty-state">{t('students.empty')}</div>
+      ) : (
+        <div className="teacher-student-list">
+          {students.map((student, index) => {
+            const completion = todayCompletion[student.id] ?? { cards: 'none', homework: 'none' };
+            return (
+              <article key={student.id} className="teacher-student-card">
+                <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>{studentInitial(student.fullName)}</div>
+                <div className="teacher-student-main">
+                  <div className="teacher-student-name">{student.fullName}</div>
+                  <div className="teacher-student-email">{language === 'DE' ? 'Login' : 'Логин'}: <strong>{student.username ?? '—'}</strong></div>
+                  <div className="teacher-student-email">{student.email ?? (language === 'DE' ? 'E-Mail nicht erforderlich' : 'Email не требуется')}</div>
+                  <div className="teacher-student-meta">
+                    {student.parentFullName
+                      ? `${language === 'DE' ? 'Elternteil' : 'Родитель'}: ${student.parentFullName}`
+                      : (language === 'DE' ? 'Elternteil im Bereich „Eltern“ verknüpfen' : 'Родителя можно привязать в разделе «Родители»')}
+                  </div>
+                </div>
+
+                <div className="teacher-student-stats">
+                  <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
+                  <div className="teacher-today-statuses">
+                    <TodayStatusBadge label={language === 'DE' ? 'Karten heute' : 'Карточки сегодня'} status={completion.cards} language={language} />
+                    <TodayStatusBadge label={language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'} status={completion.homework} language={language} />
+                  </div>
+                </div>
+
+                <div className="teacher-student-actions">
+                  <div className="teacher-student-actions__top">
+                    <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Karten' : 'Карточки'}</Link>
+                    <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</Link>
+                    <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">Google Drive</Link>
+                    <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                      <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия" aria-expanded={openMenuId === student.id} onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}>⋮</button>
+                      {openMenuId === student.id && (
+                        <div className="teacher-student-menu">
+                          <button type="button" disabled={!student.invitationToken} onClick={() => void copyInvitationLink(student)}>
+                            <span>⌁</span>{copiedStudentId === student.id ? (language === 'DE' ? 'Link kopiert' : 'Ссылка скопирована') : (language === 'DE' ? 'Schüler-Link' : 'Ссылка ученика')}
+                          </button>
+                          <button type="button" onClick={() => void resetStudentPassword(student)}>
+                            <span>⌘</span>{language === 'DE' ? 'Passwort ändern' : 'Сбросить пароль'}
+                          </button>
+                          <button type="button" onClick={() => void renameStudent(student)}><span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}</button>
+                          <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}><span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       )}
     </div>
   );
+}
+
+function TodayStatusBadge({ label, status, language }: { label: string; status: TodayCompletion['cards']; language: 'DE' | 'RU' }) {
+  const icon = status === 'done' ? '✓' : status === 'pending' ? '✕' : '—';
+  const text = status === 'done' ? (language === 'DE' ? 'erledigt' : 'сделано') : status === 'pending' ? (language === 'DE' ? 'offen' : 'не сделано') : (language === 'DE' ? 'nichts geplant' : 'не задано');
+  return <div className={`teacher-today-status teacher-today-status--${status}`} title={`${label}: ${text}`}><span className="teacher-today-status__icon">{icon}</span><span>{label}</span></div>;
+}
+
+function buildTodayCompletion(today: string, summary: CardSummary, homeworks: Homework[], reviewHistory: DailyReviewHistoryItem[]): TodayCompletion {
+  const todayPdf = homeworks.filter((homework) => homework.startDate === today && homework.hasWorksheet);
+  const homework: TodayCompletion['homework'] = todayPdf.length === 0 ? 'none' : todayPdf.every((item) => item.submitted) ? 'done' : 'pending';
+  const todayReview = reviewHistory.find((item) => item.date === today && item.dueCount > 0);
+  const todayCardBatches = homeworks.filter((homework) => homework.startDate === today && homework.totalCards > 0);
+  const hasCardsToday = Boolean(todayReview) || todayCardBatches.length > 0 || summary.dueNow > 0;
+  const cardsDoneByReview = todayReview?.status === 'COMPLETED';
+  const cardsDoneByBatch = todayCardBatches.length > 0 && todayCardBatches.every((item) => item.status === 'COMPLETED');
+  const cards: TodayCompletion['cards'] = !hasCardsToday ? 'none' : (cardsDoneByReview || cardsDoneByBatch) ? 'done' : 'pending';
+  return { cards, homework };
+}
+
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function studentInitial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || '?';
 }

@@ -18,7 +18,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-/** A dated homework bucket for one student's cards. */
+/** A dated homework bucket for one student's cards and optional PDF worksheet. */
 @Entity
 @Table(name = "homeworks")
 @Getter
@@ -34,6 +34,27 @@ public class Homework {
 
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
+
+    @Column(name = "worksheet_pdf", columnDefinition = "bytea")
+    private byte[] worksheetPdf;
+
+    @Column(name = "worksheet_filename", length = 255)
+    private String worksheetFilename;
+
+    @Column(name = "worksheet_page_count")
+    private Integer worksheetPageCount;
+
+    @Column(name = "submitted_pdf", columnDefinition = "bytea")
+    private byte[] submittedPdf;
+
+    @Column(name = "submitted_filename", length = 255)
+    private String submittedFilename;
+
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
+    @Column(name = "parent_notified_at")
+    private Instant parentNotifiedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -55,5 +76,33 @@ public class Homework {
 
     public static Homework create(User student, LocalDate startDate) {
         return new Homework(student, startDate);
+    }
+
+    public void attachWorksheet(String filename, byte[] pdf, int pageCount) {
+        this.worksheetFilename = filename;
+        this.worksheetPdf = pdf;
+        this.worksheetPageCount = pageCount;
+        this.submittedPdf = null;
+        this.submittedFilename = null;
+        this.submittedAt = null;
+        this.parentNotifiedAt = null;
+    }
+
+    public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
+        this.submittedFilename = filename;
+        this.submittedPdf = pdf;
+        this.submittedAt = submittedAt;
+    }
+
+    public void markParentNotified(Instant notifiedAt) {
+        this.parentNotifiedAt = notifiedAt;
+    }
+
+    public boolean hasWorksheet() {
+        return worksheetPdf != null && worksheetPdf.length > 0;
+    }
+
+    public boolean isSubmitted() {
+        return submittedPdf != null && submittedPdf.length > 0 && submittedAt != null;
     }
 }

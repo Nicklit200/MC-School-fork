@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.cards.CardRepository;
+import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
@@ -13,30 +14,27 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/**
- * Once a day, notifies every student who has cards due for review (PRD 4.6).
- *
- * <p>Disabled by default: the bean only exists when
- * {@code app.notifications.review-reminders.enabled=true}. That keeps it off in
- * tests and in local development where {@link LoggingNotificationService} would
- * otherwise just print. Enable it once a real email provider is configured.
- */
+/** Sends the morning email reminder for all tasks due today. */
 @Component
 @ConditionalOnProperty(name = "app.notifications.review-reminders.enabled", havingValue = "true")
 public class ReviewReminderScheduler {
 
     private final UserRepository userRepository;
     private final CardRepository cardRepository;
+    private final HomeworkRepository homeworkRepository;
     private final NotificationService notificationService;
     private final DailyReviewHistoryService historyService;
     private final ZoneId reviewRemindersZone;
 
-    public ReviewReminderScheduler(UserRepository userRepository, CardRepository cardRepository,
+    public ReviewReminderScheduler(UserRepository userRepository,
+                                   CardRepository cardRepository,
+                                   HomeworkRepository homeworkRepository,
                                    NotificationService notificationService,
                                    DailyReviewHistoryService historyService,
                                    @Value("${app.notifications.review-reminders.zone}") String reviewRemindersZone) {
         this.userRepository = userRepository;
         this.cardRepository = cardRepository;
+        this.homeworkRepository = homeworkRepository;
         this.notificationService = notificationService;
         this.historyService = historyService;
         this.reviewRemindersZone = ZoneId.of(reviewRemindersZone);
@@ -51,10 +49,13 @@ public class ReviewReminderScheduler {
         for (User student : userRepository.findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(
                 Role.STUDENT, UserStatus.ACTIVE)) {
             long dueCards = cardRepository.countDueCards(student.getId(), today);
+            long dueHomeworks = homeworkRepository.countOpenWorksheetsForDay(student.getId(), today);
+            if (dueCards == 0 && dueHomeworks == 0) continue;
+
             if (dueCards > 0) {
                 historyService.recordDueSnapshot(student, today, dueCards);
-                notificationService.sendReviewReminder(student, dueCards);
             }
+            notificationService.sendDailyTaskReminder(student, dueCards, dueHomeworks);
         }
     }
 }

@@ -14,11 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-/**
- * Sends real transactional email through the Brevo HTTPS API. Active only when
- * {@code app.mail.enabled=true}; delivery failures are logged and never rethrown
- * so a temporary provider outage cannot fail account creation.
- */
 @Service
 @ConditionalOnProperty(name = "app.mail.enabled", havingValue = "true")
 public class EmailNotificationService implements NotificationService {
@@ -36,8 +31,7 @@ public class EmailNotificationService implements NotificationService {
     public EmailNotificationService(AppLinks appLinks,
                                     @Value("${app.mail.from}") String from,
                                     @Value("${app.brevo.api-key}") String brevoApiKey) {
-        this(HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build(),
-                appLinks, from, brevoApiKey);
+        this(HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build(), appLinks, from, brevoApiKey);
     }
 
     EmailNotificationService(HttpClient httpClient, AppLinks appLinks, String from, String brevoApiKey) {
@@ -50,16 +44,25 @@ public class EmailNotificationService implements NotificationService {
     @Override
     public void sendInvitation(User invitee, String invitationToken) {
         NotificationMessages.Email email = NotificationMessages.invitation(
-                invitee.getPreferredLanguage(), invitee.getFullName(),
-                appLinks.activationLink(invitationToken));
+                invitee.getPreferredLanguage(), invitee.getFullName(), appLinks.activationLink(invitationToken));
         send(invitee.getEmail(), invitee.getFullName(), email);
     }
 
     @Override
-    public void sendReviewReminder(User student, long dueCardCount) {
-        NotificationMessages.Email email = NotificationMessages.reviewReminder(
-                student.getPreferredLanguage(), student.getFullName(), dueCardCount, appLinks.todayLink());
+    public void sendDailyTaskReminder(User student, long dueCardCount, long dueHomeworkCount) {
+        NotificationMessages.Email email = NotificationMessages.dailyTaskReminder(
+                student.getPreferredLanguage(), student.getFullName(), dueCardCount, dueHomeworkCount,
+                appLinks.todayLink());
         send(student.getEmail(), student.getFullName(), email);
+    }
+
+    @Override
+    public void sendParentMissedHomework(User parent, User student, long unfinishedHomeworkCount) {
+        if (parent.getEmail() == null || parent.getEmail().isBlank()) return;
+        NotificationMessages.Email email = NotificationMessages.parentMissedHomework(
+                parent.getPreferredLanguage(), parent.getFullName(), student.getFullName(),
+                unfinishedHomeworkCount, appLinks.parentLink());
+        send(parent.getEmail(), parent.getFullName(), email);
     }
 
     private void send(String toEmail, String toName, NotificationMessages.Email email) {
@@ -74,8 +77,7 @@ public class EmailNotificationService implements NotificationService {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                log.error("Brevo API email send failed for {}: status={} error={}",
-                        toEmail, response.statusCode(), response.body());
+                log.error("Brevo API email send failed for {}: status={} error={}", toEmail, response.statusCode(), response.body());
             }
         } catch (IOException e) {
             log.error("Brevo API email send failed for {}: {}", toEmail, e.getMessage());
@@ -107,11 +109,8 @@ public class EmailNotificationService implements NotificationService {
                 case '\r' -> escaped.append("\\r");
                 case '\t' -> escaped.append("\\t");
                 default -> {
-                    if (c < 0x20) {
-                        escaped.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        escaped.append(c);
-                    }
+                    if (c < 0x20) escaped.append(String.format("\\u%04x", (int) c));
+                    else escaped.append(c);
                 }
             }
         }

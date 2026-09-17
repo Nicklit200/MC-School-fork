@@ -30,9 +30,14 @@ class NotificationContentTest {
     }
 
     @Test
-    void reminderEmailIncludesDueCountAndLoginLink() {
-        NotificationMessages.Email de = NotificationMessages.reviewReminder(Language.DE, "Sam", 5, "http://app/today");
+    void reminderEmailIncludesTaskCountsAndLoginLink() {
+        NotificationMessages.Email de = NotificationMessages.dailyTaskReminder(
+                Language.DE, "Sam", 5, 1, "http://app/today");
 
-        assertThat(de.body()).contains("Sam").contains("5").contains("http://app/today");
+        assertThat(de.body())
+                .contains("Sam")
+                .contains("5")
+                .contains("1")
+                .contains("http://app/today");
     }
 }

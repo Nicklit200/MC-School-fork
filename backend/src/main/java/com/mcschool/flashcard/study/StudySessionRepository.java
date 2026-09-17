@@ -14,5 +14,8 @@ public interface StudySessionRepository extends JpaRepository<StudySession, UUID
     List<StudySession> findAllByStudentIdAndStatusAndSessionTypeOrderByCompletedAtDesc(
             UUID studentId, SessionStatus status, SessionType sessionType);
 
+    List<StudySession> findAllByStudentIdAndStatusOrderByCompletedAtAsc(
+            UUID studentId, SessionStatus status);
+
     boolean existsByStudentIdAndStatus(UUID studentId, SessionStatus status);
 }
