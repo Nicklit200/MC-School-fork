@@ -27,7 +27,7 @@ export interface ParentAccount { id: string; fullName: string; username: string 
 export interface ParentCredentials { parent: User; temporaryPassword: string; }
 export interface Card { id: string; homeworkId: string; question: string; correctAnswer: string; status: CardStatus; repetitionNumber: number; dueDate: string | null; timeLimitSeconds: number | null; }
 export interface Homework { id: string; studentId: string; startDate: string; createdAt: string; totalCards: number; notStarted: number; inProgress: number; learned: number; status: HomeworkStatus; hasWorksheet: boolean; worksheetFilename: string | null; worksheetPageCount: number | null; pdfUploaded: boolean; submitted: boolean; submittedAt: string | null; finalAnswerCount: number | null; finalAnswersSubmitted: boolean; finalAnswersCorrect: boolean | null; finalCorrectCount: number | null; finalCorrectPercent: number | null; deadlineAt: string; overdue: boolean; submittedLate: boolean; }
-export interface HomeworkAnswerReviewItem { label: string; answer: string; correct: boolean; }
+export interface HomeworkAnswerReviewItem { label: string; answer: string; correctAnswer: string | null; correct: boolean; }
 export interface HomeworkAnswerReview { correctCount: number; totalCount: number; percent: number; items: HomeworkAnswerReviewItem[]; }
 export interface HomeworkPageOverlay { pageIndex: number; imageBase64: string; }
 export interface CardSummary { total: number; dueNow: number; awaitingRepetition: number; learned: number; }
