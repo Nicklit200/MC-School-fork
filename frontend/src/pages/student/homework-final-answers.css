@@ -186,9 +186,35 @@
 }
 
 .math-keyboard__grid button:active,
-.math-keyboard__letters button:active,
-.math-keyboard__special-row button:active {
+.math-keyboard__letters button:active {
   background: #f2f4f7;
+}
+
+.math-keyboard__fraction-icon {
+  display: inline-grid;
+  grid-template-rows: auto 2px auto;
+  align-items: center;
+  justify-items: center;
+  min-width: 34px;
+  line-height: 1;
+  font-size: .9em;
+}
+
+.math-keyboard__fraction-icon > span:first-child {
+  grid-row: 1;
+}
+
+.math-keyboard__fraction-bar {
+  grid-row: 2;
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: currentColor;
+  border-radius: 999px;
+}
+
+.math-keyboard__fraction-icon > span:last-child {
+  grid-row: 3;
 }
 
 .math-keyboard__grid--functions button,
@@ -208,61 +234,6 @@
 
 .math-keyboard__letters button {
   min-height: 70px;
-}
-
-.math-keyboard__special-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr .7fr;
-  gap: 8px;
-  padding: 10px;
-  background: #fff;
-}
-
-.math-keyboard__special-row > button {
-  min-height: 62px;
-  border: 1px solid #d8dee5;
-  border-radius: 14px;
-  background: #fff;
-  color: #111827;
-  font-size: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.math-keyboard__special-row > button.is-active {
-  border-color: #111827;
-  box-shadow: inset 0 0 0 1px #111827;
-}
-
-.math-keyboard__special-row small {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.mini-fraction {
-  display: inline-grid;
-  grid-template-rows: auto 1px auto;
-  min-width: 22px;
-  text-align: center;
-  line-height: 1;
-}
-
-.mini-fraction::after {
-  content: '';
-  grid-row: 2;
-  height: 1.5px;
-  background: currentColor;
-}
-
-.mini-fraction span:first-child { grid-row: 1; }
-.mini-fraction span:last-child { grid-row: 3; }
-
-.mini-mixed {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .structured-number {
