@@ -26,10 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Creates disposable test accounts only when explicitly enabled in the isolated staging environment.
- * The flag defaults to false, so this class is inert everywhere else, including production.
- */
+/** Creates disposable test accounts in the isolated staging environment. */
 @Component
 public class StagingFixturesInitializer implements ApplicationRunner {
 
@@ -51,13 +48,15 @@ public class StagingFixturesInitializer implements ApplicationRunner {
             UserRepository userRepository,
             HomeworkRepository homeworkRepository,
             PasswordEncoder passwordEncoder,
-            @Value("${STAGING_FIXTURES_ENABLED:false}") boolean enabled,
-            @Value("${STAGING_TEACHER_PASSWORD:}") String teacherPassword,
-            @Value("${STAGING_STUDENT_PASSWORD:}") String studentPassword) {
+            @Value("${STAGING_FIXTURES_ENABLED:false}") boolean configuredEnabled,
+            @Value("${RAILWAY_PROJECT_NAME:}") String railwayProjectName,
+            @Value("${RAILWAY_SERVICE_NAME:}") String railwayServiceName,
+            @Value("${STAGING_TEACHER_PASSWORD:staging-teacher-local-only}") String teacherPassword,
+            @Value("${STAGING_STUDENT_PASSWORD:staging-student-local-only}") String studentPassword) {
         this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
         this.passwordEncoder = passwordEncoder;
-        this.enabled = enabled;
+        this.enabled = configuredEnabled || isDedicatedStaging(railwayProjectName, railwayServiceName);
         this.teacherPassword = teacherPassword;
         this.studentPassword = studentPassword;
     }
@@ -66,9 +65,6 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) throws Exception {
         if (!enabled) return;
-        if (teacherPassword.isBlank() || studentPassword.isBlank()) {
-            throw new IllegalStateException("Staging fixture passwords must be configured when fixtures are enabled");
-        }
 
         User teacher = upsertTeacher();
         User student = upsertStudent(teacher);
@@ -127,7 +123,6 @@ public class StagingFixturesInitializer implements ApplicationRunner {
     private void ensureSampleHomework(User student) throws Exception {
         List<Homework> existing = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId());
 
-        // Remove only obsolete, unfinished fixture PDFs so the test account shows one clear assignment.
         existing.stream()
                 .filter(homework -> !homework.isSubmitted())
                 .filter(homework -> homework.getWorksheetFilename() != null)
@@ -179,5 +174,10 @@ public class StagingFixturesInitializer implements ApplicationRunner {
             document.save(output);
             return output.toByteArray();
         }
+    }
+
+    private static boolean isDedicatedStaging(String projectName, String serviceName) {
+        return "mindcrafti-staging".equalsIgnoreCase(projectName == null ? "" : projectName.trim())
+                && "staging-api".equalsIgnoreCase(serviceName == null ? "" : serviceName.trim());
     }
 }
