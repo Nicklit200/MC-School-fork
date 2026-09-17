@@ -36,6 +36,7 @@ public class McpSchoolPromptWriteBridge extends OncePerRequestFilter {
     private static final String MCP_PATH = "/api/v1/mcp";
     private static final String TOOL_NAME = "update_school_prompt";
     private static final int MAX_PROMPT_LENGTH = 30000;
+    private static final int REQUEST_CACHE_LIMIT = 65536;
 
     private final ObjectMapper objectMapper;
     private final McpOAuthService oauthService;
@@ -61,7 +62,7 @@ public class McpSchoolPromptWriteBridge extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
-        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request);
+        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request, REQUEST_CACHE_LIMIT);
         ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
 
         filterChain.doFilter(requestWrapper, responseWrapper);
