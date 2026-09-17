@@ -138,9 +138,13 @@ public class Homework {
         return submittedPdf != null && submittedPdf.length > 0 && submittedAt != null;
     }
 
-    /** The whole homework is complete only after required final answers are correct. */
+    /**
+     * The whole homework is complete after the PDF is uploaded and every required
+     * final-answer field has been submitted. Correctness is recorded separately and
+     * never blocks the student from handing the homework in.
+     */
     public boolean isSubmissionComplete() {
-        return isSubmitted() && (!hasFinalAnswerPrompt() || Boolean.TRUE.equals(finalAnswersCorrect));
+        return isSubmitted() && (!hasFinalAnswerPrompt() || hasSubmittedFinalAnswers());
     }
 
     public boolean hasFinalAnswerPrompt() {
