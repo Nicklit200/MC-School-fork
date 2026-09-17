@@ -26,6 +26,7 @@ public record HomeworkResponse(
         Instant submittedAt,
         Integer finalAnswerCount,
         boolean finalAnswersSubmitted,
+        Boolean finalAnswersCorrect,
         Instant deadlineAt,
         boolean overdue,
         boolean submittedLate
@@ -39,7 +40,7 @@ public record HomeworkResponse(
                 stats.notStarted(), stats.inProgress(), stats.learned(), status,
                 homework.hasWorksheet(), homework.getWorksheetFilename(), homework.getWorksheetPageCount(),
                 homework.isSubmitted(), homework.getSubmittedAt(), homework.getFinalAnswerCount(),
-                homework.hasSubmittedFinalAnswers(),
+                homework.hasSubmittedFinalAnswers(), homework.getFinalAnswersCorrect(),
                 HomeworkDeadlinePolicy.deadlineAt(homework.getStartDate()),
                 HomeworkDeadlinePolicy.isOverdue(homework),
                 HomeworkDeadlinePolicy.wasSubmittedLate(homework));
