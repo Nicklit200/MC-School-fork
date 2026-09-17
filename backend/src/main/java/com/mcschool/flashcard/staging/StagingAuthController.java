@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
  *
  * <p>The endpoints deliberately return 404 unless staging fixtures are enabled,
  * so the same code is harmless if it is ever present in a non-staging build.</p>
+ * <p>This controller is also used to force a clean staging rebuild after auth configuration changes.</p>
  */
 @RestController
 @RequestMapping("/api/v1/auth")
