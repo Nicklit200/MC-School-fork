@@ -220,12 +220,29 @@ export function HomeworkFinalAnswersEditor({
   const [history, setHistory] = useState<Draft[][]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activePart, setActivePart] = useState<FractionPart>('numerator');
+  const [cursorPos, setCursorPos] = useState(0);
   const [keyboardTab, setKeyboardTab] = useState<KeyboardTab>('basic');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const allFilled = useMemo(() => drafts.every(isFilled), [drafts]);
   const activeDraft = drafts[activeIndex] ?? drafts[0];
+
+  function activeFieldValue(draft = activeDraft, part = activePart) {
+    if (!draft) return '';
+    if (draft.mode === 'text') return draft.text;
+    return draft[part];
+  }
+
+  function clampCursor(value: string, position: number) {
+    return Math.max(0, Math.min(position, value.length));
+  }
+
+  function setPart(part: FractionPart) {
+    if (!activeDraft || activeDraft.mode === 'text') return;
+    setActivePart(part);
+    setCursorPos(activeDraft[part].length);
+  }
 
   function commit(next: Draft[], keepHistory = true) {
     if (keepHistory) {
@@ -243,23 +260,28 @@ export function HomeworkFinalAnswersEditor({
   function activate(index: number) {
     if (index < 0 || index >= drafts.length) return;
     setActiveIndex(index);
-    const mode = drafts[index]?.mode ?? 'text';
-    setActivePart(mode === 'mixed' ? 'whole' : 'numerator');
+    const draft = drafts[index];
+    const mode = draft?.mode ?? 'text';
+    const part: FractionPart = mode === 'mixed' ? 'whole' : 'numerator';
+    setActivePart(part);
+    setCursorPos(mode === 'text' ? (draft?.text.length ?? 0) : (draft?.[part].length ?? 0));
   }
 
   function setMode(mode: EntryMode) {
     if (!activeDraft) return;
     updateDraft(activeIndex, { mode });
-    setActivePart(mode === 'mixed' ? 'whole' : 'numerator');
+    const part: FractionPart = mode === 'mixed' ? 'whole' : 'numerator';
+    setActivePart(part);
+    setCursorPos(mode === 'text' ? activeDraft.text.length : activeDraft[part].length);
   }
 
   function switchToTextAndAppend(value: string) {
     if (!activeDraft) return;
     const current = serializeDraft(activeDraft);
-    updateDraft(activeIndex, {
-      mode: 'text',
-      text: `${current}${value}`,
-    });
+    const position = clampCursor(current, cursorPos);
+    const next = `${current.slice(0, position)}${value}${current.slice(position)}`;
+    updateDraft(activeIndex, { mode: 'text', text: next });
+    setCursorPos(position + value.length);
   }
 
   function appendValue(value: string) {
@@ -267,13 +289,20 @@ export function HomeworkFinalAnswersEditor({
     const normalized = value === '−' ? '-' : value;
 
     if (activeDraft.mode === 'text') {
-      updateDraft(activeIndex, { text: `${activeDraft.text}${normalized}` });
+      const position = clampCursor(activeDraft.text, cursorPos);
+      const next = `${activeDraft.text.slice(0, position)}${normalized}${activeDraft.text.slice(position)}`;
+      updateDraft(activeIndex, { text: next });
+      setCursorPos(position + normalized.length);
       return;
     }
 
     if (/^[0-9.,-]$/.test(normalized)) {
       const field = activePart;
-      updateDraft(activeIndex, { [field]: `${activeDraft[field]}${normalized}` });
+      const current = activeDraft[field];
+      const position = clampCursor(current, cursorPos);
+      const next = `${current.slice(0, position)}${normalized}${current.slice(position)}`;
+      updateDraft(activeIndex, { [field]: next });
+      setCursorPos(position + normalized.length);
       return;
     }
 
@@ -291,26 +320,56 @@ export function HomeworkFinalAnswersEditor({
           denominator: '',
         });
         setActivePart('numerator');
+        setCursorPos(0);
       } else {
         setMode('fraction');
+        setCursorPos(0);
       }
       return;
     }
     if (key.action === 'mixed') {
       setMode('mixed');
+      setCursorPos(0);
       return;
     }
     if (key.value != null) appendValue(key.value);
   }
 
   function backspace() {
-    if (!activeDraft) return;
+    if (!activeDraft || cursorPos <= 0) return;
     if (activeDraft.mode === 'text') {
-      updateDraft(activeIndex, { text: activeDraft.text.slice(0, -1) });
+      const position = clampCursor(activeDraft.text, cursorPos);
+      updateDraft(activeIndex, { text: `${activeDraft.text.slice(0, position - 1)}${activeDraft.text.slice(position)}` });
+      setCursorPos(position - 1);
       return;
     }
     const field = activePart;
-    updateDraft(activeIndex, { [field]: activeDraft[field].slice(0, -1) });
+    const current = activeDraft[field];
+    const position = clampCursor(current, cursorPos);
+    updateDraft(activeIndex, { [field]: `${current.slice(0, position - 1)}${current.slice(position)}` });
+    setCursorPos(position - 1);
+  }
+
+  function moveCursor(direction: -1 | 1) {
+    if (!activeDraft) return;
+    const current = activeFieldValue();
+    const position = clampCursor(current, cursorPos);
+    const next = position + direction;
+    if (next >= 0 && next <= current.length) {
+      setCursorPos(next);
+      return;
+    }
+
+    if (activeDraft.mode === 'text') return;
+    const parts: FractionPart[] = activeDraft.mode === 'mixed'
+      ? ['whole', 'numerator', 'denominator']
+      : ['numerator', 'denominator'];
+    const partIndex = parts.indexOf(activePart);
+    const nextPartIndex = partIndex + direction;
+    if (nextPartIndex < 0 || nextPartIndex >= parts.length) return;
+    const nextPart = parts[nextPartIndex];
+    setActivePart(nextPart);
+    setCursorPos(direction > 0 ? 0 : activeDraft[nextPart].length);
   }
 
   function undo() {
@@ -318,18 +377,23 @@ export function HomeworkFinalAnswersEditor({
     if (!previous) return;
     setHistory((current) => current.slice(0, -1));
     commit(cloneDrafts(previous), false);
+    const restored = previous[activeIndex];
+    if (restored) {
+      const value = restored.mode === 'text' ? restored.text : restored[activePart];
+      setCursorPos(value.length);
+    }
   }
 
   function enterNext() {
     if (!activeDraft) return;
     if (activeDraft.mode === 'mixed') {
-      if (activePart === 'whole') setActivePart('numerator');
-      else if (activePart === 'numerator') setActivePart('denominator');
+      if (activePart === 'whole') setPart('numerator');
+      else if (activePart === 'numerator') setPart('denominator');
       else if (activeIndex < drafts.length - 1) activate(activeIndex + 1);
       return;
     }
     if (activeDraft.mode === 'fraction') {
-      if (activePart === 'numerator') setActivePart('denominator');
+      if (activePart === 'numerator') setPart('denominator');
       else if (activeIndex < drafts.length - 1) activate(activeIndex + 1);
       return;
     }
@@ -398,13 +462,18 @@ export function HomeworkFinalAnswersEditor({
       <div className="math-answer-editor__display" onClick={() => activate(activeIndex)}>
         {activeDraft?.mode === 'text' ? (
           <div className={`math-answer-editor__text-value ${activeDraft.text ? '' : 'is-placeholder'}`}>
-            {activeDraft.text || (language === 'DE' ? 'Antwort eingeben…' : 'Введите ответ…')}
+            {activeDraft.text ? (
+              <CaretText value={activeDraft.text} cursorPos={cursorPos} />
+            ) : (
+              <><span className="math-caret" />{language === 'DE' ? 'Antwort eingeben…' : 'Введите ответ…'}</>
+            )}
           </div>
         ) : (
           <MathFractionInput
             draft={activeDraft}
             activePart={activePart}
-            onPart={setActivePart}
+            cursorPos={cursorPos}
+            onPart={(part) => setPart(part)}
           />
         )}
       </div>
@@ -415,8 +484,8 @@ export function HomeworkFinalAnswersEditor({
         <div className="math-keyboard__utility-row">
           <button type="button" className={keyboardTab === 'letters' ? 'is-selected' : ''} onClick={() => useTab('letters')}>abc</button>
           <button type="button" onClick={undo} disabled={history.length === 0}>↶</button>
-          <button type="button" onClick={() => activate(activeIndex - 1)} disabled={activeIndex === 0}>←</button>
-          <button type="button" onClick={() => activate(activeIndex + 1)} disabled={activeIndex === drafts.length - 1}>→</button>
+          <button type="button" onClick={() => moveCursor(-1)}>←</button>
+          <button type="button" onClick={() => moveCursor(1)}>→</button>
           <button type="button" onClick={enterNext}>↵</button>
           <button type="button" onClick={backspace}>⌫</button>
         </div>
@@ -498,15 +567,35 @@ function KeyGrid({ keys, tab, onKey }: { keys: Key[]; tab: Exclude<KeyboardTab, 
   );
 }
 
+function CaretText({ value, cursorPos }: { value: string; cursorPos: number }) {
+  const position = Math.max(0, Math.min(cursorPos, value.length));
+  return (
+    <>
+      {value.slice(0, position)}
+      <span className="math-caret" />
+      {value.slice(position)}
+    </>
+  );
+}
+
 function MathFractionInput({
   draft,
   activePart,
+  cursorPos,
   onPart,
 }: {
   draft: Draft;
   activePart: FractionPart;
+  cursorPos: number;
   onPart: (part: FractionPart) => void;
 }) {
+  function fieldValue(part: FractionPart) {
+    const value = draft[part];
+    if (activePart !== part) return value || '□';
+    if (!value) return <><span className="math-caret" />□</>;
+    return <CaretText value={value} cursorPos={cursorPos} />;
+  }
+
   return (
     <div className={`structured-number ${draft.mode === 'mixed' ? 'structured-number--mixed' : ''}`}>
       {draft.mode === 'mixed' && (
@@ -515,7 +604,7 @@ function MathFractionInput({
           className={`structured-number__whole ${activePart === 'whole' ? 'is-active' : ''}`}
           onClick={(event) => { event.stopPropagation(); onPart('whole'); }}
         >
-          {draft.whole || '□'}
+          {fieldValue('whole')}
         </button>
       )}
       <span className="structured-number__fraction">
@@ -524,7 +613,7 @@ function MathFractionInput({
           className={activePart === 'numerator' ? 'is-active' : ''}
           onClick={(event) => { event.stopPropagation(); onPart('numerator'); }}
         >
-          {draft.numerator || '□'}
+          {fieldValue('numerator')}
         </button>
         <span className="structured-number__bar" />
         <button
@@ -532,7 +621,7 @@ function MathFractionInput({
           className={activePart === 'denominator' ? 'is-active' : ''}
           onClick={(event) => { event.stopPropagation(); onPart('denominator'); }}
         >
-          {draft.denominator || '□'}
+          {fieldValue('denominator')}
         </button>
       </span>
     </div>
