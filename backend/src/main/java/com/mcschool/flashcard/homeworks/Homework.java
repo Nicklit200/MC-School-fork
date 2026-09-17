@@ -65,6 +65,9 @@ public class Homework {
     @Column(name = "answer_key_json", columnDefinition = "text")
     private String answerKeyJson;
 
+    @Column(name = "final_answers_correct")
+    private Boolean finalAnswersCorrect;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -98,6 +101,7 @@ public class Homework {
         this.finalAnswersJson = null;
         this.finalAnswerCount = null;
         this.answerKeyJson = null;
+        this.finalAnswersCorrect = null;
     }
 
     public void configureFinalAnswerKey(int answerCount, String answerKeyJson) {
@@ -107,6 +111,7 @@ public class Homework {
         this.finalAnswerCount = answerCount;
         this.answerKeyJson = answerKeyJson;
         this.finalAnswersJson = null;
+        this.finalAnswersCorrect = null;
     }
 
     public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
@@ -115,8 +120,9 @@ public class Homework {
         this.submittedAt = submittedAt;
     }
 
-    public void changeFinalAnswersJson(String finalAnswersJson) {
+    public void changeFinalAnswersJson(String finalAnswersJson, boolean allCorrect) {
         this.finalAnswersJson = finalAnswersJson;
+        this.finalAnswersCorrect = allCorrect;
     }
 
     public void markParentNotified(Instant notifiedAt) {
