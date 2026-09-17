@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.lessons.dto.BindLessonGroupRequest;
 import com.mcschool.flashcard.lessons.dto.BindLessonStudentRequest;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
@@ -48,5 +49,13 @@ public class GroupLessonController {
                             @PathVariable String bindingKey,
                             @RequestBody BindLessonStudentRequest request) {
         lessonService.bindStudent(caller, bindingKey, request.studentId());
+    }
+
+    @PutMapping("/{bindingKey}/group")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void bindGroup(@AuthenticationPrincipal AuthenticatedUser caller,
+                          @PathVariable String bindingKey,
+                          @RequestBody BindLessonGroupRequest request) {
+        lessonService.bindGroup(caller, bindingKey, request.groupId());
     }
 }
