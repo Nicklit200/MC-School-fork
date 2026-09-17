@@ -2,6 +2,7 @@ package com.mcschool.flashcard.homeworks;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
+import com.mcschool.flashcard.homeworks.dto.HomeworkFinalAnswersResult;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
 import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
@@ -87,12 +88,11 @@ public class HomeworkController {
     }
 
     @PostMapping("/study/homeworks/{homeworkId}/final-answers")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('STUDENT')")
-    public void saveFinalAnswers(@AuthenticationPrincipal AuthenticatedUser caller,
-                                 @PathVariable UUID homeworkId,
-                                 @Valid @RequestBody SaveHomeworkFinalAnswersRequest request) {
-        homeworkService.saveFinalAnswers(caller, homeworkId, request);
+    public HomeworkFinalAnswersResult saveFinalAnswers(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                        @PathVariable UUID homeworkId,
+                                                        @Valid @RequestBody SaveHomeworkFinalAnswersRequest request) {
+        return homeworkService.saveFinalAnswers(caller, homeworkId, request);
     }
 
     @PostMapping(value = "/homeworks/{homeworkId}/worksheet", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -185,7 +185,6 @@ public class HomeworkController {
     public void submitPdf(@AuthenticationPrincipal AuthenticatedUser caller,
                           @PathVariable UUID homeworkId,
                           @Valid @RequestBody SubmitHomeworkRequest request) {
-        homeworkService.requireFinalAnswers(caller, homeworkId);
         homeworkPdfService.submit(caller, homeworkId, request);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
@@ -196,7 +195,6 @@ public class HomeworkController {
     public void submitFile(@AuthenticationPrincipal AuthenticatedUser caller,
                            @PathVariable UUID homeworkId,
                            @RequestParam("file") MultipartFile file) {
-        homeworkService.requireFinalAnswers(caller, homeworkId);
         homeworkPdfService.submitFile(caller, homeworkId, file);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
@@ -207,7 +205,6 @@ public class HomeworkController {
     public void submitFiles(@AuthenticationPrincipal AuthenticatedUser caller,
                             @PathVariable UUID homeworkId,
                             @RequestParam("files") List<MultipartFile> files) {
-        homeworkService.requireFinalAnswers(caller, homeworkId);
         homeworkPdfService.submitFiles(caller, homeworkId, files);
         homeworkDriveExportService.exportSubmittedHomework(caller.id(), homeworkId);
     }
