@@ -59,6 +59,12 @@ public class Homework {
     @Column(name = "final_answers_json", columnDefinition = "text")
     private String finalAnswersJson;
 
+    @Column(name = "final_answer_count")
+    private Integer finalAnswerCount;
+
+    @Column(name = "answer_key_json", columnDefinition = "text")
+    private String answerKeyJson;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -90,6 +96,17 @@ public class Homework {
         this.submittedAt = null;
         this.parentNotifiedAt = null;
         this.finalAnswersJson = null;
+        this.finalAnswerCount = null;
+        this.answerKeyJson = null;
+    }
+
+    public void configureFinalAnswerKey(int answerCount, String answerKeyJson) {
+        if (answerCount < 1 || answerCount > 50) {
+            throw new IllegalArgumentException("Final answer count must be between 1 and 50");
+        }
+        this.finalAnswerCount = answerCount;
+        this.answerKeyJson = answerKeyJson;
+        this.finalAnswersJson = null;
     }
 
     public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
@@ -112,5 +129,13 @@ public class Homework {
 
     public boolean isSubmitted() {
         return submittedPdf != null && submittedPdf.length > 0 && submittedAt != null;
+    }
+
+    public boolean hasFinalAnswerPrompt() {
+        return finalAnswerCount != null && finalAnswerCount > 0;
+    }
+
+    public boolean hasSubmittedFinalAnswers() {
+        return finalAnswersJson != null && !finalAnswersJson.isBlank();
     }
 }
