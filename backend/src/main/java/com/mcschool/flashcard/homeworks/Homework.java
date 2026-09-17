@@ -133,8 +133,14 @@ public class Homework {
         return worksheetPdf != null && worksheetPdf.length > 0;
     }
 
+    /** PDF/image payload is already uploaded and locked from further editing. */
     public boolean isSubmitted() {
         return submittedPdf != null && submittedPdf.length > 0 && submittedAt != null;
+    }
+
+    /** The whole homework is complete only after required final answers are correct. */
+    public boolean isSubmissionComplete() {
+        return isSubmitted() && (!hasFinalAnswerPrompt() || Boolean.TRUE.equals(finalAnswersCorrect));
     }
 
     public boolean hasFinalAnswerPrompt() {
