@@ -3,10 +3,14 @@ package com.mcschool.flashcard.drive;
 import com.mcschool.flashcard.drive.dto.DriveItemResponse;
 import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.users.User;
+import com.mcschool.flashcard.users.UserRepository;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -41,9 +45,18 @@ public class GoogleDriveStructureService {
     );
 
     private final GoogleDriveService googleDriveService;
+    private final UserRepository userRepository;
 
+    // Kept for tests/direct construction. Spring uses the annotated constructor.
     public GoogleDriveStructureService(GoogleDriveService googleDriveService) {
+        this(googleDriveService, null);
+    }
+
+    @Autowired
+    public GoogleDriveStructureService(GoogleDriveService googleDriveService,
+                                       UserRepository userRepository) {
         this.googleDriveService = googleDriveService;
+        this.userRepository = userRepository;
     }
 
     public void provisionIndividualStudent(User teacher, User student) {
@@ -100,7 +113,6 @@ public class GoogleDriveStructureService {
     /** Same semantic keys as the individual map, backed by the established group layout. */
     public Map<String, String> resolveGroupDocumentFolders(User teacher, StudentGroup group) {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
-        group.updateTranscriptFolder(groupFolders.folders().get("Транскрипции").id());
         Map<String, DriveItemResponse> folders = groupFolders.folders();
         return semanticDestinations(
                 folders.get("Чистые листы"),
@@ -123,7 +135,6 @@ public class GoogleDriveStructureService {
 
     public String resolveGroupDocumentFolder(User teacher, StudentGroup group, String documentType) {
         GroupFolders groupFolders = ensureGroup(teacher, group.getName());
-        group.updateTranscriptFolder(groupFolders.folders().get("Транскрипции").id());
         return groupFolders.folders().get(groupFolderName(documentType)).id();
     }
 
@@ -164,6 +175,13 @@ public class GoogleDriveStructureService {
             throw new IllegalStateException("No shared Google Drive is available to the Mindcrafti service account");
         }
 
+        // Existing student links are the strongest source of truth. They keep working
+        // even when the teacher's account name and Drive folder name differ (e.g. Nick/Nikolay).
+        FolderContext linkedRoot = teacherRootFromExistingStudentLinks(teacher, drives);
+        if (linkedRoot != null) {
+            return linkedRoot;
+        }
+
         for (DriveItemResponse drive : drives) {
             DriveItemResponse folder = findFolder(
                     googleDriveService.listFolders(drive.id(), null), teacher.getFullName());
@@ -172,14 +190,53 @@ public class GoogleDriveStructureService {
             }
         }
 
-        // The school currently uses one shared drive. If a new teacher does not yet
-        // have a root folder, create it automatically instead of asking for a path.
+        // Only a genuinely new teacher with no existing linked Drive data gets a new root.
         if (drives.size() == 1) {
             DriveItemResponse created = googleDriveService.createFolder(drives.get(0).id(), teacher.getFullName().trim());
             return new FolderContext(drives.get(0).id(), created.id());
         }
 
         throw new IllegalStateException("Teacher Google Drive folder was not found and several shared drives are available");
+    }
+
+    private FolderContext teacherRootFromExistingStudentLinks(User teacher, List<DriveItemResponse> drives) {
+        if (userRepository == null || teacher.getId() == null) {
+            return null;
+        }
+        for (User student : userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.getId())) {
+            FolderContext root = rootFromKnownFolder(drives, student.getGoogleDriveFolderUrl());
+            if (root != null) return root;
+            root = rootFromKnownFolder(drives, student.getGoogleDriveHomeworkFolderId());
+            if (root != null) return root;
+            root = rootFromKnownFolder(drives, student.getGoogleDriveTranscriptFolderId());
+            if (root != null) return root;
+        }
+        return null;
+    }
+
+    private FolderContext rootFromKnownFolder(List<DriveItemResponse> drives, String linkedFolderId) {
+        if (linkedFolderId == null || linkedFolderId.isBlank()) {
+            return null;
+        }
+        Set<String> driveIds = new HashSet<>();
+        for (DriveItemResponse drive : drives) driveIds.add(drive.id());
+
+        String current = linkedFolderId.trim();
+        Set<String> visited = new HashSet<>();
+        for (int depth = 0; depth < 12 && visited.add(current); depth++) {
+            try {
+                List<String> parents = googleDriveService.getParentIds(current);
+                if (parents.isEmpty()) return null;
+                String parent = parents.get(0);
+                if (driveIds.contains(parent)) {
+                    return new FolderContext(parent, current);
+                }
+                current = parent;
+            } catch (RuntimeException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private Map<String, DriveItemResponse> ensureFolders(String driveId,
