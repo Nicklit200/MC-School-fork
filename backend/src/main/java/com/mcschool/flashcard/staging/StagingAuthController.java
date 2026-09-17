@@ -14,12 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- * Passwordless shortcuts for disposable staging accounts.
- *
- * <p>The endpoints deliberately return 404 unless staging fixtures are enabled,
- * so the same code is harmless if it is ever present in a non-staging build.</p>
- */
+/** Passwordless shortcuts for disposable staging accounts. */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class StagingAuthController {
@@ -29,9 +24,11 @@ public class StagingAuthController {
 
     public StagingAuthController(
             AuthService authService,
-            @Value("${STAGING_FIXTURES_ENABLED:false}") boolean enabled) {
+            @Value("${STAGING_FIXTURES_ENABLED:false}") boolean configuredEnabled,
+            @Value("${RAILWAY_PROJECT_NAME:}") String railwayProjectName,
+            @Value("${RAILWAY_SERVICE_NAME:}") String railwayServiceName) {
         this.authService = authService;
-        this.enabled = enabled;
+        this.enabled = configuredEnabled || isDedicatedStaging(railwayProjectName, railwayServiceName);
     }
 
     @GetMapping("/staging-profiles")
@@ -64,6 +61,11 @@ public class StagingAuthController {
         if (!enabled) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
+    }
+
+    private static boolean isDedicatedStaging(String projectName, String serviceName) {
+        return "mindcrafti-staging".equalsIgnoreCase(projectName == null ? "" : projectName.trim())
+                && "staging-api".equalsIgnoreCase(serviceName == null ? "" : serviceName.trim());
     }
 
     public record StagingLoginRequest(String profile) {}
