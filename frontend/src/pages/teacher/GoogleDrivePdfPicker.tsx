@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { driveApi, type DriveItem } from '../../api/drive';
 
 type Props = {
@@ -9,7 +10,6 @@ type Props = {
 };
 
 export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany, maxFiles = 31 }: Props) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const [selectionLimit, setSelectionLimit] = useState(1);
@@ -42,15 +42,21 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (downloadingMany) return;
-      if (wrapperRef.current && event.target instanceof Node && !wrapperRef.current.contains(event.target)) {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !downloadingMany) {
         setSelected([]);
         setOpen(false);
       }
     };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open, downloadingMany]);
 
   function openPicker() {
@@ -196,8 +202,168 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
     }
   }
 
+  const picker = open ? createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={multi ? 'Выбрать несколько PDF из Google Drive' : 'Выбрать PDF из Google Drive'}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !downloadingMany) {
+          setSelected([]);
+          setOpen(false);
+        }
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10000,
+        background: 'rgba(15, 23, 42, .42)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'clamp(8px, 2vw, 20px)',
+      }}
+    >
+      <div
+        className="panel"
+        onMouseDown={(event) => event.stopPropagation()}
+        style={{
+          width: 'min(820px, 100%)',
+          maxHeight: 'calc(100vh - 24px)',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          margin: 0,
+          padding: 'clamp(14px, 2vw, 20px)',
+          background: '#fff',
+          boxShadow: '0 24px 80px rgba(15, 23, 42, .26)',
+        }}
+      >
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ flex: '1 1 420px' }}>
+            <strong style={{ fontSize: 18 }}>{multi ? 'Выбрать несколько PDF из Google Drive' : 'Выбрать PDF из Google Drive'}</strong>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              {multi
+                ? `Нажимай на PDF в нужном порядке. Первый выбранный пойдёт на текущий день, второй — на следующий и так далее. Можно выбрать до ${selectionLimit}.`
+                : 'Открой нужную папку и нажми на PDF.'}
+            </p>
+          </div>
+          <button
+            className="btn btn--ghost"
+            type="button"
+            disabled={downloadingMany}
+            onClick={() => {
+              setSelected([]);
+              setOpen(false);
+            }}
+            style={{ flex: '0 0 auto' }}
+          >
+            Закрыть
+          </button>
+        </div>
+
+        {error && <div className="banner banner--error" style={{ marginTop: 14 }}>{error}</div>}
+
+        <label className="field" style={{ marginTop: 16 }}>
+          <span className="field__label">Общий диск</span>
+          <select
+            className="select"
+            value={driveId}
+            onChange={(e) => void chooseDrive(e.target.value)}
+            disabled={loadingDrives || downloadingMany}
+          >
+            <option value="">{loadingDrives ? 'Загружаем диски…' : 'Выберите диск'}</option>
+            {drives.map((drive) => <option key={drive.id} value={drive.id}>{drive.name}</option>)}
+          </select>
+        </label>
+
+        {multi && selected.length > 0 && (
+          <div className="banner banner--info" style={{ marginBottom: 14 }}>
+            Выбрано {selected.length} из {selectionLimit}: {selected.map((item, index) => `${index + 1}. ${item.name}`).join(' · ')}
+          </div>
+        )}
+
+        {driveId && (
+          <>
+            <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              <button className="btn btn--ghost" type="button" disabled={downloadingMany} onClick={() => void jumpTo(-1)}>Корень</button>
+              {path.map((item, index) => (
+                <span key={item.id} className="row" style={{ gap: 6 }}>
+                  <span className="muted">/</span>
+                  <button className="btn btn--ghost" type="button" disabled={downloadingMany} onClick={() => void jumpTo(index)}>{item.name}</button>
+                </span>
+              ))}
+            </div>
+
+            {loading ? <p className="muted">Загрузка папки…</p> : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    className="list-row"
+                    disabled={downloadingMany}
+                    onClick={() => void enterFolder(folder)}
+                    style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
+                  >
+                    <div className="list-row__title">📁 {folder.name}</div>
+                  </button>
+                ))}
+                {files.map((file) => {
+                  const selectedIndex = selected.findIndex((item) => item.id === file.id);
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      className="list-row"
+                      onClick={() => multi ? toggleFile(file) : void selectFile(file)}
+                      disabled={downloadingMany || (!multi && downloadingId === file.id)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderColor: selectedIndex >= 0 ? '#ff9f6a' : undefined,
+                      }}
+                    >
+                      <div className="list-row__title">📄 {file.name}</div>
+                      <div className="muted">
+                        {multi
+                          ? (selectedIndex >= 0 ? `Выбран ${selectedIndex + 1}-м` : 'Нажать, чтобы добавить в очередь')
+                          : (downloadingId === file.id ? 'Загружаю PDF…' : 'Выбрать этот PDF')}
+                      </div>
+                    </button>
+                  );
+                })}
+                {folders.length === 0 && files.length === 0 && <p className="muted">В этой папке нет PDF или подпапок.</p>}
+              </div>
+            )}
+          </>
+        )}
+
+        {multi && (
+          <div
+            className="row"
+            style={{
+              justifyContent: 'flex-end',
+              gap: 10,
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: '1px solid var(--border)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button className="btn btn--ghost" type="button" disabled={selected.length === 0 || downloadingMany} onClick={() => setSelected([])}>Очистить</button>
+            <button className="btn" type="button" disabled={selected.length === 0 || downloadingMany} onClick={() => void confirmMany()}>
+              {downloadingMany ? 'Загружаем PDF…' : `Добавить ${selected.length || ''} PDF`}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
-    <div ref={wrapperRef} style={{ position: 'relative', display: 'inline-block' }}>
+    <div style={{ display: 'inline-block' }}>
       <button
         ref={buttonRef}
         className="btn btn--secondary"
@@ -208,106 +374,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
       >
         Google Drive
       </button>
-
-      {open && (
-        <div
-          className="panel"
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 'calc(100% + 8px)',
-            zIndex: 9999,
-            width: 'min(820px, calc(100vw - 32px))',
-            maxHeight: '70vh',
-            overflowY: 'auto',
-            margin: 0,
-            padding: 20,
-            background: '#fff',
-            boxShadow: '0 18px 60px rgba(15, 23, 42, .18)',
-          }}
-        >
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <div>
-              <strong style={{ fontSize: 18 }}>{multi ? 'Выбрать несколько PDF из Google Drive' : 'Выбрать PDF из Google Drive'}</strong>
-              <p className="muted" style={{ margin: '6px 0 0' }}>
-                {multi
-                  ? `Нажимай на PDF в нужном порядке. Первый выбранный пойдёт на текущий день, второй — на следующий и так далее. Можно выбрать до ${selectionLimit}.`
-                  : 'Открой нужную папку и нажми на PDF.'}
-              </p>
-            </div>
-          </div>
-
-          {error && <div className="banner banner--error" style={{ marginTop: 14 }}>{error}</div>}
-
-          <label className="field" style={{ marginTop: 16 }}>
-            <span className="field__label">Общий диск</span>
-            <select className="select" value={driveId} onChange={(e) => void chooseDrive(e.target.value)} disabled={loadingDrives || downloadingMany}>
-              <option value="">{loadingDrives ? 'Загружаем диски…' : 'Выберите диск'}</option>
-              {drives.map((drive) => <option key={drive.id} value={drive.id}>{drive.name}</option>)}
-            </select>
-          </label>
-
-          {multi && selected.length > 0 && (
-            <div className="banner banner--info" style={{ marginBottom: 14 }}>
-              Выбрано {selected.length} из {selectionLimit}: {selected.map((item, index) => `${index + 1}. ${item.name}`).join(' · ')}
-            </div>
-          )}
-
-          {driveId && (
-            <>
-              <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                <button className="btn btn--ghost" type="button" disabled={downloadingMany} onClick={() => void jumpTo(-1)}>Корень</button>
-                {path.map((item, index) => (
-                  <span key={item.id} className="row" style={{ gap: 6 }}>
-                    <span className="muted">/</span>
-                    <button className="btn btn--ghost" type="button" disabled={downloadingMany} onClick={() => void jumpTo(index)}>{item.name}</button>
-                  </span>
-                ))}
-              </div>
-
-              {loading ? <p className="muted">Загрузка папки…</p> : (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {folders.map((folder) => (
-                    <button key={folder.id} type="button" className="list-row" disabled={downloadingMany} onClick={() => void enterFolder(folder)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
-                      <div className="list-row__title">📁 {folder.name}</div>
-                    </button>
-                  ))}
-                  {files.map((file) => {
-                    const selectedIndex = selected.findIndex((item) => item.id === file.id);
-                    return (
-                      <button
-                        key={file.id}
-                        type="button"
-                        className="list-row"
-                        onClick={() => multi ? toggleFile(file) : void selectFile(file)}
-                        disabled={downloadingMany || (!multi && downloadingId === file.id)}
-                        style={{ width: '100%', textAlign: 'left', cursor: 'pointer', borderColor: selectedIndex >= 0 ? '#ff9f6a' : undefined }}
-                      >
-                        <div className="list-row__title">📄 {file.name}</div>
-                        <div className="muted">
-                          {multi
-                            ? (selectedIndex >= 0 ? `Выбран ${selectedIndex + 1}-м` : 'Нажать, чтобы добавить в очередь')
-                            : (downloadingId === file.id ? 'Загружаю PDF…' : 'Выбрать этот PDF')}
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {folders.length === 0 && files.length === 0 && <p className="muted">В этой папке нет PDF или подпапок.</p>}
-                </div>
-              )}
-            </>
-          )}
-
-          {multi && (
-            <div className="row" style={{ justifyContent: 'flex-end', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-              <button className="btn btn--ghost" type="button" disabled={selected.length === 0 || downloadingMany} onClick={() => setSelected([])}>Очистить</button>
-              <button className="btn" type="button" disabled={selected.length === 0 || downloadingMany} onClick={() => void confirmMany()}>
-                {downloadingMany ? 'Загружаем PDF…' : `Добавить ${selected.length || ''} PDF`}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {picker}
     </div>
   );
 }
