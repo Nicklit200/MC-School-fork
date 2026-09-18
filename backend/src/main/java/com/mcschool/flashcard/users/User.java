@@ -145,6 +145,22 @@ public class User {
         this.invitationExpiresAt = null;
     }
 
+    public void deactivateManagedStudent() {
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can be made inactive");
+        if (this.archived) throw new IllegalStateException("Archived accounts cannot be made inactive");
+        this.status = UserStatus.INACTIVE;
+        this.invitationToken = null;
+        this.invitationExpiresAt = null;
+    }
+
+    public void reactivateManagedStudent() {
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can be reactivated");
+        if (this.archived) throw new IllegalStateException("Archived accounts cannot be reactivated");
+        this.status = UserStatus.ACTIVE;
+        this.invitationToken = null;
+        this.invitationExpiresAt = null;
+    }
+
     public void assignParentOwner(User teacher) {
         if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can have a managing teacher");
         if (teacher == null || teacher.getRole() != Role.TEACHER) throw new IllegalArgumentException("Teacher account is required");

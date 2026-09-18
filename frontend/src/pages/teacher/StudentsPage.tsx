@@ -18,6 +18,7 @@ export function StudentsPage() {
   const [fullName, setFullName] = useState('');
   const [createdStudent, setCreatedStudent] = useState<StudentInvitation | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,8 +26,9 @@ export function StudentsPage() {
     const list = await api.students.list();
     setStudents(list);
     const today = localDateString(new Date());
+    const activeStudents = list.filter((student) => student.status !== 'INACTIVE');
     const details = await Promise.all(
-      list.map(async (student) => {
+      activeStudents.map(async (student) => {
         const [summary, homeworks, reviewHistory] = await Promise.all([
           api.cards.summaryForStudent(student.id),
           api.homeworks.listForStudent(student.id),
@@ -106,6 +108,35 @@ export function StudentsPage() {
     }
   }
 
+  async function deactivateStudent(student: StudentListItem) {
+    const confirmed = window.confirm(
+      language === 'DE'
+        ? `${student.fullName} deaktivieren? Der Schüler kann sich nicht mehr anmelden und erhält keine neuen Gruppenaufgaben oder Erinnerungen. Alle bisherigen Daten bleiben erhalten.`
+        : `Сделать ${student.fullName} неактивным? Ученик больше не сможет войти и не будет получать новые групповые задания и напоминания. Вся история сохранится.`,
+    );
+    if (!confirmed) return;
+    setError(null);
+    try {
+      await api.students.deactivate(student.id);
+      setOpenMenuId(null);
+      await reload();
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function reactivateStudent(student: StudentListItem) {
+    setError(null);
+    try {
+      await api.students.reactivate(student.id);
+      setOpenMenuId(null);
+      setShowInactive(false);
+      await reload();
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
+  }
+
   async function deleteStudent(student: StudentListItem) {
     if (!window.confirm(t('students.deleteConfirm', { name: student.fullName }))) return;
     setError(null);
@@ -118,11 +149,31 @@ export function StudentsPage() {
     }
   }
 
+  const activeStudents = students.filter((student) => student.status !== 'INACTIVE');
+  const inactiveStudents = students.filter((student) => student.status === 'INACTIVE');
+  const visibleStudents = showInactive ? inactiveStudents : activeStudents;
+
   return (
     <div className="teacher-students-page" onClick={() => openMenuId && setOpenMenuId(null)}>
       <div className="teacher-page-heading">
         <h1>{language === 'DE' ? 'Meine Schüler' : 'Мои ученики'}</h1>
         <p>{language === 'DE' ? 'Verwalte Schüler und ihren Zugriff auf Materialien' : 'Управляйте своими учениками и их доступом к материалам'}</p>
+        <div className="row" style={{ marginTop: 14, gap: 8 }}>
+          <button
+            type="button"
+            className={showInactive ? 'btn btn--ghost' : 'btn'}
+            onClick={() => setShowInactive(false)}
+          >
+            {language === 'DE' ? `Aktiv (${activeStudents.length})` : `Активные (${activeStudents.length})`}
+          </button>
+          <button
+            type="button"
+            className={showInactive ? 'btn' : 'btn btn--ghost'}
+            onClick={() => setShowInactive(true)}
+          >
+            {language === 'DE' ? `Inaktiv (${inactiveStudents.length})` : `Неактивные (${inactiveStudents.length})`}
+          </button>
+        </div>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
@@ -147,17 +198,28 @@ export function StudentsPage() {
         )}
       </section>
 
-      {loading ? <p className="muted">{t('common.loading')}</p> : students.length === 0 ? (
-        <div className="teacher-empty-state">{t('students.empty')}</div>
+      {loading ? <p className="muted">{t('common.loading')}</p> : visibleStudents.length === 0 ? (
+        <div className="teacher-empty-state">
+          {showInactive
+            ? (language === 'DE' ? 'Keine inaktiven Schüler.' : 'Неактивных учеников нет.')
+            : t('students.empty')}
+        </div>
       ) : (
         <div className="teacher-student-list">
-          {students.map((student, index) => {
+          {visibleStudents.map((student, index) => {
             const completion = todayCompletion[student.id] ?? { cards: 'none', homework: 'none' };
             return (
               <article key={student.id} className="teacher-student-card">
                 <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>{studentInitial(student.fullName)}</div>
                 <div className="teacher-student-main">
-                  <div className="teacher-student-name">{student.fullName}</div>
+                  <div className="teacher-student-name">
+                    {student.fullName}
+                    {student.status === 'INACTIVE' && (
+                      <span className="pill pill--pending" style={{ marginLeft: 10, verticalAlign: 'middle' }}>
+                        {language === 'DE' ? 'Inaktiv' : 'Неактивен'}
+                      </span>
+                    )}
+                  </div>
                   <div className="teacher-student-email">{language === 'DE' ? 'Login' : 'Логин'}: <strong>{student.username ?? '—'}</strong></div>
                   <div className="teacher-student-meta">
                     {student.parentFullName
@@ -167,11 +229,21 @@ export function StudentsPage() {
                 </div>
 
                 <div className="teacher-student-stats">
-                  <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
-                  <div className="teacher-today-statuses">
-                    <TodayStatusBadge label={language === 'DE' ? 'Karten heute' : 'Карточки сегодня'} status={completion.cards} language={language} />
-                    <TodayStatusBadge label={language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'} status={completion.homework} language={language} />
-                  </div>
+                  {student.status === 'INACTIVE' ? (
+                    <div className="muted">
+                      {language === 'DE'
+                        ? 'Historie bleibt erhalten. Keine neuen Aufgaben oder Erinnerungen.'
+                        : 'История сохранена. Новые задания и напоминания не отправляются.'}
+                    </div>
+                  ) : (
+                    <>
+                      <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
+                      <div className="teacher-today-statuses">
+                        <TodayStatusBadge label={language === 'DE' ? 'Karten heute' : 'Карточки сегодня'} status={completion.cards} language={language} />
+                        <TodayStatusBadge label={language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'} status={completion.homework} language={language} />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="teacher-student-actions">
@@ -187,6 +259,15 @@ export function StudentsPage() {
                             <span>⌘</span>{language === 'DE' ? 'Passwort festlegen/ändern' : 'Задать/изменить пароль'}
                           </button>
                           <button type="button" onClick={() => void renameStudent(student)}><span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}</button>
+                          {student.status === 'INACTIVE' ? (
+                            <button type="button" onClick={() => void reactivateStudent(student)}>
+                              <span>✓</span>{language === 'DE' ? 'Aktivieren' : 'Сделать активным'}
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => void deactivateStudent(student)}>
+                              <span>◌</span>{language === 'DE' ? 'Deaktivieren' : 'Сделать неактивным'}
+                            </button>
+                          )}
                           <button type="button" className="is-danger" onClick={() => void deleteStudent(student)}><span>♧</span>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
                         </div>
                       )}

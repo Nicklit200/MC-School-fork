@@ -1,7 +1,7 @@
 // TypeScript mirrors of the backend DTOs. Keep these in sync with the Java records.
 
 export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT';
-export type UserStatus = 'INVITED' | 'ACTIVE';
+export type UserStatus = 'INVITED' | 'ACTIVE' | 'INACTIVE';
 export type Language = 'DE' | 'RU';
 export type CardStatus = 'ACTIVE' | 'LEARNED';
 export type HomeworkStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED';
