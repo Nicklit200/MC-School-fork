@@ -50,4 +50,16 @@ public class AuthController {
     public AuthResponse impersonateTeacher(@PathVariable UUID teacherId) {
         return authService.impersonateTeacher(teacherId);
     }
+
+    @PostMapping("/impersonate/student/{studentId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public AuthResponse impersonateStudent(@PathVariable UUID studentId) {
+        return authService.impersonateStudent(studentId);
+    }
+
+    @PostMapping("/impersonate/parent/{parentId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public AuthResponse impersonateParent(@PathVariable UUID parentId) {
+        return authService.impersonateParent(parentId);
+    }
 }

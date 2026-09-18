@@ -10,6 +10,7 @@ import { AdminTeacherLessonsPage } from './pages/admin/AdminTeacherLessonsPage';
 import { AdminLessonDetailWithHomeworkSeries } from './pages/admin/AdminLessonDetailWithHomeworkSeries';
 import { TrialLeadsPage } from './pages/admin/TrialLeadsPage';
 import { AdminPromptSettingsPage } from './pages/admin/AdminPromptSettingsPage';
+import { AdminAccountsPage } from './pages/admin/AdminAccountsPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { TeacherParentsPage } from './pages/teacher/TeacherParentsPage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
@@ -45,6 +46,7 @@ export function App() {
       <Route path="/activate" element={<ActivatePage />} />
 
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/accounts" element={<ProtectedRoute role="ADMIN"><Layout><AdminAccountsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/lessons" element={<ProtectedRoute role="ADMIN"><Layout><AdminTeacherLessonsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/leads" element={<ProtectedRoute role="ADMIN"><Layout><TrialLeadsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute role="ADMIN"><Layout><SettingsPage /></Layout></ProtectedRoute>} />

@@ -4,13 +4,10 @@ import { api, getAccessToken, setAccessToken } from '../../api/client';
 import type { TeacherInvitation, User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { useAuth } from '../../auth/AuthContext';
+import { saveAdminImpersonation } from '../../auth/adminImpersonation';
 import { toErrorMessage } from '../../lib/errors';
 import { InvitationNotice } from '../../components/InvitationNotice';
 import { TeacherTrialTranscriptFolderPicker } from './TeacherTrialTranscriptFolderPicker';
-
-const ADMIN_TOKEN_KEY = 'mindcrafti.impersonation.adminToken';
-const ADMIN_TEACHER_ID_KEY = 'mindcrafti.impersonation.teacherId';
-const ADMIN_TEACHER_NAME_KEY = 'mindcrafti.impersonation.teacherName';
 
 /** Admin home: create teacher accounts and manage their school lessons. */
 export function TeachersPage() {
@@ -62,9 +59,7 @@ export function TeachersPage() {
     setError(null);
     try {
       const auth = await api.auth.impersonateTeacher(teacher.id);
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, adminToken);
-      sessionStorage.setItem(ADMIN_TEACHER_ID_KEY, teacher.id);
-      sessionStorage.setItem(ADMIN_TEACHER_NAME_KEY, teacher.fullName);
+      saveAdminImpersonation(adminToken, teacher, `/admin/lessons?teacherId=${teacher.id}`);
       setAccessToken(auth.accessToken);
       setUser(auth.user);
       navigate('/teacher/lessons');

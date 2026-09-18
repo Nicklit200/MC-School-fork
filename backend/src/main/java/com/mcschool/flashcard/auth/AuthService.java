@@ -96,11 +96,25 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse impersonateTeacher(UUID teacherId) {
-        User teacher = userRepository.findById(teacherId)
-                .filter(user -> !user.isArchived())
-                .filter(user -> user.getRole() == Role.TEACHER)
-                .orElseThrow(() -> new ResourceNotFoundException("Teacher account not found"));
-        return issueToken(teacher);
+        return impersonate(teacherId, Role.TEACHER, "Teacher");
+    }
+
+    @Transactional(readOnly = true)
+    public AuthResponse impersonateStudent(UUID studentId) {
+        return impersonate(studentId, Role.STUDENT, "Student");
+    }
+
+    @Transactional(readOnly = true)
+    public AuthResponse impersonateParent(UUID parentId) {
+        return impersonate(parentId, Role.PARENT, "Parent");
+    }
+
+    private AuthResponse impersonate(UUID userId, Role expectedRole, String accountLabel) {
+        User user = userRepository.findById(userId)
+                .filter(candidate -> !candidate.isArchived())
+                .filter(candidate -> candidate.getRole() == expectedRole)
+                .orElseThrow(() -> new ResourceNotFoundException(accountLabel + " account not found"));
+        return issueToken(user);
     }
 
     private AuthResponse issueToken(User user) {
