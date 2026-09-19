@@ -139,6 +139,47 @@ export function OnlineClassRoom({
     };
   }, [classId]);
 
+  useEffect(() => {
+    if (!connection.host) return;
+
+    let active = true;
+    let inFlight = false;
+
+    const refreshConnectedStudents = async () => {
+      if (!active || inFlight) return;
+      inFlight = true;
+      try {
+        const participants = await onlineClassesApi.listParticipants(classId);
+        if (!active) return;
+
+        const students = participants
+          .filter((participant) => participant.classRole === 'STUDENT' && participant.connected)
+          .map((participant) => ({
+            id: participant.userId,
+            fullName: participant.displayName,
+          }))
+          .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+        setBoardContext((current) =>
+          current ? { ...current, students } : current,
+        );
+      } catch {
+        // Participant polling elsewhere in the room may still recover; avoid
+        // hiding an already visible private board on a transient request error.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void refreshConnectedStudents();
+    const timer = window.setInterval(() => void refreshConnectedStudents(), 1000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [classId, connection.host]);
+
   return (
     <LiveKitRoom
       serverUrl={connection.serverUrl}
