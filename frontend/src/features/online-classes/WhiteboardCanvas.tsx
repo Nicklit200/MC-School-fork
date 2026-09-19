@@ -20,8 +20,8 @@ export type Tool =
   | 'erase'
   | 'laser';
 
-/** Freehand input fires far faster than the wire needs; sampling caps it. */
-const SAMPLE_INTERVAL_MS = 16;
+/** Laser movement may be sampled; handwriting itself is collected losslessly. */
+const LASER_SAMPLE_INTERVAL_MS = 16;
 
 interface Props {
   shapes: RenderableShape[];
@@ -122,6 +122,19 @@ export function WhiteboardCanvas({
     [sourceAspect, viewport],
   );
 
+  const rawPointerToNormalized = useCallback(
+    (pointerEvent: PointerEvent, stage: Konva.Stage) => {
+      const rect = stage.container().getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      const pixel = {
+        x: (pointerEvent.clientX - rect.left) * (stage.width() / rect.width),
+        y: (pointerEvent.clientY - rect.top) * (stage.height() / rect.height),
+      };
+      return toNormalized(pixel, viewport, sourceAspect);
+    },
+    [sourceAspect, viewport],
+  );
+
   const handleDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
     if (readOnly) return;
 
@@ -152,6 +165,7 @@ export function WhiteboardCanvas({
     }
     activePointerId.current = event.evt.pointerId;
     activePointerType.current = pointerType;
+    lastSample.current = 0;
 
     const point = pointerToNormalized(event.target.getStage()!);
     if (!point) {
@@ -209,7 +223,7 @@ export function WhiteboardCanvas({
     if (tool === 'laser' && !readOnly) {
       if (!laserActive.current) return;
       const now = performance.now();
-      if (now - lastSample.current < SAMPLE_INTERVAL_MS) return;
+      if (now - lastSample.current < LASER_SAMPLE_INTERVAL_MS) return;
       lastSample.current = now;
       const point = pointerToNormalized(stage);
       if (point) {
@@ -220,24 +234,49 @@ export function WhiteboardCanvas({
       return;
     }
 
-    if (!drawing.current || !draft) return;
-    const now = performance.now();
-    if (now - lastSample.current < SAMPLE_INTERVAL_MS) return;
-    lastSample.current = now;
-
-    const point = pointerToNormalized(stage);
-    if (!point) return;
+    if (!drawing.current || !draftRef.current) return;
 
     const current = draftRef.current;
-    if (!current) return;
-
     let next: Shape;
+
     if (current.points) {
-      next = { ...current, points: [...current.points, [point.x, point.y]] };
-    } else if (current.x1 !== undefined) {
-      next = { ...current, x2: point.x, y2: point.y };
+      // Browsers may bundle several high-frequency Apple Pencil samples into a
+      // single pointermove. Consume the whole bundle; otherwise fast strokes
+      // can lose segments or become a one-point (invisible) stroke.
+      const coalesced =
+        typeof event.evt.getCoalescedEvents === 'function'
+          ? event.evt.getCoalescedEvents()
+          : [];
+      const rawEvents = coalesced.length > 0 ? coalesced : [event.evt];
+      const appended: [number, number][] = [];
+      const existing = current.points;
+      let previous = existing[existing.length - 1];
+
+      for (const rawEvent of rawEvents) {
+        const point = rawPointerToNormalized(rawEvent, stage);
+        if (!point) continue;
+        const candidate: [number, number] = [point.x, point.y];
+        // Only remove exact/sub-pixel duplicates, never meaningful handwriting
+        // samples. This keeps quick hooks, dots and short number strokes.
+        if (
+          !previous
+          || Math.hypot(candidate[0] - previous[0], candidate[1] - previous[1]) > 0.00005
+        ) {
+          appended.push(candidate);
+          previous = candidate;
+        }
+      }
+
+      if (appended.length === 0) return;
+      next = { ...current, points: [...existing, ...appended] };
     } else {
-      next = { ...current, w: point.x - (current.x ?? 0), h: point.y - (current.y ?? 0) };
+      const point = rawPointerToNormalized(event.evt, stage) ?? pointerToNormalized(stage);
+      if (!point) return;
+      if (current.x1 !== undefined) {
+        next = { ...current, x2: point.x, y2: point.y };
+      } else {
+        next = { ...current, w: point.x - (current.x ?? 0), h: point.y - (current.y ?? 0) };
+      }
     }
 
     draftRef.current = next;
@@ -278,12 +317,45 @@ export function WhiteboardCanvas({
       return;
     }
 
-    const current = draftRef.current;
+    let current = draftRef.current;
     if (!drawing.current || !current) {
       activePointerId.current = null;
       activePointerType.current = null;
       return;
     }
+
+    if (event) {
+      const stage = event.target.getStage();
+      const finalPoint = stage
+        ? (rawPointerToNormalized(event.evt, stage) ?? pointerToNormalized(stage))
+        : null;
+
+      if (finalPoint) {
+        if (current.points) {
+          const lastPoint = current.points[current.points.length - 1];
+          const finalTuple: [number, number] = [finalPoint.x, finalPoint.y];
+          if (
+            !lastPoint
+            || Math.hypot(finalTuple[0] - lastPoint[0], finalTuple[1] - lastPoint[1]) > 0.00005
+          ) {
+            current = { ...current, points: [...current.points, finalTuple] };
+          } else if (current.points.length === 1) {
+            // A tap/tiny stroke still needs two points for Konva to render it.
+            current = { ...current, points: [...current.points, finalTuple] };
+          }
+        } else if (current.x1 !== undefined) {
+          current = { ...current, x2: finalPoint.x, y2: finalPoint.y };
+        } else {
+          current = {
+            ...current,
+            w: finalPoint.x - (current.x ?? 0),
+            h: finalPoint.y - (current.y ?? 0),
+          };
+        }
+      }
+    }
+
+    draftRef.current = current;
     drawing.current = false;
     const operationId = draftIdRef.current ?? undefined;
     // Do not re-shape handwriting when the Pencil is lifted. Normal strokes
