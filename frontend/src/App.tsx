@@ -32,6 +32,7 @@ import { StudentHomeworksListPage } from './pages/student/StudentHomeworksListPa
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
 import { ExperimentalPdfHomeworkSubmissionPage } from './pages/student/ExperimentalPdfHomeworkSubmissionPage';
 import { SettingsPage } from './pages/student/SettingsPage';
+import { StudentLessonHistoryPage } from './pages/student/StudentLessonHistoryPage';
 import { ParentPage } from './pages/parent/ParentPage';
 
 const UpcomingOnlineClassesPage = lazy(() =>
@@ -83,6 +84,7 @@ export function App() {
       <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><ExperimentalPdfHomeworkSubmissionPage /></Layout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
+      <Route path="/student/lessons/:classId/history" element={<ProtectedRoute role="STUDENT"><Layout><StudentLessonHistoryPage /></Layout></ProtectedRoute>} />
 
       <Route path="/online-classes" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
       <Route path="/online-classes/:classId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><OnlineClassPage /></Suspense></Layout></ProtectedRoute>} />
