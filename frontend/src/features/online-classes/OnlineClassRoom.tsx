@@ -14,21 +14,21 @@ import {
 import '@livekit/components-styles';
 import { ConnectionState, Track } from 'livekit-client';
 import { useI18n } from '../../i18n/I18nContext';
-import type { ClassFeatureState, OnlineClassConnection } from '../../api/onlineClasses';
+import {
+  onlineClassesApi,
+  type ClassFeatureState,
+  type OnlineClassBoardContext,
+  type OnlineClassConnection,
+} from '../../api/onlineClasses';
 import { ChatPanel } from './ChatPanel';
-import { Suspense, lazy, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CaptionsPanel } from './CaptionsPanel';
 import { RecordingControls } from './RecordingControls';
 import { TranscriptionControls } from './TranscriptionControls';
 import { ParticipantListPanel } from './ParticipantListPanel';
 import { WaitingRoomPanel } from './WaitingRoomPanel';
 import type { TranslationKey } from '../../i18n/translations';
-
-// Konva is ~300 kB and most classes never open the board, so it gets its own
-// lazy boundary inside the already-lazy class route.
-const WhiteboardPanel = lazy(() =>
-  import('./WhiteboardPanel').then((m) => ({ default: m.WhiteboardPanel })),
-);
+import { BoardWorkspace } from './BoardWorkspace';
 
 /**
  * Chooses grid or screen-share focus automatically, with a filmstrip of the
@@ -121,6 +121,23 @@ export function OnlineClassRoom({
 }) {
   const { t } = useI18n();
   const [boardOpen, setBoardOpen] = useState(false);
+  const [boardContext, setBoardContext] = useState<OnlineClassBoardContext | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    onlineClassesApi
+      .boardContext(classId)
+      .then((context) => {
+        if (!active) return;
+        setBoardContext(context);
+        // A prepared workbook should be the first thing the class sees.
+        if (context.workbook.hasWorkbook) setBoardOpen(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [classId]);
 
   return (
     <LiveKitRoom
@@ -153,15 +170,14 @@ export function OnlineClassRoom({
 
       <div className="online-class-room__stage">
         <div className="online-class-room__main">
-          {boardOpen ? (
-            <Suspense fallback={null}>
-              <WhiteboardPanel
-                classId={classId}
-                actorId={currentUserId}
-                isHost={connection.host}
-                canAnnotate={connection.host || studentAnnotationAllowed}
-              />
-            </Suspense>
+          {boardOpen && boardContext ? (
+            <BoardWorkspace
+              classId={classId}
+              currentUserId={currentUserId}
+              isHost={connection.host}
+              canAnnotate={connection.host || studentAnnotationAllowed}
+              context={boardContext}
+            />
           ) : (
             <ClassStage />
           )}
