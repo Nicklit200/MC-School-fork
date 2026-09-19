@@ -30,7 +30,8 @@ interface Props {
   strokeWidth: number;
   sourceAspect: number | null;
   readOnly?: boolean;
-  onCommit: (shape: Shape) => void;
+  onCommit: (shape: Shape, operationId?: string) => void;
+  onDraftChange?: (operationId: string, shape: Shape) => void;
   onLaserMove?: (point: { x: number; y: number }) => void;
   onRequestText?: () => string | null;
 }
@@ -51,12 +52,15 @@ export function WhiteboardCanvas({
   sourceAspect,
   readOnly = false,
   onCommit,
+  onDraftChange,
   onLaserMove,
   onRequestText,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
+  const draftRef = useRef<Shape | null>(null);
+  const draftIdRef = useRef<string | null>(null);
   const drawing = useRef(false);
   const lastSample = useRef(0);
 
@@ -98,13 +102,22 @@ export function WhiteboardCanvas({
     }
 
     drawing.current = true;
+    draftIdRef.current =
+      typeof crypto?.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    let initial: Shape;
     if (tool === 'pen' || tool === 'highlighter' || tool === 'erase') {
-      setDraft({ kind: tool, color, width: strokeWidth, points: [[point.x, point.y]] });
+      initial = { kind: tool, color, width: strokeWidth, points: [[point.x, point.y]] };
     } else if (tool === 'line' || tool === 'arrow') {
-      setDraft({ kind: tool, color, width: strokeWidth, x1: point.x, y1: point.y, x2: point.x, y2: point.y });
+      initial = { kind: tool, color, width: strokeWidth, x1: point.x, y1: point.y, x2: point.x, y2: point.y };
     } else {
-      setDraft({ kind: tool, color, width: strokeWidth, x: point.x, y: point.y, w: 0, h: 0 });
+      initial = { kind: tool, color, width: strokeWidth, x: point.x, y: point.y, w: 0, h: 0 };
     }
+    draftRef.current = initial;
+    setDraft(initial);
+    if (draftIdRef.current) onDraftChange?.(draftIdRef.current, initial);
   };
 
   const handleMove = (event: Konva.KonvaEventObject<PointerEvent>) => {
@@ -128,26 +141,43 @@ export function WhiteboardCanvas({
     const point = pointerToNormalized(stage);
     if (!point) return;
 
-    setDraft((current) => {
-      if (!current) return current;
-      if (current.points) {
-        return { ...current, points: [...current.points, [point.x, point.y]] };
-      }
-      if (current.x1 !== undefined) {
-        return { ...current, x2: point.x, y2: point.y };
-      }
-      return { ...current, w: point.x - (current.x ?? 0), h: point.y - (current.y ?? 0) };
-    });
+    const current = draftRef.current;
+    if (!current) return;
+
+    let next: Shape;
+    if (current.points) {
+      next = { ...current, points: [...current.points, [point.x, point.y]] };
+    } else if (current.x1 !== undefined) {
+      next = { ...current, x2: point.x, y2: point.y };
+    } else {
+      next = { ...current, w: point.x - (current.x ?? 0), h: point.y - (current.y ?? 0) };
+    }
+
+    draftRef.current = next;
+    setDraft(next);
+
+    const id = draftIdRef.current;
+    if (id) {
+      const preview =
+        next.points && next.points.length > 2
+          ? { ...next, points: thinPoints(next.points) }
+          : next;
+      onDraftChange?.(id, preview);
+    }
   };
 
   const handleUp = () => {
-    if (!drawing.current || !draft) return;
+    const current = draftRef.current;
+    if (!drawing.current || !current) return;
     drawing.current = false;
+    const operationId = draftIdRef.current ?? undefined;
     // Thinning keeps the stroke under the server's point cap without visibly
     // changing the line.
-    const finished = draft.points ? { ...draft, points: thinPoints(draft.points) } : draft;
+    const finished = current.points ? { ...current, points: thinPoints(current.points) } : current;
+    draftRef.current = null;
+    draftIdRef.current = null;
     setDraft(null);
-    onCommit(finished);
+    onCommit(finished, operationId);
   };
 
   const flatten = (points: [number, number][]) =>
