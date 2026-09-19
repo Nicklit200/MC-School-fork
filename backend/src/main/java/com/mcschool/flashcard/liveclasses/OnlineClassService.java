@@ -17,7 +17,10 @@ import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -223,7 +226,8 @@ public class OnlineClassService {
                                 + ":group=" + (item.getGroup() == null ? "-" : item.getGroup().getId()))
                         .toList());
 
-        return classes.stream().map(item -> toResponse(item, caller)).toList();
+        List<OnlineClass> visible = canonicalizeTestClasses(classes);
+        return visible.stream().map(item -> toResponse(item, caller)).toList();
     }
 
     /**
@@ -247,7 +251,9 @@ public class OnlineClassService {
     @Transactional(readOnly = true)
     public OnlineClassResponse get(AuthenticatedUser caller, UUID classId) {
         requireEnabled();
-        return toResponse(accessService.requireViewer(caller, classId), caller);
+        OnlineClass requested = accessService.requireViewer(caller, classId);
+        OnlineClass canonical = canonicalTestClassFor(requested);
+        return toResponse(canonical, caller);
     }
 
     // --- Lifecycle -----------------------------------------------------------
@@ -418,6 +424,70 @@ public class OnlineClassService {
         Instant opensAt = onlineClass.getScheduledStartAt().minus(properties.joinWindowBeforeStart());
         Instant closesAt = onlineClass.getScheduledEndAt().plus(properties.joinWindowAfterEnd());
         return !now.isBefore(opensAt) && !now.isAfter(closesAt);
+    }
+
+    private List<OnlineClass> canonicalizeTestClasses(List<OnlineClass> classes) {
+        if (!properties.allowTestClasses()) {
+            return classes;
+        }
+
+        Map<String, OnlineClass> latestTests = new LinkedHashMap<>();
+        List<OnlineClass> normal = new java.util.ArrayList<>();
+
+        for (OnlineClass onlineClass : classes) {
+            if (!isTestClass(onlineClass)) {
+                normal.add(onlineClass);
+                continue;
+            }
+
+            String audience = audienceKey(onlineClass);
+            OnlineClass previous = latestTests.get(audience);
+            if (previous == null || isNewerTestClass(onlineClass, previous)) {
+                latestTests.put(audience, onlineClass);
+            }
+        }
+
+        normal.addAll(latestTests.values());
+        normal.sort(Comparator.comparing(OnlineClass::getScheduledStartAt));
+        return normal;
+    }
+
+    private OnlineClass canonicalTestClassFor(OnlineClass requested) {
+        if (!properties.allowTestClasses() || !isTestClass(requested) || requested.isTerminal()) {
+            return requested;
+        }
+
+        List<OnlineClassStatus> active = List.of(
+                OnlineClassStatus.SCHEDULED,
+                OnlineClassStatus.LOBBY_OPEN,
+                OnlineClassStatus.LIVE);
+
+        return classRepository
+                .findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(
+                        requested.getTeacher().getId(), active)
+                .stream()
+                .filter(this::isTestClass)
+                .filter(candidate -> audienceKey(candidate).equals(audienceKey(requested)))
+                .max((left, right) -> isNewerTestClass(left, right) ? 1 : -1)
+                .orElse(requested);
+    }
+
+    private boolean isTestClass(OnlineClass onlineClass) {
+        return onlineClass.getEventId() != null && onlineClass.getEventId().startsWith("test-");
+    }
+
+    private String audienceKey(OnlineClass onlineClass) {
+        if (onlineClass.getStudent() != null) {
+            return "student:" + onlineClass.getStudent().getId();
+        }
+        return "group:" + onlineClass.getGroup().getId();
+    }
+
+    private boolean isNewerTestClass(OnlineClass left, OnlineClass right) {
+        if (left.getCreatedAt() != null && right.getCreatedAt() != null) {
+            return left.getCreatedAt().isAfter(right.getCreatedAt());
+        }
+        return left.getScheduledStartAt().isAfter(right.getScheduledStartAt());
     }
 
     private OnlineClass requireHostForMutation(AuthenticatedUser caller, UUID classId) {
