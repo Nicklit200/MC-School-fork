@@ -6,6 +6,7 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.lessons.GoogleCalendarLessonService;
+import com.mcschool.flashcard.lessons.NativeLessonService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassConnectionResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassResponse;
@@ -44,6 +45,7 @@ public class OnlineClassService {
     private final OnlineClassJoinRequestRepository joinRequestRepository;
     private final OnlineClassAccessService accessService;
     private final GoogleCalendarLessonService lessonService;
+    private final NativeLessonService nativeLessonService;
     private final StudentGroupRepository groupRepository;
     private final LiveClassMediaProvider mediaProvider;
     private final OnlineClassProperties properties;
@@ -55,6 +57,7 @@ public class OnlineClassService {
                               OnlineClassJoinRequestRepository joinRequestRepository,
                               OnlineClassAccessService accessService,
                               GoogleCalendarLessonService lessonService,
+                              NativeLessonService nativeLessonService,
                               StudentGroupRepository groupRepository,
                               LiveClassMediaProvider mediaProvider,
                               OnlineClassProperties properties,
@@ -65,6 +68,7 @@ public class OnlineClassService {
         this.joinRequestRepository = joinRequestRepository;
         this.accessService = accessService;
         this.lessonService = lessonService;
+        this.nativeLessonService = nativeLessonService;
         this.groupRepository = groupRepository;
         this.mediaProvider = mediaProvider;
         this.properties = properties;
@@ -84,10 +88,12 @@ public class OnlineClassService {
     @Transactional
     public OnlineClassResponse materializeFromCalendar(AuthenticatedUser caller, String eventId) {
         requireEnabled();
-        GroupLessonResponse lesson = lessonService.listGroupLessons(caller).stream()
-                .filter(candidate -> candidate.eventId().equals(eventId))
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        GroupLessonResponse lesson = nativeLessonService.isNativeEventId(eventId)
+                ? nativeLessonService.requireLesson(caller, eventId)
+                : lessonService.listGroupLessons(caller).stream()
+                    .filter(candidate -> candidate.eventId().equals(eventId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
 
         return classRepository
                 .findByTeacherIdAndEventIdAndScheduledStartAt(caller.id(), eventId, lesson.startsAt())
