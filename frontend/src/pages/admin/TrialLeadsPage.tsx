@@ -172,7 +172,7 @@ export function TrialLeadsPage() {
               {visit.leadPhone && <div className="site-visit-phone">Лид: {visit.leadPhone}</div>}
             </article>;
           })}
-        </div>
+        </div>}
       </section>}
 
       {loading && <div className="trial-leads-empty">Загружаем заявки…</div>}
