@@ -77,6 +77,18 @@ export function UpcomingOnlineClassesPage() {
   if (!classes) return <p>{t('common.loading')}</p>;
 
   const locale = language === 'DE' ? 'de-DE' : 'ru-RU';
+  const statusRank: Record<OnlineClass['status'], number> = {
+    LIVE: 0,
+    LOBBY_OPEN: 1,
+    SCHEDULED: 2,
+    ENDED: 3,
+    CANCELLED: 4,
+  };
+  const visibleClasses = [...classes].sort((a, b) => {
+    const byStatus = statusRank[a.status] - statusRank[b.status];
+    if (byStatus !== 0) return byStatus;
+    return new Date(b.scheduledStartAt).getTime() - new Date(a.scheduledStartAt).getTime();
+  });
 
   return (
     <div className="online-classes">
@@ -105,11 +117,11 @@ export function UpcomingOnlineClassesPage() {
         </div>
       )}
 
-      {classes.length === 0 ? (
+      {visibleClasses.length === 0 ? (
         <p>{t('onlineClass.none')}</p>
       ) : (
         <ul>
-          {classes.map((item) => (
+          {visibleClasses.map((item) => (
             <li key={item.id}>
               <Link to={`/online-classes/${item.id}`}>
                 {item.title} — {new Date(item.scheduledStartAt).toLocaleString(locale)}
