@@ -72,6 +72,8 @@ export function WhiteboardCanvas({
   const draftIdRef = useRef<string | null>(null);
   const drawing = useRef(false);
   const laserActive = useRef(false);
+  const activePointerId = useRef<number | null>(null);
+  const activePointerType = useRef<string | null>(null);
   const lastSample = useRef(0);
 
   // The surface is responsive; normalized coordinates mean a resize never
@@ -122,8 +124,34 @@ export function WhiteboardCanvas({
 
   const handleDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
     if (readOnly) return;
+
+    // Tablet rule: fingers/palms never create marks. Apple Pencil / stylus
+    // arrives as pointerType="pen"; desktop mouse remains supported.
+    if (event.evt.pointerType === 'touch') return;
+
+    // Keep the accepted device type for the lifetime of the stroke. This also
+    // makes it explicit that a touch pointer can never take over a pen stroke.
+    const pointerType = event.evt.pointerType || 'mouse';
+
+    // Ignore a second simultaneous pointer so a palm or another input cannot
+    // interrupt an active stylus stroke.
+    if (
+      activePointerId.current !== null
+      && activePointerId.current !== event.evt.pointerId
+    ) {
+      return;
+    }
+
+    event.evt.preventDefault();
+    activePointerId.current = event.evt.pointerId;
+    activePointerType.current = pointerType;
+
     const point = pointerToNormalized(event.target.getStage()!);
-    if (!point) return;
+    if (!point) {
+      activePointerId.current = null;
+      activePointerType.current = null;
+      return;
+    }
 
     if (tool === 'laser') {
       laserActive.current = true;
@@ -158,6 +186,16 @@ export function WhiteboardCanvas({
   };
 
   const handleMove = (event: Konva.KonvaEventObject<PointerEvent>) => {
+    if (event.evt.pointerType === 'touch') return;
+    if (
+      activePointerType.current === 'touch'
+      || activePointerId.current === null
+      || activePointerId.current !== event.evt.pointerId
+    ) {
+      return;
+    }
+
+    event.evt.preventDefault();
     const stage = event.target.getStage();
     if (!stage) return;
 
@@ -208,14 +246,31 @@ export function WhiteboardCanvas({
     }
   };
 
-  const handleUp = () => {
+  const handleUp = (event?: Konva.KonvaEventObject<PointerEvent>) => {
+    if (event) {
+      if (event.evt.pointerType === 'touch') return;
+      if (
+        activePointerId.current !== null
+        && activePointerId.current !== event.evt.pointerId
+      ) {
+        return;
+      }
+      event.evt.preventDefault();
+    }
+
     if (tool === 'laser') {
       laserActive.current = false;
+      activePointerId.current = null;
+      activePointerType.current = null;
       return;
     }
 
     const current = draftRef.current;
-    if (!drawing.current || !current) return;
+    if (!drawing.current || !current) {
+      activePointerId.current = null;
+      activePointerType.current = null;
+      return;
+    }
     drawing.current = false;
     const operationId = draftIdRef.current ?? undefined;
     // Thinning keeps the stroke under the server's point cap without visibly
@@ -227,6 +282,8 @@ export function WhiteboardCanvas({
       setCommittedDraft({ operationId, shape: finished });
     }
     setDraft(null);
+    activePointerId.current = null;
+    activePointerType.current = null;
     onCommit(finished, operationId);
   };
 
@@ -399,11 +456,19 @@ export function WhiteboardCanvas({
         onPointerDown={handleDown}
         onPointerMove={handleMove}
         onPointerUp={handleUp}
-        onPointerLeave={() => {
+        onPointerCancel={handleUp}
+        onPointerLeave={(event) => {
+          if (event.evt.pointerType === 'touch') return;
+          if (
+            activePointerId.current !== null
+            && activePointerId.current !== event.evt.pointerId
+          ) {
+            return;
+          }
           laserActive.current = false;
-          handleUp();
+          handleUp(event);
         }}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
       >
         <Layer listening={false}>
           {shapes.map((entry) => renderShape(entry.operationId, entry.shape))}
