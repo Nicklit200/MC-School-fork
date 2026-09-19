@@ -149,13 +149,14 @@ export function WhiteboardPanel({
       </div>
 
       <WhiteboardCanvas
-        shapes={board.shapes}
+        shapes={[...board.shapes, ...board.previewShapes]}
         tool={tool}
         color={color}
         strokeWidth={strokeWidth}
         sourceAspect={sourceAspect}
         readOnly={!canAnnotate}
-        onCommit={(shape) => void board.addShape(shape)}
+        onCommit={(shape, operationId) => void board.addShape(shape, operationId)}
+        onDraftChange={(operationId, shape) => board.previewShape(operationId, shape)}
         onLaserMove={onLaserMove}
         onRequestText={() => window.prompt(t('onlineClass.whiteboard.textPrompt'))}
       />
