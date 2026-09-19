@@ -97,7 +97,8 @@ export function useClassSession(classId: string | undefined): ClassSession {
   }, [reload]);
 
   const requestConnection = useCallback(async () => {
-    if (!classId || requestInFlight.current) return;
+    const effectiveClassId = onlineClass?.id ?? classId;
+    if (!effectiveClassId || requestInFlight.current) return;
     requestInFlight.current = true;
     setPhase('requesting');
     setErrorMessage(null);
@@ -105,10 +106,10 @@ export function useClassSession(classId: string | undefined): ClassSession {
       // Students must create a waiting-room request before asking for a media
       // token. Teachers are already admitted and connect directly.
       if (onlineClass && !onlineClass.viewerIsHost) {
-        await onlineClassesApi.knock(classId);
+        await onlineClassesApi.knock(effectiveClassId);
       }
 
-      const issued = await onlineClassesApi.connect(classId);
+      const issued = await onlineClassesApi.connect(effectiveClassId);
       if (!mounted.current) return;
       setConnection(issued);
       setPhase('connected');
@@ -126,12 +127,13 @@ export function useClassSession(classId: string | undefined): ClassSession {
   // as the teacher approves the waiting-room request, the next attempt enters
   // the room without making the student click Join again.
   useEffect(() => {
-    if (!classId || phase !== 'waiting') return;
+    const effectiveClassId = onlineClass?.id ?? classId;
+    if (!effectiveClassId || phase !== 'waiting') return;
     let cancelled = false;
     const timer = window.setInterval(() => {
       if (cancelled || requestInFlight.current) return;
       requestInFlight.current = true;
-      onlineClassesApi.connect(classId)
+      onlineClassesApi.connect(effectiveClassId)
         .then((issued) => {
           if (!mounted.current || cancelled) return;
           setConnection(issued);
@@ -154,17 +156,18 @@ export function useClassSession(classId: string | undefined): ClassSession {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [classId, phase]);
+  }, [classId, onlineClass, phase]);
 
   const release = useCallback(() => {
     setConnection(null);
     setPhase('ready');
-    if (classId) {
+    const effectiveClassId = onlineClass?.id ?? classId;
+    if (effectiveClassId) {
       // Best effort: attendance is also reconciled server-side from provider
       // events, so a failed leave call is not fatal.
-      void onlineClassesApi.leave(classId).catch(() => undefined);
+      void onlineClassesApi.leave(effectiveClassId).catch(() => undefined);
     }
-  }, [classId]);
+  }, [classId, onlineClass]);
 
   return { phase, onlineClass, connection, errorMessage, requestConnection, release, reload };
 }
