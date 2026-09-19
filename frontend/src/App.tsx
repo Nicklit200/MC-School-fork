@@ -9,6 +9,7 @@ import { TeachersPage } from './pages/admin/TeachersPage';
 import { AdminTeacherLessonsPage } from './pages/admin/AdminTeacherLessonsPage';
 import { AdminLessonDetailWithHomeworkSeries } from './pages/admin/AdminLessonDetailWithHomeworkSeries';
 import { TrialLeadsPage } from './pages/admin/TrialLeadsPage';
+import { SiteVisitsPage } from './pages/admin/SiteVisitsPage';
 import { AdminPromptSettingsPage } from './pages/admin/AdminPromptSettingsPage';
 import { AdminAccountsPage } from './pages/admin/AdminAccountsPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
@@ -49,6 +50,7 @@ export function App() {
       <Route path="/admin/accounts" element={<ProtectedRoute role="ADMIN"><Layout><AdminAccountsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/lessons" element={<ProtectedRoute role="ADMIN"><Layout><AdminTeacherLessonsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/leads" element={<ProtectedRoute role="ADMIN"><Layout><TrialLeadsPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/site-visits" element={<ProtectedRoute role="ADMIN"><Layout><SiteVisitsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute role="ADMIN"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/prompts" element={<ProtectedRoute role="ADMIN"><Layout><AdminPromptSettingsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
