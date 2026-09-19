@@ -28,6 +28,16 @@ interface RealtimeAnnotationPacket {
   operation: Operation;
 }
 
+interface RealtimeAnnotationPreviewPacket {
+  v: 1;
+  type: 'annotation-preview';
+  classId: string;
+  documentId: string;
+  operationId: string;
+  actorId: string;
+  shape: Shape;
+}
+
 /**
  * Board state for one annotated surface.
  *
@@ -58,6 +68,9 @@ export function useAnnotationBoard({
   const [document, setDocument] = useState<AnnotationDocument | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
+  const [remotePreviews, setRemotePreviews] = useState<
+    Record<string, { actorId: string; shape: Shape }>
+  >({});
   const room = useRoomContext();
   const mounted = useRef(true);
   // Optimistic entries use a negative sequence so they sort after nothing and
@@ -91,17 +104,35 @@ export function useAnnotationBoard({
     const onData = (payload: Uint8Array, _participant: unknown, _kind: unknown, topic?: string) => {
       if (topic !== ANNOTATION_TOPIC || !document) return;
       try {
-        const parsed = JSON.parse(new TextDecoder().decode(payload)) as RealtimeAnnotationPacket;
+        const parsed = JSON.parse(new TextDecoder().decode(payload)) as
+          | RealtimeAnnotationPacket
+          | RealtimeAnnotationPreviewPacket;
         if (
           parsed?.v !== 1
-          || parsed.type !== 'annotation'
           || parsed.classId !== classId
           || parsed.documentId !== document.id
-          || !parsed.operation?.operationId
         ) {
           return;
         }
-        merge(parsed.operation);
+
+        if (parsed.type === 'annotation-preview') {
+          if (!parsed.operationId || !parsed.actorId || !parsed.shape) return;
+          setRemotePreviews((current) => ({
+            ...current,
+            [parsed.operationId]: { actorId: parsed.actorId, shape: parsed.shape },
+          }));
+          return;
+        }
+
+        if (parsed.type === 'annotation' && parsed.operation?.operationId) {
+          setRemotePreviews((current) => {
+            if (!(parsed.operation.operationId in current)) return current;
+            const next = { ...current };
+            delete next[parsed.operation.operationId];
+            return next;
+          });
+          merge(parsed.operation);
+        }
       } catch {
         // Malformed realtime packets are ignored. The durable replay remains
         // authoritative and will reconcile the board.
@@ -175,9 +206,13 @@ export function useAnnotationBoard({
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
 
   const submit = useCallback(
-    async (operationType: Operation['operationType'], payload: string) => {
+    async (
+      operationType: Operation['operationType'],
+      payload: string,
+      requestedOperationId?: string,
+    ) => {
       if (!document) return;
-      const operationId = newId();
+      const operationId = requestedOperationId ?? newId();
       const optimistic: Operation = {
         operationId,
         sequence: optimisticSequence.current--,
@@ -234,7 +269,33 @@ export function useAnnotationBoard({
     [actorId, classId, document, merge, room],
   );
 
-  const addShape = useCallback((shape: Shape) => submit('ADD', JSON.stringify(shape)), [submit]);
+  const previewShape = useCallback(
+    (operationId: string, shape: Shape) => {
+      if (!document) return;
+      const packet: RealtimeAnnotationPreviewPacket = {
+        v: 1,
+        type: 'annotation-preview',
+        classId,
+        documentId: document.id,
+        operationId,
+        actorId,
+        shape,
+      };
+      void room.localParticipant
+        .publishData(new TextEncoder().encode(JSON.stringify(packet)), {
+          reliable: false,
+          topic: ANNOTATION_TOPIC,
+        })
+        .catch(() => undefined);
+    },
+    [actorId, classId, document, room],
+  );
+
+  const addShape = useCallback(
+    (shape: Shape, operationId?: string) =>
+      submit('ADD', JSON.stringify(shape), operationId),
+    [submit],
+  );
 
   const undo = useCallback(() => {
     const last = undoable[undoable.length - 1];
@@ -261,6 +322,17 @@ export function useAnnotationBoard({
     return submit('CLEAR_ALL', '{}');
   }, [isHost, submit]);
 
+  const previewShapes = useMemo(
+    () =>
+      Object.entries(remotePreviews).map(([operationId, preview]) => ({
+        operationId: `preview-${operationId}`,
+        layerOwnerId: preview.actorId,
+        sequence: Number.MAX_SAFE_INTEGER,
+        shape: preview.shape,
+      })),
+    [remotePreviews],
+  );
+
   /** Applies an operation that arrived over the realtime channel. */
   const ingest = useCallback(
     (operation: Operation) => {
@@ -275,6 +347,8 @@ export function useAnnotationBoard({
     canUndo: undoable.length > 0,
     canRedo: redoStack.length > 0,
     addShape,
+    previewShape,
+    previewShapes,
     undo,
     redo,
     clearMine,
