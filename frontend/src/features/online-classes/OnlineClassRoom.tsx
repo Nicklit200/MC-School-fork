@@ -152,7 +152,20 @@ export function OnlineClassRoom({
       />
 
       <div className="online-class-room__stage">
-        <ClassStage />
+        <div className="online-class-room__main">
+          {boardOpen ? (
+            <Suspense fallback={null}>
+              <WhiteboardPanel
+                classId={classId}
+                actorId={currentUserId}
+                isHost={connection.host}
+                canAnnotate={connection.host || studentAnnotationAllowed}
+              />
+            </Suspense>
+          ) : (
+            <ClassStage />
+          )}
+        </div>
         <aside className="online-class-room__sidebar">
           {/* The waiting room is host-only; the server rejects it for students
               regardless of what is rendered here. */}
@@ -161,19 +174,13 @@ export function OnlineClassRoom({
           <ChatPanel classId={classId} currentUserId={currentUserId} isHost={connection.host} />
         </aside>
       </div>
-      <button type="button" onClick={() => setBoardOpen((open) => !open)}>
+      <button
+        type="button"
+        className="online-class-room__board-toggle"
+        onClick={() => setBoardOpen((open) => !open)}
+      >
         {boardOpen ? t('onlineClass.whiteboard.close') : t('onlineClass.whiteboard.open')}
       </button>
-      {boardOpen && (
-        <Suspense fallback={null}>
-          <WhiteboardPanel
-            classId={classId}
-            actorId={currentUserId}
-            isHost={connection.host}
-            canAnnotate={connection.host || studentAnnotationAllowed}
-          />
-        </Suspense>
-      )}
 
       <CaptionsPanel enabled={transcriptionState === 'ACTIVE'} />
       <RoomAudioRenderer />
