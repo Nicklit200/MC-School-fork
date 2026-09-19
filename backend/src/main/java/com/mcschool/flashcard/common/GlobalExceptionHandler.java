@@ -12,6 +12,7 @@ import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -64,6 +65,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleUnknownPath(HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "No endpoint at this path", request);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiErrorResponse> handleResponseStatus(ResponseStatusException ex,
+                                                                 HttpServletRequest request) {
+        String message = ex.getReason() == null || ex.getReason().isBlank()
+                ? "Request failed"
+                : ex.getReason();
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(ApiErrorResponse.of(
+                        ex.getStatusCode().value(),
+                        "REQUEST_ERROR",
+                        message,
+                        request.getRequestURI()));
     }
 
     @ExceptionHandler(ConflictException.class)
