@@ -59,6 +59,7 @@ export function WhiteboardCanvas({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
+  const [committedDraft, setCommittedDraft] = useState<{ operationId: string; shape: Shape } | null>(null);
   const draftRef = useRef<Shape | null>(null);
   const draftIdRef = useRef<string | null>(null);
   const drawing = useRef(false);
@@ -76,6 +77,19 @@ export function WhiteboardCanvas({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!committedDraft) return;
+    if (shapes.some((entry) => entry.operationId === committedDraft.operationId)) {
+      setCommittedDraft(null);
+      return;
+    }
+
+    // Safety valve for a rejected/failed commit. Normally this never fires:
+    // the optimistic board operation appears immediately.
+    const timer = window.setTimeout(() => setCommittedDraft(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [committedDraft, shapes]);
 
   const pointerToNormalized = useCallback(
     (stage: Konva.Stage) => {
@@ -176,6 +190,9 @@ export function WhiteboardCanvas({
     const finished = current.points ? { ...current, points: thinPoints(current.points) } : current;
     draftRef.current = null;
     draftIdRef.current = null;
+    if (operationId) {
+      setCommittedDraft({ operationId, shape: finished });
+    }
     setDraft(null);
     onCommit(finished, operationId);
   };
@@ -281,6 +298,9 @@ export function WhiteboardCanvas({
       >
         <Layer listening={false}>
           {shapes.map((entry) => renderShape(entry.operationId, entry.shape))}
+          {committedDraft &&
+            !shapes.some((entry) => entry.operationId === committedDraft.operationId) &&
+            renderShape(`committed-${committedDraft.operationId}`, committedDraft.shape)}
           {draft && renderShape('draft', draft)}
         </Layer>
       </Stage>
