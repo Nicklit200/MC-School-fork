@@ -115,8 +115,8 @@ export function TrialLeadsPage() {
       <div className="trial-leads-heading">
         <div>
           <p className="trial-leads-eyebrow">Продажи</p>
-          <h1>Заявки на пробный урок</h1>
-          <p>Теперь отдельно видны все входы на сайт и технические данные устройства. Так можно понять, например, есть ли отвал только на Android, Safari или конкретном размере экрана.</p>
+          <h1>Заявки и попытки на сайте</h1>
+          <p>Сохраняем каждый уникальный заход: устройство, систему, браузер и этап воронки. Если человек оставил номер, попытка связывается с заявкой.</p>
         </div>
         <div className="trial-lead-actions">
           <Link className="btn btn--secondary" to="/admin/settings">Уведомления</Link>
@@ -136,8 +136,8 @@ export function TrialLeadsPage() {
       {!loading && <section className="site-visits-panel">
         <div className="site-visits-heading">
           <div>
-            <h2>Последние посещения сайта</h2>
-            <p>Последние 200 уникальных сессий. Если телефон не оставлен, это видно прямо здесь.</p>
+            <h2>Попытки посетителей</h2>
+            <p>До 200 последних уникальных заходов. Видно, с какого телефона или компьютера зашли, до какого шага дошли и оставили ли номер.</p>
           </div>
           <span>{visits.length}</span>
         </div>
@@ -145,7 +145,7 @@ export function TrialLeadsPage() {
         {visits.length === 0 && <div className="trial-leads-empty">Новые посещения начнут появляться после обновления сайта.</div>}
 
         {visits.length > 0 && <div className="site-visits-list">
-          {visits.slice(0, 30).map((visit) => {
+          {visits.map((visit) => {
             const device = [visit.deviceModel || visit.deviceType, joinVersion(visit.osName, visit.osVersion)].filter(Boolean).join(' · ');
             const browser = joinVersion(visit.browserName, visit.browserVersion);
             const converted = Boolean(visit.leadStatus);
@@ -161,6 +161,7 @@ export function TrialLeadsPage() {
               </div>
 
               <div className="site-visit-meta">
+                <span><b>Устройство:</b> {device || '—'}</span>
                 <span><b>Браузер:</b> {browser || '—'}</span>
                 <span><b>Экран:</b> {visit.screenSize || '—'}</span>
                 <span><b>Окно:</b> {visit.viewportSize || '—'}</span>
@@ -172,7 +173,7 @@ export function TrialLeadsPage() {
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
               </div>
 
-              {visit.leadPhone && <div className="site-visit-phone">Лид: {visit.leadPhone}</div>}
+              <div className="site-visit-phone">{visit.leadPhone ? <>Контактный номер: {visit.leadPhone}</> : <>Контактный номер: не оставил</>}</div>
             </article>;
           })}
         </div>}
