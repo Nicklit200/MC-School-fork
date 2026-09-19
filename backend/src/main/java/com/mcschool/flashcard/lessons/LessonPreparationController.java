@@ -29,14 +29,17 @@ import org.springframework.web.multipart.MultipartFile;
 public class LessonPreparationController {
     private final LessonPreparationService service;
     private final GoogleCalendarLessonService lessonService;
+    private final NativeLessonService nativeLessonService;
     private final McpHomeworkSeriesService homeworkSeriesService;
 
     public LessonPreparationController(
             LessonPreparationService service,
             GoogleCalendarLessonService lessonService,
+            NativeLessonService nativeLessonService,
             McpHomeworkSeriesService homeworkSeriesService) {
         this.service = service;
         this.lessonService = lessonService;
+        this.nativeLessonService = nativeLessonService;
         this.homeworkSeriesService = homeworkSeriesService;
     }
 
@@ -105,6 +108,9 @@ public class LessonPreparationController {
     }
 
     private GroupLessonResponse requireLesson(AuthenticatedUser teacher, String eventId) {
+        if (nativeLessonService.isNativeEventId(eventId)) {
+            return nativeLessonService.requireLesson(teacher, eventId);
+        }
         return lessonService.listGroupLessons(teacher).stream()
                 .filter(lesson -> lesson.eventId().equals(eventId))
                 .findFirst()
