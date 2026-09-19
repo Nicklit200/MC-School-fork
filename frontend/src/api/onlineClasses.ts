@@ -172,6 +172,15 @@ export const onlineClassesApi = {
   materializeFromCalendar: (eventId: string) =>
     request<OnlineClass>('POST', `/online-classes/calendar/${encodeURIComponent(eventId)}`),
 
+  createTestClass: (studentId?: string, groupId?: string, title?: string) => {
+    const params = new URLSearchParams();
+    if (studentId) params.set('studentId', studentId);
+    if (groupId) params.set('groupId', groupId);
+    if (title) params.set('title', title);
+    const query = params.toString();
+    return request<OnlineClass>('POST', `/online-classes/test-class${query ? `?${query}` : ''}`);
+  },
+
   listUpcoming: () => request<OnlineClass[]>('GET', '/online-classes/upcoming'),
 
   get: (classId: string) => request<OnlineClass>('GET', `/online-classes/${classId}`),
