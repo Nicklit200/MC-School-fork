@@ -185,6 +185,17 @@ public class OnlineClassService {
                 ? classRepository.findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(caller.id(), active)
                 : classRepository.findVisibleToStudent(caller.id(), from, active);
 
+        log.info("Online classes upcoming: callerId={} role={} count={} classes={}",
+                caller.id(),
+                caller.role(),
+                classes.size(),
+                classes.stream()
+                        .map(item -> item.getId()
+                                + ":" + item.getStatus()
+                                + ":student=" + (item.getStudent() == null ? "-" : item.getStudent().getId())
+                                + ":group=" + (item.getGroup() == null ? "-" : item.getGroup().getId()))
+                        .toList());
+
         return classes.stream().map(item -> toResponse(item, caller)).toList();
     }
 
