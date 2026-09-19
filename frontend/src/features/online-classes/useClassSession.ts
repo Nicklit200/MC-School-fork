@@ -102,6 +102,12 @@ export function useClassSession(classId: string | undefined): ClassSession {
     setPhase('requesting');
     setErrorMessage(null);
     try {
+      // Students must create a waiting-room request before asking for a media
+      // token. Teachers are already admitted and connect directly.
+      if (onlineClass && !onlineClass.viewerIsHost) {
+        await onlineClassesApi.knock(classId);
+      }
+
       const issued = await onlineClassesApi.connect(classId);
       if (!mounted.current) return;
       setConnection(issued);
@@ -114,7 +120,41 @@ export function useClassSession(classId: string | undefined): ClassSession {
     } finally {
       requestInFlight.current = false;
     }
-  }, [classId]);
+  }, [classId, onlineClass]);
+
+  // While a student is waiting, retry the token request automatically. As soon
+  // as the teacher approves the waiting-room request, the next attempt enters
+  // the room without making the student click Join again.
+  useEffect(() => {
+    if (!classId || phase !== 'waiting') return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (cancelled || requestInFlight.current) return;
+      requestInFlight.current = true;
+      onlineClassesApi.connect(classId)
+        .then((issued) => {
+          if (!mounted.current || cancelled) return;
+          setConnection(issued);
+          setPhase('connected');
+          setErrorMessage(null);
+        })
+        .catch((error) => {
+          if (!mounted.current || cancelled) return;
+          const mapped = phaseForError(error);
+          if (mapped.phase !== 'waiting') {
+            setPhase(mapped.phase);
+            setErrorMessage(mapped.message);
+          }
+        })
+        .finally(() => {
+          requestInFlight.current = false;
+        });
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [classId, phase]);
 
   const release = useCallback(() => {
     setConnection(null);
