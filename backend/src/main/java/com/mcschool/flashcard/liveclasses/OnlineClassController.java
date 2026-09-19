@@ -2,6 +2,8 @@ package com.mcschool.flashcard.liveclasses;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationDocumentResponse;
+import com.mcschool.flashcard.liveclasses.dto.AttendanceStudentResponse;
+import com.mcschool.flashcard.liveclasses.dto.FinishClassRequest;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassBoardContextResponse;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationResponse;
@@ -50,6 +52,7 @@ public class OnlineClassController {
     private final OnlineClassService onlineClassService;
     private final OnlineClassAdmissionService admissionService;
     private final OnlineClassHostControlService hostControlService;
+    private final OnlineClassAttendanceService attendanceService;
     private final OnlineClassChatService chatService;
     private final OnlineClassRecordingService recordingService;
     private final OnlineClassTranscriptService transcriptService;
@@ -59,6 +62,7 @@ public class OnlineClassController {
     public OnlineClassController(OnlineClassService onlineClassService,
                                  OnlineClassAdmissionService admissionService,
                                  OnlineClassHostControlService hostControlService,
+                                 OnlineClassAttendanceService attendanceService,
                                  OnlineClassChatService chatService,
                                  OnlineClassRecordingService recordingService,
                                  OnlineClassTranscriptService transcriptService,
@@ -67,6 +71,7 @@ public class OnlineClassController {
         this.onlineClassService = onlineClassService;
         this.admissionService = admissionService;
         this.hostControlService = hostControlService;
+        this.attendanceService = attendanceService;
         this.chatService = chatService;
         this.recordingService = recordingService;
         this.transcriptService = transcriptService;
@@ -112,6 +117,12 @@ public class OnlineClassController {
     @GetMapping("/upcoming")
     public List<OnlineClassResponse> listUpcoming(@AuthenticationPrincipal AuthenticatedUser caller) {
         return onlineClassService.listUpcoming(caller);
+    }
+
+    /** Completed lessons remain available as a student's durable lesson history. */
+    @GetMapping("/history")
+    public List<OnlineClassResponse> history(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return onlineClassService.listHistory(caller);
     }
 
     @GetMapping("/{classId}")
@@ -216,6 +227,26 @@ public class OnlineClassController {
     public List<ClassParticipantResponse> attendance(@AuthenticationPrincipal AuthenticatedUser caller,
                                                      @PathVariable UUID classId) {
         return hostControlService.attendance(caller, classId);
+    }
+
+    /** Full scheduled roster, including students who never connected. */
+    @GetMapping("/{classId}/attendance-roster")
+    @PreAuthorize("hasRole('TEACHER')")
+    public List<AttendanceStudentResponse> attendanceRoster(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @PathVariable UUID classId) {
+        return attendanceService.roster(caller, classId);
+    }
+
+    /** Teacher confirms present/absent, then the room is ended for everyone. */
+    @PostMapping("/{classId}/finish")
+    @PreAuthorize("hasRole('TEACHER')")
+    public OnlineClassResponse finish(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @PathVariable UUID classId,
+            @RequestBody FinishClassRequest request) {
+        attendanceService.confirm(caller, classId, request == null ? null : request.attendance());
+        return onlineClassService.end(caller, classId);
     }
 
     @PostMapping("/{classId}/participants/{userId}/mute")
