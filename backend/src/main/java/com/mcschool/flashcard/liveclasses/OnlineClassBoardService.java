@@ -2,7 +2,6 @@ package com.mcschool.flashcard.liveclasses;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
-import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
 import com.mcschool.flashcard.lessons.LessonPreparation;
 import com.mcschool.flashcard.lessons.LessonPreparationRepository;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassBoardContextResponse;
@@ -31,14 +30,14 @@ public class OnlineClassBoardService {
 
     private final OnlineClassAccessService accessService;
     private final LessonPreparationRepository preparationRepository;
-    private final StudentGroupMemberRepository groupMemberRepository;
+    private final OnlineClassParticipantRepository participantRepository;
 
     public OnlineClassBoardService(OnlineClassAccessService accessService,
                                    LessonPreparationRepository preparationRepository,
-                                   StudentGroupMemberRepository groupMemberRepository) {
+                                   OnlineClassParticipantRepository participantRepository) {
         this.accessService = accessService;
         this.preparationRepository = preparationRepository;
-        this.groupMemberRepository = groupMemberRepository;
+        this.participantRepository = participantRepository;
     }
 
     @Transactional(readOnly = true)
@@ -48,19 +47,18 @@ public class OnlineClassBoardService {
 
         List<OnlineClassBoardStudentResponse> students;
         if (host) {
-            if (onlineClass.isGroupClass()) {
-                students = groupMemberRepository
-                        .findAllByGroupIdOrderByStudentFullNameAsc(onlineClass.getGroup().getId())
-                        .stream()
-                        .map(member -> new OnlineClassBoardStudentResponse(
-                                member.getStudent().getId(),
-                                member.getStudent().getFullName()))
-                        .toList();
-            } else {
-                students = List.of(new OnlineClassBoardStudentResponse(
-                        onlineClass.getStudent().getId(),
-                        onlineClass.getStudent().getFullName()));
-            }
+            students = participantRepository
+                    .findAllByOnlineClassIdOrderByCreatedAtAsc(classId)
+                    .stream()
+                    .filter(participant -> !participant.isHost())
+                    .filter(OnlineClassParticipant::isConnected)
+                    .map(participant -> new OnlineClassBoardStudentResponse(
+                            participant.getUser().getId(),
+                            participant.getUser().getFullName()))
+                    .sorted(java.util.Comparator.comparing(
+                            OnlineClassBoardStudentResponse::fullName,
+                            String.CASE_INSENSITIVE_ORDER))
+                    .toList();
         } else {
             students = List.of(new OnlineClassBoardStudentResponse(
                     caller.id(),
