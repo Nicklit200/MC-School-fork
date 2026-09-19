@@ -4,20 +4,34 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
+import com.mcschool.flashcard.homeworks.dto.HomeworkAnswerReviewResponse;
+import com.mcschool.flashcard.homeworks.dto.HomeworkFinalAnswersResult;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
+import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class HomeworkService {
+
+    private static final Pattern ANSWER_KEY_ITEM = Pattern.compile(
+            "\\{\\\"label\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"answer\\\":\\\"((?:\\\\.|[^\\\"])*)\\\"\\}");
+    private static final Pattern ANSWER_RESULT_ITEM = Pattern.compile(
+            "\\{\\\"label\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"answer\\\":\\\"((?:\\\\.|[^\\\"])*)\\\",\\\"correct\\\":(true|false)\\}");
 
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
@@ -42,9 +56,114 @@ public class HomeworkService {
         return listForStudent(studentId);
     }
 
+    @Transactional
+    public HomeworkAnswerReviewResponse reviewFinalAnswers(AuthenticatedUser teacher, UUID homeworkId) {
+        Homework homework = homeworkRepository.findById(homeworkId)
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+        requireOwnedStudent(teacher.id(), homework.getStudent().getId());
+
+        int total = homework.getFinalAnswerCount() == null ? 0 : homework.getFinalAnswerCount();
+        List<AnswerKeyItem> answerKey = homework.hasFinalAnswerPrompt()
+                ? readAnswerKey(homework.getAnswerKeyJson())
+                : List.of();
+        List<SaveHomeworkFinalAnswersRequest.FinalAnswer> submittedAnswers =
+                readSubmittedAnswers(homework.getFinalAnswersJson());
+
+        if (!submittedAnswers.isEmpty() && submittedAnswers.size() == answerKey.size()) {
+            int correctCount = 0;
+            List<HomeworkFinalAnswersResult.Item> resultItems = new ArrayList<>();
+            List<HomeworkAnswerReviewResponse.Item> reviewItems = new ArrayList<>();
+
+            for (int index = 0; index < submittedAnswers.size(); index++) {
+                SaveHomeworkFinalAnswersRequest.FinalAnswer submitted = submittedAnswers.get(index);
+                AnswerKeyItem correct = answerKey.get(index);
+                boolean matches = answersEquivalent(submitted.answer(), correct.answer());
+                if (matches) correctCount += 1;
+                String label = submitted.label().isBlank() ? correct.label() : submitted.label().trim();
+                resultItems.add(new HomeworkFinalAnswersResult.Item(label, matches));
+                reviewItems.add(new HomeworkAnswerReviewResponse.Item(
+                        label,
+                        submitted.answer().trim(),
+                        correct.answer(),
+                        matches));
+            }
+
+            boolean allCorrect = correctCount == total;
+            if (!Integer.valueOf(correctCount).equals(homework.getFinalCorrectCount())
+                    || !Boolean.valueOf(allCorrect).equals(homework.getFinalAnswersCorrect())) {
+                homework.changeFinalAnswers(
+                        homework.getFinalAnswersJson(),
+                        correctCount,
+                        allCorrect,
+                        toResultsJson(submittedAnswers, resultItems));
+            }
+
+            double percent = total == 0 ? 0.0 : Math.round((correctCount * 10000.0) / total) / 100.0;
+            return new HomeworkAnswerReviewResponse(correctCount, total, percent, reviewItems);
+        }
+
+        int storedCorrect = homework.getFinalCorrectCount() == null ? 0 : homework.getFinalCorrectCount();
+        List<HomeworkAnswerReviewResponse.Item> storedItems = readAnswerResults(homework.getFinalAnswerResultsJson());
+        List<HomeworkAnswerReviewResponse.Item> reviewItems = new ArrayList<>();
+        for (int index = 0; index < storedItems.size(); index++) {
+            HomeworkAnswerReviewResponse.Item stored = storedItems.get(index);
+            String correctAnswer = index < answerKey.size() ? answerKey.get(index).answer() : null;
+            reviewItems.add(new HomeworkAnswerReviewResponse.Item(
+                    stored.label(), stored.answer(), correctAnswer, stored.correct()));
+        }
+        double percent = total == 0 ? 0.0 : Math.round((storedCorrect * 10000.0) / total) / 100.0;
+        return new HomeworkAnswerReviewResponse(storedCorrect, total, percent, reviewItems);
+    }
+
     @Transactional(readOnly = true)
     public List<HomeworkResponse> listForStudent(AuthenticatedUser student) {
         return listForStudent(student.id());
+    }
+
+    /**
+     * Grades the compact final-answer form that appears after the PDF itself has been submitted.
+     * The answer key remains server-side; the response only tells the student which rows matched.
+     * Incorrect answers never block submission: grading is persisted for teacher analytics.
+     */
+    @Transactional
+    public HomeworkFinalAnswersResult saveFinalAnswers(AuthenticatedUser student, UUID homeworkId,
+                                                        SaveHomeworkFinalAnswersRequest request) {
+        Homework homework = requireStudentHomework(student, homeworkId);
+        if (!homework.isSubmitted()) {
+            throw new ConflictException("Submit the PDF homework before entering final answers");
+        }
+        if (!homework.hasFinalAnswerPrompt()) {
+            throw new ConflictException("This homework does not require final answers");
+        }
+
+        int expectedCount = homework.getFinalAnswerCount();
+        if (request.answers().size() != expectedCount) {
+            throw new ConflictException("Exactly " + expectedCount + " final answers are required");
+        }
+
+        List<AnswerKeyItem> answerKey = readAnswerKey(homework.getAnswerKeyJson());
+        if (answerKey.size() != expectedCount) {
+            throw new IllegalStateException("Homework answer key does not match the configured answer count");
+        }
+
+        int correctCount = 0;
+        List<HomeworkFinalAnswersResult.Item> items = new ArrayList<>();
+        for (int index = 0; index < expectedCount; index++) {
+            SaveHomeworkFinalAnswersRequest.FinalAnswer submitted = request.answers().get(index);
+            AnswerKeyItem correct = answerKey.get(index);
+            boolean matches = answersEquivalent(submitted.answer(), correct.answer());
+            if (matches) correctCount += 1;
+            String label = submitted.label().isBlank() ? correct.label() : submitted.label().trim();
+            items.add(new HomeworkFinalAnswersResult.Item(label, matches));
+        }
+
+        boolean allCorrect = correctCount == expectedCount;
+        homework.changeFinalAnswers(
+                toJson(request.answers()),
+                correctCount,
+                allCorrect,
+                toResultsJson(request.answers(), items));
+        return new HomeworkFinalAnswersResult(correctCount, expectedCount, allCorrect, items);
     }
 
     @Transactional
@@ -64,6 +183,12 @@ public class HomeworkService {
         homeworkRepository.delete(homework);
     }
 
+    private Homework requireStudentHomework(AuthenticatedUser student, UUID homeworkId) {
+        if (student.role() != Role.STUDENT) throw new IllegalStateException("Student role required");
+        return homeworkRepository.findByIdAndStudentId(homeworkId, student.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found"));
+    }
+
     private List<HomeworkResponse> listForStudent(UUID studentId) {
         List<Homework> homeworks = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(studentId);
         Map<UUID, HomeworkStats> stats = homeworkRepository.statsByStudentId(studentId).stream()
@@ -80,4 +205,156 @@ public class HomeworkService {
                 .filter(u -> u.getTeacher() != null && u.getTeacher().getId().equals(teacherId))
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
     }
+
+    private List<AnswerKeyItem> readAnswerKey(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Homework answer key is missing");
+        }
+        List<AnswerKeyItem> items = new ArrayList<>();
+        Matcher matcher = ANSWER_KEY_ITEM.matcher(value);
+        while (matcher.find()) {
+            items.add(new AnswerKeyItem(jsonUnescape(matcher.group(1)), jsonUnescape(matcher.group(2))));
+        }
+        if (items.isEmpty()) {
+            throw new IllegalStateException("Homework answer key is invalid");
+        }
+        return items;
+    }
+
+    private List<SaveHomeworkFinalAnswersRequest.FinalAnswer> readSubmittedAnswers(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<SaveHomeworkFinalAnswersRequest.FinalAnswer> items = new ArrayList<>();
+        Matcher matcher = ANSWER_KEY_ITEM.matcher(value);
+        while (matcher.find()) {
+            items.add(new SaveHomeworkFinalAnswersRequest.FinalAnswer(
+                    jsonUnescape(matcher.group(1)),
+                    jsonUnescape(matcher.group(2))));
+        }
+        return items;
+    }
+
+    private List<HomeworkAnswerReviewResponse.Item> readAnswerResults(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<HomeworkAnswerReviewResponse.Item> items = new ArrayList<>();
+        Matcher matcher = ANSWER_RESULT_ITEM.matcher(value);
+        while (matcher.find()) {
+            items.add(new HomeworkAnswerReviewResponse.Item(
+                    jsonUnescape(matcher.group(1)),
+                    jsonUnescape(matcher.group(2)),
+                    null,
+                    Boolean.parseBoolean(matcher.group(3))));
+        }
+        return items;
+    }
+
+    private boolean answersEquivalent(String submitted, String correct) {
+        String left = normalizeText(submitted);
+        String right = normalizeText(correct);
+        if (left.equals(right)) return true;
+
+        NumericValue leftNumeric = parseNumeric(left);
+        NumericValue rightNumeric = parseNumeric(right);
+        return leftNumeric != null
+                && rightNumeric != null
+                && unitsEquivalent(leftNumeric.unit(), rightNumeric.unit())
+                && leftNumeric.value().compareTo(rightNumeric.value()) == 0;
+    }
+
+    private boolean unitsEquivalent(String left, String right) {
+        if (left.equals(right)) return true;
+        return (left.isEmpty() && "€".equals(right))
+                || (right.isEmpty() && "€".equals(left));
+    }
+
+    private String normalizeText(String value) {
+        return value.trim()
+                .toLowerCase(Locale.ROOT)
+                .replace('−', '-')
+                .replace(',', '.')
+                .replaceAll("\\s+", "")
+                .replace("eur", "€");
+    }
+
+    private NumericValue parseNumeric(String normalized) {
+        try {
+            String unit = "";
+            String number = normalized;
+            if (number.endsWith("%")) {
+                unit = "%";
+                number = number.substring(0, number.length() - 1);
+            } else if (number.endsWith("€")) {
+                unit = "€";
+                number = number.substring(0, number.length() - 1);
+            }
+            if (number.isBlank()) return null;
+
+            BigDecimal result;
+            int slash = number.indexOf('/');
+            if (slash >= 0) {
+                if (slash == 0 || slash == number.length() - 1 || number.indexOf('/', slash + 1) >= 0) return null;
+                BigDecimal numerator = new BigDecimal(number.substring(0, slash));
+                BigDecimal denominator = new BigDecimal(number.substring(slash + 1));
+                if (denominator.compareTo(BigDecimal.ZERO) == 0) return null;
+                result = numerator.divide(denominator, MathContext.DECIMAL128);
+            } else {
+                result = new BigDecimal(number);
+            }
+            return new NumericValue(result, unit);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private String toJson(List<SaveHomeworkFinalAnswersRequest.FinalAnswer> answers) {
+        return answers.stream()
+                .map(answer -> "{\"label\":\"" + jsonEscape(answer.label().trim())
+                        + "\",\"answer\":\"" + jsonEscape(answer.answer().trim()) + "\"}")
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    private String toResultsJson(List<SaveHomeworkFinalAnswersRequest.FinalAnswer> answers,
+                                 List<HomeworkFinalAnswersResult.Item> items) {
+        List<String> rows = new ArrayList<>();
+        for (int index = 0; index < answers.size(); index++) {
+            SaveHomeworkFinalAnswersRequest.FinalAnswer answer = answers.get(index);
+            HomeworkFinalAnswersResult.Item item = items.get(index);
+            rows.add("{\"label\":\"" + jsonEscape(item.label())
+                    + "\",\"answer\":\"" + jsonEscape(answer.answer().trim())
+                    + "\",\"correct\":" + item.correct() + "}");
+        }
+        return rows.stream().collect(Collectors.joining(",", "[", "]"));
+    }
+
+    private String jsonEscape(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+                .replace("\t", "\\t");
+    }
+
+    private String jsonUnescape(String value) {
+        StringBuilder result = new StringBuilder();
+        boolean escaped = false;
+        for (int i = 0; i < value.length(); i++) {
+            char current = value.charAt(i);
+            if (!escaped) {
+                if (current == '\\') escaped = true;
+                else result.append(current);
+                continue;
+            }
+            result.append(switch (current) {
+                case 'n' -> '\n';
+                case 'r' -> '\r';
+                case 't' -> '\t';
+                default -> current;
+            });
+            escaped = false;
+        }
+        if (escaped) result.append('\\');
+        return result.toString();
+    }
+
+    private record AnswerKeyItem(String label, String answer) {}
+    private record NumericValue(BigDecimal value, String unit) {}
 }

@@ -22,8 +22,14 @@ public record HomeworkResponse(
         boolean hasWorksheet,
         String worksheetFilename,
         Integer worksheetPageCount,
+        boolean pdfUploaded,
         boolean submitted,
         Instant submittedAt,
+        Integer finalAnswerCount,
+        boolean finalAnswersSubmitted,
+        Boolean finalAnswersCorrect,
+        Integer finalCorrectCount,
+        Double finalCorrectPercent,
         Instant deadlineAt,
         boolean overdue,
         boolean submittedLate
@@ -32,11 +38,18 @@ public record HomeworkResponse(
         HomeworkStats stats = statsByHomework.getOrDefault(homework.getId(),
                 new HomeworkStats(homework.getId(), 0, 0, 0, 0));
         HomeworkStatus status = statusFor(homework, stats);
+        Integer total = homework.getFinalAnswerCount();
+        Integer correct = homework.getFinalCorrectCount();
+        Double percent = total != null && total > 0 && correct != null
+                ? Math.round((correct * 10000.0) / total) / 100.0
+                : null;
         return new HomeworkResponse(homework.getId(), homework.getStudent().getId(),
                 homework.getStartDate(), homework.getCreatedAt(), stats.totalCards(),
                 stats.notStarted(), stats.inProgress(), stats.learned(), status,
                 homework.hasWorksheet(), homework.getWorksheetFilename(), homework.getWorksheetPageCount(),
-                homework.isSubmitted(), homework.getSubmittedAt(),
+                homework.isSubmitted(), homework.isSubmissionComplete(), homework.getSubmittedAt(),
+                homework.getFinalAnswerCount(), homework.hasSubmittedFinalAnswers(), homework.getFinalAnswersCorrect(),
+                homework.getFinalCorrectCount(), percent,
                 HomeworkDeadlinePolicy.deadlineAt(homework.getStartDate()),
                 HomeworkDeadlinePolicy.isOverdue(homework),
                 HomeworkDeadlinePolicy.wasSubmittedLate(homework));

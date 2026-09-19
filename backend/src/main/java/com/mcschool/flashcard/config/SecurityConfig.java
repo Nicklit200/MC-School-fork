@@ -48,25 +48,18 @@ public class SecurityConfig {
                         .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER)))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/activate",
+                                "/api/v1/auth/staging-login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/staging-profiles").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/public/trial-leads").permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/public/trial-leads/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/google-meet/events").permitAll()
-                        // LiveKit webhook. Exempt from JWT because the provider
-                        // holds no user token — NOT unverified: the handler
-                        // validates the Authorization JWT against the API
-                        // key/secret and compares a SHA-256 of the raw body
-                        // before touching any state. Scoped to this exact path
-                        // and POST only; never widened to a wildcard.
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/online-classes/webhooks/livekit").permitAll()
-                        // Transcript ingestion by the transcription worker.
-                        // Exempt from JWT because the worker acts for no user —
-                        // NOT unauthenticated: the handler requires a matching
-                        // internal shared secret (constant-time compared) and
-                        // rejects everything else with 401.
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/internal/online-classes/*/transcript-segments").permitAll()
                         .requestMatchers(
@@ -112,7 +105,8 @@ public class SecurityConfig {
                                 railwayOrigin,
                                 "https://mindcrafti-school-production.up.railway.app",
                                 "https://mindcrafti.de",
-                                "https://www.mindcrafti.de"))
+                                "https://www.mindcrafti.de",
+                                "https://staging-web-production.up.railway.app"))
                 .map(String::trim)
                 .map(SecurityConfig::stripTrailingSlash)
                 .filter(origin -> !origin.isBlank())
@@ -122,11 +116,6 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Mindcrafti-Api-Key", "MCP-Protocol-Version", "MCP-Session-Id"));
 
-        // Trial leads are intentionally public. Embedded browsers (notably social-media
-        // in-app browsers) may add their own request headers or expose a non-site Origin,
-        // which used to make Spring reject the CORS preflight before the POST reached us.
-        // Keep this permissive rule scoped to the public lead endpoint only; authenticated
-        // API routes continue to use the restricted origin/header configuration above.
         CorsConfiguration publicTrialLeadConfiguration = new CorsConfiguration();
         publicTrialLeadConfiguration.setAllowedOriginPatterns(List.of("*"));
         publicTrialLeadConfiguration.setAllowedMethods(List.of("POST", "PATCH", "OPTIONS"));

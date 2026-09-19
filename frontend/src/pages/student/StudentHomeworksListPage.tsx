@@ -21,7 +21,7 @@ export function StudentHomeworksListPage() {
   const today = localDateString(new Date());
   const homeworks = useMemo(
     () => (items ?? [])
-      .filter((item) => item.hasWorksheet && (item.startDate === today || item.overdue))
+      .filter((item) => item.hasWorksheet && (item.startDate === today || item.overdue || !item.submitted))
       .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
     [items, today],
   );
@@ -38,31 +38,36 @@ export function StudentHomeworksListPage() {
         </p>
       ) : (
         <div className="panel stack">
-          {homeworks.map((homework) => (
-            <Link
-              key={homework.id}
-              className="list-row"
-              to={`/student/homeworks/${homework.id}/worksheet`}
-              style={{ textDecoration: 'none' }}
-            >
-              <div>
-                <div className="list-row__title">{formatDate(homework.startDate, language)}</div>
-                <div className="muted">
-                  {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
-                  {homework.worksheetPageCount
-                    ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}`
-                    : ''}
+          {homeworks.map((homework) => {
+            const awaitingAnswers = homework.pdfUploaded && !homework.submitted;
+            return (
+              <Link
+                key={homework.id}
+                className="list-row"
+                to={`/student/homeworks/${homework.id}/worksheet`}
+                style={{ textDecoration: 'none' }}
+              >
+                <div>
+                  <div className="list-row__title">{formatDate(homework.startDate, language)}</div>
+                  <div className="muted">
+                    {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
+                    {homework.worksheetPageCount
+                      ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}`
+                      : ''}
+                  </div>
                 </div>
-              </div>
-              <span className={`pill ${homework.overdue ? 'pill--danger' : homework.submitted ? 'pill--learned' : 'pill--active'}`}>
-                {homework.overdue
-                  ? (language === 'DE' ? 'Überfällig — trotzdem erledigen' : 'Просрочено — всё равно нужно сдать')
-                  : homework.submitted
+                <span className={`pill ${homework.submitted ? 'pill--learned' : homework.overdue ? 'pill--danger' : 'pill--active'}`}>
+                  {homework.submitted
                     ? (language === 'DE' ? 'Abgegeben' : 'Сдано')
-                    : (language === 'DE' ? 'Heute bis 19:00' : 'Сдать сегодня до 19:00')}
-              </span>
-            </Link>
-          ))}
+                    : awaitingAnswers
+                      ? (language === 'DE' ? 'Antworten eingeben' : 'Ввести ответы')
+                      : homework.overdue
+                        ? (language === 'DE' ? 'Überfällig — trotzdem erledigen' : 'Просрочено — всё равно нужно сдать')
+                        : (language === 'DE' ? 'Heute erledigen' : 'Нужно сделать')}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

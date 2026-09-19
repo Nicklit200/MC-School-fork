@@ -47,6 +47,22 @@ public class AuthService {
     }
 
     /**
+     * Issues a token for an isolated staging fixture without checking a password.
+     * This method is only called by StagingAuthController, which returns 404 unless
+     * STAGING_FIXTURES_ENABLED is explicitly enabled in the staging environment.
+     */
+    @Transactional(readOnly = true)
+    public AuthResponse stagingLogin(String identifier, Role expectedRole) {
+        String normalized = identifier.trim();
+        User user = userRepository.findByEmail(normalized.toLowerCase(Locale.ROOT))
+                .or(() -> userRepository.findByUsernameIgnoreCase(normalized))
+                .filter(candidate -> !candidate.isArchived())
+                .filter(candidate -> candidate.getRole() == expectedRole)
+                .orElseThrow(() -> new ResourceNotFoundException("Staging account not found"));
+        return issueToken(user);
+    }
+
+    /**
      * Completes an invitation. Students can activate with the school username only;
      * teachers and parents still require an email address.
      */

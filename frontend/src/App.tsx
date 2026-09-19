@@ -30,12 +30,10 @@ import { MyCardsPage } from './pages/student/MyCardsPage';
 import { StudentCardsDetailPage } from './pages/student/StudentCardsDetailPage';
 import { StudentHomeworksListPage } from './pages/student/StudentHomeworksListPage';
 import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetailPage';
-import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSubmissionPage';
+import { ExperimentalPdfHomeworkSubmissionPage } from './pages/student/ExperimentalPdfHomeworkSubmissionPage';
 import { SettingsPage } from './pages/student/SettingsPage';
 import { ParentPage } from './pages/parent/ParentPage';
 
-// Online-class pages pull in the LiveKit SDK (~700 kB). They are lazy-loaded so
-// the flashcard flows — especially on student mobile — do not pay for it.
 const UpcomingOnlineClassesPage = lazy(() =>
   import('./pages/online-classes/UpcomingOnlineClassesPage').then((m) => ({
     default: m.UpcomingOnlineClassesPage,
@@ -83,11 +81,9 @@ export function App() {
       <Route path="/homeworks" element={<Navigate to="/student/homeworks" replace />} />
       <Route path="/student/homeworks" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworksListPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
-      <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkWithSubmissionPage /></Layout></ProtectedRoute>} />
+      <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><ExperimentalPdfHomeworkSubmissionPage /></Layout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
-      {/* Online classes: teachers and students share these routes; the
-          backend decides who may see or join each class. */}
       <Route path="/online-classes" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
       <Route path="/online-classes/:classId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><OnlineClassPage /></Suspense></Layout></ProtectedRoute>} />
 

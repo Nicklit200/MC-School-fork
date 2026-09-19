@@ -56,6 +56,24 @@ public class Homework {
     @Column(name = "parent_notified_at")
     private Instant parentNotifiedAt;
 
+    @Column(name = "final_answers_json", columnDefinition = "text")
+    private String finalAnswersJson;
+
+    @Column(name = "final_answer_count")
+    private Integer finalAnswerCount;
+
+    @Column(name = "answer_key_json", columnDefinition = "text")
+    private String answerKeyJson;
+
+    @Column(name = "final_answers_correct")
+    private Boolean finalAnswersCorrect;
+
+    @Column(name = "final_correct_count")
+    private Integer finalCorrectCount;
+
+    @Column(name = "final_answer_results_json", columnDefinition = "text")
+    private String finalAnswerResultsJson;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -86,12 +104,40 @@ public class Homework {
         this.submittedFilename = null;
         this.submittedAt = null;
         this.parentNotifiedAt = null;
+        this.finalAnswersJson = null;
+        this.finalAnswerCount = null;
+        this.answerKeyJson = null;
+        this.finalAnswersCorrect = null;
+        this.finalCorrectCount = null;
+        this.finalAnswerResultsJson = null;
+    }
+
+    public void configureFinalAnswerKey(int answerCount, String answerKeyJson) {
+        if (answerCount < 1 || answerCount > 50) {
+            throw new IllegalArgumentException("Final answer count must be between 1 and 50");
+        }
+        this.finalAnswerCount = answerCount;
+        this.answerKeyJson = answerKeyJson;
+        this.finalAnswersJson = null;
+        this.finalAnswersCorrect = null;
+        this.finalCorrectCount = null;
+        this.finalAnswerResultsJson = null;
     }
 
     public void submitWorksheet(String filename, byte[] pdf, Instant submittedAt) {
         this.submittedFilename = filename;
         this.submittedPdf = pdf;
         this.submittedAt = submittedAt;
+    }
+
+    public void changeFinalAnswers(String finalAnswersJson,
+                                   int correctCount,
+                                   boolean allCorrect,
+                                   String finalAnswerResultsJson) {
+        this.finalAnswersJson = finalAnswersJson;
+        this.finalCorrectCount = correctCount;
+        this.finalAnswersCorrect = allCorrect;
+        this.finalAnswerResultsJson = finalAnswerResultsJson;
     }
 
     public void markParentNotified(Instant notifiedAt) {
@@ -102,7 +148,25 @@ public class Homework {
         return worksheetPdf != null && worksheetPdf.length > 0;
     }
 
+    /** PDF/image payload is already uploaded and locked from further editing. */
     public boolean isSubmitted() {
         return submittedPdf != null && submittedPdf.length > 0 && submittedAt != null;
+    }
+
+    /**
+     * The whole homework is complete after the PDF is uploaded and every required
+     * final-answer field has been submitted. Correctness is recorded separately and
+     * never blocks the student from handing the homework in.
+     */
+    public boolean isSubmissionComplete() {
+        return isSubmitted() && (!hasFinalAnswerPrompt() || hasSubmittedFinalAnswers());
+    }
+
+    public boolean hasFinalAnswerPrompt() {
+        return finalAnswerCount != null && finalAnswerCount > 0;
+    }
+
+    public boolean hasSubmittedFinalAnswers() {
+        return finalAnswersJson != null && !finalAnswersJson.isBlank();
     }
 }

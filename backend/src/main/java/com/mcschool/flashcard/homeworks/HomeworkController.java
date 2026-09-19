@@ -2,7 +2,10 @@ package com.mcschool.flashcard.homeworks;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.homeworks.dto.CreateHomeworkRequest;
+import com.mcschool.flashcard.homeworks.dto.HomeworkAnswerReviewResponse;
+import com.mcschool.flashcard.homeworks.dto.HomeworkFinalAnswersResult;
 import com.mcschool.flashcard.homeworks.dto.HomeworkResponse;
+import com.mcschool.flashcard.homeworks.dto.SaveHomeworkFinalAnswersRequest;
 import com.mcschool.flashcard.homeworks.dto.SubmitHomeworkRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
@@ -71,6 +74,13 @@ public class HomeworkController {
         return homeworkService.listForTeacher(caller, studentId);
     }
 
+    @GetMapping("/homeworks/{homeworkId}/final-answers-review")
+    @PreAuthorize("hasRole('TEACHER')")
+    public HomeworkAnswerReviewResponse finalAnswersReview(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                           @PathVariable UUID homeworkId) {
+        return homeworkService.reviewFinalAnswers(caller, homeworkId);
+    }
+
     @DeleteMapping("/homeworks/{homeworkId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('TEACHER')")
@@ -83,6 +93,14 @@ public class HomeworkController {
     @PreAuthorize("hasRole('STUDENT')")
     public List<HomeworkResponse> listForStudent(@AuthenticationPrincipal AuthenticatedUser caller) {
         return homeworkService.listForStudent(caller);
+    }
+
+    @PostMapping("/study/homeworks/{homeworkId}/final-answers")
+    @PreAuthorize("hasRole('STUDENT')")
+    public HomeworkFinalAnswersResult saveFinalAnswers(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                        @PathVariable UUID homeworkId,
+                                                        @Valid @RequestBody SaveHomeworkFinalAnswersRequest request) {
+        return homeworkService.saveFinalAnswers(caller, homeworkId, request);
     }
 
     @PostMapping(value = "/homeworks/{homeworkId}/worksheet", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

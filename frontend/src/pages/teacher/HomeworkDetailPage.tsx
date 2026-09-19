@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, getAccessToken } from '../../api/client';
-import type { Homework, StudentListItem } from '../../api/types';
+import type { Homework, HomeworkAnswerReview, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
@@ -26,6 +26,8 @@ export function HomeworkDetailPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submissionPreviewUrls, setSubmissionPreviewUrls] = useState<string[]>([]);
   const [submissionPreviewLoading, setSubmissionPreviewLoading] = useState(false);
+  const [answerReview, setAnswerReview] = useState<HomeworkAnswerReview | null>(null);
+  const [answerReviewLoading, setAnswerReviewLoading] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(null);
   const previewUrlsRef = useRef<string[]>([]);
   const submissionPreviewUrlsRef = useRef<string[]>([]);
@@ -99,6 +101,18 @@ export function HomeworkDetailPage() {
     }
   }, [homeworkId, t]);
 
+  const loadAnswerReview = useCallback(async () => {
+    setAnswerReviewLoading(true);
+    try {
+      setAnswerReview(await fetchFinalAnswersReview(homeworkId));
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+      setAnswerReview(null);
+    } finally {
+      setAnswerReviewLoading(false);
+    }
+  }, [homeworkId, t]);
+
   useEffect(() => {
     reload().catch((e) => {
       setError(toErrorMessage(e, t));
@@ -121,6 +135,14 @@ export function HomeworkDetailPage() {
       clearSubmissionPreviewUrls();
     }
   }, [homework?.submitted, homework?.worksheetPageCount, openSection, loadSubmissionPreview, clearSubmissionPreviewUrls]);
+
+  useEffect(() => {
+    if (homework?.submitted || homework?.pdfUploaded) {
+      void loadAnswerReview();
+    } else {
+      setAnswerReview(null);
+    }
+  }, [homework?.submitted, homework?.pdfUploaded, loadAnswerReview]);
 
   useEffect(() => () => {
     previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -288,7 +310,7 @@ export function HomeworkDetailPage() {
         )}
 
         {homework?.submitted && (
-          <div className="panel" style={{ margin: 0, padding: 16 }}>
+          <div className="panel stack" style={{ margin: 0, padding: 16 }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <div>
                 <strong>{language === 'DE' ? 'Hausaufgabe abgegeben' : 'Домашка сдана'}</strong>
@@ -302,6 +324,49 @@ export function HomeworkDetailPage() {
                 {language === 'DE' ? 'Abgegebenes PDF herunterladen' : 'Скачать выполненную домашку'}
               </button>
             </div>
+
+            {(answerReviewLoading || (answerReview?.totalCount ?? 0) > 0) && (
+              <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                  <strong>{language === 'DE' ? 'Antworten des Schülers' : 'Ответы ученика'}</strong>
+                  {answerReview && (
+                    <strong style={{ fontSize: 18 }}>
+                      {answerReview.correctCount}/{answerReview.totalCount} · {Math.round(answerReview.percent)}%
+                    </strong>
+                  )}
+                </div>
+
+                {answerReviewLoading ? (
+                  <div className="muted" style={{ marginTop: 10 }}>
+                    {language === 'DE' ? 'Antworten werden geladen…' : 'Загружаем ответы…'}
+                  </div>
+                ) : answerReview && answerReview.items.length > 0 ? (
+                  <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                    {answerReview.items.map((item, index) => (
+                      <div
+                        key={`${item.label}-${index}`}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(70px, auto) 1fr auto',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '10px 12px',
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          background: item.correct ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                        }}
+                      >
+                        <span className="muted">{language === 'DE' ? 'Aufgabe' : 'Задание'} {item.label || index + 1}</span>
+                        <strong style={{ overflowWrap: 'anywhere' }}>{item.answer}</strong>
+                        <strong style={{ color: item.correct ? '#15803d' : '#dc2626', fontSize: 22 }}>
+                          {item.correct ? '✓' : '✕'}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         )}
 
@@ -464,6 +529,14 @@ export function HomeworkDetailPage() {
       </div>
     </div>
   );
+}
+
+async function fetchFinalAnswersReview(homeworkId: string): Promise<HomeworkAnswerReview> {
+  const response = await fetch(`${API_BASE_URL}/homeworks/${homeworkId}/final-answers-review`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`Could not load final answers (${response.status})`);
+  return response.json() as Promise<HomeworkAnswerReview>;
 }
 
 async function fetchSubmissionPageCount(homeworkId: string): Promise<number> {

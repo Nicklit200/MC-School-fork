@@ -12,7 +12,7 @@ public final class HomeworkDeadlinePolicy {
     private HomeworkDeadlinePolicy() {}
 
     /**
-     * A homework assigned for a date can be submitted normally during that entire day.
+     * A homework assigned for a date can be completed normally during that entire day.
      * It becomes overdue only when the next calendar day begins in Berlin.
      */
     public static Instant deadlineAt(LocalDate startDate) {
@@ -20,11 +20,11 @@ public final class HomeworkDeadlinePolicy {
     }
 
     public static boolean isOverdue(Homework homework) {
-        return !homework.isSubmitted() && !Instant.now().isBefore(deadlineAt(homework.getStartDate()));
+        return !homework.isSubmissionComplete() && !Instant.now().isBefore(deadlineAt(homework.getStartDate()));
     }
 
     public static boolean wasSubmittedLate(Homework homework) {
-        return homework.isSubmitted()
+        return homework.isSubmissionComplete()
                 && homework.getSubmittedAt() != null
                 && !homework.getSubmittedAt().isBefore(deadlineAt(homework.getStartDate()));
     }
