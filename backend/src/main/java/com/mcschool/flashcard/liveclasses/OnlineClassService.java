@@ -38,6 +38,7 @@ public class OnlineClassService {
 
     private final OnlineClassRepository classRepository;
     private final OnlineClassParticipantRepository participantRepository;
+    private final OnlineClassJoinRequestRepository joinRequestRepository;
     private final OnlineClassAccessService accessService;
     private final GoogleCalendarLessonService lessonService;
     private final StudentGroupRepository groupRepository;
@@ -48,6 +49,7 @@ public class OnlineClassService {
 
     public OnlineClassService(OnlineClassRepository classRepository,
                               OnlineClassParticipantRepository participantRepository,
+                              OnlineClassJoinRequestRepository joinRequestRepository,
                               OnlineClassAccessService accessService,
                               GoogleCalendarLessonService lessonService,
                               StudentGroupRepository groupRepository,
@@ -57,6 +59,7 @@ public class OnlineClassService {
                               Clock clock) {
         this.classRepository = classRepository;
         this.participantRepository = participantRepository;
+        this.joinRequestRepository = joinRequestRepository;
         this.accessService = accessService;
         this.lessonService = lessonService;
         this.groupRepository = groupRepository;
@@ -318,6 +321,14 @@ public class OnlineClassService {
             throw new ConflictException("You have been removed from this class");
         }
         if (!participant.isAdmitted()) {
+            // Be resilient to an older/stale frontend bundle: asking for a
+            // connection while the waiting room is enabled must also register
+            // the student in the teacher's waiting room. This remains
+            // idempotent because the DB allows only one pending request.
+            joinRequestRepository
+                    .findByOnlineClassIdAndUserIdAndState(classId, caller.id(), JoinRequestState.PENDING)
+                    .orElseGet(() -> joinRequestRepository.save(
+                            OnlineClassJoinRequest.knock(onlineClass, user, now())));
             throw new ConflictException("Waiting for the teacher to admit you");
         }
 
