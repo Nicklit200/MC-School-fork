@@ -101,12 +101,6 @@ export function useAnnotationBoard({
     if (incoming.sequence > 0) {
       lastSequence.current = Math.max(lastSequence.current, incoming.sequence);
     }
-    setRemotePreviews((current) => {
-      if (!(incoming.operationId in current)) return current;
-      const next = { ...current };
-      delete next[incoming.operationId];
-      return next;
-    });
     setOperations((current) => {
       const index = current.findIndex((item) => item.operationId === incoming.operationId);
       if (index >= 0) {
@@ -164,12 +158,6 @@ export function useAnnotationBoard({
         }
 
         if (parsed.type === 'annotation' && parsed.operation?.operationId) {
-          setRemotePreviews((current) => {
-            if (!(parsed.operation.operationId in current)) return current;
-            const next = { ...current };
-            delete next[parsed.operation.operationId];
-            return next;
-          });
           merge(parsed.operation);
         }
       } catch {
@@ -242,6 +230,33 @@ export function useAnnotationBoard({
   }, [classId, document, merge]);
 
   const shapes = useMemo(() => foldOperations(operations), [operations]);
+
+  // Flicker-free handoff: keep a remote preview visible until the same
+  // operation is already present in the authoritative/rendered shape list.
+  // Cleanup happens after the render that contains the final shape, so there is
+  // never a frame where both preview and final shape are absent.
+  useEffect(() => {
+    const authoritativeIds = new Set(shapes.map((shape) => shape.operationId));
+    const stalePreviewIds = Object.keys(remotePreviews).filter((id) => authoritativeIds.has(id));
+    if (stalePreviewIds.length === 0) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      setRemotePreviews((current) => {
+        let changed = false;
+        const next = { ...current };
+        for (const id of stalePreviewIds) {
+          if (id in next) {
+            delete next[id];
+            changed = true;
+          }
+        }
+        return changed ? next : current;
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [remotePreviews, shapes]);
+
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
 
   const flushPreview = useCallback(
@@ -452,16 +467,17 @@ export function useAnnotationBoard({
     return submit('CLEAR_ALL', '{}');
   }, [isHost, submit]);
 
-  const previewShapes = useMemo(
-    () =>
-      Object.entries(remotePreviews).map(([operationId, preview]) => ({
+  const previewShapes = useMemo(() => {
+    const authoritativeIds = new Set(shapes.map((shape) => shape.operationId));
+    return Object.entries(remotePreviews)
+      .filter(([operationId]) => !authoritativeIds.has(operationId))
+      .map(([operationId, preview]) => ({
         operationId: `preview-${operationId}`,
         layerOwnerId: preview.actorId,
         sequence: Number.MAX_SAFE_INTEGER,
         shape: preview.shape,
-      })),
-    [remotePreviews],
-  );
+      }));
+  }, [remotePreviews, shapes]);
 
   /** Applies an operation that arrived over the realtime channel. */
   const ingest = useCallback(
