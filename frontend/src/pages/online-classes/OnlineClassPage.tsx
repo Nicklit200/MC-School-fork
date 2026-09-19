@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
@@ -16,6 +17,51 @@ export function OnlineClassPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const session = useClassSession(classId);
+
+  useEffect(() => {
+    const current = session.onlineClass;
+    const isStagingHost =
+      typeof window !== 'undefined'
+      && window.location.hostname === 'staging-web-production.up.railway.app';
+
+    if (
+      !isStagingHost
+      || !current?.viewerIsHost
+      || !current.eventId.startsWith('test-')
+      || !classId
+    ) {
+      return;
+    }
+
+    let active = true;
+    onlineClassesApi.listUpcoming()
+      .then((classes) => {
+        if (!active) return;
+        const candidates = classes
+          .filter((item) =>
+            item.eventId.startsWith('test-')
+            && item.status === 'LIVE'
+            && item.studentId === current.studentId
+            && item.groupId === current.groupId
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.scheduledStartAt).getTime()
+              - new Date(a.scheduledStartAt).getTime(),
+          );
+
+        const newest = candidates[0];
+        if (newest && newest.id !== classId) {
+          session.release();
+          navigate(`/online-classes/${newest.id}`, { replace: true });
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [classId, navigate, session.onlineClass]);
 
   if (session.phase === 'loading') {
     return <p>{t('common.loading')}</p>;
