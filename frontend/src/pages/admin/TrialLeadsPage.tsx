@@ -154,7 +154,7 @@ export function TrialLeadsPage() {
                 <div>
                   <strong>{device || 'Неизвестное устройство'}</strong>
                   <span className={converted ? 'site-visit-result site-visit-result--ok' : 'site-visit-result'}>
-                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : 'Не оставил телефон'}
+                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : visitStageLabel(visit.funnelStage)}
                   </span>
                 </div>
                 <time>{formatDate(visit.createdAt)}</time>
@@ -167,6 +167,9 @@ export function TrialLeadsPage() {
                 <span><b>Язык:</b> {visit.language || '—'}</span>
                 <span><b>Страница:</b> {visit.path || '/'}</span>
                 <span><b>Источник:</b> {visit.source || visit.referrer || 'Прямой переход'}</span>
+                <span><b>Класс:</b> {visit.grade || '—'}</span>
+                <span><b>Проблема:</b> {visit.goal || '—'}</span>
+                <span><b>Что важно:</b> {visit.priority || '—'}</span>
               </div>
 
               {visit.leadPhone && <div className="site-visit-phone">Лид: {visit.leadPhone}</div>}
@@ -232,6 +235,16 @@ function Detail({ label, value, wide = false }: { label: string; value?: string 
     <span>{label}</span>
     <strong>{value || '—'}</strong>
   </div>;
+}
+
+function visitStageLabel(stage?: string | null) {
+  switch (stage) {
+    case 'GRADE_SELECTED': return 'Ответил: класс';
+    case 'GOAL_SELECTED': return 'Ответил: проблема';
+    case 'PRIORITY_SELECTED': return 'Ответил: что важно';
+    case 'PHONE_STEP': return 'Дошёл до телефона';
+    default: return 'Только открыл сайт';
+  }
 }
 
 function joinVersion(name?: string | null, version?: string | null) {
