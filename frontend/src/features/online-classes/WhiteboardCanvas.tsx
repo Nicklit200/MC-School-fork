@@ -1,6 +1,6 @@
 import Konva from 'konva';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Arrow, Ellipse, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { Arrow, Circle, Ellipse, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import {
   type RenderableShape,
   type Shape,
@@ -32,6 +32,7 @@ interface Props {
   readOnly?: boolean;
   onCommit: (shape: Shape, operationId?: string) => void;
   onDraftChange?: (operationId: string, shape: Shape) => void;
+  remoteLaserPointers?: { actorId: string; x: number; y: number }[];
   onLaserMove?: (point: { x: number; y: number }) => void;
   onRequestText?: () => string | null;
 }
@@ -53,6 +54,7 @@ export function WhiteboardCanvas({
   readOnly = false,
   onCommit,
   onDraftChange,
+  remoteLaserPointers = [],
   onLaserMove,
   onRequestText,
 }: Props) {
@@ -60,6 +62,7 @@ export function WhiteboardCanvas({
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
   const [committedDraft, setCommittedDraft] = useState<{ operationId: string; shape: Shape } | null>(null);
+  const [localLaser, setLocalLaser] = useState<{ x: number; y: number } | null>(null);
   const draftRef = useRef<Shape | null>(null);
   const draftIdRef = useRef<string | null>(null);
   const drawing = useRef(false);
@@ -91,6 +94,10 @@ export function WhiteboardCanvas({
     return () => window.clearTimeout(timer);
   }, [committedDraft, shapes]);
 
+  useEffect(() => {
+    if (tool !== 'laser' && localLaser) setLocalLaser(null);
+  }, [localLaser, tool]);
+
   const pointerToNormalized = useCallback(
     (stage: Konva.Stage) => {
       const position = stage.getPointerPosition();
@@ -106,6 +113,7 @@ export function WhiteboardCanvas({
     if (!point) return;
 
     if (tool === 'laser') {
+      setLocalLaser(point);
       onLaserMove?.(point);
       return;
     }
@@ -143,7 +151,10 @@ export function WhiteboardCanvas({
       if (now - lastSample.current < SAMPLE_INTERVAL_MS) return;
       lastSample.current = now;
       const point = pointerToNormalized(stage);
-      if (point) onLaserMove?.(point);
+      if (point) {
+        setLocalLaser(point);
+        onLaserMove?.(point);
+      }
       return;
     }
 
@@ -285,6 +296,39 @@ export function WhiteboardCanvas({
     }
   };
 
+  const renderLaser = (
+    key: string,
+    point: { x: number; y: number },
+    local: boolean,
+  ) => {
+    const pixel = toPixels(point, viewport, sourceAspect);
+    return (
+      <>
+        <Circle
+          key={`${key}-halo`}
+          x={pixel.x}
+          y={pixel.y}
+          radius={local ? 12 : 11}
+          fill={local ? '#ff8a00' : '#ef4444'}
+          opacity={0.2}
+          listening={false}
+        />
+        <Circle
+          key={`${key}-dot`}
+          x={pixel.x}
+          y={pixel.y}
+          radius={local ? 5 : 4.5}
+          fill={local ? '#ff6b00' : '#dc2626'}
+          stroke="#ffffff"
+          strokeWidth={2}
+          shadowBlur={5}
+          shadowOpacity={0.35}
+          listening={false}
+        />
+      </>
+    );
+  };
+
   return (
     <div ref={containerRef} className="whiteboard__surface">
       <Stage
@@ -293,7 +337,10 @@ export function WhiteboardCanvas({
         onPointerDown={handleDown}
         onPointerMove={handleMove}
         onPointerUp={handleUp}
-        onPointerLeave={handleUp}
+        onPointerLeave={() => {
+          if (tool === 'laser') setLocalLaser(null);
+          handleUp();
+        }}
         style={{ touchAction: 'none' }}
       >
         <Layer listening={false}>
@@ -302,6 +349,10 @@ export function WhiteboardCanvas({
             !shapes.some((entry) => entry.operationId === committedDraft.operationId) &&
             renderShape(`committed-${committedDraft.operationId}`, committedDraft.shape)}
           {draft && renderShape('draft', draft)}
+          {remoteLaserPointers.map((pointer) =>
+            renderLaser(`remote-laser-${pointer.actorId}`, pointer, false),
+          )}
+          {tool === 'laser' && localLaser && renderLaser('local-laser', localLaser, true)}
         </Layer>
       </Stage>
     </div>
