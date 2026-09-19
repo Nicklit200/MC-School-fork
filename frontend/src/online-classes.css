@@ -215,6 +215,154 @@
   touch-action: none;
 }
 
+
+.board-workspace {
+  min-width: 0;
+}
+
+.board-workspace__tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+  scrollbar-width: thin;
+}
+
+.board-workspace__tabs button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 800;
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-workspace__tabs button[aria-selected='true'] {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+
+.board-workspace__document-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+}
+
+.board-workspace__document-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.board-workspace__pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.board-workspace__pages button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.board-workspace__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.board-workspace__student-preview {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.board-workspace__student-preview:hover {
+  border-color: var(--orange);
+}
+
+.board-workspace__student-name {
+  font-weight: 900;
+  padding: 2px 4px 7px;
+}
+
+.board-workspace__student-board {
+  pointer-events: none;
+}
+
+.whiteboard--compact {
+  min-height: 0;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.whiteboard--compact h3,
+.whiteboard--compact [role='status'] {
+  display: none;
+}
+
+.whiteboard--compact .whiteboard__surface {
+  height: 250px;
+  min-height: 250px;
+  border-radius: 10px;
+}
+
+.whiteboard__surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.whiteboard__background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+.whiteboard__surface .konvajs-content {
+  position: relative;
+  z-index: 1;
+}
+
+.board-workspace__loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
 /* --- Participants and waiting room --------------------------------------- */
 
 .participants ul,
@@ -277,6 +425,15 @@
 }
 
 @media (max-width: 640px) {
+  .board-workspace__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .board-workspace__tabs button {
+    padding: 8px 11px;
+    max-width: 135px;
+  }
+
   .online-class-room__controls {
     /* Touch targets stay reachable at the bottom of a phone screen. */
     position: sticky;
