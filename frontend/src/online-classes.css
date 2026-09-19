@@ -215,7 +215,8 @@
    * Fingers/palms are navigation only on tablets; drawing input is filtered in
    * WhiteboardCanvas to pen/mouse. Keep native one/two-finger pan/zoom usable.
    */
-  touch-action: pan-x pan-y pinch-zoom;
+  /* One-finger/pencil movement must stay on the board; two-finger pinch zoom remains allowed. */
+  touch-action: pinch-zoom;
   overscroll-behavior: contain;
 }
 
@@ -423,7 +424,7 @@
   .whiteboard__surface,
   .whiteboard__surface .konvajs-content,
   .whiteboard__surface canvas {
-    touch-action: pan-x pan-y pinch-zoom !important;
+    touch-action: pinch-zoom !important;
   }
 
   .board-workspace__tabs {
