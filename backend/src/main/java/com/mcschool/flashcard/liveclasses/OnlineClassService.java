@@ -143,6 +143,33 @@ public class OnlineClassService {
             throw new ResourceNotFoundException("Not found");
         }
 
+        // Staging test classes are disposable. Keep exactly one active test
+        // room per teacher so a teacher and student cannot accidentally open
+        // two identically titled LIVE rooms and wait for each other forever.
+        List<OnlineClassStatus> activeTestStatuses = List.of(
+                OnlineClassStatus.SCHEDULED,
+                OnlineClassStatus.LOBBY_OPEN,
+                OnlineClassStatus.LIVE);
+        Instant cleanupAt = now();
+        classRepository
+                .findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(caller.id(), activeTestStatuses)
+                .stream()
+                .filter(item -> item.getEventId() != null && item.getEventId().startsWith("test-"))
+                .forEach(item -> {
+                    if (item.getStatus() == OnlineClassStatus.LIVE) {
+                        item.end(cleanupAt);
+                        closeConnectionsFor(item, cleanupAt);
+                        try {
+                            mediaProvider.closeRoom(item.getRoomName());
+                        } catch (MediaProviderException e) {
+                            metrics.providerFailure("closeRoom");
+                            log.warn("Old staging test room could not be closed: classId={}", item.getId());
+                        }
+                    } else {
+                        item.cancel();
+                    }
+                });
+
         Instant start = now().minus(java.time.Duration.ofMinutes(5));
         Instant end = start.plus(java.time.Duration.ofHours(1));
         // A distinct event id per call keeps the unique-occurrence index happy
