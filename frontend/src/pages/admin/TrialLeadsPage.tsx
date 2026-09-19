@@ -150,7 +150,7 @@ export function TrialLeadsPage() {
               <Detail label="Преподаватель" value={lead.teacherName} />
               <Detail label="Главная задача" value={lead.goal} wide />
               <Detail label="Что важно" value={lead.priority} wide />
-              <Detail label="Источник" value={lead.source || 'Прямой переход'} wide />
+              <Detail label="Источник" value={lead.source || 'Источник не передан'} wide />
             </div>
 
             <div className="trial-lead-actions">
