@@ -19,6 +19,12 @@ export function OnlineClassPage() {
   const session = useClassSession(classId);
 
   useEffect(() => {
+    if (session.onlineClass?.id && classId && session.onlineClass.id !== classId) {
+      navigate(`/online-classes/${session.onlineClass.id}`, { replace: true });
+    }
+  }, [classId, navigate, session.onlineClass?.id]);
+
+  useEffect(() => {
     const current = session.onlineClass;
     const isStagingHost =
       typeof window !== 'undefined'
