@@ -78,6 +78,17 @@ export interface JoinRequest {
 }
 
 /** Roster entry. Carries no e-mail: students can see this list. */
+export type AttendanceStatus = 'PRESENT' | 'ABSENT';
+
+export interface AttendanceStudent {
+  studentId: string;
+  studentName: string;
+  status: AttendanceStatus;
+  joined: boolean;
+  firstJoinedAt: string | null;
+  connectedSeconds: number;
+}
+
 export interface ClassParticipant {
   userId: string;
   displayName: string;
@@ -202,6 +213,8 @@ export const onlineClassesApi = {
 
   listUpcoming: () => request<OnlineClass[]>('GET', '/online-classes/upcoming'),
 
+  history: () => request<OnlineClass[]>('GET', '/online-classes/history'),
+
   get: (classId: string) => request<OnlineClass>('GET', `/online-classes/${classId}`),
 
   openLobby: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/open-lobby`),
@@ -242,6 +255,15 @@ export const onlineClassesApi = {
 
   attendance: (classId: string) =>
     request<ClassParticipant[]>('GET', `/online-classes/${classId}/attendance`),
+
+  attendanceRoster: (classId: string) =>
+    request<AttendanceStudent[]>('GET', `/online-classes/${classId}/attendance-roster`),
+
+  finish: (
+    classId: string,
+    attendance: Array<{ studentId: string; status: AttendanceStatus }>,
+  ) =>
+    request<OnlineClass>('POST', `/online-classes/${classId}/finish`, { attendance }),
 
   muteParticipant: (classId: string, userId: string) =>
     request<ClassParticipant>('POST', `/online-classes/${classId}/participants/${userId}/mute`),
