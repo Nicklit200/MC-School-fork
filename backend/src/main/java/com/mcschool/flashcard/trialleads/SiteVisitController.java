@@ -20,6 +20,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -56,13 +58,33 @@ public class SiteVisitController {
         return Map.of("accepted", true);
     }
 
+    @PatchMapping("/public/site-visits/{sessionId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void updateProgress(@PathVariable String sessionId, @Valid @RequestBody FunnelProgressRequest request) {
+        jdbc.update("""
+                UPDATE site_visits SET
+                    funnel_stage = COALESCE(?, funnel_stage),
+                    grade = COALESCE(?, grade),
+                    goal = COALESCE(?, goal),
+                    priority = COALESCE(?, priority),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE session_id = ?
+                """,
+                nullable(request.event(), 40),
+                nullable(request.grade(), 80),
+                nullable(request.goal(), 500),
+                nullable(request.priority(), 500),
+                clean(sessionId, 80));
+    }
+
     @GetMapping("/admin/site-visits")
     @PreAuthorize("hasRole('ADMIN')")
     public List<SiteVisitResponse> list() {
         return jdbc.query("""
                 SELECT v.id, v.session_id, v.path, v.source, v.referrer, v.device_type, v.device_model,
                        v.os_name, v.os_version, v.browser_name, v.browser_version, v.screen_size,
-                       v.viewport_size, v.language, v.user_agent, v.created_at,
+                       v.viewport_size, v.language, v.user_agent, v.funnel_stage,
+                       v.grade, v.goal, v.priority, v.created_at, v.updated_at,
                        l.phone AS lead_phone, l.status AS lead_status
                 FROM site_visits v
                 LEFT JOIN trial_leads l ON l.client_id = v.session_id
@@ -84,9 +106,14 @@ public class SiteVisitController {
                 rs.getString("viewport_size"),
                 rs.getString("language"),
                 rs.getString("user_agent"),
+                rs.getString("funnel_stage"),
+                rs.getString("grade"),
+                rs.getString("goal"),
+                rs.getString("priority"),
                 rs.getString("lead_phone"),
                 rs.getString("lead_status"),
-                instant(rs.getTimestamp("created_at"))
+                instant(rs.getTimestamp("created_at")),
+                instant(rs.getTimestamp("updated_at"))
         ));
     }
 
@@ -97,8 +124,8 @@ public class SiteVisitController {
                     INSERT INTO site_visits (
                         id, session_id, path, source, referrer, device_type, device_model,
                         os_name, os_version, browser_name, browser_version, screen_size,
-                        viewport_size, language, user_agent
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        viewport_size, language, user_agent, funnel_stage
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VISIT')
                     """,
                     UUID.randomUUID(),
                     clean(request.sessionId(), 80),
@@ -209,6 +236,13 @@ public class SiteVisitController {
             @Size(max = 500) String userAgent
     ) {}
 
+    public record FunnelProgressRequest(
+            @Size(max = 40) String event,
+            @Size(max = 80) String grade,
+            @Size(max = 500) String goal,
+            @Size(max = 500) String priority
+    ) {}
+
     public record SiteVisitResponse(
             UUID id,
             String sessionId,
@@ -225,8 +259,13 @@ public class SiteVisitController {
             String viewportSize,
             String language,
             String userAgent,
+            String funnelStage,
+            String grade,
+            String goal,
+            String priority,
             String leadPhone,
             String leadStatus,
-            Instant createdAt
+            Instant createdAt,
+            Instant updatedAt
     ) {}
 }

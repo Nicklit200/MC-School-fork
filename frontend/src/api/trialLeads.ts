@@ -51,9 +51,14 @@ export type SiteVisit = {
   viewportSize?: string | null;
   language?: string | null;
   userAgent?: string | null;
+  funnelStage?: string | null;
+  grade?: string | null;
+  goal?: string | null;
+  priority?: string | null;
   leadPhone?: string | null;
   leadStatus?: TrialLeadStatus | null;
   createdAt: string;
+  updatedAt?: string | null;
 };
 
 function headers(): Record<string, string> {
