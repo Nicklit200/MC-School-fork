@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRoomContext } from '@livekit/components-react';
+import { RoomEvent } from 'livekit-client';
 import {
   onlineClassesApi,
   type AnnotationDocument,
@@ -10,11 +12,20 @@ import {
   foldOperations,
   undoableOperations,
 } from './annotations';
+import { ANNOTATION_TOPIC } from './events';
 
 function newId(): string {
   return typeof crypto?.randomUUID === 'function'
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+interface RealtimeAnnotationPacket {
+  v: 1;
+  type: 'annotation';
+  classId: string;
+  documentId: string;
+  operation: Operation;
 }
 
 /**
@@ -47,6 +58,7 @@ export function useAnnotationBoard({
   const [document, setDocument] = useState<AnnotationDocument | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
+  const room = useRoomContext();
   const mounted = useRef(true);
   // Optimistic entries use a negative sequence so they sort after nothing and
   // are replaced the moment the server assigns a real one.
@@ -76,6 +88,33 @@ export function useAnnotationBoard({
   }, []);
 
   useEffect(() => {
+    const onData = (payload: Uint8Array, _participant: unknown, _kind: unknown, topic?: string) => {
+      if (topic !== ANNOTATION_TOPIC || !document) return;
+      try {
+        const parsed = JSON.parse(new TextDecoder().decode(payload)) as RealtimeAnnotationPacket;
+        if (
+          parsed?.v !== 1
+          || parsed.type !== 'annotation'
+          || parsed.classId !== classId
+          || parsed.documentId !== document.id
+          || !parsed.operation?.operationId
+        ) {
+          return;
+        }
+        merge(parsed.operation);
+      } catch {
+        // Malformed realtime packets are ignored. The durable replay remains
+        // authoritative and will reconcile the board.
+      }
+    };
+
+    room.on(RoomEvent.DataReceived, onData);
+    return () => {
+      room.off(RoomEvent.DataReceived, onData);
+    };
+  }, [classId, document, merge, room]);
+
+  useEffect(() => {
     let active = true;
     onlineClassesApi
       .openAnnotationDocument(classId, targetType, targetId, pageIndex, sourceWidth, sourceHeight)
@@ -97,10 +136,9 @@ export function useAnnotationBoard({
     };
   }, [classId, targetType, targetId, pageIndex, sourceWidth, sourceHeight]);
 
-  // Until annotation data-channel delivery is wired into this screen, keep
-  // every participant in sync by replaying only operations newer than the last
-  // sequence we have seen. This is lightweight (incremental) and gives a
-  // sub-second shared-board experience on staging.
+  // Durable fallback/reconnect path. Realtime operations arrive over LiveKit;
+  // this incremental replay repairs any lossy packet that was dropped and
+  // catches a participant up after reconnecting.
   useEffect(() => {
     if (!document) return;
     let active = true;
@@ -126,7 +164,7 @@ export function useAnnotationBoard({
     };
 
     void poll();
-    const timer = window.setInterval(() => void poll(), 400);
+    const timer = window.setInterval(() => void poll(), 1500);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -150,6 +188,30 @@ export function useAnnotationBoard({
       };
       merge(optimistic);
 
+      // Lowest-latency path: broadcast the operation immediately over LiveKit
+      // instead of waiting for the HTTP persistence round-trip. Lossy delivery
+      // minimizes delay; the REST write + incremental replay below remain the
+      // durable fallback if a packet is ever dropped.
+      const realtimePacket: RealtimeAnnotationPacket = {
+        v: 1,
+        type: 'annotation',
+        classId,
+        documentId: document.id,
+        operation: {
+          ...optimistic,
+          // Put the optimistic realtime operation after already-persisted ones.
+          // The server-assigned sequence replaces this same operationId shortly
+          // after persistence succeeds.
+          sequence: Math.max(lastSequence.current + 1, Date.now()),
+        },
+      };
+      void room.localParticipant
+        .publishData(new TextEncoder().encode(JSON.stringify(realtimePacket)), {
+          reliable: false,
+          topic: ANNOTATION_TOPIC,
+        })
+        .catch(() => undefined);
+
       try {
         const saved = await onlineClassesApi.appendAnnotation(
           classId,
@@ -169,7 +231,7 @@ export function useAnnotationBoard({
         }
       }
     },
-    [actorId, classId, document, merge],
+    [actorId, classId, document, merge, room],
   );
 
   const addShape = useCallback((shape: Shape) => submit('ADD', JSON.stringify(shape)), [submit]);
