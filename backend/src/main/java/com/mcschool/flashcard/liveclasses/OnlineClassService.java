@@ -255,6 +255,24 @@ public class OnlineClassService {
     }
 
     @Transactional(readOnly = true)
+    public List<OnlineClassResponse> listHistory(AuthenticatedUser caller) {
+        requireEnabled();
+        List<OnlineClass> classes = caller.role() == Role.TEACHER
+                ? classRepository.findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(
+                        caller.id(), List.of(OnlineClassStatus.ENDED))
+                : classRepository.findHistoryVisibleToStudent(caller.id());
+
+        return classes.stream()
+                .sorted(Comparator.comparing(
+                        (OnlineClass item) -> item.getActualEndAt() == null
+                                ? item.getScheduledEndAt()
+                                : item.getActualEndAt())
+                        .reversed())
+                .map(item -> toResponse(item, caller))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public OnlineClassResponse get(AuthenticatedUser caller, UUID classId) {
         requireEnabled();
         OnlineClass requested = accessService.requireViewer(caller, classId);
