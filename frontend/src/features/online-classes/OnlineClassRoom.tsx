@@ -19,6 +19,8 @@ import {
   type ClassFeatureState,
   type OnlineClassBoardContext,
   type OnlineClassConnection,
+  type AttendanceStudent,
+  type AttendanceStatus,
 } from '../../api/onlineClasses';
 import { ChatPanel } from './ChatPanel';
 import { useEffect, useState } from 'react';
@@ -116,7 +118,7 @@ export function OnlineClassRoom({
   /** Teacher-governed: students annotate only when the class allows it. */
   studentAnnotationAllowed?: boolean;
   onLeave: () => void;
-  onEndForAll?: () => void;
+  onEndForAll?: (attendance: Array<{ studentId: string; status: AttendanceStatus }>) => void;
   onStateChanged?: () => void;
 }) {
   const { t } = useI18n();
@@ -124,6 +126,8 @@ export function OnlineClassRoom({
   // board immediately. Video remains one click away via the toggle below.
   const [boardOpen, setBoardOpen] = useState(true);
   const [boardContext, setBoardContext] = useState<OnlineClassBoardContext | null>(null);
+  const [attendanceRoster, setAttendanceRoster] = useState<AttendanceStudent[] | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -254,16 +258,84 @@ export function OnlineClassRoom({
           <button
             type="button"
             className="online-class-room__end"
+            disabled={attendanceLoading}
             onClick={() => {
-              if (window.confirm(t('onlineClass.endConfirm'))) {
-                onEndForAll();
-              }
+              if (attendanceLoading) return;
+              setAttendanceLoading(true);
+              onlineClassesApi.attendanceRoster(classId)
+                .then((roster) => setAttendanceRoster(roster))
+                .catch(() => undefined)
+                .finally(() => setAttendanceLoading(false));
             }}
           >
-            {t('onlineClass.end')}
+            {attendanceLoading ? 'Загружаем…' : t('onlineClass.end')}
           </button>
         )}
       </div>
+
+      {attendanceRoster && onEndForAll && (
+        <div className="attendance-finish-modal" role="dialog" aria-modal="true" aria-label="Посещаемость">
+          <div className="attendance-finish-modal__card">
+            <h2>Кто был на уроке?</h2>
+            <p className="muted">Мы отметили тех, кто подключался. Проверь перед завершением урока.</p>
+            <div className="attendance-finish-modal__list">
+              {attendanceRoster.map((student) => (
+                <div key={student.studentId} className="attendance-finish-modal__student">
+                  <div>
+                    <strong>{student.studentName}</strong>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {student.joined
+                        ? `Подключался · ${Math.max(1, Math.round(student.connectedSeconds / 60))} мин`
+                        : 'Не подключался'}
+                    </div>
+                  </div>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button
+                      type="button"
+                      className={`btn ${student.status === 'PRESENT' ? '' : 'btn--secondary'}`}
+                      onClick={() => setAttendanceRoster((current) =>
+                        current?.map((item) => item.studentId === student.studentId
+                          ? { ...item, status: 'PRESENT' }
+                          : item) ?? null)}
+                    >
+                      Был
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${student.status === 'ABSENT' ? '' : 'btn--secondary'}`}
+                      onClick={() => setAttendanceRoster((current) =>
+                        current?.map((item) => item.studentId === student.studentId
+                          ? { ...item, status: 'ABSENT' }
+                          : item) ?? null)}
+                    >
+                      Не был
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button type="button" className="btn btn--ghost" onClick={() => setAttendanceRoster(null)}>
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const decisions = attendanceRoster.map((student) => ({
+                    studentId: student.studentId,
+                    status: student.status,
+                  }));
+                  setAttendanceRoster(null);
+                  onEndForAll(decisions);
+                }}
+              >
+                Сохранить и завершить урок
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </LiveKitRoom>
   );
 }
