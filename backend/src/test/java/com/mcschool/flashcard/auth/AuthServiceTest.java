@@ -87,6 +87,9 @@ class AuthServiceTest {
         User teacher = User.bootstrapAdmin("Owner", "owner@test.local", passwordEncoder.encode("Password1!"));
         User invited = User.invitedStudent("Student", null, teacher, "student-token",
                 Instant.now().plusSeconds(3600));
+        // StudentService.createStudent provisions a username before the student
+        // is ever invited; activation requires one (AuthService guard).
+        invited.assignUsername("student123");
         when(userRepository.findByInvitationToken("student-token")).thenReturn(Optional.of(invited));
         when(userRepository.existsByEmail("student@test.local")).thenReturn(false);
 

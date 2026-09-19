@@ -67,7 +67,13 @@ class StudentServiceTest {
 
     @Test
     void createStudentRejectsDuplicateEmail() {
-        when(userRepository.existsByEmail("student@test.local")).thenReturn(true);
+        // A live (non-archived) account already owns this email. Only an
+        // archived student of the same teacher may be restored; anything else
+        // is a conflict.
+        User existing = User.invitedStudent("Existing Student", "student@test.local", teacherEntity,
+                "existing-token", Instant.now().plusSeconds(3600));
+        when(userRepository.findById(teacher.id())).thenReturn(Optional.of(teacherEntity));
+        when(userRepository.findByEmail("student@test.local")).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> studentService.createStudent(teacher,
                 new CreateStudentRequest("Student One", "student@test.local")))
@@ -81,7 +87,8 @@ class StudentServiceTest {
     void listStudentsQueriesOnlyTheCallingTeachersStudents() {
         User student = User.invitedStudent("Student One", "student@test.local", teacherEntity,
                 "token2", Instant.now().plusSeconds(3600));
-        when(userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()))
+        when(userRepository.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(
+                teacher.id(), Role.STUDENT))
                 .thenReturn(List.of(student));
 
         var students = studentService.listStudents(teacher);
@@ -89,7 +96,8 @@ class StudentServiceTest {
         assertThat(students).hasSize(1);
         assertThat(students.get(0).email()).isEqualTo("student@test.local");
         assertThat(students.get(0).invitationToken()).isEqualTo("token2");
-        verify(userRepository).findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id());
+        verify(userRepository).findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(
+                teacher.id(), Role.STUDENT);
     }
 
     @Test

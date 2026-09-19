@@ -35,7 +35,7 @@ class CardImportParserTest {
         assertThat(result.warnings()).singleElement()
                 .satisfies(warning -> assertThat(warning)
                         .contains("Line 1")
-                        .contains("expected exactly 4 answers"));
+                        .contains("expected 4 answers"));
     }
 
     @Test

@@ -36,6 +36,16 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+
+        // Each distinct @TestPropertySource creates its own Spring context, and
+        // every context opens a pool against this one shared container. Spring
+        // caches contexts rather than closing them, so with the default pool
+        // size enough contexts exhaust PostgreSQL's max_connections and later
+        // tests fail with "sorry, too many clients already" — a harness limit,
+        // not an application fault. Integration tests are single-threaded per
+        // context, so a small pool is ample.
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> 2);
+        registry.add("spring.datasource.hikari.minimum-idle", () -> 0);
     }
 
     @BeforeEach

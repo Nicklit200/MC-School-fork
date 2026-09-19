@@ -122,7 +122,7 @@ class AccountAndAuthFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.invitationToken").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
         String teacherToken = activate(JsonPath.read(teacherInvitation, "$.invitationToken"),
-                "TeacherPass123!");
+                "TeacherPass123!", "maria@test.local");
 
         // Teacher creates a student account.
         String studentInvitation = mockMvc.perform(post("/api/v1/students")
@@ -162,7 +162,7 @@ class AccountAndAuthFlowIntegrationTest extends AbstractIntegrationTest {
                                 """))
                 .andReturn().getResponse().getContentAsString();
         String token = JsonPath.read(invitation, "$.invitationToken");
-        activate(token, "TeacherPass123!");
+        activate(token, "TeacherPass123!", "maria@test.local");
 
         mockMvc.perform(post("/api/v1/auth/activate")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -275,6 +275,18 @@ class AccountAndAuthFlowIntegrationTest extends AbstractIntegrationTest {
         return JsonPath.read(body, "$.accessToken");
     }
 
+    /** Non-student accounts must confirm their e-mail to activate. */
+    private String activate(String invitationToken, String password, String email) throws Exception {
+        String body = mockMvc.perform(post("/api/v1/auth/activate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"invitationToken": "%s", "email": "%s", "password": "%s"}
+                                """.formatted(invitationToken, email, password)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.accessToken");
+    }
+
     private String createActivatedTeacher(String email) throws Exception {
         String adminToken = loginAs(ADMIN_EMAIL, ADMIN_PASSWORD);
         String invitation = mockMvc.perform(post("/api/v1/teachers")
@@ -285,6 +297,6 @@ class AccountAndAuthFlowIntegrationTest extends AbstractIntegrationTest {
                                 """.formatted(email)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return activate(JsonPath.read(invitation, "$.invitationToken"), "TeacherPass123!");
+        return activate(JsonPath.read(invitation, "$.invitationToken"), "TeacherPass123!", email);
     }
 }

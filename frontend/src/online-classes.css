@@ -1,0 +1,285 @@
+/*
+ * Online classes. Uses the existing palette from index.css so the feature does
+ * not introduce a second visual language.
+ */
+
+/*
+ * Available to screen readers, invisible on screen. The clip technique is used
+ * rather than display:none or visibility:hidden, both of which remove the
+ * element from the accessibility tree — which would defeat the purpose of the
+ * label entirely.
+ */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * Keyboard focus must be visible everywhere in the class UI. The room is dense
+ * and largely icon-driven, so a lost focus ring makes it unusable without a
+ * mouse. focus-visible keeps the ring off for pointer users.
+ */
+.online-class-room :focus-visible,
+.online-class-page :focus-visible,
+.whiteboard :focus-visible,
+.chat :focus-visible,
+.participants :focus-visible,
+.waiting-room :focus-visible,
+.prejoin :focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --- Room layout --------------------------------------------------------- */
+
+.online-class-room__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
+  min-height: 60vh;
+}
+
+.online-class-room__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 80vh;
+}
+
+.online-class-room__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.online-class-room__leave {
+  background: var(--danger);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.online-class-room__end {
+  background: transparent;
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- Status --------------------------------------------------------------- */
+
+.online-class-room__status {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/*
+ * Recording is signalled by a dot plus text, never colour alone — a red dot on
+ * its own is invisible to a colour-blind participant, and this is a consent
+ * signal that everyone must be able to perceive.
+ */
+.recording__active {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.recording__notice {
+  border: 2px solid #b91c1c;
+  background: #fff5f5;
+  color: #7f1d1d;
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 8px 0;
+}
+
+/* --- Chat ----------------------------------------------------------------- */
+
+.chat__messages {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px;
+  overflow-y: auto;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat__message--system {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.chat__message--pending {
+  opacity: 0.6;
+}
+
+.chat__body {
+  /* Long unbroken input must not force the panel to scroll sideways. */
+  overflow-wrap: anywhere;
+}
+
+.chat__composer {
+  display: flex;
+  gap: 8px;
+}
+
+.chat__composer input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat__error {
+  color: var(--danger);
+}
+
+/* --- Captions ------------------------------------------------------------- */
+
+.captions__lines {
+  background: rgba(15, 23, 32, 0.85);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  max-height: 22vh;
+  overflow-y: auto;
+  /* Captions are read quickly; keep them comfortably large. */
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+/* --- Whiteboard ----------------------------------------------------------- */
+
+.whiteboard__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.whiteboard__toolbar button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.whiteboard__surface {
+  width: 100%;
+  height: min(60vh, 640px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* Stops the browser panning the page while drawing with a finger. */
+  touch-action: none;
+}
+
+/* --- Participants and waiting room --------------------------------------- */
+
+.participants ul,
+.waiting-room ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.participants li,
+.waiting-room li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.participants__offline {
+  color: var(--muted);
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+/* Tablet and below: the sidebar moves under the video rather than squeezing it. */
+@media (max-width: 1024px) {
+  .online-class-room__stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-class-room__sidebar {
+    max-height: none;
+  }
+}
+
+/*
+ * Landscape tablet and phone: vertical space is scarce, so the stage keeps the
+ * height and the panels stay scrollable instead of pushing controls off-screen.
+ */
+@media (max-height: 560px) and (orientation: landscape) {
+  .online-class-room__stage {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    min-height: 0;
+  }
+
+  .online-class-room__sidebar {
+    max-height: 100vh;
+  }
+
+  .whiteboard__surface {
+    height: 70vh;
+  }
+
+  .captions__lines {
+    max-height: 18vh;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .online-class-room__controls {
+    /* Touch targets stay reachable at the bottom of a phone screen. */
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .online-class-room__controls button {
+    min-height: 44px;
+  }
+
+  .whiteboard__toolbar button {
+    min-height: 40px;
+  }
+}
+
+/*
+ * Respect a reduced-motion preference: transitions and any spinner animation
+ * are dropped rather than merely shortened.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .online-class-room *,
+  .whiteboard *,
+  .chat * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

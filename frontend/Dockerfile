@@ -12,6 +12,13 @@ RUN npm run build
 
 # --- Runtime stage: serve the bundle with nginx ---
 FROM nginx:1.29-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Rendered at container start by the image's envsubst entrypoint. The filter
+# restricts substitution to LIVEKIT_* so nginx's own $uri/$scheme/$remote_addr
+# are left untouched.
+ENV NGINX_ENVSUBST_FILTER=LIVEKIT_
+# Empty by default: with online classes disabled the CSP is byte-for-byte the
+# strict policy that shipped before the feature.
+ENV LIVEKIT_CSP_ORIGINS=""
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

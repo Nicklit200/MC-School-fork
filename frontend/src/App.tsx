@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -32,6 +33,17 @@ import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetail
 import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSubmissionPage';
 import { SettingsPage } from './pages/student/SettingsPage';
 import { ParentPage } from './pages/parent/ParentPage';
+
+// Online-class pages pull in the LiveKit SDK (~700 kB). They are lazy-loaded so
+// the flashcard flows — especially on student mobile — do not pay for it.
+const UpcomingOnlineClassesPage = lazy(() =>
+  import('./pages/online-classes/UpcomingOnlineClassesPage').then((m) => ({
+    default: m.UpcomingOnlineClassesPage,
+  })),
+);
+const OnlineClassPage = lazy(() =>
+  import('./pages/online-classes/OnlineClassPage').then((m) => ({ default: m.OnlineClassPage })),
+);
 
 export function App() {
   const { user, initializing } = useAuth();
@@ -73,6 +85,11 @@ export function App() {
       <Route path="/student/homeworks/:homeworkId" element={<ProtectedRoute role="STUDENT"><Layout><StudentHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/student/homeworks/:homeworkId/worksheet" element={<ProtectedRoute role="STUDENT"><Layout><PdfHomeworkWithSubmissionPage /></Layout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute role="STUDENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
+
+      {/* Online classes: teachers and students share these routes; the
+          backend decides who may see or join each class. */}
+      <Route path="/online-classes" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
+      <Route path="/online-classes/:classId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><OnlineClassPage /></Suspense></Layout></ProtectedRoute>} />
 
       <Route path="/parent" element={<ProtectedRoute role="PARENT"><Layout><ParentPage /></Layout></ProtectedRoute>} />
       <Route path="/parent/settings" element={<ProtectedRoute role="PARENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />

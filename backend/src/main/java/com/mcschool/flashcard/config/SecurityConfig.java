@@ -54,6 +54,21 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/google-meet/events").permitAll()
+                        // LiveKit webhook. Exempt from JWT because the provider
+                        // holds no user token — NOT unverified: the handler
+                        // validates the Authorization JWT against the API
+                        // key/secret and compares a SHA-256 of the raw body
+                        // before touching any state. Scoped to this exact path
+                        // and POST only; never widened to a wildcard.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/online-classes/webhooks/livekit").permitAll()
+                        // Transcript ingestion by the transcription worker.
+                        // Exempt from JWT because the worker acts for no user —
+                        // NOT unauthenticated: the handler requires a matching
+                        // internal shared secret (constant-time compared) and
+                        // rejects everything else with 401.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/internal/online-classes/*/transcript-segments").permitAll()
                         .requestMatchers(
                                 "/.well-known/oauth-protected-resource",
                                 "/.well-known/oauth-protected-resource/**",

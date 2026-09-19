@@ -26,6 +26,27 @@ verified implementation status, and prioritized remaining work are documented in
 
 ---
 
+## Online classes (LiveKit)
+
+Teachers can run a lesson inside MC-School instead of Google Meet: audio/video,
+screen share, waiting room, host controls, persistent chat, recording, live
+captions and a shared whiteboard.
+
+**Disabled by default.** With `ONLINE_CLASSES_ENABLED=false` the existing Google
+Meet / Soniox flow is unchanged and no online-class endpoint is reachable.
+
+| Document | Purpose |
+|---|---|
+| [docs/online-classes/QUICKSTART.md](docs/online-classes/QUICKSTART.md) | **Start here** — test it on your own laptop |
+| [docs/online-classes/FOR-TESTERS.md](docs/online-classes/FOR-TESTERS.md) | **hand this to testers** — two laptops, teacher + student |
+| [docs/online-classes/03-testing-instructions.md](docs/online-classes/03-testing-instructions.md) | full testing reference (verified command output) |
+| [docs/online-classes/02-architecture-and-runbook.md](docs/online-classes/02-architecture-and-runbook.md) | architecture, configuration, operations |
+| [docs/online-classes/01-realtime-event-protocol.md](docs/online-classes/01-realtime-event-protocol.md) | data-channel event contract |
+| [docs/online-classes/00-current-state-and-plan.md](docs/online-classes/00-current-state-and-plan.md) | implementation log and decisions |
+
+Camera and microphone require a secure context: HTTPS everywhere except
+`localhost`.
+
 ## What is implemented
 
 **Backend**

@@ -106,6 +106,30 @@ npm run dev
 
 Open http://localhost:5173 and log in with the bootstrap admin credentials.
 
+## Online classes (optional)
+
+Disabled by default. To try it locally, add to the backend command in Terminal 2:
+
+```bash
+ONLINE_CLASSES_ENABLED=true
+```
+
+Without LiveKit credentials the app still starts and the class list works — it is
+simply empty, and the teacher-facing state says the feature is not configured.
+The startup log shows which integrations are inactive:
+
+```
+Online classes: media provider unconfigured (enabled=true)
+```
+
+For real audio and video add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and
+`LIVEKIT_API_SECRET` (LiveKit Cloud project). Camera and microphone work on
+`http://localhost` because browsers treat localhost as a secure context; any
+other host needs HTTPS.
+
+Full instructions, including the two-browser test:
+[docs/online-classes/03-testing-instructions.md](docs/online-classes/03-testing-instructions.md).
+
 ## Important note about environment files
 
 Spring Boot does not automatically load `backend/.env`. For the default local

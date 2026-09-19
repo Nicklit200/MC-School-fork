@@ -8,3 +8,16 @@
 # Local environment files — never commit real credentials
 .env
 *.env.local
+
+# Conflict copies ("file 2.java", "file 3.class") created intermittently by a
+# file-sync/backup tool on macOS. They break the Java build — two files
+# declaring the same class — so they must never be committed.
+# Detect and clean with: ./scripts/check-duplicates.sh --fix
+* [0-9].*
+*\ 2.*
+*\ 3.*
+
+# Build output
+backend/target/
+frontend/dist/
+node_modules/

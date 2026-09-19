@@ -87,3 +87,79 @@ frontend origin to `CORS_ALLOWED_ORIGINS`.
   the code is ready; you only supply `MAIL_*` in `.env`.
 - **Domain + TLS certificate** for HTTPS.
 - **Server host** to run it on.
+
+---
+
+## Online classes (LiveKit)
+
+Disabled by default; enabling it changes browser-facing headers, so deploy in
+this order.
+
+### 1. Provider
+
+**LiveKit Cloud is the recommended production choice.** Self-hosting an SFU is a
+separate exercise: it needs UDP and a public IP (or a TURN relay), a trusted TLS
+certificate, Redis for multi-node, host networking, and **Egress runs as its own
+service**. Adding one container to this compose file is *not* production-ready.
+
+### 2. Backend variables
+
+```
+ONLINE_CLASSES_ENABLED=true
+LIVEKIT_URL=wss://<project>.livekit.cloud
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+```
+
+Point the LiveKit project's webhook at
+`https://<your-host>/api/v1/online-classes/webhooks/livekit`. It is exempt from
+JWT but verifies an HMAC over the raw body; an unsigned request gets 401.
+
+### 3. Frontend headers — required
+
+`frontend/nginx.conf.template` is rendered at container start by the nginx
+image's envsubst entrypoint. Set:
+
+```
+LIVEKIT_CSP_ORIGINS=wss://<project>.livekit.cloud https://<project>.livekit.cloud
+```
+
+This injects the signalling origin into CSP `connect-src`. **Leave it empty and
+the browser cannot connect.** Leaving it empty while the feature is off is
+correct — the policy is then byte-for-byte the pre-feature one.
+
+`NGINX_ENVSUBST_FILTER=LIVEKIT_` (set in the Dockerfile) ensures nginx's own
+`$uri` / `$scheme` are never substituted.
+
+The rendered `Permissions-Policy` grants `camera`, `microphone` and
+`display-capture` to `self` only. **HTTPS is mandatory** — browsers do not offer
+`getUserMedia` in an insecure context.
+
+### 4. Recording (optional)
+
+```
+LIVEKIT_RECORDING_ENABLED=true
+CLASS_ARTIFACT_STORAGE_BUCKET=...
+CLASS_ARTIFACT_STORAGE_ACCESS_KEY=...
+CLASS_ARTIFACT_STORAGE_SECRET_KEY=...
+CLASS_ARTIFACT_STORAGE_ENDPOINT=      # R2/MinIO; empty for AWS S3
+CLASS_ARTIFACT_STORAGE_PATH_STYLE=true
+```
+
+Recordings are written by Egress straight to object storage — never through the
+application heap, never into PostgreSQL.
+
+### 5. Transcription (optional)
+
+Runs as a **separate service**, `services/transcription-agent`, included in
+`docker-compose.prod.yml`. `SONIOX_API_KEY` belongs only to that container.
+Generate `TRANSCRIPTION_INTERNAL_TOKEN` with `openssl rand -hex 32` and set the
+same value on the backend.
+
+### Rollback
+
+Set `ONLINE_CLASSES_ENABLED=false` and redeploy. Endpoints return 404 and the
+Google Meet flow resumes. Migrations V44–V48 are additive and inert while off.
+
+Architecture and runbook:
+[docs/online-classes/02-architecture-and-runbook.md](docs/online-classes/02-architecture-and-runbook.md).

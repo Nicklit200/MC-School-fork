@@ -5,6 +5,8 @@ import { lessonPreparationApi } from '../../api/lessonPreparation';
 import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
+import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
+import { LessonClassArtifacts } from '../../features/online-classes/LessonClassArtifacts';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type HomeworkSummary = {
@@ -200,8 +202,13 @@ export function LessonDetailPage() {
         </div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
-          {lesson?.meetUrl && <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">Google Meet</a>}
+          {/* Primary action once online classes are enabled; Google Meet stays
+              as a clearly secondary fallback during rollout. */}
+          {eventId && <StartOnlineClassButton eventId={eventId} />}
+          {lesson?.meetUrl && <a className="btn btn--ghost" href={lesson.meetUrl} target="_blank" rel="noreferrer">{t('onlineClass.meetFallback')}</a>}
         </div>
+        {/* Renders nothing unless an online class was actually held. */}
+        {eventId && <LessonClassArtifacts eventId={eventId} />}
       </div>
 
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}

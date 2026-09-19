@@ -9,7 +9,7 @@ import { homePathForRole } from './roleRoutes';
  * home when they lack the required role. Server-side checks still enforce
  * authorization — this only keeps the UI tidy.
  */
-export function ProtectedRoute({ role, children }: { role?: Role; children: ReactNode }) {
+export function ProtectedRoute({ role, children }: { role?: Role | Role[]; children: ReactNode }) {
   const { user, initializing } = useAuth();
 
   if (initializing) {
@@ -18,7 +18,8 @@ export function ProtectedRoute({ role, children }: { role?: Role; children: Reac
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  if (role && user.role !== role) {
+  const allowed = role === undefined || (Array.isArray(role) ? role.includes(user.role) : user.role === role);
+  if (!allowed) {
     return <Navigate to={homePathForRole(user.role)} replace />;
   }
   return <>{children}</>;

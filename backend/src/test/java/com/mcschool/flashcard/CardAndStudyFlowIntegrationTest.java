@@ -181,9 +181,10 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void oneHomeworkWithSixCardsAppearsAsSingleFolder() throws Exception {
+        // Since "Create separate homework entries for the same day" (30a4cef),
+        // repeating a create for the same date yields a distinct homework, so
+        // this test builds exactly one and checks it renders as one folder.
         UUID homeworkId = createHomework(teacherToken, studentId, LocalDate.of(2026, 8, 27));
-        UUID sameDateHomeworkId = createHomework(teacherToken, studentId, LocalDate.of(2026, 8, 27));
-        assertThat(sameDateHomeworkId).isEqualTo(homeworkId);
 
         createCardInHomework(teacherToken, homeworkId, "q1", "a1");
         createCardInHomework(teacherToken, homeworkId, "q2", "a2");
@@ -820,7 +821,8 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         String adminToken = login(ADMIN_EMAIL, ADMIN_PASSWORD);
         String invitation = postAndReturn("/api/v1/teachers", adminToken,
                 "{\"fullName\": \"Teacher\", \"email\": \"" + email + "\"}", status().isCreated());
-        return activate(JsonPath.read(invitation, "$.invitationToken"), password);
+        // Non-student accounts must confirm their e-mail to activate.
+        return activate(JsonPath.read(invitation, "$.invitationToken"), password, email);
     }
 
     private String login(String email, String password) throws Exception {
@@ -833,10 +835,16 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
     }
 
     private String activate(String invitationToken, String password) throws Exception {
+        return activate(invitationToken, password, null);
+    }
+
+    /** {@code email} is optional for students and required for every other role. */
+    private String activate(String invitationToken, String password, String email) throws Exception {
+        String emailField = email == null ? "" : "\"email\": \"" + email + "\", ";
         String body = mockMvc.perform(post("/api/v1/auth/activate")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"invitationToken\": \"" + invitationToken + "\", \"password\": \""
-                                + password + "\"}"))
+                        .content("{\"invitationToken\": \"" + invitationToken + "\", " + emailField
+                                + "\"password\": \"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(body, "$.accessToken");

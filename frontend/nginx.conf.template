@@ -1,5 +1,13 @@
 # Serves the built SPA and reverse-proxies the API to the backend container, so
 # the browser only ever talks to one origin (no CORS needed).
+#
+# This file is a TEMPLATE. The nginx image renders it at container start with
+# envsubst, restricted by NGINX_ENVSUBST_FILTER to LIVEKIT_* variables only, so
+# nginx's own $uri / $scheme / $remote_addr are never substituted.
+#
+#   LIVEKIT_CSP_ORIGINS  e.g. "wss://my-app.livekit.cloud https://my-app.livekit.cloud"
+#                        Leave EMPTY when online classes are disabled: the CSP
+#                        then stays exactly as strict as before the feature.
 
 # Don't advertise the nginx version (information disclosure).
 server_tokens off;
@@ -19,14 +27,31 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "no-referrer" always;
-    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    # Online classes need camera, microphone and screen capture, granted to this
+    # origin only — never to embedded third parties. Everything else stays
+    # denied outright. `display-capture` is the feature behind getDisplayMedia.
+    add_header Permissions-Policy "geolocation=(), camera=(self), microphone=(self), display-capture=(self), payment=(), usb=(), serial=(), bluetooth=(), midi=(), accelerometer=(), gyroscope=(), magnetometer=(), interest-cohort=()" always;
+
     # Legacy header; disabled because a real CSP is in force.
     add_header X-XSS-Protection "0" always;
+
     # 'unsafe-inline' is only allowed for styles (React sets inline style
     # attributes); scripts are restricted to same-origin bundles. PDF previews
     # use authenticated blob: URLs inside an iframe, so frame-src must allow blob:.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    #
+    # For online classes:
+    #   connect-src  adds the configured LiveKit signalling origin (wss + https).
+    #                Empty by default, so the policy is unchanged when the
+    #                feature is off. WebRTC media itself is not governed by CSP.
+    #   media-src    blob: — LiveKit attaches media through blob/object URLs.
+    #   worker-src   blob: — the client runs audio processing in workers created
+    #                from blobs.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ${LIVEKIT_CSP_ORIGINS}; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+
     # Honoured only over HTTPS; safe to send on HTTP (browsers ignore it there).
+    # Camera and microphone require a secure context: outside localhost the app
+    # MUST be served over HTTPS or getUserMedia will not be offered at all.
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     # Forward API calls to the Railway backend while keeping the browser same-origin.

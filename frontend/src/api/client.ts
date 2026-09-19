@@ -40,7 +40,7 @@ export function setAccessToken(token: string | null): void { accessToken = token
 export function getAccessToken(): string | null { return accessToken; }
 function authHeaders(): Record<string, string> { return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}; }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = authHeaders();
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(`${BASE_URL}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
