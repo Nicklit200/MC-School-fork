@@ -157,7 +157,11 @@ export function WhiteboardPanel({
         readOnly={!canAnnotate}
         onCommit={(shape, operationId) => void board.addShape(shape, operationId)}
         onDraftChange={(operationId, shape) => board.previewShape(operationId, shape)}
-        onLaserMove={onLaserMove}
+        remoteLaserPointers={board.remotePointers}
+        onLaserMove={(point) => {
+          board.sendLaserPointer(point);
+          onLaserMove?.(point);
+        }}
         onRequestText={() => window.prompt(t('onlineClass.whiteboard.textPrompt'))}
       />
     </section>
