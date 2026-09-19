@@ -33,7 +33,13 @@ export function WhiteboardPanel({
   targetType = 'WHITEBOARD',
   targetId = 'board-1',
   sourceAspect = null,
+  backgroundImageUrl,
+  pageIndex = 0,
+  privateUserIds,
   canAnnotate = true,
+  showToolbar = true,
+  compact = false,
+  heading,
   onLaserMove,
 }: {
   classId: string;
@@ -42,7 +48,13 @@ export function WhiteboardPanel({
   targetType?: AnnotationTargetType;
   targetId?: string;
   sourceAspect?: number | null;
+  backgroundImageUrl?: string | null;
+  pageIndex?: number;
+  privateUserIds?: string[];
   canAnnotate?: boolean;
+  showToolbar?: boolean;
+  compact?: boolean;
+  heading?: string;
   onLaserMove?: (point: { x: number; y: number }) => void;
 }) {
   const { t } = useI18n();
@@ -55,8 +67,10 @@ export function WhiteboardPanel({
     classId,
     targetType,
     targetId,
+    pageIndex,
     actorId,
     isHost,
+    privateUserIds,
   });
 
   const saveSnapshot = async () => {
@@ -75,10 +89,13 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className="whiteboard" aria-labelledby="whiteboard-title">
-      <h3 id="whiteboard-title">{t('onlineClass.whiteboard')}</h3>
+    <section
+      className={compact ? 'whiteboard whiteboard--compact' : 'whiteboard'}
+      aria-labelledby="whiteboard-title"
+    >
+      <h3 id="whiteboard-title">{heading ?? t('onlineClass.whiteboard')}</h3>
 
-      {canAnnotate && (
+      {canAnnotate && showToolbar && (
         <div className="whiteboard__toolbar" role="toolbar" aria-label={t('onlineClass.whiteboard')}>
           {TOOLS.map((entry) => (
             <button
@@ -154,6 +171,7 @@ export function WhiteboardPanel({
         color={color}
         strokeWidth={strokeWidth}
         sourceAspect={sourceAspect}
+        backgroundImageUrl={backgroundImageUrl}
         readOnly={!canAnnotate}
         onCommit={(shape, operationId) => void board.addShape(shape, operationId)}
         onDraftChange={(operationId, shape) => board.previewShape(operationId, shape)}
