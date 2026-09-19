@@ -48,6 +48,22 @@
   min-height: 60vh;
 }
 
+.online-class-room__main {
+  min-width: 0;
+  min-height: 60vh;
+}
+
+.online-class-room__board-toggle {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .online-class-room__sidebar {
   display: flex;
   flex-direction: column;
@@ -180,10 +196,19 @@
   color: #fff;
 }
 
+.whiteboard {
+  min-height: 60vh;
+  background: #ffffff;
+  color: #111827;
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
 .whiteboard__surface {
   width: 100%;
   height: min(60vh, 640px);
-  background: var(--surface);
+  min-height: 420px;
+  background: #ffffff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   /* Stops the browser panning the page while drawing with a finger. */
