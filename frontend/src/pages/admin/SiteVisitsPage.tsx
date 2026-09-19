@@ -120,6 +120,13 @@ export function SiteVisitsPage() {
                 <span><b>Класс:</b> {visit.grade || '—'}</span>
                 <span><b>Проблема:</b> {visit.goal || '—'}</span>
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
+                <span><b>Взаимодействие:</b> {visit.firstInteractionAt ? 'да' : 'нет'}</span>
+                <span><b>Первое действие:</b> {visit.firstInteractionLabel || '—'}</span>
+                <span><b>Скролл:</b> {visit.maxScrollPercent != null ? `${visit.maxScrollPercent}%` : '—'}</span>
+                <span><b>На странице:</b> {visit.maxActiveSeconds != null ? `не менее ${visit.maxActiveSeconds} сек.` : '—'}</span>
+                <span><b>Выбор класса показался:</b> {visit.gradeOptionsVisibleAt ? 'да' : visit.trialPageLoadedAt ? 'нет' : '—'}</span>
+                <span><b>Последняя диагностика:</b> {diagnosticLabel(visit.diagnosticStage)}</span>
+                {visit.clientError && <span><b>Ошибка JavaScript:</b> {visit.clientError}</span>}
               </div>
 
               <div className="site-visit-phone">
@@ -135,6 +142,7 @@ export function SiteVisitsPage() {
 
 function visitStageLabel(stage?: string | null) {
   switch (stage) {
+    case 'TRIAL_CTA_CLICK': return 'Нажал «Записаться»';
     case 'TRIAL_PAGE_LOADED': return 'Анкета открылась';
     case 'GRADE_OPTIONS_VISIBLE': return 'Видит выбор класса';
     case 'GRADE_TAP': return 'Нажал на класс';
@@ -143,6 +151,18 @@ function visitStageLabel(stage?: string | null) {
     case 'PRIORITY_SELECTED': return 'Ответил: что важно';
     case 'PHONE_STEP': return 'Дошёл до телефона';
     default: return 'Только открыл сайт';
+  }
+}
+
+function diagnosticLabel(stage?: string | null) {
+  switch (stage) {
+    case 'FIRST_INTERACTION': return 'касался/нажимал';
+    case 'SCROLLED': return 'скроллил';
+    case 'ACTIVE': return 'оставался на странице';
+    case 'PAGE_HIDDEN': return 'ушёл со страницы';
+    case 'JS_ERROR': return 'ошибка JavaScript';
+    case 'UNHANDLED_REJECTION': return 'ошибка Promise';
+    default: return '—';
   }
 }
 

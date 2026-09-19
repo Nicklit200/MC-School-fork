@@ -52,9 +52,18 @@ export type SiteVisit = {
   language?: string | null;
   userAgent?: string | null;
   funnelStage?: string | null;
+  diagnosticStage?: string | null;
   grade?: string | null;
   goal?: string | null;
   priority?: string | null;
+  firstInteractionLabel?: string | null;
+  maxScrollPercent?: number | null;
+  maxActiveSeconds?: number | null;
+  clientError?: string | null;
+  trialPageLoadedAt?: string | null;
+  gradeOptionsVisibleAt?: string | null;
+  firstInteractionAt?: string | null;
+  firstScrollAt?: string | null;
   leadPhone?: string | null;
   leadStatus?: TrialLeadStatus | null;
   createdAt: string;

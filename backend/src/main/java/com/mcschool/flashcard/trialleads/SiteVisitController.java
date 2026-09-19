@@ -61,21 +61,69 @@ public class SiteVisitController {
     @PatchMapping("/public/site-visits/{sessionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void updateProgress(@PathVariable String sessionId, @Valid @RequestBody FunnelProgressRequest request) {
+        String event = clean(request.event(), 40);
+        String funnelEvent = isFunnelEvent(event) ? event : null;
+        String diagnosticEvent = isDiagnosticEvent(event) ? event : null;
+        Integer scrollPercent = request.scrollPercent() == null
+                ? null
+                : Math.max(0, Math.min(100, request.scrollPercent()));
+        Integer activeSeconds = request.activeSeconds() == null
+                ? null
+                : Math.max(0, Math.min(3600, request.activeSeconds()));
+
         jdbc.update("""
                 UPDATE site_visits SET
                     funnel_stage = COALESCE(?, funnel_stage),
+                    diagnostic_stage = COALESCE(?, diagnostic_stage),
                     path = COALESCE(?, path),
                     grade = COALESCE(?, grade),
                     goal = COALESCE(?, goal),
                     priority = COALESCE(?, priority),
+                    trial_page_loaded_at = CASE
+                        WHEN ? = 'TRIAL_PAGE_LOADED' THEN COALESCE(trial_page_loaded_at, CURRENT_TIMESTAMP)
+                        ELSE trial_page_loaded_at
+                    END,
+                    grade_options_visible_at = CASE
+                        WHEN ? = 'GRADE_OPTIONS_VISIBLE' THEN COALESCE(grade_options_visible_at, CURRENT_TIMESTAMP)
+                        ELSE grade_options_visible_at
+                    END,
+                    first_interaction_at = CASE
+                        WHEN ? = 'FIRST_INTERACTION' THEN COALESCE(first_interaction_at, CURRENT_TIMESTAMP)
+                        ELSE first_interaction_at
+                    END,
+                    first_scroll_at = CASE
+                        WHEN ? = 'SCROLLED' THEN COALESCE(first_scroll_at, CURRENT_TIMESTAMP)
+                        ELSE first_scroll_at
+                    END,
+                    max_scroll_percent = CASE
+                        WHEN ? IS NULL THEN max_scroll_percent
+                        ELSE GREATEST(COALESCE(max_scroll_percent, 0), ?)
+                    END,
+                    max_active_seconds = CASE
+                        WHEN ? IS NULL THEN max_active_seconds
+                        ELSE GREATEST(COALESCE(max_active_seconds, 0), ?)
+                    END,
+                    first_interaction_label = COALESCE(first_interaction_label, ?),
+                    client_error = COALESCE(?, client_error),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE session_id = ?
                 """,
-                nullable(request.event(), 40),
+                funnelEvent,
+                diagnosticEvent,
                 nullable(request.path(), 160),
                 nullable(request.grade(), 80),
                 nullable(request.goal(), 500),
                 nullable(request.priority(), 500),
+                event,
+                event,
+                event,
+                event,
+                scrollPercent,
+                scrollPercent,
+                activeSeconds,
+                activeSeconds,
+                nullable(request.interactionLabel(), 160),
+                nullable(request.clientError(), 500),
                 clean(sessionId, 80));
     }
 
@@ -85,8 +133,11 @@ public class SiteVisitController {
         return jdbc.query("""
                 SELECT v.id, v.session_id, v.path, v.source, v.referrer, v.device_type, v.device_model,
                        v.os_name, v.os_version, v.browser_name, v.browser_version, v.screen_size,
-                       v.viewport_size, v.language, v.user_agent, v.funnel_stage,
-                       v.grade, v.goal, v.priority, v.created_at, v.updated_at,
+                       v.viewport_size, v.language, v.user_agent, v.funnel_stage, v.diagnostic_stage,
+                       v.grade, v.goal, v.priority, v.first_interaction_label,
+                       v.max_scroll_percent, v.max_active_seconds, v.client_error,
+                       v.trial_page_loaded_at, v.grade_options_visible_at, v.first_interaction_at, v.first_scroll_at,
+                       v.created_at, v.updated_at,
                        l.phone AS lead_phone, l.status AS lead_status
                 FROM site_visits v
                 LEFT JOIN trial_leads l ON l.client_id = v.session_id
@@ -109,9 +160,18 @@ public class SiteVisitController {
                 rs.getString("language"),
                 rs.getString("user_agent"),
                 rs.getString("funnel_stage"),
+                rs.getString("diagnostic_stage"),
                 rs.getString("grade"),
                 rs.getString("goal"),
                 rs.getString("priority"),
+                rs.getString("first_interaction_label"),
+                (Integer) rs.getObject("max_scroll_percent"),
+                (Integer) rs.getObject("max_active_seconds"),
+                rs.getString("client_error"),
+                instant(rs.getTimestamp("trial_page_loaded_at")),
+                instant(rs.getTimestamp("grade_options_visible_at")),
+                instant(rs.getTimestamp("first_interaction_at")),
+                instant(rs.getTimestamp("first_scroll_at")),
                 rs.getString("lead_phone"),
                 rs.getString("lead_status"),
                 instant(rs.getTimestamp("created_at")),
@@ -206,6 +266,23 @@ public class SiteVisitController {
         return cleanVersion.isBlank() ? cleanName : cleanName + " " + cleanVersion;
     }
 
+    private static boolean isFunnelEvent(String event) {
+        return switch (event) {
+            case "TRIAL_CTA_CLICK", "TRIAL_PAGE_LOADED", "GRADE_OPTIONS_VISIBLE", "GRADE_TAP",
+                    "GRADE_SELECTED", "GOAL_SELECTED", "PRIORITY_SELECTED", "PHONE_STEP",
+                    "FORM_COMPLETED", "TEACHER_SELECTED", "CALENDAR_OPENED", "BOOKED" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isDiagnosticEvent(String event) {
+        return switch (event) {
+            case "FIRST_INTERACTION", "SCROLLED", "ACTIVE", "PAGE_HIDDEN", "JS_ERROR",
+                    "UNHANDLED_REJECTION" -> true;
+            default -> false;
+        };
+    }
+
     private static String nullable(String value, int maxLength) {
         String cleaned = clean(value, maxLength);
         return cleaned.isBlank() ? null : cleaned;
@@ -243,7 +320,11 @@ public class SiteVisitController {
             @Size(max = 160) String path,
             @Size(max = 80) String grade,
             @Size(max = 500) String goal,
-            @Size(max = 500) String priority
+            @Size(max = 500) String priority,
+            Integer scrollPercent,
+            Integer activeSeconds,
+            @Size(max = 160) String interactionLabel,
+            @Size(max = 500) String clientError
     ) {}
 
     public record SiteVisitResponse(
@@ -263,9 +344,18 @@ public class SiteVisitController {
             String language,
             String userAgent,
             String funnelStage,
+            String diagnosticStage,
             String grade,
             String goal,
             String priority,
+            String firstInteractionLabel,
+            Integer maxScrollPercent,
+            Integer maxActiveSeconds,
+            String clientError,
+            Instant trialPageLoadedAt,
+            Instant gradeOptionsVisibleAt,
+            Instant firstInteractionAt,
+            Instant firstScrollAt,
             String leadPhone,
             String leadStatus,
             Instant createdAt,
