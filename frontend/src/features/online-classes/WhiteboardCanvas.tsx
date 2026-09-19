@@ -32,7 +32,7 @@ interface Props {
   readOnly?: boolean;
   onCommit: (shape: Shape, operationId?: string) => void;
   onDraftChange?: (operationId: string, shape: Shape) => void;
-  remoteLaserPointers?: { actorId: string; x: number; y: number }[];
+  remoteLaserPointers?: { actorId: string; points: { x: number; y: number; at: number }[] }[];
   onLaserMove?: (point: { x: number; y: number }) => void;
   onRequestText?: () => string | null;
 }
@@ -62,7 +62,10 @@ export function WhiteboardCanvas({
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
   const [committedDraft, setCommittedDraft] = useState<{ operationId: string; shape: Shape } | null>(null);
-  const [localLaser, setLocalLaser] = useState<{ x: number; y: number } | null>(null);
+  const [localLaserTrail, setLocalLaserTrail] = useState<
+    { x: number; y: number; at: number }[]
+  >([]);
+  const [laserNow, setLaserNow] = useState(() => Date.now());
   const draftRef = useRef<Shape | null>(null);
   const draftIdRef = useRef<string | null>(null);
   const drawing = useRef(false);
@@ -95,8 +98,15 @@ export function WhiteboardCanvas({
   }, [committedDraft, shapes]);
 
   useEffect(() => {
-    if (tool !== 'laser' && localLaser) setLocalLaser(null);
-  }, [localLaser, tool]);
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setLaserNow(now);
+      setLocalLaserTrail((current) =>
+        current.filter((point) => now - point.at < 1800),
+      );
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const pointerToNormalized = useCallback(
     (stage: Konva.Stage) => {
@@ -113,7 +123,8 @@ export function WhiteboardCanvas({
     if (!point) return;
 
     if (tool === 'laser') {
-      setLocalLaser(point);
+      const at = Date.now();
+      setLocalLaserTrail((current) => [...current.filter((p) => at - p.at < 1800), { ...point, at }].slice(-120));
       onLaserMove?.(point);
       return;
     }
@@ -152,7 +163,8 @@ export function WhiteboardCanvas({
       lastSample.current = now;
       const point = pointerToNormalized(stage);
       if (point) {
-        setLocalLaser(point);
+        const at = Date.now();
+        setLocalLaserTrail((current) => [...current.filter((p) => at - p.at < 1800), { ...point, at }].slice(-120));
         onLaserMove?.(point);
       }
       return;
@@ -296,33 +308,64 @@ export function WhiteboardCanvas({
     }
   };
 
-  const renderLaser = (
+  const renderLaserTrail = (
     key: string,
-    point: { x: number; y: number },
+    points: { x: number; y: number; at: number }[],
     local: boolean,
   ) => {
-    const pixel = toPixels(point, viewport, sourceAspect);
+    if (points.length === 0) return null;
+
+    const visible = points.filter((point) => laserNow - point.at < 1800);
+    if (visible.length === 0) return null;
+
+    const segments = visible.slice(1).map((point, index) => {
+      const previous = visible[index];
+      const from = toPixels(previous, viewport, sourceAspect);
+      const to = toPixels(point, viewport, sourceAspect);
+      const age = Math.max(0, laserNow - point.at);
+      const opacity = Math.max(0, 1 - age / 1800);
+
+      return (
+        <Line
+          key={`${key}-segment-${index}`}
+          points={[from.x, from.y, to.x, to.y]}
+          stroke={local ? '#ff6b00' : '#dc2626'}
+          strokeWidth={local ? 5 : 4.5}
+          opacity={opacity}
+          lineCap="round"
+          lineJoin="round"
+          listening={false}
+        />
+      );
+    });
+
+    const head = visible[visible.length - 1];
+    const headPixel = toPixels(head, viewport, sourceAspect);
+    const headOpacity = Math.max(0, 1 - Math.max(0, laserNow - head.at) / 1800);
+
     return (
       <>
+        {segments}
         <Circle
           key={`${key}-halo`}
-          x={pixel.x}
-          y={pixel.y}
-          radius={local ? 12 : 11}
+          x={headPixel.x}
+          y={headPixel.y}
+          radius={local ? 11 : 10}
           fill={local ? '#ff8a00' : '#ef4444'}
-          opacity={0.2}
+          opacity={0.18 * headOpacity}
           listening={false}
         />
         <Circle
           key={`${key}-dot`}
-          x={pixel.x}
-          y={pixel.y}
-          radius={local ? 5 : 4.5}
+          x={headPixel.x}
+          y={headPixel.y}
+          radius={local ? 4.5 : 4}
           fill={local ? '#ff6b00' : '#dc2626'}
           stroke="#ffffff"
-          strokeWidth={2}
-          shadowBlur={5}
-          shadowOpacity={0.35}
+          strokeWidth={1.5}
+          opacity={headOpacity}
+          shadowBlur={4}
+          shadowOpacity={0.3 * headOpacity}
           listening={false}
         />
       </>
@@ -337,10 +380,7 @@ export function WhiteboardCanvas({
         onPointerDown={handleDown}
         onPointerMove={handleMove}
         onPointerUp={handleUp}
-        onPointerLeave={() => {
-          if (tool === 'laser') setLocalLaser(null);
-          handleUp();
-        }}
+        onPointerLeave={handleUp}
         style={{ touchAction: 'none' }}
       >
         <Layer listening={false}>
@@ -350,9 +390,9 @@ export function WhiteboardCanvas({
             renderShape(`committed-${committedDraft.operationId}`, committedDraft.shape)}
           {draft && renderShape('draft', draft)}
           {remoteLaserPointers.map((pointer) =>
-            renderLaser(`remote-laser-${pointer.actorId}`, pointer, false),
+            renderLaserTrail(`remote-laser-${pointer.actorId}`, pointer.points, false),
           )}
-          {tool === 'laser' && localLaser && renderLaser('local-laser', localLaser, true)}
+          {renderLaserTrail('local-laser', localLaserTrail, true)}
         </Layer>
       </Stage>
     </div>
