@@ -292,7 +292,7 @@ public class OnlineClassService {
      * Issues a short-lived, room-scoped token after authorization, admission and
      * time-window checks all pass.
      */
-    @Transactional
+    @Transactional(noRollbackFor = ConflictException.class)
     public OnlineClassConnectionResponse connect(AuthenticatedUser caller, UUID classId, String deviceId) {
         requireEnabled();
         if (!mediaProvider.isConfigured()) {
