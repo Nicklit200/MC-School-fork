@@ -92,6 +92,7 @@ public class SiteVisitController {
 
     private boolean persist(SiteVisitRequest request) {
         try {
+            jdbc.update("DELETE FROM site_visits WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'");
             jdbc.update("""
                     INSERT INTO site_visits (
                         id, session_id, path, source, referrer, device_type, device_model,
