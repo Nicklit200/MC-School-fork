@@ -58,15 +58,21 @@ interface RealtimePointerPacket {
   y: number;
 }
 
-export interface RemoteLaserPointer {
-  actorId: string;
+export interface LaserTrailPoint {
   x: number;
   y: number;
+  at: number;
+}
+
+export interface RemoteLaserTrail {
+  actorId: string;
+  points: LaserTrailPoint[];
 }
 
 const PREVIEW_INTERVAL_MS = 24;
 const POINTER_INTERVAL_MS = 24;
-const POINTER_FADE_MS = 700;
+const LASER_TRAIL_MS = 1800;
+const LASER_PRUNE_INTERVAL_MS = 50;
 
 /**
  * Board state for one annotated surface.
@@ -101,7 +107,7 @@ export function useAnnotationBoard({
   const [remotePreviews, setRemotePreviews] = useState<
     Record<string, { actorId: string; shape: Shape }>
   >({});
-  const [remotePointers, setRemotePointers] = useState<Record<string, RemoteLaserPointer>>({});
+  const [remotePointers, setRemotePointers] = useState<Record<string, RemoteLaserTrail>>({});
   const room = useRoomContext();
   const mounted = useRef(true);
   // Optimistic entries use a negative sequence so they sort after nothing and
@@ -109,18 +115,36 @@ export function useAnnotationBoard({
   const optimisticSequence = useRef(-1);
   const lastSequence = useRef(0);
   const previewSendState = useRef(new Map<string, PreviewSendState>());
-  const pointerClearTimers = useRef(new Map<string, number>());
   const lastPointerSentAt = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      for (const timer of pointerClearTimers.current.values()) {
-        window.clearTimeout(timer);
-      }
-      pointerClearTimers.current.clear();
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const cutoff = Date.now() - LASER_TRAIL_MS;
+      setRemotePointers((current) => {
+        let changed = false;
+        const next: Record<string, RemoteLaserTrail> = {};
+
+        for (const [actor, trail] of Object.entries(current)) {
+          const points = trail.points.filter((point) => point.at >= cutoff);
+          if (points.length > 0) {
+            next[actor] = { actorId: trail.actorId, points };
+          }
+          if (points.length !== trail.points.length) changed = true;
+        }
+
+        if (Object.keys(next).length !== Object.keys(current).length) changed = true;
+        return changed ? next : current;
+      });
+    }, LASER_PRUNE_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
   }, []);
 
   const merge = useCallback((incoming: Operation) => {
@@ -163,23 +187,20 @@ export function useAnnotationBoard({
             ? identity.split('|')[0]
             : 'remote';
 
-          setRemotePointers((current) => ({
-            ...current,
-            [actor]: { actorId: actor, x: parsed.x, y: parsed.y },
-          }));
+          const pointAt = Number.isFinite(parsed.at) ? parsed.at : Date.now();
+          setRemotePointers((current) => {
+            const existing = current[actor]?.points ?? [];
+            const cutoff = Date.now() - LASER_TRAIL_MS;
+            const points = [
+              ...existing.filter((point) => point.at >= cutoff),
+              { x: parsed.x, y: parsed.y, at: pointAt },
+            ].slice(-120);
 
-          const previousTimer = pointerClearTimers.current.get(actor);
-          if (previousTimer !== undefined) window.clearTimeout(previousTimer);
-          const timer = window.setTimeout(() => {
-            setRemotePointers((current) => {
-              if (!(actor in current)) return current;
-              const next = { ...current };
-              delete next[actor];
-              return next;
-            });
-            pointerClearTimers.current.delete(actor);
-          }, POINTER_FADE_MS);
-          pointerClearTimers.current.set(actor, timer);
+            return {
+              ...current,
+              [actor]: { actorId: actor, points },
+            };
+          });
           return;
         }
 
