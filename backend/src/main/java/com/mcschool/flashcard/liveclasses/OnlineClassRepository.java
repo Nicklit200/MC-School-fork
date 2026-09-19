@@ -49,4 +49,17 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
     List<OnlineClass> findVisibleToStudent(@Param("studentId") UUID studentId,
                                            @Param("from") Instant from,
                                            @Param("statuses") List<OnlineClassStatus> statuses);
+
+    @Query("""
+            SELECT c FROM OnlineClass c
+            WHERE c.status = com.mcschool.flashcard.liveclasses.OnlineClassStatus.ENDED
+              AND (
+                    c.student.id = :studentId
+                 OR c.group.id IN (
+                        SELECT m.group.id FROM StudentGroupMember m WHERE m.student.id = :studentId
+                    )
+              )
+            ORDER BY c.actualEndAt DESC, c.scheduledStartAt DESC
+            """)
+    List<OnlineClass> findHistoryVisibleToStudent(@Param("studentId") UUID studentId);
 }
