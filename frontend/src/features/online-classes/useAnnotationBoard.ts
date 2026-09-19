@@ -91,6 +91,7 @@ export function useAnnotationBoard({
   isHost,
   sourceWidth,
   sourceHeight,
+  privateUserIds,
 }: {
   classId: string;
   targetType: AnnotationTargetType;
@@ -100,6 +101,8 @@ export function useAnnotationBoard({
   isHost: boolean;
   sourceWidth?: number;
   sourceHeight?: number;
+  /** When set, realtime packets are delivered only to these user ids. */
+  privateUserIds?: string[];
 }) {
   const [document, setDocument] = useState<AnnotationDocument | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
@@ -116,6 +119,34 @@ export function useAnnotationBoard({
   const lastSequence = useRef(0);
   const previewSendState = useRef(new Map<string, PreviewSendState>());
   const lastPointerSentAt = useRef(0);
+  const realtimeDestinations = useCallback(() => {
+    if (!privateUserIds || privateUserIds.length === 0) return undefined;
+    const allowed = new Set(privateUserIds);
+    return Array.from(room.remoteParticipants.values())
+      .map((participant) => participant.identity)
+      .filter((identity) => allowed.has(identity.split('|')[0]));
+  }, [privateUserIds, room]);
+
+  const publishRealtime = useCallback(
+    (
+      payload: Uint8Array,
+      options: { reliable: boolean; topic: string },
+    ) => {
+      const destinationIdentities = realtimeDestinations();
+      // An empty destination list is interpreted by LiveKit as broadcast.
+      // For a private board, skip realtime delivery until an allowed peer is
+      // actually present; persistence remains the authoritative fallback.
+      if (privateUserIds?.length && destinationIdentities?.length === 0) {
+        return Promise.resolve();
+      }
+      return room.localParticipant.publishData(payload, {
+        ...options,
+        ...(destinationIdentities ? { destinationIdentities } : {}),
+      });
+    },
+    [privateUserIds, realtimeDestinations, room],
+  );
+
 
   useEffect(() => {
     mounted.current = true;
@@ -409,14 +440,12 @@ export function useAnnotationBoard({
         };
       }
 
-      void room.localParticipant
-        .publishData(new TextEncoder().encode(JSON.stringify(packet)), {
-          reliable: false,
-          topic: ANNOTATION_TOPIC,
-        })
-        .catch(() => undefined);
+      void publishRealtime(new TextEncoder().encode(JSON.stringify(packet)), {
+        reliable: false,
+        topic: ANNOTATION_TOPIC,
+      }).catch(() => undefined);
     },
-    [actorId, classId, document, room],
+    [actorId, classId, document, publishRealtime],
   );
 
   const submit = useCallback(
@@ -456,14 +485,12 @@ export function useAnnotationBoard({
           sequence: 0,
         },
       };
-      void room.localParticipant
-        .publishData(new TextEncoder().encode(JSON.stringify(realtimePacket)), {
-          // Finalized operations are tiny after thinning and must not be lost.
-          // In-progress previews use lossy packets below.
-          reliable: true,
-          topic: ANNOTATION_TOPIC,
-        })
-        .catch(() => undefined);
+      void publishRealtime(new TextEncoder().encode(JSON.stringify(realtimePacket)), {
+        // Finalized operations are tiny after thinning and must not be lost.
+        // In-progress previews use lossy packets below.
+        reliable: true,
+        topic: ANNOTATION_TOPIC,
+      }).catch(() => undefined);
 
       const previewState = previewSendState.current.get(operationId);
       if (previewState && previewState.timer !== null) {
@@ -490,7 +517,7 @@ export function useAnnotationBoard({
         }
       }
     },
-    [actorId, classId, document, flushPreview, merge, room],
+    [actorId, classId, document, flushPreview, merge, publishRealtime],
   );
 
   const previewShape = useCallback(
@@ -543,14 +570,12 @@ export function useAnnotationBoard({
         y: point.y,
       };
 
-      void room.localParticipant
-        .publishData(new TextEncoder().encode(JSON.stringify(packet)), {
-          reliable: false,
-          topic: POINTER_TOPIC,
-        })
-        .catch(() => undefined);
+      void publishRealtime(new TextEncoder().encode(JSON.stringify(packet)), {
+        reliable: false,
+        topic: POINTER_TOPIC,
+      }).catch(() => undefined);
     },
-    [classId, room, targetId],
+    [classId, publishRealtime, targetId],
   );
 
   const addShape = useCallback(
