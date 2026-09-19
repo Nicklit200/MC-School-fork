@@ -29,6 +29,7 @@ interface Props {
   color: string;
   strokeWidth: number;
   sourceAspect: number | null;
+  backgroundImageUrl?: string | null;
   readOnly?: boolean;
   onCommit: (shape: Shape, operationId?: string) => void;
   onDraftChange?: (operationId: string, shape: Shape) => void;
@@ -51,6 +52,7 @@ export function WhiteboardCanvas({
   color,
   strokeWidth,
   sourceAspect,
+  backgroundImageUrl,
   readOnly = false,
   onCommit,
   onDraftChange,
@@ -382,6 +384,15 @@ export function WhiteboardCanvas({
 
   return (
     <div ref={containerRef} className="whiteboard__surface">
+      {backgroundImageUrl && (
+        <img
+          className="whiteboard__background"
+          src={backgroundImageUrl}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
+      )}
       <Stage
         width={viewport.width}
         height={viewport.height}
