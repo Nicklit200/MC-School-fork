@@ -244,80 +244,6 @@ export function useAnnotationBoard({
   const shapes = useMemo(() => foldOperations(operations), [operations]);
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
 
-  const submit = useCallback(
-    async (
-      operationType: Operation['operationType'],
-      payload: string,
-      requestedOperationId?: string,
-    ) => {
-      if (!document) return;
-      const operationId = requestedOperationId ?? newId();
-      if (requestedOperationId) {
-        flushPreview(operationId);
-      }
-      const optimistic: Operation = {
-        operationId,
-        sequence: optimisticSequence.current--,
-        actorId,
-        layerOwnerId: actorId,
-        operationType,
-        payload,
-      };
-      merge(optimistic);
-
-      // Lowest-latency path: broadcast the operation immediately over LiveKit
-      // instead of waiting for the HTTP persistence round-trip. Lossy delivery
-      // minimizes delay; the REST write + incremental replay below remain the
-      // durable fallback if a packet is ever dropped.
-      const realtimePacket: RealtimeAnnotationPacket = {
-        v: 1,
-        type: 'annotation',
-        classId,
-        documentId: document.id,
-        operation: {
-          ...optimistic,
-          // Realtime delivery is not authoritative. Sequence 0 prevents this
-          // transient packet from advancing the durable replay cursor.
-          sequence: 0,
-        },
-      };
-      void room.localParticipant
-        .publishData(new TextEncoder().encode(JSON.stringify(realtimePacket)), {
-          // Finalized operations are tiny after thinning and must not be lost.
-          // In-progress previews use lossy packets below.
-          reliable: true,
-          topic: ANNOTATION_TOPIC,
-        })
-        .catch(() => undefined);
-
-      const previewState = previewSendState.current.get(operationId);
-      if (previewState?.timer !== null) {
-        window.clearTimeout(previewState.timer);
-      }
-      previewSendState.current.delete(operationId);
-
-      try {
-        const saved = await onlineClassesApi.appendAnnotation(
-          classId,
-          document.id,
-          operationId,
-          operationType,
-          payload,
-        );
-        if (mounted.current) merge(saved as unknown as Operation);
-      } catch {
-        // The server rejected it (validation, or the class ended): drop the
-        // optimistic shape rather than showing something nobody else has.
-        if (mounted.current) {
-          setOperations((current) =>
-            current.filter((item) => item.operationId !== operationId),
-          );
-        }
-      }
-    },
-    [actorId, classId, document, flushPreview, merge, room],
-  );
-
   const flushPreview = useCallback(
     (operationId: string) => {
       if (!document) return;
@@ -386,6 +312,80 @@ export function useAnnotationBoard({
         .catch(() => undefined);
     },
     [actorId, classId, document, room],
+  );
+
+  const submit = useCallback(
+    async (
+      operationType: Operation['operationType'],
+      payload: string,
+      requestedOperationId?: string,
+    ) => {
+      if (!document) return;
+      const operationId = requestedOperationId ?? newId();
+      if (requestedOperationId) {
+        flushPreview(operationId);
+      }
+      const optimistic: Operation = {
+        operationId,
+        sequence: optimisticSequence.current--,
+        actorId,
+        layerOwnerId: actorId,
+        operationType,
+        payload,
+      };
+      merge(optimistic);
+
+      // Lowest-latency path: broadcast the operation immediately over LiveKit
+      // instead of waiting for the HTTP persistence round-trip. Lossy delivery
+      // minimizes delay; the REST write + incremental replay below remain the
+      // durable fallback if a packet is ever dropped.
+      const realtimePacket: RealtimeAnnotationPacket = {
+        v: 1,
+        type: 'annotation',
+        classId,
+        documentId: document.id,
+        operation: {
+          ...optimistic,
+          // Realtime delivery is not authoritative. Sequence 0 prevents this
+          // transient packet from advancing the durable replay cursor.
+          sequence: 0,
+        },
+      };
+      void room.localParticipant
+        .publishData(new TextEncoder().encode(JSON.stringify(realtimePacket)), {
+          // Finalized operations are tiny after thinning and must not be lost.
+          // In-progress previews use lossy packets below.
+          reliable: true,
+          topic: ANNOTATION_TOPIC,
+        })
+        .catch(() => undefined);
+
+      const previewState = previewSendState.current.get(operationId);
+      if (previewState && previewState.timer !== null) {
+        window.clearTimeout(previewState.timer);
+      }
+      previewSendState.current.delete(operationId);
+
+      try {
+        const saved = await onlineClassesApi.appendAnnotation(
+          classId,
+          document.id,
+          operationId,
+          operationType,
+          payload,
+        );
+        if (mounted.current) merge(saved as unknown as Operation);
+      } catch {
+        // The server rejected it (validation, or the class ended): drop the
+        // optimistic shape rather than showing something nobody else has.
+        if (mounted.current) {
+          setOperations((current) =>
+            current.filter((item) => item.operationId !== operationId),
+          );
+        }
+      }
+    },
+    [actorId, classId, document, flushPreview, merge, room],
   );
 
   const previewShape = useCallback(
