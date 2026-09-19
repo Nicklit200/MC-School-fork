@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { trialLeadsApi, type TrialLead, type TrialLeadStatus } from '../../api/trialLeads';
+import { trialLeadsApi, type SiteVisit, type TrialLead, type TrialLeadStatus } from '../../api/trialLeads';
 import '../../trial-leads.css';
 
 const STATUS_LABELS: Record<TrialLeadStatus, string> = {
@@ -24,6 +24,7 @@ const AUTO_REFRESH_MS = 10_000;
 
 export function TrialLeadsPage() {
   const [leads, setLeads] = useState<TrialLead[]>([]);
+  const [visits, setVisits] = useState<SiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -35,7 +36,12 @@ export function TrialLeadsPage() {
     else setLoading(true);
     setError('');
     try {
-      setLeads(await trialLeadsApi.list());
+      const [nextLeads, nextVisits] = await Promise.all([
+        trialLeadsApi.list(),
+        trialLeadsApi.listVisits().catch(() => []),
+      ]);
+      setLeads(nextLeads);
+      setVisits(nextVisits);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить заявки');
     } finally {
@@ -110,7 +116,7 @@ export function TrialLeadsPage() {
         <div>
           <p className="trial-leads-eyebrow">Продажи</p>
           <h1>Заявки на пробный урок</h1>
-          <p>Телефон сохраняется до анкеты. Статус показывает последний этап, до которого человек дошёл. Список обновляется автоматически каждые 10 секунд.</p>
+          <p>Теперь отдельно видны все входы на сайт и технические данные устройства. Так можно понять, например, есть ли отвал только на Android, Safari или конкретном размере экрана.</p>
         </div>
         <div className="trial-lead-actions">
           <Link className="btn btn--secondary" to="/admin/settings">Уведомления</Link>
@@ -119,13 +125,56 @@ export function TrialLeadsPage() {
       </div>
 
       <div className="trial-leads-summary">
-        <div><span>Всего</span><strong>{summary.total}</strong></div>
+        <div><span>Всего заявок</span><strong>{summary.total}</strong></div>
         <div><span>В процессе</span><strong>{summary.newCount}</strong></div>
         <div><span>Открыли календарь</span><strong>{summary.calendar}</strong></div>
         <div><span>Забронировано</span><strong>{summary.booked}</strong></div>
       </div>
 
       {error && <div className="trial-leads-error">{error}</div>}
+
+      {!loading && <section className="site-visits-panel">
+        <div className="site-visits-heading">
+          <div>
+            <h2>Последние посещения сайта</h2>
+            <p>Последние 200 уникальных сессий. Если телефон не оставлен, это видно прямо здесь.</p>
+          </div>
+          <span>{visits.length}</span>
+        </div>
+
+        {visits.length === 0 && <div className="trial-leads-empty">Новые посещения начнут появляться после обновления сайта.</div>}
+
+        {visits.length > 0 && <div className="site-visits-list">
+          {visits.slice(0, 30).map((visit) => {
+            const device = [visit.deviceModel || visit.deviceType, joinVersion(visit.osName, visit.osVersion)].filter(Boolean).join(' · ');
+            const browser = joinVersion(visit.browserName, visit.browserVersion);
+            const converted = Boolean(visit.leadStatus);
+            return <article className="site-visit-card" key={visit.id}>
+              <div className="site-visit-card__top">
+                <div>
+                  <strong>{device || 'Неизвестное устройство'}</strong>
+                  <span className={converted ? 'site-visit-result site-visit-result--ok' : 'site-visit-result'}>
+                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : 'Не оставил телефон'}
+                  </span>
+                </div>
+                <time>{formatDate(visit.createdAt)}</time>
+              </div>
+
+              <div className="site-visit-meta">
+                <span><b>Браузер:</b> {browser || '—'}</span>
+                <span><b>Экран:</b> {visit.screenSize || '—'}</span>
+                <span><b>Окно:</b> {visit.viewportSize || '—'}</span>
+                <span><b>Язык:</b> {visit.language || '—'}</span>
+                <span><b>Страница:</b> {visit.path || '/'}</span>
+                <span><b>Источник:</b> {visit.source || visit.referrer || 'Прямой переход'}</span>
+              </div>
+
+              {visit.leadPhone && <div className="site-visit-phone">Лид: {visit.leadPhone}</div>}
+            </article>;
+          })}
+        </div>
+      </section>}
+
       {loading && <div className="trial-leads-empty">Загружаем заявки…</div>}
       {!loading && leads.length === 0 && <div className="trial-leads-empty">Пока нет заявок.</div>}
 
@@ -183,6 +232,11 @@ function Detail({ label, value, wide = false }: { label: string; value?: string 
     <span>{label}</span>
     <strong>{value || '—'}</strong>
   </div>;
+}
+
+function joinVersion(name?: string | null, version?: string | null) {
+  if (!name) return '';
+  return version ? `${name} ${version}` : name;
 }
 
 function formatDate(value: string) {
