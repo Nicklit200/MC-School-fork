@@ -116,7 +116,7 @@ export function SiteVisitsPage() {
                 <span><b>Окно:</b> {visit.viewportSize || '—'}</span>
                 <span><b>Язык:</b> {visit.language || '—'}</span>
                 <span><b>Страница:</b> {visit.path || '/'}</span>
-                <span><b>Источник:</b> {visit.source || visit.referrer || 'Прямой переход'}</span>
+                <span><b>Источник:</b> {visit.source || visit.referrer || 'Источник не передан'}</span>
                 <span><b>Класс:</b> {visit.grade || '—'}</span>
                 <span><b>Проблема:</b> {visit.goal || '—'}</span>
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
