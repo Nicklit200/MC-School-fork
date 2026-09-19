@@ -523,3 +523,54 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+/* --- Finish lesson / attendance ------------------------------------------ */
+
+.attendance-finish-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.attendance-finish-modal__card {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow-y: auto;
+  background: #fff;
+  color: #111827;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+}
+
+.attendance-finish-modal__card h2 {
+  margin: 0 0 6px;
+}
+
+.attendance-finish-modal__list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.attendance-finish-modal__student {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+@media (max-width: 640px) {
+  .attendance-finish-modal__student {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
