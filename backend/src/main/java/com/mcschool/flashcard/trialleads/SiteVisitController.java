@@ -60,11 +60,13 @@ public class SiteVisitController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<SiteVisitResponse> list() {
         return jdbc.query("""
-                SELECT id, session_id, path, source, referrer, device_type, device_model,
-                       os_name, os_version, browser_name, browser_version, screen_size,
-                       viewport_size, language, user_agent, created_at
-                FROM site_visits
-                ORDER BY created_at DESC
+                SELECT v.id, v.session_id, v.path, v.source, v.referrer, v.device_type, v.device_model,
+                       v.os_name, v.os_version, v.browser_name, v.browser_version, v.screen_size,
+                       v.viewport_size, v.language, v.user_agent, v.created_at,
+                       l.phone AS lead_phone, l.status AS lead_status
+                FROM site_visits v
+                LEFT JOIN trial_leads l ON l.client_id = v.session_id
+                ORDER BY v.created_at DESC
                 LIMIT 200
                 """, (rs, rowNum) -> new SiteVisitResponse(
                 rs.getObject("id", UUID.class),
@@ -82,6 +84,8 @@ public class SiteVisitController {
                 rs.getString("viewport_size"),
                 rs.getString("language"),
                 rs.getString("user_agent"),
+                rs.getString("lead_phone"),
+                rs.getString("lead_status"),
                 instant(rs.getTimestamp("created_at"))
         ));
     }
@@ -220,6 +224,8 @@ public class SiteVisitController {
             String viewportSize,
             String language,
             String userAgent,
+            String leadPhone,
+            String leadStatus,
             Instant createdAt
     ) {}
 }
