@@ -120,7 +120,9 @@ export function OnlineClassRoom({
   onStateChanged?: () => void;
 }) {
   const { t } = useI18n();
-  const [boardOpen, setBoardOpen] = useState(false);
+  // The classroom is board-first: starting a lesson opens its durable lesson
+  // board immediately. Video remains one click away via the toggle below.
+  const [boardOpen, setBoardOpen] = useState(true);
   const [boardContext, setBoardContext] = useState<OnlineClassBoardContext | null>(null);
 
   useEffect(() => {
@@ -130,8 +132,8 @@ export function OnlineClassRoom({
       .then((context) => {
         if (!active) return;
         setBoardContext(context);
-        // A prepared workbook should be the first thing the class sees.
-        if (context.workbook.hasWorkbook) setBoardOpen(true);
+        // Board state is tied to this lesson/class. If a workbook was prepared
+        // for the lesson it appears as the sheet background automatically.
       })
       .catch(() => undefined);
     return () => {
