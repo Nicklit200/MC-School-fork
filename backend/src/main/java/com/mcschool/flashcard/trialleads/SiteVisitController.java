@@ -104,6 +104,8 @@ public class SiteVisitController {
                         ELSE GREATEST(COALESCE(max_active_seconds, 0), ?)
                     END,
                     first_interaction_label = COALESCE(first_interaction_label, ?),
+                    furthest_section_id = COALESCE(?, furthest_section_id),
+                    furthest_section_label = COALESCE(?, furthest_section_label),
                     client_error = COALESCE(?, client_error),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE session_id = ?
@@ -123,6 +125,8 @@ public class SiteVisitController {
                 activeSeconds,
                 activeSeconds,
                 nullable(request.interactionLabel(), 160),
+                nullable(request.sectionId(), 80),
+                nullable(request.sectionLabel(), 160),
                 nullable(request.clientError(), 500),
                 clean(sessionId, 80));
     }
@@ -135,6 +139,7 @@ public class SiteVisitController {
                        v.os_name, v.os_version, v.browser_name, v.browser_version, v.screen_size,
                        v.viewport_size, v.language, v.user_agent, v.funnel_stage, v.diagnostic_stage,
                        v.grade, v.goal, v.priority, v.first_interaction_label,
+                       v.furthest_section_id, v.furthest_section_label,
                        v.max_scroll_percent, v.max_active_seconds, v.client_error,
                        v.trial_page_loaded_at, v.grade_options_visible_at, v.first_interaction_at, v.first_scroll_at,
                        v.created_at, v.updated_at,
@@ -165,6 +170,8 @@ public class SiteVisitController {
                 rs.getString("goal"),
                 rs.getString("priority"),
                 rs.getString("first_interaction_label"),
+                rs.getString("furthest_section_id"),
+                rs.getString("furthest_section_label"),
                 (Integer) rs.getObject("max_scroll_percent"),
                 (Integer) rs.getObject("max_active_seconds"),
                 rs.getString("client_error"),
@@ -277,8 +284,8 @@ public class SiteVisitController {
 
     private static boolean isDiagnosticEvent(String event) {
         return switch (event) {
-            case "FIRST_INTERACTION", "SCROLLED", "ACTIVE", "PAGE_HIDDEN", "JS_ERROR",
-                    "UNHANDLED_REJECTION" -> true;
+            case "FIRST_INTERACTION", "SCROLLED", "SECTION_REACHED", "PAGE_END",
+                    "ACTIVE", "PAGE_HIDDEN", "JS_ERROR", "UNHANDLED_REJECTION" -> true;
             default -> false;
         };
     }
@@ -324,6 +331,8 @@ public class SiteVisitController {
             Integer scrollPercent,
             Integer activeSeconds,
             @Size(max = 160) String interactionLabel,
+            @Size(max = 80) String sectionId,
+            @Size(max = 160) String sectionLabel,
             @Size(max = 500) String clientError
     ) {}
 
@@ -349,6 +358,8 @@ public class SiteVisitController {
             String goal,
             String priority,
             String firstInteractionLabel,
+            String furthestSectionId,
+            String furthestSectionLabel,
             Integer maxScrollPercent,
             Integer maxActiveSeconds,
             String clientError,

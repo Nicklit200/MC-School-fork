@@ -122,7 +122,7 @@ export function SiteVisitsPage() {
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
                 <span><b>Взаимодействие:</b> {visit.firstInteractionAt ? 'да' : 'нет'}</span>
                 <span><b>Первое действие:</b> {visit.firstInteractionLabel || '—'}</span>
-                <span><b>Скролл:</b> {visit.maxScrollPercent != null ? `${visit.maxScrollPercent}%` : '—'}</span>
+                <span><b>Доскроллил до:</b> {visit.furthestSectionLabel || '—'}</span>
                 <span><b>На странице:</b> {visit.maxActiveSeconds != null ? `не менее ${visit.maxActiveSeconds} сек.` : '—'}</span>
                 <span><b>Выбор класса показался:</b> {visit.gradeOptionsVisibleAt ? 'да' : visit.trialPageLoadedAt ? 'нет' : '—'}</span>
                 <span><b>Последняя диагностика:</b> {diagnosticLabel(visit.diagnosticStage)}</span>
@@ -158,6 +158,8 @@ function diagnosticLabel(stage?: string | null) {
   switch (stage) {
     case 'FIRST_INTERACTION': return 'касался/нажимал';
     case 'SCROLLED': return 'скроллил';
+    case 'SECTION_REACHED': return 'дошёл до раздела';
+    case 'PAGE_END': return 'дошёл до конца страницы';
     case 'ACTIVE': return 'оставался на странице';
     case 'PAGE_HIDDEN': return 'ушёл со страницы';
     case 'JS_ERROR': return 'ошибка JavaScript';

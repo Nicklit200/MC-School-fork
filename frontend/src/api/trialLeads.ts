@@ -57,6 +57,8 @@ export type SiteVisit = {
   goal?: string | null;
   priority?: string | null;
   firstInteractionLabel?: string | null;
+  furthestSectionId?: string | null;
+  furthestSectionLabel?: string | null;
   maxScrollPercent?: number | null;
   maxActiveSeconds?: number | null;
   clientError?: string | null;
