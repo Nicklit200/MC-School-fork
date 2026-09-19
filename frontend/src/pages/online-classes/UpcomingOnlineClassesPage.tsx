@@ -17,6 +17,7 @@ export function UpcomingOnlineClassesPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [classes, setClasses] = useState<OnlineClass[] | null>(null);
+  const [history, setHistory] = useState<OnlineClass[]>([]);
   const [failed, setFailed] = useState(false);
   const [creatingTestClass, setCreatingTestClass] = useState(false);
   const [providerMissing, setProviderMissing] = useState(false);
@@ -29,9 +30,13 @@ export function UpcomingOnlineClassesPage() {
       if (!active || inFlight) return;
       inFlight = true;
       try {
-        const loaded = await onlineClassesApi.listUpcoming();
+        const [loaded, completed] = await Promise.all([
+          onlineClassesApi.listUpcoming(),
+          user?.role === 'STUDENT' ? onlineClassesApi.history() : Promise.resolve([]),
+        ]);
         if (!active) return;
         setClasses(loaded);
+        setHistory(completed);
         setFailed(false);
       } catch {
         if (active) setFailed(true);
@@ -150,6 +155,27 @@ export function UpcomingOnlineClassesPage() {
           ))}
         </ul>
       )}
+      {user?.role === 'STUDENT' && history.length > 0 && (
+        <section className="panel" style={{ marginTop: 22, padding: 18 }}>
+          <h2 style={{ marginTop: 0 }}>История уроков</h2>
+          <p className="muted" style={{ marginTop: -4 }}>
+            Открой прошлый урок и посмотри рабочую тетрадь, общую доску и свою работу.
+          </p>
+          <div className="stack" style={{ gap: 8 }}>
+            {history.map((item) => (
+              <Link
+                key={item.id}
+                className="btn btn--secondary"
+                to={`/student/lessons/${item.id}/history`}
+                style={{ textAlign: 'left' }}
+              >
+                {item.title} · {new Date(item.scheduledStartAt).toLocaleString(locale)}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
     </div>
   );
 }
