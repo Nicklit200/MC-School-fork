@@ -51,6 +51,7 @@ export function useAnnotationBoard({
   // Optimistic entries use a negative sequence so they sort after nothing and
   // are replaced the moment the server assigns a real one.
   const optimisticSequence = useRef(-1);
+  const lastSequence = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -60,6 +61,9 @@ export function useAnnotationBoard({
   }, []);
 
   const merge = useCallback((incoming: Operation) => {
+    if (incoming.sequence > 0) {
+      lastSequence.current = Math.max(lastSequence.current, incoming.sequence);
+    }
     setOperations((current) => {
       const index = current.findIndex((item) => item.operationId === incoming.operationId);
       if (index >= 0) {
@@ -80,13 +84,54 @@ export function useAnnotationBoard({
         setDocument(opened);
         const replayed = await onlineClassesApi.replayAnnotations(classId, opened.id, 0);
         if (!active) return;
-        setOperations(replayed as unknown as Operation[]);
+        const replayedOperations = replayed as unknown as Operation[];
+        setOperations(replayedOperations);
+        lastSequence.current = replayedOperations.reduce(
+          (max, operation) => Math.max(max, operation.sequence > 0 ? operation.sequence : 0),
+          0,
+        );
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
   }, [classId, targetType, targetId, pageIndex, sourceWidth, sourceHeight]);
+
+  // Until annotation data-channel delivery is wired into this screen, keep
+  // every participant in sync by replaying only operations newer than the last
+  // sequence we have seen. This is lightweight (incremental) and gives a
+  // sub-second shared-board experience on staging.
+  useEffect(() => {
+    if (!document) return;
+    let active = true;
+    let inFlight = false;
+
+    const poll = async () => {
+      if (!active || inFlight) return;
+      inFlight = true;
+      try {
+        const incoming = await onlineClassesApi.replayAnnotations(
+          classId,
+          document.id,
+          lastSequence.current,
+        );
+        if (!active) return;
+        (incoming as unknown as Operation[]).forEach(merge);
+      } catch {
+        // A transient network hiccup should not blank the board. The next poll
+        // resumes from the last successfully merged sequence.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 400);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [classId, document, merge]);
 
   const shapes = useMemo(() => foldOperations(operations), [operations]);
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
