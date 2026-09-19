@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { trialLeadsApi, type SiteVisit, type TrialLead, type TrialLeadStatus } from '../../api/trialLeads';
+import { trialLeadsApi, type TrialLead, type TrialLeadStatus } from '../../api/trialLeads';
 import '../../trial-leads.css';
 
 const STATUS_LABELS: Record<TrialLeadStatus, string> = {
@@ -24,7 +24,6 @@ const AUTO_REFRESH_MS = 10_000;
 
 export function TrialLeadsPage() {
   const [leads, setLeads] = useState<TrialLead[]>([]);
-  const [visits, setVisits] = useState<SiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -36,12 +35,7 @@ export function TrialLeadsPage() {
     else setLoading(true);
     setError('');
     try {
-      const [nextLeads, nextVisits] = await Promise.all([
-        trialLeadsApi.list(),
-        trialLeadsApi.listVisits().catch(() => []),
-      ]);
-      setLeads(nextLeads);
-      setVisits(nextVisits);
+      setLeads(await trialLeadsApi.list());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить заявки');
     } finally {
@@ -115,10 +109,11 @@ export function TrialLeadsPage() {
       <div className="trial-leads-heading">
         <div>
           <p className="trial-leads-eyebrow">Продажи</p>
-          <h1>Заявки и попытки на сайте</h1>
-          <p>Сохраняем каждый уникальный заход: устройство, систему, браузер и этап воронки. Если человек оставил номер, попытка связывается с заявкой.</p>
+          <h1>Заявки на пробный урок</h1>
+          <p>Здесь только люди, которые уже оставили номер. Анонимные заходы вынесены в отдельную вкладку «Попытки посетителей».</p>
         </div>
         <div className="trial-lead-actions">
+          <Link className="btn btn--secondary" to="/admin/site-visits">Попытки посетителей</Link>
           <Link className="btn btn--secondary" to="/admin/settings">Уведомления</Link>
           <button type="button" className="btn" onClick={() => void load({ silent: true })} disabled={loading || refreshing}>{refreshing ? 'Обновляем…' : 'Обновить'}</button>
         </div>
@@ -132,53 +127,6 @@ export function TrialLeadsPage() {
       </div>
 
       {error && <div className="trial-leads-error">{error}</div>}
-
-      {!loading && <section className="site-visits-panel">
-        <div className="site-visits-heading">
-          <div>
-            <h2>Попытки посетителей</h2>
-            <p>До 200 последних уникальных заходов. Видно, с какого телефона или компьютера зашли, до какого шага дошли и оставили ли номер.</p>
-          </div>
-          <span>{visits.length}</span>
-        </div>
-
-        {visits.length === 0 && <div className="trial-leads-empty">Новые посещения начнут появляться после обновления сайта.</div>}
-
-        {visits.length > 0 && <div className="site-visits-list">
-          {visits.map((visit) => {
-            const device = [visit.deviceModel || visit.deviceType, joinVersion(visit.osName, visit.osVersion)].filter(Boolean).join(' · ');
-            const browser = joinVersion(visit.browserName, visit.browserVersion);
-            const converted = Boolean(visit.leadStatus);
-            return <article className="site-visit-card" key={visit.id}>
-              <div className="site-visit-card__top">
-                <div>
-                  <strong>{device || 'Неизвестное устройство'}</strong>
-                  <span className={converted ? 'site-visit-result site-visit-result--ok' : 'site-visit-result'}>
-                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : visitStageLabel(visit.funnelStage)}
-                  </span>
-                </div>
-                <time>{formatDate(visit.createdAt)}</time>
-              </div>
-
-              <div className="site-visit-meta">
-                <span><b>Устройство:</b> {device || '—'}</span>
-                <span><b>Браузер:</b> {browser || '—'}</span>
-                <span><b>Экран:</b> {visit.screenSize || '—'}</span>
-                <span><b>Окно:</b> {visit.viewportSize || '—'}</span>
-                <span><b>Язык:</b> {visit.language || '—'}</span>
-                <span><b>Страница:</b> {visit.path || '/'}</span>
-                <span><b>Источник:</b> {visit.source || visit.referrer || 'Прямой переход'}</span>
-                <span><b>Класс:</b> {visit.grade || '—'}</span>
-                <span><b>Проблема:</b> {visit.goal || '—'}</span>
-                <span><b>Что важно:</b> {visit.priority || '—'}</span>
-              </div>
-
-              <div className="site-visit-phone">{visit.leadPhone ? <>Контактный номер: {visit.leadPhone}</> : <>Контактный номер: не оставил</>}</div>
-            </article>;
-          })}
-        </div>}
-      </section>}
-
       {loading && <div className="trial-leads-empty">Загружаем заявки…</div>}
       {!loading && leads.length === 0 && <div className="trial-leads-empty">Пока нет заявок.</div>}
 
@@ -236,24 +184,6 @@ function Detail({ label, value, wide = false }: { label: string; value?: string 
     <span>{label}</span>
     <strong>{value || '—'}</strong>
   </div>;
-}
-
-function visitStageLabel(stage?: string | null) {
-  switch (stage) {
-    case 'TRIAL_PAGE_LOADED': return 'Анкета открылась';
-    case 'GRADE_OPTIONS_VISIBLE': return 'Видит выбор класса';
-    case 'GRADE_TAP': return 'Нажал на класс';
-    case 'GRADE_SELECTED': return 'Ответил: класс';
-    case 'GOAL_SELECTED': return 'Ответил: проблема';
-    case 'PRIORITY_SELECTED': return 'Ответил: что важно';
-    case 'PHONE_STEP': return 'Дошёл до телефона';
-    default: return 'Только открыл сайт';
-  }
-}
-
-function joinVersion(name?: string | null, version?: string | null) {
-  if (!name) return '';
-  return version ? `${name} ${version}` : name;
 }
 
 function formatDate(value: string) {
