@@ -43,6 +43,9 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
                  OR c.group.id IN (
                         SELECT m.group.id FROM StudentGroupMember m WHERE m.student.id = :studentId
                     )
+                 OR c.id IN (
+                        SELECT a.onlineClass.id FROM OnlineClassAttendance a WHERE a.student.id = :studentId
+                    )
               )
             ORDER BY c.scheduledStartAt ASC
             """)
