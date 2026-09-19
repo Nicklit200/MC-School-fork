@@ -12,7 +12,7 @@ import {
   foldOperations,
   undoableOperations,
 } from './annotations';
-import { ANNOTATION_TOPIC } from './events';
+import { ANNOTATION_TOPIC, POINTER_TOPIC } from './events';
 
 function newId(): string {
   return typeof crypto?.randomUUID === 'function'
@@ -47,7 +47,26 @@ interface PreviewSendState {
   timer: number | null;
 }
 
+interface RealtimePointerPacket {
+  v: 1;
+  type: 'pointer';
+  classId: string;
+  id: string;
+  at: number;
+  targetId: string;
+  x: number;
+  y: number;
+}
+
+export interface RemoteLaserPointer {
+  actorId: string;
+  x: number;
+  y: number;
+}
+
 const PREVIEW_INTERVAL_MS = 24;
+const POINTER_INTERVAL_MS = 24;
+const POINTER_FADE_MS = 700;
 
 /**
  * Board state for one annotated surface.
@@ -82,6 +101,7 @@ export function useAnnotationBoard({
   const [remotePreviews, setRemotePreviews] = useState<
     Record<string, { actorId: string; shape: Shape }>
   >({});
+  const [remotePointers, setRemotePointers] = useState<Record<string, RemoteLaserPointer>>({});
   const room = useRoomContext();
   const mounted = useRef(true);
   // Optimistic entries use a negative sequence so they sort after nothing and
@@ -89,11 +109,17 @@ export function useAnnotationBoard({
   const optimisticSequence = useRef(-1);
   const lastSequence = useRef(0);
   const previewSendState = useRef(new Map<string, PreviewSendState>());
+  const pointerClearTimers = useRef(new Map<string, number>());
+  const lastPointerSentAt = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      for (const timer of pointerClearTimers.current.values()) {
+        window.clearTimeout(timer);
+      }
+      pointerClearTimers.current.clear();
     };
   }, []);
 
@@ -113,9 +139,52 @@ export function useAnnotationBoard({
   }, []);
 
   useEffect(() => {
-    const onData = (payload: Uint8Array, _participant: unknown, _kind: unknown, topic?: string) => {
-      if (topic !== ANNOTATION_TOPIC || !document) return;
+    const onData = (payload: Uint8Array, participant: unknown, _kind: unknown, topic?: string) => {
       try {
+        if (topic === POINTER_TOPIC) {
+          const parsed = JSON.parse(new TextDecoder().decode(payload)) as RealtimePointerPacket;
+          if (
+            parsed?.v !== 1
+            || parsed.type !== 'pointer'
+            || parsed.classId !== classId
+            || parsed.targetId !== targetId
+            || typeof parsed.x !== 'number'
+            || typeof parsed.y !== 'number'
+            || parsed.x < 0
+            || parsed.x > 1
+            || parsed.y < 0
+            || parsed.y > 1
+          ) {
+            return;
+          }
+
+          const identity = (participant as { identity?: unknown } | undefined)?.identity;
+          const actor = typeof identity === 'string' && identity.length > 0
+            ? identity.split('|')[0]
+            : 'remote';
+
+          setRemotePointers((current) => ({
+            ...current,
+            [actor]: { actorId: actor, x: parsed.x, y: parsed.y },
+          }));
+
+          const previousTimer = pointerClearTimers.current.get(actor);
+          if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+          const timer = window.setTimeout(() => {
+            setRemotePointers((current) => {
+              if (!(actor in current)) return current;
+              const next = { ...current };
+              delete next[actor];
+              return next;
+            });
+            pointerClearTimers.current.delete(actor);
+          }, POINTER_FADE_MS);
+          pointerClearTimers.current.set(actor, timer);
+          return;
+        }
+
+        if (topic !== ANNOTATION_TOPIC || !document) return;
+
         const parsed = JSON.parse(new TextDecoder().decode(payload)) as
           | RealtimeAnnotationPacket
           | RealtimeAnnotationPreviewPacket;
@@ -161,8 +230,8 @@ export function useAnnotationBoard({
           merge(parsed.operation);
         }
       } catch {
-        // Malformed realtime packets are ignored. The durable replay remains
-        // authoritative and will reconcile the board.
+        // Malformed realtime packets are ignored. Durable annotation replay
+        // remains authoritative and laser pointers simply expire.
       }
     };
 
@@ -170,7 +239,7 @@ export function useAnnotationBoard({
     return () => {
       room.off(RoomEvent.DataReceived, onData);
     };
-  }, [classId, document, merge, room]);
+  }, [classId, document, merge, room, targetId]);
 
   useEffect(() => {
     let active = true;
@@ -436,6 +505,33 @@ export function useAnnotationBoard({
     [document, flushPreview],
   );
 
+  const sendLaserPointer = useCallback(
+    (point: { x: number; y: number }) => {
+      const now = performance.now();
+      if (now - lastPointerSentAt.current < POINTER_INTERVAL_MS) return;
+      lastPointerSentAt.current = now;
+
+      const packet: RealtimePointerPacket = {
+        v: 1,
+        type: 'pointer',
+        classId,
+        id: newId(),
+        at: Date.now(),
+        targetId,
+        x: point.x,
+        y: point.y,
+      };
+
+      void room.localParticipant
+        .publishData(new TextEncoder().encode(JSON.stringify(packet)), {
+          reliable: false,
+          topic: POINTER_TOPIC,
+        })
+        .catch(() => undefined);
+    },
+    [classId, room, targetId],
+  );
+
   const addShape = useCallback(
     (shape: Shape, operationId?: string) =>
       submit('ADD', JSON.stringify(shape), operationId),
@@ -495,6 +591,8 @@ export function useAnnotationBoard({
     addShape,
     previewShape,
     previewShapes,
+    remotePointers: Object.values(remotePointers),
+    sendLaserPointer,
     undo,
     redo,
     clearMine,
