@@ -139,7 +139,8 @@ export function useAnnotationBoard({
       if (privateUserIds?.length && destinationIdentities?.length === 0) {
         return Promise.resolve();
       }
-      return room.localParticipant.publishData(payload, {
+      const safePayload = new Uint8Array(payload);
+      return room.localParticipant.publishData(safePayload, {
         ...options,
         ...(destinationIdentities ? { destinationIdentities } : {}),
       });
