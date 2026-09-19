@@ -2,9 +2,9 @@ import Konva from 'konva';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Arrow, Circle, Ellipse, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import {
+  compactStrokePoints,
   type RenderableShape,
   type Shape,
-  thinPoints,
   toNormalized,
   toPixels,
 } from './annotations';
@@ -245,11 +245,10 @@ export function WhiteboardCanvas({
 
     const id = draftIdRef.current;
     if (id) {
-      const preview =
-        next.points && next.points.length > 2
-          ? { ...next, points: thinPoints(next.points) }
-          : next;
-      onDraftChange?.(id, preview);
+      // Keep the same geometry locally and remotely while the Pencil moves.
+      // Delta transport already keeps realtime packets small, so there is no
+      // need to reshape handwriting mid-stroke.
+      onDraftChange?.(id, next);
     }
   };
 
@@ -287,9 +286,12 @@ export function WhiteboardCanvas({
     }
     drawing.current = false;
     const operationId = draftIdRef.current ?? undefined;
-    // Thinning keeps the stroke under the server's point cap without visibly
-    // changing the line.
-    const finished = current.points ? { ...current, points: thinPoints(current.points) } : current;
+    // Do not re-shape handwriting when the Pencil is lifted. Normal strokes
+    // keep every sampled point; only very long uninterrupted strokes are
+    // compacted, with sub-pixel coordinate rounding.
+    const finished = current.points
+      ? { ...current, points: compactStrokePoints(current.points) }
+      : current;
     draftRef.current = null;
     draftIdRef.current = null;
     if (operationId) {
