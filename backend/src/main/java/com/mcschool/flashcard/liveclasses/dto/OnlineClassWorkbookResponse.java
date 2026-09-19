@@ -4,5 +4,7 @@ package com.mcschool.flashcard.liveclasses.dto;
 public record OnlineClassWorkbookResponse(
         boolean hasWorkbook,
         String filename,
-        int pageCount
+        int pageCount,
+        float pageWidth,
+        float pageHeight
 ) {}
