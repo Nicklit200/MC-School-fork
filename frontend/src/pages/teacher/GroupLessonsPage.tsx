@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
 import type { DailyReviewHistoryItem, GoogleCalendarConnection, GroupLesson, Homework, StudentGroup, StudentListItem, User } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
+import { onlineClassesApi } from '../../api/onlineClasses';
 
 type StudentBrief = {
   studentId: string;
@@ -29,6 +30,7 @@ const SONIOX_NOTIFICATION_PREFIX = 'mindcrafti.sonioxStopNotification.';
 
 export function GroupLessonsPage() {
   const { language, t } = useI18n();
+  const navigate = useNavigate();
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
   const [teacher, setTeacher] = useState<User | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
@@ -70,12 +72,6 @@ export function GroupLessonsPage() {
       setConnection(googleConnection);
       setTeacher(currentTeacher);
       setStudents(studentList);
-      if (!googleConnection.connected) {
-        setLessons([]);
-        setBriefs({});
-        return;
-      }
-
       const lessonList = await api.lessons.groupLessons();
       setLessons(lessonList);
       const groupIds = Array.from(new Set(lessonList.map((lesson) => lesson.groupId).filter((id): id is string => Boolean(id))));
@@ -170,8 +166,26 @@ export function GroupLessonsPage() {
   }
 
   async function requestStartLesson(lesson: GroupLesson) {
+    if (lesson.eventId.startsWith('native:')) {
+      try {
+        const onlineClass = await onlineClassesApi.materializeFromCalendar(lesson.eventId);
+        await onlineClassesApi.start(onlineClass.id);
+        navigate(`/online-classes/${onlineClass.id}`);
+      } catch (e) {
+        setError(toErrorMessage(e, t));
+      }
+      return;
+    }
+
     if (!lesson.meetUrl) {
-      window.alert(language === 'DE' ? 'Kein Google Meet für diesen Termin.' : 'У этого события нет ссылки Google Meet.');
+      // Calendar lessons without Meet can still use the Mindcrafti classroom.
+      try {
+        const onlineClass = await onlineClassesApi.materializeFromCalendar(lesson.eventId);
+        await onlineClassesApi.start(onlineClass.id);
+        navigate(`/online-classes/${onlineClass.id}`);
+      } catch (e) {
+        setError(toErrorMessage(e, t));
+      }
       return;
     }
     await prepareBrowserNotifications();
@@ -236,16 +250,23 @@ export function GroupLessonsPage() {
       )}
 
       {connection?.connected !== true ? (
-        <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
-          <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Google Calendar verbinden' : 'Подключить Google Calendar'}</h2>
-          <p className="muted">{language === 'DE' ? 'Verbinde dein Google-Konto, damit deine Termine hier erscheinen.' : 'Подключи свой Google-аккаунт, и события календаря появятся здесь.'}</p>
-          {connection?.authorizationUrl ? <a className="btn" href={connection.authorizationUrl}>{language === 'DE' ? 'Mit Google verbinden' : 'Войти через Google'}</a> : <div className="banner banner--info">{language === 'DE' ? 'Google OAuth ist noch nicht eingerichtet.' : 'Google OAuth на сервере пока не настроен.'}</div>}
+        <div className="panel" style={{ maxWidth: 720, padding: 18, marginBottom: 16 }}>
+          <strong>{language === 'DE' ? 'Google Calendar ist optional' : 'Google Calendar необязателен'}</strong>
+          <p className="muted" style={{ margin: '6px 0 12px' }}>
+            {language === 'DE'
+              ? 'Mindcrafti-Unterricht funktioniert auch ohne Google. Du kannst Google zusätzlich verbinden.'
+              : 'Уроки Mindcrafti работают без Google. Календарь можно подключить дополнительно, если захочешь.'}
+          </p>
+          {connection?.authorizationUrl
+            ? <a className="btn btn--secondary" href={connection.authorizationUrl}>{language === 'DE' ? 'Google verbinden' : 'Подключить Google Calendar'}</a>
+            : <div className="muted">{language === 'DE' ? 'Google OAuth ist auf diesem Server nicht eingerichtet.' : 'Google OAuth на этом сервере пока не настроен.'}</div>}
         </div>
-      ) : <>
+      ) : (
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
           <div className="banner banner--success" style={{ margin: 0 }}>{language === 'DE' ? 'Google Calendar ist verbunden.' : 'Google Calendar подключён.'}</div>
           <button className="btn btn--ghost" type="button" onClick={() => void disconnectCalendar()}>{language === 'DE' ? 'Trennen' : 'Отключить календарь'}</button>
         </div>
+      )}
 
         <div style={{ overflowX: 'auto', paddingBottom: 10 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(220px, 1fr))', gap: 12, minWidth: 1540 }}>
@@ -309,7 +330,6 @@ export function GroupLessonsPage() {
             ))}
           </div>
         </div>
-      </>}
 
       {startReminderLesson && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,23,42,.55)', display: 'grid', placeItems: 'center', padding: 20 }}>
