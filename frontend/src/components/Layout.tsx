@@ -56,6 +56,7 @@ export function Layout({ children }: { children: ReactNode }) {
       { to: '/parents', label: 'Родители' },
       { to: '/groups', label: 'Мои группы' },
       { to: '/teacher/lessons', label: 'Уроки' },
+      { to: '/online-classes', label: 'Онлайн-уроки' },
       { to: '/teacher/settings', label: 'Настройки' },
       { to: '/students', label: 'Домашние задания', disabled: true },
       { to: '/students', label: 'Материалы', disabled: true },
@@ -179,6 +180,7 @@ export function Layout({ children }: { children: ReactNode }) {
     ? [
         { to: '/today', label: 'nav.today' },
         { to: '/my-cards', label: 'nav.myCards' },
+        { to: '/online-classes', label: language === 'DE' ? 'Online-Unterricht' : 'Онлайн-уроки' },
         { to: '/settings', label: 'nav.settings' },
       ]
     : isParent
