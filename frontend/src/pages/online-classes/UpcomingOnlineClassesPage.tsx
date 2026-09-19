@@ -19,6 +19,7 @@ export function UpcomingOnlineClassesPage() {
   const [classes, setClasses] = useState<OnlineClass[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [creatingTestClass, setCreatingTestClass] = useState(false);
+  const [providerMissing, setProviderMissing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -39,6 +40,7 @@ export function UpcomingOnlineClassesPage() {
     if (creatingTestClass) return;
     setCreatingTestClass(true);
     setFailed(false);
+    setProviderMissing(false);
     try {
       const students = await api.students.list();
       const testStudent = students.find((student) =>
@@ -52,8 +54,18 @@ export function UpcomingOnlineClassesPage() {
         undefined,
         'Тестовый онлайн-урок',
       );
-      await onlineClassesApi.start(onlineClass.id);
-      navigate(`/online-classes/${onlineClass.id}`);
+      try {
+        await onlineClassesApi.start(onlineClass.id);
+        navigate(`/online-classes/${onlineClass.id}`);
+      } catch {
+        // The test class itself was created successfully. A 409 here on staging
+        // normally means LiveKit is not configured yet, so keep the class and
+        // explain the next setup step instead of claiming creation failed.
+        setClasses((current) => current
+          ? [onlineClass, ...current.filter((item) => item.id !== onlineClass.id)]
+          : [onlineClass]);
+        setProviderMissing(true);
+      }
     } catch {
       setFailed(true);
     } finally {
@@ -84,6 +96,11 @@ export function UpcomingOnlineClassesPage() {
           >
             {creatingTestClass ? 'Создаём…' : 'Создать тестовый онлайн-урок'}
           </button>
+          {providerMissing && (
+            <p role="status" className="online-class-error">
+              Урок создан. Чтобы запустить видео и звук, подключите LiveKit.
+            </p>
+          )}
           {failed && <p role="alert" className="online-class-error">Не удалось создать тестовый урок.</p>}
         </div>
       )}
