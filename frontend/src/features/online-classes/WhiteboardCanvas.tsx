@@ -143,6 +143,13 @@ export function WhiteboardCanvas({
     }
 
     event.evt.preventDefault();
+    event.evt.stopPropagation();
+    try {
+      const target = event.evt.currentTarget as Element | null;
+      target?.setPointerCapture?.(event.evt.pointerId);
+    } catch {
+      // Safari/Konva may manage capture itself; drawing still continues.
+    }
     activePointerId.current = event.evt.pointerId;
     activePointerType.current = pointerType;
 
@@ -256,6 +263,13 @@ export function WhiteboardCanvas({
         return;
       }
       event.evt.preventDefault();
+      event.evt.stopPropagation();
+      try {
+        const target = event.evt.currentTarget as Element | null;
+        target?.releasePointerCapture?.(event.evt.pointerId);
+      } catch {
+        // Ignore capture-release races.
+      }
     }
 
     if (tool === 'laser') {
@@ -468,7 +482,7 @@ export function WhiteboardCanvas({
           laserActive.current = false;
           handleUp(event);
         }}
-        style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
+        style={{ touchAction: 'pinch-zoom' }}
       >
         <Layer listening={false}>
           {shapes.map((entry) => renderShape(entry.operationId, entry.shape))}
