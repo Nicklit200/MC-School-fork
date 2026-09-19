@@ -36,7 +36,7 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
      */
     @Query("""
             SELECT c FROM OnlineClass c
-            WHERE c.scheduledStartAt >= :from
+            WHERE c.scheduledEndAt >= :from
               AND c.status IN :statuses
               AND (
                     c.student.id = :studentId
