@@ -69,6 +69,7 @@ export function WhiteboardCanvas({
   const draftRef = useRef<Shape | null>(null);
   const draftIdRef = useRef<string | null>(null);
   const drawing = useRef(false);
+  const laserActive = useRef(false);
   const lastSample = useRef(0);
 
   // The surface is responsive; normalized coordinates mean a resize never
@@ -123,6 +124,7 @@ export function WhiteboardCanvas({
     if (!point) return;
 
     if (tool === 'laser') {
+      laserActive.current = true;
       const at = Date.now();
       setLocalLaserTrail((current) => [...current.filter((p) => at - p.at < 1800), { ...point, at }].slice(-120));
       onLaserMove?.(point);
@@ -158,6 +160,7 @@ export function WhiteboardCanvas({
     if (!stage) return;
 
     if (tool === 'laser' && !readOnly) {
+      if (!laserActive.current) return;
       const now = performance.now();
       if (now - lastSample.current < SAMPLE_INTERVAL_MS) return;
       lastSample.current = now;
@@ -204,6 +207,11 @@ export function WhiteboardCanvas({
   };
 
   const handleUp = () => {
+    if (tool === 'laser') {
+      laserActive.current = false;
+      return;
+    }
+
     const current = draftRef.current;
     if (!drawing.current || !current) return;
     drawing.current = false;
@@ -380,7 +388,10 @@ export function WhiteboardCanvas({
         onPointerDown={handleDown}
         onPointerMove={handleMove}
         onPointerUp={handleUp}
-        onPointerLeave={handleUp}
+        onPointerLeave={() => {
+          laserActive.current = false;
+          handleUp();
+        }}
         style={{ touchAction: 'none' }}
       >
         <Layer listening={false}>
