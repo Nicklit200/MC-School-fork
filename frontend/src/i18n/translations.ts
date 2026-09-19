@@ -158,7 +158,7 @@ const ru = {
   'lang.RU': 'Русский',
 
   'onlineClass.title': 'Онлайн-урок',
-  'onlineClass.start': 'Начать онлайн-урок',
+  'onlineClass.start': 'Начать урок',
   'onlineClass.join': 'Войти в урок',
   'onlineClass.openLobby': 'Открыть комнату ожидания',
   'onlineClass.end': 'Завершить урок для всех',
@@ -446,7 +446,7 @@ const de: Record<keyof typeof ru, string> = {
   'lang.RU': 'Russisch',
 
   'onlineClass.title': 'Online-Unterricht',
-  'onlineClass.start': 'Online-Unterricht starten',
+  'onlineClass.start': 'Unterricht starten',
   'onlineClass.join': 'Unterricht beitreten',
   'onlineClass.openLobby': 'Warteraum öffnen',
   'onlineClass.end': 'Unterricht für alle beenden',
