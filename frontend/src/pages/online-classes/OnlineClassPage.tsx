@@ -98,8 +98,8 @@ export function OnlineClassPage() {
         }}
         onEndForAll={
           session.onlineClass?.viewerIsHost && classId
-            ? () => {
-                void onlineClassesApi.end(classId).then(() => {
+            ? (attendance) => {
+                void onlineClassesApi.finish(classId, attendance).then(() => {
                   session.release();
                   navigate(-1);
                 });
