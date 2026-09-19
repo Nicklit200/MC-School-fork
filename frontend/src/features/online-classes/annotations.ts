@@ -141,6 +141,33 @@ export function thinPoints(
   return kept;
 }
 
+/**
+ * Keeps normal handwriting visually identical when a stroke is finalized.
+ *
+ * The old distance-based thinning changed the set of Konva spline control
+ * points when the Pencil was lifted, so handwritten letters could visibly
+ * "jump". For ordinary strokes we only round normalized coordinates, which is
+ * sub-pixel at classroom canvas sizes. Only exceptionally long uninterrupted
+ * strokes are evenly resampled to stay safely below the server payload cap.
+ */
+export function compactStrokePoints(
+  points: [number, number][],
+  maxPoints = 600,
+): [number, number][] {
+  const rounded = points.map(
+    ([x, y]) => [Number(x.toFixed(5)), Number(y.toFixed(5))] as [number, number],
+  );
+  if (rounded.length <= maxPoints) return rounded;
+
+  const lastIndex = rounded.length - 1;
+  const result: [number, number][] = [];
+  for (let index = 0; index < maxPoints; index += 1) {
+    const sourceIndex = Math.round((index * lastIndex) / (maxPoints - 1));
+    result.push(rounded[sourceIndex]);
+  }
+  return result;
+}
+
 function parseShape(payload: string): Shape | null {
   try {
     const parsed = JSON.parse(payload);
