@@ -1,4 +1,4 @@
-import { request } from './client';
+import { getAccessToken, request } from './client';
 
 /**
  * Online-class API. Kept in its own module rather than added to the `api`
@@ -33,6 +33,25 @@ export interface OnlineClass {
  * Connection details. The token is short-lived and scoped to one room and one
  * identity; it is never persisted to storage.
  */
+export interface OnlineClassBoardStudent {
+  id: string;
+  fullName: string;
+}
+
+export interface OnlineClassWorkbook {
+  hasWorkbook: boolean;
+  filename: string | null;
+  pageCount: number;
+  pageWidth: number;
+  pageHeight: number;
+}
+
+export interface OnlineClassBoardContext {
+  teacherId: string;
+  students: OnlineClassBoardStudent[];
+  workbook: OnlineClassWorkbook;
+}
+
 export interface OnlineClassConnection {
   serverUrl: string;
   token: string;
@@ -290,6 +309,24 @@ export const onlineClassesApi = {
 
   transcript: (classId: string) =>
     request<TranscriptSegment[]>('GET', `/online-classes/${classId}/transcript`),
+
+  // --- Board workspace ---------------------------------------------------------
+
+  boardContext: (classId: string) =>
+    request<OnlineClassBoardContext>('GET', `/online-classes/${classId}/board-context`),
+
+  workbookPageUrl: async (classId: string, pageIndex: number) => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+    const token = getAccessToken();
+    const response = await fetch(
+      `${baseUrl}/online-classes/${classId}/workbook/pages/${pageIndex}.png`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (!response.ok) {
+      throw new Error(`Workbook page request failed: ${response.status}`);
+    }
+    return URL.createObjectURL(await response.blob());
+  },
 
   // --- Annotations ----------------------------------------------------------
 
