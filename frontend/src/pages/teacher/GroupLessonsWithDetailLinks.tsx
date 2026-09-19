@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GroupLessonsPage } from './GroupLessonsPage';
+import { NativeLessonCreator } from './NativeLessonCreator';
 
 export function GroupLessonsWithDetailLinks() {
   const navigate = useNavigate();
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const refresh = () => {
@@ -53,5 +55,10 @@ export function GroupLessonsWithDetailLinks() {
     };
   }, [navigate]);
 
-  return <GroupLessonsPage />;
+  return (
+    <>
+      <NativeLessonCreator onCreated={() => setRefreshKey((value) => value + 1)} />
+      <GroupLessonsPage key={refreshKey} />
+    </>
+  );
 }
