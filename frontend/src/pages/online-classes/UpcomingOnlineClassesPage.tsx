@@ -23,16 +23,35 @@ export function UpcomingOnlineClassesPage() {
 
   useEffect(() => {
     let active = true;
-    onlineClassesApi
-      .listUpcoming()
-      .then((loaded) => {
-        if (active) setClasses(loaded);
-      })
-      .catch(() => {
+    let inFlight = false;
+
+    const refresh = async () => {
+      if (!active || inFlight) return;
+      inFlight = true;
+      try {
+        const loaded = await onlineClassesApi.listUpcoming();
+        if (!active) return;
+        setClasses(loaded);
+        setFailed(false);
+      } catch {
         if (active) setFailed(true);
-      });
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void refresh();
+    // A teacher may create/start a lesson while the student is already sitting
+    // on this page. Refresh continuously so the live lesson appears without a
+    // manual reload.
+    const timer = window.setInterval(() => void refresh(), 2000);
+    const onFocus = () => void refresh();
+    window.addEventListener('focus', onFocus);
+
     return () => {
       active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
 
