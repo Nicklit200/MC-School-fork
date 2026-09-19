@@ -2,6 +2,7 @@ package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.dto.BindLessonStudentRequest;
+import com.mcschool.flashcard.lessons.dto.CreateNativeLessonRequest;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import java.util.List;
@@ -23,17 +24,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class GroupLessonController {
 
     private final GoogleCalendarLessonService lessonService;
+    private final NativeLessonService nativeLessonService;
     private final LessonPreparationService preparationService;
 
     public GroupLessonController(GoogleCalendarLessonService lessonService,
+                                 NativeLessonService nativeLessonService,
                                  LessonPreparationService preparationService) {
         this.lessonService = lessonService;
+        this.nativeLessonService = nativeLessonService;
         this.preparationService = preparationService;
     }
 
     @GetMapping("/groups")
     public List<GroupLessonResponse> listGroupLessons(@AuthenticationPrincipal AuthenticatedUser caller) {
-        return lessonService.listGroupLessons(caller);
+        return java.util.stream.Stream
+                .concat(
+                        nativeLessonService.listLessons(caller).stream(),
+                        lessonService.listGroupLessons(caller).stream())
+                .sorted(java.util.Comparator.comparing(GroupLessonResponse::startsAt))
+                .toList();
+    }
+
+    @PostMapping("/native")
+    public List<GroupLessonResponse> createNativeLesson(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @RequestBody CreateNativeLessonRequest request) {
+        return nativeLessonService.create(caller, request);
     }
 
     @PostMapping("/{eventId}/site-opened")
