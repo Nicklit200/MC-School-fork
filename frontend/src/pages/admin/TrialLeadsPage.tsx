@@ -240,6 +240,9 @@ function Detail({ label, value, wide = false }: { label: string; value?: string 
 
 function visitStageLabel(stage?: string | null) {
   switch (stage) {
+    case 'TRIAL_PAGE_LOADED': return 'Анкета открылась';
+    case 'GRADE_OPTIONS_VISIBLE': return 'Видит выбор класса';
+    case 'GRADE_TAP': return 'Нажал на класс';
     case 'GRADE_SELECTED': return 'Ответил: класс';
     case 'GOAL_SELECTED': return 'Ответил: проблема';
     case 'PRIORITY_SELECTED': return 'Ответил: что важно';

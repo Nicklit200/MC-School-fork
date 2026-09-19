@@ -64,6 +64,7 @@ public class SiteVisitController {
         jdbc.update("""
                 UPDATE site_visits SET
                     funnel_stage = COALESCE(?, funnel_stage),
+                    path = COALESCE(?, path),
                     grade = COALESCE(?, grade),
                     goal = COALESCE(?, goal),
                     priority = COALESCE(?, priority),
@@ -71,6 +72,7 @@ public class SiteVisitController {
                 WHERE session_id = ?
                 """,
                 nullable(request.event(), 40),
+                nullable(request.path(), 160),
                 nullable(request.grade(), 80),
                 nullable(request.goal(), 500),
                 nullable(request.priority(), 500),
@@ -238,6 +240,7 @@ public class SiteVisitController {
 
     public record FunnelProgressRequest(
             @Size(max = 40) String event,
+            @Size(max = 160) String path,
             @Size(max = 80) String grade,
             @Size(max = 500) String goal,
             @Size(max = 500) String priority
