@@ -188,6 +188,7 @@ export function Layout({ children }: { children: ReactNode }) {
             { to: '/admin/accounts', label: language === 'DE' ? 'Konten' : 'Ученики и родители' },
             { to: '/admin/lessons', label: language === 'DE' ? 'Unterricht' : 'Уроки школы' },
             { to: '/admin/leads', label: language === 'DE' ? 'Anfragen' : 'Заявки' },
+            { to: '/admin/site-visits', label: language === 'DE' ? 'Besuche' : 'Попытки посетителей' },
             { to: '/admin/prompts', label: language === 'DE' ? 'Prompts' : 'Промты школы' },
           ]
         : [{ to: '/teachers', label: 'nav.teachers' }];
