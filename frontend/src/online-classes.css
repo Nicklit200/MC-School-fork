@@ -211,8 +211,12 @@
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  /* Stops the browser panning the page while drawing with a finger. */
-  touch-action: none;
+  /*
+   * Fingers/palms are navigation only on tablets; drawing input is filtered in
+   * WhiteboardCanvas to pen/mouse. Keep native one/two-finger pan/zoom usable.
+   */
+  touch-action: pan-x pan-y pinch-zoom;
+  overscroll-behavior: contain;
 }
 
 
@@ -385,6 +389,59 @@
 
 .participants__offline {
   color: var(--muted);
+}
+
+
+/* Tablet whiteboard: stylus writes, fingers/palms navigate and zoom. */
+@media (pointer: coarse) {
+  .whiteboard__toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 4px;
+  }
+
+  .whiteboard__toolbar > * {
+    flex: 0 0 auto;
+  }
+
+  .whiteboard__toolbar button,
+  .whiteboard__toolbar select {
+    min-height: 44px;
+  }
+
+  .whiteboard__toolbar input[type='range'] {
+    min-width: 120px;
+  }
+
+  .whiteboard__surface,
+  .whiteboard__surface .konvajs-content,
+  .whiteboard__surface canvas {
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+
+  .board-workspace__tabs {
+    position: sticky;
+    top: 0;
+    z-index: 9;
+    background: #111;
+    padding-top: 6px;
+  }
+
+  .board-workspace__tabs button {
+    min-height: 44px;
+  }
+
+  .board-workspace__pages button {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* --- Responsive ----------------------------------------------------------- */
