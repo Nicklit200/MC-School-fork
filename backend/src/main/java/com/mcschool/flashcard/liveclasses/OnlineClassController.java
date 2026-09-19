@@ -2,6 +2,7 @@ package com.mcschool.flashcard.liveclasses;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationDocumentResponse;
+import com.mcschool.flashcard.liveclasses.dto.OnlineClassBoardContextResponse;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationResponse;
 import com.mcschool.flashcard.liveclasses.dto.ChatMessageResponse;
@@ -20,6 +21,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,6 +54,7 @@ public class OnlineClassController {
     private final OnlineClassRecordingService recordingService;
     private final OnlineClassTranscriptService transcriptService;
     private final OnlineClassAnnotationService annotationService;
+    private final OnlineClassBoardService boardService;
 
     public OnlineClassController(OnlineClassService onlineClassService,
                                  OnlineClassAdmissionService admissionService,
@@ -59,7 +62,8 @@ public class OnlineClassController {
                                  OnlineClassChatService chatService,
                                  OnlineClassRecordingService recordingService,
                                  OnlineClassTranscriptService transcriptService,
-                                 OnlineClassAnnotationService annotationService) {
+                                 OnlineClassAnnotationService annotationService,
+                                 OnlineClassBoardService boardService) {
         this.onlineClassService = onlineClassService;
         this.admissionService = admissionService;
         this.hostControlService = hostControlService;
@@ -67,6 +71,7 @@ public class OnlineClassController {
         this.recordingService = recordingService;
         this.transcriptService = transcriptService;
         this.annotationService = annotationService;
+        this.boardService = boardService;
     }
 
     /** Creates or returns the durable class for a calendar occurrence. */
@@ -379,6 +384,23 @@ public class OnlineClassController {
     public String transcriptVtt(@AuthenticationPrincipal AuthenticatedUser caller,
                                 @PathVariable UUID classId) {
         return transcriptService.exportVtt(caller, classId);
+    }
+
+    // --- Classroom boards and workbook ----------------------------------------
+
+    @GetMapping("/{classId}/board-context")
+    public OnlineClassBoardContextResponse boardContext(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @PathVariable UUID classId) {
+        return boardService.context(caller, classId);
+    }
+
+    @GetMapping(value = "/{classId}/workbook/pages/{pageIndex}.png", produces = MediaType.IMAGE_PNG_VALUE)
+    public byte[] workbookPage(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @PathVariable UUID classId,
+            @PathVariable int pageIndex) {
+        return boardService.renderWorkbookPage(caller, classId, pageIndex);
     }
 
     // --- Annotations ---------------------------------------------------------
