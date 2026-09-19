@@ -25,13 +25,16 @@ public class OnlineClassAccessService {
 
     private final OnlineClassRepository classRepository;
     private final StudentGroupMemberRepository groupMemberRepository;
+    private final OnlineClassAttendanceRepository attendanceRepository;
     private final UserRepository userRepository;
 
     public OnlineClassAccessService(OnlineClassRepository classRepository,
                                     StudentGroupMemberRepository groupMemberRepository,
+                                    OnlineClassAttendanceRepository attendanceRepository,
                                     UserRepository userRepository) {
         this.classRepository = classRepository;
         this.groupMemberRepository = groupMemberRepository;
+        this.attendanceRepository = attendanceRepository;
         this.userRepository = userRepository;
     }
 
@@ -84,6 +87,14 @@ public class OnlineClassAccessService {
         }
         if (caller.role() != Role.STUDENT) {
             return false;
+        }
+        // Finished lessons use the confirmed roster snapshot. This keeps a
+        // student's history available even if group membership changes later.
+        if (onlineClass.isTerminal()
+                && attendanceRepository
+                    .findByOnlineClassIdAndStudentId(onlineClass.getId(), caller.id())
+                    .isPresent()) {
+            return true;
         }
         if (onlineClass.isGroupClass()) {
             return groupMemberRepository.existsByGroupIdAndStudentId(
