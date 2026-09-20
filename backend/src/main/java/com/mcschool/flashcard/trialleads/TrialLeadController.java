@@ -87,7 +87,7 @@ public class TrialLeadController {
                             priority = COALESCE(?, priority),
                             source = CASE WHEN ? = '' THEN source ELSE ? END,
                             status = CASE
-                                WHEN status IN ('BOOKED','CONTACTED','CONTRACT','DECLINED') THEN status
+                                WHEN status IN ('TEACHER_SELECTED','CALENDAR_OPENED','BOOKED','CONTACTED','CONTRACT','DECLINED') THEN status
                                 ELSE ?
                             END,
                             updated_at = CURRENT_TIMESTAMP
