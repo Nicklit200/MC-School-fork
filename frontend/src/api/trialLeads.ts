@@ -55,6 +55,7 @@ export type SiteVisit = {
   funnelStage?: string | null;
   diagnosticStage?: string | null;
   grade?: string | null;
+  subject?: string | null;
   goal?: string | null;
   priority?: string | null;
   firstInteractionLabel?: string | null;
