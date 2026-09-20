@@ -76,16 +76,34 @@ public class TrialLeadController {
 
         if (clientId != null) {
             PublicLeadResponse existing = findByClientId(clientId);
-            if (existing != null) return existing;
+            if (existing != null) {
+                syncLeadByClientId(clientId, request);
+                return findByClientId(clientId);
+            }
         }
 
         UUID id = UUID.randomUUID();
         UUID token = UUID.randomUUID();
         try {
+            String initialStatus = initialStatus(request);
             jdbc.update("""
-                    INSERT INTO trial_leads (id, tracking_token, phone, source, status, client_id)
-                    VALUES (?, ?, ?, ?, 'NEW', ?)
-                    """, id, token, phone, source, clientId);
+                    INSERT INTO trial_leads (
+                        id, tracking_token, phone, grade, school_type, subject, goal, priority,
+                        source, status, client_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    id,
+                    token,
+                    phone,
+                    cleanOrNull(request.grade()),
+                    cleanOrNull(request.schoolType()),
+                    cleanOrNull(request.subject()),
+                    cleanOrNull(request.goal()),
+                    cleanOrNull(request.priority()),
+                    source,
+                    initialStatus,
+                    clientId);
         } catch (DuplicateKeyException e) {
             if (clientId != null) {
                 PublicLeadResponse existing = findByClientId(clientId);
@@ -96,6 +114,45 @@ public class TrialLeadController {
 
         notifyAdminsAboutNewLead(phone);
         return new PublicLeadResponse(token, "NEW");
+    }
+
+    private void syncLeadByClientId(String clientId, CreateLeadRequest request) {
+        jdbc.update("""
+                UPDATE trial_leads SET
+                    phone = COALESCE(?, phone),
+                    grade = COALESCE(?, grade),
+                    school_type = COALESCE(?, school_type),
+                    subject = COALESCE(?, subject),
+                    goal = COALESCE(?, goal),
+                    priority = COALESCE(?, priority),
+                    source = COALESCE(?, source),
+                    status = CASE
+                        WHEN ? IS NOT NULL THEN 'FORM_COMPLETED'
+                        WHEN ? IS NOT NULL THEN 'GOAL_SELECTED'
+                        WHEN ? IS NOT NULL THEN 'GRADE_SELECTED'
+                        ELSE status
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE client_id = ?
+                """,
+                cleanOrNull(request.phone()),
+                cleanOrNull(request.grade()),
+                cleanOrNull(request.schoolType()),
+                cleanOrNull(request.subject()),
+                cleanOrNull(request.goal()),
+                cleanOrNull(request.priority()),
+                cleanOrNull(request.source()),
+                cleanOrNull(request.priority()),
+                cleanOrNull(request.goal()),
+                cleanOrNull(request.grade()),
+                clientId);
+    }
+
+    private static String initialStatus(CreateLeadRequest request) {
+        if (cleanOrNull(request.priority()) != null) return "FORM_COMPLETED";
+        if (cleanOrNull(request.goal()) != null) return "GOAL_SELECTED";
+        if (cleanOrNull(request.grade()) != null) return "GRADE_SELECTED";
+        return "NEW";
     }
 
     private PublicLeadResponse findByClientId(String clientId) {
@@ -233,7 +290,12 @@ public class TrialLeadController {
     public record CreateLeadRequest(
             @NotBlank @Size(max = 40) String phone,
             @Size(max = 500) String source,
-            @Size(max = 80) String clientId
+            @Size(max = 80) String clientId,
+            @Size(max = 80) String grade,
+            @Size(max = 120) String schoolType,
+            @Size(max = 120) String subject,
+            @Size(max = 500) String goal,
+            @Size(max = 500) String priority
     ) {}
 
     public record UpdateLeadRequest(
