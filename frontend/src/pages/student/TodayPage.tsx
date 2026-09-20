@@ -24,11 +24,20 @@ export function TodayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const todayHomeworks = useMemo(() => {
+  const openHomeworks = useMemo(() => {
     const todayDate = localDateString(new Date());
-    return homeworks.filter(
-      (homework) => homework.hasWorksheet && homework.startDate === todayDate && !homework.submitted,
-    );
+    return homeworks
+      .filter(
+        (homework) =>
+          homework.hasWorksheet &&
+          !homework.submitted &&
+          (homework.startDate === todayDate || homework.overdue),
+      )
+      .sort(
+        (a, b) =>
+          a.startDate.localeCompare(b.startDate) ||
+          (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
+      );
   }, [homeworks]);
 
   async function start(type: SessionType) {
@@ -101,19 +110,19 @@ export function TodayPage() {
       </p>
 
       <h2 style={{ marginBottom: 0 }}>{language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'}</h2>
-      {todayHomeworks.length === 0 ? (
+      {openHomeworks.length === 0 ? (
         <div className="banner banner--success">
-          {language === 'DE' ? 'Für heute gibt es keine offene Hausaufgabe 🎉' : 'На сегодня невыполненной домашки нет 🎉'}
+          {language === 'DE' ? 'Keine offene Hausaufgabe 🎉' : 'Невыполненной домашки нет 🎉'}
         </div>
       ) : (
         <div className="panel stack">
           <div className="center">
-            <div className="result__stat">{todayHomeworks.length}</div>
+            <div className="result__stat">{openHomeworks.length}</div>
             <div className="muted">
-              {language === 'DE' ? 'Offene Hausaufgaben für heute' : 'Домашних заданий осталось на сегодня'}
+              {language === 'DE' ? 'Offene Hausaufgaben' : 'Невыполненных домашних заданий'}
             </div>
           </div>
-          {todayHomeworks.map((homework) => (
+          {openHomeworks.map((homework) => (
             <Link
               key={homework.id}
               className="list-row"
@@ -130,8 +139,10 @@ export function TodayPage() {
                     : ''}
                 </div>
               </div>
-              <span className="pill pill--pending">
-                {language === 'DE' ? 'Zu erledigen' : 'Нужно сделать'}
+              <span className={`pill ${homework.overdue ? 'pill--danger' : 'pill--pending'}`}>
+                {homework.overdue
+                  ? (language === 'DE' ? 'Überfällig — trotzdem erledigen' : 'Просрочено — всё равно нужно сделать')
+                  : (language === 'DE' ? 'Zu erledigen' : 'Нужно сделать')}
               </span>
             </Link>
           ))}
