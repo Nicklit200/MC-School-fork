@@ -10,6 +10,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,16 +41,19 @@ public class SiteVisitController {
     private final UserRepository userRepository;
     private final PushSubscriptionRepository subscriptionRepository;
     private final WebPushService webPushService;
+    private final FunnelAnalyticsService funnelAnalyticsService;
 
     public SiteVisitController(
             JdbcTemplate jdbc,
             UserRepository userRepository,
             PushSubscriptionRepository subscriptionRepository,
-            WebPushService webPushService) {
+            WebPushService webPushService,
+            FunnelAnalyticsService funnelAnalyticsService) {
         this.jdbc = jdbc;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.webPushService = webPushService;
+        this.funnelAnalyticsService = funnelAnalyticsService;
     }
 
     @PostMapping("/public/site-visits")
@@ -129,6 +135,20 @@ public class SiteVisitController {
                 nullable(request.sectionLabel(), 160),
                 nullable(request.clientError(), 500),
                 clean(sessionId, 80));
+
+        persistDetailedEvent(sessionId, event, request, scrollPercent, activeSeconds);
+    }
+
+    @GetMapping("/admin/site-visits/analytics")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> analytics(
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(defaultValue = "50") int recentLimit) {
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Berlin"));
+        LocalDate to = parseDate(toDate, today);
+        LocalDate from = parseDate(fromDate, to.minusDays(6));
+        return funnelAnalyticsService.report(null, true, from, to, recentLimit);
     }
 
     @GetMapping("/admin/site-visits")
@@ -288,6 +308,54 @@ public class SiteVisitController {
                     "ACTIVE", "PAGE_HIDDEN", "JS_ERROR", "UNHANDLED_REJECTION" -> true;
             default -> false;
         };
+    }
+
+    private void persistDetailedEvent(
+            String sessionId,
+            String event,
+            FunnelProgressRequest request,
+            Integer scrollPercent,
+            Integer activeSeconds) {
+        if (!shouldPersistDetailedEvent(event)) return;
+        jdbc.update("""
+                INSERT INTO site_visit_events (
+                    id, visit_id, session_id, event, path, grade, goal, priority,
+                    scroll_percent, active_seconds, interaction_label, section_id, section_label
+                )
+                SELECT ?, id, session_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                FROM site_visits
+                WHERE session_id = ?
+                """,
+                UUID.randomUUID(),
+                event,
+                nullable(request.path(), 160),
+                nullable(request.grade(), 80),
+                nullable(request.goal(), 500),
+                nullable(request.priority(), 500),
+                scrollPercent,
+                activeSeconds,
+                nullable(request.interactionLabel(), 160),
+                nullable(request.sectionId(), 80),
+                nullable(request.sectionLabel(), 160),
+                clean(sessionId, 80));
+    }
+
+    private static boolean shouldPersistDetailedEvent(String event) {
+        if (isFunnelEvent(event)) return true;
+        return switch (event) {
+            case "FIRST_INTERACTION", "SECTION_REACHED", "PAGE_END", "PAGE_HIDDEN",
+                    "JS_ERROR", "UNHANDLED_REJECTION" -> true;
+            default -> false;
+        };
+    }
+
+    private static LocalDate parseDate(String value, LocalDate fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return LocalDate.parse(value);
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException("Dates must use YYYY-MM-DD format");
+        }
     }
 
     private static String nullable(String value, int maxLength) {
