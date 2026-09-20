@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { trialLeadsApi, type SiteVisit, type TrialLeadStatus } from '../../api/trialLeads';
+import { trialLeadsApi, type FunnelAnalytics, type SiteVisit, type TrialLeadStatus } from '../../api/trialLeads';
 import '../../trial-leads.css';
 
 const STATUS_LABELS: Record<TrialLeadStatus, string> = {
@@ -22,6 +22,8 @@ const AUTO_REFRESH_MS = 10_000;
 
 export function SiteVisitsPage() {
   const [visits, setVisits] = useState<SiteVisit[]>([]);
+  const [analytics, setAnalytics] = useState<FunnelAnalytics | null>(null);
+  const [rangeDays, setRangeDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -31,7 +33,13 @@ export function SiteVisitsPage() {
     else setLoading(true);
     setError('');
     try {
-      setVisits(await trialLeadsApi.listVisits());
+      const { fromDate, toDate } = analyticsRange(rangeDays);
+      const [visitsResult, analyticsResult] = await Promise.all([
+        trialLeadsApi.listVisits(),
+        trialLeadsApi.funnelAnalytics(fromDate, toDate, 50),
+      ]);
+      setVisits(visitsResult);
+      setAnalytics(analyticsResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить попытки посетителей');
     } finally {
@@ -61,7 +69,7 @@ export function SiteVisitsPage() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [rangeDays]);
 
   return (
     <div className="trial-leads-page">
@@ -78,8 +86,23 @@ export function SiteVisitsPage() {
         </div>
       </div>
 
+      <div className="funnel-range" aria-label="Период аналитики">
+        {[1, 7, 30].map((days) => (
+          <button
+            key={days}
+            type="button"
+            className={rangeDays === days ? 'funnel-range__button funnel-range__button--active' : 'funnel-range__button'}
+            onClick={() => setRangeDays(days)}
+          >
+            {days === 1 ? 'Сегодня' : days + ' дней'}
+          </button>
+        ))}
+      </div>
+
       {error && <div className="trial-leads-error">{error}</div>}
-      {loading && <div className="trial-leads-empty">Загружаем попытки…</div>}
+      {loading && <div className="trial-leads-empty">Загружаем аналитику…</div>}
+
+      {!loading && analytics && <FunnelOverview analytics={analytics} />}
 
       {!loading && <section className="site-visits-panel">
         <div className="site-visits-heading">
@@ -123,7 +146,7 @@ export function SiteVisitsPage() {
                 <span><b>Взаимодействие:</b> {visit.firstInteractionAt ? 'да' : 'нет'}</span>
                 <span><b>Первое действие:</b> {visit.firstInteractionLabel || '—'}</span>
                 <span><b>Доскроллил до:</b> {visit.furthestSectionLabel || '—'}</span>
-                <span><b>На странице:</b> {visit.maxActiveSeconds != null ? `не менее ${visit.maxActiveSeconds} сек.` : '—'}</span>
+                <span><b>На странице:</b> {visit.maxActiveSeconds != null ? formatDuration(visit.maxActiveSeconds) : '—'}</span>
                 <span><b>Выбор класса показался:</b> {visit.gradeOptionsVisibleAt ? 'да' : visit.trialPageLoadedAt ? 'нет' : '—'}</span>
                 <span><b>Последняя диагностика:</b> {diagnosticLabel(visit.diagnosticStage)}</span>
                 {visit.clientError && <span><b>Ошибка JavaScript:</b> {visit.clientError}</span>}
@@ -138,6 +161,100 @@ export function SiteVisitsPage() {
       </section>}
     </div>
   );
+}
+
+function FunnelOverview({ analytics }: { analytics: FunnelAnalytics }) {
+  return (
+    <>
+      <section className="funnel-kpis">
+        <Kpi label="Посещения" value={analytics.totals.visits} />
+        <Kpi label="Оставили WhatsApp" value={analytics.totals.leads} hint={analytics.totals.leadConversionPct + '%'} />
+        <Kpi label="Записались" value={analytics.totals.bookings} hint={analytics.totals.bookingConversionPct + '%'} />
+        <Kpi label="Контракты" value={analytics.totals.contracts} hint={analytics.totals.contractConversionPct + '%'} />
+        <Kpi label="Среднее активное время" value={analytics.totals.averageActiveMinutes != null ? analytics.totals.averageActiveMinutes + ' мин' : '—'} />
+      </section>
+
+      <section className="site-visits-panel">
+        <div className="site-visits-heading">
+          <div>
+            <h2>Конверсия по шагам</h2>
+            <p>{formatSimpleDate(analytics.fromDate)} – {formatSimpleDate(analytics.toDate)}. Видно, после какого шага люди уходят чаще всего.</p>
+          </div>
+        </div>
+        <div className="funnel-table">
+          <div className="funnel-table__row funnel-table__row--head">
+            <span>Шаг</span><span>Людей</span><span>Конверсия</span><span>Ушло</span><span>Время</span>
+          </div>
+          {analytics.funnel.map((stage) => {
+            const timing = analytics.stepTiming.find((item) => item.stage === stage.stage);
+            return <div className="funnel-table__row" key={stage.stage}>
+              <strong>{stage.label}</strong>
+              <span>{stage.sessions}</span>
+              <span>{stage.conversionFromPreviousPct}%</span>
+              <span>{stage.dropOffFromPrevious}</span>
+              <span>{timing?.averageMinutesToNext != null ? timing.averageMinutesToNext + ' мин' : '—'}</span>
+            </div>;
+          })}
+        </div>
+      </section>
+
+      <section className="site-visits-panel">
+        <div className="site-visits-heading">
+          <div>
+            <h2>Источники рекламы</h2>
+            <p>Какие источники дают не только клики, но и WhatsApp и записи.</p>
+          </div>
+        </div>
+        {analytics.sources.length === 0 ? <div className="trial-leads-empty">За этот период источников пока нет.</div> :
+          <div className="funnel-source-list">
+            {analytics.sources.map((source) => (
+              <div className="funnel-source" key={source.source}>
+                <strong>{source.source}</strong>
+                <span>{source.visits} визитов</span>
+                <span>{source.leads} WhatsApp · {source.leadConversionPct}%</span>
+                <span>{source.bookings} записей</span>
+              </div>
+            ))}
+          </div>}
+      </section>
+    </>
+  );
+}
+
+function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+  return <div className="funnel-kpi">
+    <span>{label}</span>
+    <strong>{value}</strong>
+    {hint && <small>{hint} от визитов</small>}
+  </div>;
+}
+
+function analyticsRange(days: number) {
+  const now = new Date();
+  const berlinToday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const end = new Date(berlinToday + 'T12:00:00Z');
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - Math.max(0, days - 1));
+  return { fromDate: start.toISOString().slice(0, 10), toDate: berlinToday };
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return seconds + ' сек.';
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? minutes + ' мин ' + rest + ' сек' : minutes + ' мин';
+}
+
+function formatSimpleDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(value + 'T12:00:00Z'));
 }
 
 function visitStageLabel(stage?: string | null) {
