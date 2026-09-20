@@ -5,6 +5,7 @@ import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
 import com.mcschool.flashcard.notifications.WebPushService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -42,25 +43,31 @@ public class SiteVisitController {
     private final PushSubscriptionRepository subscriptionRepository;
     private final WebPushService webPushService;
     private final FunnelAnalyticsService funnelAnalyticsService;
+    private final GeoIpCountryService geoIpCountryService;
 
     public SiteVisitController(
             JdbcTemplate jdbc,
             UserRepository userRepository,
             PushSubscriptionRepository subscriptionRepository,
             WebPushService webPushService,
-            FunnelAnalyticsService funnelAnalyticsService) {
+            FunnelAnalyticsService funnelAnalyticsService,
+            GeoIpCountryService geoIpCountryService) {
         this.jdbc = jdbc;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.webPushService = webPushService;
         this.funnelAnalyticsService = funnelAnalyticsService;
+        this.geoIpCountryService = geoIpCountryService;
     }
 
     @PostMapping("/public/site-visits")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public Map<String, Boolean> visit(@Valid @RequestBody SiteVisitRequest request) {
-        boolean inserted = persist(request);
-        if (inserted) notifyAdmins(request);
+    public Map<String, Boolean> visit(
+            @Valid @RequestBody SiteVisitRequest request,
+            HttpServletRequest httpRequest) {
+        String countryCode = geoIpCountryService.resolveCountryCode(clientIp(httpRequest));
+        boolean inserted = persist(request, countryCode);
+        if (inserted) notifyAdmins(request, countryCode);
         return Map.of("accepted", true);
     }
 
@@ -155,7 +162,7 @@ public class SiteVisitController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<SiteVisitResponse> list() {
         return jdbc.query("""
-                SELECT v.id, v.session_id, v.path, v.source, v.referrer, v.device_type, v.device_model,
+                SELECT v.id, v.session_id, v.country_code, v.path, v.source, v.referrer, v.device_type, v.device_model,
                        v.os_name, v.os_version, v.browser_name, v.browser_version, v.screen_size,
                        v.viewport_size, v.language, v.user_agent, v.funnel_stage, v.diagnostic_stage,
                        v.grade, v.goal, v.priority, v.first_interaction_label,
@@ -171,6 +178,7 @@ public class SiteVisitController {
                 """, (rs, rowNum) -> new SiteVisitResponse(
                 rs.getObject("id", UUID.class),
                 rs.getString("session_id"),
+                rs.getString("country_code"),
                 rs.getString("path"),
                 rs.getString("source"),
                 rs.getString("referrer"),
@@ -206,18 +214,19 @@ public class SiteVisitController {
         ));
     }
 
-    private boolean persist(SiteVisitRequest request) {
+    private boolean persist(SiteVisitRequest request, String countryCode) {
         try {
             jdbc.update("DELETE FROM site_visits WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'");
             jdbc.update("""
                     INSERT INTO site_visits (
-                        id, session_id, path, source, referrer, device_type, device_model,
+                        id, session_id, country_code, path, source, referrer, device_type, device_model,
                         os_name, os_version, browser_name, browser_version, screen_size,
                         viewport_size, language, user_agent, funnel_stage
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VISIT')
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VISIT')
                     """,
                     UUID.randomUUID(),
                     clean(request.sessionId(), 80),
+                    nullable(countryCode, 2),
                     nullable(request.path(), 160),
                     nullable(request.source(), 240),
                     nullable(request.referrer(), 240),
@@ -237,7 +246,7 @@ public class SiteVisitController {
         }
     }
 
-    private void notifyAdmins(SiteVisitRequest request) {
+    private void notifyAdmins(SiteVisitRequest request, String countryCode) {
         if (!webPushService.isConfigured()) return;
 
         String source = clean(request.source(), 240);
@@ -245,6 +254,7 @@ public class SiteVisitController {
 
         StringBuilder body = new StringBuilder("Кто-то открыл mindcrafti.de");
         if (!device.isBlank()) body.append(" · ").append(device);
+        if (countryCode != null && !countryCode.isBlank()) body.append(" · страна: ").append(countryCode);
         if (!source.isBlank()) body.append(" · источник: ").append(source);
 
         try {
@@ -358,6 +368,24 @@ public class SiteVisitController {
         }
     }
 
+    private static String clientIp(HttpServletRequest request) {
+        if (request == null) return null;
+
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            for (String candidate : forwardedFor.split(",")) {
+                String ip = GeoIpCountryService.normalizeIp(candidate);
+                if (ip != null && !GeoIpCountryService.isLocalOrPrivate(ip)) return ip;
+            }
+        }
+
+        String realIp = GeoIpCountryService.normalizeIp(request.getHeader("X-Real-IP"));
+        if (realIp != null && !GeoIpCountryService.isLocalOrPrivate(realIp)) return realIp;
+
+        String remote = GeoIpCountryService.normalizeIp(request.getRemoteAddr());
+        return remote != null && !GeoIpCountryService.isLocalOrPrivate(remote) ? remote : null;
+    }
+
     private static String nullable(String value, int maxLength) {
         String cleaned = clean(value, maxLength);
         return cleaned.isBlank() ? null : cleaned;
@@ -407,6 +435,7 @@ public class SiteVisitController {
     public record SiteVisitResponse(
             UUID id,
             String sessionId,
+            String countryCode,
             String path,
             String source,
             String referrer,
