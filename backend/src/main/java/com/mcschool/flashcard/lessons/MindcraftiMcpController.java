@@ -8,6 +8,7 @@ import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
+import com.mcschool.flashcard.trialleads.FunnelAnalyticsService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -41,7 +42,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.11.0";
+    private static final String SERVER_VERSION = "1.12.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -55,6 +56,7 @@ public class MindcraftiMcpController {
     private final McpAnalyticsService analyticsService;
     private final McpHomeworkReadService homeworkReadService;
     private final SchoolPromptSettingsService schoolPromptSettingsService;
+    private final FunnelAnalyticsService funnelAnalyticsService;
 
     public MindcraftiMcpController(
             @Value("${MINDCRAFTI_LESSON_IMPORT_API_KEY:}") String apiKey,
@@ -67,7 +69,8 @@ public class MindcraftiMcpController {
             McpHomeworkSeriesService homeworkSeriesService,
             McpAnalyticsService analyticsService,
             McpHomeworkReadService homeworkReadService,
-            SchoolPromptSettingsService schoolPromptSettingsService) {
+            SchoolPromptSettingsService schoolPromptSettingsService,
+            FunnelAnalyticsService funnelAnalyticsService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
@@ -79,6 +82,7 @@ public class MindcraftiMcpController {
         this.analyticsService = analyticsService;
         this.homeworkReadService = homeworkReadService;
         this.schoolPromptSettingsService = schoolPromptSettingsService;
+        this.funnelAnalyticsService = funnelAnalyticsService;
     }
 
     @GetMapping
@@ -127,7 +131,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools include lessons, school prompts, homework assignment, direct PDF homework upload, submitted homework PDFs, rendered submission pages and read-only student analytics. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group or individual and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
+                ? "Mindcrafti school tools include lessons, school prompts, homework assignment, direct PDF homework upload, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group or individual and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -235,6 +239,12 @@ public class MindcraftiMcpController {
         Map<String, Object> sessionProperties = new LinkedHashMap<>();
         sessionProperties.put("sessionId", property("string", "Card study-session UUID returned by a summary or student activity tool."));
         tools.add(tool("get_card_session_details", "Inspect one card session in detail: start/end time, duration, every question, the student's first answer, correct answer and whether the first attempt was wrong. Teachers can only inspect sessions belonging to their own students.", schema(sessionProperties, List.of("sessionId")), readOnlyAnnotations()));
+
+        Map<String, Object> funnelProperties = new LinkedHashMap<>();
+        funnelProperties.put("fromDate", property("string", "First date in YYYY-MM-DD. Public visit data is retained for up to 90 days."));
+        funnelProperties.put("toDate", property("string", "Last date in YYYY-MM-DD. Maximum range is 90 days."));
+        funnelProperties.put("recentLimit", property("integer", "Optional number of recent visitor sessions with detailed timelines to return, 1 to 100. Defaults to 50."));
+        tools.add(tool("get_public_funnel_analytics", "Admin-only. Analyze the public website acquisition funnel: visits, conversion at every step, drop-offs, traffic sources, devices, time spent, bookings, contracts and recent visitor timelines. Use this when the administrator asks how advertising traffic or the website funnel is performing.", schema(funnelProperties, List.of("fromDate", "toDate")), readOnlyAnnotations()));
         return tools;
     }
 
@@ -281,6 +291,12 @@ public class MindcraftiMcpController {
             case "get_student_activity" -> toolResult(analyticsService.studentActivity(auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"), date(arguments, "fromDate"), date(arguments, "toDate")));
             case "get_student_homework_history" -> toolResult(analyticsService.homeworkHistory(auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"), date(arguments, "fromDate"), date(arguments, "toDate")));
             case "get_card_session_details" -> toolResult(analyticsService.cardSessionDetails(auth.user(), auth.apiKey(), uuid(required(arguments, "sessionId"), "sessionId")));
+            case "get_public_funnel_analytics" -> toolResult(funnelAnalyticsService.report(
+                    auth.user(),
+                    auth.apiKey(),
+                    date(arguments, "fromDate"),
+                    date(arguments, "toDate"),
+                    arguments.containsKey("recentLimit") ? integer(arguments.get("recentLimit"), "recentLimit") : 50));
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
         };
     }
