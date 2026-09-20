@@ -38,6 +38,7 @@ export type TrialLead = {
 export type SiteVisit = {
   id: string;
   sessionId: string;
+  countryCode?: string | null;
   path?: string | null;
   source?: string | null;
   referrer?: string | null;
@@ -116,6 +117,16 @@ export type FunnelAnalytics = {
   }>;
   devices: Array<{
     device: string;
+    visits: number;
+    leads: number;
+    bookings: number;
+    contracts: number;
+    leadConversionPct: number;
+    bookingConversionPct: number;
+    averageActiveSeconds?: number | null;
+  }>;
+  countries: Array<{
+    countryCode: string;
     visits: number;
     leads: number;
     bookings: number;
