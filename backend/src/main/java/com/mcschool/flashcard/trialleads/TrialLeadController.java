@@ -73,19 +73,58 @@ public class TrialLeadController {
         String phone = request.phone().strip();
         String source = clean(request.source());
         String clientId = cleanOrNull(request.clientId());
+        String initialStatus = initialStatus(request);
 
         if (clientId != null) {
             PublicLeadResponse existing = findByClientId(clientId);
-            if (existing != null) return existing;
+            if (existing != null) {
+                jdbc.update("""
+                        UPDATE trial_leads SET
+                            phone = ?,
+                            grade = COALESCE(?, grade),
+                            subject = COALESCE(?, subject),
+                            goal = COALESCE(?, goal),
+                            priority = COALESCE(?, priority),
+                            source = CASE WHEN ? = '' THEN source ELSE ? END,
+                            status = CASE
+                                WHEN status IN ('BOOKED','CONTACTED','CONTRACT','DECLINED') THEN status
+                                ELSE ?
+                            END,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE client_id = ?
+                        """,
+                        phone,
+                        cleanOrNull(request.grade()),
+                        cleanOrNull(request.subject()),
+                        cleanOrNull(request.goal()),
+                        cleanOrNull(request.priority()),
+                        source, source,
+                        initialStatus,
+                        clientId);
+                return findByClientId(clientId);
+            }
         }
 
         UUID id = UUID.randomUUID();
         UUID token = UUID.randomUUID();
         try {
             jdbc.update("""
-                    INSERT INTO trial_leads (id, tracking_token, phone, source, status, client_id)
-                    VALUES (?, ?, ?, ?, 'NEW', ?)
-                    """, id, token, phone, source, clientId);
+                    INSERT INTO trial_leads (
+                        id, tracking_token, phone, grade, subject, goal, priority,
+                        source, status, client_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    id,
+                    token,
+                    phone,
+                    cleanOrNull(request.grade()),
+                    cleanOrNull(request.subject()),
+                    cleanOrNull(request.goal()),
+                    cleanOrNull(request.priority()),
+                    source,
+                    initialStatus,
+                    clientId);
         } catch (DuplicateKeyException e) {
             if (clientId != null) {
                 PublicLeadResponse existing = findByClientId(clientId);
@@ -95,7 +134,7 @@ public class TrialLeadController {
         }
 
         notifyAdminsAboutNewLead(phone);
-        return new PublicLeadResponse(token, "NEW");
+        return new PublicLeadResponse(token, initialStatus);
     }
 
     private PublicLeadResponse findByClientId(String clientId) {
@@ -216,6 +255,14 @@ public class TrialLeadController {
         if (changed == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found");
     }
 
+    private static String initialStatus(CreateLeadRequest request) {
+        if (cleanOrNull(request.priority()) != null) return "FORM_COMPLETED";
+        if (cleanOrNull(request.goal()) != null) return "GOAL_SELECTED";
+        if (cleanOrNull(request.subject()) != null) return "SUBJECT_SELECTED";
+        if (cleanOrNull(request.grade()) != null) return "GRADE_SELECTED";
+        return "NEW";
+    }
+
     private static String clean(String value) {
         return value == null ? "" : value.strip();
     }
@@ -233,7 +280,11 @@ public class TrialLeadController {
     public record CreateLeadRequest(
             @NotBlank @Size(max = 40) String phone,
             @Size(max = 500) String source,
-            @Size(max = 80) String clientId
+            @Size(max = 80) String clientId,
+            @Size(max = 80) String grade,
+            @Size(max = 120) String subject,
+            @Size(max = 500) String goal,
+            @Size(max = 500) String priority
     ) {}
 
     public record UpdateLeadRequest(
