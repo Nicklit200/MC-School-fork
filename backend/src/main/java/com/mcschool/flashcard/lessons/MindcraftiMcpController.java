@@ -241,7 +241,7 @@ public class MindcraftiMcpController {
         tools.add(tool("get_card_session_details", "Inspect one card session in detail: start/end time, duration, every question, the student's first answer, correct answer and whether the first attempt was wrong. Teachers can only inspect sessions belonging to their own students.", schema(sessionProperties, List.of("sessionId")), readOnlyAnnotations()));
 
         Map<String, Object> funnelProperties = new LinkedHashMap<>();
-        funnelProperties.put("fromDate", property("string", "First date in YYYY-MM-DD. Public visit data is retained for up to 90 days."));
+        funnelProperties.put("fromDate", property("string", "First date in YYYY-MM-DD. One report can cover up to 90 days."));
         funnelProperties.put("toDate", property("string", "Last date in YYYY-MM-DD. Maximum range is 90 days."));
         funnelProperties.put("recentLimit", property("integer", "Optional number of recent visitor sessions with detailed timelines to return, 1 to 100. Defaults to 50."));
         tools.add(tool("get_public_funnel_analytics", "Admin-only. Analyze the public website acquisition funnel: visits, conversion at every step, drop-offs, traffic sources, devices, time spent, bookings, contracts and recent visitor timelines. Use this when the administrator asks how advertising traffic or the website funnel is performing.", schema(funnelProperties, List.of("fromDate", "toDate")), readOnlyAnnotations()));
