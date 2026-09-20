@@ -140,6 +140,7 @@ export function SiteVisitsPage() {
                 <span><b>Язык:</b> {visit.language || '—'}</span>
                 <span><b>Страница:</b> {visit.path || '/'}</span>
                 <span><b>Источник:</b> {visit.source || visit.referrer || 'Источник не передан'}</span>
+                <span><b>Страна:</b> {countryLabel(visit.countryCode)}</span>
                 <span><b>Класс:</b> {visit.grade || '—'}</span>
                 <span><b>Проблема:</b> {visit.goal || '—'}</span>
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
@@ -217,6 +218,26 @@ function FunnelOverview({ analytics }: { analytics: FunnelAnalytics }) {
             ))}
           </div>}
       </section>
+
+      <section className="site-visits-panel">
+        <div className="site-visits-heading">
+          <div>
+            <h2>Страны</h2>
+            <p>Приблизительная страна по сети посетителя. VPN и iCloud Private Relay могут искажать результат.</p>
+          </div>
+        </div>
+        {analytics.countries.length === 0 ? <div className="trial-leads-empty">За этот период стран пока нет.</div> :
+          <div className="funnel-source-list">
+            {analytics.countries.map((country) => (
+              <div className="funnel-source" key={country.countryCode}>
+                <strong>{countryLabel(country.countryCode)}</strong>
+                <span>{country.visits} визитов</span>
+                <span>{country.leads} WhatsApp · {country.leadConversionPct}%</span>
+                <span>{country.bookings} записей</span>
+              </div>
+            ))}
+          </div>}
+      </section>
     </>
   );
 }
@@ -283,6 +304,21 @@ function diagnosticLabel(stage?: string | null) {
     case 'UNHANDLED_REJECTION': return 'ошибка Promise';
     default: return '—';
   }
+}
+
+function countryLabel(code?: string | null) {
+  if (!code || code === 'UNKNOWN') return 'Не определена';
+  const normalized = code.toUpperCase();
+  let name = normalized;
+  try {
+    name = new Intl.DisplayNames(['ru'], { type: 'region' }).of(normalized) || normalized;
+  } catch {
+    name = normalized;
+  }
+  const flag = /^[A-Z]{2}$/.test(normalized)
+    ? String.fromCodePoint(...normalized.split('').map((char) => 127397 + char.charCodeAt(0)))
+    : '';
+  return flag ? flag + ' ' + name : name;
 }
 
 function joinVersion(name?: string | null, version?: string | null) {
