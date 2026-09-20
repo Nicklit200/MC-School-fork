@@ -126,7 +126,7 @@ export function SiteVisitsPage() {
                 <div>
                   <strong>{device || 'Неизвестное устройство'}</strong>
                   <span className={converted ? 'site-visit-result site-visit-result--ok' : 'site-visit-result'}>
-                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : visitStageLabel(visit.funnelStage)}
+                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : anonymousVisitLabel(visit)}
                   </span>
                 </div>
                 <time>{formatDate(visit.createdAt)}</time>
@@ -142,6 +142,7 @@ export function SiteVisitsPage() {
                 <span><b>Источник:</b> {visit.source || visit.referrer || 'Источник не передан'}</span>
                 <span><b>Страна:</b> {countryLabel(visit.countryCode)}</span>
                 <span><b>Класс:</b> {visit.grade || '—'}</span>
+                <span><b>Предмет:</b> {visit.subject || '—'}</span>
                 <span><b>Проблема:</b> {visit.goal || '—'}</span>
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
                 <span><b>Взаимодействие:</b> {visit.firstInteractionAt ? 'да' : 'нет'}</span>
@@ -276,6 +277,14 @@ function formatSimpleDate(value: string) {
     day: '2-digit',
     month: '2-digit',
   }).format(new Date(value + 'T12:00:00Z'));
+}
+
+function anonymousVisitLabel(visit: SiteVisit) {
+  if (visit.priority) return 'Анкета заполнена · телефон не оставил';
+  if (visit.funnelStage === 'PHONE_STEP') return 'Дошёл до телефона · не оставил';
+  if (visit.goal) return 'Заполнил класс и проблему';
+  if (visit.grade) return 'Выбрал класс';
+  return visitStageLabel(visit.funnelStage);
 }
 
 function visitStageLabel(stage?: string | null) {
