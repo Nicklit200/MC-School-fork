@@ -81,6 +81,7 @@ public class FunnelAnalyticsService {
                 SELECT v.session_id,
                        COALESCE(NULLIF(v.source, ''), NULLIF(v.referrer, ''), 'Источник не передан') AS traffic_source,
                        COALESCE(NULLIF(v.device_model, ''), NULLIF(v.device_type, ''), 'Неизвестное устройство') AS device,
+                       v.country_code,
                        v.funnel_stage, v.grade, v.goal, v.priority, v.max_active_seconds,
                        v.trial_page_loaded_at, v.grade_options_visible_at, v.first_interaction_at,
                        v.created_at, l.phone AS lead_phone, l.status AS lead_status
@@ -92,6 +93,7 @@ public class FunnelAnalyticsService {
                 rs.getString("session_id"),
                 rs.getString("traffic_source"),
                 rs.getString("device"),
+                rs.getString("country_code"),
                 rs.getString("funnel_stage"),
                 rs.getString("grade"),
                 rs.getString("goal"),
@@ -132,6 +134,7 @@ public class FunnelAnalyticsService {
         List<Map<String, Object>> timing = timing(eventsBySession);
         List<Map<String, Object>> sources = groupStats(visits, true);
         List<Map<String, Object>> devices = groupStats(visits, false);
+        List<Map<String, Object>> countries = countryStats(visits);
 
         int visitsCount = visits.size();
         int interactions = (int) visits.stream().filter(v -> v.firstInteractionAt() != null).count();
@@ -161,6 +164,7 @@ public class FunnelAnalyticsService {
             item.put("createdAt", visit.createdAt());
             item.put("source", visit.source());
             item.put("device", visit.device());
+            item.put("countryCode", visit.countryCode());
             item.put("grade", visit.grade());
             item.put("goal", visit.goal());
             item.put("priority", visit.priority());
@@ -194,11 +198,13 @@ public class FunnelAnalyticsService {
         result.put("stepTiming", timing);
         result.put("sources", sources);
         result.put("devices", devices);
+        result.put("countries", countries);
         result.put("recentVisits", recentVisits);
         result.put("measurementLimitations", List.of(
                 "Подробная история по шагам доступна только для посещений после включения site_visit_events.",
                 "Время шага считается по накопленному активному времени, если оно передано; иначе по разнице между событиями с отсечением длинных простоев более 30 минут.",
                 "Посетитель идентифицируется только как сессия до тех пор, пока сам не оставит WhatsApp; скрытое fingerprinting и точная геолокация не используются.",
+                "Страна определяется приблизительно по сетевому IP в момент захода; IP не сохраняется. VPN, мобильные сети и iCloud Private Relay могут исказить страну.",
                 "Один отчёт можно запросить максимум за 90 дней; это ограничение отчёта, а не срок хранения данных."
         ));
         return result;
@@ -310,6 +316,40 @@ public class FunnelAnalyticsService {
                 .toList();
     }
 
+    private List<Map<String, Object>> countryStats(List<VisitRow> visits) {
+        Map<String, GroupAccumulator> groups = new HashMap<>();
+        for (VisitRow visit : visits) {
+            String key = notBlank(visit.countryCode()) ? visit.countryCode() : "UNKNOWN";
+            GroupAccumulator group = groups.computeIfAbsent(key, ignored -> new GroupAccumulator());
+            group.visits++;
+            if (notBlank(visit.leadPhone())) group.leads++;
+            if (isBooked(visit.leadStatus())) group.bookings++;
+            if ("CONTRACT".equals(visit.leadStatus())) group.contracts++;
+            if (visit.maxActiveSeconds() != null) {
+                group.activeSeconds += visit.maxActiveSeconds();
+                group.activeMeasured++;
+            }
+        }
+
+        return groups.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue().visits, a.getValue().visits))
+                .limit(50)
+                .map(entry -> {
+                    GroupAccumulator group = entry.getValue();
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("countryCode", entry.getKey());
+                    item.put("visits", group.visits);
+                    item.put("leads", group.leads);
+                    item.put("bookings", group.bookings);
+                    item.put("contracts", group.contracts);
+                    item.put("leadConversionPct", pct(group.leads, group.visits));
+                    item.put("bookingConversionPct", pct(group.bookings, group.visits));
+                    item.put("averageActiveSeconds", group.activeMeasured == 0 ? null : Math.round((double) group.activeSeconds / group.activeMeasured));
+                    return item;
+                })
+                .toList();
+    }
+
     private boolean reached(VisitRow visit, Set<String> events, String target) {
         if ("VISIT".equals(target)) return true;
         if (events.contains(target)) return true;
@@ -401,6 +441,7 @@ public class FunnelAnalyticsService {
             String sessionId,
             String source,
             String device,
+            String countryCode,
             String funnelStage,
             String grade,
             String goal,
