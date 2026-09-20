@@ -77,7 +77,7 @@ export function SiteVisitsPage() {
         <div>
           <p className="trial-leads-eyebrow">Продажи</p>
           <h1>Попытки посетителей</h1>
-          <p>Каждый уникальный заход на сайт: устройство, браузер, источник и последний этап воронки. Если человек оставил номер, он привязывается к попытке.</p>
+          <p>Здесь сохраняется вся история попытки даже без телефона: источник, устройство, страна, ответы анкеты и последний этап. В «Заявки» человек попадает только после того, как оставил номер.</p>
         </div>
         <div className="trial-lead-actions">
           <button type="button" className="btn" onClick={() => void load({ silent: true })} disabled={loading || refreshing}>
@@ -126,7 +126,11 @@ export function SiteVisitsPage() {
                 <div>
                   <strong>{device || 'Неизвестное устройство'}</strong>
                   <span className={converted ? 'site-visit-result site-visit-result--ok' : 'site-visit-result'}>
-                    {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : visitStageLabel(visit.funnelStage)}
+                    {visit.leadStatus
+                      ? STATUS_LABELS[visit.leadStatus]
+                      : visit.grade && visit.goal && visit.priority
+                        ? 'Анкета заполнена, телефон не оставил'
+                        : visitStageLabel(visit.funnelStage)}
                   </span>
                 </div>
                 <time>{formatDate(visit.createdAt)}</time>
@@ -142,6 +146,7 @@ export function SiteVisitsPage() {
                 <span><b>Источник:</b> {visit.source || visit.referrer || 'Источник не передан'}</span>
                 <span><b>Страна:</b> {countryLabel(visit.countryCode)}</span>
                 <span><b>Класс:</b> {visit.grade || '—'}</span>
+                <span><b>Предмет:</b> {visit.subject || '—'}</span>
                 <span><b>Проблема:</b> {visit.goal || '—'}</span>
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
                 <span><b>Взаимодействие:</b> {visit.firstInteractionAt ? 'да' : 'нет'}</span>
