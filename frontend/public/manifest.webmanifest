@@ -1,10 +1,26 @@
 {
   "name": "Mindcrafti School",
   "short_name": "Mindcrafti",
+  "id": "/",
   "start_url": "/today",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#ffffff",
-  "theme_color": "#111827",
-  "description": "Mindcrafti School — карточки и домашние задания"
+  "theme_color": "#16a34a",
+  "description": "Mindcrafti School — карточки и домашние задания",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
