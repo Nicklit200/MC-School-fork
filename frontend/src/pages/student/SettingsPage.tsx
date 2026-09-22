@@ -34,7 +34,12 @@ export function SettingsPage() {
 
         const registration = await navigator.serviceWorker.register('/sw.js');
         await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (subscription && !subscriptionUsesKey(subscription, config.publicKey)) {
+          await subscription.unsubscribe();
+          subscription = null;
+        }
 
         if (!subscription) {
           setPushEnabled(false);
@@ -106,6 +111,10 @@ export function SettingsPage() {
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
+      if (subscription && !subscriptionUsesKey(subscription, config.publicKey)) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -287,4 +296,17 @@ function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
     bytes[i] = rawData.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+
+function subscriptionUsesKey(subscription: PushSubscription, publicKey: string): boolean {
+  const expected = new Uint8Array(urlBase64ToArrayBuffer(publicKey));
+  const current = subscription.options.applicationServerKey
+    ? new Uint8Array(subscription.options.applicationServerKey)
+    : null;
+  if (!current || current.length !== expected.length) return false;
+  for (let i = 0; i < current.length; i += 1) {
+    if (current[i] !== expected[i]) return false;
+  }
+  return true;
 }

@@ -32,6 +32,14 @@ function restoreLessonReturnRoute() {
 restoreLessonReturnRoute();
 installLessonStartFlow();
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('Mindcrafti service worker registration failed', error);
+    });
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* I18nProvider wraps AuthProvider because auth sets the language on login. */}
