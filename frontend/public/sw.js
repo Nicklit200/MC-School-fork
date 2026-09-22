@@ -27,8 +27,8 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body || 'У тебя есть задания на сегодня.',
     data: { url: data.url || '/today' },
-    badge: '/icon-192.svg',
-    icon: '/icon-192.svg',
+    badge: '/icon-192.png',
+    icon: '/icon-192.png',
     tag: data.tag || 'mindcrafti-reminder',
   };
 
