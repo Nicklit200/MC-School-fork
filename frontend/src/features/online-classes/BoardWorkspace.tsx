@@ -30,6 +30,8 @@ export function BoardWorkspace({
   const [selection, setSelection] = useState<BoardSelection>({ kind: 'shared' });
   const [pageIndex, setPageIndex] = useState(0);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const [backgroundError, setBackgroundError] = useState(false);
 
   const workbook = context.workbook;
   const sourceAspect =
@@ -38,13 +40,26 @@ export function BoardWorkspace({
       : null;
 
   useEffect(() => {
+    // Every new lesson opens on the shared board and on page 1 of the PDF that
+    // was prepared for that exact calendar/native lesson.
+    setSelection({ kind: 'shared' });
+    setPageIndex(0);
+  }, [classId]);
+
+  useEffect(() => {
     let active = true;
     let objectUrl: string | null = null;
 
     if (!workbook.hasWorkbook) {
       setBackgroundUrl(null);
+      setBackgroundLoading(false);
+      setBackgroundError(false);
       return () => undefined;
     }
+
+    setBackgroundLoading(true);
+    setBackgroundError(false);
+    setBackgroundUrl(null);
 
     onlineClassesApi
       .workbookPageUrl(classId, pageIndex)
@@ -55,9 +70,13 @@ export function BoardWorkspace({
           return;
         }
         setBackgroundUrl(url);
+        setBackgroundLoading(false);
       })
       .catch(() => {
-        if (active) setBackgroundUrl(null);
+        if (!active) return;
+        setBackgroundUrl(null);
+        setBackgroundLoading(false);
+        setBackgroundError(true);
       });
 
     return () => {
@@ -178,6 +197,15 @@ export function BoardWorkspace({
         </div>
       )}
 
+      {workbook.hasWorkbook && backgroundLoading ? (
+        <div className="board-workspace__loading">
+          Открываем PDF «{workbook.filename ?? 'Рабочая тетрадь'}»…
+        </div>
+      ) : workbook.hasWorkbook && backgroundError ? (
+        <div className="banner banner--error" style={{ marginBottom: 12 }}>
+          PDF прикреплён к уроку, но страницу не удалось загрузить. Обнови урок — файл останется привязан к этому занятию.
+        </div>
+      ) : (
       <Suspense fallback={<div className="board-workspace__loading">Открываем доску…</div>}>
         {selection.kind === 'shared' &&
           renderBoard('shared', workbook.hasWorkbook ? 'Общая рабочая тетрадь' : 'Общая доска')}
@@ -214,6 +242,7 @@ export function BoardWorkspace({
           </div>
         )}
       </Suspense>
+      )}
     </section>
   );
 }
