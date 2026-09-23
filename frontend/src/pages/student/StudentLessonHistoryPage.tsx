@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthContext';
 import {
   onlineClassesApi,
   type AnnotationDocument,
@@ -10,15 +11,18 @@ import {
 import { foldOperations, type Operation } from '../../features/online-classes/annotations';
 import { WhiteboardCanvas } from '../../features/online-classes/WhiteboardCanvas';
 
-type BoardKind = 'shared' | 'mine';
+type BoardKind = 'shared' | 'mine' | 'student';
 
 export function StudentLessonHistoryPage() {
   const { classId = '' } = useParams();
+  const { user } = useAuth();
+  const isTeacher = user?.role === 'TEACHER';
   const [onlineClass, setOnlineClass] = useState<OnlineClass | null>(null);
   const [context, setContext] = useState<OnlineClassBoardContext | null>(null);
   const [documents, setDocuments] = useState<AnnotationDocument[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
   const [boardKind, setBoardKind] = useState<BoardKind>('shared');
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [operations, setOperations] = useState<AnnotationOperation[]>([]);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,7 +47,12 @@ export function StudentLessonHistoryPage() {
   }, [classId]);
 
   const ownId = context?.students[0]?.id ?? null;
-  const targetId = boardKind === 'shared' ? 'shared' : ownId ? `student:${ownId}` : null;
+  const effectiveStudentId = isTeacher ? selectedStudentId : ownId;
+  const targetId = boardKind === 'shared'
+    ? 'shared'
+    : effectiveStudentId
+      ? `student:${effectiveStudentId}`
+      : null;
   const currentDocument = useMemo(
     () => documents.find((doc) => doc.targetId === targetId && doc.pageIndex === pageIndex) ?? null,
     [documents, pageIndex, targetId],
@@ -102,7 +111,7 @@ export function StudentLessonHistoryPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <Link to="/online-classes" className="muted">← Назад к урокам</Link>
+      <Link to={isTeacher ? '/students' : '/online-classes'} className="muted">← Назад к урокам</Link>
       <div style={{ margin: '10px 0 16px' }}>
         <h1 style={{ marginBottom: 4 }}>{onlineClass.title}</h1>
         <div className="muted">
@@ -114,9 +123,25 @@ export function StudentLessonHistoryPage() {
         <button type="button" aria-selected={boardKind === 'shared'} onClick={() => setBoardKind('shared')}>
           Общая
         </button>
-        <button type="button" aria-selected={boardKind === 'mine'} onClick={() => setBoardKind('mine')}>
-          Моя работа
-        </button>
+        {isTeacher ? (
+          context.students.map((student) => (
+            <button
+              key={student.id}
+              type="button"
+              aria-selected={boardKind === 'student' && selectedStudentId === student.id}
+              onClick={() => {
+                setSelectedStudentId(student.id);
+                setBoardKind('student');
+              }}
+            >
+              {student.fullName}
+            </button>
+          ))
+        ) : (
+          <button type="button" aria-selected={boardKind === 'mine'} onClick={() => setBoardKind('mine')}>
+            Моя работа
+          </button>
+        )}
       </div>
 
       <div className="board-workspace__document-bar">
