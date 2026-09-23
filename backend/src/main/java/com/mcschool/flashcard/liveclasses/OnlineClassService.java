@@ -272,6 +272,28 @@ public class OnlineClassService {
                 .toList();
     }
 
+    /**
+     * Completed lessons for one student, visible to that student's owning teacher.
+     * Group lessons are included through the durable attendance/group history query.
+     */
+    @Transactional(readOnly = true)
+    public List<OnlineClassResponse> listStudentHistory(AuthenticatedUser teacher, UUID studentId) {
+        requireEnabled();
+        User student = accessService.requireActiveUser(studentId);
+        if (teacher.role() != Role.TEACHER
+                || student.getRole() != Role.STUDENT
+                || student.getTeacher() == null
+                || !student.getTeacher().getId().equals(teacher.id())) {
+            throw new ResourceNotFoundException("Student not found");
+        }
+
+        return classRepository.findHistoryVisibleToStudent(studentId).stream()
+                .filter(item -> item.getTeacher().getId().equals(teacher.id()))
+                .sorted(Comparator.comparing(OnlineClass::getScheduledStartAt).reversed())
+                .map(item -> toResponse(item, teacher))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public OnlineClassResponse get(AuthenticatedUser caller, UUID classId) {
         requireEnabled();
