@@ -110,11 +110,23 @@ export function SettingsPage() {
       }
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
+      // iOS Web Push can keep a stale Home Screen subscription after an app/service-worker update.
+      // Recreate the local subscription on iPhone/iPad when the user explicitly enables push.
       let subscription = await registration.pushManager.getSubscription();
-      if (subscription && !subscriptionUsesKey(subscription, config.publicKey)) {
+      const iosDevice = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      if (subscription && (iosDevice || !subscriptionUsesKey(subscription, config.publicKey))) {
+        try {
+          const previous = subscription.toJSON();
+          if (previous.endpoint && previous.keys?.p256dh && previous.keys?.auth) {
+            await api.push.unsubscribe({ endpoint: previous.endpoint, p256dh: previous.keys.p256dh, auth: previous.keys.auth });
+          }
+        } catch {
+          // The local subscription is the source of truth; continue rebuilding it.
+        }
         await subscription.unsubscribe();
         subscription = null;
       }
+      await registration.update();
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -127,6 +139,8 @@ export function SettingsPage() {
       }
       await api.push.subscribe({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
       setPushEnabled(true);
+      // Verify the newly registered subscription immediately.
+      await api.push.test();
     } catch (e) {
       setError(e instanceof Error ? e.message : toErrorMessage(e, t));
     } finally {
