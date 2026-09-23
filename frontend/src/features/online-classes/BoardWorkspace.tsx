@@ -32,6 +32,7 @@ export function BoardWorkspace({
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [backgroundError, setBackgroundError] = useState(false);
+  const [renderZoom, setRenderZoom] = useState(1);
 
   const workbook = context.workbook;
   const sourceAspect =
@@ -39,11 +40,17 @@ export function BoardWorkspace({
       ? workbook.pageWidth / workbook.pageHeight
       : null;
 
+  const renderDpi = useMemo(
+    () => Math.round(Math.max(120, Math.min(576, 144 * renderZoom))),
+    [renderZoom],
+  );
+
   useEffect(() => {
     // Every new lesson opens on the shared board and on page 1 of the PDF that
     // was prepared for that exact calendar/native lesson.
     setSelection({ kind: 'shared' });
     setPageIndex(0);
+    setRenderZoom(1);
   }, [classId]);
 
   useEffect(() => {
@@ -62,7 +69,7 @@ export function BoardWorkspace({
     setBackgroundUrl(null);
 
     onlineClassesApi
-      .workbookPageUrl(classId, pageIndex)
+      .workbookPageUrl(classId, pageIndex, renderDpi)
       .then((url) => {
         objectUrl = url;
         if (!active) {
@@ -83,7 +90,7 @@ export function BoardWorkspace({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [classId, pageIndex, workbook.hasWorkbook]);
+  }, [classId, pageIndex, renderDpi, workbook.hasWorkbook]);
 
   const ownStudent = useMemo(
     () => context.students.find((student) => student.id === currentUserId) ?? context.students[0],
@@ -115,6 +122,7 @@ export function BoardWorkspace({
       showToolbar={!compact}
       compact={compact}
       heading={heading}
+      onZoomChange={compact ? undefined : setRenderZoom}
     />
   );
 
