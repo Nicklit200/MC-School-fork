@@ -95,7 +95,7 @@ export function GroupTranscriptFolderPicker({ groupId }: { groupId: string }) {
     try {
       const updated = await api.groups.updateTranscriptFolder(groupId, currentFolderId);
       setSavedFolderId(updated.googleDriveTranscriptFolderId ?? currentFolderId);
-      setMessage(`Папка для транскрипций группы «${updated.name}» сохранена: ${currentPath || 'выбранная папка'}.`);
+      setMessage(`Общая папка уроков группы «${updated.name}» сохранена: ${currentPath || 'выбранная папка'}.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -107,9 +107,9 @@ export function GroupTranscriptFolderPicker({ groupId }: { groupId: string }) {
     <section className="panel" style={{ margin: '16px 0 20px', padding: 20, border: '1px solid #f0d8c8' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Транскрипции уроков</h2>
+          <h2 style={{ margin: 0 }}>Уроки группы → Google Drive</h2>
           <p className="muted" style={{ margin: '6px 0 0' }}>
-            Выберите папку Google Drive, куда после уроков группы {groupName ? `«${groupName}»` : ''} будут сохраняться транскрипции Soniox.
+            Выберите одну общую папку группы. После каждого урока сюда автоматически попадут общая доска, заполненные доски всех учеников и транскрипция Soniox.
           </p>
         </div>
         {savedFolderId && (
@@ -185,7 +185,7 @@ export function GroupTranscriptFolderPicker({ groupId }: { groupId: string }) {
                   ? 'Сохраняем…'
                   : currentFolderId === savedFolderId
                     ? 'Эта папка уже выбрана'
-                    : 'Использовать эту папку для транскрипций'}
+                    : 'Использовать эту папку для уроков группы'}
               </button>
             </>
           )}
