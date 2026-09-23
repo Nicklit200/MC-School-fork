@@ -8,6 +8,7 @@ import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
 
 const MIN_CARDS_TO_START = 4;
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
+type PageTab = 'overview' | 'lessons' | 'homework' | 'cards';
 
 /** Teacher cards area. PDF homework is intentionally not shown or linked from here. */
 export function StudentDetailPage() {
@@ -28,6 +29,8 @@ export function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [lessonHistory, setLessonHistory] = useState<OnlineClass[]>([]);
   const [student, setStudent] = useState<StudentListItem | null>(null);
+  const [homeworks, setHomeworks] = useState<Homework[]>([]);
+  const [pageTab, setPageTab] = useState<PageTab>('overview');
 
   const reload = useCallback(async () => {
     const [studentInfo, allBatches, cardList, cardSummary, history, lessons] = await Promise.all([
@@ -39,6 +42,7 @@ export function StudentDetailPage() {
       onlineClassesApi.studentHistory(studentId),
     ]);
     setStudent(studentInfo);
+    setHomeworks(allBatches);
     setCardBatches(allBatches.filter((item) => item.totalCards > 0));
     setCards(cardList);
     setSummary(cardSummary);
@@ -55,6 +59,12 @@ export function StudentDetailPage() {
   }, [reload, t]);
 
   const futureSchedule = useMemo(() => buildFutureReviewSchedule(cards), [cards]);
+  const worksheetHomeworks = useMemo(
+    () => homeworks
+      .filter((item) => item.hasWorksheet)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.createdAt.localeCompare(a.createdAt)),
+    [homeworks],
+  );
 
   async function createCardBatch(event: FormEvent) {
     event.preventDefault();
@@ -152,45 +162,63 @@ export function StudentDetailPage() {
     <div>
       <p><Link to="/students" className="muted">← {t('common.back')}</Link></p>
 
-      <section className="panel" style={{ padding: 20, marginBottom: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ margin: 0 }}>{student?.fullName ?? (language === 'DE' ? 'Schüler' : 'Ученик')}</h1>
-            <div className="muted" style={{ marginTop: 5 }}>
-              {language === 'DE' ? 'Login' : 'Логин'}: <strong>{student?.username ?? '—'}</strong>
-            </div>
-          </div>
-
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <a className="btn" href="#cards">{language === 'DE' ? 'Karten' : 'Карточки'}</a>
-            <Link className="btn btn--secondary" to={`/students/${studentId}/homeworks`}>
-              {language === 'DE' ? 'Hausaufgabe' : 'Домашка'}
-            </Link>
-            <Link className="btn btn--secondary" to={`/students/${studentId}/drive`}>
-              Google Drive
-            </Link>
-            <a className="btn btn--secondary" href="#lessons">{language === 'DE' ? 'Stunden' : 'Уроки'}</a>
+      <section className="panel" style={{ padding: 20, marginBottom: 14 }}>
+        <div>
+          <h1 style={{ margin: 0 }}>{student?.fullName ?? (language === 'DE' ? 'Schüler' : 'Ученик')}</h1>
+          <div className="muted" style={{ marginTop: 5 }}>
+            {language === 'DE' ? 'Login' : 'Логин'}: <strong>{student?.username ?? '—'}</strong>
           </div>
         </div>
       </section>
 
+      <div className="group-detail-tabs" style={{ marginBottom: 18 }}>
+        <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>
+          ▤ <span>{language === 'DE' ? 'Übersicht' : 'Обзор'}</span>
+        </button>
+        <button className={pageTab === 'lessons' ? 'active' : ''} onClick={() => setPageTab('lessons')}>
+          ▣ <span>{language === 'DE' ? 'Stunden' : 'Уроки'}</span>
+        </button>
+        <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}>
+          ▦ <span>{language === 'DE' ? 'Hausaufgaben' : 'Домашние задания'}</span>
+        </button>
+        <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}>
+          ▥ <span>{language === 'DE' ? 'Karten' : 'Карточки'}</span>
+        </button>
+        <div className="group-detail-tabs__spacer" />
+        <Link className="group-message-btn" to={`/students/${studentId}/drive`}>
+          Google Drive
+        </Link>
+      </div>
+
       {error && <div className="banner banner--error">{error}</div>}
 
-      {summary && (
+      {pageTab === 'overview' && (
         <>
-          <div className="panel row center">
-            <SummaryStat label={t('cards.summary.total')} value={summary.total} />
-            <SummaryStat label={t('cards.summary.dueNow')} value={summary.dueNow} />
-            <SummaryStat label={t('cards.summary.awaiting')} value={summary.awaitingRepetition} />
-            <SummaryStat label={t('cards.summary.learned')} value={summary.learned} />
-          </div>
-          {summary.total < MIN_CARDS_TO_START && (
-            <div className="banner banner--info">{t('cards.tooFew', { min: MIN_CARDS_TO_START })}</div>
+          {summary && (
+            <>
+              <div className="panel row center">
+                <SummaryStat label={t('cards.summary.total')} value={summary.total} />
+                <SummaryStat label={t('cards.summary.dueNow')} value={summary.dueNow} />
+                <SummaryStat label={t('cards.summary.awaiting')} value={summary.awaitingRepetition} />
+                <SummaryStat label={t('cards.summary.learned')} value={summary.learned} />
+              </div>
+              {summary.total < MIN_CARDS_TO_START && (
+                <div className="banner banner--info">{t('cards.tooFew', { min: MIN_CARDS_TO_START })}</div>
+              )}
+            </>
           )}
+
+          <div className="panel row" style={{ marginTop: 14, gap: 24, flexWrap: 'wrap' }}>
+            <SummaryStat label={historyText(language, 'Проведено уроков', 'Abgeschlossene Stunden')} value={lessonHistory.length} />
+            <SummaryStat label={historyText(language, 'PDF-домашек', 'PDF-Hausaufgaben')} value={worksheetHomeworks.length} />
+            <SummaryStat label={historyText(language, 'Наборов карточек', 'Kartensätze')} value={cardBatches.length} />
+          </div>
         </>
       )}
 
-      <h2 id="lessons">{historyText(language, 'Проведённые уроки', 'Abgeschlossene Stunden')}</h2>
+      {pageTab === 'lessons' && (
+        <>
+      <h2>{historyText(language, 'Проведённые уроки', 'Abgeschlossene Stunden')}</h2>
       <div className="panel stack">
         {lessonHistory.length === 0 ? (
           <p className="muted">{historyText(language, 'Проведённых уроков пока нет.', 'Noch keine abgeschlossenen Stunden.')}</p>
@@ -207,8 +235,50 @@ export function StudentDetailPage() {
             ))
         )}
       </div>
+        </>
+      )}
 
-      <h2 id="cards">{historyText(language, 'Карточки', 'Karten')}</h2>
+      {pageTab === 'homework' && (
+        <>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+            <h2 style={{ margin: 0 }}>{historyText(language, 'Домашние задания', 'Hausaufgaben')}</h2>
+            <Link className="btn" to={`/students/${studentId}/homeworks`}>
+              {historyText(language, 'Управлять домашкой', 'Hausaufgaben verwalten')}
+            </Link>
+          </div>
+
+          {worksheetHomeworks.length === 0 ? (
+            <div className="panel"><p className="muted" style={{ margin: 0 }}>{historyText(language, 'PDF-домашек пока нет.', 'Noch keine PDF-Hausaufgaben.')}</p></div>
+          ) : (
+            <div className="panel">
+              <div className="history-list">
+                {worksheetHomeworks.map((homework) => (
+                  <Link
+                    key={homework.id}
+                    className="history-row"
+                    to={`/teacher/students/${studentId}/homeworks/${homework.id}`}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <span>{formatDate(homework.startDate, language)}</span>
+                    <span>{homework.worksheetFilename ?? historyText(language, 'Домашка в PDF', 'PDF-Hausaufgabe')}</span>
+                    <span className={`pill ${homework.submitted ? 'pill--learned' : homework.overdue ? 'pill--danger' : 'pill--active'}`}>
+                      {homework.submitted
+                        ? historyText(language, 'Сдано', 'Abgegeben')
+                        : homework.overdue
+                          ? historyText(language, 'Просрочено', 'Überfällig')
+                          : historyText(language, 'Назначено', 'Geplant')}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {pageTab === 'cards' && (
+        <>
+      <h2>{historyText(language, 'Карточки', 'Karten')}</h2>
       <h3>{historyText(language, 'Создать карточки', 'Karten erstellen')}</h3>
       <div className="panel stack">
         <form className="row" onSubmit={createCardBatch}>
@@ -397,6 +467,8 @@ export function StudentDetailPage() {
           </button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }
