@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Card, CardSummary, DailyReviewHistoryItem, DailyReviewStatus, Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
 
 const MIN_CARDS_TO_START = 4;
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
@@ -25,18 +26,21 @@ export function StudentDetailPage() {
   const [pilotMessage, setPilotMessage] = useState<string | null>(null);
   const [pilotBusy, setPilotBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [lessonHistory, setLessonHistory] = useState<OnlineClass[]>([]);
 
   const reload = useCallback(async () => {
-    const [allBatches, cardList, cardSummary, history] = await Promise.all([
+    const [allBatches, cardList, cardSummary, history, lessons] = await Promise.all([
       api.homeworks.listForStudent(studentId),
       api.cards.listForStudent(studentId),
       api.cards.summaryForStudent(studentId),
       api.students.reviewHistory(studentId),
+      onlineClassesApi.studentHistory(studentId),
     ]);
     setCardBatches(allBatches.filter((item) => item.totalCards > 0));
     setCards(cardList);
     setSummary(cardSummary);
     setReviewHistory(history);
+    setLessonHistory(lessons);
     setLoading(false);
   }, [studentId]);
 
@@ -160,6 +164,24 @@ export function StudentDetailPage() {
           )}
         </>
       )}
+
+      <h2>{historyText(language, 'Проведённые уроки', 'Abgeschlossene Stunden')}</h2>
+      <div className="panel stack">
+        {lessonHistory.length === 0 ? (
+          <p className="muted">{historyText(language, 'Проведённых уроков пока нет.', 'Noch keine abgeschlossenen Stunden.')}</p>
+        ) : (
+          [...lessonHistory]
+            .sort((a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime())
+            .map((lesson, index) => (
+              <div key={lesson.id} className="list-row">
+                <div>
+                  <div className="list-row__title">{historyText(language, `Урок ${index + 1}`, `Stunde ${index + 1}`)}</div>
+                  <div className="muted">{new Date(lesson.scheduledStartAt).toLocaleString(language === 'DE' ? 'de-DE' : 'ru-RU')}</div>
+                </div>
+              </div>
+            ))
+        )}
+      </div>
 
       <h2>{historyText(language, 'Создать карточки', 'Karten erstellen')}</h2>
       <div className="panel stack">
