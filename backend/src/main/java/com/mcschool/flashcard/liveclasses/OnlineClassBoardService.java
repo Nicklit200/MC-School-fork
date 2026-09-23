@@ -51,7 +51,6 @@ public class OnlineClassBoardService {
                     .findAllByOnlineClassIdOrderByCreatedAtAsc(classId)
                     .stream()
                     .filter(participant -> !participant.isHost())
-                    .filter(OnlineClassParticipant::isConnected)
                     .map(participant -> new OnlineClassBoardStudentResponse(
                             participant.getUser().getId(),
                             participant.getUser().getFullName()))
