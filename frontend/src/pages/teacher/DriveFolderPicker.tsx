@@ -87,7 +87,7 @@ export function DriveFolderPicker({ studentId, savedFolderId, kind }: Props) {
         if (result.status === 'error') { setError(result.message || (ru ? 'Не удалось проверить папку' : 'Ordner konnte nicht geprüft werden')); return; }
         setTestMessage(kind === 'homework'
           ? (ru ? 'Папка для выполненных домашних работ доступна.' : 'Ordner für abgegebene Hausaufgaben ist verfügbar.')
-          : (ru ? 'Папка для транскрипций доступна.' : 'Ordner für Transkriptionen ist verfügbar.'));
+          : (ru ? 'Папка для уроков и досок доступна.' : 'Ordner für Unterricht und Tafeln ist verfügbar.'));
         setTestFileUrl(result.fileUrl ?? null);
       }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -98,13 +98,13 @@ export function DriveFolderPicker({ studentId, savedFolderId, kind }: Props) {
     ? (ru ? 'Карточки → Google Drive' : 'Karten → Google Drive')
     : kind === 'homework'
       ? (ru ? 'Сделанные домашки → Google Drive' : 'Abgegebene Hausaufgaben → Google Drive')
-      : (ru ? 'Транскрипции уроков → Google Drive' : 'Unterrichtstranskriptionen → Google Drive');
+      : (ru ? 'Уроки и доски → Google Drive' : 'Unterricht und Tafeln → Google Drive');
 
   const description = kind === 'cards'
     ? (ru ? 'Выберите папку, куда после завершения карточек автоматически сохраняется таблица с результатами ученика.' : 'Wähle den Ordner, in dem nach abgeschlossenen Karten-Sessions die Ergebnistabelle gespeichert wird.')
     : kind === 'homework'
       ? (ru ? 'Выберите отдельную папку, куда после сдачи домашки автоматически сохраняется готовый PDF ученика с его пометками.' : 'Wähle einen separaten Ordner, in dem nach der Abgabe automatisch das fertige PDF mit den Notizen des Schülers gespeichert wird.')
-      : (ru ? 'Выберите отдельную папку ученика, куда после урока будет загружаться файл транскрипции Soniox.' : 'Wähle den Ordner des Schülers, in den nach dem Unterricht die Soniox-Transkription hochgeladen wird.');
+      : (ru ? 'Выберите папку ученика, куда после завершения урока автоматически сохраняются доски урока и транскрипция Soniox.' : 'Wähle den Schülerordner, in den nach dem Unterricht automatisch Tafeln und die Soniox-Transkription gespeichert werden.');
 
   return (
     <div className="panel">
