@@ -8,7 +8,7 @@ import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
 
 const MIN_CARDS_TO_START = 4;
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
-type PageTab = 'overview' | 'lessons' | 'homework' | 'cards';
+type PageTab = 'lessons' | 'homework' | 'cards';
 
 /** Teacher cards area. PDF homework is intentionally not shown or linked from here. */
 export function StudentDetailPage() {
@@ -30,7 +30,7 @@ export function StudentDetailPage() {
   const [lessonHistory, setLessonHistory] = useState<OnlineClass[]>([]);
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
-  const [pageTab, setPageTab] = useState<PageTab>('overview');
+  const [pageTab, setPageTab] = useState<PageTab>('lessons');
 
   const reload = useCallback(async () => {
     const [studentInfo, allBatches, cardList, cardSummary, history, lessons] = await Promise.all([
@@ -171,10 +171,29 @@ export function StudentDetailPage() {
         </div>
       </section>
 
+      {error && <div className="banner banner--error">{error}</div>}
+
+      <div className="panel row" style={{ marginBottom: 14, gap: 24, flexWrap: 'wrap' }}>
+        <SummaryStat label={historyText(language, 'Проведено уроков', 'Abgeschlossene Stunden')} value={lessonHistory.length} />
+        <SummaryStat label={historyText(language, 'PDF-домашек', 'PDF-Hausaufgaben')} value={worksheetHomeworks.length} />
+        <SummaryStat label={historyText(language, 'Наборов карточек', 'Kartensätze')} value={cardBatches.length} />
+      </div>
+
+      {summary && (
+        <>
+          <div className="panel row center" style={{ marginBottom: 14 }}>
+            <SummaryStat label={t('cards.summary.total')} value={summary.total} />
+            <SummaryStat label={t('cards.summary.dueNow')} value={summary.dueNow} />
+            <SummaryStat label={t('cards.summary.awaiting')} value={summary.awaitingRepetition} />
+            <SummaryStat label={t('cards.summary.learned')} value={summary.learned} />
+          </div>
+          {summary.total < MIN_CARDS_TO_START && (
+            <div className="banner banner--info" style={{ marginBottom: 14 }}>{t('cards.tooFew', { min: MIN_CARDS_TO_START })}</div>
+          )}
+        </>
+      )}
+
       <div className="group-detail-tabs" style={{ marginBottom: 18 }}>
-        <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>
-          ▤ <span>{language === 'DE' ? 'Übersicht' : 'Обзор'}</span>
-        </button>
         <button className={pageTab === 'lessons' ? 'active' : ''} onClick={() => setPageTab('lessons')}>
           ▣ <span>{language === 'DE' ? 'Stunden' : 'Уроки'}</span>
         </button>
@@ -189,32 +208,6 @@ export function StudentDetailPage() {
           Google Drive
         </Link>
       </div>
-
-      {error && <div className="banner banner--error">{error}</div>}
-
-      {pageTab === 'overview' && (
-        <>
-          {summary && (
-            <>
-              <div className="panel row center">
-                <SummaryStat label={t('cards.summary.total')} value={summary.total} />
-                <SummaryStat label={t('cards.summary.dueNow')} value={summary.dueNow} />
-                <SummaryStat label={t('cards.summary.awaiting')} value={summary.awaitingRepetition} />
-                <SummaryStat label={t('cards.summary.learned')} value={summary.learned} />
-              </div>
-              {summary.total < MIN_CARDS_TO_START && (
-                <div className="banner banner--info">{t('cards.tooFew', { min: MIN_CARDS_TO_START })}</div>
-              )}
-            </>
-          )}
-
-          <div className="panel row" style={{ marginTop: 14, gap: 24, flexWrap: 'wrap' }}>
-            <SummaryStat label={historyText(language, 'Проведено уроков', 'Abgeschlossene Stunden')} value={lessonHistory.length} />
-            <SummaryStat label={historyText(language, 'PDF-домашек', 'PDF-Hausaufgaben')} value={worksheetHomeworks.length} />
-            <SummaryStat label={historyText(language, 'Наборов карточек', 'Kartensätze')} value={cardBatches.length} />
-          </div>
-        </>
-      )}
 
       {pageTab === 'lessons' && (
         <>
