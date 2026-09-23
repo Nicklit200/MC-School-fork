@@ -389,10 +389,12 @@ export function WhiteboardCanvas({
   const handleDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
     containerRef.current?.focus({ preventScroll: true });
 
-    // Desktop "hand tool": hold Space, then drag with the mouse/stylus.
-    // This is intentionally checked before readOnly so archived boards can
-    // still be navigated without accidentally creating marks.
-    if (spacePanRef.current && event.evt.pointerType !== 'touch') {
+    // Desktop "hand tool": hold Space + drag, or hold the middle mouse
+    // button (wheel click) + drag. Middle-click must never create ink.
+    // This is checked before readOnly so archived boards can still be moved.
+    const middleMousePan =
+      event.evt.pointerType === 'mouse' && event.evt.button === 1;
+    if ((spacePanRef.current || middleMousePan) && event.evt.pointerType !== 'touch') {
       event.evt.preventDefault();
       event.evt.stopPropagation();
       try {
@@ -880,6 +882,10 @@ export function WhiteboardCanvas({
       }}
       onPointerLeave={() => {
         pointerInsideRef.current = false;
+      }}
+      onAuxClick={(event) => {
+        // Stop the browser's native middle-click auto-scroll on the board.
+        if (event.button === 1) event.preventDefault();
       }}
       style={{
         cursor: spaceDragging ? 'grabbing' : spacePanActive ? 'grab' : undefined,
