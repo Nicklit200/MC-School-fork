@@ -58,8 +58,12 @@ public class WebPushService {
             var response = pushService.send(notification);
             int status = response.getStatusLine().getStatusCode();
             String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity());
-            if (status == 404 || status == 410) {
+            if (status == 404 || status == 410
+                    || (status == 400 && responseBody.contains("VapidPkHashMismatch"))) {
                 subscriptionRepository.delete(subscription);
+                if (status == 400) {
+                    throw new IllegalStateException("Push subscription used an old VAPID key and was removed");
+                }
             } else if (status >= 400) {
                 String endpointHost;
                 try {
