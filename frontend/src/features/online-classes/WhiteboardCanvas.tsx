@@ -907,25 +907,31 @@ export function WhiteboardCanvas({
           Готовим доску…
         </div>
       ) : (
-        <div
-          className="whiteboard__zoom-layer"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: '0 0',
-          }}
-        >
+        <div className="whiteboard__zoom-layer">
           {backgroundImageUrl && (
-            <img
-              className="whiteboard__background"
-              src={backgroundImageUrl}
-              alt=""
-              aria-hidden="true"
-              draggable={false}
-            />
+            <div
+              className="whiteboard__background-zoom"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              <img
+                className="whiteboard__background"
+                src={backgroundImageUrl}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+              />
+            </div>
           )}
           <Stage
             width={viewport.width}
             height={viewport.height}
+            x={pan.x}
+            y={pan.y}
+            scaleX={zoom}
+            scaleY={zoom}
             onPointerDown={handleDown}
             onPointerMove={handleMove}
             onPointerUp={handleUp}
