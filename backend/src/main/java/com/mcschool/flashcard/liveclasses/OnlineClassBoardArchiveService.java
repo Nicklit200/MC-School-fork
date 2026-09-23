@@ -130,37 +130,60 @@ public class OnlineClassBoardArchiveService {
             }
         }
 
-        String prefix = safeFileName(
-                onlineClass.getScheduledStartAt().atZone(SCHOOL_ZONE).format(FILE_TIME)
-                        + "_" + onlineClass.getTitle());
+        long lessonNumber = lessonNumber(onlineClass);
+        String lessonPrefix = String.format("Urok_%02d", Math.max(1L, lessonNumber));
 
-        // Group-level folder acts as the teacher/central archive for a group lesson.
+        // For a group lesson there is one common Google Drive folder.
+        // All completed student boards live together and are distinguished by
+        // lesson number + student name. We deliberately do not duplicate these
+        // group files into every student's personal Drive folder.
         if (onlineClass.getGroup() != null) {
             String groupFolder = onlineClass.getGroup().getGoogleDriveTranscriptFolderId();
-            if (hasText(groupFolder)) {
-                uploadIfNeeded(groupFolder, prefix + "_Obshchaya_doska.pdf", sharedPdf);
-                for (Recipient recipient : recipients.values()) {
-                    uploadIfNeeded(
-                            groupFolder,
-                            prefix + "_" + safeFileName(recipient.name()) + "_doska.pdf",
-                            privatePdfs.get(recipient.id()));
-                }
+            if (!hasText(groupFolder)) {
+                log.info("Skipping group board Drive archive because no group lesson folder is configured: classId={} groupId={}",
+                        classId, onlineClass.getGroup().getId());
+                return;
             }
+
+            uploadIfNeeded(groupFolder, lessonPrefix + "_Obshchaya.pdf", sharedPdf);
+            for (Recipient recipient : recipients.values()) {
+                uploadIfNeeded(
+                        groupFolder,
+                        lessonPrefix + "_" + safeFileName(recipient.name()) + ".pdf",
+                        privatePdfs.get(recipient.id()));
+            }
+            log.info("Group lesson board archive finished: classId={} lessonNumber={} recipients={}",
+                    classId, lessonNumber, recipients.size());
+            return;
         }
 
-        // Each student gets the common board plus only their own private board.
+        // Individual lesson: keep both the common sheet and the student's
+        // completed sheet in that student's lesson folder.
         for (Recipient recipient : recipients.values()) {
             if (!hasText(recipient.folderId())) {
                 continue;
             }
-            uploadIfNeeded(recipient.folderId(), prefix + "_Obshchaya_doska.pdf", sharedPdf);
+            uploadIfNeeded(recipient.folderId(), lessonPrefix + "_Obshchaya.pdf", sharedPdf);
             uploadIfNeeded(
                     recipient.folderId(),
-                    prefix + "_Moya_doska.pdf",
+                    lessonPrefix + "_" + safeFileName(recipient.name()) + ".pdf",
                     privatePdfs.get(recipient.id()));
         }
 
-        log.info("Lesson board archive finished: classId={} recipients={}", classId, recipients.size());
+        log.info("Individual lesson board archive finished: classId={} lessonNumber={} recipients={}",
+                classId, lessonNumber, recipients.size());
+    }
+
+    private long lessonNumber(OnlineClass onlineClass) {
+        if (onlineClass.getGroup() != null) {
+            return classRepository.countEndedGroupLessonsUpTo(
+                    onlineClass.getGroup().getId(), onlineClass.getScheduledStartAt());
+        }
+        if (onlineClass.getStudent() != null) {
+            return classRepository.countEndedStudentLessonsUpTo(
+                    onlineClass.getStudent().getId(), onlineClass.getScheduledStartAt());
+        }
+        return 1L;
     }
 
     private Map<UUID, Recipient> recipientsFor(OnlineClass onlineClass) {
