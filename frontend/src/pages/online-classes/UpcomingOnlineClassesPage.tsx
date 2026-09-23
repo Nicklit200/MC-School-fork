@@ -138,6 +138,14 @@ export function UpcomingOnlineClassesPage() {
     ENDED: 3,
     CANCELLED: 4,
   };
+  const numberedStudentClasses = useMemo(() => {
+    if (user?.role !== 'STUDENT') return new Map<string, number>();
+    const all = [...history, ...classes]
+      .filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index)
+      .sort((a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime());
+    return new Map(all.map((item, index) => [item.id, index + 1]));
+  }, [classes, history, user?.role]);
+
   const visibleClasses = [...classes].sort((a, b) => {
     const byStatus = statusRank[a.status] - statusRank[b.status];
     if (byStatus !== 0) return byStatus;
@@ -199,7 +207,11 @@ export function UpcomingOnlineClassesPage() {
                     {day.classes.map((item) => (
                       <article key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: '#fff' }}>
                         <div style={{ fontSize: 17, fontWeight: 800 }}>{formatStartTime(item.scheduledStartAt, language)}</div>
-                        <div style={{ fontWeight: 750, marginTop: 4 }}>{item.title}</div>
+                        <div style={{ fontWeight: 750, marginTop: 4 }}>
+                          {language === 'DE'
+                            ? `Stunde ${numberedStudentClasses.get(item.id) ?? 1}`
+                            : `Урок ${numberedStudentClasses.get(item.id) ?? 1}`}
+                        </div>
                         <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
                           {formatLessonTime(item.scheduledStartAt, item.scheduledEndAt, language)}
                         </div>
@@ -258,7 +270,7 @@ export function UpcomingOnlineClassesPage() {
                 to={`/student/lessons/${item.id}/history`}
                 style={{ textAlign: 'left' }}
               >
-                {item.title} · {new Date(item.scheduledStartAt).toLocaleString(locale)}
+                {language === 'DE' ? `Stunde ${numberedStudentClasses.get(item.id) ?? 1}` : `Урок ${numberedStudentClasses.get(item.id) ?? 1}`} · {new Date(item.scheduledStartAt).toLocaleString(locale)}
               </Link>
             ))}
           </div>
