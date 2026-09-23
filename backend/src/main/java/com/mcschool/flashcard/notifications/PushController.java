@@ -6,6 +6,8 @@ import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import jakarta.validation.Valid;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/push")
 public class PushController {
+
+    private static final Logger log = LoggerFactory.getLogger(PushController.class);
 
     private final PushSubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
@@ -64,7 +68,11 @@ public class PushController {
     public ResponseEntity<Void> test(@AuthenticationPrincipal AuthenticatedUser principal) {
         String url = principal.role() == Role.PARENT ? "/parent" : "/today";
         for (PushSubscription subscription : subscriptionRepository.findAllByUserId(principal.id())) {
-            webPushService.send(subscription, "Mindcrafti School", "Тестовое уведомление работает 🎉", url);
+            try {
+                webPushService.send(subscription, "Mindcrafti School", "Тестовое уведомление работает 🎉", url);
+            } catch (Exception e) {
+                log.warn("Failed to send test push to subscription {}", subscription.getId(), e);
+            }
         }
         return ResponseEntity.noContent().build();
     }
