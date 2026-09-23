@@ -41,6 +41,7 @@ export function WhiteboardPanel({
   compact = false,
   heading,
   onLaserMove,
+  onZoomChange,
 }: {
   classId: string;
   actorId: string;
@@ -56,6 +57,7 @@ export function WhiteboardPanel({
   compact?: boolean;
   heading?: string;
   onLaserMove?: (point: { x: number; y: number }) => void;
+  onZoomChange?: (zoom: number) => void;
 }) {
   const { t } = useI18n();
   const [tool, setTool] = useState<Tool>('pen');
@@ -181,6 +183,7 @@ export function WhiteboardPanel({
           onLaserMove?.(point);
         }}
         onRequestText={() => window.prompt(t('onlineClass.whiteboard.textPrompt'))}
+        onZoomChange={onZoomChange}
       />
     </section>
   );
