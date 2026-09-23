@@ -125,6 +125,15 @@ public class OnlineClassController {
         return onlineClassService.listHistory(caller);
     }
 
+    /** Completed online lessons for a student owned by the current teacher. */
+    @GetMapping("/students/{studentId}/history")
+    @PreAuthorize("hasRole('TEACHER')")
+    public List<OnlineClassResponse> studentHistory(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @PathVariable UUID studentId) {
+        return onlineClassService.listStudentHistory(caller, studentId);
+    }
+
     @GetMapping("/{classId}")
     public OnlineClassResponse get(@AuthenticationPrincipal AuthenticatedUser caller,
                                    @PathVariable UUID classId) {
