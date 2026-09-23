@@ -264,12 +264,18 @@ export function StudentDetailPage() {
           [...lessonHistory]
             .sort((a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime())
             .map((lesson, index) => (
-              <div key={lesson.id} className="list-row">
+              <Link
+                key={lesson.id}
+                className="list-row"
+                to={`/teacher/lessons/${lesson.id}/history`}
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
                 <div>
                   <div className="list-row__title">{historyText(language, `Урок ${index + 1}`, `Stunde ${index + 1}`)}</div>
                   <div className="muted">{new Date(lesson.scheduledStartAt).toLocaleString(language === 'DE' ? 'de-DE' : 'ru-RU')}</div>
                 </div>
-              </div>
+                <span className="muted">→</span>
+              </Link>
             ))
         )}
       </div>
