@@ -3,7 +3,6 @@ import { api } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
 
 export function GroupTranscriptFolderPicker({ groupId }: { groupId: string }) {
-  const [groupName, setGroupName] = useState('');
   const [savedFolderId, setSavedFolderId] = useState('');
   const [drives, setDrives] = useState<DriveItem[]>([]);
   const [selectedDriveId, setSelectedDriveId] = useState('');
@@ -36,7 +35,6 @@ export function GroupTranscriptFolderPicker({ groupId }: { groupId: string }) {
           driveApi.listSharedDrives(),
         ]);
         if (cancelled) return;
-        setGroupName(group.name);
         setSavedFolderId(group.googleDriveTranscriptFolderId ?? '');
         setDrives(sharedDrives);
       } catch (e) {
