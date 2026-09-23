@@ -71,7 +71,7 @@ public class OnlineClassBoardService {
     }
 
     @Transactional(readOnly = true)
-    public byte[] renderWorkbookPage(AuthenticatedUser caller, java.util.UUID classId, int pageIndex) {
+    public byte[] renderWorkbookPage(AuthenticatedUser caller, java.util.UUID classId, int pageIndex, int requestedDpi) {
         OnlineClass onlineClass = accessService.requireParticipant(caller, classId);
         LessonPreparation preparation = preparation(onlineClass);
         if (preparation == null || !preparation.hasWorkbook()) {
@@ -84,9 +84,11 @@ public class OnlineClassBoardService {
                 throw new ResourceNotFoundException("Workbook page not found");
             }
             PDFRenderer renderer = new PDFRenderer(document);
-            // Render at 2x the previous density so PDF text stays sharp during normal
-            // classroom zoom. Handwriting is redrawn as vectors on the client.
-            BufferedImage image = renderer.renderImageWithDPI(pageIndex, 288f);
+            // Match raster density to the current classroom zoom instead of
+            // shrinking one huge PNG. This avoids dark/bold-looking text when
+            // zoomed out while still providing detail at high zoom.
+            int dpi = Math.max(96, Math.min(576, requestedDpi));
+            BufferedImage image = renderer.renderImageWithDPI(pageIndex, (float) dpi);
             ImageIO.write(image, "png", output);
             return output.toByteArray();
         } catch (IOException e) {
