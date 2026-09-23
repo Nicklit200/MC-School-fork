@@ -5,6 +5,7 @@ import type { Card, DailyReviewHistoryItem, DailyReviewStatus, Homework, Student
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
+import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
 type PageTab = 'lessons' | 'homework' | 'cards';
@@ -29,6 +30,11 @@ export function StudentDetailPage() {
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [pageTab, setPageTab] = useState<PageTab>('lessons');
+  const [homeworkStartDate, setHomeworkStartDate] = useState(() => localDateString(new Date()));
+  const [homeworkDays, setHomeworkDays] = useState(1);
+  const [homeworkFiles, setHomeworkFiles] = useState<Array<File | null>>([null]);
+  const [creatingHomework, setCreatingHomework] = useState(false);
+  const [homeworkMessage, setHomeworkMessage] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const [studentInfo, allBatches, cardList, history, lessons] = await Promise.all([
@@ -61,6 +67,63 @@ export function StudentDetailPage() {
       .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.createdAt.localeCompare(a.createdAt)),
     [homeworks],
   );
+  const homeworkDates = useMemo(
+    () => Array.from({ length: homeworkDays }, (_, index) => addDays(homeworkStartDate, index)),
+    [homeworkStartDate, homeworkDays],
+  );
+  const allHomeworkFilesSelected = homeworkFiles.length === homeworkDays && homeworkFiles.every((file) => file !== null);
+
+  function changeHomeworkDays(value: number) {
+    const next = Math.max(1, Math.min(31, value || 1));
+    setHomeworkDays(next);
+    setHomeworkFiles((current) => Array.from({ length: next }, (_, index) => current[index] ?? null));
+  }
+
+  function setHomeworkFile(index: number, file: File | null) {
+    setHomeworkFiles((current) => current.map((existing, currentIndex) => currentIndex === index ? file : existing));
+  }
+
+  function removeHomeworkFile(index: number) {
+    setHomeworkFile(index, null);
+    const input = document.getElementById(`student-homework-pdf-${index}`) as HTMLInputElement | null;
+    if (input) input.value = '';
+  }
+
+  function moveHomeworkFile(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= homeworkFiles.length) return;
+    setHomeworkFiles((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  async function createHomework(event: FormEvent) {
+    event.preventDefault();
+    if (!allHomeworkFilesSelected || creatingHomework) return;
+    setCreatingHomework(true);
+    setHomeworkMessage(null);
+    setError(null);
+    try {
+      for (let index = 0; index < homeworkFiles.length; index += 1) {
+        const file = homeworkFiles[index];
+        if (!file) continue;
+        await api.homeworks.createPdf(studentId, homeworkDates[index], file);
+      }
+      setHomeworkFiles(Array.from({ length: homeworkDays }, () => null));
+      setHomeworkMessage(
+        language === 'DE'
+          ? `${homeworkDays} Hausaufgaben wurden erstellt.`
+          : `Создано домашних заданий: ${homeworkDays}.`,
+      );
+      await reload();
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setCreatingHomework(false);
+    }
+  }
 
   async function createCardBatch(event: FormEvent) {
     event.preventDefault();
@@ -215,15 +278,126 @@ export function StudentDetailPage() {
 
       {pageTab === 'homework' && (
         <>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>{historyText(language, 'Домашние задания', 'Hausaufgaben')}</h2>
-            <Link className="btn" to={`/students/${studentId}/homeworks`}>
-              {historyText(language, 'Управлять домашкой', 'Hausaufgaben verwalten')}
-            </Link>
-          </div>
+          <section className="group-work-card" style={{ marginBottom: 18 }}>
+            <h2>{historyText(language, 'Задать PDF-домашку', 'PDF-Hausaufgabe erstellen')}</h2>
+            {homeworkMessage && <div className="banner banner--success" style={{ marginBottom: 12 }}>{homeworkMessage}</div>}
 
+            <form className="stack" onSubmit={createHomework}>
+              <div className="group-homework-options">
+                <label className="field">
+                  <span className="field__label">{historyText(language, 'Первый день', 'Erster Tag')}</span>
+                  <input
+                    className="input"
+                    type="date"
+                    value={homeworkStartDate}
+                    onChange={(e) => setHomeworkStartDate(e.target.value)}
+                    disabled={creatingHomework}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">{historyText(language, 'На сколько дней', 'Anzahl Tage')}</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={homeworkDays}
+                    onChange={(e) => changeHomeworkDays(Number(e.target.value))}
+                    disabled={creatingHomework}
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className="group-day-grid">
+                {homeworkDates.map((date, index) => {
+                  const file = homeworkFiles[index];
+                  return (
+                    <div key={`${date}-${index}`} className="group-day-card">
+                      <div className="group-day-card__head">
+                        <div>
+                          <strong>{historyText(language, `День ${index + 1}`, `Tag ${index + 1}`)}</strong>
+                          <span>{formatDate(date, language)}</span>
+                        </div>
+                        {file && (
+                          <div>
+                            <button type="button" className="mini-icon-btn" disabled={creatingHomework || index === 0} onClick={() => moveHomeworkFile(index, -1)}>↑</button>
+                            <button type="button" className="mini-icon-btn" disabled={creatingHomework || index === homeworkDays - 1} onClick={() => moveHomeworkFile(index, 1)}>↓</button>
+                            <button type="button" className="mini-delete-btn" disabled={creatingHomework} onClick={() => removeHomeworkFile(index)}>
+                              {historyText(language, 'Удалить', 'Löschen')}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="row" style={{ alignItems: 'end', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ flex: '1 1 360px' }}>
+                          <input
+                            id={`student-homework-pdf-${index}`}
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            disabled={creatingHomework}
+                            onChange={(event) => setHomeworkFile(index, event.target.files?.[0] ?? null)}
+                            style={{ display: 'none' }}
+                          />
+                          <label
+                            htmlFor={`student-homework-pdf-${index}`}
+                            className="input"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              minHeight: 46,
+                              cursor: creatingHomework ? 'default' : 'pointer',
+                              color: file ? '#172033' : '#6d7890',
+                            }}
+                          >
+                            {file
+                              ? file.name
+                              : historyText(language, 'Выбрать PDF с компьютера', 'PDF vom Computer auswählen')}
+                          </label>
+                        </div>
+                        <div style={{ paddingBottom: 1 }}>
+                          <GoogleDrivePdfPicker
+                            disabled={creatingHomework}
+                            onSelect={(driveFile) => setHomeworkFile(index, driveFile)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!allHomeworkFilesSelected && (
+                <div className="banner banner--info">
+                  {historyText(
+                    language,
+                    'Нужно выбрать PDF для каждого дня — с компьютера или из Google Drive.',
+                    'Bitte für jeden Tag eine PDF vom Computer oder aus Google Drive auswählen.',
+                  )}
+                </div>
+              )}
+
+              <button
+                className="btn group-submit-btn"
+                type="submit"
+                disabled={!allHomeworkFilesSelected || creatingHomework}
+              >
+                {creatingHomework
+                  ? historyText(language, 'Создаём домашки…', 'Hausaufgaben werden erstellt…')
+                  : historyText(language, `Задать на ${homeworkDays} дн.`, `Für ${homeworkDays} Tage erstellen`)}
+              </button>
+            </form>
+          </section>
+
+          <h2>{historyText(language, 'История домашки', 'Hausaufgaben-Historie')}</h2>
           {worksheetHomeworks.length === 0 ? (
-            <div className="panel"><p className="muted" style={{ margin: 0 }}>{historyText(language, 'PDF-домашек пока нет.', 'Noch keine PDF-Hausaufgaben.')}</p></div>
+            <div className="panel">
+              <p className="muted" style={{ margin: 0 }}>
+                {historyText(language, 'PDF-домашек пока нет.', 'Noch keine PDF-Hausaufgaben.')}
+              </p>
+            </div>
           ) : (
             <div className="panel">
               <div className="history-list">
@@ -469,6 +643,13 @@ function resolveHistoryStatus(item: DailyReviewHistoryItem): ReviewHistoryDispla
   const today = localDateString(new Date());
   if (item.date === today && item.dueCount > 0 && item.completedCount === 0) return 'EXPECTED';
   return item.status;
+}
+
+function addDays(dateString: string, days: number) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
 }
 
 function localDateString(date: Date) {
