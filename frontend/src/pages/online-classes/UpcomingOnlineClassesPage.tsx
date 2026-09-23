@@ -153,7 +153,7 @@ export function UpcomingOnlineClassesPage() {
   });
 
   return (
-    <div className="online-classes" style={{ maxWidth: user?.role === 'STUDENT' ? 1660 : undefined, margin: user?.role === 'STUDENT' ? '0 auto' : undefined }}>
+    <div className="online-classes" style={{ maxWidth: user?.role === 'STUDENT' ? 1660 : undefined, width: user?.role === 'STUDENT' ? '100%' : undefined, margin: user?.role === 'STUDENT' ? '0 auto' : undefined }}>
       {user?.role === 'STUDENT' ? (
         <div style={{ marginBottom: 18 }}>
           <h1 style={{ marginBottom: 6 }}>{language === 'DE' ? 'Unterricht' : 'Уроки'}</h1>
@@ -189,10 +189,10 @@ export function UpcomingOnlineClassesPage() {
       )}
 
       {user?.role === 'STUDENT' ? (
-        <div style={{ overflowX: 'auto', paddingBottom: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(220px, 1fr))', gap: 12, minWidth: 1540 }}>
+        <div style={{ overflowX: 'auto', paddingBottom: 12, width: '100%' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(185px, 1fr))', gap: 14, minWidth: 1365 }}>
             {scheduleDays.map((day, index) => (
-              <section key={day.key} className="panel" style={{ padding: 14, margin: 0, minHeight: 260 }}>
+              <section key={day.key} className="panel" style={{ padding: 16, margin: 0, minHeight: 300 }}>
                 <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
                   <div style={{ fontWeight: 800, fontSize: 16 }}>{formatDayTitle(day.date, index, language)}</div>
                   <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>{formatDayDate(day.date, language)}</div>
@@ -205,7 +205,7 @@ export function UpcomingOnlineClassesPage() {
                 ) : (
                   <div className="stack" style={{ gap: 8 }}>
                     {day.classes.map((item) => (
-                      <article key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: '#fff' }}>
+                      <article key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: '#fff' }}>
                         <div style={{ fontSize: 17, fontWeight: 800 }}>{formatStartTime(item.scheduledStartAt, language)}</div>
                         <div style={{ fontWeight: 750, marginTop: 4 }}>
                           {language === 'DE'
@@ -257,7 +257,7 @@ export function UpcomingOnlineClassesPage() {
         </ul>
       )}
       {user?.role === 'STUDENT' && history.length > 0 && (
-        <section className="panel" style={{ marginTop: 22, padding: 18 }}>
+        <section className="panel" style={{ marginTop: 24, padding: 22, width: '100%' }}>
           <h2 style={{ marginTop: 0 }}>История уроков</h2>
           <p className="muted" style={{ marginTop: -4 }}>
             Открой прошлый урок и посмотри рабочую тетрадь, общую доску и свою работу.
