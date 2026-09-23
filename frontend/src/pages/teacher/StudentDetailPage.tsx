@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Card, CardSummary, DailyReviewHistoryItem, DailyReviewStatus, Homework, StudentListItem } from '../../api/types';
+import type { Card, DailyReviewHistoryItem, DailyReviewStatus, Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
 
-const MIN_CARDS_TO_START = 4;
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
 type PageTab = 'lessons' | 'homework' | 'cards';
 
@@ -18,7 +17,6 @@ export function StudentDetailPage() {
   const [cardBatches, setCardBatches] = useState<Homework[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [newBatchDate, setNewBatchDate] = useState(() => localDateString(new Date()));
-  const [summary, setSummary] = useState<CardSummary | null>(null);
   const [reviewHistory, setReviewHistory] = useState<DailyReviewHistoryItem[]>([]);
   const [openHistoryDate, setOpenHistoryDate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,11 +31,10 @@ export function StudentDetailPage() {
   const [pageTab, setPageTab] = useState<PageTab>('lessons');
 
   const reload = useCallback(async () => {
-    const [studentInfo, allBatches, cardList, cardSummary, history, lessons] = await Promise.all([
+    const [studentInfo, allBatches, cardList, history, lessons] = await Promise.all([
       api.students.get(studentId),
       api.homeworks.listForStudent(studentId),
       api.cards.listForStudent(studentId),
-      api.cards.summaryForStudent(studentId),
       api.students.reviewHistory(studentId),
       onlineClassesApi.studentHistory(studentId),
     ]);
@@ -45,7 +42,6 @@ export function StudentDetailPage() {
     setHomeworks(allBatches);
     setCardBatches(allBatches.filter((item) => item.totalCards > 0));
     setCards(cardList);
-    setSummary(cardSummary);
     setReviewHistory(history);
     setLessonHistory(lessons);
     setLoading(false);
@@ -178,20 +174,6 @@ export function StudentDetailPage() {
         <SummaryStat label={historyText(language, 'PDF-домашек', 'PDF-Hausaufgaben')} value={worksheetHomeworks.length} />
         <SummaryStat label={historyText(language, 'Наборов карточек', 'Kartensätze')} value={cardBatches.length} />
       </div>
-
-      {summary && (
-        <>
-          <div className="panel row center" style={{ marginBottom: 14 }}>
-            <SummaryStat label={t('cards.summary.total')} value={summary.total} />
-            <SummaryStat label={t('cards.summary.dueNow')} value={summary.dueNow} />
-            <SummaryStat label={t('cards.summary.awaiting')} value={summary.awaitingRepetition} />
-            <SummaryStat label={t('cards.summary.learned')} value={summary.learned} />
-          </div>
-          {summary.total < MIN_CARDS_TO_START && (
-            <div className="banner banner--info" style={{ marginBottom: 14 }}>{t('cards.tooFew', { min: MIN_CARDS_TO_START })}</div>
-          )}
-        </>
-      )}
 
       <div className="group-detail-tabs" style={{ marginBottom: 18 }}>
         <button className={pageTab === 'lessons' ? 'active' : ''} onClick={() => setPageTab('lessons')}>
