@@ -127,6 +127,14 @@ export function UpcomingOnlineClassesPage() {
     });
   }, [classes]);
 
+  const numberedStudentClasses = useMemo(() => {
+    if (user?.role !== 'STUDENT') return new Map<string, number>();
+    const all = [...history, ...(classes ?? [])]
+      .filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index)
+      .sort((a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime());
+    return new Map(all.map((item, index) => [item.id, index + 1]));
+  }, [classes, history, user?.role]);
+
   if (failed && !classes) return <p role="alert">{t('onlineClass.unavailable')}</p>;
   if (!classes) return <p>{t('common.loading')}</p>;
 
@@ -138,14 +146,6 @@ export function UpcomingOnlineClassesPage() {
     ENDED: 3,
     CANCELLED: 4,
   };
-  const numberedStudentClasses = useMemo(() => {
-    if (user?.role !== 'STUDENT') return new Map<string, number>();
-    const all = [...history, ...classes]
-      .filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index)
-      .sort((a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime());
-    return new Map(all.map((item, index) => [item.id, index + 1]));
-  }, [classes, history, user?.role]);
-
   const visibleClasses = [...classes].sort((a, b) => {
     const byStatus = statusRank[a.status] - statusRank[b.status];
     if (byStatus !== 0) return byStatus;
