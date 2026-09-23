@@ -65,6 +65,23 @@ body {
 .content { max-width: 960px; margin: 0 auto; padding: 24px; }
 .app[data-variant='student'] .content { max-width: 460px; }
 
+/* Online lessons are a workspace, not a narrow reading page.
+   Give the student's weekly calendar the same comfortable width as teacher/admin views. */
+.app[data-variant='student'] .content:has(.online-classes) {
+  max-width: 1720px;
+  width: 100%;
+  margin: 0 auto;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+@media (max-width: 720px) {
+  .app[data-variant='student'] .content:has(.online-classes) {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
 /* --- Typography --- */
 h1 { font-size: 24px; margin: 0 0 16px; }
 h2 { font-size: 18px; margin: 0 0 12px; }
