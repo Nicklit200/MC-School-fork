@@ -73,6 +73,12 @@ export function WhiteboardCanvas({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
+  const [spacePanActive, setSpacePanActive] = useState(false);
+  const [spaceDragging, setSpaceDragging] = useState(false);
+  const spacePanRef = useRef(false);
+  const pointerInsideRef = useRef(false);
+  const spacePanPointerId = useRef<number | null>(null);
+  const lastPanPointer = useRef<{ x: number; y: number } | null>(null);
   const touchesRef = useRef(new Map<number, { x: number; y: number }>());
   const touchGestureRef = useRef<{
     center: { x: number; y: number } | null;
@@ -103,6 +109,57 @@ export function WhiteboardCanvas({
     });
     observer.observe(element);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const isEditable = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      if (!element) return false;
+      const tag = element.tagName;
+      return tag === 'INPUT'
+        || tag === 'TEXTAREA'
+        || tag === 'SELECT'
+        || element.isContentEditable;
+    };
+
+    const setSpaceMode = (active: boolean) => {
+      spacePanRef.current = active;
+      setSpacePanActive(active);
+      if (!active) {
+        spacePanPointerId.current = null;
+        lastPanPointer.current = null;
+        setSpaceDragging(false);
+      }
+    };
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat || isEditable(event.target)) return;
+      const element = containerRef.current;
+      const focused = element != null && (
+        document.activeElement === element
+        || element.contains(document.activeElement)
+      );
+      if (!pointerInsideRef.current && !focused) return;
+      event.preventDefault();
+      setSpaceMode(true);
+    };
+
+    const onKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.code !== 'Space') return;
+      if (spacePanRef.current) event.preventDefault();
+      setSpaceMode(false);
+    };
+
+    const onBlur = () => setSpaceMode(false);
+
+    window.addEventListener('keydown', onKeyDown, { passive: false });
+    window.addEventListener('keyup', onKeyUp, { passive: false });
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
   }, []);
 
   const clampPan = useCallback(
@@ -330,6 +387,26 @@ export function WhiteboardCanvas({
   );
 
   const handleDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
+    containerRef.current?.focus({ preventScroll: true });
+
+    // Desktop "hand tool": hold Space, then drag with the mouse/stylus.
+    // This is intentionally checked before readOnly so archived boards can
+    // still be navigated without accidentally creating marks.
+    if (spacePanRef.current && event.evt.pointerType !== 'touch') {
+      event.evt.preventDefault();
+      event.evt.stopPropagation();
+      try {
+        const target = event.evt.currentTarget as Element | null;
+        target?.setPointerCapture?.(event.evt.pointerId);
+      } catch {
+        // Pointer capture is a convenience; panning still works without it.
+      }
+      spacePanPointerId.current = event.evt.pointerId;
+      lastPanPointer.current = { x: event.evt.clientX, y: event.evt.clientY };
+      setSpaceDragging(true);
+      return;
+    }
+
     if (readOnly) return;
 
     // Tablet rule: fingers/palms never create marks. Apple Pencil / stylus
@@ -402,6 +479,20 @@ export function WhiteboardCanvas({
   };
 
   const handleMove = (event: Konva.KonvaEventObject<PointerEvent>) => {
+    if (
+      spacePanPointerId.current !== null
+      && spacePanPointerId.current === event.evt.pointerId
+      && lastPanPointer.current
+    ) {
+      event.evt.preventDefault();
+      event.evt.stopPropagation();
+      const previous = lastPanPointer.current;
+      const next = { x: event.evt.clientX, y: event.evt.clientY };
+      lastPanPointer.current = next;
+      panBy(next.x - previous.x, next.y - previous.y);
+      return;
+    }
+
     if (event.evt.pointerType === 'touch') return;
     if (
       activePointerType.current === 'touch'
@@ -487,6 +578,25 @@ export function WhiteboardCanvas({
   };
 
   const handleUp = (event?: Konva.KonvaEventObject<PointerEvent>) => {
+    if (
+      event
+      && spacePanPointerId.current !== null
+      && spacePanPointerId.current === event.evt.pointerId
+    ) {
+      event.evt.preventDefault();
+      event.evt.stopPropagation();
+      try {
+        const target = event.evt.currentTarget as Element | null;
+        target?.releasePointerCapture?.(event.evt.pointerId);
+      } catch {
+        // Ignore capture-release races.
+      }
+      spacePanPointerId.current = null;
+      lastPanPointer.current = null;
+      setSpaceDragging(false);
+      return;
+    }
+
     if (event) {
       if (event.evt.pointerType === 'touch') return;
       if (
@@ -765,7 +875,16 @@ export function WhiteboardCanvas({
       className="whiteboard__surface"
       tabIndex={0}
       onKeyDown={handleSurfaceKeyDown}
-      aria-label="Доска. Ctrl плюс или Ctrl колесо — приблизить, Ctrl минус — отдалить."
+      onPointerEnter={() => {
+        pointerInsideRef.current = true;
+      }}
+      onPointerLeave={() => {
+        pointerInsideRef.current = false;
+      }}
+      style={{
+        cursor: spaceDragging ? 'grabbing' : spacePanActive ? 'grab' : undefined,
+      }}
+      aria-label="Доска. Ctrl плюс или Ctrl колесо — приблизить. Удерживай пробел и тяни мышью, чтобы двигать документ."
     >
       {!viewportReady ? (
         <div
