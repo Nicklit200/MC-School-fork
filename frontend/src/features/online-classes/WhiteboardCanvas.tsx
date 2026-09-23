@@ -43,6 +43,7 @@ interface Props {
   remoteLaserPointers?: { actorId: string; points: { x: number; y: number; at: number }[] }[];
   onLaserMove?: (point: { x: number; y: number }) => void;
   onRequestText?: () => string | null;
+  onZoomChange?: (zoom: number) => void;
 }
 
 /**
@@ -66,6 +67,7 @@ export function WhiteboardCanvas({
   remoteLaserPointers = [],
   onLaserMove,
   onRequestText,
+  onZoomChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -221,6 +223,12 @@ export function WhiteboardCanvas({
     // Keep the visible page inside the surface after a resize.
     commitView(zoomRef.current, panRef.current);
   }, [commitView, viewport.height, viewport.width]);
+
+  useEffect(() => {
+    if (!onZoomChange) return;
+    const timer = window.setTimeout(() => onZoomChange(zoom), 180);
+    return () => window.clearTimeout(timer);
+  }, [onZoomChange, zoom]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -690,9 +698,10 @@ export function WhiteboardCanvas({
 
   const renderShape = (key: string, shape: Shape) => {
     const stroke = shape.color ?? '#111111';
-    // Keep the selected pen thickness visually stable while the document zooms.
-    // Geometry scales with the PDF; stroke thickness does not balloon.
-    const width = Math.max(1 / zoom, ((shape.width ?? 0.004) * viewport.width) / zoom);
+    // Pen width belongs to the document, not to the screen. This matches
+    // Goodnotes: zooming the page scales handwriting and PDF together, so
+    // strokes do not look artificially bold when the page is zoomed out.
+    const width = Math.max(1, (shape.width ?? 0.004) * viewport.width);
     const opacity = shape.kind === 'highlighter' ? 0.35 : 1;
 
     switch (shape.kind) {
