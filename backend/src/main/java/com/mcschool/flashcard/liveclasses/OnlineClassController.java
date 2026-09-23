@@ -446,8 +446,9 @@ public class OnlineClassController {
     public byte[] workbookPage(
             @AuthenticationPrincipal AuthenticatedUser caller,
             @PathVariable UUID classId,
-            @PathVariable int pageIndex) {
-        return boardService.renderWorkbookPage(caller, classId, pageIndex);
+            @PathVariable int pageIndex,
+            @RequestParam(defaultValue = "144") int dpi) {
+        return boardService.renderWorkbookPage(caller, classId, pageIndex, dpi);
     }
 
     // --- Annotations ---------------------------------------------------------
