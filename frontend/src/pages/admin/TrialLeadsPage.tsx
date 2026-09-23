@@ -113,6 +113,7 @@ export function TrialLeadsPage() {
           <p>Телефон сохраняется до анкеты. Статус показывает последний этап, до которого человек дошёл. Список обновляется автоматически каждые 10 секунд.</p>
         </div>
         <div className="trial-lead-actions">
+          <Link className="btn btn--secondary" to="/admin/site-visits">Посещения</Link>
           <Link className="btn btn--secondary" to="/admin/settings">Уведомления</Link>
           <button type="button" className="btn" onClick={() => void load({ silent: true })} disabled={loading || refreshing}>{refreshing ? 'Обновляем…' : 'Обновить'}</button>
         </div>

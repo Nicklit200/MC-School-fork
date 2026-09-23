@@ -34,6 +34,33 @@ export type TrialLead = {
   updatedAt: string;
 };
 
+
+export type SiteVisit = {
+  id: string;
+  sessionId: string;
+  path?: string | null;
+  source?: string | null;
+  referrer?: string | null;
+  deviceType?: string | null;
+  deviceModel?: string | null;
+  osName?: string | null;
+  osVersion?: string | null;
+  browserName?: string | null;
+  browserVersion?: string | null;
+  screenSize?: string | null;
+  viewportSize?: string | null;
+  language?: string | null;
+  userAgent?: string | null;
+  funnelStage?: string | null;
+  grade?: string | null;
+  goal?: string | null;
+  priority?: string | null;
+  leadPhone?: string | null;
+  leadStatus?: TrialLeadStatus | null;
+  createdAt: string;
+  updatedAt?: string | null;
+};
+
 function headers(): Record<string, string> {
   const token = getAccessToken();
   return {
@@ -51,6 +78,7 @@ async function parse<T>(response: Response): Promise<T> {
 
 export const trialLeadsApi = {
   list: async (): Promise<TrialLead[]> => parse<TrialLead[]>(await fetch(`${BASE_URL}/admin/trial-leads`, { headers: headers() })),
+  listVisits: async (): Promise<SiteVisit[]> => parse<SiteVisit[]>(await fetch(`${BASE_URL}/admin/site-visits`, { headers: headers() })),
   setStatus: async (id: string, status: TrialLeadStatus): Promise<void> => {
     await parse(await fetch(`${BASE_URL}/admin/trial-leads/${id}/status`, {
       method: 'PATCH',
