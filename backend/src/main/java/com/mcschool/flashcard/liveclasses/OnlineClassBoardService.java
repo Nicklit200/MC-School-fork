@@ -84,7 +84,9 @@ public class OnlineClassBoardService {
                 throw new ResourceNotFoundException("Workbook page not found");
             }
             PDFRenderer renderer = new PDFRenderer(document);
-            BufferedImage image = renderer.renderImageWithDPI(pageIndex, 144f);
+            // Render at 2x the previous density so PDF text stays sharp during normal
+            // classroom zoom. Handwriting is redrawn as vectors on the client.
+            BufferedImage image = renderer.renderImageWithDPI(pageIndex, 288f);
             ImageIO.write(image, "png", output);
             return output.toByteArray();
         } catch (IOException e) {
