@@ -29,6 +29,25 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
     List<OnlineClass> findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(
             UUID teacherId, List<OnlineClassStatus> statuses);
 
+    @Query("""
+            SELECT COUNT(c) FROM OnlineClass c
+            WHERE c.group.id = :groupId
+              AND c.status = com.mcschool.flashcard.liveclasses.OnlineClassStatus.ENDED
+              AND c.scheduledStartAt <= :scheduledStartAt
+            """)
+    long countEndedGroupLessonsUpTo(@Param("groupId") UUID groupId,
+                                    @Param("scheduledStartAt") Instant scheduledStartAt);
+
+    @Query("""
+            SELECT COUNT(c) FROM OnlineClass c
+            WHERE c.student.id = :studentId
+              AND c.status = com.mcschool.flashcard.liveclasses.OnlineClassStatus.ENDED
+              AND c.scheduledStartAt <= :scheduledStartAt
+            """)
+    long countEndedStudentLessonsUpTo(@Param("studentId") UUID studentId,
+                                      @Param("scheduledStartAt") Instant scheduledStartAt);
+
+
     /**
      * Classes a student may see: bound directly to them, or to a group in which
      * they hold an active membership. Membership is resolved in the query so a
