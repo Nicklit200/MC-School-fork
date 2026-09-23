@@ -58,6 +58,7 @@ public class OnlineClassController {
     private final OnlineClassTranscriptService transcriptService;
     private final OnlineClassAnnotationService annotationService;
     private final OnlineClassBoardService boardService;
+    private final OnlineClassBoardArchiveService boardArchiveService;
 
     public OnlineClassController(OnlineClassService onlineClassService,
                                  OnlineClassAdmissionService admissionService,
@@ -67,7 +68,8 @@ public class OnlineClassController {
                                  OnlineClassRecordingService recordingService,
                                  OnlineClassTranscriptService transcriptService,
                                  OnlineClassAnnotationService annotationService,
-                                 OnlineClassBoardService boardService) {
+                                 OnlineClassBoardService boardService,
+                                 OnlineClassBoardArchiveService boardArchiveService) {
         this.onlineClassService = onlineClassService;
         this.admissionService = admissionService;
         this.hostControlService = hostControlService;
@@ -77,6 +79,7 @@ public class OnlineClassController {
         this.transcriptService = transcriptService;
         this.annotationService = annotationService;
         this.boardService = boardService;
+        this.boardArchiveService = boardArchiveService;
     }
 
     /** Creates or returns the durable class for a calendar occurrence. */
@@ -158,7 +161,9 @@ public class OnlineClassController {
     @PreAuthorize("hasRole('TEACHER')")
     public OnlineClassResponse end(@AuthenticationPrincipal AuthenticatedUser caller,
                                    @PathVariable UUID classId) {
-        return onlineClassService.end(caller, classId);
+        OnlineClassResponse response = onlineClassService.end(caller, classId);
+        boardArchiveService.archiveAfterEnd(classId);
+        return response;
     }
 
     @PostMapping("/{classId}/cancel")
@@ -255,7 +260,9 @@ public class OnlineClassController {
             @PathVariable UUID classId,
             @RequestBody FinishClassRequest request) {
         attendanceService.confirm(caller, classId, request == null ? null : request.attendance());
-        return onlineClassService.end(caller, classId);
+        OnlineClassResponse response = onlineClassService.end(caller, classId);
+        boardArchiveService.archiveAfterEnd(classId);
+        return response;
     }
 
     @PostMapping("/{classId}/participants/{userId}/mute")
