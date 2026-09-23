@@ -34,7 +34,12 @@ export function SettingsPage() {
 
         const registration = await navigator.serviceWorker.register('/sw.js');
         await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (subscription && !subscriptionUsesKey(subscription, config.publicKey)) {
+          await subscription.unsubscribe();
+          subscription = null;
+        }
 
         if (!subscription) {
           setPushEnabled(false);
@@ -106,6 +111,20 @@ export function SettingsPage() {
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
+      const iosDevice = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      if (subscription && (iosDevice || !subscriptionUsesKey(subscription, config.publicKey))) {
+        try {
+          const previous = subscription.toJSON();
+          if (previous.endpoint && previous.keys?.p256dh && previous.keys?.auth) {
+            await api.push.unsubscribe({ endpoint: previous.endpoint, p256dh: previous.keys.p256dh, auth: previous.keys.auth });
+          }
+        } catch {
+          // Continue rebuilding the local subscription even if server cleanup fails.
+        }
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      await registration.update();
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -118,6 +137,7 @@ export function SettingsPage() {
       }
       await api.push.subscribe({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
       setPushEnabled(true);
+      await api.push.test();
     } catch (e) {
       setError(e instanceof Error ? e.message : toErrorMessage(e, t));
     } finally {
@@ -287,4 +307,17 @@ function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
     bytes[i] = rawData.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+
+function subscriptionUsesKey(subscription: PushSubscription, publicKey: string): boolean {
+  const expected = new Uint8Array(urlBase64ToArrayBuffer(publicKey));
+  const current = subscription.options.applicationServerKey
+    ? new Uint8Array(subscription.options.applicationServerKey)
+    : null;
+  if (!current || current.length !== expected.length) return false;
+  for (let i = 0; i < current.length; i += 1) {
+    if (current[i] !== expected[i]) return false;
+  }
+  return true;
 }
