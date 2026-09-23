@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Arrow, Circle, Ellipse, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import {
   compactStrokePoints,
@@ -22,6 +22,13 @@ export type Tool =
 
 /** Laser movement may be sampled; handwriting itself is collected losslessly. */
 const LASER_SAMPLE_INTERVAL_MS = 16;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 5;
+const ZOOM_STEP = 1.2;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 interface Props {
   shapes: RenderableShape[];
@@ -62,6 +69,15 @@ export function WhiteboardCanvas({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const touchesRef = useRef(new Map<number, { x: number; y: number }>());
+  const touchGestureRef = useRef<{
+    center: { x: number; y: number } | null;
+    distance: number | null;
+  }>({ center: null, distance: null });
   const [draft, setDraft] = useState<Shape | null>(null);
   const [committedDraft, setCommittedDraft] = useState<{ operationId: string; shape: Shape } | null>(null);
   const [localLaserTrail, setLocalLaserTrail] = useState<
@@ -89,6 +105,173 @@ export function WhiteboardCanvas({
     return () => observer.disconnect();
   }, []);
 
+  const clampPan = useCallback(
+    (candidate: { x: number; y: number }, scale: number) => ({
+      x: clamp(candidate.x, viewport.width * (1 - scale), 0),
+      y: clamp(candidate.y, viewport.height * (1 - scale), 0),
+    }),
+    [viewport.height, viewport.width],
+  );
+
+  const commitView = useCallback(
+    (nextZoom: number, nextPan: { x: number; y: number }) => {
+      const boundedZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+      const boundedPan = boundedZoom <= MIN_ZOOM
+        ? { x: 0, y: 0 }
+        : clampPan(nextPan, boundedZoom);
+      zoomRef.current = boundedZoom;
+      panRef.current = boundedPan;
+      setZoom(boundedZoom);
+      setPan(boundedPan);
+    },
+    [clampPan],
+  );
+
+  const zoomAtClientPoint = useCallback(
+    (requestedZoom: number, clientX?: number, clientY?: number) => {
+      const element = containerRef.current;
+      if (!element || viewport.width <= 0 || viewport.height <= 0) return;
+      const rect = element.getBoundingClientRect();
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+      const anchorX = clientX === undefined ? rect.left + viewport.width / 2 : clientX;
+      const anchorY = clientY === undefined ? rect.top + viewport.height / 2 : clientY;
+      const localX = anchorX - rect.left;
+      const localY = anchorY - rect.top;
+      const contentX = (localX - currentPan.x) / currentZoom;
+      const contentY = (localY - currentPan.y) / currentZoom;
+      const nextZoom = clamp(requestedZoom, MIN_ZOOM, MAX_ZOOM);
+      commitView(nextZoom, {
+        x: localX - contentX * nextZoom,
+        y: localY - contentY * nextZoom,
+      });
+    },
+    [commitView, viewport.height, viewport.width],
+  );
+
+  const panBy = useCallback(
+    (dx: number, dy: number) => {
+      if (zoomRef.current <= MIN_ZOOM) return;
+      commitView(zoomRef.current, {
+        x: panRef.current.x + dx,
+        y: panRef.current.y + dy,
+      });
+    },
+    [commitView],
+  );
+
+  useEffect(() => {
+    // Keep the visible page inside the surface after a resize.
+    commitView(zoomRef.current, panRef.current);
+  }, [commitView, viewport.height, viewport.width]);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const onWheel = (event: WheelEvent) => {
+      element.focus({ preventScroll: true });
+
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const factor = Math.exp(-event.deltaY * 0.002);
+        zoomAtClientPoint(zoomRef.current * factor, event.clientX, event.clientY);
+        return;
+      }
+
+      // Mouse wheel / trackpad pans the zoomed document like Goodnotes.
+      if (zoomRef.current > MIN_ZOOM) {
+        event.preventDefault();
+        const dx = event.shiftKey && Math.abs(event.deltaX) < 0.01
+          ? -event.deltaY
+          : -event.deltaX;
+        const dy = event.shiftKey && Math.abs(event.deltaX) < 0.01
+          ? 0
+          : -event.deltaY;
+        panBy(dx, dy);
+      }
+    };
+
+    const touchCenter = () => {
+      const points = [...touchesRef.current.values()];
+      if (points.length === 0) return null;
+      return {
+        x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+        y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+      };
+    };
+
+    const touchDistance = () => {
+      const points = [...touchesRef.current.values()];
+      if (points.length < 2) return null;
+      return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      event.preventDefault();
+      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      touchGestureRef.current = {
+        center: touchCenter(),
+        distance: touchDistance(),
+      };
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !touchesRef.current.has(event.pointerId)) return;
+      event.preventDefault();
+
+      const previousCenter = touchGestureRef.current.center;
+      const previousDistance = touchGestureRef.current.distance;
+      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const nextCenter = touchCenter();
+      const nextDistance = touchDistance();
+      if (!nextCenter) return;
+
+      if (touchesRef.current.size >= 2 && previousCenter && previousDistance && nextDistance) {
+        const elementRect = element.getBoundingClientRect();
+        const currentZoom = zoomRef.current;
+        const currentPan = panRef.current;
+        const documentX = (previousCenter.x - elementRect.left - currentPan.x) / currentZoom;
+        const documentY = (previousCenter.y - elementRect.top - currentPan.y) / currentZoom;
+        const nextZoom = clamp(currentZoom * (nextDistance / previousDistance), MIN_ZOOM, MAX_ZOOM);
+        commitView(nextZoom, {
+          x: nextCenter.x - elementRect.left - documentX * nextZoom,
+          y: nextCenter.y - elementRect.top - documentY * nextZoom,
+        });
+      } else if (touchesRef.current.size === 1 && previousCenter) {
+        panBy(nextCenter.x - previousCenter.x, nextCenter.y - previousCenter.y);
+      }
+
+      touchGestureRef.current = { center: nextCenter, distance: nextDistance };
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      touchesRef.current.delete(event.pointerId);
+      touchGestureRef.current = {
+        center: touchCenter(),
+        distance: touchDistance(),
+      };
+    };
+
+    element.addEventListener('wheel', onWheel, { passive: false });
+    element.addEventListener('pointerdown', onPointerDown, { passive: false });
+    element.addEventListener('pointermove', onPointerMove, { passive: false });
+    element.addEventListener('pointerup', onPointerUp, { passive: false });
+    element.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+    return () => {
+      element.removeEventListener('wheel', onWheel);
+      element.removeEventListener('pointerdown', onPointerDown);
+      element.removeEventListener('pointermove', onPointerMove);
+      element.removeEventListener('pointerup', onPointerUp);
+      element.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [commitView, panBy, zoomAtClientPoint]);
+
+
+
   useEffect(() => {
     if (!committedDraft) return;
     if (shapes.some((entry) => entry.operationId === committedDraft.operationId)) {
@@ -113,26 +296,37 @@ export function WhiteboardCanvas({
     return () => window.clearInterval(timer);
   }, []);
 
-  const pointerToNormalized = useCallback(
-    (stage: Konva.Stage) => {
-      const position = stage.getPointerPosition();
-      if (!position) return null;
-      return toNormalized(position, viewport, sourceAspect);
-    },
-    [sourceAspect, viewport],
-  );
-
-  const rawPointerToNormalized = useCallback(
-    (pointerEvent: PointerEvent, stage: Konva.Stage) => {
-      const rect = stage.container().getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return null;
+  const clientToNormalized = useCallback(
+    (clientX: number, clientY: number) => {
+      const element = containerRef.current;
+      if (!element || viewport.width <= 0 || viewport.height <= 0) return null;
+      const rect = element.getBoundingClientRect();
       const pixel = {
-        x: (pointerEvent.clientX - rect.left) * (stage.width() / rect.width),
-        y: (pointerEvent.clientY - rect.top) * (stage.height() / rect.height),
+        x: (clientX - rect.left - panRef.current.x) / zoomRef.current,
+        y: (clientY - rect.top - panRef.current.y) / zoomRef.current,
       };
       return toNormalized(pixel, viewport, sourceAspect);
     },
     [sourceAspect, viewport],
+  );
+
+  const pointerToNormalized = useCallback(
+    (stage: Konva.Stage) => {
+      const position = stage.getPointerPosition();
+      if (!position) return null;
+      const rect = stage.container().getBoundingClientRect();
+      return clientToNormalized(
+        rect.left + (position.x / stage.width()) * rect.width,
+        rect.top + (position.y / stage.height()) * rect.height,
+      );
+    },
+    [clientToNormalized],
+  );
+
+  const rawPointerToNormalized = useCallback(
+    (pointerEvent: PointerEvent, _stage: Konva.Stage) =>
+      clientToNormalized(pointerEvent.clientX, pointerEvent.clientY),
+    [clientToNormalized],
   );
 
   const handleDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
@@ -167,7 +361,8 @@ export function WhiteboardCanvas({
     activePointerType.current = pointerType;
     lastSample.current = 0;
 
-    const point = pointerToNormalized(event.target.getStage()!);
+    const stage = event.target.getStage();
+    const point = stage ? rawPointerToNormalized(event.evt, stage) : null;
     if (!point) {
       activePointerId.current = null;
       activePointerType.current = null;
@@ -225,7 +420,7 @@ export function WhiteboardCanvas({
       const now = performance.now();
       if (now - lastSample.current < LASER_SAMPLE_INTERVAL_MS) return;
       lastSample.current = now;
-      const point = pointerToNormalized(stage);
+      const point = rawPointerToNormalized(event.evt, stage);
       if (point) {
         const at = Date.now();
         setLocalLaserTrail((current) => [...current.filter((p) => at - p.at < 1800), { ...point, at }].slice(-120));
@@ -383,8 +578,9 @@ export function WhiteboardCanvas({
 
   const renderShape = (key: string, shape: Shape) => {
     const stroke = shape.color ?? '#111111';
-    // Stroke width is normalized to the surface, so it scales with the view.
-    const width = Math.max(1, (shape.width ?? 0.004) * viewport.width);
+    // Keep the selected pen thickness visually stable while the document zooms.
+    // Geometry scales with the PDF; stroke thickness does not balloon.
+    const width = Math.max(1 / zoom, ((shape.width ?? 0.004) * viewport.width) / zoom);
     const opacity = shape.kind === 'highlighter' ? 0.35 : 1;
 
     switch (shape.kind) {
@@ -485,7 +681,7 @@ export function WhiteboardCanvas({
           key={`${key}-segment-${index}`}
           points={[from.x, from.y, to.x, to.y]}
           stroke={local ? '#ff6b00' : '#dc2626'}
-          strokeWidth={local ? 5 : 4.5}
+          strokeWidth={(local ? 5 : 4.5) / zoom}
           opacity={opacity}
           lineCap="round"
           lineJoin="round"
@@ -505,7 +701,7 @@ export function WhiteboardCanvas({
           key={`${key}-halo`}
           x={headPixel.x}
           y={headPixel.y}
-          radius={local ? 11 : 10}
+          radius={(local ? 11 : 10) / zoom}
           fill={local ? '#ff8a00' : '#ef4444'}
           opacity={0.18 * headOpacity}
           listening={false}
@@ -514,12 +710,12 @@ export function WhiteboardCanvas({
           key={`${key}-dot`}
           x={headPixel.x}
           y={headPixel.y}
-          radius={local ? 4.5 : 4}
+          radius={(local ? 4.5 : 4) / zoom}
           fill={local ? '#ff6b00' : '#dc2626'}
           stroke="#ffffff"
-          strokeWidth={1.5}
+          strokeWidth={1.5 / zoom}
           opacity={headOpacity}
-          shadowBlur={4}
+          shadowBlur={4 / zoom}
           shadowOpacity={0.3 * headOpacity}
           listening={false}
         />
@@ -529,17 +725,48 @@ export function WhiteboardCanvas({
 
   const viewportReady = viewport.width > 1 && viewport.height > 1;
 
+  const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && (event.key === '+' || event.key === '=')) {
+      event.preventDefault();
+      zoomAtClientPoint(zoomRef.current * ZOOM_STEP);
+      return;
+    }
+    if (modifier && event.key === '-') {
+      event.preventDefault();
+      zoomAtClientPoint(zoomRef.current / ZOOM_STEP);
+      return;
+    }
+    if (modifier && (event.key === '0' || event.key === '9')) {
+      event.preventDefault();
+      commitView(1, { x: 0, y: 0 });
+      return;
+    }
+    if (zoomRef.current <= MIN_ZOOM) return;
+    const step = 48;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      panBy(step, 0);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      panBy(-step, 0);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      panBy(0, step);
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      panBy(0, -step);
+    }
+  };
+
   return (
-    <div ref={containerRef} className="whiteboard__surface">
-      {backgroundImageUrl && (
-        <img
-          className="whiteboard__background"
-          src={backgroundImageUrl}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-        />
-      )}
+    <div
+      ref={containerRef}
+      className="whiteboard__surface"
+      tabIndex={0}
+      onKeyDown={handleSurfaceKeyDown}
+      aria-label="Доска. Ctrl плюс или Ctrl колесо — приблизить, Ctrl минус — отдалить."
+    >
       {!viewportReady ? (
         <div
           role="status"
@@ -555,39 +782,82 @@ export function WhiteboardCanvas({
           Готовим доску…
         </div>
       ) : (
-      <Stage
-        width={viewport.width}
-        height={viewport.height}
-        onPointerDown={handleDown}
-        onPointerMove={handleMove}
-        onPointerUp={handleUp}
-        onPointerCancel={handleUp}
-        onPointerLeave={(event) => {
-          if (event.evt.pointerType === 'touch') return;
-          if (
-            activePointerId.current !== null
-            && activePointerId.current !== event.evt.pointerId
-          ) {
-            return;
-          }
-          laserActive.current = false;
-          handleUp(event);
-        }}
-        style={{ touchAction: 'pinch-zoom' }}
-      >
-        <Layer listening={false}>
-          {shapes.map((entry) => renderShape(entry.operationId, entry.shape))}
-          {committedDraft &&
-            !shapes.some((entry) => entry.operationId === committedDraft.operationId) &&
-            renderShape(`committed-${committedDraft.operationId}`, committedDraft.shape)}
-          {draft && renderShape('draft', draft)}
-          {remoteLaserPointers.map((pointer) =>
-            renderLaserTrail(`remote-laser-${pointer.actorId}`, pointer.points, false),
+        <div
+          className="whiteboard__zoom-layer"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          }}
+        >
+          {backgroundImageUrl && (
+            <img
+              className="whiteboard__background"
+              src={backgroundImageUrl}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+            />
           )}
-          {renderLaserTrail('local-laser', localLaserTrail, true)}
-        </Layer>
-      </Stage>
+          <Stage
+            width={viewport.width}
+            height={viewport.height}
+            onPointerDown={handleDown}
+            onPointerMove={handleMove}
+            onPointerUp={handleUp}
+            onPointerCancel={handleUp}
+            onPointerLeave={(event) => {
+              if (event.evt.pointerType === 'touch') return;
+              if (
+                activePointerId.current !== null
+                && activePointerId.current !== event.evt.pointerId
+              ) {
+                return;
+              }
+              laserActive.current = false;
+              handleUp(event);
+            }}
+            style={{ touchAction: 'none' }}
+          >
+            <Layer listening={false}>
+              {shapes.map((entry) => renderShape(entry.operationId, entry.shape))}
+              {committedDraft &&
+                !shapes.some((entry) => entry.operationId === committedDraft.operationId) &&
+                renderShape(`committed-${committedDraft.operationId}`, committedDraft.shape)}
+              {draft && renderShape('draft', draft)}
+              {remoteLaserPointers.map((pointer) =>
+                renderLaserTrail(`remote-laser-${pointer.actorId}`, pointer.points, false),
+              )}
+              {renderLaserTrail('local-laser', localLaserTrail, true)}
+            </Layer>
+          </Stage>
+        </div>
       )}
+
+      <div className="whiteboard__zoom-controls" aria-label="Масштаб документа">
+        <button
+          type="button"
+          onClick={() => zoomAtClientPoint(zoomRef.current / ZOOM_STEP)}
+          disabled={zoom <= MIN_ZOOM}
+          title="Отдалить (Ctrl -)"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="whiteboard__zoom-value"
+          onClick={() => commitView(1, { x: 0, y: 0 })}
+          title="По размеру / 100% (Ctrl 0)"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomAtClientPoint(zoomRef.current * ZOOM_STEP)}
+          disabled={zoom >= MAX_ZOOM}
+          title="Приблизить (Ctrl +)"
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }
