@@ -47,7 +47,7 @@ export function GroupLessonsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('fromMeet') !== '1') return;
+    if (params.get('fromMeet') !== '1' && params.get('fromClass') !== '1') return;
     const completedLesson = params.get('completedLesson');
     if (completedLesson) {
       setReturnedLessonId(completedLesson);
@@ -166,46 +166,30 @@ export function GroupLessonsPage() {
   }
 
   async function requestStartLesson(lesson: GroupLesson) {
-    if (lesson.eventId.startsWith('native:')) {
-      try {
-        const onlineClass = await onlineClassesApi.materializeFromCalendar(lesson.eventId);
-        await onlineClassesApi.start(onlineClass.id);
-        navigate(`/online-classes/${onlineClass.id}`);
-      } catch (e) {
-        setError(toErrorMessage(e, t));
-      }
-      return;
-    }
-
-    if (!lesson.meetUrl) {
-      // Calendar lessons without Meet can still use the Mindcrafti classroom.
-      try {
-        const onlineClass = await onlineClassesApi.materializeFromCalendar(lesson.eventId);
-        await onlineClassesApi.start(onlineClass.id);
-        navigate(`/online-classes/${onlineClass.id}`);
-      } catch (e) {
-        setError(toErrorMessage(e, t));
-      }
-      return;
-    }
     await prepareBrowserNotifications();
     setStartReminderLessonId(lesson.eventId);
   }
 
-  async function openMeetAfterSoniox(lesson: GroupLesson) {
-    if (!lesson.meetUrl) return;
-    try { await api.lessons.ensureGoogleMeetEvents(); } catch { /* Meet still opens. */ }
-    const openedAt = Date.now();
-    localStorage.setItem(STARTED_LESSON_KEY, lesson.eventId);
-    localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
-    localStorage.removeItem(`${SONIOX_NOTIFICATION_PREFIX}${lesson.eventId}`);
-    setStartedLessonId(lesson.eventId);
-    setFinishedLessonId(null);
-    setReturnedLessonId(null);
-    setFinishReminderLessonId(null);
-    setStartReminderLessonId(null);
-    const tab = window.open(lesson.meetUrl, '_blank');
-    if (tab) tab.opener = null;
+  async function openMindcraftiAfterSoniox(lesson: GroupLesson) {
+    setError(null);
+    try {
+      const onlineClass = await onlineClassesApi.materializeFromCalendar(lesson.eventId);
+      await onlineClassesApi.start(onlineClass.id);
+
+      const openedAt = Date.now();
+      localStorage.setItem(STARTED_LESSON_KEY, lesson.eventId);
+      localStorage.setItem(STARTED_LESSON_AT_KEY, String(openedAt));
+      localStorage.removeItem(`${SONIOX_NOTIFICATION_PREFIX}${lesson.eventId}`);
+      setStartedLessonId(lesson.eventId);
+      setFinishedLessonId(null);
+      setReturnedLessonId(null);
+      setFinishReminderLessonId(null);
+      setStartReminderLessonId(null);
+
+      navigate(`/online-classes/${onlineClass.id}`);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    }
   }
 
   function confirmSonioxStopped(lesson: GroupLesson) {
@@ -236,8 +220,8 @@ export function GroupLessonsPage() {
           <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>{language === 'DE' ? 'Unterricht beendet' : 'Урок завершён'}</div>
           <div style={{ fontSize: 16, marginBottom: 14 }}>
             {returnedLesson?.title
-              ? (language === 'DE' ? `${returnedLesson.title}. Lade jetzt die Soniox-Transkription hoch.` : `${returnedLesson.title}. Теперь загрузи транскрипцию Soniox.`)
-              : (language === 'DE' ? 'Lade jetzt die Soniox-Transkription hoch.' : 'Теперь загрузи транскрипцию Soniox.')}
+              ? (language === 'DE' ? `${returnedLesson.title}. Die Tafeln werden automatisch gespeichert. Lade jetzt die Soniox-Transkription hoch.` : `${returnedLesson.title}. Доски сохраняются автоматически. Теперь загрузи транскрипцию Soniox.`)
+              : (language === 'DE' ? 'Die Tafeln werden automatisch gespeichert. Lade jetzt die Soniox-Transkription hoch.' : 'Доски сохраняются автоматически. Теперь загрузи транскрипцию Soniox.')}
           </div>
           {returnedGroup ? (
             <TranscriptUpload target={{ kind: 'group', id: returnedGroup.id, initialFolderId: returnedGroup.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
@@ -335,10 +319,10 @@ export function GroupLessonsPage() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,23,42,.55)', display: 'grid', placeItems: 'center', padding: 20 }}>
           <div className="panel" style={{ width: 'min(560px, 100%)', padding: 28, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.28)' }}>
             <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 10 }}>{language === 'DE' ? 'Soniox einschalten' : 'Включи Soniox'}</div>
-            <div style={{ fontSize: 17, lineHeight: 1.5, marginBottom: 20 }}>{language === 'DE' ? 'Starte jetzt die Soniox-Aufnahme. Erst danach öffnen wir Google Meet.' : 'Сначала запусти запись Soniox. Только после этого открывай Google Meet.'}</div>
+            <div style={{ fontSize: 17, lineHeight: 1.5, marginBottom: 20 }}>{language === 'DE' ? 'Starte zuerst Soniox. Danach öffnen wir den Mindcrafti-Unterricht mit der gemeinsamen und den persönlichen Tafeln.' : 'Сначала запусти запись Soniox. После этого откроется урок Mindcrafti с общей и личными досками.'}</div>
             <div style={{ fontWeight: 800, marginBottom: 18 }}>{startReminderLesson.title} · {formatLessonTime(startReminderLesson.startsAt, startReminderLesson.endsAt, language)}</div>
             <div className="stack" style={{ gap: 10 }}>
-              <button className="btn" type="button" onClick={() => void openMeetAfterSoniox(startReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox läuft — Google Meet öffnen' : 'Soniox включён — открыть Google Meet'}</button>
+              <button className="btn" type="button" onClick={() => void openMindcraftiAfterSoniox(startReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox läuft — Unterricht öffnen' : 'Soniox включён — открыть урок'}</button>
               <button className="btn btn--ghost" type="button" onClick={() => setStartReminderLessonId(null)} style={{ width: '100%' }}>{language === 'DE' ? 'Abbrechen' : 'Отмена'}</button>
             </div>
           </div>
@@ -349,7 +333,7 @@ export function GroupLessonsPage() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(15,23,42,.62)', display: 'grid', placeItems: 'center', padding: 20 }}>
           <div className="panel" style={{ width: 'min(580px, 100%)', padding: 30, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.32)', border: '2px solid #ff6a00' }}>
             <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: '#d94f00' }}>{language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}</div>
-            <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>{language === 'DE' ? 'Google Meet meldet, dass du den Anruf verlassen hast. Stoppe jetzt Soniox.' : 'Google Meet сообщил, что ты вышел из звонка. Сейчас останови запись Soniox.'}</div>
+            <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>{language === 'DE' ? 'Der Unterricht ist beendet. Stoppe jetzt die Soniox-Aufnahme.' : 'Урок завершён. Сейчас останови запись Soniox.'}</div>
             <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.title}</div>
             <div className="stack" style={{ gap: 10 }}>
               <button className="btn" type="button" onClick={() => confirmSonioxStopped(finishReminderLesson)} style={{ width: '100%', minHeight: 52, fontSize: 16 }}>{language === 'DE' ? 'Soniox gestoppt — Unterricht abschließen' : 'Soniox остановлен — завершить урок'}</button>
