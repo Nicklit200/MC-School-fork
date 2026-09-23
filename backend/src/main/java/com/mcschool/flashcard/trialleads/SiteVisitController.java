@@ -110,12 +110,12 @@ public class SiteVisitController {
                         ELSE first_scroll_at
                     END,
                     max_scroll_percent = CASE
-                        WHEN ? IS NULL THEN max_scroll_percent
-                        ELSE GREATEST(COALESCE(max_scroll_percent, 0), ?)
+                        WHEN CAST(? AS INTEGER) IS NULL THEN max_scroll_percent
+                        ELSE GREATEST(COALESCE(max_scroll_percent, 0), CAST(? AS INTEGER))
                     END,
                     max_active_seconds = CASE
-                        WHEN ? IS NULL THEN max_active_seconds
-                        ELSE GREATEST(COALESCE(max_active_seconds, 0), ?)
+                        WHEN CAST(? AS INTEGER) IS NULL THEN max_active_seconds
+                        ELSE GREATEST(COALESCE(max_active_seconds, 0), CAST(? AS INTEGER))
                     END,
                     first_interaction_label = COALESCE(first_interaction_label, ?),
                     furthest_section_id = COALESCE(?, furthest_section_id),
