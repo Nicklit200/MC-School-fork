@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { OnlineClassRoom } from '../../features/online-classes/OnlineClassRoom';
+import { OnlineClassErrorBoundary } from '../../features/online-classes/OnlineClassErrorBoundary';
 import { PrejoinPanel } from '../../features/online-classes/PrejoinPanel';
 import { useClassSession } from '../../features/online-classes/useClassSession';
 
@@ -122,6 +123,7 @@ export function OnlineClassPage() {
 
   if (session.connection) {
     return (
+      <OnlineClassErrorBoundary onBack={() => navigate('/teacher/lessons')}>
       <OnlineClassRoom
         classId={classId!}
         currentUserId={user?.id ?? ''}
@@ -156,6 +158,7 @@ export function OnlineClassPage() {
             : undefined
         }
       />
+      </OnlineClassErrorBoundary>
     );
   }
 
