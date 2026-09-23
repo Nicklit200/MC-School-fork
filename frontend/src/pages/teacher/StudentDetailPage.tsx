@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Card, CardSummary, DailyReviewHistoryItem, DailyReviewStatus, Homework } from '../../api/types';
+import type { Card, CardSummary, DailyReviewHistoryItem, DailyReviewStatus, Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
@@ -27,15 +27,18 @@ export function StudentDetailPage() {
   const [pilotBusy, setPilotBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lessonHistory, setLessonHistory] = useState<OnlineClass[]>([]);
+  const [student, setStudent] = useState<StudentListItem | null>(null);
 
   const reload = useCallback(async () => {
-    const [allBatches, cardList, cardSummary, history, lessons] = await Promise.all([
+    const [studentInfo, allBatches, cardList, cardSummary, history, lessons] = await Promise.all([
+      api.students.get(studentId),
       api.homeworks.listForStudent(studentId),
       api.cards.listForStudent(studentId),
       api.cards.summaryForStudent(studentId),
       api.students.reviewHistory(studentId),
       onlineClassesApi.studentHistory(studentId),
     ]);
+    setStudent(studentInfo);
     setCardBatches(allBatches.filter((item) => item.totalCards > 0));
     setCards(cardList);
     setSummary(cardSummary);
@@ -148,7 +151,29 @@ export function StudentDetailPage() {
   return (
     <div>
       <p><Link to="/students" className="muted">← {t('common.back')}</Link></p>
-      <h1>{t('cards.title')}</h1>
+
+      <section className="panel" style={{ padding: 20, marginBottom: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: 0 }}>{student?.fullName ?? (language === 'DE' ? 'Schüler' : 'Ученик')}</h1>
+            <div className="muted" style={{ marginTop: 5 }}>
+              {language === 'DE' ? 'Login' : 'Логин'}: <strong>{student?.username ?? '—'}</strong>
+            </div>
+          </div>
+
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <a className="btn" href="#cards">{language === 'DE' ? 'Karten' : 'Карточки'}</a>
+            <Link className="btn btn--secondary" to={`/students/${studentId}/homeworks`}>
+              {language === 'DE' ? 'Hausaufgabe' : 'Домашка'}
+            </Link>
+            <Link className="btn btn--secondary" to={`/students/${studentId}/drive`}>
+              Google Drive
+            </Link>
+            <a className="btn btn--secondary" href="#lessons">{language === 'DE' ? 'Stunden' : 'Уроки'}</a>
+          </div>
+        </div>
+      </section>
+
       {error && <div className="banner banner--error">{error}</div>}
 
       {summary && (
@@ -165,7 +190,7 @@ export function StudentDetailPage() {
         </>
       )}
 
-      <h2>{historyText(language, 'Проведённые уроки', 'Abgeschlossene Stunden')}</h2>
+      <h2 id="lessons">{historyText(language, 'Проведённые уроки', 'Abgeschlossene Stunden')}</h2>
       <div className="panel stack">
         {lessonHistory.length === 0 ? (
           <p className="muted">{historyText(language, 'Проведённых уроков пока нет.', 'Noch keine abgeschlossenen Stunden.')}</p>
@@ -183,7 +208,8 @@ export function StudentDetailPage() {
         )}
       </div>
 
-      <h2>{historyText(language, 'Создать карточки', 'Karten erstellen')}</h2>
+      <h2 id="cards">{historyText(language, 'Карточки', 'Karten')}</h2>
+      <h3>{historyText(language, 'Создать карточки', 'Karten erstellen')}</h3>
       <div className="panel stack">
         <form className="row" onSubmit={createCardBatch}>
           <label className="field" style={{ margin: 0 }}>
