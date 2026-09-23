@@ -215,6 +215,9 @@ export const onlineClassesApi = {
 
   history: () => request<OnlineClass[]>('GET', '/online-classes/history'),
 
+  studentHistory: (studentId: string) =>
+    request<OnlineClass[]>('GET', `/online-classes/students/${studentId}/history`),
+
   get: (classId: string) => request<OnlineClass>('GET', `/online-classes/${classId}`),
 
   openLobby: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/open-lobby`),
