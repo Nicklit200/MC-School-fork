@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -13,6 +13,7 @@ type TodayCompletion = {
 
 export function StudentsPage() {
   const { language, t } = useI18n();
+  const navigate = useNavigate();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
   const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
@@ -177,7 +178,20 @@ export function StudentsPage() {
           {students.map((student, index) => {
             const completion = todayCompletion[student.id] ?? { cards: 'none', homework: 'none' };
             return (
-              <article key={student.id} className="teacher-student-card">
+              <article
+                key={student.id}
+                className="teacher-student-card"
+                role="button"
+                tabIndex={0}
+                style={{ cursor: 'pointer' }}
+                onClick={() => navigate(`/students/${student.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/students/${student.id}`);
+                  }
+                }}
+              >
                 <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>{studentInitial(student.fullName)}</div>
                 <div className="teacher-student-main">
                   <div className="teacher-student-name">{student.fullName}</div>
@@ -200,9 +214,6 @@ export function StudentsPage() {
 
                 <div className="teacher-student-actions">
                   <div className="teacher-student-actions__top">
-                    <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Karten' : 'Карточки'}</Link>
-                    <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</Link>
-                    <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">Google Drive</Link>
                     <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
                       <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия" aria-expanded={openMenuId === student.id} onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}>⋮</button>
                       {openMenuId === student.id && (
