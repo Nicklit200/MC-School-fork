@@ -5,6 +5,9 @@ import com.mcschool.flashcard.lessons.dto.GoogleCalendarConnectionResponse;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
+import com.mcschool.flashcard.liveclasses.OnlineClassService;
+import com.mcschool.flashcard.liveclasses.dto.OnlineClassResponse;
+import com.mcschool.flashcard.students.dto.StudentListResponse;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -42,18 +45,21 @@ public class AdminLessonManagementController {
     private final LessonPreparationService preparationService;
     private final McpHomeworkSeriesService homeworkSeriesService;
     private final GoogleCalendarOAuthService calendarOAuthService;
+    private final OnlineClassService onlineClassService;
 
     public AdminLessonManagementController(
             UserRepository userRepository,
             GoogleCalendarLessonService lessonService,
             LessonPreparationService preparationService,
             McpHomeworkSeriesService homeworkSeriesService,
-            GoogleCalendarOAuthService calendarOAuthService) {
+            GoogleCalendarOAuthService calendarOAuthService,
+            OnlineClassService onlineClassService) {
         this.userRepository = userRepository;
         this.lessonService = lessonService;
         this.preparationService = preparationService;
         this.homeworkSeriesService = homeworkSeriesService;
         this.calendarOAuthService = calendarOAuthService;
+        this.onlineClassService = onlineClassService;
     }
 
     @GetMapping("/google-calendar/connection")
@@ -71,6 +77,23 @@ public class AdminLessonManagementController {
     @GetMapping("/lessons")
     public List<GroupLessonResponse> lessons(@PathVariable UUID teacherId) {
         return lessonService.listGroupLessons(teacherPrincipal(teacherId));
+    }
+
+    @GetMapping("/students")
+    public List<StudentListResponse> students(@PathVariable UUID teacherId) {
+        teacherPrincipal(teacherId);
+        return userRepository.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(
+                        teacherId, Role.STUDENT)
+                .stream()
+                .map(StudentListResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/students/{studentId}/lesson-history")
+    public List<OnlineClassResponse> studentLessonHistory(
+            @PathVariable UUID teacherId,
+            @PathVariable UUID studentId) {
+        return onlineClassService.listStudentHistory(teacherPrincipal(teacherId), studentId);
     }
 
     @GetMapping("/lesson-preparations/{eventId}")
