@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { adminLessonsApi } from '../../api/adminLessons';
-import type { GoogleCalendarConnection, GroupLesson, User } from '../../api/types';
+import type { GoogleCalendarConnection, GroupLesson, StudentListItem, User } from '../../api/types';
+import type { OnlineClass } from '../../api/onlineClasses';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
@@ -18,6 +19,9 @@ export function AdminTeacherLessonsPage() {
   const [teachers, setTeachers] = useState<User[]>([]);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
+  const [students, setStudents] = useState<StudentListItem[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [studentHistory, setStudentHistory] = useState<OnlineClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +49,15 @@ export function AdminTeacherLessonsPage() {
     Promise.all([
       adminLessonsApi.list(teacherId),
       adminLessonsApi.calendarConnection(teacherId),
+      adminLessonsApi.students(teacherId),
     ])
-      .then(([lessonItems, calendar]) => {
+      .then(([lessonItems, calendar, studentItems]) => {
         setLessons(lessonItems);
         setConnection(calendar);
+        setStudents(studentItems);
+        setSelectedStudentId((current) => current && studentItems.some((student) => student.id === current)
+          ? current
+          : (studentItems[0]?.id ?? ''));
       })
       .catch((e) => setError(toErrorMessage(e, t)))
       .finally(() => setLoading(false));
@@ -65,6 +74,16 @@ export function AdminTeacherLessonsPage() {
       })
       .catch((e) => setError(toErrorMessage(e, t)));
   }, [googleCalendarStatus, teacherId, t]);
+
+  useEffect(() => {
+    if (!teacherId || !selectedStudentId) {
+      setStudentHistory([]);
+      return;
+    }
+    adminLessonsApi.studentLessonHistory(teacherId, selectedStudentId)
+      .then(setStudentHistory)
+      .catch((e) => setError(toErrorMessage(e, t)));
+  }, [teacherId, selectedStudentId, t]);
 
   async function disconnectCalendar() {
     if (!teacherId || calendarLoading) return;
@@ -130,6 +149,33 @@ export function AdminTeacherLessonsPage() {
             )}
           </div>
         )}
+      </section>
+
+      <section className="panel" style={{ padding: 18, marginBottom: 18 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <label className="field" style={{ marginBottom: 0, minWidth: 280 }}>
+            <span className="field__label">Проведённые уроки ученика</span>
+            <select className="select" value={selectedStudentId} onChange={(e) => setSelectedStudentId(e.target.value)}>
+              {students.map((student) => <option key={student.id} value={student.id}>{student.fullName}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="stack" style={{ gap: 8, marginTop: 14 }}>
+          {selectedStudentId && studentHistory.length === 0 ? (
+            <div className="muted">Проведённых уроков пока нет.</div>
+          ) : (
+            [...studentHistory]
+              .sort((a, b) => new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime())
+              .map((lesson, index) => (
+                <div key={lesson.id} className="list-row">
+                  <div>
+                    <div className="list-row__title">Урок {index + 1}</div>
+                    <div className="muted">{new Date(lesson.scheduledStartAt).toLocaleString('ru-RU')}</div>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
       </section>
 
       {loading ? <p className="muted">Загрузка…</p> : !connection?.connected ? (
