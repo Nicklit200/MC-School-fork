@@ -340,11 +340,11 @@ export const onlineClassesApi = {
   boardContext: (classId: string) =>
     request<OnlineClassBoardContext>('GET', `/online-classes/${classId}/board-context`),
 
-  workbookPageUrl: async (classId: string, pageIndex: number) => {
+  workbookPageUrl: async (classId: string, pageIndex: number, dpi = 120) => {
     const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
     const token = getAccessToken();
     const response = await fetch(
-      `${baseUrl}/online-classes/${classId}/workbook/pages/${pageIndex}.png`,
+      `${baseUrl}/online-classes/${classId}/workbook/pages/${pageIndex}.png?dpi=${encodeURIComponent(String(dpi))}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} },
     );
     if (!response.ok) {
