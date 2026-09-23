@@ -527,6 +527,8 @@ export function WhiteboardCanvas({
     );
   };
 
+  const viewportReady = viewport.width > 1 && viewport.height > 1;
+
   return (
     <div ref={containerRef} className="whiteboard__surface">
       {backgroundImageUrl && (
@@ -538,6 +540,21 @@ export function WhiteboardCanvas({
           draggable={false}
         />
       )}
+      {!viewportReady ? (
+        <div
+          role="status"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            color: '#6b7280',
+            fontWeight: 700,
+          }}
+        >
+          Готовим доску…
+        </div>
+      ) : (
       <Stage
         width={viewport.width}
         height={viewport.height}
@@ -570,6 +587,7 @@ export function WhiteboardCanvas({
           {renderLaserTrail('local-laser', localLaserTrail, true)}
         </Layer>
       </Stage>
+      )}
     </div>
   );
 }
