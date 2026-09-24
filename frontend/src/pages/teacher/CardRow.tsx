@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import type { Card } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { formatCardReviewProgress } from '../../lib/reviewStages';
 
 /** One card in the teacher's list, with inline edit and delete. */
 export function CardRow({
@@ -14,7 +15,7 @@ export function CardRow({
   onChanged: () => void;
   onDeleted?: () => void;
 }) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [question, setQuestion] = useState(card.question);
@@ -90,6 +91,9 @@ export function CardRow({
         <div className="muted">
           {card.correctAnswer}
           {card.timeLimitSeconds != null && ` · ⏱ ${card.timeLimitSeconds}${t('cards.secondsShort')}`}
+        </div>
+        <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
+          {formatCardReviewProgress(card, language)}
         </div>
       </div>
       <div className="row" style={{ alignItems: 'center', flex: '0 0 auto' }}>
