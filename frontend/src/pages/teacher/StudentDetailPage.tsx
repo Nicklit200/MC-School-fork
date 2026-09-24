@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Card, CardSummary, DailyReviewHistoryItem, DailyReviewStatus, Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { formatBatchReviewStages, formatReviewStage, reviewScheduleLegend } from '../../lib/reviewStages';
 
 const MIN_CARDS_TO_START = 4;
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
@@ -213,6 +214,9 @@ export function StudentDetailPage() {
                     {t('homeworks.total')}: {batch.totalCards} · {t('homeworks.notStarted')}: {batch.notStarted} ·{' '}
                     {t('homeworks.inProgress')}: {batch.inProgress} · {t('homeworks.learned')}: {batch.learned}
                   </div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                    {formatBatchReviewStages(cards, batch.id, language)}
+                  </div>
                 </div>
                 <span className={`pill ${homeworkStatusClass(batch.status)}`}>
                   {t(`homeworks.status.${batch.status}`)}
@@ -310,6 +314,9 @@ export function StudentDetailPage() {
         <>
           <h2>{t('reviewSchedule.title')}</h2>
           <div className="panel">
+            <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+              {reviewScheduleLegend(language)}
+            </div>
             <div className="history-list">
               {futureSchedule.map((day) => (
                 <details key={day.date}>
@@ -324,7 +331,7 @@ export function StudentDetailPage() {
                         <div>
                           <div className="list-row__title">{card.question}</div>
                           <div className="muted" style={{ fontSize: 13 }}>
-                            {t('reviewSchedule.stage', { stage: card.repetitionNumber })}
+                            {formatReviewStage(card.repetitionNumber, language)}
                           </div>
                         </div>
                       </div>
