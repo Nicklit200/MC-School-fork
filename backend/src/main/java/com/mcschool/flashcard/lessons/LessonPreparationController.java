@@ -85,6 +85,14 @@ public class LessonPreparationController {
         return pdf(filename, preparation.getAnswersPdf());
     }
 
+    @PostMapping("/{eventId}/drive-archive")
+    public LessonPreparationResponse archiveToDrive(
+            @AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable String eventId) {
+        requireLesson(teacher, eventId);
+        return service.archiveToDrive(teacher, eventId);
+    }
+
     @PostMapping(value = "/{eventId}/homework-series", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> assignHomeworkSeries(
             @AuthenticationPrincipal AuthenticatedUser teacher,
