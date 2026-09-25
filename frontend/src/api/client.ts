@@ -21,7 +21,6 @@ import type {
   StudentListItem,
   StudentInvitation,
   TestReviewReminderResult,
-  TeacherInvitation,
   Today,
   User,
 } from './types';
@@ -69,7 +68,11 @@ export const api = {
   },
   users: { updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }), changePassword: (password: string) => request<void>('PUT', '/users/me/password', { password }) },
   push: { config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'), subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('POST', '/push/subscriptions', subscription), unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('DELETE', '/push/subscriptions', subscription), test: () => request<void>('POST', '/push/test') },
-  teachers: { list: () => request<User[]>('GET', '/teachers'), create: (fullName: string, email: string) => request<TeacherInvitation>('POST', '/teachers', { fullName, email }) },
+  teachers: {
+    list: () => request<User[]>('GET', '/teachers'),
+    create: (fullName: string, email: string, username: string, password: string) =>
+      request<User>('POST', '/teachers', { fullName, email, username, password }),
+  },
   adminAccounts: { list: (role: 'STUDENT' | 'PARENT') => request<User[]>('GET', `/admin/accounts?role=${role}`) },
   students: {
     list: () => request<StudentListItem[]>('GET', '/students'), get: (studentId: string) => request<StudentListItem>('GET', `/students/${studentId}`), create: (fullName: string, email: string) => request<StudentInvitation>('POST', '/students', { fullName, email: email.trim() || null }), rename: (studentId: string, fullName: string) => request<StudentListItem>('PUT', `/students/${studentId}/name`, { fullName }), resetPassword: (studentId: string, password: string) => request<void>('PUT', `/students/${studentId}/password`, { password }), updateDriveFolder: (studentId: string, googleDriveFolderUrl: string) => request<StudentListItem>('PUT', `/students/${studentId}/drive-folder`, { googleDriveFolderUrl }), updateHomeworkDriveFolder: (studentId: string, googleDriveHomeworkFolderId: string) => request<StudentListItem>('PUT', `/students/${studentId}/homework-drive-folder`, { googleDriveHomeworkFolderId }), updateTranscriptDriveFolder: (studentId: string, googleDriveTranscriptFolderId: string) => request<StudentListItem>('PUT', `/students/${studentId}/transcript-drive-folder`, { googleDriveTranscriptFolderId }), updateChatGptProjectUrl: (studentId: string, chatGptProjectUrl: string) => request<StudentListItem>('PUT', `/students/${studentId}/chatgpt-project`, { chatGptProjectUrl }), testDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test`), testHomeworkDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/homework-drive-folder/test`), testTranscriptDriveFolder: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/transcript-drive-folder/test`), testAutomaticExport: (studentId: string) => request<{ status: string; fileName?: string; fileUrl?: string; message?: string }>('POST', `/students/${studentId}/drive-folder/test-export`), reviewHistory: (studentId: string) => request<DailyReviewHistoryItem[]>('GET', `/students/${studentId}/review-history`), testReviewReminder: (studentId: string) => request<TestReviewReminderResult>('POST', `/students/${studentId}/test-review-reminder`), makeOneCardDueToday: (studentId: string) => request<PilotDueCardResult>('POST', `/students/${studentId}/make-one-card-due-today`), deactivate: (studentId: string) => request<StudentListItem>('PUT', `/students/${studentId}/deactivate`), reactivate: (studentId: string) => request<StudentListItem>('PUT', `/students/${studentId}/reactivate`), remove: (studentId: string) => request<void>('DELETE', `/students/${studentId}`),
