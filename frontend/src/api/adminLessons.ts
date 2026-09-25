@@ -73,6 +73,8 @@ export const adminLessonsApi = {
   uploadAnswers: (teacherId: string, eventId: string, file: File) => upload<LessonPreparation>(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/answers`, file),
   workbook: (teacherId: string, eventId: string) => blob(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/workbook`),
   answers: (teacherId: string, eventId: string) => blob(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/answers`),
+  archiveToDrive: (teacherId: string, eventId: string) =>
+    request<LessonPreparation>('POST', `${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/drive-archive`),
   assignHomeworkSeries: (teacherId: string, eventId: string, startDate: string, days: number, files: File[]) =>
     uploadSeries(`${root(teacherId)}/lesson-preparations/${encodeURIComponent(eventId)}/homework-series`, startDate, days, files),
 };
