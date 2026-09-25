@@ -61,6 +61,7 @@ public class TeacherService {
                 .filter(user -> !user.isArchived())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher not found"));
         teacher.archive();
+        teacher.releaseTeacherLoginIdentity();
     }
 
     @Transactional
