@@ -150,6 +150,11 @@ public class GoogleDriveStructureService {
         return groupFolders.folders().get(groupFolderName(documentType)).id();
     }
 
+    public synchronized String resolveTeacherTrialDocumentFolder(User teacher) {
+        FolderContext teacherRoot = teacherRoot(teacher);
+        return ensureFolder(teacherRoot.driveId(), teacherRoot.folderId(), "Пробные уроки").id();
+    }
+
     private Map<String, String> semanticDestinations(DriveItemResponse clean,
                                                      DriveItemResponse homework,
                                                      DriveItemResponse table,
