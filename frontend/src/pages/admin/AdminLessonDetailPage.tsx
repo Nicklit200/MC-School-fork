@@ -24,6 +24,7 @@ export function AdminLessonDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<MaterialKind | null>(null);
+  const [archivingDrive, setArchivingDrive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -91,6 +92,21 @@ export function AdminLessonDetailPage() {
     }
   }
 
+  async function archiveToDrive() {
+    if (archivingDrive || (!preparation?.hasWorkbook && !preparation?.hasAnswers)) return;
+    setArchivingDrive(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await adminLessonsApi.archiveToDrive(teacherId, decodedEventId);
+      setMessage('PDF сохранены в Google Drive. Копии в Mindcrafti остаются основными.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setArchivingDrive(false);
+    }
+  }
+
   async function upload(kind: MaterialKind, file: File) {
     if (!file.name.toLowerCase().endsWith('.pdf')) {
       setError('Нужен PDF-файл.');
@@ -145,6 +161,11 @@ export function AdminLessonDetailPage() {
           <button className="btn" type="button" onClick={() => void save()} disabled={saving}>
             {saving ? 'Сохраняем…' : 'Сохранить информацию'}
           </button>
+          {(preparation?.hasWorkbook || preparation?.hasAnswers) && (
+            <button className="btn btn--ghost" type="button" onClick={() => void archiveToDrive()} disabled={archivingDrive}>
+              {archivingDrive ? 'Сохраняем в Drive…' : 'Сохранить в Google Drive'}
+            </button>
+          )}
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
         </div>
       </div>
