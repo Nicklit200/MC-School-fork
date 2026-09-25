@@ -247,6 +247,16 @@ public class User {
         return user;
     }
 
+    public static User activeTeacher(String fullName, String email, String username, String passwordHash) {
+        User user = new User(fullName, email, Role.TEACHER);
+        user.username = username;
+        user.passwordHash = passwordHash;
+        user.status = UserStatus.ACTIVE;
+        user.invitationToken = null;
+        user.invitationExpiresAt = null;
+        return user;
+    }
+
     public static User managedStudent(String fullName, User teacher) {
         User user = new User(fullName, null, Role.STUDENT);
         user.status = UserStatus.ACTIVE;
