@@ -72,6 +72,7 @@ export const api = {
     list: () => request<User[]>('GET', '/teachers'),
     create: (fullName: string, email: string, username: string, password: string) =>
       request<User>('POST', '/teachers', { fullName, email, username, password }),
+    remove: (teacherId: string) => request<void>('DELETE', '/teachers/' + teacherId),
   },
   adminAccounts: { list: (role: 'STUDENT' | 'PARENT') => request<User[]>('GET', `/admin/accounts?role=${role}`) },
   students: {
