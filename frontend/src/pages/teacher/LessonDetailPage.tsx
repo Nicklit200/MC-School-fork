@@ -42,6 +42,7 @@ export function LessonDetailPage() {
   const [uploadingWorkbook, setUploadingWorkbook] = useState(false);
   const [uploadingAnswers, setUploadingAnswers] = useState(false);
   const [openingChatGpt, setOpeningChatGpt] = useState<MaterialKind | null>(null);
+  const [archivingDrive, setArchivingDrive] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,6 +149,21 @@ export function LessonDetailPage() {
     }
   }
 
+  async function archiveToDrive() {
+    if (archivingDrive || (!preparation?.hasWorkbook && !preparation?.hasAnswers)) return;
+    setArchivingDrive(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await lessonPreparationApi.archiveToDrive(eventId);
+      setMessage('PDF сохранены в Google Drive. Копии в Mindcrafti остаются основными.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setArchivingDrive(false);
+    }
+  }
+
   async function editPdfInChatGpt(kind: MaterialKind, url: string | null, filename?: string | null) {
     if (!url || openingChatGpt) return;
     setOpeningChatGpt(kind);
@@ -199,6 +215,11 @@ export function LessonDetailPage() {
           )}
         </div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {(preparation?.hasWorkbook || preparation?.hasAnswers) && (
+            <button className="btn btn--ghost" type="button" onClick={() => void archiveToDrive()} disabled={archivingDrive}>
+              {archivingDrive ? 'Сохраняем в Drive…' : 'Сохранить в Google Drive'}
+            </button>
+          )}
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
           {lesson?.meetUrl && <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">Google Meet</a>}
         </div>

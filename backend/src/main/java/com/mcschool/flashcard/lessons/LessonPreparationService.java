@@ -18,10 +18,15 @@ public class LessonPreparationService {
 
     private final LessonPreparationRepository repository;
     private final UserRepository userRepository;
+    private final LessonDriveArchiveService driveArchiveService;
 
-    public LessonPreparationService(LessonPreparationRepository repository, UserRepository userRepository) {
+    public LessonPreparationService(
+            LessonPreparationRepository repository,
+            UserRepository userRepository,
+            LessonDriveArchiveService driveArchiveService) {
         this.repository = repository;
         this.userRepository = userRepository;
+        this.driveArchiveService = driveArchiveService;
     }
 
     @Transactional
@@ -47,19 +52,43 @@ public class LessonPreparationService {
     @Transactional
     public LessonPreparationResponse uploadWorkbook(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
-        if (isAnswersCompatibilityFilename(filename)) {
-            preparation.attachAnswers(cleanAnswersFilename(filename), pdf);
+        boolean answersCompatibility = isAnswersCompatibilityFilename(filename);
+        String storedFilename = answersCompatibility ? cleanAnswersFilename(filename) : filename;
+        if (answersCompatibility) {
+            preparation.attachAnswers(storedFilename, pdf);
         } else {
-            preparation.attachWorkbook(filename, pdf);
+            preparation.attachWorkbook(storedFilename, pdf);
         }
-        return response(repository.save(preparation));
+        LessonPreparation saved = repository.save(preparation);
+        if (answersCompatibility) {
+            driveArchiveService.archiveAnswersBestEffort(teacher, eventId, storedFilename, pdf);
+        } else {
+            driveArchiveService.archiveWorkbookBestEffort(teacher, eventId, storedFilename, pdf);
+        }
+        return response(saved);
     }
 
     @Transactional
     public LessonPreparationResponse uploadAnswers(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
         preparation.attachAnswers(filename, pdf);
-        return response(repository.save(preparation));
+        LessonPreparation saved = repository.save(preparation);
+        driveArchiveService.archiveAnswersBestEffort(teacher, eventId, filename, pdf);
+        return response(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public LessonPreparationResponse archiveToDrive(AuthenticatedUser teacher, String eventId) {
+        LessonPreparation preparation = require(teacher, eventId);
+        if (preparation.hasWorkbook()) {
+            driveArchiveService.archiveWorkbook(
+                    teacher, eventId, preparation.getWorkbookFilename(), preparation.getWorkbookPdf());
+        }
+        if (preparation.hasAnswers()) {
+            driveArchiveService.archiveAnswers(
+                    teacher, eventId, preparation.getAnswersFilename(), preparation.getAnswersPdf());
+        }
+        return response(preparation);
     }
 
     @Transactional(readOnly = true)
