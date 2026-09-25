@@ -2,19 +2,16 @@ package com.mcschool.flashcard.teachers;
 
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
-import com.mcschool.flashcard.notifications.NotificationService;
 import com.mcschool.flashcard.teachers.dto.CreateTeacherRequest;
-import com.mcschool.flashcard.teachers.dto.TeacherInvitationResponse;
 import com.mcschool.flashcard.teachers.dto.UpdateTeacherTrialTranscriptFolderRequest;
-import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
-import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,25 +19,31 @@ import org.springframework.transaction.annotation.Transactional;
 public class TeacherService {
 
     private final UserRepository userRepository;
-    private final NotificationService notificationService;
+    private final PasswordEncoder passwordEncoder;
 
-    public TeacherService(UserRepository userRepository, NotificationService notificationService) {
+    public TeacherService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
-        this.notificationService = notificationService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
-    public TeacherInvitationResponse createTeacher(CreateTeacherRequest request) {
+    public UserResponse createTeacher(CreateTeacherRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String username = request.username().trim();
+
         if (userRepository.existsByEmail(email)) {
             throw new ConflictException("An account with this email already exists");
         }
-        String token = Invitations.newToken();
-        Instant expiresAt = Invitations.expiry(Instant.now());
-        User teacher = userRepository.save(
-                User.invitedTeacher(request.fullName().trim(), email, token, expiresAt));
-        notificationService.sendInvitation(teacher, token);
-        return new TeacherInvitationResponse(UserResponse.from(teacher), token, expiresAt);
+        if (userRepository.existsByUsernameIgnoreCase(username)) {
+            throw new ConflictException("An account with this login already exists");
+        }
+
+        User teacher = userRepository.save(User.activeTeacher(
+                request.fullName().trim(),
+                email,
+                username,
+                passwordEncoder.encode(request.password())));
+        return UserResponse.from(teacher);
     }
 
     @Transactional(readOnly = true)
