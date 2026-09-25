@@ -42,6 +42,14 @@ public class LessonDriveArchiveService {
         this.googleDriveService = googleDriveService;
     }
 
+    public void archiveWorkbook(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
+        archive(teacher, eventId, filename, pdf, "lesson-workbook.pdf", "workbook");
+    }
+
+    public void archiveAnswers(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
+        archive(teacher, eventId, filename, pdf, "lesson-answers.pdf", "answers");
+    }
+
     public void archiveWorkbookBestEffort(
             AuthenticatedUser teacher,
             String eventId,
@@ -67,20 +75,7 @@ public class LessonDriveArchiveService {
             String kind) {
         if (pdf == null || pdf.length == 0) return;
         try {
-            ArchiveDestination destination = destination(teacher, eventId);
-            String safeFilename = pdfFilename(filename, fallbackFilename);
-            googleDriveService.upsertBytes(
-                    destination.folderId(),
-                    safeFilename,
-                    "application/pdf",
-                    pdf);
-            log.info(
-                    "Archived lesson {} to Google Drive: teacherId={}, eventId={}, destination={}, filename={}",
-                    kind,
-                    teacher.id(),
-                    eventId,
-                    destination.label(),
-                    safeFilename);
+            archive(teacher, eventId, filename, pdf, fallbackFilename, kind);
         } catch (RuntimeException ex) {
             log.warn(
                     "Lesson {} saved in Mindcrafti but Google Drive archive failed: teacherId={}, eventId={}, reason={}",
@@ -89,6 +84,30 @@ public class LessonDriveArchiveService {
                     eventId,
                     ex.getMessage());
         }
+    }
+
+    private void archive(
+            AuthenticatedUser teacher,
+            String eventId,
+            String filename,
+            byte[] pdf,
+            String fallbackFilename,
+            String kind) {
+        if (pdf == null || pdf.length == 0) return;
+        ArchiveDestination destination = destination(teacher, eventId);
+        String safeFilename = pdfFilename(filename, fallbackFilename);
+        googleDriveService.upsertBytes(
+                destination.folderId(),
+                safeFilename,
+                "application/pdf",
+                pdf);
+        log.info(
+                "Archived lesson {} to Google Drive: teacherId={}, eventId={}, destination={}, filename={}",
+                kind,
+                teacher.id(),
+                eventId,
+                destination.label(),
+                safeFilename);
     }
 
     private ArchiveDestination destination(AuthenticatedUser teacher, String eventId) {
