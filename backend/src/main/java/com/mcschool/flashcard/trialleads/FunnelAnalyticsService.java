@@ -82,6 +82,8 @@ public class FunnelAnalyticsService {
                        COALESCE(NULLIF(v.source, ''), NULLIF(v.referrer, ''), 'Источник не передан') AS traffic_source,
                        COALESCE(NULLIF(v.device_model, ''), NULLIF(v.device_type, ''), 'Неизвестное устройство') AS device,
                        v.country_code,
+                       v.utm_source, v.utm_medium, v.utm_campaign, v.utm_content, v.utm_term, v.utm_id,
+                       v.fbclid, v.meta_campaign_id, v.meta_adset_id, v.meta_ad_id,
                        v.funnel_stage, v.grade, v.goal, v.priority, v.max_active_seconds,
                        v.trial_page_loaded_at, v.grade_options_visible_at, v.first_interaction_at,
                        v.created_at, l.phone AS lead_phone, l.status AS lead_status
@@ -94,6 +96,16 @@ public class FunnelAnalyticsService {
                 rs.getString("traffic_source"),
                 rs.getString("device"),
                 rs.getString("country_code"),
+                rs.getString("utm_source"),
+                rs.getString("utm_medium"),
+                rs.getString("utm_campaign"),
+                rs.getString("utm_content"),
+                rs.getString("utm_term"),
+                rs.getString("utm_id"),
+                rs.getString("fbclid"),
+                rs.getString("meta_campaign_id"),
+                rs.getString("meta_adset_id"),
+                rs.getString("meta_ad_id"),
                 rs.getString("funnel_stage"),
                 rs.getString("grade"),
                 rs.getString("goal"),
@@ -135,6 +147,7 @@ public class FunnelAnalyticsService {
         List<Map<String, Object>> sources = groupStats(visits, true);
         List<Map<String, Object>> devices = groupStats(visits, false);
         List<Map<String, Object>> countries = countryStats(visits);
+        List<Map<String, Object>> campaigns = campaignStats(visits);
 
         int visitsCount = visits.size();
         int interactions = (int) visits.stream().filter(v -> v.firstInteractionAt() != null).count();
@@ -165,6 +178,15 @@ public class FunnelAnalyticsService {
             item.put("source", visit.source());
             item.put("device", visit.device());
             item.put("countryCode", visit.countryCode());
+            item.put("utmSource", visit.utmSource());
+            item.put("utmMedium", visit.utmMedium());
+            item.put("utmCampaign", visit.utmCampaign());
+            item.put("utmContent", visit.utmContent());
+            item.put("utmTerm", visit.utmTerm());
+            item.put("utmId", visit.utmId());
+            item.put("metaCampaignId", visit.metaCampaignId());
+            item.put("metaAdsetId", visit.metaAdsetId());
+            item.put("metaAdId", visit.metaAdId());
             item.put("grade", visit.grade());
             item.put("goal", visit.goal());
             item.put("priority", visit.priority());
@@ -199,6 +221,7 @@ public class FunnelAnalyticsService {
         result.put("sources", sources);
         result.put("devices", devices);
         result.put("countries", countries);
+        result.put("campaigns", campaigns);
         result.put("recentVisits", recentVisits);
         result.put("measurementLimitations", List.of(
                 "Подробная история по шагам доступна только для посещений после включения site_visit_events.",
@@ -350,6 +373,50 @@ public class FunnelAnalyticsService {
                 .toList();
     }
 
+    private List<Map<String, Object>> campaignStats(List<VisitRow> visits) {
+        Map<String, GroupAccumulator> groups = new HashMap<>();
+        for (VisitRow visit : visits) {
+            String campaign = notBlank(visit.utmCampaign()) ? visit.utmCampaign()
+                    : notBlank(visit.metaCampaignId()) ? "Meta campaign " + visit.metaCampaignId()
+                    : null;
+            String content = notBlank(visit.utmContent()) ? visit.utmContent()
+                    : notBlank(visit.metaAdId()) ? "ad " + visit.metaAdId()
+                    : null;
+            if (!notBlank(campaign) && !notBlank(content)) continue;
+
+            String key = String.join(" | ",
+                    notBlank(campaign) ? campaign : "Campaign not named",
+                    notBlank(content) ? content : "Creative not named");
+            GroupAccumulator group = groups.computeIfAbsent(key, ignored -> new GroupAccumulator());
+            group.visits++;
+            if (notBlank(visit.leadPhone())) group.leads++;
+            if (isBooked(visit.leadStatus())) group.bookings++;
+            if ("CONTRACT".equals(visit.leadStatus())) group.contracts++;
+            if (visit.maxActiveSeconds() != null) {
+                group.activeSeconds += visit.maxActiveSeconds();
+                group.activeMeasured++;
+            }
+        }
+
+        return groups.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue().visits, a.getValue().visits))
+                .limit(100)
+                .map(entry -> {
+                    GroupAccumulator group = entry.getValue();
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("campaignCreative", entry.getKey());
+                    item.put("visits", group.visits);
+                    item.put("leads", group.leads);
+                    item.put("bookings", group.bookings);
+                    item.put("contracts", group.contracts);
+                    item.put("leadConversionPct", pct(group.leads, group.visits));
+                    item.put("bookingConversionPct", pct(group.bookings, group.visits));
+                    item.put("contractConversionPct", pct(group.contracts, group.visits));
+                    return item;
+                })
+                .toList();
+    }
+
     private boolean reached(VisitRow visit, Set<String> events, String target) {
         if ("VISIT".equals(target)) return true;
         if (events.contains(target)) return true;
@@ -442,6 +509,16 @@ public class FunnelAnalyticsService {
             String source,
             String device,
             String countryCode,
+            String utmSource,
+            String utmMedium,
+            String utmCampaign,
+            String utmContent,
+            String utmTerm,
+            String utmId,
+            String fbclid,
+            String metaCampaignId,
+            String metaAdsetId,
+            String metaAdId,
             String funnelStage,
             String grade,
             String goal,
