@@ -81,11 +81,11 @@ public class LessonPreparationService {
     public LessonPreparationResponse archiveToDrive(AuthenticatedUser teacher, String eventId) {
         LessonPreparation preparation = require(teacher, eventId);
         if (preparation.hasWorkbook()) {
-            driveArchiveService.archiveWorkbookBestEffort(
+            driveArchiveService.archiveWorkbook(
                     teacher, eventId, preparation.getWorkbookFilename(), preparation.getWorkbookPdf());
         }
         if (preparation.hasAnswers()) {
-            driveArchiveService.archiveAnswersBestEffort(
+            driveArchiveService.archiveAnswers(
                     teacher, eventId, preparation.getAnswersFilename(), preparation.getAnswersPdf());
         }
         return response(preparation);
