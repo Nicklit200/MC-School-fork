@@ -321,5 +321,13 @@ public class User {
         this.googleCalendarOauthStateExpiresAt = null;
     }
 
+    public void releaseTeacherLoginIdentity() {
+        if (this.role != Role.TEACHER) {
+            throw new IllegalStateException("Only teacher accounts can release teacher login identity");
+        }
+        this.email = null;
+        this.username = null;
+    }
+
     public boolean isInvitationExpired(Instant now) { return invitationExpiresAt != null && now.isAfter(invitationExpiresAt); }
 }
