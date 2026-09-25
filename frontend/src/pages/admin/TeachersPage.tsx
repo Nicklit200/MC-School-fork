@@ -22,6 +22,7 @@ export function TeachersPage() {
   const [loading, setLoading] = useState(true);
   const [enteringTeacherId, setEnteringTeacherId] = useState<string | null>(null);
   const [driveTeacherId, setDriveTeacherId] = useState<string | null>(null);
+  const [deletingTeacherId, setDeletingTeacherId] = useState<string | null>(null);
 
   async function reload() {
     setTeachers(await api.teachers.list());
@@ -73,6 +74,23 @@ export function TeachersPage() {
 
   function updateTeacher(updated: User) {
     setTeachers((current) => current.map((teacher) => teacher.id === updated.id ? updated : teacher));
+  }
+
+  async function deleteTeacher(teacher: User) {
+    if (deletingTeacherId) return;
+    if (!window.confirm('Удалить учителя ' + teacher.fullName + '? Учитель больше не сможет войти в систему.')) return;
+
+    setDeletingTeacherId(teacher.id);
+    setError(null);
+    try {
+      await api.teachers.remove(teacher.id);
+      setTeachers((current) => current.filter((item) => item.id !== teacher.id));
+      if (driveTeacherId === teacher.id) setDriveTeacherId(null);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setDeletingTeacherId(null);
+    }
   }
 
   return (
@@ -152,6 +170,14 @@ export function TeachersPage() {
               <span className={`pill ${teacher.status === 'ACTIVE' ? 'pill--learned' : 'pill--active'}`}>
                 {teacher.status}
               </span>
+              <button
+                className="btn btn--danger"
+                type="button"
+                disabled={Boolean(deletingTeacherId)}
+                onClick={() => void deleteTeacher(teacher)}
+              >
+                {deletingTeacherId === teacher.id ? 'Удаляем…' : 'Удалить'}
+              </button>
             </div>
             {driveTeacherId === teacher.id && <TeacherTrialTranscriptFolderPicker teacher={teacher} onSaved={updateTeacher} />}
           </Fragment>
