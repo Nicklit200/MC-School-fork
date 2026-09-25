@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,6 +39,12 @@ public class TeacherController {
     @GetMapping
     public List<UserResponse> listTeachers() {
         return teacherService.listTeachers();
+    }
+
+    @DeleteMapping("/{teacherId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTeacher(@PathVariable UUID teacherId) {
+        teacherService.deleteTeacher(teacherId);
     }
 
     @PutMapping("/{teacherId}/trial-transcript-drive-folder")
