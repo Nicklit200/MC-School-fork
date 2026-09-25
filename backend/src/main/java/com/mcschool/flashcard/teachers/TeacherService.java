@@ -31,12 +31,26 @@ public class TeacherService {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String username = request.username().trim();
 
-        if (userRepository.existsByEmail(email)) {
-            throw new ConflictException("An account with this email already exists");
+        User existingByEmail = userRepository.findByEmail(email).orElse(null);
+        User existingByUsername = userRepository.findByUsernameIgnoreCase(username).orElse(null);
+
+        if (existingByEmail != null) {
+            if (existingByEmail.getRole() == Role.TEACHER && existingByEmail.isArchived()) {
+                existingByEmail.releaseTeacherLoginIdentity();
+            } else {
+                throw new ConflictException("An account with this email already exists");
+            }
         }
-        if (userRepository.existsByUsernameIgnoreCase(username)) {
-            throw new ConflictException("An account with this login already exists");
+
+        if (existingByUsername != null) {
+            if (existingByUsername.getRole() == Role.TEACHER && existingByUsername.isArchived()) {
+                existingByUsername.releaseTeacherLoginIdentity();
+            } else {
+                throw new ConflictException("An account with this login already exists");
+            }
         }
+
+        userRepository.flush();
 
         User teacher = userRepository.save(User.activeTeacher(
                 request.fullName().trim(),
