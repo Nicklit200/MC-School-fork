@@ -86,6 +86,12 @@ export const lessonPreparationApi = {
   answersUrl(eventId: string) {
     return pdfUrl(eventId, 'answers');
   },
+  archiveToDrive(eventId: string) {
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/drive-archive`, {
+      method: 'POST',
+      headers: authHeaders(),
+    }).then(parse<LessonPreparation>);
+  },
   assignHomeworkSeries(eventId: string, startDate: string, days: number, files: File[]) {
     return uploadHomeworkSeries(eventId, startDate, days, files);
   },
