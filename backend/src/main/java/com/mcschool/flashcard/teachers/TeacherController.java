@@ -1,7 +1,6 @@
 package com.mcschool.flashcard.teachers;
 
 import com.mcschool.flashcard.teachers.dto.CreateTeacherRequest;
-import com.mcschool.flashcard.teachers.dto.TeacherInvitationResponse;
 import com.mcschool.flashcard.teachers.dto.UpdateTeacherTrialTranscriptFolderRequest;
 import com.mcschool.flashcard.users.UserResponse;
 import jakarta.validation.Valid;
@@ -32,7 +31,7 @@ public class TeacherController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TeacherInvitationResponse createTeacher(@Valid @RequestBody CreateTeacherRequest request) {
+    public UserResponse createTeacher(@Valid @RequestBody CreateTeacherRequest request) {
         return teacherService.createTeacher(request);
     }
 
