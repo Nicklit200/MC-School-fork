@@ -1,12 +1,11 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, getAccessToken, setAccessToken } from '../../api/client';
-import type { TeacherInvitation, User } from '../../api/types';
+import type { User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { useAuth } from '../../auth/AuthContext';
 import { saveAdminImpersonation } from '../../auth/adminImpersonation';
 import { toErrorMessage } from '../../lib/errors';
-import { InvitationNotice } from '../../components/InvitationNotice';
 import { TeacherTrialTranscriptFolderPicker } from './TeacherTrialTranscriptFolderPicker';
 
 /** Admin home: create teacher accounts and manage their school lessons. */
@@ -17,7 +16,8 @@ export function TeachersPage() {
   const [teachers, setTeachers] = useState<User[]>([]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [invitation, setInvitation] = useState<TeacherInvitation | null>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [enteringTeacherId, setEnteringTeacherId] = useState<string | null>(null);
@@ -37,10 +37,11 @@ export function TeachersPage() {
     event.preventDefault();
     setError(null);
     try {
-      const created = await api.teachers.create(fullName.trim(), email.trim());
-      setInvitation(created);
+      await api.teachers.create(fullName.trim(), email.trim(), username.trim(), password);
       setFullName('');
       setEmail('');
+      setUsername('');
+      setPassword('');
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
@@ -95,14 +96,32 @@ export function TeachersPage() {
               <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </label>
           </div>
+          <div className="row">
+            <label className="field">
+              <span className="field__label">Логин</span>
+              <input
+                className="input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="off"
+                required
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Пароль</span>
+              <input
+                className="input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </label>
+          </div>
           <button className="btn" type="submit">{t('teachers.create')}</button>
         </form>
-        {invitation && (
-          <InvitationNotice
-            message={t('teachers.inviteCreated')}
-            token={invitation.invitationToken}
-          />
-        )}
       </div>
 
       {loading ? (
