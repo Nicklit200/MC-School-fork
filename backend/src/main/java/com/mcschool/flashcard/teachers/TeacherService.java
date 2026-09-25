@@ -49,8 +49,18 @@ public class TeacherService {
     @Transactional(readOnly = true)
     public List<UserResponse> listTeachers() {
         return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER).stream()
+                .filter(user -> !user.isArchived())
                 .map(UserResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public void deleteTeacher(UUID teacherId) {
+        User teacher = userRepository.findById(teacherId)
+                .filter(user -> user.getRole() == Role.TEACHER)
+                .filter(user -> !user.isArchived())
+                .orElseThrow(() -> new ResourceNotFoundException("Teacher not found"));
+        teacher.archive();
     }
 
     @Transactional
