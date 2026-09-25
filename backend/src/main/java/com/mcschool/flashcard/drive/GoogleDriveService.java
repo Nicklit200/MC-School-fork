@@ -194,6 +194,14 @@ public class GoogleDriveService {
         }
     }
 
+    public DriveUploadResponse upsertBytes(String folderId, String fileName, String mimeType, byte[] bytes) {
+        String existingId = findFileId(folderId, fileName);
+        if (existingId == null) {
+            return uploadBytes(folderId, fileName, mimeType, bytes);
+        }
+        return updateBytes(existingId, fileName, mimeType, bytes);
+    }
+
     public DriveUploadResponse uploadBytes(String folderId, String fileName, String mimeType, byte[] bytes) {
         if (folderId == null || folderId.isBlank()) {
             throw new IllegalArgumentException("Folder id is required");
@@ -237,6 +245,57 @@ public class GoogleDriveService {
                 throw runtimeException;
             }
             throw new IllegalStateException("Google Drive upload failed", ex);
+        }
+    }
+
+    private String findFileId(String folderId, String fileName) {
+        if (folderId == null || folderId.isBlank() || fileName == null || fileName.isBlank()) return null;
+        String q = "'" + folderId.replace("'", "\\'") + "' in parents and name='"
+                + fileName.replace("'", "\\'") + "' and trashed=false";
+        String url = DRIVE_API + "/files"
+                + "?includeItemsFromAllDrives=true"
+                + "&supportsAllDrives=true"
+                + "&pageSize=1"
+                + "&q=" + enc(q)
+                + "&fields=files(id,name)";
+        Map<String, Object> payload = getJson(url);
+        Object raw = payload.get("files");
+        if (!(raw instanceof List<?> files) || files.isEmpty()) return null;
+        Object first = files.get(0);
+        if (!(first instanceof Map<?, ?> map)) return null;
+        String id = stringValue(map.get("id"));
+        return id.isBlank() ? null : id;
+    }
+
+    private DriveUploadResponse updateBytes(String fileId, String fileName, String mimeType, byte[] bytes) {
+        try {
+            String boundary = "mindcrafti-" + UUID.randomUUID();
+            String metadata = objectMapper.writeValueAsString(Map.of("name", fileName));
+            ByteArrayOutputStream body = new ByteArrayOutputStream();
+            writeUtf8(body, "--" + boundary + "\r\n");
+            writeUtf8(body, "Content-Type: application/json; charset=UTF-8\r\n\r\n");
+            writeUtf8(body, metadata + "\r\n");
+            writeUtf8(body, "--" + boundary + "\r\n");
+            writeUtf8(body, "Content-Type: " + (mimeType == null || mimeType.isBlank() ? "application/octet-stream" : mimeType) + "\r\n\r\n");
+            body.write(bytes == null ? new byte[0] : bytes);
+            writeUtf8(body, "\r\n--" + boundary + "--\r\n");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(DRIVE_UPLOAD_API + "/files/" + enc(fileId)
+                            + "?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink"))
+                    .header("Authorization", "Bearer " + accessToken())
+                    .header("Content-Type", "multipart/related; boundary=" + boundary)
+                    .method("PATCH", HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                    .build();
+            HttpResponse<String> response = send(request);
+            Map<String, Object> payload = asMap(objectMapper.readValue(response.body(), Map.class));
+            return new DriveUploadResponse(
+                    stringValue(payload.get("id")),
+                    stringValue(payload.get("name")),
+                    stringValue(payload.get("webViewLink")));
+        } catch (Exception ex) {
+            if (ex instanceof RuntimeException runtimeException) throw runtimeException;
+            throw new IllegalStateException("Google Drive update failed", ex);
         }
     }
 
