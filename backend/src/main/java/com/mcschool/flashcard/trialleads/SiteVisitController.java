@@ -222,10 +222,12 @@ public class SiteVisitController {
             jdbc.update("DELETE FROM site_visits WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'");
             jdbc.update("""
                     INSERT INTO site_visits (
-                        id, session_id, country_code, path, source, referrer, device_type, device_model,
-                        os_name, os_version, browser_name, browser_version, screen_size,
-                        viewport_size, language, user_agent, funnel_stage
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VISIT')
+                        id, session_id, country_code, path, source, referrer,
+                        utm_source, utm_medium, utm_campaign, utm_content, utm_term, utm_id,
+                        fbclid, meta_campaign_id, meta_adset_id, meta_ad_id,
+                        device_type, device_model, os_name, os_version, browser_name, browser_version,
+                        screen_size, viewport_size, language, user_agent, funnel_stage
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VISIT')
                     """,
                     UUID.randomUUID(),
                     clean(request.sessionId(), 80),
@@ -233,6 +235,16 @@ public class SiteVisitController {
                     nullable(request.path(), 160),
                     nullable(request.source(), 240),
                     nullable(request.referrer(), 240),
+                    nullable(request.utmSource(), 120),
+                    nullable(request.utmMedium(), 120),
+                    nullable(request.utmCampaign(), 240),
+                    nullable(request.utmContent(), 240),
+                    nullable(request.utmTerm(), 240),
+                    nullable(request.utmId(), 160),
+                    nullable(request.fbclid(), 500),
+                    nullable(request.metaCampaignId(), 160),
+                    nullable(request.metaAdsetId(), 160),
+                    nullable(request.metaAdId(), 160),
                     nullable(request.deviceType(), 40),
                     nullable(request.deviceModel(), 160),
                     nullable(request.osName(), 80),
@@ -410,6 +422,16 @@ public class SiteVisitController {
             @Size(max = 160) String path,
             @Size(max = 240) String source,
             @Size(max = 240) String referrer,
+            @Size(max = 120) String utmSource,
+            @Size(max = 120) String utmMedium,
+            @Size(max = 240) String utmCampaign,
+            @Size(max = 240) String utmContent,
+            @Size(max = 240) String utmTerm,
+            @Size(max = 160) String utmId,
+            @Size(max = 500) String fbclid,
+            @Size(max = 160) String metaCampaignId,
+            @Size(max = 160) String metaAdsetId,
+            @Size(max = 160) String metaAdId,
             @Size(max = 40) String deviceType,
             @Size(max = 160) String deviceModel,
             @Size(max = 80) String osName,
