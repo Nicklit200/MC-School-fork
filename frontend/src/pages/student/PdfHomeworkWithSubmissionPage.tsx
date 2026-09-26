@@ -32,12 +32,10 @@ export function PdfHomeworkWithSubmissionPage() {
 
   useEffect(() => {
     refresh().catch((e) => setError(toErrorMessage(e, t)));
-    const timer = window.setInterval(() => {
-      if (!homework?.submitted) refresh().catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
+    // Homework status is refreshed explicitly after a successful submission.
+    // Avoid polling every 3 seconds while the student is handwriting on the canvas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeworkId, homework?.submitted]);
+  }, [homeworkId]);
 
   async function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []);
@@ -146,7 +144,7 @@ export function PdfHomeworkWithSubmissionPage() {
 
   return (
     <>
-      <PdfHomeworkPage />
+      <PdfHomeworkPage onSubmitted={() => { void refresh(); }} />
 
       {!homework?.submitted && (
         <div className="panel" style={{ marginTop: 18, marginBottom: 32 }}>
