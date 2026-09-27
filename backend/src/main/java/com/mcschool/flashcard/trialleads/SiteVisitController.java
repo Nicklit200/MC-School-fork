@@ -84,6 +84,8 @@ public class SiteVisitController {
                 ? null
                 : Math.max(0, Math.min(3600, request.activeSeconds()));
 
+        ensureVisitExistsForProgress(sessionId, request.path());
+
         jdbc.update("""
                 UPDATE site_visits SET
                     funnel_stage = COALESCE(?, funnel_stage),
@@ -217,9 +219,87 @@ public class SiteVisitController {
         ));
     }
 
+    private void ensureVisitExistsForProgress(String sessionId, String path) {
+        jdbc.update("""
+                INSERT INTO site_visits (id, session_id, path, funnel_stage)
+                VALUES (?, ?, ?, 'VISIT')
+                ON CONFLICT (session_id) DO NOTHING
+                """,
+                UUID.randomUUID(),
+                clean(sessionId, 80),
+                nullable(path, 160));
+    }
+
+    private int enrichProgressPlaceholder(SiteVisitRequest request, String countryCode) {
+        return jdbc.update("""
+                UPDATE site_visits SET
+                    country_code = COALESCE(country_code, ?),
+                    path = COALESCE(path, ?),
+                    source = COALESCE(source, ?),
+                    referrer = COALESCE(referrer, ?),
+                    utm_source = COALESCE(utm_source, ?),
+                    utm_medium = COALESCE(utm_medium, ?),
+                    utm_campaign = COALESCE(utm_campaign, ?),
+                    utm_content = COALESCE(utm_content, ?),
+                    utm_term = COALESCE(utm_term, ?),
+                    utm_id = COALESCE(utm_id, ?),
+                    fbclid = COALESCE(fbclid, ?),
+                    meta_campaign_id = COALESCE(meta_campaign_id, ?),
+                    meta_adset_id = COALESCE(meta_adset_id, ?),
+                    meta_ad_id = COALESCE(meta_ad_id, ?),
+                    device_type = COALESCE(device_type, ?),
+                    device_model = COALESCE(device_model, ?),
+                    os_name = COALESCE(os_name, ?),
+                    os_version = COALESCE(os_version, ?),
+                    browser_name = COALESCE(browser_name, ?),
+                    browser_version = COALESCE(browser_version, ?),
+                    screen_size = COALESCE(screen_size, ?),
+                    viewport_size = COALESCE(viewport_size, ?),
+                    language = COALESCE(language, ?),
+                    user_agent = COALESCE(user_agent, ?),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE session_id = ?
+                  AND user_agent IS NULL
+                  AND device_type IS NULL
+                  AND browser_name IS NULL
+                  AND source IS NULL
+                  AND referrer IS NULL
+                """,
+                nullable(countryCode, 2),
+                nullable(request.path(), 160),
+                nullable(request.source(), 240),
+                nullable(request.referrer(), 240),
+                nullable(request.utmSource(), 120),
+                nullable(request.utmMedium(), 120),
+                nullable(request.utmCampaign(), 240),
+                nullable(request.utmContent(), 240),
+                nullable(request.utmTerm(), 240),
+                nullable(request.utmId(), 160),
+                nullable(request.fbclid(), 500),
+                nullable(request.metaCampaignId(), 160),
+                nullable(request.metaAdsetId(), 160),
+                nullable(request.metaAdId(), 160),
+                nullable(request.deviceType(), 40),
+                nullable(request.deviceModel(), 160),
+                nullable(request.osName(), 80),
+                nullable(request.osVersion(), 80),
+                nullable(request.browserName(), 80),
+                nullable(request.browserVersion(), 80),
+                nullable(request.screenSize(), 80),
+                nullable(request.viewportSize(), 80),
+                nullable(request.language(), 40),
+                nullable(request.userAgent(), 500),
+                clean(request.sessionId(), 80));
+    }
+
     private boolean persist(SiteVisitRequest request, String countryCode) {
+        jdbc.update("DELETE FROM site_visits WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'");
+
+        if (enrichProgressPlaceholder(request, countryCode) > 0) {
+            return true;
+        }
+
         try {
-            jdbc.update("DELETE FROM site_visits WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'");
             jdbc.update("""
                     INSERT INTO site_visits (
                         id, session_id, country_code, path, source, referrer,
@@ -257,7 +337,7 @@ public class SiteVisitController {
                     nullable(request.userAgent(), 500));
             return true;
         } catch (DuplicateKeyException duplicate) {
-            return false;
+            return enrichProgressPlaceholder(request, countryCode) > 0;
         }
     }
 
