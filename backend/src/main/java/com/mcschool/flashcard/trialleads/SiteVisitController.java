@@ -22,6 +22,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -217,6 +218,13 @@ public class SiteVisitController {
                 instant(rs.getTimestamp("created_at")),
                 instant(rs.getTimestamp("updated_at"))
         ));
+    }
+
+    @DeleteMapping("/admin/site-visits/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
+    public void deleteVisit(@PathVariable UUID id) {
+        jdbc.update("DELETE FROM site_visits WHERE id = ?", id);
     }
 
     private void ensureVisitExistsForProgress(String sessionId, String path) {
