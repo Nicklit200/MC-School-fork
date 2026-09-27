@@ -49,3 +49,4 @@
   .funnel-table__row{min-width:650px}
   .funnel-source{grid-template-columns:1fr 1fr}
 }
+.site-visit-card__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.site-visit-card__actions .trial-lead-delete{margin-left:0!important;padding:7px 10px;font-size:12px}@media(max-width:760px){.site-visit-card__actions{align-items:flex-end;flex-direction:column}}
