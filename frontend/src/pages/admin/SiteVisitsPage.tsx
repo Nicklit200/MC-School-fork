@@ -26,6 +26,7 @@ export function SiteVisitsPage() {
   const [rangeDays, setRangeDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingVisitId, setDeletingVisitId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   async function load({ silent = false }: { silent?: boolean } = {}) {
@@ -45,6 +46,20 @@ export function SiteVisitsPage() {
     } finally {
       if (silent) setRefreshing(false);
       else setLoading(false);
+    }
+  }
+
+  async function deleteVisit(id: string) {
+    if (!window.confirm('Удалить это посещение?')) return;
+    setDeletingVisitId(id);
+    setError('');
+    try {
+      await trialLeadsApi.deleteVisit(id);
+      await load({ silent: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить посещение');
+    } finally {
+      setDeletingVisitId(null);
     }
   }
 
@@ -129,7 +144,18 @@ export function SiteVisitsPage() {
                     {visit.leadStatus ? STATUS_LABELS[visit.leadStatus] : anonymousVisitLabel(visit)}
                   </span>
                 </div>
-                <time>{formatDate(visit.createdAt)}</time>
+                <div className="site-visit-card__actions">
+                  <time>{formatDate(visit.createdAt)}</time>
+                  <button
+                    type="button"
+                    className="btn trial-lead-delete"
+                    onClick={() => void deleteVisit(visit.id)}
+                    disabled={deletingVisitId === visit.id}
+                    aria-label="Удалить посещение"
+                  >
+                    {deletingVisitId === visit.id ? 'Удаляем…' : 'Удалить'}
+                  </button>
+                </div>
               </div>
 
               <div className="site-visit-meta">
