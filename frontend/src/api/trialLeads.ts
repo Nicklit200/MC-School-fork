@@ -158,6 +158,12 @@ async function parse<T>(response: Response): Promise<T> {
 export const trialLeadsApi = {
   list: async (): Promise<TrialLead[]> => parse<TrialLead[]>(await fetch(`${BASE_URL}/admin/trial-leads`, { headers: headers() })),
   listVisits: async (): Promise<SiteVisit[]> => parse<SiteVisit[]>(await fetch(`${BASE_URL}/admin/site-visits`, { headers: headers() })),
+  deleteVisit: async (id: string): Promise<void> => {
+    await parse(await fetch(`${BASE_URL}/admin/site-visits/${id}`, {
+      method: 'DELETE',
+      headers: headers(),
+    }));
+  },
   funnelAnalytics: async (fromDate: string, toDate: string, recentLimit = 50): Promise<FunnelAnalytics> =>
     parse<FunnelAnalytics>(await fetch(
       `${BASE_URL}/admin/site-visits/analytics?fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}&recentLimit=${recentLimit}`,
