@@ -168,6 +168,7 @@ export function SiteVisitsPage() {
                 <span><b>Источник:</b> {visit.source || visit.referrer || 'Источник не передан'}</span>
                 <span><b>Страна:</b> {countryLabel(visit.countryCode)}</span>
                 <span><b>Класс:</b> {visit.grade || '—'}</span>
+                <span><b>Тип школы:</b> {visit.schoolType || '—'}</span>
                 <span><b>Предмет:</b> {visit.subject || '—'}</span>
                 <span><b>Проблема:</b> {visit.goal || '—'}</span>
                 <span><b>Что важно:</b> {visit.priority || '—'}</span>
