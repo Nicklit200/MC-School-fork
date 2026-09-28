@@ -93,6 +93,7 @@ public class SiteVisitController {
                     diagnostic_stage = COALESCE(?, diagnostic_stage),
                     path = COALESCE(?, path),
                     grade = COALESCE(?, grade),
+                    school_type = COALESCE(?, school_type),
                     subject = COALESCE(?, subject),
                     goal = COALESCE(?, goal),
                     priority = COALESCE(?, priority),
@@ -131,6 +132,7 @@ public class SiteVisitController {
                 diagnosticEvent,
                 nullable(request.path(), 160),
                 nullable(request.grade(), 80),
+                nullable(request.schoolType(), 120),
                 nullable(request.subject(), 120),
                 nullable(request.goal(), 500),
                 nullable(request.priority(), 500),
@@ -170,7 +172,7 @@ public class SiteVisitController {
                 SELECT v.id, v.session_id, v.country_code, v.path, v.source, v.referrer, v.device_type, v.device_model,
                        v.os_name, v.os_version, v.browser_name, v.browser_version, v.screen_size,
                        v.viewport_size, v.language, v.user_agent, v.funnel_stage, v.diagnostic_stage,
-                       v.grade, v.subject, v.goal, v.priority, v.first_interaction_label,
+                       v.grade, v.school_type, v.subject, v.goal, v.priority, v.first_interaction_label,
                        v.furthest_section_id, v.furthest_section_label,
                        v.max_scroll_percent, v.max_active_seconds, v.client_error,
                        v.trial_page_loaded_at, v.grade_options_visible_at, v.first_interaction_at, v.first_scroll_at,
@@ -200,6 +202,7 @@ public class SiteVisitController {
                 rs.getString("funnel_stage"),
                 rs.getString("diagnostic_stage"),
                 rs.getString("grade"),
+                rs.getString("school_type"),
                 rs.getString("subject"),
                 rs.getString("goal"),
                 rs.getString("priority"),
@@ -409,7 +412,7 @@ public class SiteVisitController {
     private static boolean isFunnelEvent(String event) {
         return switch (event) {
             case "TRIAL_CTA_CLICK", "TRIAL_PAGE_LOADED", "GRADE_OPTIONS_VISIBLE", "GRADE_TAP",
-                    "GRADE_SELECTED", "GOAL_SELECTED", "PRIORITY_SELECTED", "PHONE_STEP",
+                    "GRADE_SELECTED", "SCHOOL_SELECTED", "GOAL_SELECTED", "PRIORITY_SELECTED", "PHONE_STEP",
                     "FORM_COMPLETED", "TEACHER_SELECTED", "CALENDAR_OPENED", "BOOKED" -> true;
             default -> false;
         };
@@ -432,10 +435,10 @@ public class SiteVisitController {
         if (!shouldPersistDetailedEvent(event)) return;
         jdbc.update("""
                 INSERT INTO site_visit_events (
-                    id, visit_id, session_id, event, path, grade, subject, goal, priority,
+                    id, visit_id, session_id, event, path, grade, school_type, subject, goal, priority,
                     scroll_percent, active_seconds, interaction_label, section_id, section_label
                 )
-                SELECT ?, id, session_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                SELECT ?, id, session_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 FROM site_visits
                 WHERE session_id = ?
                 """,
@@ -443,6 +446,7 @@ public class SiteVisitController {
                 event,
                 nullable(request.path(), 160),
                 nullable(request.grade(), 80),
+                nullable(request.schoolType(), 120),
                 nullable(request.subject(), 120),
                 nullable(request.goal(), 500),
                 nullable(request.priority(), 500),
@@ -536,6 +540,7 @@ public class SiteVisitController {
             @Size(max = 40) String event,
             @Size(max = 160) String path,
             @Size(max = 80) String grade,
+            @Size(max = 120) String schoolType,
             @Size(max = 120) String subject,
             @Size(max = 500) String goal,
             @Size(max = 500) String priority,
@@ -567,6 +572,7 @@ public class SiteVisitController {
             String funnelStage,
             String diagnosticStage,
             String grade,
+            String schoolType,
             String subject,
             String goal,
             String priority,
