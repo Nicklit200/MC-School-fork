@@ -31,8 +31,9 @@ public class SchoolPromptSettingsService {
         }
         validate(request.groupLessonPrompt(), "Group lesson prompt");
         validate(request.individualLessonPrompt(), "Individual lesson prompt");
+        validate(request.diagnosticLessonPrompt(), "Diagnostic lesson prompt");
         SchoolPromptSettings settings = requireSettings();
-        settings.updatePrompts(request.groupLessonPrompt(), request.individualLessonPrompt());
+        settings.updatePrompts(request.groupLessonPrompt(), request.individualLessonPrompt(), request.diagnosticLessonPrompt());
         return toResponse(repository.save(settings));
     }
 
@@ -62,6 +63,7 @@ public class SchoolPromptSettingsService {
         return new SchoolPromptSettingsResponse(
                 settings.getGroupLessonPrompt(),
                 settings.getIndividualLessonPrompt(),
+                settings.getDiagnosticLessonPrompt(),
                 settings.getUpdatedAt());
     }
 }
