@@ -6,7 +6,7 @@ body{font-family:Inter,system-ui,sans-serif;margin:0;background:#f5f7fb;color:#1
 <script>
 let pass=sessionStorage.getItem('tsubera-pass')||'',trips=[],activeTrip=null;
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function ask(){if(!pass){pass=prompt('Пароль Tsubera')||'';if(pass)sessionStorage.setItem('tsubera-pass',pass)}}
+function ask(){}
 async function api(p,o={}){ask();let r=await fetch(p,{...o,headers:{...(o.headers||{}),'x-app-password':pass}});if(r.status===401){sessionStorage.removeItem('tsubera-pass');pass='';ask();return api(p,o)}let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 function status(t){if(t.rechnungCode)return '<span class="status ok">Rechnung создан</span>';if(t.auftrag&&t.cmr&&t.pod)return '<span class="status ok">Можно создать Rechnung</span>';let m=[];if(!t.auftrag)m.push('Auftrag');if(!t.cmr)m.push('CMR');if(!t.pod)m.push('POD');return '<span class="status wait">Не хватает: '+m.join(', ')+'</span>'}
 async function load(){let d=await api('/api/trips');trips=d.trips||[];render()}
