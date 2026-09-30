@@ -592,7 +592,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 404, { error: "API route not found" });
     }
 
-    let rel = p === "/" ? "index.html" : p.replace(/^\//,"");
+    let rel = p === "/" ? "app.html" : p.replace(/^\//,"");
     const full = path.normalize(path.join(__dirname, rel));
     if (!full.startsWith(__dirname)) return text(res, 403, "Forbidden");
     fs.readFile(full, (err, data) => {
