@@ -222,6 +222,76 @@ const toolDefs = [
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
   {
+    name: "create_trip",
+    description: "Create a new Tsubera trip in the server database. Use when the user wants ChatGPT to add a trip to the site.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "Trip date in YYYY-MM-DD format." },
+        trip_number: { type: "string", description: "Tour or trip number if known." },
+        customer: { type: "string", description: "Customer/company name." },
+        auftrag: { type: "boolean", description: "Whether Transportauftrag is already present." },
+        cmr: { type: "boolean", description: "Whether CMR is already present." },
+        pod: { type: "boolean", description: "Whether POD/Lieferschein proof is already present." },
+        rechnung_number: { type: "string", description: "Rechnung number if already created." }
+      },
+      required: ["date","customer"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+  },
+  {
+    name: "update_trip",
+    description: "Update Tsubera trip fields such as document flags, customer, date, tour number, or Rechnung number.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trip_id_or_number: { type: "string" },
+        date: { type: "string" },
+        trip_number: { type: "string" },
+        customer: { type: "string" },
+        auftrag: { type: "boolean" },
+        cmr: { type: "boolean" },
+        pod: { type: "boolean" },
+        rechnung_number: { type: "string" }
+      },
+      required: ["trip_id_or_number"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  {
+    name: "upload_document",
+    description: "Upload a document file to an existing Tsubera trip. Pass the original file bytes as base64. Automatically marks Auftrag, CMR, or POD present when that type is selected. Maximum decoded file size is 10 MB.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trip_id_or_number: { type: "string", description: "Existing trip internal id or tour number." },
+        document_type: { type: "string", enum: ["auftrag","cmr","pod","rechnung","other"] },
+        filename: { type: "string" },
+        mime_type: { type: "string" },
+        content_base64: { type: "string", description: "Base64 encoded raw file content, without data: prefix." }
+      },
+      required: ["trip_id_or_number","document_type","filename","content_base64"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+  },
+  {
+    name: "update_document_type",
+    description: "Reclassify an already uploaded document as Transportauftrag, CMR, POD/Lieferschein, Rechnung, or other. Use after identifying a file that was uploaded with the wrong type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        document_id: { type: "string" },
+        document_type: { type: "string", enum: ["auftrag","cmr","pod","rechnung","other"] }
+      },
+      required: ["document_id","document_type"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  {
     name: "fetch",
     description: "Fetch one Tsubera trip or document by id for connector retrieval.",
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
@@ -258,6 +328,77 @@ async function callTool(name, args, req) {
     const t = tripOut(db.prepare("SELECT * FROM trips WHERE id = ?").get(row.trip_id));
     return { found: true, document: docOut(row), trip: t, downloadUrl: tempFileUrl(req, row.id) };
   }
+  if (name === "create_trip") {
+    if (!args.date || !args.customer) throw new Error("date and customer are required");
+    const id = crypto.randomUUID();
+    const ts = now();
+    db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,rechnung_code,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        id,
+        args.date,
+        args.trip_number || "",
+        args.customer,
+        bool(args.auftrag),
+        bool(args.cmr),
+        bool(args.pod),
+        args.rechnung_number || "",
+        ts,
+        ts
+      );
+    const t = getTripByAny(id);
+    return { created: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
+  }
+  if (name === "update_trip") {
+    const old = getTripByAny(args.trip_id_or_number);
+    if (!old) return { updated: false, error: "Trip not found" };
+    const next = {
+      date: args.date ?? old.date,
+      trip: args.trip_number ?? old.trip,
+      customer: args.customer ?? old.customer,
+      auftrag: args.auftrag ?? old.auftrag,
+      cmr: args.cmr ?? old.cmr,
+      pod: args.pod ?? old.pod,
+      rechnungCode: args.rechnung_number ?? old.rechnungCode
+    };
+    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,rechnung_code=?,updated_at=? WHERE id=?")
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmr),bool(next.pod),next.rechnungCode,now(),old.id);
+    const t = getTripByAny(old.id);
+    return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
+  }
+  if (name === "upload_document") {
+    const t = getTripByAny(args.trip_id_or_number);
+    if (!t) return { uploaded: false, error: "Trip not found" };
+    if (!args.filename || !args.document_type || !args.content_base64) throw new Error("filename, document_type and content_base64 are required");
+    let buf;
+    try { buf = Buffer.from(args.content_base64, "base64"); } catch { throw new Error("Invalid base64 content"); }
+    if (!buf.length) throw new Error("Uploaded file is empty");
+    if (buf.length > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB MCP upload limit");
+    const id = crypto.randomUUID();
+    const ext = path.extname(args.filename).replace(/[^.a-zA-Z0-9]/g,"").slice(0,10);
+    const stored = id + ext;
+    fs.writeFileSync(path.join(DOCS_DIR, stored), buf);
+    db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)")
+      .run(id,t.id,args.document_type,args.filename,stored,args.mime_type || "application/octet-stream",buf.length,now());
+    if (["auftrag","cmr","pod"].includes(args.document_type)) {
+      db.prepare("UPDATE trips SET " + args.document_type + " = 1, updated_at=? WHERE id=?").run(now(), t.id);
+    }
+    const trip = getTripByAny(t.id);
+    return {
+      uploaded: true,
+      document: docOut(docRow(id)),
+      trip: { ...trip, readiness: readiness(trip), missing: missingForTrip(trip) }
+    };
+  }
+  if (name === "update_document_type") {
+    const row = docRow(args.document_id);
+    if (!row) return { updated: false, error: "Document not found" };
+    db.prepare("UPDATE documents SET doc_type=? WHERE id=?").run(args.document_type,row.id);
+    if (["auftrag","cmr","pod"].includes(args.document_type)) {
+      db.prepare("UPDATE trips SET " + args.document_type + " = 1, updated_at=? WHERE id=?").run(now(), row.trip_id);
+    }
+    return { updated: true, document: docOut(docRow(row.id)), trip: getTripByAny(row.trip_id) };
+  }
   if (name === "fetch") {
     const t = getTripByAny(args.id);
     if (t) return { id: t.id, type: "trip", data: { ...t, readiness: readiness(t), missing: missingForTrip(t), documents: listDocsForTrip(t.id) } };
@@ -275,7 +416,7 @@ async function handleMcp(req, res, token) {
   res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
   if (req.method !== "POST") return json(res, 405, { error: "POST required" });
-  const msg = await readJson(req, 2 * 1024 * 1024);
+  const msg = await readJson(req, 16 * 1024 * 1024);
   if (!msg.id && msg.method?.startsWith("notifications/")) return res.writeHead(202).end();
   const base = { jsonrpc: "2.0", id: msg.id ?? null };
   try {
@@ -285,7 +426,7 @@ async function handleMcp(req, res, token) {
         protocolVersion: requested,
         capabilities: { tools: {} },
         serverInfo: { name: "tsubera-transport-documents", version: "1.0.0" },
-        instructions: "Read-only access to Tsubera transport trips and uploaded transport documents. Use search/list tools first, then get_trip or get_document for details."
+        instructions: "Access to Tsubera transport trips and uploaded transport documents. Read tools can search and inspect. Write tools can create/update trips, upload files, and correct document types. Use search/list before modifying when the target trip is ambiguous."
       }});
     }
     if (msg.method === "ping") return json(res, 200, { ...base, result: {} });
@@ -294,8 +435,24 @@ async function handleMcp(req, res, token) {
       const name = msg.params?.name;
       const args = msg.params?.arguments || {};
       const data = await callTool(name, args, req);
+      const content = [{ type: "text", text: JSON.stringify(data) }];
+      const linkedDocument = (
+        name === "get_document" && data?.found && data?.document?.id
+      ) ? data : (
+        name === "fetch" && data?.type === "document" && data?.downloadUrl
+      ) ? data : null;
+      if (linkedDocument?.downloadUrl) {
+        const d = linkedDocument.document || linkedDocument.data || {};
+        content.push({
+          type: "resource_link",
+          name: d.name || "Tsubera document",
+          uri: linkedDocument.downloadUrl,
+          mimeType: d.mime || "application/octet-stream",
+          size: d.size || undefined
+        });
+      }
       return json(res, 200, { ...base, result: {
-        content: [{ type: "text", text: JSON.stringify(data) }],
+        content,
         structuredContent: data,
         isError: false
       }});
