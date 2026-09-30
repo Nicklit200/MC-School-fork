@@ -3,7 +3,7 @@ import { promptSettingsApi, type SchoolPromptSettings } from '../../api/promptSe
 
 export function TeacherPromptLibraryPage() {
   const [settings, setSettings] = useState<SchoolPromptSettings | null>(null);
-  const [copied, setCopied] = useState<'group' | 'individual' | null>(null);
+  const [copied, setCopied] = useState<'group' | 'individual' | 'diagnostic' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -12,7 +12,7 @@ export function TeacherPromptLibraryPage() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты'));
   }, []);
 
-  async function copy(kind: 'group' | 'individual', text: string) {
+  async function copy(kind: 'group' | 'individual' | 'diagnostic', text: string) {
     await navigator.clipboard.writeText(text);
     setCopied(kind);
     window.setTimeout(() => setCopied(null), 1800);
@@ -41,6 +41,12 @@ export function TeacherPromptLibraryPage() {
             text={settings.individualLessonPrompt}
             copied={copied === 'individual'}
             onCopy={() => void copy('individual', settings.individualLessonPrompt)}
+          />
+          <PromptCard
+            title="Диагностика"
+            text={settings.diagnosticLessonPrompt}
+            copied={copied === 'diagnostic'}
+            onCopy={() => void copy('diagnostic', settings.diagnosticLessonPrompt)}
           />
         </>
       )}
