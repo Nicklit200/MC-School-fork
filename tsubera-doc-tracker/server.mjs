@@ -440,7 +440,7 @@ const server = http.createServer(async (req, res) => {
     if (!full.startsWith(__dirname)) return text(res, 403, "Forbidden");
     fs.readFile(full, (err, data) => {
       if (err) {
-        fs.readFile(path.join(__dirname,"index.html"), (e,d) => {
+        fs.readFile(path.join(__dirname,"app.html"), (e,d) => {
           if (e) return text(res,404,"Not found");
           res.writeHead(200,{"content-type":"text/html; charset=utf-8"});res.end(d);
         });
