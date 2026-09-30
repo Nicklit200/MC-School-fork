@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tsubera migration</title>
+<style>body{font-family:system-ui,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#111827}.box{max-width:680px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:20px}input,button{font:inherit;padding:10px 12px;border-radius:10px}input{border:1px solid #d1d5db;width:100%;box-sizing:border-box}button{border:0;background:#111827;color:#fff;font-weight:600;cursor:pointer;margin-top:12px}.muted{color:#6b7280;font-size:13px}.log{white-space:pre-wrap;background:#f9fafb;border:1px solid #eee;border-radius:10px;padding:12px;margin-top:14px}</style>
+<div class="box"><h2>Импорт старых данных Tsubera</h2><p class="muted">Эта страница переносит рейсы и файлы из старого localStorage/IndexedDB в серверную базу.</p>
+<label>Пароль сайта</label><input id="pwd" type="password" placeholder="Пароль Tsubera"><button id="go">Импортировать</button><div id="log" class="log">Ожидание запуска…</div></div>
+<script>
+const log=t=>document.getElementById('log').textContent=t;
+async function api(path,opt={}){const p=document.getElementById('pwd').value;const r=await fetch(path,{...opt,headers:{...(opt.headers||{}),'x-app-password':p}});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
+function openOldDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open('tsubera-docs-db');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+async function oldDocs(){try{const db=await openOldDb();if(!db.objectStoreNames.contains('docs'))return[];return await new Promise((res,rej)=>{const tx=db.transaction('docs','readonly');const q=tx.objectStore('docs').getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error)})}catch{return[]}}
+async function toB64(blob){return await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]||'');fr.onerror=()=>rej(fr.error);fr.readAsDataURL(blob)})}
+document.getElementById('go').onclick=async()=>{try{
+ const legacy=JSON.parse(localStorage.getItem('tsubera-trips-v1')||'[]');const docs=await oldDocs();
+ if(!legacy.length){log('Старых рейсов в этом браузере не найдено.');return}
+ const current=(await api('/api/trips')).trips||[];const map={};let created=0,uploaded=0;
+ for(const t of legacy){
+   let ex=current.find(x=>x.date===t.date&&(x.trip||'')===(t.trip||'')&&x.customer===t.customer&&(x.rechnungCode||'')===(t.rechnungCode||''));
+   if(!ex){const r=await api('/api/trips',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({date:t.date,trip:t.trip||'',customer:t.customer||'Unknown',auftrag:!!t.auftrag,cmr:!!t.cmr,pod:!!t.pod,rechnungCode:t.rechnungCode||''})});ex=r.trip;created++}
+   map[t.id]=ex.id;
+ }
+ for(const d of docs){
+   const nid=map[d.tripId]; if(!nid||!d.blob)continue;
+   const dataBase64=await toB64(d.blob);
+   await api('/api/trips/'+encodeURIComponent(nid)+'/documents',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({docType:d.docType||'other',name:d.name||'document',mime:d.mime||'application/octet-stream',dataBase64})});uploaded++;
+ }
+ log('Готово. Перенесено новых рейсов: '+created+'\nФайлов загружено: '+uploaded+'\nТеперь открой обычный сайт и обнови страницу.');
+}catch(e){log('Ошибка: '+e.message)}};
+</script>
