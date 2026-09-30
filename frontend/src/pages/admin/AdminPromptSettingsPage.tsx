@@ -15,7 +15,6 @@ export function AdminPromptSettingsPage() {
       .then((settings) => {
         setGroupPrompt(settings.groupLessonPrompt);
         setIndividualPrompt(settings.individualLessonPrompt);
-      setDiagnosticPrompt(settings.diagnosticLessonPrompt);
         setDiagnosticPrompt(settings.diagnosticLessonPrompt);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты'))
@@ -30,6 +29,7 @@ export function AdminPromptSettingsPage() {
       const settings = await promptSettingsApi.update(groupPrompt, individualPrompt, diagnosticPrompt);
       setGroupPrompt(settings.groupLessonPrompt);
       setIndividualPrompt(settings.individualLessonPrompt);
+      setDiagnosticPrompt(settings.diagnosticLessonPrompt);
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось сохранить промты');
