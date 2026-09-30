@@ -11,8 +11,8 @@
     h1{font-size:30px;line-height:1.15;margin:0 0 8px}.sub{color:var(--muted);font-size:14px}.btn{border:0;background:var(--brand);color:#fff;padding:12px 16px;border-radius:12px;font-weight:600;cursor:pointer}.btn.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}
     .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}.stat b{display:block;font-size:26px;margin-top:8px}.stat span{color:var(--muted);font-size:13px}
     .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}.toolbar{padding:14px;border-bottom:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap}.search{flex:1;min-width:220px;border:1px solid var(--line);border-radius:12px;padding:11px 13px;font:inherit}
-    .th,.row{display:grid;grid-template-columns:120px 1.2fr 1fr 100px 100px 100px 100px 170px 44px;align-items:center}.th{padding:11px 14px;color:var(--muted);font-size:12px;background:#fafbfc;border-bottom:1px solid var(--line)}.row{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}.row:last-child{border-bottom:0}
-    .check{display:flex;justify-content:center}.check input{width:18px;height:18px;accent-color:#111827}.status{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:600}.status.ok{background:var(--greenbg);color:var(--green)}.status.wait{background:var(--amberbg);color:var(--amber)}
+    .th,.row{display:grid;grid-template-columns:120px 1.2fr 1fr 100px 100px 100px 150px 190px 44px;align-items:center}.th{padding:11px 14px;color:var(--muted);font-size:12px;background:#fafbfc;border-bottom:1px solid var(--line)}.row{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}.row:last-child{border-bottom:0}
+    .check{display:flex;justify-content:center}.check input{width:18px;height:18px;accent-color:#111827}.rn{width:100%;min-width:110px;border:1px solid var(--line);border-radius:10px;padding:8px 9px;font:inherit;background:#fff}.status{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:600}.status.ok{background:var(--greenbg);color:var(--green)}.status.wait{background:var(--amberbg);color:var(--amber)}
     .icon{border:0;background:transparent;cursor:pointer;font-size:20px;color:#88909e}.empty{padding:38px;text-align:center;color:var(--muted)}
     .modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.dialog{width:min(560px,100%);background:#fff;border-radius:20px;padding:22px;box-shadow:0 25px 80px rgba(0,0,0,.22)}.dialog h2{margin:0 0 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted)}.field input{border:1px solid var(--line);border-radius:12px;padding:11px 12px;font:inherit}.checks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px;border:1px solid var(--line);border-radius:14px}.checks label{display:flex;align-items:center;gap:8px;font-size:14px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
     @media(max-width:900px){.stats{grid-template-columns:1fr}.th{display:none}.row{grid-template-columns:1fr 1fr;gap:10px;padding:16px}.row>div:before{content:attr(data-label);display:block;font-size:11px;color:var(--muted);margin-bottom:4px}.check{justify-content:flex-start}.delete{grid-column:2;justify-self:end}.top{flex-direction:column}.btn{width:100%}}
@@ -31,7 +31,7 @@
     </section>
     <section class="panel">
       <div class="toolbar"><input id="search" class="search" placeholder="Поиск по номеру рейса, фирме или дате…"><button class="btn secondary" id="clearBtn">Очистить всё</button></div>
-      <div class="th"><div>Дата</div><div>№ рейса</div><div>Заказчик</div><div>Auftrag</div><div>CMR</div><div>POD</div><div>Rechnung</div><div>Статус</div><div></div></div>
+      <div class="th"><div>Дата</div><div>№ рейса</div><div>Заказчик</div><div>Auftrag</div><div>CMR</div><div>POD</div><div>Rechnung-Nr.</div><div>Статус</div><div></div></div>
       <div id="rows"></div>
     </section>
   </main>
@@ -47,9 +47,9 @@
             <label><input type="checkbox" name="auftrag"> Transportauftrag</label>
             <label><input type="checkbox" name="cmr"> CMR</label>
             <label><input type="checkbox" name="pod"> POD / подпись</label>
-            <label><input type="checkbox" name="rechnung"> Rechnung</label>
           </div>
         </div>
+        <div class="field full"><label>Rechnung-Nr. (если уже создан)</label><input name="rechnungCode" placeholder="Напр. RE-2026-001"></div>
       </div>
       <div class="actions"><button type="button" class="btn secondary" id="cancelBtn">Отмена</button><button class="btn" type="submit">Сохранить</button></div>
     </form>
@@ -60,13 +60,13 @@ let trips=JSON.parse(localStorage.getItem(KEY)||'[]');
 const rows=document.getElementById('rows'), search=document.getElementById('search');
 function save(){localStorage.setItem(KEY,JSON.stringify(trips));render()}
 function missingDocs(t){const req=[['auftrag','Transportauftrag'],['cmr','CMR'],['pod','POD']];return req.filter(([k])=>!t[k]).map(([,n])=>n)}
-function statusHtml(t){const miss=missingDocs(t);if(t.rechnung)return '<span class="status ok">✓ Rechnung создан</span>';if(!miss.length)return '<span class="status ok">✓ Можно создать Rechnung</span>';return '<span class="status wait">Не хватает: '+miss.join(', ')+'</span>'}
-function render(){const q=search.value.trim().toLowerCase();const list=trips.filter(t=>[t.date,t.trip,t.customer].join(' ').toLowerCase().includes(q));document.getElementById('total').textContent=trips.length;document.getElementById('ready').textContent=trips.filter(t=>!missingDocs(t).length&&!t.rechnung).length;document.getElementById('missing').textContent=trips.filter(t=>missingDocs(t).length).length;if(!list.length){rows.innerHTML='<div class="empty">Пока нет рейсов. Нажми «Добавить рейс».</div>';return}rows.innerHTML=list.map(t=>'<div class="row"><div data-label="Дата">'+(t.date||'—')+'</div><div data-label="№ рейса"><b>'+t.trip+'</b></div><div data-label="Заказчик">'+t.customer+'</div>'+['auftrag','cmr','pod','rechnung'].map(k=>'<div class="check" data-label="'+k+'"><input type="checkbox" '+(t[k]?'checked':'')+' onchange="toggle(\''+t.id+'\',\''+k+'\',this.checked)"></div>').join('')+'<div data-label="Статус">'+statusHtml(t)+'</div><div class="delete"><button class="icon" onclick="removeTrip(\''+t.id+'\')">×</button></div></div>').join('')}
-window.toggle=(id,k,v)=>{const t=trips.find(x=>x.id===id);if(t){t[k]=v;save()}};
+function statusHtml(t){const miss=missingDocs(t);if((t.rechnungCode||'').trim()||t.rechnung)return '<span class="status ok">✓ Rechnung создан</span>';if(!miss.length)return '<span class="status ok">✓ Можно создать Rechnung</span>';return '<span class="status wait">Не хватает: '+miss.join(', ')+'</span>'}
+function render(){const q=search.value.trim().toLowerCase();const list=trips.filter(t=>[t.date,t.trip,t.customer].join(' ').toLowerCase().includes(q));document.getElementById('total').textContent=trips.length;document.getElementById('ready').textContent=trips.filter(t=>!missingDocs(t).length&&!((t.rechnungCode||'').trim()||t.rechnung)).length;document.getElementById('missing').textContent=trips.filter(t=>missingDocs(t).length).length;if(!list.length){rows.innerHTML='<div class="empty">Пока нет рейсов. Нажми «Добавить рейс».</div>';return}rows.innerHTML=list.map(t=>'<div class="row"><div data-label="Дата">'+(t.date||'—')+'</div><div data-label="№ рейса"><b>'+t.trip+'</b></div><div data-label="Заказчик">'+t.customer+'</div>'+['auftrag','cmr','pod','rechnung'].map(k=>'<div class="check" data-label="'+k+'"><input type="checkbox" '+(t[k]?'checked':'')+' onchange="toggle(\''+t.id+'\',\''+k+'\',this.checked)"></div>').join('')+'<div data-label="Статус">'+statusHtml(t)+'</div><div class="delete"><button class="icon" onclick="removeTrip(\''+t.id+'\')">×</button></div></div>').join('')}
+window.toggle=(id,k,v)=>{const t=trips.find(x=>x.id===id);if(t){t[k]=v;save()}};window.setRechnungCode=(id,v)=>{const t=trips.find(x=>x.id===id);if(t){t.rechnungCode=v.trim();t.rechnung=false;save()}};
 window.removeTrip=(id)=>{if(confirm('Удалить этот рейс?')){trips=trips.filter(x=>x.id!==id);save()}};
 search.addEventListener('input',render);
 const modal=document.getElementById('modal');document.getElementById('addBtn').onclick=()=>modal.classList.add('open');document.getElementById('cancelBtn').onclick=()=>modal.classList.remove('open');
-document.getElementById('form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);trips.unshift({id:crypto.randomUUID(),date:f.get('date'),trip:f.get('trip').trim(),customer:f.get('customer').trim(),auftrag:f.has('auftrag'),cmr:f.has('cmr'),pod:f.has('pod'),rechnung:f.has('rechnung')});save();e.target.reset();e.target.customer.value='DC Cargo';modal.classList.remove('open')};
+document.getElementById('form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);trips.unshift({id:crypto.randomUUID(),date:f.get('date'),trip:f.get('trip').trim(),customer:f.get('customer').trim(),auftrag:f.has('auftrag'),cmr:f.has('cmr'),pod:f.has('pod'),rechnungCode:(f.get('rechnungCode')||'').trim()});save();e.target.reset();e.target.customer.value='DC Cargo';modal.classList.remove('open')};
 document.getElementById('clearBtn').onclick=()=>{if(confirm('Удалить все рейсы из браузера?')){trips=[];save()}};
 render();
 </script>
