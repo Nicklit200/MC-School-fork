@@ -5,17 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Tsubera — Transport Documents</title>
   <style>
-    :root{--bg:#f5f7fb;--card:#fff;--text:#131722;--muted:#6d7482;--line:#e7eaf0;--brand:#111827;--green:#0f9f6e;--greenbg:#eafaf4;--amber:#b7791f;--amberbg:#fff7df}
+    :root{--bg:#f5f7fb;--card:#fff;--text:#131722;--muted:#6d7482;--line:#e7eaf0;--brand:#111827;--green:#0f9f6e;--greenbg:#eafaf4;--amber:#b7791f;--amberbg:#fff7df;--red:#c2410c}
     *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)}
-    .shell{max-width:1180px;margin:0 auto;padding:32px 20px 60px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:24px}
-    h1{font-size:30px;line-height:1.15;margin:0 0 8px}.sub{color:var(--muted);font-size:14px}.btn{border:0;background:var(--brand);color:#fff;padding:12px 16px;border-radius:12px;font-weight:600;cursor:pointer}.btn.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}
+    .shell{max-width:1320px;margin:0 auto;padding:32px 20px 60px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:24px}
+    h1{font-size:30px;line-height:1.15;margin:0 0 8px}.sub{color:var(--muted);font-size:14px}.btn{border:0;background:var(--brand);color:#fff;padding:12px 16px;border-radius:12px;font-weight:600;cursor:pointer}.btn.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}.btn.small{padding:8px 10px;border-radius:10px;font-size:12px}.btn.danger{background:#fff;color:var(--red);border:1px solid #fed7aa}
     .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}.stat b{display:block;font-size:26px;margin-top:8px}.stat span{color:var(--muted);font-size:13px}
     .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}.toolbar{padding:14px;border-bottom:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap}.search{flex:1;min-width:220px;border:1px solid var(--line);border-radius:12px;padding:11px 13px;font:inherit}
-    .th,.row{display:grid;grid-template-columns:120px 1.2fr 1fr 100px 100px 100px 150px 190px 44px;align-items:center}.th{padding:11px 14px;color:var(--muted);font-size:12px;background:#fafbfc;border-bottom:1px solid var(--line)}.row{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}.row:last-child{border-bottom:0}
-    .check{display:flex;justify-content:center}.check input{width:18px;height:18px;accent-color:#111827}.rn{width:100%;min-width:110px;border:1px solid var(--line);border-radius:10px;padding:8px 9px;font:inherit;background:#fff}.status{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:600}.status.ok{background:var(--greenbg);color:var(--green)}.status.wait{background:var(--amberbg);color:var(--amber)}
+    .th,.row{display:grid;grid-template-columns:110px 1.15fr 1fr 80px 80px 80px 145px 130px 190px 36px;align-items:center}.th{padding:11px 14px;color:var(--muted);font-size:12px;background:#fafbfc;border-bottom:1px solid var(--line)}.row{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}.row:last-child{border-bottom:0}
+    .check{display:flex;justify-content:center}.check input{width:18px;height:18px;accent-color:#111827}.rn{width:100%;min-width:110px;border:1px solid var(--line);border-radius:10px;padding:8px 9px;font:inherit;background:#fff}.status{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:600}.status.ok{background:var(--greenbg);color:var(--green)}.status.wait{background:var(--amberbg);color:var(--amber)}.status.warn{background:#fff1f2;color:#be123c}
     .icon{border:0;background:transparent;cursor:pointer;font-size:20px;color:#88909e}.empty{padding:38px;text-align:center;color:var(--muted)}
-    .modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.dialog{width:min(560px,100%);background:#fff;border-radius:20px;padding:22px;box-shadow:0 25px 80px rgba(0,0,0,.22)}.dialog h2{margin:0 0 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted)}.field input{border:1px solid var(--line);border-radius:12px;padding:11px 12px;font:inherit}.checks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px;border:1px solid var(--line);border-radius:14px}.checks label{display:flex;align-items:center;gap:8px;font-size:14px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
-    @media(max-width:900px){.stats{grid-template-columns:1fr}.th{display:none}.row{grid-template-columns:1fr 1fr;gap:10px;padding:16px}.row>div:before{content:attr(data-label);display:block;font-size:11px;color:var(--muted);margin-bottom:4px}.check{justify-content:flex-start}.delete{grid-column:2;justify-self:end}.top{flex-direction:column}.btn{width:100%}}
+    .docs-btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.count{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:999px;background:#eef2f7;font-size:11px;color:#374151}
+    .modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:30}.modal.open{display:flex}.dialog{width:min(600px,100%);background:#fff;border-radius:20px;padding:22px;box-shadow:0 25px 80px rgba(0,0,0,.22);max-height:90vh;overflow:auto}.dialog.wide{width:min(760px,100%)}.dialog h2{margin:0 0 18px}.dialog .hint{color:var(--muted);font-size:13px;margin:-10px 0 16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted)}.field input,.field select{border:1px solid var(--line);border-radius:12px;padding:11px 12px;font:inherit;background:#fff}.checks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px;border:1px solid var(--line);border-radius:14px}.checks label{display:flex;align-items:center;gap:8px;font-size:14px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+    .uploadbox{border:1px dashed #cfd5df;border-radius:14px;padding:14px;margin-bottom:16px}.uploadrow{display:grid;grid-template-columns:170px 1fr auto;gap:10px;align-items:end}.doc-list{display:flex;flex-direction:column;gap:8px}.doc{display:grid;grid-template-columns:95px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px}.tag{font-size:11px;font-weight:700;padding:5px 7px;background:#f3f4f6;border-radius:8px;text-align:center}.doc-name{min-width:0}.doc-name b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}.doc-name span{font-size:11px;color:var(--muted)}.doc-actions{display:flex;gap:6px}
+    @media(max-width:1000px){.stats{grid-template-columns:1fr}.th{display:none}.row{grid-template-columns:1fr 1fr;gap:10px;padding:16px}.row>div:before{content:attr(data-label);display:block;font-size:11px;color:var(--muted);margin-bottom:4px}.check{justify-content:flex-start}.delete{grid-column:2;justify-self:end}.top{flex-direction:column}.top>.btn{width:100%}.uploadrow{grid-template-columns:1fr}.doc{grid-template-columns:1fr}.doc-actions{justify-content:flex-start}}
   </style>
 </head>
 <body>
@@ -31,16 +34,17 @@
     </section>
     <section class="panel">
       <div class="toolbar"><input id="search" class="search" placeholder="Поиск по номеру рейса, фирме или дате…"><button class="btn secondary" id="clearBtn">Очистить всё</button></div>
-      <div class="th"><div>Дата</div><div>№ рейса</div><div>Заказчик</div><div>Auftrag</div><div>CMR</div><div>POD</div><div>Rechnung-Nr.</div><div>Статус</div><div></div></div>
+      <div class="th"><div>Дата</div><div>№ рейса</div><div>Заказчик</div><div>Auftrag</div><div>CMR</div><div>POD</div><div>Rechnung-Nr.</div><div>Документы</div><div>Статус</div><div></div></div>
       <div id="rows"></div>
     </section>
   </main>
+
   <div class="modal" id="modal">
     <form class="dialog" id="form">
       <h2>Добавить рейс</h2>
       <div class="grid">
         <div class="field"><label>Дата</label><input name="date" type="date" required></div>
-        <div class="field"><label>№ рейса</label><input name="trip" placeholder="Напр. GD26090083" required></div>
+        <div class="field"><label>№ рейса</label><input name="trip" placeholder="Напр. GD26090083"></div>
         <div class="field full"><label>Заказчик</label><input name="customer" value="DC Cargo" required></div>
         <div class="field full"><label>Какие документы уже есть</label>
           <div class="checks">
@@ -54,20 +58,143 @@
       <div class="actions"><button type="button" class="btn secondary" id="cancelBtn">Отмена</button><button class="btn" type="submit">Сохранить</button></div>
     </form>
   </div>
+
+  <div class="modal" id="docsModal">
+    <div class="dialog wide">
+      <h2 id="docsTitle">Документы рейса</h2>
+      <div class="hint">PDF, JPG, PNG и другие файлы. Пока документы сохраняются только в браузере этого устройства.</div>
+      <div class="uploadbox">
+        <div class="uploadrow">
+          <div class="field"><label>Тип документа</label>
+            <select id="docType">
+              <option value="auftrag">Transportauftrag</option>
+              <option value="cmr">CMR</option>
+              <option value="pod">POD / Lieferschein</option>
+              <option value="rechnung">Rechnung</option>
+              <option value="other">Другое</option>
+            </select>
+          </div>
+          <div class="field"><label>Файлы</label><input id="docFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx"></div>
+          <button class="btn" id="uploadDocsBtn" type="button">Загрузить</button>
+        </div>
+      </div>
+      <div id="docList" class="doc-list"></div>
+      <div class="actions"><button type="button" class="btn secondary" id="closeDocsBtn">Закрыть</button></div>
+    </div>
+  </div>
+
 <script>
 const KEY='tsubera-trips-v1';
 let trips=JSON.parse(localStorage.getItem(KEY)||'[]');
+let currentTripId=null;
 const rows=document.getElementById('rows'), search=document.getElementById('search');
+
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function save(){localStorage.setItem(KEY,JSON.stringify(trips));render()}
 function missingDocs(t){const req=[['auftrag','Transportauftrag'],['cmr','CMR'],['pod','POD']];return req.filter(([k])=>!t[k]).map(([,n])=>n)}
-function statusHtml(t){const miss=missingDocs(t);if((t.rechnungCode||'').trim()||t.rechnung)return '<span class="status ok">✓ Rechnung создан</span>';if(!miss.length)return '<span class="status ok">✓ Можно создать Rechnung</span>';return '<span class="status wait">Не хватает: '+miss.join(', ')+'</span>'}
-function render(){const q=search.value.trim().toLowerCase();const list=trips.filter(t=>[t.date,t.trip,t.customer].join(' ').toLowerCase().includes(q));document.getElementById('total').textContent=trips.length;document.getElementById('ready').textContent=trips.filter(t=>!missingDocs(t).length&&!((t.rechnungCode||'').trim()||t.rechnung)).length;document.getElementById('missing').textContent=trips.filter(t=>missingDocs(t).length).length;if(!list.length){rows.innerHTML='<div class="empty">Пока нет рейсов. Нажми «Добавить рейс».</div>';return}rows.innerHTML=list.map(t=>'<div class="row"><div data-label="Дата">'+(t.date||'—')+'</div><div data-label="№ рейса"><b>'+t.trip+'</b></div><div data-label="Заказчик">'+t.customer+'</div>'+['auftrag','cmr','pod','rechnung'].map(k=>'<div class="check" data-label="'+k+'"><input type="checkbox" '+(t[k]?'checked':'')+' onchange="toggle(\''+t.id+'\',\''+k+'\',this.checked)"></div>').join('')+'<div data-label="Статус">'+statusHtml(t)+'</div><div class="delete"><button class="icon" onclick="removeTrip(\''+t.id+'\')">×</button></div></div>').join('')}
-window.toggle=(id,k,v)=>{const t=trips.find(x=>x.id===id);if(t){t[k]=v;save()}};window.setRechnungCode=(id,v)=>{const t=trips.find(x=>x.id===id);if(t){t.rechnungCode=v.trim();t.rechnung=false;save()}};
-window.removeTrip=(id)=>{if(confirm('Удалить этот рейс?')){trips=trips.filter(x=>x.id!==id);save()}};
+function statusHtml(t){
+  const miss=missingDocs(t), code=(t.rechnungCode||'').trim();
+  if(code)return '<span class="status ok">✓ Rechnung создан</span>';
+  if(t.rechnung)return '<span class="status warn">Rechnung есть · укажи номер</span>';
+  if(!miss.length)return '<span class="status ok">✓ Можно создать Rechnung</span>';
+  return '<span class="status wait">Не хватает: '+miss.join(', ')+'</span>'
+}
+
+function openDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open('tsubera-docs-db',1);
+    req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains('docs')){const st=db.createObjectStore('docs',{keyPath:'id'});st.createIndex('tripId','tripId',{unique:false})}};
+    req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
+  });
+}
+async function allDocs(){
+  const db=await openDb(); return new Promise((res,rej)=>{const tx=db.transaction('docs','readonly');const r=tx.objectStore('docs').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});
+}
+async function docsForTrip(tripId){
+  const db=await openDb(); return new Promise((res,rej)=>{const tx=db.transaction('docs','readonly');const r=tx.objectStore('docs').index('tripId').getAll(tripId);r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});
+}
+async function putDoc(doc){
+  const db=await openDb(); return new Promise((res,rej)=>{const tx=db.transaction('docs','readwrite');tx.objectStore('docs').put(doc);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)});
+}
+async function getDoc(id){
+  const db=await openDb(); return new Promise((res,rej)=>{const tx=db.transaction('docs','readonly');const r=tx.objectStore('docs').get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+}
+async function deleteDocDb(id){
+  const db=await openDb(); return new Promise((res,rej)=>{const tx=db.transaction('docs','readwrite');tx.objectStore('docs').delete(id);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)});
+}
+async function deleteTripDocs(tripId){
+  const docs=await docsForTrip(tripId); for(const d of docs) await deleteDocDb(d.id);
+}
+async function clearAllDocs(){
+  const db=await openDb(); return new Promise((res,rej)=>{const tx=db.transaction('docs','readwrite');tx.objectStore('docs').clear();tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)});
+}
+
+async function render(){
+  const q=search.value.trim().toLowerCase();
+  const list=trips.filter(t=>[t.date,t.trip,t.customer].join(' ').toLowerCase().includes(q));
+  document.getElementById('total').textContent=trips.length;
+  document.getElementById('ready').textContent=trips.filter(t=>!missingDocs(t).length&&!(t.rechnungCode||'').trim()&&!t.rechnung).length;
+  document.getElementById('missing').textContent=trips.filter(t=>missingDocs(t).length).length;
+  if(!list.length){rows.innerHTML='<div class="empty">Пока нет рейсов. Нажми «Добавить рейс».</div>';return}
+  let docs=[];try{docs=await allDocs()}catch(e){}
+  const counts={};docs.forEach(d=>counts[d.tripId]=(counts[d.tripId]||0)+1);
+  rows.innerHTML=list.map(t=>'<div class="row">'+
+    '<div data-label="Дата">'+escapeHtml(t.date||'—')+'</div>'+
+    '<div data-label="№ рейса"><b>'+escapeHtml(t.trip||'—')+'</b></div>'+
+    '<div data-label="Заказчик">'+escapeHtml(t.customer)+'</div>'+
+    ['auftrag','cmr','pod'].map(k=>'<div class="check" data-label="'+k+'"><input type="checkbox" '+(t[k]?'checked':'')+' onchange="toggle(\''+t.id+'\',\''+k+'\',this.checked)"></div>').join('')+
+    '<div data-label="Rechnung-Nr."><input class="rn" value="'+escapeHtml(t.rechnungCode||'')+'" placeholder="—" onchange="setRechnungCode(\''+t.id+'\',this.value)"></div>'+
+    '<div data-label="Документы"><button class="btn secondary small docs-btn" onclick="openDocs(\''+t.id+'\')">📎 Документы <span class="count">'+(counts[t.id]||0)+'</span></button></div>'+
+    '<div data-label="Статус">'+statusHtml(t)+'</div>'+
+    '<div class="delete"><button class="icon" onclick="removeTrip(\''+t.id+'\')">×</button></div></div>').join('');
+}
+
+window.toggle=(id,k,v)=>{const t=trips.find(x=>x.id===id);if(t){t[k]=v;save()}};
+window.setRechnungCode=(id,v)=>{const t=trips.find(x=>x.id===id);if(t){t.rechnungCode=v.trim();t.rechnung=false;save()}};
+window.removeTrip=async(id)=>{if(confirm('Удалить этот рейс и все загруженные к нему документы?')){await deleteTripDocs(id);trips=trips.filter(x=>x.id!==id);save()}};
+
+const docsModal=document.getElementById('docsModal');
+window.openDocs=async(id)=>{
+  currentTripId=id; const t=trips.find(x=>x.id===id);
+  document.getElementById('docsTitle').textContent='Документы · '+(t?.trip||t?.customer||'рейс');
+  document.getElementById('docFiles').value='';
+  docsModal.classList.add('open'); await renderDocList();
+};
+document.getElementById('closeDocsBtn').onclick=()=>{docsModal.classList.remove('open');currentTripId=null;render()};
+function typeLabel(t){return ({auftrag:'Transportauftrag',cmr:'CMR',pod:'POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
+function sizeLabel(n){if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB'}
+async function renderDocList(){
+  const box=document.getElementById('docList'); const docs=await docsForTrip(currentTripId);
+  if(!docs.length){box.innerHTML='<div class="empty">Документов пока нет.</div>';return}
+  docs.sort((a,b)=>b.createdAt-a.createdAt);
+  box.innerHTML=docs.map(d=>'<div class="doc"><div class="tag">'+escapeHtml(typeLabel(d.docType))+'</div><div class="doc-name"><b>'+escapeHtml(d.name)+'</b><span>'+sizeLabel(d.size||0)+'</span></div><div class="doc-actions"><button class="btn secondary small" onclick="viewDoc(\''+d.id+'\')">Открыть</button><button class="btn danger small" onclick="removeDoc(\''+d.id+'\')">Удалить</button></div></div>').join('');
+}
+document.getElementById('uploadDocsBtn').onclick=async()=>{
+  if(!currentTripId)return;
+  const input=document.getElementById('docFiles'), files=[...input.files];
+  if(!files.length){alert('Выбери хотя бы один файл');return}
+  const docType=document.getElementById('docType').value;
+  for(const file of files){
+    await putDoc({id:crypto.randomUUID(),tripId:currentTripId,docType,name:file.name,size:file.size,mime:file.type,createdAt:Date.now(),blob:file});
+  }
+  const t=trips.find(x=>x.id===currentTripId);
+  if(t&&['auftrag','cmr','pod'].includes(docType))t[docType]=true;
+  localStorage.setItem(KEY,JSON.stringify(trips));
+  input.value=''; await renderDocList(); await render();
+};
+window.viewDoc=async(id)=>{const d=await getDoc(id);if(!d)return;const url=URL.createObjectURL(d.blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000)};
+window.removeDoc=async(id)=>{if(confirm('Удалить этот файл?')){await deleteDocDb(id);await renderDocList();await render()}};
+
 search.addEventListener('input',render);
-const modal=document.getElementById('modal');document.getElementById('addBtn').onclick=()=>modal.classList.add('open');document.getElementById('cancelBtn').onclick=()=>modal.classList.remove('open');
-document.getElementById('form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);trips.unshift({id:crypto.randomUUID(),date:f.get('date'),trip:f.get('trip').trim(),customer:f.get('customer').trim(),auftrag:f.has('auftrag'),cmr:f.has('cmr'),pod:f.has('pod'),rechnungCode:(f.get('rechnungCode')||'').trim()});save();e.target.reset();e.target.customer.value='DC Cargo';modal.classList.remove('open')};
-document.getElementById('clearBtn').onclick=()=>{if(confirm('Удалить все рейсы из браузера?')){trips=[];save()}};
+const modal=document.getElementById('modal');
+document.getElementById('addBtn').onclick=()=>modal.classList.add('open');
+document.getElementById('cancelBtn').onclick=()=>modal.classList.remove('open');
+document.getElementById('form').onsubmit=e=>{
+  e.preventDefault();const f=new FormData(e.target);
+  trips.unshift({id:crypto.randomUUID(),date:f.get('date'),trip:(f.get('trip')||'').trim(),customer:f.get('customer').trim(),auftrag:f.has('auftrag'),cmr:f.has('cmr'),pod:f.has('pod'),rechnungCode:(f.get('rechnungCode')||'').trim()});
+  save();e.target.reset();e.target.customer.value='DC Cargo';modal.classList.remove('open')
+};
+document.getElementById('clearBtn').onclick=async()=>{if(confirm('Удалить все рейсы и все загруженные документы из этого браузера?')){await clearAllDocs();trips=[];save()}};
 render();
 </script>
 </body>
