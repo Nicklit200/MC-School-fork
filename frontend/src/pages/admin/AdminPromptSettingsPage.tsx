@@ -4,6 +4,7 @@ import { promptSettingsApi } from '../../api/promptSettings';
 export function AdminPromptSettingsPage() {
   const [groupPrompt, setGroupPrompt] = useState('');
   const [individualPrompt, setIndividualPrompt] = useState('');
+  const [diagnosticPrompt, setDiagnosticPrompt] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -14,6 +15,8 @@ export function AdminPromptSettingsPage() {
       .then((settings) => {
         setGroupPrompt(settings.groupLessonPrompt);
         setIndividualPrompt(settings.individualLessonPrompt);
+      setDiagnosticPrompt(settings.diagnosticLessonPrompt);
+        setDiagnosticPrompt(settings.diagnosticLessonPrompt);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты'))
       .finally(() => setLoading(false));
@@ -24,7 +27,7 @@ export function AdminPromptSettingsPage() {
     setSaved(false);
     setError(null);
     try {
-      const settings = await promptSettingsApi.update(groupPrompt, individualPrompt);
+      const settings = await promptSettingsApi.update(groupPrompt, individualPrompt, diagnosticPrompt);
       setGroupPrompt(settings.groupLessonPrompt);
       setIndividualPrompt(settings.individualLessonPrompt);
       setSaved(true);
@@ -79,6 +82,22 @@ export function AdminPromptSettingsPage() {
           style={{ minHeight: 280, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
         <div className="muted">{individualPrompt.length.toLocaleString()} / 30 000 символов</div>
+      </div>
+
+      <div className="panel stack">
+        <div>
+          <h2 style={{ margin: 0 }}>Диагностика</h2>
+          <p className="muted">Главный промт для пробных диагностических уроков и проверки уровня ученика.</p>
+        </div>
+        <textarea
+          className="input"
+          value={diagnosticPrompt}
+          maxLength={30000}
+          onChange={(event) => { setDiagnosticPrompt(event.target.value); setSaved(false); }}
+          placeholder="Вставьте промт для диагностики…"
+          style={{ minHeight: 280, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+        <div className="muted">{diagnosticPrompt.length.toLocaleString()} / 30 000 символов</div>
       </div>
 
       <button className="btn" type="button" disabled={saving} onClick={() => void save()} style={{ alignSelf: 'flex-start' }}>
