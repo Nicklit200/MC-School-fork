@@ -5,6 +5,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api
 export type SchoolPromptSettings = {
   groupLessonPrompt: string;
   individualLessonPrompt: string;
+  diagnosticLessonPrompt: string;
   updatedAt: string | null;
 };
 
@@ -26,6 +27,6 @@ async function promptRequest<T>(method: string, body?: unknown): Promise<T> {
 
 export const promptSettingsApi = {
   get: () => promptRequest<SchoolPromptSettings>('GET'),
-  update: (groupLessonPrompt: string, individualLessonPrompt: string) =>
-    promptRequest<SchoolPromptSettings>('PUT', { groupLessonPrompt, individualLessonPrompt }),
+  update: (groupLessonPrompt: string, individualLessonPrompt: string, diagnosticLessonPrompt: string) =>
+    promptRequest<SchoolPromptSettings>('PUT', { groupLessonPrompt, individualLessonPrompt, diagnosticLessonPrompt }),
 };
