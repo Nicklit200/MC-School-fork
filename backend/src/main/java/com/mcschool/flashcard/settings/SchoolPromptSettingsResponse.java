@@ -5,6 +5,7 @@ import java.time.Instant;
 public record SchoolPromptSettingsResponse(
         String groupLessonPrompt,
         String individualLessonPrompt,
+        String diagnosticLessonPrompt,
         Instant updatedAt
 ) {
 }
