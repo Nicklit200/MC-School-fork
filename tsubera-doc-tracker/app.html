@@ -8,7 +8,7 @@
 :root{color-scheme:light}
 *{box-sizing:border-box}
 body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f5f7fb;color:#111827}
-main{max-width:1480px;margin:auto;padding:26px 18px}
+main{max-width:1620px;margin:auto;padding:26px 18px}
 .top{display:flex;justify-content:space-between;gap:14px;align-items:center}
 h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:650;cursor:pointer;background:#111827;color:#fff}
@@ -16,7 +16,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px}.toolbar input{flex:1;border:1px solid #dfe3ea;border-radius:10px;padding:11px}
-.table{overflow-x:auto}.head,.row{min-width:1370px;display:grid;grid-template-columns:105px 120px 190px 80px 180px 190px 150px 125px 120px 190px 34px;align-items:center}
+.table{overflow-x:auto}.head,.row{min-width:1510px;display:grid;grid-template-columns:105px 145px 145px 190px 80px 180px 190px 150px 125px 120px 170px 34px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
 .cellcheck{display:flex;justify-content:center}.row input[type=checkbox]{width:18px;height:18px}
@@ -30,7 +30,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.full{grid-column:1/-1}
 .field input,.field select{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .docs{display:flex;flex-direction:column;gap:8px;margin-top:16px}.doc{display:grid;grid-template-columns:165px 1fr auto;gap:8px;align-items:center;border:1px solid #eee;border-radius:10px;padding:9px}
-.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.tid{font-weight:800;letter-spacing:.2px;color:#111827}.customer-ref{color:#4b5563;font-size:12px}
 @media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.full{grid-column:auto}}
 </style>
 </head>
@@ -58,10 +58,10 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
   </div>
 
   <div class="panel">
-    <div class="toolbar"><input id="q" placeholder="Поиск по дате, номеру рейса, заказчику или Rechnung..."></div>
+    <div class="toolbar"><input id="q" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате, фирме или Rechnung..."></div>
     <div class="table">
       <div class="head">
-        <div>Дата</div><div>№ рейса</div><div>Заказчик</div><div>Auftrag</div>
+        <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Auftrag</div>
         <div>CMR загрузка</div><div>CMR выгрузка / POD</div><div>Rechnung-Nr.</div>
         <div>Документы</div><div>Статус</div><div>Обновлено</div><div></div>
       </div>
@@ -75,7 +75,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
     <h2>Добавить рейс</h2>
     <div class="grid">
       <div class="field"><label>Дата рейса</label><input type="date" name="date" required></div>
-      <div class="field"><label>№ рейса / Tour-Nr.</label><input name="trip"></div>
+      <div class="field"><label>№ заказа / Tour-Nr. заказчика</label><input name="trip" placeholder="например GD26090270"></div>
       <div class="field full"><label>Заказчик</label><input name="customer" value="DC Cargo Sp. z o.o." required></div>
       <div class="field full"><label>Rechnung-Nr. (если уже создан)</label><input name="rechnungCode"></div>
     </div>
@@ -123,7 +123,7 @@ function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTi
 async function load(){let d=await api('/api/trips');trips=d.trips||[];render()}
 function render(){
   let q=$('q').value.toLowerCase();
-  let list=trips.filter(t=>[t.date,t.trip,t.customer,t.rechnungCode].join(' ').toLowerCase().includes(q));
+  let list=trips.filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.rechnungCode].join(' ').toLowerCase().includes(q));
   $('total').textContent=trips.length;
   $('loaded').textContent=trips.filter(t=>t.cmrLoaded).length;
   $('unloaded').textContent=trips.filter(t=>t.cmrUnloaded).length;
@@ -131,7 +131,8 @@ function render(){
   $('rows').innerHTML=list.map(t=>`
     <div class="row">
       <div>${esc(t.date)}</div>
-      <div><b>${esc(t.trip||'—')}</b></div>
+      <div><span class="tid">${esc(t.internalTripId||'—')}</span></div>
+      <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
       <div>${esc(t.customer)}</div>
       <div class="cellcheck"><input aria-label="Auftrag" type="checkbox" ${t.auftrag?'checked':''} onchange="toggle('${t.id}','auftrag',this.checked)"></div>
       <div class="stage">
@@ -152,7 +153,7 @@ window.toggle=async(id,k,v)=>{
 }
 window.rechnung=async(id,v)=>{await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({rechnungCode:v.trim()})});await load()}
 window.delTrip=async id=>{if(confirm('Удалить рейс и все его документы?')){await api('/api/trips/'+id,{method:'DELETE'});await load()}}
-window.openDocs=async id=>{activeTrip=id;let t=trips.find(x=>x.id===id);$('docsTitle').textContent='Документы · '+(t?.trip||t?.customer||'рейс');$('docsModal').classList.add('open');await loadDocs()}
+window.openDocs=async id=>{activeTrip=id;let t=trips.find(x=>x.id===id);$('docsTitle').textContent='Документы · '+(t?.internalTripId||'рейс')+(t?.trip?' · '+t.trip:'');$('docsModal').classList.add('open');await loadDocs()}
 async function loadDocs(){let d=await api('/api/trips/'+activeTrip+'/documents');$('docList').innerHTML=(d.documents||[]).map(x=>`<div class="doc"><b>${esc(docLabel(x.docType))}</b><div><div>${esc(x.name)}</div><div class="muted">${Math.round((x.size||0)/1024)} KB</div></div><div><button class="btn alt small" onclick="openDoc('${x.id}')">Открыть</button> <button class="btn alt small" onclick="delDoc('${x.id}')">Удалить</button></div></div>`).join('')||'<div class="muted">Документов пока нет</div>'}
 window.openDoc=async id=>{let d=await api('/api/documents/'+id+'/link');window.open(d.url,'_blank')}
 window.delDoc=async id=>{if(confirm('Удалить файл?')){await api('/api/documents/'+id,{method:'DELETE'});await loadDocs();await load()}}
