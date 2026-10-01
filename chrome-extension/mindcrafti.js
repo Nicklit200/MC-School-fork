@@ -6,16 +6,6 @@
     return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
-  async function rememberReturnOrigin() {
-    try {
-      await chrome.storage.local.set({ mindcraftiReturnOrigin: window.location.origin });
-    } catch {
-      // The lesson flow must continue even if extension storage is unavailable.
-    }
-  }
-
-  void rememberReturnOrigin();
-
   document.addEventListener('click', (event) => {
     const target = event.target instanceof Element ? event.target.closest('button, a') : null;
     if (!target) return;
@@ -27,12 +17,12 @@
     const groupId = target.getAttribute('data-mindcrafti-group-id') || '';
     const studentId = target.getAttribute('data-mindcrafti-student-id') || '';
     const params = new URLSearchParams();
-    if (lessonId) params.set('completedLesson', lessonId);
-    if (groupId) params.set('groupId', groupId);
-    if (studentId) params.set('studentId', studentId);
-    params.set('fromMeet', '1');
+    params.set('mindcraftiReturn', 'lesson');
 
-    const returnUrl = `${window.location.origin}/teacher/lessons?${params.toString()}`;
+    const returnPath = lessonId
+      ? `/teacher/lessons/${encodeURIComponent(lessonId)}`
+      : '/teacher/lessons';
+    const returnUrl = `${window.location.origin}${returnPath}?${params.toString()}`;
 
     void (async () => {
       try {
@@ -50,7 +40,6 @@
         // Returning to Mindcrafti is an enhancement; lesson start must still continue.
       }
 
-      // Only launch Soniox after the return context has definitely been stored.
       try {
         window.location.href = PROTOCOL_URL;
       } catch {
