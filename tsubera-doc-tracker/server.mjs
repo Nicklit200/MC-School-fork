@@ -205,6 +205,63 @@ async function readJson(req, limit = 25 * 1024 * 1024) {
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
+function assertSafeHttpsUrl(value) {
+  let u;
+  try { u = new URL(String(value || "")); } catch { throw new Error("Invalid source URL"); }
+  if (u.protocol !== "https:") throw new Error("Only HTTPS source URLs are allowed");
+  const h = u.hostname.toLowerCase();
+  if (
+    h === "localhost" || h === "::1" || h === "[::1]" ||
+    /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) ||
+    /^169\.254\./.test(h) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(h)
+  ) throw new Error("Private/internal source URLs are not allowed");
+  return u;
+}
+async function downloadUrlToBuffer(sourceUrl, maxBytes = 20 * 1024 * 1024) {
+  let current = assertSafeHttpsUrl(sourceUrl);
+  for (let i = 0; i < 5; i++) {
+    const rr = await fetch(current, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(20000),
+      headers: { "user-agent": "Tsubera-Document-Importer/1.0" }
+    });
+    if (rr.status >= 300 && rr.status < 400) {
+      const location = rr.headers.get("location");
+      if (!location) throw new Error("Source URL redirected without a Location header");
+      current = assertSafeHttpsUrl(new URL(location, current).toString());
+      continue;
+    }
+    if (!rr.ok) throw new Error("Could not fetch source file: HTTP " + rr.status);
+    const len = Number(rr.headers.get("content-length") || 0);
+    if (len && len > maxBytes) throw new Error("Source file exceeds " + Math.floor(maxBytes / 1024 / 1024) + " MB limit");
+    const buf = Buffer.from(await rr.arrayBuffer());
+    if (!buf.length) throw new Error("Source file is empty");
+    if (buf.length > maxBytes) throw new Error("Source file exceeds " + Math.floor(maxBytes / 1024 / 1024) + " MB limit");
+    return { buffer: buf, mime: rr.headers.get("content-type") || "application/octet-stream", finalUrl: current.toString() };
+  }
+  throw new Error("Too many redirects while fetching source file");
+}
+function storeTripDocument(t, { documentType, filename, mimeType, buffer, vehiclePlate }) {
+  const id = crypto.randomUUID();
+  const ext = path.extname(filename).replace(/[^.a-zA-Z0-9]/g,"").slice(0,10);
+  const stored = id + ext;
+  fs.writeFileSync(path.join(DOCS_DIR, stored), buffer);
+  db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(id,t.id,documentType,filename,stored,mimeType || "application/octet-stream",buffer.length,now());
+  const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
+  const flag = flagMap[documentType];
+  if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
+  else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
+  else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
+  if (vehiclePlate) appendVehicleToTrip(t.id, vehiclePlate);
+  const trip = getTripByAny(t.id);
+  return {
+    uploaded: true,
+    document: docOut(docRow(id)),
+    trip: { ...trip, readiness: readiness(trip), missing: missingForTrip(trip) }
+  };
+}
 function apiAuthorized(req) {
   if (!SITE_PASSWORD) return true;
   const h = req.headers["x-app-password"];
@@ -437,6 +494,24 @@ const toolDefs = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
   },
   {
+    name: "upload_document_from_url",
+    description: "Fast document upload from a temporary/signed HTTPS download URL. Use for files handed off by ChatGPT, Gmail, Google Drive or similar connectors so the file does not need to be copied into base64 first. The file is downloaded server-side and stored in the Tsubera trip. Maximum file size is 20 MB.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trip_id_or_number: { type: "string", description: "Existing Tsubera Tour-ID, customer tour/order number, or trip database id." },
+        document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
+        filename: { type: "string" },
+        mime_type: { type: "string", description: "Optional MIME override; if omitted the source response Content-Type is used." },
+        vehicle_plate: { type: "string", description: "Optional vehicle plate detected/selected from this document. It will be assigned to the tour." },
+        source_url: { type: "string", description: "Temporary or signed HTTPS download URL for the original file." }
+      },
+      required: ["trip_id_or_number","document_type","filename","source_url"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+  },
+  {
     name: "update_document_type",
     description: "Reclassify an uploaded document as Transportauftrag, CMR after loading, final CMR/POD after unloading, Rechnung, or other.",
     inputSchema: {
@@ -557,39 +632,33 @@ async function callTool(name, args, req) {
     if (!args.filename || !args.document_type || !args.content_base64) throw new Error("filename, document_type and content_base64 are required");
     let buf;
     if (String(args.content_base64).startsWith("url:")) {
-      const src = new URL(String(args.content_base64).slice(4));
-      if (src.protocol !== "https:" || !(src.hostname === "oaiusercontent.com" || src.hostname.endsWith(".oaiusercontent.com"))) {
-        throw new Error("Only temporary oaiusercontent HTTPS URLs are allowed");
-      }
-      const rr = await fetch(src, { redirect: "follow" });
-      if (!rr.ok) throw new Error("Could not fetch temporary file URL: HTTP " + rr.status);
-      const ab = await rr.arrayBuffer();
-      buf = Buffer.from(ab);
+      const downloaded = await downloadUrlToBuffer(String(args.content_base64).slice(4), 10 * 1024 * 1024);
+      buf = downloaded.buffer;
     } else {
       try { buf = Buffer.from(args.content_base64, "base64"); } catch { throw new Error("Invalid base64 content"); }
     }
     if (!buf.length) throw new Error("Uploaded file is empty");
     if (buf.length > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB MCP upload limit");
-    const id = crypto.randomUUID();
-    const ext = path.extname(args.filename).replace(/[^.a-zA-Z0-9]/g,"").slice(0,10);
-    const stored = id + ext;
-    fs.writeFileSync(path.join(DOCS_DIR, stored), buf);
-    db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)")
-      .run(id,t.id,args.document_type,args.filename,stored,args.mime_type || "application/octet-stream",buf.length,now());
-    const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
-    const flag = flagMap[args.document_type];
-    if (flag) {
-      if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
-      else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
-      else db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
-    }
-    if (args.vehicle_plate) appendVehicleToTrip(t.id, args.vehicle_plate);
-    const trip = getTripByAny(t.id);
-    return {
-      uploaded: true,
-      document: docOut(docRow(id)),
-      trip: { ...trip, readiness: readiness(trip), missing: missingForTrip(trip) }
-    };
+    return storeTripDocument(t, {
+      documentType: args.document_type,
+      filename: args.filename,
+      mimeType: args.mime_type || "application/octet-stream",
+      buffer: buf,
+      vehiclePlate: args.vehicle_plate
+    });
+  }
+  if (name === "upload_document_from_url") {
+    const t = getTripByAny(args.trip_id_or_number);
+    if (!t) return { uploaded: false, error: "Trip not found" };
+    if (!args.filename || !args.document_type || !args.source_url) throw new Error("filename, document_type and source_url are required");
+    const downloaded = await downloadUrlToBuffer(args.source_url, 20 * 1024 * 1024);
+    return storeTripDocument(t, {
+      documentType: args.document_type,
+      filename: args.filename,
+      mimeType: args.mime_type || downloaded.mime || "application/octet-stream",
+      buffer: downloaded.buffer,
+      vehiclePlate: args.vehicle_plate
+    });
   }
   if (name === "update_document_type") {
     const row = docRow(args.document_id);
