@@ -193,7 +193,7 @@ public class McpHomeworkWriteService {
         String value = requested == null ? "" : requested.trim();
         if (value.isBlank()) value = homework.getWorksheetFilename();
         if (value == null || value.isBlank()) value = "homework.pdf";
-        value = value.replace("/", "_").replace("\\", "_").replace(""", "");
+        value = value.replace("/", "_").replace("\\", "_").replace("\"", "");
         if (!value.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) value += ".pdf";
         return value;
     }
