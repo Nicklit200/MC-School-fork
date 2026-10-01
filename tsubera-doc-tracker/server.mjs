@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS documents (
   FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_documents_trip_id ON documents(trip_id);
+CREATE TABLE IF NOT EXISTS vehicles (
+  id TEXT PRIMARY KEY,
+  plate TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON vehicles(plate);
 `);
 
 const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
@@ -66,6 +74,59 @@ db.exec("UPDATE documents SET doc_type = 'cmr_unloading' WHERE doc_type = 'pod'"
 
 const now = () => new Date().toISOString();
 const bool = v => v ? 1 : 0;
+const normalizePlate = v => String(v || "").trim().replace(/\s+/g," ").toUpperCase();
+const vehicleOut = row => row ? ({
+  id: row.id,
+  plate: row.plate,
+  note: row.note || "",
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+}) : null;
+function listVehicles() {
+  const rows = db.prepare("SELECT * FROM vehicles ORDER BY plate COLLATE NOCASE").all();
+  const trips = db.prepare("SELECT vehicle_plates FROM trips").all();
+  return rows.map(r => {
+    const plate = normalizePlate(r.plate);
+    const tripCount = trips.filter(t => String(t.vehicle_plates || "").split(/\r?\n|,|;/).map(normalizePlate).filter(Boolean).includes(plate)).length;
+    return { ...vehicleOut(r), tripCount };
+  });
+}
+function ensureVehicle(plate, note = "") {
+  const p = normalizePlate(plate);
+  if (!p) return null;
+  const existing = db.prepare("SELECT * FROM vehicles WHERE UPPER(plate)=UPPER(?) LIMIT 1").get(p);
+  if (existing) {
+    if (note && !existing.note) db.prepare("UPDATE vehicles SET note=?,updated_at=? WHERE id=?").run(String(note).trim(), now(), existing.id);
+    return vehicleOut(db.prepare("SELECT * FROM vehicles WHERE id=?").get(existing.id));
+  }
+  const id = crypto.randomUUID(), ts = now();
+  db.prepare("INSERT INTO vehicles (id,plate,note,created_at,updated_at) VALUES (?,?,?,?,?)").run(id,p,String(note||"").trim(),ts,ts);
+  return vehicleOut(db.prepare("SELECT * FROM vehicles WHERE id=?").get(id));
+}
+function platesToArray(value) {
+  const arr = Array.isArray(value) ? value : String(value || "").split(/\r?\n|,|;/);
+  return [...new Set(arr.map(normalizePlate).filter(Boolean))];
+}
+function platesToText(value) {
+  const arr = platesToArray(value);
+  for (const p of arr) ensureVehicle(p);
+  return arr.join("\n");
+}
+function appendVehicleToTrip(tripId, plate) {
+  const p = normalizePlate(plate);
+  if (!p) return getTripByAny(tripId);
+  ensureVehicle(p);
+  const row = db.prepare("SELECT vehicle_plates FROM trips WHERE id=?").get(tripId);
+  if (!row) return null;
+  const plates = platesToArray(row.vehicle_plates);
+  if (!plates.includes(p)) plates.push(p);
+  db.prepare("UPDATE trips SET vehicle_plates=?,updated_at=? WHERE id=?").run(plates.join("\n"),now(),tripId);
+  return getTripByAny(tripId);
+}
+
+for (const row of db.prepare("SELECT vehicle_plates FROM trips WHERE TRIM(COALESCE(vehicle_plates,'')) <> ''").all()) {
+  for (const p of platesToArray(row.vehicle_plates)) ensureVehicle(p);
+}
 
 function internalPrefix(date) {
   const clean = String(date || "").replace(/[^0-9]/g, "");
@@ -194,6 +255,7 @@ function systemOverview() {
     readyForRechnung: rows.filter(t => readiness(t) === "ready_for_rechnung").length,
     missingDocuments: rows.filter(t => readiness(t) === "missing_documents").length,
     rechnungenCreated: rows.filter(t => readiness(t) === "rechnung_created").length,
+    totalVehicles: db.prepare("SELECT COUNT(*) c FROM vehicles").get().c,
     database: "SQLite on persistent Railway volume",
     files: "Persistent Railway volume at /data/documents",
     connector: "Read/write MCP"
@@ -274,6 +336,40 @@ const toolDefs = [
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
   {
+    name: "list_vehicles",
+    description: "List the vehicle registry used for Tsubera tours, including plate numbers and how many tours reference each vehicle.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "create_vehicle",
+    description: "Add a vehicle registration number (Kennzeichen) to the Tsubera vehicle registry.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        plate: { type: "string", description: "Vehicle registration / Kennzeichen." },
+        note: { type: "string", description: "Optional note such as owner/company." }
+      },
+      required: ["plate"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  {
+    name: "assign_vehicle_to_trip",
+    description: "Assign a vehicle from the registry to an existing tour. The vehicle is added without removing other vehicles already assigned to the tour.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trip_id_or_number: { type: "string" },
+        vehicle_plate: { type: "string" }
+      },
+      required: ["trip_id_or_number","vehicle_plate"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  {
     name: "create_trip",
     description: "Create a new Tsubera trip. A stable Tsubera Tour-ID like TS-261001-001 is generated automatically from the trip date.",
     inputSchema: {
@@ -332,6 +428,7 @@ const toolDefs = [
         document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
         filename: { type: "string" },
         mime_type: { type: "string" },
+        vehicle_plate: { type: "string", description: "Optional vehicle plate detected/selected from this document. It will be assigned to the tour." },
         content_base64: { type: "string", description: "Base64 encoded raw file content, without data: prefix." }
       },
       required: ["trip_id_or_number","document_type","filename","content_base64"],
@@ -390,6 +487,20 @@ async function callTool(name, args, req) {
     const t = tripOut(db.prepare("SELECT * FROM trips WHERE id = ?").get(row.trip_id));
     return { found: true, document: docOut(row), trip: t, downloadUrl: tempFileUrl(req, row.id) };
   }
+  if (name === "list_vehicles") return { vehicles: listVehicles(), count: listVehicles().length };
+  if (name === "create_vehicle") {
+    const vehicle = ensureVehicle(args.plate, args.note || "");
+    if (!vehicle) throw new Error("plate is required");
+    return { created: true, vehicle };
+  }
+  if (name === "assign_vehicle_to_trip") {
+    const t = getTripByAny(args.trip_id_or_number);
+    if (!t) return { assigned: false, error: "Trip not found" };
+    const p = normalizePlate(args.vehicle_plate);
+    if (!p) throw new Error("vehicle_plate is required");
+    const trip = appendVehicleToTrip(t.id, p);
+    return { assigned: true, vehicle: ensureVehicle(p), trip };
+  }
   if (name === "create_trip") {
     if (!args.date || !args.customer) throw new Error("date and customer are required");
     const id = crypto.randomUUID();
@@ -412,7 +523,7 @@ async function callTool(name, args, req) {
         bool(cmrUnloaded),
         args.loaded_at || "",
         args.unloaded_at || "",
-        Array.isArray(args.vehicle_plates) ? args.vehicle_plates.map(x=>String(x).trim()).filter(Boolean).join("\n") : "",
+        platesToText(args.vehicle_plates || []),
         args.rechnung_number || "",
         ts,
         ts
@@ -436,7 +547,7 @@ async function callTool(name, args, req) {
       rechnungCode: args.rechnung_number ?? old.rechnungCode
     };
     db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,rechnung_code=?,updated_at=? WHERE id=?")
-      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,Array.isArray(next.vehiclePlates)?next.vehiclePlates.map(x=>String(x).trim()).filter(Boolean).join("\n"):String(next.vehiclePlates||""),next.rechnungCode,now(),old.id);
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,platesToText(next.vehiclePlates),next.rechnungCode,now(),old.id);
     const t = getTripByAny(old.id);
     return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
@@ -461,6 +572,7 @@ async function callTool(name, args, req) {
       else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
       else db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
     }
+    if (args.vehicle_plate) appendVehicleToTrip(t.id, args.vehicle_plate);
     const trip = getTripByAny(t.id);
     return {
       uploaded: true,
@@ -584,6 +696,21 @@ const server = http.createServer(async (req, res) => {
 
       if (p === "/api/overview" && req.method === "GET") return json(res, 200, systemOverview());
 
+      if (p === "/api/vehicles" && req.method === "GET") return json(res, 200, { vehicles: listVehicles() });
+      if (p === "/api/vehicles" && req.method === "POST") {
+        const b = await readJson(req);
+        const vehicle = ensureVehicle(b.plate, b.note || "");
+        if (!vehicle) return json(res, 400, { error: "plate is required" });
+        return json(res, 201, { vehicle });
+      }
+      const vehicleMatch = p.match(/^\/api\/vehicles\/([^/]+)$/);
+      if (vehicleMatch && req.method === "DELETE") {
+        const row = db.prepare("SELECT * FROM vehicles WHERE id=?").get(vehicleMatch[1]);
+        if (!row) return json(res, 404, { error: "Vehicle not found" });
+        db.prepare("DELETE FROM vehicles WHERE id=?").run(row.id);
+        return json(res, 200, { ok: true, historyPreserved: true });
+      }
+
       if (p === "/api/trips" && req.method === "GET") {
         const args = {
           query: url.searchParams.get("q") || undefined,
@@ -606,7 +733,7 @@ const server = http.createServer(async (req, res) => {
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
         db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,vehicle_plates,rechnung_code,created_at,updated_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, internalTripId, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", Array.isArray(b.vehiclePlates)?b.vehiclePlates.map(x=>String(x).trim()).filter(Boolean).join("\n"):"", b.rechnungCode || "", ts, ts);
+          .run(id, internalTripId, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", platesToText(b.vehiclePlates || []), b.rechnungCode || "", ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
@@ -626,7 +753,7 @@ const server = http.createServer(async (req, res) => {
           rechnungCode: b.rechnungCode ?? old.rechnungCode
         };
         db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,rechnung_code=?,updated_at=? WHERE id=?")
-          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,Array.isArray(next.vehiclePlates)?next.vehiclePlates.map(x=>String(x).trim()).filter(Boolean).join("\n"):String(next.vehiclePlates||""),next.rechnungCode,now(),id);
+          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,platesToText(next.vehiclePlates),next.rechnungCode,now(),id);
         return json(res, 200, { trip: getTripByAny(id) });
       }
       if (tripMatch && req.method === "DELETE") {
@@ -661,7 +788,8 @@ const server = http.createServer(async (req, res) => {
         if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
         else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
         else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
-        return json(res, 201, { document: docOut(docRow(id)) });
+        if (b.vehiclePlate) appendVehicleToTrip(t.id, b.vehiclePlate);
+        return json(res, 201, { document: docOut(docRow(id)), trip: getTripByAny(t.id) });
       }
 
       const docLink = p.match(/^\/api\/documents\/([^/]+)\/link$/);
