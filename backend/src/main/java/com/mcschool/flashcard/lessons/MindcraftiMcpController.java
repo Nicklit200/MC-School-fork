@@ -6,6 +6,8 @@ import com.mcschool.flashcard.drive.TeacherGoogleDriveDownloadService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
+import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
+import com.mcschool.flashcard.monthlyplans.dto.MonthlyPlanResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
 import com.mcschool.flashcard.trialleads.FunnelAnalyticsService;
@@ -42,7 +44,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.13.0";
+    private static final String SERVER_VERSION = "1.14.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -56,6 +58,7 @@ public class MindcraftiMcpController {
     private final McpAnalyticsService analyticsService;
     private final McpHomeworkReadService homeworkReadService;
     private final McpHomeworkWriteService homeworkWriteService;
+    private final MonthlyPlanService monthlyPlanService;
     private final SchoolPromptSettingsService schoolPromptSettingsService;
     private final FunnelAnalyticsService funnelAnalyticsService;
 
@@ -71,6 +74,7 @@ public class MindcraftiMcpController {
             McpAnalyticsService analyticsService,
             McpHomeworkReadService homeworkReadService,
             McpHomeworkWriteService homeworkWriteService,
+            MonthlyPlanService monthlyPlanService,
             SchoolPromptSettingsService schoolPromptSettingsService,
             FunnelAnalyticsService funnelAnalyticsService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
@@ -84,6 +88,7 @@ public class MindcraftiMcpController {
         this.analyticsService = analyticsService;
         this.homeworkReadService = homeworkReadService;
         this.homeworkWriteService = homeworkWriteService;
+        this.monthlyPlanService = monthlyPlanService;
         this.schoolPromptSettingsService = schoolPromptSettingsService;
         this.funnelAnalyticsService = funnelAnalyticsService;
     }
@@ -134,7 +139,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools include lessons, school prompts, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group, individual or diagnostic and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
+                ? "Mindcrafti school tools include lessons, structured monthly plans for students and groups, school prompts, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. When preparing the next lesson for a student or group, use get_month_plan for the current month when a plan exists, then combine it with recent lesson/homework evidence and the current school prompt. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group, individual or diagnostic and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -186,6 +191,15 @@ public class MindcraftiMcpController {
         targetProperties.put("query", property("string", "Optional student or group name filter, for example Виталина, Christian or Группа 1."));
         targetProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it to search across every active teacher."));
         tools.add(tool("find_homework_targets", "Find students and groups that can receive homework. Admins search all active teachers by default. Every result includes teacherId and teacherName so it can be used directly for follow-up actions.", schema(targetProperties, List.of()), readOnlyAnnotations()));
+
+        Map<String, Object> monthPlanProperties = new LinkedHashMap<>();
+        monthPlanProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it when targetId identifies one teacher uniquely."));
+        monthPlanProperties.put("targetType", property("string", "Monthly plan target type: student or group."));
+        monthPlanProperties.put("targetId", property("string", "Student or group UUID."));
+        monthPlanProperties.put("month", property("string", "Plan month in YYYY-MM format."));
+        tools.add(tool("get_month_plan", "Read the current structured monthly teaching plan for one student or group. Use it before preparing the next lesson when the target has a plan for the current month.", schema(monthPlanProperties, List.of("targetType", "targetId", "month")), readOnlyAnnotations()));
+        monthPlanProperties.put("planJson", property("string", "Complete monthly plan encoded as a JSON object string. This replaces the current saved plan for the target and month."));
+        tools.add(tool("update_month_plan", "Create or replace the structured monthly teaching plan for one student or group. Use this when the teacher asks to save or change the plan.", schema(monthPlanProperties, List.of("targetType", "targetId", "month", "planJson")), writeAnnotations()));
 
         Map<String, Object> seriesProperties = new LinkedHashMap<>();
         seriesProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it and Mindcrafti will infer the teacher from targetId when the target is unique."));
@@ -293,6 +307,8 @@ public class MindcraftiMcpController {
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
             case "find_homework_targets" -> toolResult(findHomeworkTargets(arguments, auth));
+            case "get_month_plan" -> toolResult(getMonthPlan(arguments, auth));
+            case "update_month_plan" -> toolResult(updateMonthPlan(arguments, auth));
             case "assign_homework_series" -> toolResult(assignHomeworkSeries(arguments, auth));
             case "list_school_teachers" -> toolResult(analyticsService.listTeachers(auth.user(), auth.apiKey()));
             case "find_students" -> toolResult(analyticsService.findStudents(auth.user(), auth.apiKey(), string(arguments.get("query")), string(arguments.get("teacherId"))));
@@ -500,6 +516,25 @@ public class MindcraftiMcpController {
         byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveFileId, filename);
         if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
         return preparationService.uploadAnswers(teacher, eventId, filename, pdf);
+    }
+
+    private MonthlyPlanResponse getMonthPlan(Map<String, Object> arguments, AuthContext auth) {
+        String targetType = required(arguments, "targetType");
+        UUID targetId = uuid(required(arguments, "targetId"), "targetId");
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth, targetType, targetId);
+        return monthlyPlanService.get(teacher, targetType, targetId, required(arguments, "month"));
+    }
+
+    private MonthlyPlanResponse updateMonthPlan(Map<String, Object> arguments, AuthContext auth) {
+        String targetType = required(arguments, "targetType");
+        UUID targetId = uuid(required(arguments, "targetId"), "targetId");
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth, targetType, targetId);
+        return monthlyPlanService.save(
+                teacher,
+                targetType,
+                targetId,
+                required(arguments, "month"),
+                required(arguments, "planJson"));
     }
 
     private Map<String, Object> findHomeworkTargets(Map<String, Object> arguments, AuthContext auth) {
