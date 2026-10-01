@@ -62,22 +62,27 @@ db.exec("UPDATE documents SET doc_type = 'cmr_unloading' WHERE doc_type = 'pod'"
 
 const now = () => new Date().toISOString();
 const bool = v => v ? 1 : 0;
-const tripOut = row => row ? ({
-  id: row.id,
-  date: row.date,
-  trip: row.trip_number || "",
-  customer: row.customer,
-  auftrag: !!row.auftrag,
-  cmrLoaded: !!row.cmr_loaded,
-  cmrUnloaded: !!row.cmr_unloaded,
-  loadedAt: row.loaded_at || "",
-  unloadedAt: row.unloaded_at || "",
-  cmr: !!row.cmr_loaded,
-  pod: !!row.cmr_unloaded,
-  rechnungCode: row.rechnung_code || "",
-  createdAt: row.created_at,
-  updatedAt: row.updated_at
-}) : null;
+const tripOut = row => {
+  if (!row) return null;
+  const hasLoadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_loading','cmr') LIMIT 1").get(row.id);
+  const hasUnloadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_unloading','pod') LIMIT 1").get(row.id);
+  return {
+    id: row.id,
+    date: row.date,
+    trip: row.trip_number || "",
+    customer: row.customer,
+    auftrag: !!row.auftrag,
+    cmrLoaded: hasLoadingCmr,
+    cmrUnloaded: hasUnloadingCmr,
+    loadedAt: row.loaded_at || "",
+    unloadedAt: row.unloaded_at || "",
+    cmr: hasLoadingCmr,
+    pod: hasUnloadingCmr,
+    rechnungCode: row.rechnung_code || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+};
 const docOut = row => row ? ({
   id: row.id,
   tripId: row.trip_id,
