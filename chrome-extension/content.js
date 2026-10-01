@@ -60,19 +60,20 @@
 
   function buildSafeReturnUrl(origin, context) {
     const params = new URLSearchParams();
-    if (context?.lessonId) params.set('completedLesson', context.lessonId);
-    if (context?.groupId) params.set('groupId', context.groupId);
-    if (context?.studentId) params.set('studentId', context.studentId);
     params.set('mindcraftiReturn', 'lesson');
-    return `${origin}/?${params.toString()}`;
+    const path = context?.lessonId
+      ? `/teacher/lessons/${encodeURIComponent(context.lessonId)}`
+      : '/teacher/lessons';
+    return `${origin}${path}?${params.toString()}`;
   }
 
   async function resolveReturnUrl() {
     try {
       const stored = await chrome.storage.local.get(['mindcraftiActiveLesson', 'mindcraftiReturnOrigin']);
       const context = stored?.mindcraftiActiveLesson;
-      const origin = stored?.mindcraftiReturnOrigin;
-      if (origin) return buildSafeReturnUrl(origin, context);
+
+      // Prefer the exact URL captured when this lesson was started.
+      // This prevents another Railway/test tab from overwriting the return origin.
       if (context?.returnUrl) {
         try {
           const url = new URL(context.returnUrl);
@@ -81,6 +82,9 @@
           return context.returnUrl;
         }
       }
+
+      const origin = stored?.mindcraftiReturnOrigin;
+      if (origin) return buildSafeReturnUrl(origin, context);
     } catch {
       // Keep fallback below.
     }
