@@ -20,6 +20,7 @@ db.exec("PRAGMA foreign_keys = ON;");
 db.exec(`
 CREATE TABLE IF NOT EXISTS trips (
   id TEXT PRIMARY KEY,
+  internal_trip_id TEXT,
   date TEXT NOT NULL,
   trip_number TEXT,
   customer TEXT NOT NULL,
@@ -51,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_trip_id ON documents(trip_id);
 `);
 
 const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
+if (!tripColumns.has("internal_trip_id")) db.exec("ALTER TABLE trips ADD COLUMN internal_trip_id TEXT");
 if (!tripColumns.has("cmr_loaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_loaded INTEGER NOT NULL DEFAULT 0");
 if (!tripColumns.has("cmr_unloaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_unloaded INTEGER NOT NULL DEFAULT 0");
 if (!tripColumns.has("loaded_at")) db.exec("ALTER TABLE trips ADD COLUMN loaded_at TEXT NOT NULL DEFAULT ''");
@@ -62,12 +64,34 @@ db.exec("UPDATE documents SET doc_type = 'cmr_unloading' WHERE doc_type = 'pod'"
 
 const now = () => new Date().toISOString();
 const bool = v => v ? 1 : 0;
+
+function internalPrefix(date) {
+  const clean = String(date || "").replace(/[^0-9]/g, "");
+  const yymmdd = clean.length >= 8 ? clean.slice(2,8) : new Date().toISOString().slice(2,10).replace(/-/g,"");
+  return "TS-" + yymmdd;
+}
+function nextInternalTripId(date) {
+  const prefix = internalPrefix(date);
+  const rows = db.prepare("SELECT internal_trip_id FROM trips WHERE internal_trip_id LIKE ?").all(prefix + "-%");
+  let max = 0;
+  for (const r of rows) {
+    const m = String(r.internal_trip_id || "").match(/-(\d+)$/);
+    if (m) max = Math.max(max, Number(m[1]) || 0);
+  }
+  return prefix + "-" + String(max + 1).padStart(3,"0");
+}
+for (const r of db.prepare("SELECT id,date FROM trips WHERE internal_trip_id IS NULL OR TRIM(internal_trip_id) = '' ORDER BY date,created_at,id").all()) {
+  db.prepare("UPDATE trips SET internal_trip_id=? WHERE id=?").run(nextInternalTripId(r.date), r.id);
+}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_internal_trip_id ON trips(internal_trip_id)");
+
 const tripOut = row => {
   if (!row) return null;
   const hasLoadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_loading','cmr') LIMIT 1").get(row.id);
   const hasUnloadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_unloading','pod') LIMIT 1").get(row.id);
   return {
     id: row.id,
+    internalTripId: row.internal_trip_id || "",
     date: row.date,
     trip: row.trip_number || "",
     customer: row.customer,
@@ -148,7 +172,7 @@ function readiness(t) {
   return missingForTrip(t).length ? "missing_documents" : "ready_for_rechnung";
 }
 function getTripByAny(v) {
-  const row = db.prepare("SELECT * FROM trips WHERE id = ? OR trip_number = ? LIMIT 1").get(v, v);
+  const row = db.prepare("SELECT * FROM trips WHERE id = ? OR internal_trip_id = ? OR trip_number = ? LIMIT 1").get(v, v, v);
   return tripOut(row);
 }
 function docRow(id) {
@@ -177,9 +201,9 @@ function queryTrips(args = {}) {
   let sql = "SELECT * FROM trips WHERE 1=1";
   const vals = [];
   if (args.query) {
-    sql += " AND (LOWER(COALESCE(trip_number,'')) LIKE ? OR LOWER(customer) LIKE ? OR date LIKE ? OR LOWER(rechnung_code) LIKE ?)";
+    sql += " AND (LOWER(COALESCE(internal_trip_id,'')) LIKE ? OR LOWER(COALESCE(trip_number,'')) LIKE ? OR LOWER(customer) LIKE ? OR date LIKE ? OR LOWER(rechnung_code) LIKE ?)";
     const q = "%" + String(args.query).toLowerCase() + "%";
-    vals.push(q, q, q, q);
+    vals.push(q, q, q, q, q);
   }
   if (args.date_from) { sql += " AND date >= ?"; vals.push(args.date_from); }
   if (args.date_to) { sql += " AND date <= ?"; vals.push(args.date_to); }
@@ -199,7 +223,7 @@ const toolDefs = [
   },
   {
     name: "search",
-    description: "Search Tsubera trips by tour number, customer, date, or Rechnung number.",
+    description: "Search Tsubera trips by Tsubera Tour-ID, customer tour/order number, customer, date, or Rechnung number.",
     inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
@@ -221,7 +245,7 @@ const toolDefs = [
   },
   {
     name: "get_trip",
-    description: "Get one Tsubera trip by internal id or tour number, including missing documents and uploaded file metadata.",
+    description: "Get one Tsubera trip by database id, Tsubera Tour-ID, or customer tour/order number, including missing documents and uploaded file metadata.",
     inputSchema: { type: "object", properties: { trip_id_or_number: { type: "string" } }, required: ["trip_id_or_number"], additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
@@ -246,12 +270,12 @@ const toolDefs = [
   },
   {
     name: "create_trip",
-    description: "Create a new Tsubera trip in the server database. Use when the user wants ChatGPT to add a trip to the site.",
+    description: "Create a new Tsubera trip. A stable Tsubera Tour-ID like TS-261001-001 is generated automatically from the trip date.",
     inputSchema: {
       type: "object",
       properties: {
         date: { type: "string", description: "Trip date in YYYY-MM-DD format." },
-        trip_number: { type: "string", description: "Tour or trip number if known." },
+        trip_number: { type: "string", description: "Customer's order/tour/reference number if known. Tsubera Tour-ID is generated automatically." },
         customer: { type: "string", description: "Customer/company name." },
         auftrag: { type: "boolean", description: "Whether Transportauftrag is already present." },
         cmr_loaded: { type: "boolean", description: "Whether the CMR/loading confirmation after loading is present." },
@@ -333,7 +357,7 @@ const toolDefs = [
 async function callTool(name, args, req) {
   if (name === "get_system_overview") return systemOverview();
   if (name === "search") {
-    return { results: queryTrips({ query: args.query }).map(t => ({ id: t.id, title: t.trip || t.customer, url: null, ...t })) };
+    return { results: queryTrips({ query: args.query }).map(t => ({ id: t.id, title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t })) };
   }
   if (name === "list_trips") return { trips: queryTrips(args), count: queryTrips(args).length };
   if (name === "get_trip") {
@@ -363,12 +387,14 @@ async function callTool(name, args, req) {
     if (!args.date || !args.customer) throw new Error("date and customer are required");
     const id = crypto.randomUUID();
     const ts = now();
+    const internalTripId = nextInternalTripId(args.date);
     const cmrLoaded = args.cmr_loaded ?? args.cmr ?? false;
     const cmrUnloaded = args.cmr_unloaded ?? args.pod ?? false;
-    db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
+        internalTripId,
         args.date,
         args.trip_number || "",
         args.customer,
@@ -565,11 +591,12 @@ const server = http.createServer(async (req, res) => {
         if (!b.date || !b.customer) return json(res, 400, { error: "date and customer are required" });
         const id = crypto.randomUUID();
         const ts = now();
+        const internalTripId = nextInternalTripId(b.date);
         const cmrLoaded = b.cmrLoaded ?? b.cmr ?? false;
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
-        db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", b.rechnungCode || "", ts, ts);
+        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, internalTripId, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", b.rechnungCode || "", ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
