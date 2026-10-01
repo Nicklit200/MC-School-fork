@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS trips (
   cmr_unloaded INTEGER NOT NULL DEFAULT 0,
   loaded_at TEXT NOT NULL DEFAULT '',
   unloaded_at TEXT NOT NULL DEFAULT '',
+  vehicle_plates TEXT NOT NULL DEFAULT '',
   rechnung_code TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -57,6 +58,7 @@ if (!tripColumns.has("cmr_loaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_lo
 if (!tripColumns.has("cmr_unloaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_unloaded INTEGER NOT NULL DEFAULT 0");
 if (!tripColumns.has("loaded_at")) db.exec("ALTER TABLE trips ADD COLUMN loaded_at TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("unloaded_at")) db.exec("ALTER TABLE trips ADD COLUMN unloaded_at TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN vehicle_plates TEXT NOT NULL DEFAULT ''");
 db.exec("UPDATE trips SET cmr_loaded = 1 WHERE cmr = 1 AND cmr_loaded = 0");
 db.exec("UPDATE trips SET cmr_unloaded = 1 WHERE pod = 1 AND cmr_unloaded = 0");
 db.exec("UPDATE documents SET doc_type = 'cmr_loading' WHERE doc_type = 'cmr'");
@@ -100,6 +102,7 @@ const tripOut = row => {
     cmrUnloaded: hasUnloadingCmr,
     loadedAt: row.loaded_at || "",
     unloadedAt: row.unloaded_at || "",
+    vehiclePlates: String(row.vehicle_plates || "").split(/\r?\n|,|;/).map(s=>s.trim()).filter(Boolean),
     cmr: hasLoadingCmr,
     pod: hasUnloadingCmr,
     rechnungCode: row.rechnung_code || "",
@@ -201,13 +204,14 @@ function queryTrips(args = {}) {
   let sql = "SELECT * FROM trips WHERE 1=1";
   const vals = [];
   if (args.query) {
-    sql += " AND (LOWER(COALESCE(internal_trip_id,'')) LIKE ? OR LOWER(COALESCE(trip_number,'')) LIKE ? OR LOWER(customer) LIKE ? OR date LIKE ? OR LOWER(rechnung_code) LIKE ?)";
+    sql += " AND (LOWER(COALESCE(internal_trip_id,'')) LIKE ? OR LOWER(COALESCE(trip_number,'')) LIKE ? OR LOWER(customer) LIKE ? OR LOWER(COALESCE(vehicle_plates,'')) LIKE ? OR date LIKE ? OR LOWER(rechnung_code) LIKE ?)";
     const q = "%" + String(args.query).toLowerCase() + "%";
-    vals.push(q, q, q, q, q);
+    vals.push(q, q, q, q, q, q);
   }
   if (args.date_from) { sql += " AND date >= ?"; vals.push(args.date_from); }
   if (args.date_to) { sql += " AND date <= ?"; vals.push(args.date_to); }
   if (args.customer) { sql += " AND LOWER(customer) LIKE ?"; vals.push("%" + String(args.customer).toLowerCase() + "%"); }
+  if (args.vehicle) { sql += " AND LOWER(COALESCE(vehicle_plates,'')) LIKE ?"; vals.push("%" + String(args.vehicle).toLowerCase() + "%"); }
   sql += " ORDER BY date DESC, created_at DESC LIMIT 500";
   let rows = db.prepare(sql).all(...vals).map(tripOut);
   if (args.readiness) rows = rows.filter(t => readiness(t) === args.readiness);
@@ -237,6 +241,7 @@ const toolDefs = [
         date_from: { type: "string", description: "YYYY-MM-DD" },
         date_to: { type: "string", description: "YYYY-MM-DD" },
         customer: { type: "string" },
+        vehicle: { type: "string", description: "Vehicle registration / Kennzeichen filter." },
         readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created"] }
       },
       additionalProperties: false
@@ -282,6 +287,7 @@ const toolDefs = [
         cmr_unloaded: { type: "boolean", description: "Whether the final CMR/POD after unloading is present." },
         loaded_at: { type: "string", description: "Loading date/time, preferably ISO local datetime." },
         unloaded_at: { type: "string", description: "Unloading date/time, preferably ISO local datetime." },
+        vehicle_plates: { type: "array", items: { type: "string" }, description: "Vehicle registration numbers (Kennzeichen) that performed this tour." },
         cmr: { type: "boolean", description: "Legacy alias for cmr_loaded." },
         pod: { type: "boolean", description: "Legacy alias for cmr_unloaded." },
         rechnung_number: { type: "string", description: "Rechnung number if already created." }
@@ -306,6 +312,7 @@ const toolDefs = [
         cmr_unloaded: { type: "boolean" },
         loaded_at: { type: "string" },
         unloaded_at: { type: "string" },
+        vehicle_plates: { type: "array", items: { type: "string" } },
         cmr: { type: "boolean" },
         pod: { type: "boolean" },
         rechnung_number: { type: "string" }
@@ -390,8 +397,8 @@ async function callTool(name, args, req) {
     const internalTripId = nextInternalTripId(args.date);
     const cmrLoaded = args.cmr_loaded ?? args.cmr ?? false;
     const cmrUnloaded = args.cmr_unloaded ?? args.pod ?? false;
-    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,vehicle_plates,rechnung_code,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
         internalTripId,
@@ -405,6 +412,7 @@ async function callTool(name, args, req) {
         bool(cmrUnloaded),
         args.loaded_at || "",
         args.unloaded_at || "",
+        Array.isArray(args.vehicle_plates) ? args.vehicle_plates.map(x=>String(x).trim()).filter(Boolean).join("\n") : "",
         args.rechnung_number || "",
         ts,
         ts
@@ -424,10 +432,11 @@ async function callTool(name, args, req) {
       cmrUnloaded: args.cmr_unloaded ?? args.pod ?? old.cmrUnloaded,
       loadedAt: args.loaded_at ?? old.loadedAt,
       unloadedAt: args.unloaded_at ?? old.unloadedAt,
+      vehiclePlates: args.vehicle_plates ?? old.vehiclePlates,
       rechnungCode: args.rechnung_number ?? old.rechnungCode
     };
-    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,rechnung_code=?,updated_at=? WHERE id=?")
-      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,next.rechnungCode,now(),old.id);
+    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,rechnung_code=?,updated_at=? WHERE id=?")
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,Array.isArray(next.vehiclePlates)?next.vehiclePlates.map(x=>String(x).trim()).filter(Boolean).join("\n"):String(next.vehiclePlates||""),next.rechnungCode,now(),old.id);
     const t = getTripByAny(old.id);
     return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
@@ -581,6 +590,7 @@ const server = http.createServer(async (req, res) => {
           date_from: url.searchParams.get("date_from") || undefined,
           date_to: url.searchParams.get("date_to") || undefined,
           customer: url.searchParams.get("customer") || undefined,
+          vehicle: url.searchParams.get("vehicle") || undefined,
           readiness: url.searchParams.get("readiness") || undefined
         };
         return json(res, 200, { trips: queryTrips(args) });
@@ -594,9 +604,9 @@ const server = http.createServer(async (req, res) => {
         const internalTripId = nextInternalTripId(b.date);
         const cmrLoaded = b.cmrLoaded ?? b.cmr ?? false;
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
-        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, internalTripId, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", b.rechnungCode || "", ts, ts);
+        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,vehicle_plates,rechnung_code,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, internalTripId, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", Array.isArray(b.vehiclePlates)?b.vehiclePlates.map(x=>String(x).trim()).filter(Boolean).join("\n"):"", b.rechnungCode || "", ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
@@ -612,10 +622,11 @@ const server = http.createServer(async (req, res) => {
           cmrUnloaded: b.cmrUnloaded ?? b.pod ?? old.cmrUnloaded,
           loadedAt: b.loadedAt ?? old.loadedAt,
           unloadedAt: b.unloadedAt ?? old.unloadedAt,
+          vehiclePlates: b.vehiclePlates ?? old.vehiclePlates,
           rechnungCode: b.rechnungCode ?? old.rechnungCode
         };
-        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,rechnung_code=?,updated_at=? WHERE id=?")
-          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,next.rechnungCode,now(),id);
+        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,rechnung_code=?,updated_at=? WHERE id=?")
+          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,Array.isArray(next.vehiclePlates)?next.vehiclePlates.map(x=>String(x).trim()).filter(Boolean).join("\n"):String(next.vehiclePlates||""),next.rechnungCode,now(),id);
         return json(res, 200, { trip: getTripByAny(id) });
       }
       if (tripMatch && req.method === "DELETE") {
