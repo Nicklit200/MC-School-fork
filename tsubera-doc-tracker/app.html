@@ -9,7 +9,7 @@
 *{box-sizing:border-box}
 body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f5f7fb;color:#111827}
 main{max-width:1620px;margin:auto;padding:26px 18px}
-.top{display:flex;justify-content:space-between;gap:14px;align-items:center}
+.top{display:flex;justify-content:space-between;gap:14px;align-items:center}.tabs{display:flex;gap:8px;margin:18px 0 4px}.tab{border:1px solid #dfe3ea;background:#fff;color:#374151;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}.tab.active{background:#111827;color:#fff;border-color:#111827}.hidden{display:none!important}
 h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:650;cursor:pointer;background:#111827;color:#fff}
 .btn.alt{background:white;color:#111827;border:1px solid #dfe3ea}.btn.small{padding:7px 9px;font-size:12px}
@@ -30,8 +30,8 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.full{grid-column:1/-1}
 .field input,.field select{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .docs{display:flex;flex-direction:column;gap:8px;margin-top:16px}.doc{display:grid;grid-template-columns:165px 1fr auto;gap:8px;align-items:center;border:1px solid #eee;border-radius:10px;padding:9px}
-.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.tid{font-weight:800;letter-spacing:.2px;color:#111827;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:3px}.customer-ref{color:#4b5563;font-size:12px}.detailbox{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}.detailrow{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #eee}.detailrow:last-child{border-bottom:0}.detailrow b{font-size:12px;color:#6b7280}.vehicle-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.vehicle-chip{padding:7px 9px;border-radius:999px;background:#e9f2ff;color:#1857a4;font-weight:700;font-size:12px}.vehicle-textarea{width:100%;min-height:90px;padding:10px;border:1px solid #dfe3ea;border-radius:9px;resize:vertical}
-@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.tid{font-weight:800;letter-spacing:.2px;color:#111827;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:3px}.customer-ref{color:#4b5563;font-size:12px}.detailbox{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}.detailrow{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #eee}.detailrow:last-child{border-bottom:0}.detailrow b{font-size:12px;color:#6b7280}.vehicle-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.vehicle-chip{padding:7px 9px;border-radius:999px;background:#e9f2ff;color:#1857a4;font-weight:700;font-size:12px}.vehicle-select-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}.vehicle-choice{display:flex;align-items:center;gap:9px;border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fff}.vehicle-choice input{width:18px;height:18px}.vehicle-choice strong{display:block}.vehicle-choice small{display:block;color:#6b7280;margin-top:2px}.vehicle-panel{padding:16px}.vehicle-form{display:grid;grid-template-columns:220px 1fr auto;gap:10px;margin-bottom:16px}.vehicle-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.vehicle-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.vehicle-card{border:1px solid #e5e7eb;border-radius:12px;padding:13px;background:#fff}.vehicle-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.vehicle-plate{font-size:18px;font-weight:850;letter-spacing:.4px}.vehicle-meta{font-size:12px;color:#6b7280;margin-top:5px}
+@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form{grid-template-columns:1fr}.vehicle-grid{grid-template-columns:1fr}.toolbar{flex-direction:column}.toolbar #vehicleFilter{width:100%}}
 </style>
 </head>
 <body>
@@ -50,6 +50,9 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
     <button class="btn" id="add">+ Добавить рейс</button>
   </div>
 
+  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button></div>
+
+  <section id="tripsView">
   <div class="stats">
     <div class="card"><span>Всего рейсов</span><b id="total">0</b></div>
     <div class="card"><span>Загружены</span><b id="loaded">0</b></div>
@@ -58,7 +61,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
   </div>
 
   <div class="panel">
-    <div class="toolbar"><input id="q" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате, фирме или Rechnung..."><input id="vehicleFilter" placeholder="Фильтр по машине / Kennzeichen"></div>
+    <div class="toolbar"><input id="q" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате, фирме или Rechnung..."><input id="vehicleFilter" list="vehicleDatalist" placeholder="Фильтр по машине / Kennzeichen"><datalist id="vehicleDatalist"></datalist></div>
     <div class="table">
       <div class="head">
         <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Auftrag</div>
@@ -68,6 +71,21 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
       <div id="rows"></div>
     </div>
   </div>
+  </section>
+
+  <section id="vehiclesView" class="hidden">
+    <div class="panel vehicle-panel">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
+        <div><h2 style="margin:0 0 5px">Машины</h2><div class="muted">Создай список номеров. Потом машину можно выбрать внутри тура или прямо при загрузке CMR/POD.</div></div>
+      </div>
+      <form id="vehicleForm" class="vehicle-form">
+        <input id="newVehiclePlate" placeholder="Номер, например KE-TV 179" required>
+        <input id="newVehicleNote" placeholder="Комментарий, например Tsubera / партнёр (необязательно)">
+        <button class="btn">+ Добавить машину</button>
+      </form>
+      <div id="vehicleRows" class="vehicle-grid"></div>
+    </div>
+  </section>
 </main>
 
 <div class="modal" id="addModal">
@@ -89,9 +107,8 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
     <div id="tripInfo" class="detailbox"></div>
     <div class="field full" style="margin-top:14px">
       <label><b>Машины, выполнившие тур</b></label>
-      <div class="muted">Можно указать несколько номеров — по одному на строку.</div>
-      <textarea id="vehiclePlates" class="vehicle-textarea" placeholder="KE-TV 179&#10;MM-AP 102"></textarea>
-      <div id="vehicleChips" class="vehicle-list"></div>
+      <div class="muted">Выбери одну или несколько машин из вкладки «Машины».</div>
+      <div id="tripVehicleChoices" class="vehicle-select-list"></div>
     </div>
     <div class="actions"><button class="btn alt" id="tripDocs">Документы</button><button class="btn" id="saveTrip">Сохранить</button><button class="btn alt" id="closeTrip">Закрыть</button></div>
   </div>
@@ -112,6 +129,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
         </select>
       </div>
       <div class="field"><label>Файлы</label><input id="files" type="file" multiple></div>
+      <div class="field full"><label>Машина по этому документу</label><select id="docVehicle"><option value="">Не назначать машину</option></select><div class="muted">Если номер виден на CMR/POD, выбери его здесь. Машина добавится к туру.</div></div>
     </div>
     <div class="actions"><button class="btn" id="upload">Загрузить</button></div>
     <div id="docList" class="docs"></div>
@@ -120,7 +138,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 </div>
 
 <script>
-let trips=[],activeTrip=null,activeDetailTrip=null;
+let trips=[],vehicles=[],activeTrip=null,activeDetailTrip=null,currentTab='trips';
 const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
@@ -134,7 +152,11 @@ function status(t){
   return '<span class="status wait">Не хватает документов</span>';
 }
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
-async function load(){let d=await api('/api/trips');trips=d.trips||[];render()}
+async function load(){
+  const [td,vd]=await Promise.all([api('/api/trips'),api('/api/vehicles')]);
+  trips=td.trips||[];vehicles=vd.vehicles||[];
+  render();renderVehicles();renderVehicleDatalist();$('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
+}
 function render(){
   let q=$('q').value.toLowerCase();
   let vf=$('vehicleFilter').value.toLowerCase().trim();
@@ -181,22 +203,34 @@ window.openTrip=id=>{
     '<div class="detailrow"><b>Заказчик</b><div>'+esc(t.customer||'—')+'</div></div>'+
     '<div class="detailrow"><b>Статус</b><div>'+status(t)+'</div></div>'+
     '<div class="detailrow"><b>Rechnung</b><div>'+esc(t.rechnungCode||'—')+'</div></div>';
-  $('vehiclePlates').value=(t.vehiclePlates||[]).join('\n');
-  renderVehicleChips(t.vehiclePlates||[]);
+  renderTripVehicleChoices(t);
   $('tripModal').classList.add('open');
 }
-function renderVehicleChips(arr){$('vehicleChips').innerHTML=(arr||[]).map(v=>'<span class="vehicle-chip">'+esc(v)+'</span>').join('')}
-$('vehiclePlates').oninput=()=>renderVehicleChips($('vehiclePlates').value.split(/\r?\n|,|;/).map(x=>x.trim()).filter(Boolean));
+function renderTripVehicleChoices(t){
+  const selected=new Set((t?.vehiclePlates||[]).map(x=>String(x).toUpperCase()));
+  $('tripVehicleChoices').innerHTML=vehicles.length?vehicles.map(v=>
+    '<label class="vehicle-choice"><input type="checkbox" name="tripVehicle" value="'+esc(v.plate)+'" '+(selected.has(String(v.plate).toUpperCase())?'checked':'')+'><span><strong>'+esc(v.plate)+'</strong><small>'+esc(v.note||'Без комментария')+'</small></span></label>'
+  ).join(''):'<div class="muted">Сначала добавь номера во вкладке «Машины».</div>';
+}
 $('saveTrip').onclick=async()=>{
   if(!activeDetailTrip)return;
-  const vehiclePlates=$('vehiclePlates').value.split(/\r?\n|,|;/).map(x=>x.trim()).filter(Boolean);
+  const vehiclePlates=[...document.querySelectorAll('input[name="tripVehicle"]:checked')].map(x=>x.value);
   await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates})});
   await load();
-  const t=trips.find(x=>x.id===activeDetailTrip); if(t){$('vehiclePlates').value=(t.vehiclePlates||[]).join('\n');renderVehicleChips(t.vehiclePlates||[])}
+  const t=trips.find(x=>x.id===activeDetailTrip); if(t)renderTripVehicleChoices(t);
 }
 $('tripDocs').onclick=()=>{if(activeDetailTrip){$('tripModal').classList.remove('open');openDocs(activeDetailTrip)}}
 $('closeTrip').onclick=()=>$('tripModal').classList.remove('open');
-window.openDocs=async id=>{activeTrip=id;let t=trips.find(x=>x.id===id);$('docsTitle').textContent='Документы · '+(t?.internalTripId||'рейс')+(t?.trip?' · '+t.trip:'');$('docsModal').classList.add('open');await loadDocs()}
+window.openDocs=async id=>{
+  activeTrip=id;let t=trips.find(x=>x.id===id);
+  $('docsTitle').textContent='Документы · '+(t?.internalTripId||'рейс')+(t?.trip?' · '+t.trip:'');
+  renderDocVehicleOptions(t);
+  $('docsModal').classList.add('open');await loadDocs()
+}
+function renderDocVehicleOptions(t){
+  const selected=(t?.vehiclePlates||[])[0]||'';
+  $('docVehicle').innerHTML='<option value="">Не назначать машину</option>'+vehicles.map(v=>'<option value="'+esc(v.plate)+'" '+(v.plate===selected?'selected':'')+'>'+esc(v.plate)+(v.note?' · '+esc(v.note):'')+'</option>').join('');
+}
 async function loadDocs(){let d=await api('/api/trips/'+activeTrip+'/documents');$('docList').innerHTML=(d.documents||[]).map(x=>`<div class="doc"><b>${esc(docLabel(x.docType))}</b><div><div>${esc(x.name)}</div><div class="muted">${Math.round((x.size||0)/1024)} KB</div></div><div><button class="btn alt small" onclick="openDoc('${x.id}')">Открыть</button> <button class="btn alt small" onclick="delDoc('${x.id}')">Удалить</button></div></div>`).join('')||'<div class="muted">Документов пока нет</div>'}
 window.openDoc=async id=>{let d=await api('/api/documents/'+id+'/link');window.open(d.url,'_blank')}
 window.delDoc=async id=>{if(confirm('Удалить файл?')){await api('/api/documents/'+id,{method:'DELETE'});await loadDocs();await load()}}
@@ -204,9 +238,34 @@ $('upload').onclick=async()=>{
   let fs=[...$('files').files];if(!fs.length)return alert('Выбери файл');
   for(const f of fs){
     let b64=await new Promise((ok,no)=>{let r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=no;r.readAsDataURL(f)});
-    await api('/api/trips/'+activeTrip+'/documents',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({docType:$('docType').value,name:f.name,mime:f.type||'application/octet-stream',dataBase64:b64})})
+    await api('/api/trips/'+activeTrip+'/documents',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({docType:$('docType').value,name:f.name,mime:f.type||'application/octet-stream',vehiclePlate:$('docVehicle').value||'',dataBase64:b64})})
   }
   $('files').value='';await loadDocs();await load()
+}
+function setTab(tab){
+  currentTab=tab;
+  $('tripsView').classList.toggle('hidden',tab!=='trips');
+  $('vehiclesView').classList.toggle('hidden',tab!=='vehicles');
+  $('tabTrips').classList.toggle('active',tab==='trips');
+  $('tabVehicles').classList.toggle('active',tab==='vehicles');
+  $('add').classList.toggle('hidden',tab!=='trips');
+}
+$('tabTrips').onclick=()=>setTab('trips');
+$('tabVehicles').onclick=()=>setTab('vehicles');
+function renderVehicleDatalist(){$('vehicleDatalist').innerHTML=vehicles.map(v=>'<option value="'+esc(v.plate)+'"></option>').join('')}
+function renderVehicles(){
+  $('vehicleRows').innerHTML=vehicles.length?vehicles.map(v=>'<div class="vehicle-card"><div class="vehicle-card-top"><div><div class="vehicle-plate">'+esc(v.plate)+'</div><div class="vehicle-meta">'+esc(v.note||'Без комментария')+'</div><div class="vehicle-meta">Туров: '+Number(v.tripCount||0)+'</div></div><button class="btn alt small" onclick="delVehicle(\''+v.id+'\')">Удалить</button></div></div>').join(''):'<div class="muted">Машин пока нет. Добавь первый номер выше.</div>';
+}
+window.delVehicle=async id=>{
+  if(!confirm('Удалить машину из списка? В уже выполненных турах номер останется в истории.'))return;
+  await api('/api/vehicles/'+id,{method:'DELETE'});await load();
+}
+$('vehicleForm').onsubmit=async e=>{
+  e.preventDefault();
+  const plate=$('newVehiclePlate').value.trim(),note=$('newVehicleNote').value.trim();
+  if(!plate)return;
+  await api('/api/vehicles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({plate,note})});
+  $('newVehiclePlate').value='';$('newVehicleNote').value='';await load();
 }
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
@@ -220,7 +279,7 @@ $('addForm').onsubmit=async e=>{
   })});
   e.target.reset();e.target.customer.value='DC Cargo Sp. z o.o.';$('addModal').classList.remove('open');await load()
 };
-load().catch(e=>alert(e.message));
+setTab('trips');load().catch(e=>alert(e.message));
 </script>
 </body>
 </html>
