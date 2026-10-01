@@ -556,7 +556,18 @@ async function callTool(name, args, req) {
     if (!t) return { uploaded: false, error: "Trip not found" };
     if (!args.filename || !args.document_type || !args.content_base64) throw new Error("filename, document_type and content_base64 are required");
     let buf;
-    try { buf = Buffer.from(args.content_base64, "base64"); } catch { throw new Error("Invalid base64 content"); }
+    if (String(args.content_base64).startsWith("url:")) {
+      const src = new URL(String(args.content_base64).slice(4));
+      if (src.protocol !== "https:" || !(src.hostname === "oaiusercontent.com" || src.hostname.endsWith(".oaiusercontent.com"))) {
+        throw new Error("Only temporary oaiusercontent HTTPS URLs are allowed");
+      }
+      const rr = await fetch(src, { redirect: "follow" });
+      if (!rr.ok) throw new Error("Could not fetch temporary file URL: HTTP " + rr.status);
+      const ab = await rr.arrayBuffer();
+      buf = Buffer.from(ab);
+    } else {
+      try { buf = Buffer.from(args.content_base64, "base64"); } catch { throw new Error("Invalid base64 content"); }
+    }
     if (!buf.length) throw new Error("Uploaded file is empty");
     if (buf.length > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB MCP upload limit");
     const id = crypto.randomUUID();
@@ -775,7 +786,18 @@ const server = http.createServer(async (req, res) => {
         if (!t) return json(res, 404, { error: "Trip not found" });
         const b = await readJson(req, 30 * 1024 * 1024);
         if (!b.name || !b.dataBase64 || !b.docType) return json(res, 400, { error: "name, docType, dataBase64 required" });
-        const buf = Buffer.from(b.dataBase64, "base64");
+        let buf;
+        if (String(b.dataBase64).startsWith("url:")) {
+          const src = new URL(String(b.dataBase64).slice(4));
+          if (src.protocol !== "https:" || !(src.hostname === "oaiusercontent.com" || src.hostname.endsWith(".oaiusercontent.com"))) {
+            return json(res, 400, { error: "Only temporary oaiusercontent HTTPS URLs are allowed" });
+          }
+          const rr = await fetch(src, { redirect: "follow" });
+          if (!rr.ok) return json(res, 400, { error: "Could not fetch temporary file URL: HTTP " + rr.status });
+          buf = Buffer.from(await rr.arrayBuffer());
+        } else {
+          buf = Buffer.from(b.dataBase64, "base64");
+        }
         if (buf.length > 20 * 1024 * 1024) return json(res, 413, { error: "File max 20 MB" });
         const id = crypto.randomUUID();
         const ext = path.extname(b.name).replace(/[^.a-zA-Z0-9]/g,"").slice(0,10);
