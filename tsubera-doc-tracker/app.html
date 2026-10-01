@@ -77,8 +77,6 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
       <div class="field"><label>Дата рейса</label><input type="date" name="date" required></div>
       <div class="field"><label>№ рейса / Tour-Nr.</label><input name="trip"></div>
       <div class="field full"><label>Заказчик</label><input name="customer" value="DC Cargo Sp. z o.o." required></div>
-      <div class="field"><label>Загружен в</label><input type="datetime-local" name="loadedAt"></div>
-      <div class="field"><label>Выгружен в</label><input type="datetime-local" name="unloadedAt"></div>
       <div class="field full"><label>Rechnung-Nr. (если уже создан)</label><input name="rechnungCode"></div>
     </div>
     <div class="actions"><button class="btn alt" type="button" id="cancelAdd">Отмена</button><button class="btn">Сохранить</button></div>
@@ -122,7 +120,6 @@ function status(t){
   return '<span class="status wait">Не хватает документов</span>';
 }
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
-function dtValue(v){if(!v)return '';return String(v).slice(0,16)}
 async function load(){let d=await api('/api/trips');trips=d.trips||[];render()}
 function render(){
   let q=$('q').value.toLowerCase();
@@ -138,12 +135,10 @@ function render(){
       <div>${esc(t.customer)}</div>
       <div class="cellcheck"><input aria-label="Auftrag" type="checkbox" ${t.auftrag?'checked':''} onchange="toggle('${t.id}','auftrag',this.checked)"></div>
       <div class="stage">
-        <div class="stage-line"><input type="checkbox" ${t.cmrLoaded?'checked':''} onchange="toggle('${t.id}','cmrLoaded',this.checked)"> <span>Beladen</span></div>
-        <input class="dt" type="datetime-local" value="${esc(dtValue(t.loadedAt))}" onchange="setTime('${t.id}','loadedAt',this.value)">
+        <span class="status ${t.cmrLoaded?'route':'wait'}">${t.cmrLoaded?'✓ CMR загрузки загружен':'Нет CMR загрузки'}</span>
       </div>
       <div class="stage">
-        <div class="stage-line"><input type="checkbox" ${t.cmrUnloaded?'checked':''} onchange="toggle('${t.id}','cmrUnloaded',this.checked)"> <span>Entladen</span></div>
-        <input class="dt" type="datetime-local" value="${esc(dtValue(t.unloadedAt))}" onchange="setTime('${t.id}','unloadedAt',this.value)">
+        <span class="status ${t.cmrUnloaded?'ok':'wait'}">${t.cmrUnloaded?'✓ CMR выгрузки / POD загружен':'Нет CMR выгрузки'}</span>
       </div>
       <div><input class="rn" value="${esc(t.rechnungCode||'')}" onchange="rechnung('${t.id}',this.value)" placeholder="—"></div>
       <div><button class="btn alt small" onclick="openDocs('${t.id}')">Документы</button></div>
@@ -153,10 +148,8 @@ function render(){
     </div>`).join('');
 }
 window.toggle=async(id,k,v)=>{
-  const body=k==='cmrLoaded'?{cmrLoaded:v}:k==='cmrUnloaded'?{cmrUnloaded:v}:{[k]:v};
-  await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)});await load()
+  await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({[k]:v})});await load()
 }
-window.setTime=async(id,k,v)=>{await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({[k]:v})});await load()}
 window.rechnung=async(id,v)=>{await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({rechnungCode:v.trim()})});await load()}
 window.delTrip=async id=>{if(confirm('Удалить рейс и все его документы?')){await api('/api/trips/'+id,{method:'DELETE'});await load()}}
 window.openDocs=async id=>{activeTrip=id;let t=trips.find(x=>x.id===id);$('docsTitle').textContent='Документы · '+(t?.trip||t?.customer||'рейс');$('docsModal').classList.add('open');await loadDocs()}
@@ -179,7 +172,6 @@ $('addForm').onsubmit=async e=>{
   e.preventDefault();let f=new FormData(e.target);
   await api('/api/trips',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
     date:f.get('date'),trip:(f.get('trip')||'').trim(),customer:f.get('customer'),
-    loadedAt:f.get('loadedAt')||'',unloadedAt:f.get('unloadedAt')||'',
     rechnungCode:(f.get('rechnungCode')||'').trim()
   })});
   e.target.reset();e.target.customer.value='DC Cargo Sp. z o.o.';$('addModal').classList.remove('open');await load()
