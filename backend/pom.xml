@@ -18,7 +18,7 @@
 		<jjwt.version>0.13.0</jjwt.version>
 		<testcontainers.version>1.21.3</testcontainers.version>
 		<pdfbox.version>3.0.5</pdfbox.version>
-		<web-push.version>5.1.2</web-push.version>
+		<web-push.version>5.1.1</web-push.version>
 	</properties>
 	<dependencyManagement>
 		<dependencies>
