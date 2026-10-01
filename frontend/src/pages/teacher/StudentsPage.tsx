@@ -250,6 +250,7 @@ export function StudentsPage() {
                   <div className="teacher-student-actions__top">
                     <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Karten' : 'Карточки'}</Link>
                     <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</Link>
+                    <Link to={`/students/${student.id}/month-plan`} className="teacher-action-chip">{language === 'DE' ? 'Monatsplan' : 'План на месяц'}</Link>
                     <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">Google Drive</Link>
                     <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
                       <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия" aria-expanded={openMenuId === student.id} onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}>⋮</button>

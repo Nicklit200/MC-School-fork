@@ -531,7 +531,7 @@ export function GroupDetailPage() {
               <div className="group-member-row" key={student.id}>
                 <span className={`teacher-member-avatar teacher-member-avatar--${index % 4}`}>{student.fullName.charAt(0).toUpperCase()}</span>
                 <div><strong>{student.fullName}</strong><span>{student.email ?? 'Email не указан'}</span></div>
-                <Link to={`/students/${student.id}`} className="group-member-open">Открыть ученика</Link>
+                <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}><Link to={`/students/${student.id}/month-plan`} className="teacher-action-chip">План на месяц</Link><Link to={`/students/${student.id}`} className="group-member-open">Открыть ученика</Link></div>
               </div>
             ))}
           </div>

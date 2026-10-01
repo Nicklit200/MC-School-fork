@@ -26,6 +26,7 @@ import { GroupCardsDetailPage } from './pages/teacher/GroupCardsDetailPage';
 import { GroupLessonsWithDetailLinks } from './pages/teacher/GroupLessonsWithDetailLinks';
 import { LessonDetailWithHomeworkSeries } from './pages/teacher/LessonDetailWithHomeworkSeries';
 import { TeacherPromptLibraryPage } from './pages/teacher/TeacherPromptLibraryPage';
+import { MonthlyPlanPage } from './pages/teacher/MonthlyPlanPage';
 import { TodayPage } from './pages/student/TodayPage';
 import { SessionPage } from './pages/student/SessionPage';
 import { ResultPage } from './pages/student/ResultPage';
@@ -60,10 +61,12 @@ export function App() {
       <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId/homeworks" element={<ProtectedRoute role="TEACHER"><Layout><StudentHomeworksPage /></Layout></ProtectedRoute>} />
       <Route path="/students/:studentId/drive" element={<ProtectedRoute role="TEACHER"><Layout><StudentDrivePage /></Layout></ProtectedRoute>} />
+      <Route path="/students/:studentId/month-plan" element={<ProtectedRoute role="TEACHER"><Layout><MonthlyPlanPage targetType="STUDENT" /></Layout></ProtectedRoute>} />
       <Route path="/teacher/students/:studentId/cards/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><TeacherCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailWithHomeworkLinks /></Layout></ProtectedRoute>} />
+      <Route path="/groups/:groupId/month-plan" element={<ProtectedRoute role="TEACHER"><Layout><MonthlyPlanPage targetType="GROUP" /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><GroupHomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId/cards/:startDate" element={<ProtectedRoute role="TEACHER"><Layout><GroupCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons" element={<ProtectedRoute role="TEACHER"><Layout><GroupLessonsWithDetailLinks /></Layout></ProtectedRoute>} />

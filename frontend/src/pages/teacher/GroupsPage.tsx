@@ -186,6 +186,7 @@ export function GroupsPage() {
 
               <div className="teacher-group-row__spacer" />
 
+              <Link className="teacher-action-chip" to={`/groups/${group.id}/month-plan`}>План на месяц</Link>
               <Link className="teacher-open-group-btn" to={`/groups/${group.id}`}>Открыть группу</Link>
               <button type="button" className="teacher-more-btn" title="Дополнительно">⋮</button>
             </div>

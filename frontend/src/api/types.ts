@@ -41,3 +41,14 @@ export interface Question { cardId: string; question: string; options: string[];
 export interface AnswerResult { correct: boolean; correctAnswer: string; sessionCompleted: boolean; remaining: number; }
 export interface SessionReviewItem { cardId: string; question: string; selectedAnswer: string | null; correctAnswer: string; correct: boolean; }
 export interface SessionResult { type: SessionType; totalCards: number; correctFirstTry: number; nextReviewDate: string | null; review: SessionReviewItem[]; }
+
+
+export interface MonthlyPlanResponse {
+  id: string | null;
+  targetType: 'STUDENT' | 'GROUP';
+  targetId: string;
+  month: string;
+  planJson: string;
+  version: number;
+  updatedAt: string | null;
+}
