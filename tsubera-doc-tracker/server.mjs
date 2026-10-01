@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS trips (
   auftrag INTEGER NOT NULL DEFAULT 0,
   cmr INTEGER NOT NULL DEFAULT 0,
   pod INTEGER NOT NULL DEFAULT 0,
+  cmr_loaded INTEGER NOT NULL DEFAULT 0,
+  cmr_unloaded INTEGER NOT NULL DEFAULT 0,
+  loaded_at TEXT NOT NULL DEFAULT '',
+  unloaded_at TEXT NOT NULL DEFAULT '',
   rechnung_code TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -46,6 +50,16 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_trip_id ON documents(trip_id);
 `);
 
+const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
+if (!tripColumns.has("cmr_loaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_loaded INTEGER NOT NULL DEFAULT 0");
+if (!tripColumns.has("cmr_unloaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_unloaded INTEGER NOT NULL DEFAULT 0");
+if (!tripColumns.has("loaded_at")) db.exec("ALTER TABLE trips ADD COLUMN loaded_at TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("unloaded_at")) db.exec("ALTER TABLE trips ADD COLUMN unloaded_at TEXT NOT NULL DEFAULT ''");
+db.exec("UPDATE trips SET cmr_loaded = 1 WHERE cmr = 1 AND cmr_loaded = 0");
+db.exec("UPDATE trips SET cmr_unloaded = 1 WHERE pod = 1 AND cmr_unloaded = 0");
+db.exec("UPDATE documents SET doc_type = 'cmr_loading' WHERE doc_type = 'cmr'");
+db.exec("UPDATE documents SET doc_type = 'cmr_unloading' WHERE doc_type = 'pod'");
+
 const now = () => new Date().toISOString();
 const bool = v => v ? 1 : 0;
 const tripOut = row => row ? ({
@@ -54,8 +68,12 @@ const tripOut = row => row ? ({
   trip: row.trip_number || "",
   customer: row.customer,
   auftrag: !!row.auftrag,
-  cmr: !!row.cmr,
-  pod: !!row.pod,
+  cmrLoaded: !!row.cmr_loaded,
+  cmrUnloaded: !!row.cmr_unloaded,
+  loadedAt: row.loaded_at || "",
+  unloadedAt: row.unloaded_at || "",
+  cmr: !!row.cmr_loaded,
+  pod: !!row.cmr_unloaded,
   rechnungCode: row.rechnung_code || "",
   createdAt: row.created_at,
   updatedAt: row.updated_at
@@ -116,8 +134,8 @@ function tempFileUrl(req, id, seconds = 900) {
 function missingForTrip(t) {
   const missing = [];
   if (!t.auftrag) missing.push("Transportauftrag");
-  if (!t.cmr) missing.push("CMR");
-  if (!t.pod) missing.push("POD");
+  if (!t.cmrLoaded) missing.push("CMR nach Beladung");
+  if (!t.cmrUnloaded) missing.push("CMR nach Entladung / POD");
   return missing;
 }
 function readiness(t) {
@@ -146,7 +164,7 @@ function systemOverview() {
     rechnungenCreated: rows.filter(t => readiness(t) === "rechnung_created").length,
     database: "SQLite on persistent Railway volume",
     files: "Persistent Railway volume at /data/documents",
-    connector: "Read-only MCP"
+    connector: "Read/write MCP"
   };
 }
 
@@ -209,7 +227,7 @@ const toolDefs = [
       type: "object",
       properties: {
         trip_id_or_number: { type: "string" },
-        type: { type: "string", enum: ["auftrag","cmr","pod","rechnung","other"] }
+        type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] }
       },
       additionalProperties: false
     },
@@ -231,8 +249,12 @@ const toolDefs = [
         trip_number: { type: "string", description: "Tour or trip number if known." },
         customer: { type: "string", description: "Customer/company name." },
         auftrag: { type: "boolean", description: "Whether Transportauftrag is already present." },
-        cmr: { type: "boolean", description: "Whether CMR is already present." },
-        pod: { type: "boolean", description: "Whether POD/Lieferschein proof is already present." },
+        cmr_loaded: { type: "boolean", description: "Whether the CMR/loading confirmation after loading is present." },
+        cmr_unloaded: { type: "boolean", description: "Whether the final CMR/POD after unloading is present." },
+        loaded_at: { type: "string", description: "Loading date/time, preferably ISO local datetime." },
+        unloaded_at: { type: "string", description: "Unloading date/time, preferably ISO local datetime." },
+        cmr: { type: "boolean", description: "Legacy alias for cmr_loaded." },
+        pod: { type: "boolean", description: "Legacy alias for cmr_unloaded." },
         rechnung_number: { type: "string", description: "Rechnung number if already created." }
       },
       required: ["date","customer"],
@@ -251,6 +273,10 @@ const toolDefs = [
         trip_number: { type: "string" },
         customer: { type: "string" },
         auftrag: { type: "boolean" },
+        cmr_loaded: { type: "boolean" },
+        cmr_unloaded: { type: "boolean" },
+        loaded_at: { type: "string" },
+        unloaded_at: { type: "string" },
         cmr: { type: "boolean" },
         pod: { type: "boolean" },
         rechnung_number: { type: "string" }
@@ -262,12 +288,12 @@ const toolDefs = [
   },
   {
     name: "upload_document",
-    description: "Upload a document file to an existing Tsubera trip. Pass the original file bytes as base64. Automatically marks Auftrag, CMR, or POD present when that type is selected. Maximum decoded file size is 10 MB.",
+    description: "Upload a document file to an existing Tsubera trip. Supports Auftrag, CMR after loading, final CMR/POD after unloading, Rechnung, and other files. Maximum decoded file size is 10 MB.",
     inputSchema: {
       type: "object",
       properties: {
         trip_id_or_number: { type: "string", description: "Existing trip internal id or tour number." },
-        document_type: { type: "string", enum: ["auftrag","cmr","pod","rechnung","other"] },
+        document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
         filename: { type: "string" },
         mime_type: { type: "string" },
         content_base64: { type: "string", description: "Base64 encoded raw file content, without data: prefix." }
@@ -279,12 +305,12 @@ const toolDefs = [
   },
   {
     name: "update_document_type",
-    description: "Reclassify an already uploaded document as Transportauftrag, CMR, POD/Lieferschein, Rechnung, or other. Use after identifying a file that was uploaded with the wrong type.",
+    description: "Reclassify an uploaded document as Transportauftrag, CMR after loading, final CMR/POD after unloading, Rechnung, or other.",
     inputSchema: {
       type: "object",
       properties: {
         document_id: { type: "string" },
-        document_type: { type: "string", enum: ["auftrag","cmr","pod","rechnung","other"] }
+        document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] }
       },
       required: ["document_id","document_type"],
       additionalProperties: false
@@ -332,16 +358,22 @@ async function callTool(name, args, req) {
     if (!args.date || !args.customer) throw new Error("date and customer are required");
     const id = crypto.randomUUID();
     const ts = now();
-    db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,rechnung_code,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    const cmrLoaded = args.cmr_loaded ?? args.cmr ?? false;
+    const cmrUnloaded = args.cmr_unloaded ?? args.pod ?? false;
+    db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
         args.date,
         args.trip_number || "",
         args.customer,
         bool(args.auftrag),
-        bool(args.cmr),
-        bool(args.pod),
+        bool(cmrLoaded),
+        bool(cmrUnloaded),
+        bool(cmrLoaded),
+        bool(cmrUnloaded),
+        args.loaded_at || "",
+        args.unloaded_at || "",
         args.rechnung_number || "",
         ts,
         ts
@@ -357,12 +389,14 @@ async function callTool(name, args, req) {
       trip: args.trip_number ?? old.trip,
       customer: args.customer ?? old.customer,
       auftrag: args.auftrag ?? old.auftrag,
-      cmr: args.cmr ?? old.cmr,
-      pod: args.pod ?? old.pod,
+      cmrLoaded: args.cmr_loaded ?? args.cmr ?? old.cmrLoaded,
+      cmrUnloaded: args.cmr_unloaded ?? args.pod ?? old.cmrUnloaded,
+      loadedAt: args.loaded_at ?? old.loadedAt,
+      unloadedAt: args.unloaded_at ?? old.unloadedAt,
       rechnungCode: args.rechnung_number ?? old.rechnungCode
     };
-    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,rechnung_code=?,updated_at=? WHERE id=?")
-      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmr),bool(next.pod),next.rechnungCode,now(),old.id);
+    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,rechnung_code=?,updated_at=? WHERE id=?")
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,next.rechnungCode,now(),old.id);
     const t = getTripByAny(old.id);
     return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
@@ -380,8 +414,12 @@ async function callTool(name, args, req) {
     fs.writeFileSync(path.join(DOCS_DIR, stored), buf);
     db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)")
       .run(id,t.id,args.document_type,args.filename,stored,args.mime_type || "application/octet-stream",buf.length,now());
-    if (["auftrag","cmr","pod"].includes(args.document_type)) {
-      db.prepare("UPDATE trips SET " + args.document_type + " = 1, updated_at=? WHERE id=?").run(now(), t.id);
+    const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
+    const flag = flagMap[args.document_type];
+    if (flag) {
+      if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
+      else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
+      else db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
     }
     const trip = getTripByAny(t.id);
     return {
@@ -394,9 +432,11 @@ async function callTool(name, args, req) {
     const row = docRow(args.document_id);
     if (!row) return { updated: false, error: "Document not found" };
     db.prepare("UPDATE documents SET doc_type=? WHERE id=?").run(args.document_type,row.id);
-    if (["auftrag","cmr","pod"].includes(args.document_type)) {
-      db.prepare("UPDATE trips SET " + args.document_type + " = 1, updated_at=? WHERE id=?").run(now(), row.trip_id);
-    }
+    const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
+    const flag = flagMap[args.document_type];
+    if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), row.trip_id);
+    else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), row.trip_id);
+    else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), row.trip_id);
     return { updated: true, document: docOut(docRow(row.id)), trip: getTripByAny(row.trip_id) };
   }
   if (name === "fetch") {
@@ -520,9 +560,11 @@ const server = http.createServer(async (req, res) => {
         if (!b.date || !b.customer) return json(res, 400, { error: "date and customer are required" });
         const id = crypto.randomUUID();
         const ts = now();
-        db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,rechnung_code,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(b.cmr), bool(b.pod), b.rechnungCode || "", ts, ts);
+        const cmrLoaded = b.cmrLoaded ?? b.cmr ?? false;
+        const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
+        db.prepare(`INSERT INTO trips (id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,rechnung_code,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", b.rechnungCode || "", ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
@@ -533,11 +575,15 @@ const server = http.createServer(async (req, res) => {
         const b = await readJson(req);
         const next = {
           date: b.date ?? old.date, trip: b.trip ?? old.trip, customer: b.customer ?? old.customer,
-          auftrag: b.auftrag ?? old.auftrag, cmr: b.cmr ?? old.cmr, pod: b.pod ?? old.pod,
+          auftrag: b.auftrag ?? old.auftrag,
+          cmrLoaded: b.cmrLoaded ?? b.cmr ?? old.cmrLoaded,
+          cmrUnloaded: b.cmrUnloaded ?? b.pod ?? old.cmrUnloaded,
+          loadedAt: b.loadedAt ?? old.loadedAt,
+          unloadedAt: b.unloadedAt ?? old.unloadedAt,
           rechnungCode: b.rechnungCode ?? old.rechnungCode
         };
-        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,rechnung_code=?,updated_at=? WHERE id=?")
-          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmr),bool(next.pod),next.rechnungCode,now(),id);
+        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,rechnung_code=?,updated_at=? WHERE id=?")
+          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,next.rechnungCode,now(),id);
         return json(res, 200, { trip: getTripByAny(id) });
       }
       if (tripMatch && req.method === "DELETE") {
@@ -567,9 +613,11 @@ const server = http.createServer(async (req, res) => {
         fs.writeFileSync(path.join(DOCS_DIR, stored), buf);
         db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)")
           .run(id,t.id,b.docType,b.name,stored,b.mime || "application/octet-stream",buf.length,now());
-        if (["auftrag","cmr","pod"].includes(b.docType)) {
-          db.prepare("UPDATE trips SET " + b.docType + " = 1, updated_at=? WHERE id=?").run(now(), t.id);
-        }
+        const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
+        const flag = flagMap[b.docType];
+        if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
+        else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
+        else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
         return json(res, 201, { document: docOut(docRow(id)) });
       }
 
