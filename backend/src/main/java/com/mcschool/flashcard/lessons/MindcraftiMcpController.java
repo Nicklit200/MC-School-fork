@@ -42,7 +42,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.12.0";
+    private static final String SERVER_VERSION = "1.13.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -55,6 +55,7 @@ public class MindcraftiMcpController {
     private final McpHomeworkSeriesService homeworkSeriesService;
     private final McpAnalyticsService analyticsService;
     private final McpHomeworkReadService homeworkReadService;
+    private final McpHomeworkWriteService homeworkWriteService;
     private final SchoolPromptSettingsService schoolPromptSettingsService;
     private final FunnelAnalyticsService funnelAnalyticsService;
 
@@ -69,6 +70,7 @@ public class MindcraftiMcpController {
             McpHomeworkSeriesService homeworkSeriesService,
             McpAnalyticsService analyticsService,
             McpHomeworkReadService homeworkReadService,
+            McpHomeworkWriteService homeworkWriteService,
             SchoolPromptSettingsService schoolPromptSettingsService,
             FunnelAnalyticsService funnelAnalyticsService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
@@ -81,6 +83,7 @@ public class MindcraftiMcpController {
         this.homeworkSeriesService = homeworkSeriesService;
         this.analyticsService = analyticsService;
         this.homeworkReadService = homeworkReadService;
+        this.homeworkWriteService = homeworkWriteService;
         this.schoolPromptSettingsService = schoolPromptSettingsService;
         this.funnelAnalyticsService = funnelAnalyticsService;
     }
@@ -131,7 +134,7 @@ public class MindcraftiMcpController {
         result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "Mindcrafti school tools include lessons, school prompts, homework assignment, direct PDF homework upload, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group, individual or diagnostic and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
+                ? "Mindcrafti school tools include lessons, school prompts, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with lessonType=group, individual or diagnostic and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         return result;
     }
@@ -208,6 +211,24 @@ public class MindcraftiMcpController {
         homeworkRangeProperties.put("toDate", property("string", "Last assigned-homework date in YYYY-MM-DD. Maximum range is 366 days."));
         tools.add(tool("find_student_homeworks", "Find all homework buckets for one student in an inclusive date range. Returns submission status and homeworkId values that can be passed directly to get_homework_submission or get_homework_submission_pages.", schema(homeworkRangeProperties, List.of("studentId", "fromDate", "toDate")), readOnlyAnnotations()));
 
+        Map<String, Object> replaceHomeworkProperties = new LinkedHashMap<>();
+        replaceHomeworkProperties.put("homeworkId", property("string", "Existing homework UUID returned by find_student_homeworks or get_student_homework_history."));
+        replaceHomeworkProperties.put("pdfBase64", property("string", "Replacement assigned-homework PDF encoded as base64. Maximum 15 MB."));
+        replaceHomeworkProperties.put("filename", property("string", "Optional display filename for the replacement PDF. The current filename is preserved when omitted."));
+        tools.add(tool("replace_homework", "Replace the assigned PDF of one existing unsubmitted homework while preserving its homework ID and assigned date. Use this when the wrong PDF was assigned and must be corrected. Submitted homework cannot be replaced.", schema(replaceHomeworkProperties, List.of("homeworkId", "pdfBase64")), destructiveWriteAnnotations()));
+
+        Map<String, Object> updateHomeworkProperties = new LinkedHashMap<>();
+        updateHomeworkProperties.put("homeworkId", property("string", "Existing homework UUID returned by find_student_homeworks or get_student_homework_history."));
+        updateHomeworkProperties.put("newStartDate", property("string", "Optional replacement assigned date in YYYY-MM-DD format. Date changes are blocked when the homework contains cards."));
+        updateHomeworkProperties.put("pdfBase64", property("string", "Optional replacement assigned-homework PDF encoded as base64. Maximum 15 MB."));
+        updateHomeworkProperties.put("filename", property("string", "Optional display filename used when pdfBase64 is provided. The current filename is preserved when omitted."));
+        tools.add(tool("update_homework", "Update one existing unsubmitted homework. You may change its assigned date, replace its assigned PDF, or do both in one call. At least one of newStartDate or pdfBase64 is required.", schema(updateHomeworkProperties, List.of("homeworkId")), destructiveWriteAnnotations()));
+
+        Map<String, Object> deleteHomeworkProperties = new LinkedHashMap<>();
+        deleteHomeworkProperties.put("homeworkId", property("string", "Existing homework UUID returned by find_student_homeworks or get_student_homework_history."));
+        deleteHomeworkProperties.put("confirm", property("boolean", "Must be true. Confirms permanent deletion of the homework record and stored PDFs. Homework containing cards cannot be deleted."));
+        tools.add(tool("delete_homework", "Permanently delete one existing homework. Requires confirm=true and should only be used after an explicit teacher/admin deletion request. Homework containing cards cannot be deleted.", schema(deleteHomeworkProperties, List.of("homeworkId", "confirm")), destructiveWriteAnnotations()));
+
         Map<String, Object> recentHomeworkProperties = new LinkedHashMap<>();
         recentHomeworkProperties.put("studentId", property("string", "Student UUID returned by find_students."));
         recentHomeworkProperties.put("limit", property("integer", "Optional number of submitted homework PDFs to return, 1 to 10. Defaults to 5."));
@@ -278,6 +299,18 @@ public class MindcraftiMcpController {
             case "find_student_homeworks" -> toolResult(homeworkReadService.findStudentHomeworks(
                     auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"),
                     date(arguments, "fromDate"), date(arguments, "toDate")));
+            case "replace_homework" -> toolResult(homeworkWriteService.replaceHomework(
+                    auth.user(),
+                    auth.apiKey(),
+                    uuid(required(arguments, "homeworkId"), "homeworkId"),
+                    string(arguments.get("filename")),
+                    decodePdfBase64(required(arguments, "pdfBase64"), "pdfBase64")));
+            case "update_homework" -> toolResult(updateHomework(arguments, auth));
+            case "delete_homework" -> toolResult(homeworkWriteService.deleteHomework(
+                    auth.user(),
+                    auth.apiKey(),
+                    uuid(required(arguments, "homeworkId"), "homeworkId"),
+                    booleanValue(arguments.get("confirm"), "confirm")));
             case "get_recent_homework_submissions" -> toolResult(homeworkReadService.recentSubmissions(
                     auth.user(), auth.apiKey(), uuid(required(arguments, "studentId"), "studentId"),
                     arguments.containsKey("limit") ? integer(arguments.get("limit"), "limit") : 5));
@@ -299,6 +332,38 @@ public class MindcraftiMcpController {
                     arguments.containsKey("recentLimit") ? integer(arguments.get("recentLimit"), "recentLimit") : 50));
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
         };
+    }
+
+    private Map<String, Object> updateHomework(Map<String, Object> arguments, AuthContext auth) {
+        UUID homeworkId = uuid(required(arguments, "homeworkId"), "homeworkId");
+
+        LocalDate newStartDate = null;
+        String rawDate = string(arguments.get("newStartDate")).trim();
+        if (!rawDate.isBlank()) {
+            try {
+                newStartDate = LocalDate.parse(rawDate);
+            } catch (RuntimeException ex) {
+                throw new IllegalArgumentException("newStartDate must use YYYY-MM-DD format");
+            }
+        }
+
+        byte[] pdf = null;
+        String encoded = string(arguments.get("pdfBase64")).trim();
+        if (!encoded.isBlank()) {
+            pdf = decodePdfBase64(encoded, "pdfBase64");
+        }
+
+        if (newStartDate == null && pdf == null) {
+            throw new IllegalArgumentException("Provide at least one change: newStartDate or pdfBase64");
+        }
+
+        return homeworkWriteService.updateHomework(
+                auth.user(),
+                auth.apiKey(),
+                homeworkId,
+                newStartDate,
+                string(arguments.get("filename")),
+                pdf);
     }
 
     private Map<String, Object> getSchoolPrompt(Map<String, Object> arguments) {
@@ -575,6 +640,7 @@ public class MindcraftiMcpController {
     private boolean hasValidApiKey(String candidate) { return !apiKey.isBlank() && candidate != null && !candidate.isBlank() && MessageDigest.isEqual(apiKey.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8)); }
     private Map<String, Object> readOnlyAnnotations() { return Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
     private Map<String, Object> writeAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
+    private Map<String, Object> destructiveWriteAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", true, "idempotentHint", false, "openWorldHint", false); }
     private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) { Map<String, Object> tool = new LinkedHashMap<>(); tool.put("name", name); tool.put("description", description); tool.put("inputSchema", inputSchema); tool.put("annotations", annotations); return tool; }
     private Map<String, Object> schema(Map<String, Object> properties, List<String> required) { Map<String, Object> schema = new LinkedHashMap<>(); schema.put("type", "object"); schema.put("properties", properties); if (!required.isEmpty()) schema.put("required", required); schema.put("additionalProperties", false); return schema; }
     private Map<String, Object> property(String type, String description) { return Map.of("type", type, "description", description); }
@@ -590,6 +656,7 @@ public class MindcraftiMcpController {
     private UUID uuid(String value, String field) { try { return UUID.fromString(value); } catch (IllegalArgumentException ex) { throw new IllegalArgumentException(field + " must be a UUID"); } }
     private LocalDate date(Map<String, Object> values, String field) { try { return LocalDate.parse(required(values, field)); } catch (RuntimeException ex) { throw new IllegalArgumentException(field + " must use YYYY-MM-DD format"); } }
     private int integer(Object value, String field) { if (value instanceof Number number) return number.intValue(); try { return Integer.parseInt(string(value)); } catch (RuntimeException ex) { throw new IllegalArgumentException(field + " must be an integer"); } }
+    private boolean booleanValue(Object value, String field) { if (value instanceof Boolean flag) return flag; String text = string(value).trim(); if ("true".equalsIgnoreCase(text)) return true; if ("false".equalsIgnoreCase(text)) return false; throw new IllegalArgumentException(field + " must be a boolean"); }
     private List<String> stringList(Object value, String field) { if (!(value instanceof List<?> list)) throw new IllegalArgumentException(field + " must be an array of strings"); List<String> result = new ArrayList<>(); for (Object item : list) { String text = string(item).trim(); if (text.isBlank()) throw new IllegalArgumentException(field + " cannot contain blank values"); result.add(text); } return result; }
     private record AuthContext(boolean authenticated, boolean apiKey, User user) {}
 }

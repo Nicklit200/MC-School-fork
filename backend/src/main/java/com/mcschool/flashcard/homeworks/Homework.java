@@ -98,6 +98,12 @@ public class Homework {
         this.parentNotifiedAt = notifiedAt;
     }
 
+    public void reschedule(LocalDate startDate) {
+        if (startDate == null) throw new IllegalArgumentException("startDate is required");
+        this.startDate = startDate;
+        this.parentNotifiedAt = null;
+    }
+
     public boolean hasWorksheet() {
         return worksheetPdf != null && worksheetPdf.length > 0;
     }
