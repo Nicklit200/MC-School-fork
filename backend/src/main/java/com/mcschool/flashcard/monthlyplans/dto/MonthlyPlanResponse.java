@@ -11,6 +11,8 @@ public record MonthlyPlanResponse(
         UUID targetId,
         String month,
         String planJson,
+        boolean hasDocument,
+        String documentFilename,
         long version,
         Instant updatedAt
 ) {
@@ -21,11 +23,13 @@ public record MonthlyPlanResponse(
                 plan.getTargetId(),
                 plan.getPlanMonth(),
                 plan.getPlanJson(),
+                plan.hasDocument(),
+                plan.getDocumentFilename(),
                 plan.getVersion() == null ? 0L : plan.getVersion(),
                 plan.getUpdatedAt());
     }
 
     public static MonthlyPlanResponse empty(MonthlyPlanTargetType targetType, UUID targetId, String month) {
-        return new MonthlyPlanResponse(null, targetType.name(), targetId, month, "", 0L, null);
+        return new MonthlyPlanResponse(null, targetType.name(), targetId, month, "", false, null, 0L, null);
     }
 }
