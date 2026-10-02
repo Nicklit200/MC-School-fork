@@ -21,5 +21,7 @@ public interface StudentGroupMemberRepository extends JpaRepository<StudentGroup
 
     List<StudentGroupMember> findAllByStudentIdOrderByCreatedAtAsc(UUID studentId);
 
+    List<StudentGroupMember> findAllByGroupIdOrderByCreatedAtAsc(UUID groupId);
+
     boolean existsByGroupIdAndStudentId(UUID groupId, UUID studentId);
 }

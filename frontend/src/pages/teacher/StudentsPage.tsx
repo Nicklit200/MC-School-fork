@@ -248,6 +248,7 @@ export function StudentsPage() {
 
                 <div className="teacher-student-actions">
                   <div className="teacher-student-actions__top">
+                    <Link to={`/students/${student.id}/lessons`} className="teacher-action-chip">{language === 'DE' ? 'Unterricht' : 'Уроки'}</Link>
                     <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Karten' : 'Карточки'}</Link>
                     <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</Link>
                     <Link to={`/students/${student.id}/month-plan`} className="teacher-action-chip">{language === 'DE' ? 'Monatsplan' : 'План на месяц'}</Link>

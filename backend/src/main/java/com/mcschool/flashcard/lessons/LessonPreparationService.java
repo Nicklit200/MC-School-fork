@@ -38,7 +38,7 @@ public class LessonPreparationService {
     @Transactional
     public LessonPreparationResponse update(AuthenticatedUser teacher, String eventId, UpdateLessonPreparationRequest request) {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
-        preparation.updateNotes(request.homeworkNotes(), request.difficulties(), request.lessonPlan());
+        preparation.updateNotes(request.homeworkNotes(), request.difficulties(), request.lessonPlan(), request.transcriptText());
         return response(repository.save(preparation));
     }
 
@@ -133,6 +133,7 @@ public class LessonPreparationService {
                 preparation.getHomeworkNotes(),
                 preparation.getDifficulties(),
                 preparation.getLessonPlan(),
+                preparation.getTranscriptText(),
                 preparation.hasWorkbook(),
                 preparation.getWorkbookFilename(),
                 preparation.hasAnswers(),

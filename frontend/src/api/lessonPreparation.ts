@@ -67,7 +67,7 @@ export const lessonPreparationApi = {
   get(eventId: string) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}`, { headers: authHeaders() }).then(parse<LessonPreparation>);
   },
-  update(eventId: string, payload: { homeworkNotes: string; difficulties: string; lessonPlan: string }) {
+  update(eventId: string, payload: { homeworkNotes: string; difficulties: string; lessonPlan: string; transcriptText: string }) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}`, {
       method: 'PUT',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },

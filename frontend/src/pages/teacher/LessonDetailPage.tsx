@@ -18,6 +18,12 @@ type LessonStudent = Pick<StudentListItem, 'id' | 'fullName' | 'chatGptProjectUr
 type TextSectionKind = 'homework' | 'difficulties' | 'plan';
 type MaterialKind = 'workbook' | 'answers';
 
+type LessonHomeworkItem = {
+  studentId: string;
+  studentName: string;
+  homework: Homework;
+};
+
 type NoteGroup = {
   key: string;
   title: string;
@@ -34,7 +40,9 @@ export function LessonDetailPage() {
   const [homeworkNotes, setHomeworkNotes] = useState('');
   const [difficulties, setDifficulties] = useState('');
   const [lessonPlan, setLessonPlan] = useState('');
+  const [transcriptText, setTranscriptText] = useState('');
   const [homeworkSummary, setHomeworkSummary] = useState<HomeworkSummary | null>(null);
+  const [lessonHomeworks, setLessonHomeworks] = useState<LessonHomeworkItem[]>([]);
   const [workbookUrl, setWorkbookUrl] = useState<string | null>(null);
   const [answersUrl, setAnswersUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +72,7 @@ export function LessonDetailPage() {
         setHomeworkNotes(prep.homeworkNotes ?? '');
         setDifficulties(prep.difficulties ?? '');
         setLessonPlan(prep.lessonPlan ?? '');
+        setTranscriptText(prep.transcriptText ?? '');
 
         if (prep.hasWorkbook) {
           try { if (!cancelled) setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId)); } catch { /* page still works */ }
@@ -72,13 +81,15 @@ export function LessonDetailPage() {
           try { if (!cancelled) setAnswersUrl(await lessonPreparationApi.answersUrl(eventId)); } catch { /* page still works */ }
         }
         if (currentLesson) {
-          const [summary, students] = await Promise.all([
+          const [summary, students, homeworkItems] = await Promise.all([
             buildHomeworkSummary(currentLesson),
             resolveLessonStudents(currentLesson, allStudents),
+            buildLessonHomeworkDetails(currentLesson),
           ]);
           if (!cancelled) {
             setHomeworkSummary(summary);
             setLessonStudents(students);
+            setLessonHomeworks(homeworkItems);
           }
         }
       } catch (e) {
@@ -114,7 +125,7 @@ export function LessonDetailPage() {
     setError(null);
     setMessage(null);
     try {
-      const updated = await lessonPreparationApi.update(eventId, { homeworkNotes, difficulties, lessonPlan });
+      const updated = await lessonPreparationApi.update(eventId, { homeworkNotes, difficulties, lessonPlan, transcriptText });
       setPreparation(updated);
       setMessage('Информация для урока сохранена.');
     } catch (e) {
@@ -285,6 +296,28 @@ export function LessonDetailPage() {
             </>
           ) : <div className="muted" style={{ marginTop: 14 }}>Нет привязанного ученика или группы.</div>}
 
+          {lessonHomeworks.length > 0 && (
+            <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
+              {lessonHomeworks.map(({ studentId, studentName, homework }) => (
+                <Link
+                  key={`${studentId}-${homework.id}`}
+                  to={`/teacher/students/${studentId}/homeworks/${homework.id}`}
+                  style={{ textDecoration: 'none', color: 'inherit', border: '1px solid var(--border)', borderRadius: 12, padding: '11px 12px', background: '#fff', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}
+                >
+                  <div>
+                    <strong>{studentName}</strong>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+                      {homework.worksheetFilename ?? 'PDF-домашка'} · {formatHomeworkDate(homework.startDate)}
+                    </div>
+                  </div>
+                  <span className={`pill ${homework.submitted ? 'pill--learned' : 'pill--pending'}`}>
+                    {homework.submitted ? 'сдано' : 'не сдано'}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+
           <div style={{ marginTop: 16 }}>
             <StructuredTextSection
               kind="homework"
@@ -310,6 +343,23 @@ export function LessonDetailPage() {
               onChange={setDifficulties}
               placeholder="Например: ## Мелисса\n- Отрицательные числа: путает знаки...\n## София\n- Probe не автоматизирована...\n## Общее\n- Дать 60 секунд самостоятельной работы."
               rows={10}
+            />
+          </div>
+        </section>
+
+        <section className="panel" style={{ padding: 20, margin: 0 }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Транскрипция урока</h2>
+            <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>Полный текст занятия хранится прямо в Mindcrafti.</div>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <textarea
+              className="input"
+              rows={transcriptText ? 14 : 6}
+              value={transcriptText}
+              onChange={(e) => setTranscriptText(e.target.value)}
+              placeholder="Транскрипция пока не добавлена. Вставьте текст Soniox или будущую автоматическую транскрипцию."
+              style={{ width: '100%', resize: 'vertical', lineHeight: 1.55 }}
             />
           </div>
         </section>
@@ -635,6 +685,53 @@ async function resolveLessonStudents(lesson: GroupLesson, allStudents: StudentLi
     return [{ id: student.id, fullName: student.fullName, chatGptProjectUrl: student.chatGptProjectUrl }];
   }
   return [];
+}
+
+async function buildLessonHomeworkDetails(lesson: GroupLesson): Promise<LessonHomeworkItem[]> {
+  const targets: Array<{ id: string; fullName: string }> = [];
+  if (lesson.groupId) {
+    const group = await api.groups.get(lesson.groupId);
+    targets.push(...group.students.map((student) => ({ id: student.id, fullName: student.fullName })));
+  } else if (lesson.studentId) {
+    const student = await api.students.get(lesson.studentId);
+    targets.push({ id: student.id, fullName: student.fullName });
+  } else {
+    return [];
+  }
+
+  const lessonDate = localLessonDate(lesson.startsAt);
+  const untilDate = plusDays(lessonDate, 7);
+  const rows = await Promise.all(targets.map(async (student) => {
+    const homeworks = await api.homeworks.listForStudent(student.id);
+    return homeworks
+      .filter((homework) => homework.hasWorksheet && homework.startDate >= lessonDate && homework.startDate <= untilDate)
+      .map((homework) => ({ studentId: student.id, studentName: student.fullName, homework }));
+  }));
+  return rows.flat().sort((a, b) => a.homework.startDate.localeCompare(b.homework.startDate) || a.studentName.localeCompare(b.studentName));
+}
+
+function localLessonDate(value: string) {
+  const date = new Date(value);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${read('year')}-${read('month')}-${read('day')}`;
+}
+
+function plusDays(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function formatHomeworkDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    .format(new Date(year, month - 1, day));
 }
 
 async function buildHomeworkSummary(lesson: GroupLesson): Promise<HomeworkSummary | null> {
