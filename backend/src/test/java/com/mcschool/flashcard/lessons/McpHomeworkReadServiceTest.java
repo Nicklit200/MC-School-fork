@@ -58,6 +58,7 @@ class McpHomeworkReadServiceTest {
                 null,
                 student.getId(),
                 student.getFullName(),
+                List.of(student.getId()),
                 "Christian",
                 lessonStart,
                 lessonEnd,
