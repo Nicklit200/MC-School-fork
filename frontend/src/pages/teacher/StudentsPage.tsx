@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -12,6 +12,7 @@ type TodayCompletion = {
 
 export function StudentsPage() {
   const { language, t } = useI18n();
+  const navigate = useNavigate();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
   const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
@@ -209,11 +210,11 @@ export function StudentsPage() {
           {visibleStudents.map((student, index) => {
             const completion = todayCompletion[student.id] ?? { cards: 'none', homework: 'none' };
             return (
-              <article key={student.id} className="teacher-student-card">
+              <article key={student.id} className="teacher-student-card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/students/${student.id}`)}>
                 <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>{studentInitial(student.fullName)}</div>
                 <div className="teacher-student-main">
                   <div className="teacher-student-name">
-                    {student.fullName}
+                    <Link to={`/students/${student.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>{student.fullName}</Link>
                     {student.status === 'INACTIVE' && (
                       <span className="pill pill--pending" style={{ marginLeft: 10, verticalAlign: 'middle' }}>
                         {language === 'DE' ? 'Inaktiv' : 'Неактивен'}
@@ -248,11 +249,7 @@ export function StudentsPage() {
 
                 <div className="teacher-student-actions">
                   <div className="teacher-student-actions__top">
-                    <Link to={`/students/${student.id}/lessons`} className="teacher-action-chip">{language === 'DE' ? 'Unterricht' : 'Уроки'}</Link>
-                    <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Karten' : 'Карточки'}</Link>
-                    <Link to={`/students/${student.id}/homeworks`} className="teacher-action-chip">{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</Link>
-                    <Link to={`/students/${student.id}/month-plan`} className="teacher-action-chip">{language === 'DE' ? 'Monatsplan' : 'План на месяц'}</Link>
-                    <Link to={`/students/${student.id}/drive`} className="teacher-action-chip">Google Drive</Link>
+                    <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Profil öffnen' : 'Открыть ученика'}</Link>
                     <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
                       <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия" aria-expanded={openMenuId === student.id} onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}>⋮</button>
                       {openMenuId === student.id && (

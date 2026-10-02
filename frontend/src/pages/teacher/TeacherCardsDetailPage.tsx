@@ -46,7 +46,7 @@ export function TeacherCardsDetailPage() {
   return (
     <div>
       <p>
-        <Link to={`/students/${studentId}`} className="muted">
+        <Link to={`/students/${studentId}/cards`} className="muted">
           ← {language === 'DE' ? 'Zurück zu den Karten' : 'Назад к карточкам'}
         </Link>
       </p>

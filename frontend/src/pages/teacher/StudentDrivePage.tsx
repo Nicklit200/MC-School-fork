@@ -36,6 +36,7 @@ export function StudentDrivePage() {
         studentId={studentId}
         savedFolderId={student?.googleDriveHomeworkFolderId ?? null}
       />
+      <DriveFolderPicker kind="transcript" studentId={studentId} savedFolderId={student?.googleDriveTranscriptFolderId ?? null} />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { AdminPromptSettingsPage } from './pages/admin/AdminPromptSettingsPage';
 import { AdminAccountsPage } from './pages/admin/AdminAccountsPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { TeacherParentsPage } from './pages/teacher/TeacherParentsPage';
+import { StudentProfilePage } from './pages/teacher/StudentProfilePage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
 import { StudentHomeworksPage } from './pages/teacher/StudentHomeworksPage';
 import { StudentLessonsPage } from './pages/teacher/StudentLessonsPage';
@@ -60,11 +61,13 @@ export function App() {
 
       <Route path="/students" element={<ProtectedRoute role="TEACHER"><Layout><StudentsPage /></Layout></ProtectedRoute>} />
       <Route path="/parents" element={<ProtectedRoute role="TEACHER"><Layout><TeacherParentsPage /></Layout></ProtectedRoute>} />
-      <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentDetailPage /></Layout></ProtectedRoute>} />
-      <Route path="/students/:studentId/homeworks" element={<ProtectedRoute role="TEACHER"><Layout><StudentHomeworksPage /></Layout></ProtectedRoute>} />
-      <Route path="/students/:studentId/lessons" element={<ProtectedRoute role="TEACHER"><Layout><StudentLessonsPage /></Layout></ProtectedRoute>} />
-      <Route path="/students/:studentId/drive" element={<ProtectedRoute role="TEACHER"><Layout><StudentDrivePage /></Layout></ProtectedRoute>} />
-      <Route path="/students/:studentId/month-plan" element={<ProtectedRoute role="TEACHER"><Layout><MonthlyPlanPage targetType="STUDENT" /></Layout></ProtectedRoute>} />
+      <Route path="/students/:studentId" element={<ProtectedRoute role="TEACHER"><Layout><StudentProfilePage /></Layout></ProtectedRoute>}>
+        <Route path="cards" element={<StudentDetailPage />} />
+        <Route path="homeworks" element={<StudentHomeworksPage />} />
+        <Route path="lessons" element={<StudentLessonsPage />} />
+        <Route path="drive" element={<StudentDrivePage />} />
+        <Route path="month-plan" element={<MonthlyPlanPage targetType="STUDENT" />} />
+      </Route>
       <Route path="/teacher/students/:studentId/cards/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><TeacherCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
