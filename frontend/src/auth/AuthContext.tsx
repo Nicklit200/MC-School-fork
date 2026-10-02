@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, getAccessToken, setAccessToken } from '../api/client';
+import { api, ApiRequestError, getAccessToken, setAccessToken } from '../api/client';
 import type { User } from '../api/types';
 import { useI18n } from '../i18n/I18nContext';
 
@@ -36,7 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.auth
       .me()
       .then(applyUser)
-      .catch(() => setAccessToken(null))
+      .catch((error) => {
+        // Keep the saved session during temporary backend/network failures.
+        // Only remove the token when the server explicitly says it is invalid.
+        if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
+          setAccessToken(null);
+        }
+      })
       .finally(() => setInitializing(false));
   }, [applyUser]);
 
