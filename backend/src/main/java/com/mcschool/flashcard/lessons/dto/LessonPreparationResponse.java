@@ -7,6 +7,7 @@ public record LessonPreparationResponse(
         String homeworkNotes,
         String difficulties,
         String lessonPlan,
+        String transcriptText,
         boolean hasWorkbook,
         String workbookFilename,
         boolean hasAnswers,
