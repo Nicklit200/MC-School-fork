@@ -322,7 +322,6 @@ export function GroupDetailPage() {
           <h1>{group?.name ?? 'Группа'}</h1>
           <p>Управляйте учениками, домашними заданиями и карточками для всей группы.</p>
         </div>
-        <Link to={`/groups/${groupId}/lessons`} className="btn btn--secondary">История уроков</Link>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
