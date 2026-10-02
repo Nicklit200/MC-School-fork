@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
@@ -64,6 +65,60 @@ public class MonthlyPlanService {
                 .orElseGet(() -> MonthlyPlan.create(teacherEntity, type, targetId, month, planJson));
         plan.updatePlanJson(planJson);
         return MonthlyPlanResponse.from(repository.save(plan));
+    }
+
+
+    @Transactional
+    public MonthlyPlanResponse uploadDocument(
+            AuthenticatedUser teacher,
+            String targetType,
+            UUID targetId,
+            String month,
+            MultipartFile file) {
+        MonthlyPlanTargetType type = parseTargetType(targetType);
+        validateMonth(month);
+        requireOwnedTarget(teacher.id(), type, targetId);
+
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("document file is required");
+        }
+        if (file.getSize() > 15L * 1024L * 1024L) {
+            throw new IllegalArgumentException("document is too large (max 15 MB)");
+        }
+
+        String filename = file.getOriginalFilename();
+        if (filename == null || filename.isBlank()) filename = "monthly-plan";
+        String lower = filename.toLowerCase(Locale.ROOT);
+        if (!(lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx"))) {
+            throw new IllegalArgumentException("Only PDF, DOC and DOCX documents are supported");
+        }
+
+        User teacherEntity = userRepository.findById(teacher.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
+
+        MonthlyPlan plan = repository.findByTeacherIdAndTargetTypeAndTargetIdAndPlanMonth(
+                        teacher.id(), type, targetId, month)
+                .orElseGet(() -> MonthlyPlan.create(teacherEntity, type, targetId, month, "{}"));
+        try {
+            plan.updateDocument(filename, file.getContentType(), file.getBytes());
+        } catch (java.io.IOException ex) {
+            throw new IllegalArgumentException("Could not read uploaded document");
+        }
+        return MonthlyPlanResponse.from(repository.save(plan));
+    }
+
+    @Transactional(readOnly = true)
+    public MonthlyPlan getPlanWithDocument(
+            AuthenticatedUser teacher,
+            String targetType,
+            UUID targetId,
+            String month) {
+        MonthlyPlanTargetType type = parseTargetType(targetType);
+        validateMonth(month);
+        requireOwnedTarget(teacher.id(), type, targetId);
+        return repository.findByTeacherIdAndTargetTypeAndTargetIdAndPlanMonth(teacher.id(), type, targetId, month)
+                .filter(MonthlyPlan::hasDocument)
+                .orElseThrow(() -> new ResourceNotFoundException("Monthly plan document not found"));
     }
 
     private MonthlyPlanTargetType parseTargetType(String value) {
