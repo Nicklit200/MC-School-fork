@@ -49,6 +49,8 @@ export interface MonthlyPlanResponse {
   targetId: string;
   month: string;
   planJson: string;
+  hasDocument: boolean;
+  documentFilename: string | null;
   version: number;
   updatedAt: string | null;
 }
