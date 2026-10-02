@@ -95,9 +95,14 @@ public class GoogleCalendarLessonService {
                 + "&maxResults=2500"
                 + "&fields=" + enc("items(id,recurringEventId,summary,start,end,hangoutLink,htmlLink,conferenceData(entryPoints(entryPointType,uri)))");
 
-        Map<String, Object> payload = getJson(url, accessToken);
+        Map<String, Object> payload;
+        try {
+            payload = getJson(url, accessToken);
+        } catch (RuntimeException ex) {
+            return archivedLessons(teacher.id());
+        }
         Object rawItems = payload.get("items");
-        if (!(rawItems instanceof List<?> items)) return List.of();
+        if (!(rawItems instanceof List<?> items)) return archivedLessons(teacher.id());
 
         List<GroupLessonResponse> result = new ArrayList<>();
         for (Object item : items) {
