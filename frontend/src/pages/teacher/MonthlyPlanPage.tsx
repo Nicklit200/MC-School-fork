@@ -33,6 +33,9 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
   const [plan, setPlan] = useState<PlanData>(() => defaultPlan());
   const [version, setVersion] = useState(0);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [hasDocument, setHasDocument] = useState(false);
+  const [documentFilename, setDocumentFilename] = useState<string | null>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -62,6 +65,8 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
         setPlan(parsePlan(response.planJson));
         setVersion(response.version);
         setUpdatedAt(response.updatedAt);
+        setHasDocument(response.hasDocument);
+        setDocumentFilename(response.documentFilename);
       })
       .catch((e) => {
         if (!cancelled) setError(toErrorMessage(e, t));
@@ -112,6 +117,45 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
       setError(toErrorMessage(e, t));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function uploadPlanDocument(file: File | null) {
+    if (!file || !targetId || uploadingDocument) return;
+    setUploadingDocument(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.monthlyPlans.uploadDocument(targetType, targetId, month, file);
+      const refreshed = await api.monthlyPlans.get(targetType, targetId, month);
+      setHasDocument(refreshed.hasDocument);
+      setDocumentFilename(refreshed.documentFilename);
+      setVersion(refreshed.version);
+      setUpdatedAt(refreshed.updatedAt);
+      setMessage(language === 'DE' ? 'Dokument hochgeladen.' : 'Документ плана загружен.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setUploadingDocument(false);
+      const input = document.getElementById('monthly-plan-document') as HTMLInputElement | null;
+      if (input) input.value = '';
+    }
+  }
+
+  async function downloadUploadedDocument() {
+    if (!targetId || !hasDocument) return;
+    try {
+      const blob = await api.monthlyPlans.document(targetType, targetId, month);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = documentFilename || `monthly-plan-${month}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(toErrorMessage(e, t));
     }
   }
 
@@ -166,6 +210,30 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
                 <span className="field__label">{language === 'DE' ? 'Monat' : 'Месяц'}</span>
                 <input className="input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
               </label>
+            </div>
+
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                id="monthly-plan-document"
+                type="file"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                style={{ display: 'none' }}
+                onChange={(e) => void uploadPlanDocument(e.target.files?.[0] ?? null)}
+                disabled={uploadingDocument}
+              />
+              <label htmlFor="monthly-plan-document" className="btn btn--secondary" style={{ cursor: uploadingDocument ? 'default' : 'pointer' }}>
+                {uploadingDocument
+                  ? (language === 'DE' ? 'Wird hochgeladen…' : 'Загружаем…')
+                  : (language === 'DE' ? 'Dokument hochladen' : 'Загрузить документ')}
+              </label>
+              {hasDocument && (
+                <button className="btn btn--ghost" type="button" onClick={() => void downloadUploadedDocument()}>
+                  {language === 'DE' ? 'Dokument öffnen' : 'Открыть документ'}{documentFilename ? ` · ${documentFilename}` : ''}
+                </button>
+              )}
+              <span className="muted" style={{ fontSize: 12 }}>
+                PDF, DOC или DOCX · до 15 МБ
+              </span>
             </div>
 
             <label className="field">
