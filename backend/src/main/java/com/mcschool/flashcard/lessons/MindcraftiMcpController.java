@@ -477,7 +477,7 @@ public class MindcraftiMcpController {
         String homeworkNotes = optional(arguments, "homeworkNotes", current.homeworkNotes());
         String difficulties = optional(arguments, "difficulties", current.difficulties());
         String lessonPlan = optional(arguments, "lessonPlan", current.lessonPlan());
-        LessonPreparationResponse result = preparationService.update(teacher, eventId, new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan));
+        LessonPreparationResponse result = preparationService.update(teacher, eventId, new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan, null));
 
         String workbookBase64 = string(arguments.get("workbookBase64"));
         String workbookFilename = normalizedPdfFilename(string(arguments.get("workbookFilename")), "lesson-workbook.pdf");
