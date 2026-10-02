@@ -281,6 +281,33 @@ function tempFileUrl(req, id, seconds = 900) {
   const host = req.headers.host;
   return proto + "://" + host + "/file/" + encodeURIComponent(id) + "?exp=" + exp + "&sig=" + fileSig(id, exp);
 }
+function uploadTicketSig(ticket, exp) {
+  return crypto.createHmac("sha256", CONNECTOR_TOKEN || SITE_PASSWORD || "tsubera")
+    .update(ticket + ":" + exp).digest("hex");
+}
+function safeHexEqual(a, b) {
+  const aa = Buffer.from(String(a || ""), "utf8");
+  const bb = Buffer.from(String(b || ""), "utf8");
+  return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
+}
+function createDirectUploadUrl(req, args, seconds = 900) {
+  const exp = Math.floor(Date.now() / 1000) + seconds;
+  const payload = {
+    trip: String(args.trip_id_or_number || ""),
+    documentType: String(args.document_type || ""),
+    filename: String(args.filename || ""),
+    mimeType: String(args.mime_type || ""),
+    vehiclePlate: String(args.vehicle_plate || "")
+  };
+  const ticket = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const sig = uploadTicketSig(ticket, exp);
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers.host;
+  return {
+    uploadUrl: proto + "://" + host + "/direct-upload?ticket=" + encodeURIComponent(ticket) + "&exp=" + exp + "&sig=" + sig,
+    expiresAt: new Date(exp * 1000).toISOString()
+  };
+}
 function missingForTrip(t) {
   const missing = [];
   if (!t.auftrag) missing.push("Transportauftrag");
@@ -512,6 +539,23 @@ const toolDefs = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
   },
   {
+    name: "create_document_upload_url",
+    description: "Create a short-lived signed upload URL for sending the original file bytes directly from ChatGPT or another client to a Tsubera trip. No base64 and no Google Drive staging are required. After receiving the URL, POST the raw file bytes to it. Maximum file size is 50 MB.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trip_id_or_number: { type: "string", description: "Existing Tsubera Tour-ID, customer tour/order number, or trip database id." },
+        document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
+        filename: { type: "string" },
+        mime_type: { type: "string", description: "MIME type of the original file, for example application/pdf or image/jpeg." },
+        vehicle_plate: { type: "string", description: "Optional vehicle plate to assign to the trip together with the document." }
+      },
+      required: ["trip_id_or_number","document_type","filename"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+  },
+  {
     name: "update_document_type",
     description: "Reclassify an uploaded document as Transportauftrag, CMR after loading, final CMR/POD after unloading, Rechnung, or other.",
     inputSchema: {
@@ -660,6 +704,23 @@ async function callTool(name, args, req) {
       vehiclePlate: args.vehicle_plate
     });
   }
+  if (name === "create_document_upload_url") {
+    const t = getTripByAny(args.trip_id_or_number);
+    if (!t) return { ready: false, error: "Trip not found" };
+    if (!args.filename || !args.document_type) throw new Error("filename and document_type are required");
+    const allowed = new Set(["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"]);
+    if (!allowed.has(args.document_type)) throw new Error("Unsupported document_type");
+    const signed = createDirectUploadUrl(req, args, 900);
+    return {
+      ready: true,
+      method: "POST",
+      uploadUrl: signed.uploadUrl,
+      expiresAt: signed.expiresAt,
+      maxBytes: 50 * 1024 * 1024,
+      contentType: args.mime_type || "application/octet-stream",
+      trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) }
+    };
+  }
   if (name === "update_document_type") {
     const row = docRow(args.document_id);
     if (!row) return { updated: false, error: "Document not found" };
@@ -698,7 +759,7 @@ async function handleMcp(req, res, token) {
         protocolVersion: requested,
         capabilities: { tools: {} },
         serverInfo: { name: "tsubera-transport-documents", version: "1.0.0" },
-        instructions: "Access to Tsubera transport trips and uploaded transport documents. Read tools can search and inspect. Write tools can create/update trips, upload files, and correct document types. Use search/list before modifying when the target trip is ambiguous."
+        instructions: "Access to Tsubera transport trips and uploaded transport documents. Read tools can search and inspect. Write tools can create/update trips, upload files, and correct document types. Use search/list before modifying when the target trip is ambiguous. For a file already uploaded in ChatGPT or available on the local working filesystem, prefer create_document_upload_url and POST the raw file bytes to the returned signed URL; this avoids base64 and Google Drive staging."
       }});
     }
     if (msg.method === "ping") return json(res, 200, { ...base, result: {} });
@@ -769,6 +830,46 @@ const server = http.createServer(async (req, res) => {
         "content-disposition": 'inline; filename*=UTF-8\'\'' + encodeURIComponent(row.original_name)
       });
       return fs.createReadStream(fp).pipe(res);
+    }
+
+    if (p === "/direct-upload" && req.method === "POST") {
+      const exp = Number(url.searchParams.get("exp"));
+      const ticket = url.searchParams.get("ticket") || "";
+      const sig = url.searchParams.get("sig") || "";
+      const current = Math.floor(Date.now() / 1000);
+      if (!exp || exp < current || !ticket || !safeHexEqual(sig, uploadTicketSig(ticket, exp))) {
+        return json(res, 403, { error: "Expired or invalid upload link" });
+      }
+      let meta;
+      try {
+        meta = JSON.parse(Buffer.from(ticket, "base64url").toString("utf8"));
+      } catch {
+        return json(res, 400, { error: "Invalid upload ticket" });
+      }
+      const allowed = new Set(["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"]);
+      if (!meta.trip || !meta.filename || !allowed.has(meta.documentType)) {
+        return json(res, 400, { error: "Invalid upload metadata" });
+      }
+      const t = getTripByAny(meta.trip);
+      if (!t) return json(res, 404, { error: "Trip not found" });
+      const chunks = [];
+      let total = 0;
+      const maxBytes = 50 * 1024 * 1024;
+      for await (const chunk of req) {
+        total += chunk.length;
+        if (total > maxBytes) return json(res, 413, { error: "File max 50 MB" });
+        chunks.push(chunk);
+      }
+      const buffer = Buffer.concat(chunks);
+      if (!buffer.length) return json(res, 400, { error: "Uploaded file is empty" });
+      const result = storeTripDocument(t, {
+        documentType: meta.documentType,
+        filename: meta.filename,
+        mimeType: meta.mimeType || req.headers["content-type"] || "application/octet-stream",
+        buffer,
+        vehiclePlate: meta.vehiclePlate || ""
+      });
+      return json(res, 201, result);
     }
 
     if (p.startsWith("/api/")) {
