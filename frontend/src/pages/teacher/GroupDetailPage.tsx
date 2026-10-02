@@ -7,7 +7,7 @@ import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type CardTab = 'manual' | 'import';
-type PageTab = 'overview' | 'students' | 'homework' | 'cards';
+type PageTab = 'overview' | 'students' | 'lessons' | 'homework' | 'cards';
 type HomeworkByStudent = Record<string, Homework[]>;
 type ReviewHistoryByStudent = Record<string, DailyReviewHistoryItem[]>;
 
@@ -356,6 +356,7 @@ export function GroupDetailPage() {
       <div className="group-detail-tabs">
         <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>▤ <span>Обзор</span></button>
         <button className={pageTab === 'students' ? 'active' : ''} onClick={() => setPageTab('students')}>♙ <span>Ученики</span></button>
+        <button className={pageTab === 'lessons' ? 'active' : ''} onClick={() => setPageTab('lessons')}>▦ <span>Уроки</span></button>
         <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}>▣ <span>Домашние задания</span></button>
         <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}>▥ <span>Карточки</span></button>
         <div className="group-detail-tabs__spacer" />
@@ -543,6 +544,59 @@ export function GroupDetailPage() {
         </section>
       )}
 
+      {pageTab === 'lessons' && (
+        <section className="group-work-card">
+          <div className="group-members-card__header">
+            <div>
+              <h2>Уроки группы</h2>
+              <p>Все занятия этой группы. Откройте урок, чтобы увидеть транскрипцию, рабочий лист, ответы, домашние задания и заметки.</p>
+            </div>
+            <span>{groupLessons.filter((lesson) => lesson.groupId === groupId).length} уроков</span>
+          </div>
+
+          {groupLessons.filter((lesson) => lesson.groupId === groupId).length === 0 ? (
+            <div className="teacher-empty-state">Уроков группы пока нет.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {groupLessons
+                .filter((lesson) => lesson.groupId === groupId)
+                .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
+                .map((lesson) => {
+                  const isFuture = new Date(lesson.startsAt).getTime() > Date.now();
+                  return (
+                    <Link
+                      key={lesson.eventId}
+                      to={`/teacher/lessons/${encodeURIComponent(lesson.eventId)}`}
+                      style={{
+                        textDecoration: 'none',
+                        color: 'inherit',
+                        border: '1px solid var(--border)',
+                        borderRadius: 16,
+                        padding: '15px 17px',
+                        background: '#fff',
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(170px, 220px) 1fr auto',
+                        gap: 16,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <strong>{formatGroupLessonDate(lesson.startsAt)}</strong>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{formatGroupLessonTime(lesson.startsAt, lesson.endsAt)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800 }}>{lesson.title}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{group?.students.length ?? 0} учеников в группе</div>
+                      </div>
+                      <span className={`pill ${isFuture ? 'pill--pending' : 'pill--learned'}`}>{isFuture ? 'запланирован' : 'проведён'}</span>
+                    </Link>
+                  );
+                })}
+            </div>
+          )}
+        </section>
+      )}
+
       {pageTab === 'homework' && (
         <section className="group-work-card">
           <h2>Задать PDF-домашку всей группе</h2>
@@ -647,4 +701,24 @@ function formatNextLesson(value: string) {
   if (lessonKey === localDateString(today)) return `Сегодня, ${time}`;
   if (lessonKey === localDateString(tomorrow)) return `Завтра, ${time}`;
   return new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(lessonDate);
+}
+
+
+function formatGroupLessonDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Europe/Berlin',
+  }).format(new Date(value));
+}
+
+function formatGroupLessonTime(start: string, end: string) {
+  const format = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Berlin',
+  });
+  return `${format.format(new Date(start))}–${format.format(new Date(end))}`;
 }
