@@ -44,6 +44,15 @@ public class MonthlyPlan {
     @Column(name = "plan_json", nullable = false, columnDefinition = "text")
     private String planJson;
 
+    @Column(name = "document_filename")
+    private String documentFilename;
+
+    @Column(name = "document_content_type")
+    private String documentContentType;
+
+    @Column(name = "document_data")
+    private byte[] documentData;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -71,5 +80,15 @@ public class MonthlyPlan {
 
     public void updatePlanJson(String planJson) {
         this.planJson = planJson;
+    }
+
+    public void updateDocument(String filename, String contentType, byte[] data) {
+        this.documentFilename = filename;
+        this.documentContentType = contentType;
+        this.documentData = data;
+    }
+
+    public boolean hasDocument() {
+        return documentData != null && documentData.length > 0;
     }
 }
