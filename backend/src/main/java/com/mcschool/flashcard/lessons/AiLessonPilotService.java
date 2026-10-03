@@ -4,6 +4,8 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
+import com.mcschool.flashcard.homeworks.Homework;
+import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
 import com.mcschool.flashcard.monthlyplans.dto.MonthlyPlanResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsResponse;
@@ -17,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,6 +46,7 @@ public class AiLessonPilotService {
     private final MonthlyPlanService monthlyPlanService;
     private final SchoolPromptSettingsService promptSettingsService;
     private final UserRepository userRepository;
+    private final HomeworkRepository homeworkRepository;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public AiLessonPilotService(
@@ -54,7 +58,8 @@ public class AiLessonPilotService {
             LessonPreparationRepository preparationRepository,
             MonthlyPlanService monthlyPlanService,
             SchoolPromptSettingsService promptSettingsService,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            HomeworkRepository homeworkRepository) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model == null || model.isBlank() ? "gpt-5.6-terra" : model.trim();
         this.objectMapper = objectMapper;
@@ -64,6 +69,7 @@ public class AiLessonPilotService {
         this.monthlyPlanService = monthlyPlanService;
         this.promptSettingsService = promptSettingsService;
         this.userRepository = userRepository;
+        this.homeworkRepository = homeworkRepository;
     }
 
     public Map<String, Object> status(AuthenticatedUser teacher) {
@@ -113,32 +119,40 @@ public class AiLessonPilotService {
                 Подготовь следующий урок для преподавателя Mindcrafti.
                 Это пилот: ничего не выдавай ученикам автоматически. Результат должен быть черновиком для преподавателя.
 
+                Используй ТОЛЬКО три источника учебного контекста:
+                1. месячный план;
+                2. транскрипцию предыдущего урока;
+                3. выполненные учениками домашние работы после предыдущего урока, максимум 7 последних на каждого ученика.
+
+                Не используй старые домашние работы до предыдущего урока и не опирайся на другие старые заметки.
+
                 УРОК:
                 %s
 
-                НАПРАВЛЕНИЕ / ПЛАН НА МЕСЯЦ:
+                1. МЕСЯЧНЫЙ ПЛАН:
                 %s
 
-                ПРЕДЫДУЩИЙ УРОК:
+                2. ТРАНСКРИПЦИЯ ПРЕДЫДУЩЕГО УРОКА:
                 %s
 
-                ТЕКУЩИЕ ЗАМЕТКИ ПРЕПОДАВАТЕЛЯ:
+                3. ВЫПОЛНЕННЫЕ ДОМАШКИ ПОСЛЕ ПРЕДЫДУЩЕГО УРОКА:
                 %s
 
                 Требования:
-                1. lessonPlan: конкретный план занятия по времени с заданиями, вопросами и ожидаемыми ответами.
-                2. difficulties: что проверить в начале и на каких ошибках быть особенно внимательным.
-                3. homeworkDraft: черновик короткой домашней работы на 10-15 минут по результатам этого направления.
+                1. lessonPlan: конкретный план занятия по времени с заданиями и ожидаемыми ответами для преподавателя.
+                2. difficulties: что проверить в начале, какие ошибки из последних домашних работ и прошлого урока нужно разобрать.
+                3. homeworkDraft: черновик домашней работы на 10-15 минут, но не назначай её ученикам автоматически.
                 4. nextLessonFocus: кратко, куда двигаться дальше, если этот урок пройдет по плану.
-                5. Учитывай немецкую школьную терминологию, если это уместно.
-                6. Не выдумывай факты об ученике, которых нет в контексте.
+                5. Если в домашней работе видно исправление старой ошибки, не считай её текущей проблемой без дополнительных признаков.
+                6. Учитывай немецкую школьную терминологию, если это уместно.
+                7. Не выдумывай факты об ученике, которых нет в этих трёх источниках.
                 """.formatted(
                 context.lessonDescription(),
                 emptyFallback(context.monthPlanJson(), "План на месяц пока не заполнен."),
-                emptyFallback(context.previousLessonContext(), "Нет предыдущего сохранённого урока."),
-                existingPreparation(current));
+                emptyFallback(context.previousTranscript(), "Транскрипция предыдущего урока отсутствует."),
+                context.homeworkSummary());
 
-        GeneratedDraft draft = callOpenAi(context.schoolPrompt(), userPrompt);
+        GeneratedDraft draft = callOpenAi(context.schoolPrompt(), userPrompt, context.homeworkFiles());
         return preparationService.update(
                 teacher,
                 eventId,
@@ -222,36 +236,102 @@ public class AiLessonPilotService {
                 ? settings.groupLessonPrompt()
                 : settings.individualLessonPrompt();
 
-        String previous = previousLessonContext(teacher, current, lessons);
+        GroupLessonResponse previous = previousLesson(current, lessons);
+        String previousTranscript = previousTranscript(teacher, previous);
+        HomeworkEvidence homeworkEvidence = completedHomeworkEvidence(current, previous);
+
         return new LessonContext(
                 describeLesson(current),
                 monthPlan.planJson(),
-                previous,
+                previousTranscript,
+                homeworkEvidence.summary(),
+                homeworkEvidence.files(),
                 schoolPrompt == null ? "" : schoolPrompt);
     }
 
-    private String previousLessonContext(
-            AuthenticatedUser teacher,
+    private GroupLessonResponse previousLesson(
             GroupLessonResponse current,
             List<GroupLessonResponse> lessons) {
-        GroupLessonResponse previous = lessons.stream()
-                .filter(item -> item.startsAt().isBefore(current.startsAt()))
+        return lessons.stream()
+                .filter(item -> item.startsAt() != null && item.startsAt().isBefore(current.startsAt()))
                 .filter(item -> sameTarget(current, item))
                 .max(Comparator.comparing(GroupLessonResponse::startsAt))
                 .orElse(null);
+    }
+
+    private String previousTranscript(AuthenticatedUser teacher, GroupLessonResponse previous) {
         if (previous == null) return "";
+        return preparationRepository.findByTeacherIdAndEventId(teacher.id(), previous.eventId())
+                .map(LessonPreparation::getTranscriptText)
+                .map(value -> truncate(value, 30000))
+                .orElse("");
+    }
 
-        LessonPreparation prep = preparationRepository
-                .findByTeacherIdAndEventId(teacher.id(), previous.eventId())
-                .orElse(null);
-        if (prep == null) return describeLesson(previous);
+    private HomeworkEvidence completedHomeworkEvidence(
+            GroupLessonResponse current,
+            GroupLessonResponse previous) {
+        if (previous == null || previous.endsAt() == null) {
+            return new HomeworkEvidence("Предыдущий урок не найден, поэтому старые домашние работы не загружаются.", List.of());
+        }
 
-        StringBuilder value = new StringBuilder(describeLesson(previous));
-        append(value, "План", prep.getLessonPlan());
-        append(value, "Сложности", prep.getDifficulties());
-        append(value, "Домашка / заметки", prep.getHomeworkNotes());
-        append(value, "Транскрипция", truncate(prep.getTranscriptText(), 12000));
-        return truncate(value.toString(), 18000);
+        List<UUID> studentIds = current.participantStudentIds() == null
+                ? List.of()
+                : current.participantStudentIds();
+        if (studentIds.isEmpty() && current.studentId() != null) {
+            studentIds = List.of(current.studentId());
+        }
+
+        List<HomeworkFile> files = new java.util.ArrayList<>();
+        StringBuilder summary = new StringBuilder();
+        Instant cutoff = previous.endsAt();
+        Instant before = current.startsAt();
+
+        for (UUID studentId : studentIds) {
+            User student = userRepository.findById(studentId).orElse(null);
+            if (student == null || student.isArchived()) continue;
+
+            List<Homework> submitted = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(studentId).stream()
+                    .filter(Homework::isSubmitted)
+                    .filter(homework -> homework.getSubmittedAt() != null)
+                    .filter(homework -> !homework.getSubmittedAt().isBefore(cutoff))
+                    .filter(homework -> before == null || homework.getSubmittedAt().isBefore(before))
+                    .sorted(Comparator.comparing(Homework::getSubmittedAt).reversed())
+                    .limit(7)
+                    .sorted(Comparator.comparing(Homework::getSubmittedAt))
+                    .toList();
+
+            if (summary.length() > 0) summary.append("\n");
+            summary.append(student.getFullName()).append(": ").append(submitted.size())
+                    .append(" выполненных домашних работ после прошлого урока.");
+
+            for (Homework homework : submitted) {
+                byte[] pdf = homework.getSubmittedPdf();
+                if (pdf == null || pdf.length == 0) continue;
+                String filename = safeHomeworkFilename(student, homework);
+                files.add(new HomeworkFile(
+                        student.getFullName(),
+                        homework.getStartDate().toString(),
+                        homework.getSubmittedAt().toString(),
+                        filename,
+                        pdf));
+            }
+        }
+
+        if (summary.length() == 0) {
+            summary.append("После предыдущего урока выполненных домашних работ не найдено.");
+        }
+        summary.append("\nВсего PDF для анализа: ").append(files.size()).append(".");
+        return new HomeworkEvidence(summary.toString(), files);
+    }
+
+    private String safeHomeworkFilename(User student, Homework homework) {
+        String rawName = homework.getSubmittedFilename();
+        String base = rawName == null || rawName.isBlank() ? "homework.pdf" : rawName;
+        String cleaned = base.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (!cleaned.toLowerCase().endsWith(".pdf")) cleaned += ".pdf";
+        String studentPart = student.getFullName().replaceAll("[^A-Za-z0-9._-]", "_");
+        if (studentPart.isBlank()) studentPart = "student";
+        return studentPart + "_" + homework.getStartDate() + "_" + cleaned;
     }
 
     private boolean sameTarget(GroupLessonResponse a, GroupLessonResponse b) {
@@ -278,14 +358,46 @@ public class AiLessonPilotService {
     }
 
     private GeneratedDraft callOpenAi(String schoolPrompt, String userPrompt) {
+        return callOpenAi(schoolPrompt, userPrompt, List.of());
+    }
+
+    private GeneratedDraft callOpenAi(
+            String schoolPrompt,
+            String userPrompt,
+            List<HomeworkFile> homeworkFiles) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", model);
+
+            List<Map<String, Object>> userContent = new java.util.ArrayList<>();
+            userContent.add(Map.of("type", "input_text", "text", userPrompt));
+
+            long totalPdfBytes = 0L;
+            final long maxCombinedPdfBytes = 45L * 1024L * 1024L;
+            for (HomeworkFile file : homeworkFiles) {
+                if (file.pdf() == null || file.pdf().length == 0) continue;
+                if (totalPdfBytes + file.pdf().length > maxCombinedPdfBytes) break;
+                totalPdfBytes += file.pdf().length;
+
+                userContent.add(Map.of(
+                        "type", "input_text",
+                        "text", "Домашняя работа: ученик " + file.studentName()
+                                + ", дата задания " + file.assignedDate()
+                                + ", выполнена " + file.submittedAt() + "."));
+                Map<String, Object> inputFile = new LinkedHashMap<>();
+                inputFile.put("type", "input_file");
+                inputFile.put("filename", file.filename());
+                inputFile.put("file_data", "data:application/pdf;base64,"
+                        + Base64.getEncoder().encodeToString(file.pdf()));
+                inputFile.put("detail", "low");
+                userContent.add(inputFile);
+            }
+
             payload.put("input", List.of(
                     Map.of(
                             "role", "system",
                             "content", "Ты методист Mindcrafti. Следуй школьному промту как базовой инструкции.\n\nШКОЛЬНЫЙ ПРОМТ:\n" + truncate(schoolPrompt, 24000)),
-                    Map.of("role", "user", "content", userPrompt)));
+                    Map.of("role", "user", "content", userContent)));
             payload.put("reasoning", Map.of("effort", "medium"));
             payload.put("max_output_tokens", 7000);
             payload.put("text", Map.of(
@@ -417,10 +529,25 @@ public class AiLessonPilotService {
         }
     }
 
+    private record HomeworkFile(
+            String studentName,
+            String assignedDate,
+            String submittedAt,
+            String filename,
+            byte[] pdf) {
+    }
+
+    private record HomeworkEvidence(
+            String summary,
+            List<HomeworkFile> files) {
+    }
+
     private record LessonContext(
             String lessonDescription,
             String monthPlanJson,
-            String previousLessonContext,
+            String previousTranscript,
+            String homeworkSummary,
+            List<HomeworkFile> homeworkFiles,
             String schoolPrompt) {
     }
 }
