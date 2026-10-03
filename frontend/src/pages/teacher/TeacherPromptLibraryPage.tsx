@@ -3,7 +3,7 @@ import { promptSettingsApi, type SchoolPromptSettings } from '../../api/promptSe
 
 export function TeacherPromptLibraryPage() {
   const [settings, setSettings] = useState<SchoolPromptSettings | null>(null);
-  const [copied, setCopied] = useState<'group' | 'individual' | 'diagnostic' | null>(null);
+  const [copied, setCopied] = useState<'group' | 'individual' | 'diagnostic' | 'error_correction' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -12,7 +12,7 @@ export function TeacherPromptLibraryPage() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты'));
   }, []);
 
-  async function copy(kind: 'group' | 'individual' | 'diagnostic', text: string) {
+  async function copy(kind: 'group' | 'individual' | 'diagnostic' | 'error_correction', text: string) {
     await navigator.clipboard.writeText(text);
     setCopied(kind);
     window.setTimeout(() => setCopied(null), 1800);
@@ -47,6 +47,12 @@ export function TeacherPromptLibraryPage() {
             text={settings.diagnosticLessonPrompt}
             copied={copied === 'diagnostic'}
             onCopy={() => void copy('diagnostic', settings.diagnosticLessonPrompt)}
+          />
+          <PromptCard
+            title="Работа над ошибками"
+            text={settings.errorCorrectionPrompt}
+            copied={copied === 'error_correction'}
+            onCopy={() => void copy('error_correction', settings.errorCorrectionPrompt)}
           />
         </>
       )}
