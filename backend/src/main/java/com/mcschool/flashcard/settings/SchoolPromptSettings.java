@@ -29,6 +29,9 @@ public class SchoolPromptSettings {
     @Column(name = "diagnostic_lesson_prompt", nullable = false, columnDefinition = "text")
     private String diagnosticLessonPrompt;
 
+    @Column(name = "error_correction_prompt", nullable = false, columnDefinition = "text")
+    private String errorCorrectionPrompt;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -37,10 +40,15 @@ public class SchoolPromptSettings {
     @Column(nullable = false)
     private Long version;
 
-    public void updatePrompts(String groupLessonPrompt, String individualLessonPrompt, String diagnosticLessonPrompt) {
+    public void updatePrompts(
+            String groupLessonPrompt,
+            String individualLessonPrompt,
+            String diagnosticLessonPrompt,
+            String errorCorrectionPrompt) {
         this.groupLessonPrompt = normalize(groupLessonPrompt);
         this.individualLessonPrompt = normalize(individualLessonPrompt);
         this.diagnosticLessonPrompt = normalize(diagnosticLessonPrompt);
+        this.errorCorrectionPrompt = normalize(errorCorrectionPrompt);
     }
 
     private static String normalize(String value) {
