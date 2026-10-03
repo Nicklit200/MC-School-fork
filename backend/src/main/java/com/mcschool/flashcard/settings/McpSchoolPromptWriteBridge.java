@@ -122,7 +122,7 @@ public class McpSchoolPromptWriteBridge extends OncePerRequestFilter {
 
     private Map<String, Object> updateToolDefinition() {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("lessonType", property("Prompt type to replace: group, individual or diagnostic."));
+        properties.put("lessonType", property("Prompt type to replace: group, individual, diagnostic or error_correction."));
         properties.put("prompt", property("Complete replacement prompt text. Maximum 30000 characters."));
 
         Map<String, Object> inputSchema = new LinkedHashMap<>();
@@ -134,7 +134,7 @@ public class McpSchoolPromptWriteBridge extends OncePerRequestFilter {
         Map<String, Object> tool = new LinkedHashMap<>();
         tool.put("name", TOOL_NAME);
         tool.put("description",
-                "Admin-only. Replace one administrator-managed Mindcrafti school prompt while preserving the other prompts. Use this when the administrator explicitly asks to change or save the group, individual or diagnostic school prompt.");
+                "Admin-only. Replace one administrator-managed Mindcrafti school prompt while preserving the other prompts. Use this when the administrator explicitly asks to change or save the group, individual, diagnostic or error-correction school prompt.");
         tool.put("inputSchema", inputSchema);
         tool.put("annotations", Map.of(
                 "readOnlyHint", false,
@@ -171,22 +171,26 @@ public class McpSchoolPromptWriteBridge extends OncePerRequestFilter {
             String groupPrompt = current.groupLessonPrompt() == null ? "" : current.groupLessonPrompt();
             String individualPrompt = current.individualLessonPrompt() == null ? "" : current.individualLessonPrompt();
             String diagnosticPrompt = current.diagnosticLessonPrompt() == null ? "" : current.diagnosticLessonPrompt();
+            String errorCorrectionPrompt = current.errorCorrectionPrompt() == null ? "" : current.errorCorrectionPrompt();
 
             if ("group".equals(lessonType)) groupPrompt = prompt;
             else if ("individual".equals(lessonType)) individualPrompt = prompt;
             else if ("diagnostic".equals(lessonType)) diagnosticPrompt = prompt;
-            else throw new IllegalArgumentException("lessonType must be group, individual or diagnostic");
+            else if ("error_correction".equals(lessonType) || "error-correction".equals(lessonType)) errorCorrectionPrompt = prompt;
+            else throw new IllegalArgumentException("lessonType must be group, individual, diagnostic or error_correction");
 
             AuthenticatedUser caller = new AuthenticatedUser(admin.getId(), admin.getEmail(), admin.getRole());
             SchoolPromptSettingsResponse updated = promptSettingsService.update(
                     caller,
-                    new UpdateSchoolPromptSettingsRequest(groupPrompt, individualPrompt, diagnosticPrompt));
+                    new UpdateSchoolPromptSettingsRequest(groupPrompt, individualPrompt, diagnosticPrompt, errorCorrectionPrompt));
 
             String savedPrompt = "group".equals(lessonType)
                     ? updated.groupLessonPrompt()
                     : "individual".equals(lessonType)
                         ? updated.individualLessonPrompt()
-                        : updated.diagnosticLessonPrompt();
+                        : "diagnostic".equals(lessonType)
+                            ? updated.diagnosticLessonPrompt()
+                            : updated.errorCorrectionPrompt();
 
             Map<String, Object> structured = new LinkedHashMap<>();
             structured.put("lessonType", lessonType);
