@@ -33,15 +33,25 @@ public class SchoolPromptSettingsService {
         validate(request.individualLessonPrompt(), "Individual lesson prompt");
         validate(request.diagnosticLessonPrompt(), "Diagnostic lesson prompt");
         validate(request.errorCorrectionPrompt(), "Error correction prompt");
+        validate(request.workbookPrompt(), "Workbook prompt");
+        validate(request.homeworkPrompt(), "Homework prompt");
         SchoolPromptSettings settings = requireSettings();
         String errorCorrectionPrompt = request.errorCorrectionPrompt() == null
                 ? settings.getErrorCorrectionPrompt()
                 : request.errorCorrectionPrompt();
+        String workbookPrompt = request.workbookPrompt() == null
+                ? settings.getWorkbookPrompt()
+                : request.workbookPrompt();
+        String homeworkPrompt = request.homeworkPrompt() == null
+                ? settings.getHomeworkPrompt()
+                : request.homeworkPrompt();
         settings.updatePrompts(
                 request.groupLessonPrompt(),
                 request.individualLessonPrompt(),
                 request.diagnosticLessonPrompt(),
-                errorCorrectionPrompt);
+                errorCorrectionPrompt,
+                workbookPrompt,
+                homeworkPrompt);
         return toResponse(repository.save(settings));
     }
 
@@ -73,6 +83,8 @@ public class SchoolPromptSettingsService {
                 settings.getIndividualLessonPrompt(),
                 settings.getDiagnosticLessonPrompt(),
                 settings.getErrorCorrectionPrompt(),
+                settings.getWorkbookPrompt(),
+                settings.getHomeworkPrompt(),
                 settings.getUpdatedAt());
     }
 }
