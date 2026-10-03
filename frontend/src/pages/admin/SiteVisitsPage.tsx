@@ -15,6 +15,7 @@ const STATUS_LABELS: Record<TrialLeadStatus, string> = {
   BOOKED: 'Забронирован',
   CONTACTED: 'Связались',
   CONTRACT: 'Контракт',
+  NO_RESPONSE: 'Не ответили',
   DECLINED: 'Отказ',
 };
 
