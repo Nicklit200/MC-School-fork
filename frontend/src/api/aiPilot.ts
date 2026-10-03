@@ -23,9 +23,25 @@ export type AiPilotStatus = {
   teacherId: string;
 };
 
+export type AiPilotSettings = {
+  enabled: boolean;
+  preparationTime: string;
+  zone: string;
+};
+
 export const aiPilotApi = {
   status() {
     return fetch(`${BASE_URL}/ai-pilot/status`, { headers: headers() }).then(parse<AiPilotStatus>);
+  },
+  settings() {
+    return fetch(`${BASE_URL}/ai-pilot/settings`, { headers: headers() }).then(parse<AiPilotSettings>);
+  },
+  updateSettings(enabled: boolean, preparationTime: string) {
+    return fetch(`${BASE_URL}/ai-pilot/settings`, {
+      method: 'PUT',
+      headers: { ...headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, preparationTime }),
+    }).then(parse<AiPilotSettings>);
   },
   prepareLesson(eventId: string) {
     return fetch(`${BASE_URL}/ai-pilot/lessons/${encodeURIComponent(eventId)}/prepare`, {
