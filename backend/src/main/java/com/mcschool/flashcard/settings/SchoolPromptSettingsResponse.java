@@ -6,6 +6,7 @@ public record SchoolPromptSettingsResponse(
         String groupLessonPrompt,
         String individualLessonPrompt,
         String diagnosticLessonPrompt,
+        String errorCorrectionPrompt,
         Instant updatedAt
 ) {
 }
