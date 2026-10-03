@@ -113,6 +113,23 @@ export function LessonDetailPage() {
     };
   }, [eventId, t]);
 
+  useEffect(() => {
+    if (!isNickAiPilot) return;
+    let cancelled = false;
+    aiPilotApi.status()
+      .then((status) => {
+        if (cancelled) return;
+        setAiConfigured(status.configured);
+        setAiModel(status.model);
+      })
+      .catch(() => {
+        if (!cancelled) setAiConfigured(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isNickAiPilot]);
+
   useEffect(() => () => {
     if (workbookUrl) URL.revokeObjectURL(workbookUrl);
   }, [workbookUrl]);
@@ -127,6 +144,36 @@ export function LessonDetailPage() {
       weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
     }).format(new Date(lesson.startsAt));
   }, [lesson]);
+
+  function applyPreparation(updated: LessonPreparation) {
+    setPreparation(updated);
+    setHomeworkNotes(updated.homeworkNotes ?? '');
+    setDifficulties(updated.difficulties ?? '');
+    setLessonPlan(updated.lessonPlan ?? '');
+    setTranscriptText(updated.transcriptText ?? '');
+  }
+
+  async function runAiPilot(action: 'prepare' | 'analyze') {
+    if (!isNickAiPilot || aiRunning) return;
+    setAiRunning(action);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await lessonPreparationApi.update(eventId, { homeworkNotes, difficulties, lessonPlan, transcriptText });
+      applyPreparation(saved);
+      const updated = action === 'prepare'
+        ? await aiPilotApi.prepareLesson(eventId)
+        : await aiPilotApi.analyzeTranscript(eventId);
+      applyPreparation(updated);
+      setMessage(action === 'prepare'
+        ? 'AI подготовил черновик урока по плану месяца. Проверьте и отредактируйте его перед занятием.'
+        : 'AI разобрал транскрипцию и подготовил черновик домашки и направление следующего урока.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setAiRunning(null);
+    }
+  }
 
   async function savePreparation() {
     if (saving) return;
@@ -247,6 +294,46 @@ export function LessonDetailPage() {
 
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
+
+      {isNickAiPilot && (
+        <section className="panel" style={{ padding: 18, margin: '0 0 18px', border: '1px solid #f0c7ad', background: '#fffaf7' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.06em', color: '#d94f00' }}>AI пилот Николая</p>
+              <h2 style={{ margin: '5px 0 4px' }}>Автоподготовка урока</h2>
+              <div className="muted" style={{ fontSize: 13, maxWidth: 760 }}>
+                Доступно только вашему аккаунту. AI использует план на месяц, школьный промт, прошлый урок и сохранённую транскрипцию. Ничего ученикам автоматически не отправляется.
+              </div>
+            </div>
+            <span className={aiConfigured ? 'pill pill--learned' : 'pill'}>
+              {aiConfigured === null ? 'проверяем API' : aiConfigured ? `API готов · ${aiModel}` : 'API ещё не подключён'}
+            </span>
+          </div>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+            <button
+              className="btn"
+              type="button"
+              disabled={!aiConfigured || aiRunning !== null}
+              onClick={() => void runAiPilot('prepare')}
+            >
+              {aiRunning === 'prepare' ? 'AI готовит урок…' : 'AI подготовить урок'}
+            </button>
+            <button
+              className="btn btn--secondary"
+              type="button"
+              disabled={!aiConfigured || aiRunning !== null || !transcriptText.trim()}
+              onClick={() => void runAiPilot('analyze')}
+            >
+              {aiRunning === 'analyze' ? 'AI разбирает урок…' : 'AI разобрать транскрипцию и сделать домашку'}
+            </button>
+          </div>
+          {aiConfigured === false && (
+            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+              Код пилота уже подключён. Для запуска осталось добавить OPENAI_API_KEY в backend Railway.
+            </div>
+          )}
+        </section>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14, marginBottom: 18 }}>
         <MaterialPanel
