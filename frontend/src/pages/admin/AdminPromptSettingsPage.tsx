@@ -5,6 +5,7 @@ export function AdminPromptSettingsPage() {
   const [groupPrompt, setGroupPrompt] = useState('');
   const [individualPrompt, setIndividualPrompt] = useState('');
   const [diagnosticPrompt, setDiagnosticPrompt] = useState('');
+  const [errorCorrectionPrompt, setErrorCorrectionPrompt] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -16,6 +17,7 @@ export function AdminPromptSettingsPage() {
         setGroupPrompt(settings.groupLessonPrompt);
         setIndividualPrompt(settings.individualLessonPrompt);
         setDiagnosticPrompt(settings.diagnosticLessonPrompt);
+        setErrorCorrectionPrompt(settings.errorCorrectionPrompt ?? '');
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты'))
       .finally(() => setLoading(false));
@@ -26,10 +28,11 @@ export function AdminPromptSettingsPage() {
     setSaved(false);
     setError(null);
     try {
-      const settings = await promptSettingsApi.update(groupPrompt, individualPrompt, diagnosticPrompt);
+      const settings = await promptSettingsApi.update(groupPrompt, individualPrompt, diagnosticPrompt, errorCorrectionPrompt);
       setGroupPrompt(settings.groupLessonPrompt);
       setIndividualPrompt(settings.individualLessonPrompt);
       setDiagnosticPrompt(settings.diagnosticLessonPrompt);
+      setErrorCorrectionPrompt(settings.errorCorrectionPrompt ?? '');
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось сохранить промты');
@@ -98,6 +101,24 @@ export function AdminPromptSettingsPage() {
           style={{ minHeight: 280, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
         <div className="muted">{diagnosticPrompt.length.toLocaleString()} / 30 000 символов</div>
+      </div>
+
+      <div className="panel stack">
+        <div>
+          <h2 style={{ margin: 0 }}>Работа над ошибками</h2>
+          <p className="muted">
+            Промт для персонального PDF с реальными фрагментами выполненной работы ученика, объяснением ошибки и тренировкой.
+          </p>
+        </div>
+        <textarea
+          className="input"
+          value={errorCorrectionPrompt}
+          maxLength={30000}
+          onChange={(event) => { setErrorCorrectionPrompt(event.target.value); setSaved(false); }}
+          placeholder="Вставьте промт для работы над ошибками…"
+          style={{ minHeight: 360, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+        <div className="muted">{errorCorrectionPrompt.length.toLocaleString()} / 30 000 символов</div>
       </div>
 
       <button className="btn" type="button" disabled={saving} onClick={() => void save()} style={{ alignSelf: 'flex-start' }}>
