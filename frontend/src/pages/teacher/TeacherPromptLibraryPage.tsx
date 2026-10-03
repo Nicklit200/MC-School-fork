@@ -54,12 +54,6 @@ export function TeacherPromptLibraryPage() {
             copied={copied === 'error_correction'}
             onCopy={() => void copy('error_correction', settings.errorCorrectionPrompt)}
           />
-          <PromptCard
-            title="Работа над ошибками"
-            text={settings.errorCorrectionPrompt}
-            copied={copied === 'error_correction'}
-            onCopy={() => void copy('error_correction', settings.errorCorrectionPrompt)}
-          />
         </>
       )}
     </div>
