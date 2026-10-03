@@ -8,6 +8,9 @@ import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
 import com.mcschool.flashcard.monthlyplans.dto.MonthlyPlanResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
+import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.users.User;
+import com.mcschool.flashcard.users.UserRepository;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -21,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -38,6 +42,7 @@ public class AiLessonPilotService {
     private final LessonPreparationRepository preparationRepository;
     private final MonthlyPlanService monthlyPlanService;
     private final SchoolPromptSettingsService promptSettingsService;
+    private final UserRepository userRepository;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public AiLessonPilotService(
@@ -48,7 +53,8 @@ public class AiLessonPilotService {
             LessonPreparationService preparationService,
             LessonPreparationRepository preparationRepository,
             MonthlyPlanService monthlyPlanService,
-            SchoolPromptSettingsService promptSettingsService) {
+            SchoolPromptSettingsService promptSettingsService,
+            UserRepository userRepository) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model == null || model.isBlank() ? "gpt-5.6-terra" : model.trim();
         this.objectMapper = objectMapper;
@@ -57,6 +63,7 @@ public class AiLessonPilotService {
         this.preparationRepository = preparationRepository;
         this.monthlyPlanService = monthlyPlanService;
         this.promptSettingsService = promptSettingsService;
+        this.userRepository = userRepository;
     }
 
     public Map<String, Object> status(AuthenticatedUser teacher) {
@@ -66,6 +73,35 @@ public class AiLessonPilotService {
                 "configured", !apiKey.isBlank(),
                 "model", model,
                 "teacherId", teacher.id().toString());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> scheduleSettings(AuthenticatedUser teacher) {
+        User user = requirePilotTeacherEntity(teacher);
+        String preparationTime = normalizePreparationTime(user.getAiPreparationTime());
+        return Map.of(
+                "enabled", user.isAiLessonPilotEnabled(),
+                "preparationTime", preparationTime,
+                "zone", "Europe/Berlin");
+    }
+
+    @Transactional
+    public Map<String, Object> updateScheduleSettings(
+            AuthenticatedUser teacher,
+            boolean enabled,
+            String preparationTime) {
+        User user = requirePilotTeacherEntity(teacher);
+        String normalized = normalizePreparationTime(preparationTime);
+        user.configureAiLessonPilot(enabled, normalized);
+        userRepository.save(user);
+        return Map.of(
+                "enabled", user.isAiLessonPilotEnabled(),
+                "preparationTime", normalized,
+                "zone", "Europe/Berlin");
+    }
+
+    public boolean isConfigured() {
+        return !apiKey.isBlank();
     }
 
     public LessonPreparationResponse prepareLesson(AuthenticatedUser teacher, String eventId) {
@@ -327,6 +363,22 @@ public class AiLessonPilotService {
         if (teacher == null || !PILOT_TEACHER_ID.equals(teacher.id())) {
             throw new IllegalArgumentException("AI pilot is enabled only for Nick.");
         }
+    }
+
+    private User requirePilotTeacherEntity(AuthenticatedUser teacher) {
+        requirePilotTeacher(teacher);
+        return userRepository.findById(teacher.id())
+                .filter(user -> user.getRole() == Role.TEACHER)
+                .filter(user -> !user.isArchived())
+                .orElseThrow(() -> new IllegalArgumentException("Pilot teacher not found."));
+    }
+
+    private String normalizePreparationTime(String value) {
+        String time = value == null || value.isBlank() ? "10:00" : value.trim();
+        if (!time.matches("^(?:[01]\\d|2[0-3]):[0-5]\\d$")) {
+            throw new IllegalArgumentException("preparationTime must use HH:mm.");
+        }
+        return time;
     }
 
     private void requireConfiguredPilot(AuthenticatedUser teacher) {
