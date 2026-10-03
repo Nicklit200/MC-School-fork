@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { lessonPreparationApi } from '../../api/lessonPreparation';
+import { aiPilotApi } from '../../api/aiPilot';
+import { useAuth } from '../../auth/AuthContext';
 import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
@@ -31,9 +33,13 @@ type NoteGroup = {
   student: boolean;
 };
 
+const NICK_AI_PILOT_TEACHER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
+
 export function LessonDetailPage() {
   const { eventId = '' } = useParams();
   const { t } = useI18n();
+  const { user } = useAuth();
+  const isNickAiPilot = user?.id === NICK_AI_PILOT_TEACHER_ID;
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
   const [lessonStudents, setLessonStudents] = useState<LessonStudent[]>([]);
   const [preparation, setPreparation] = useState<LessonPreparation | null>(null);
@@ -51,6 +57,9 @@ export function LessonDetailPage() {
   const [uploadingAnswers, setUploadingAnswers] = useState(false);
   const [openingChatGpt, setOpeningChatGpt] = useState<MaterialKind | null>(null);
   const [archivingDrive, setArchivingDrive] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [aiModel, setAiModel] = useState('');
+  const [aiRunning, setAiRunning] = useState<'prepare' | 'analyze' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
