@@ -404,6 +404,8 @@ public class MindcraftiMcpController {
         result.put("updatedAt", settings.updatedAt() == null ? null : settings.updatedAt().toString());
         result.put("usage", "Use this prompt as the base instruction for the current request. Apply the teacher's additional instructions on top of it. If an additional instruction conflicts with the school prompt for this one request, follow the teacher's explicit request unless it would make the task unsafe or impossible.");
         result.put("configured", prompt != null && !prompt.isBlank());
+        result.put("brandGuide", schoolBrandGuideService.readForMcp());
+        result.put("brandGuideUsage", "The embedded Brand Guide is the current visual design standard. Apply it to every generated Mindcrafti document or PDF unless the administrator explicitly says otherwise.");
         return result;
     }
 
