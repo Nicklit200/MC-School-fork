@@ -15,6 +15,7 @@ export type TrialLeadStatus =
   | 'BOOKED'
   | 'CONTACTED'
   | 'CONTRACT'
+  | 'NO_RESPONSE'
   | 'DECLINED';
 
 export type TrialLead = {
