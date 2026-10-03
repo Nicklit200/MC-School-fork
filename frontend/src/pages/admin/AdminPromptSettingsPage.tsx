@@ -1,25 +1,36 @@
 import { useEffect, useState } from 'react';
 import { promptSettingsApi } from '../../api/promptSettings';
+import { brandGuideApi } from '../../api/brandGuide';
 
 export function AdminPromptSettingsPage() {
   const [groupPrompt, setGroupPrompt] = useState('');
   const [individualPrompt, setIndividualPrompt] = useState('');
   const [diagnosticPrompt, setDiagnosticPrompt] = useState('');
   const [errorCorrectionPrompt, setErrorCorrectionPrompt] = useState('');
+  const [brandGuideText, setBrandGuideText] = useState('');
+  const [brandGuideFilename, setBrandGuideFilename] = useState<string | null>(null);
+  const [brandGuideHasPdf, setBrandGuideHasPdf] = useState(false);
+  const [brandGuideUpdatedAt, setBrandGuideUpdatedAt] = useState<string | null>(null);
+  const [brandGuideFile, setBrandGuideFile] = useState<File | null>(null);
+  const [brandGuideSaving, setBrandGuideSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    promptSettingsApi.get()
-      .then((settings) => {
+    Promise.all([promptSettingsApi.get(), brandGuideApi.get()])
+      .then(([settings, brandGuide]) => {
         setGroupPrompt(settings.groupLessonPrompt);
         setIndividualPrompt(settings.individualLessonPrompt);
         setDiagnosticPrompt(settings.diagnosticLessonPrompt);
         setErrorCorrectionPrompt(settings.errorCorrectionPrompt ?? '');
+        setBrandGuideText(brandGuide.guideText ?? '');
+        setBrandGuideFilename(brandGuide.filename);
+        setBrandGuideHasPdf(brandGuide.hasPdf);
+        setBrandGuideUpdatedAt(brandGuide.updatedAt);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты'))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить промты и Brand Guide'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -119,6 +130,87 @@ export function AdminPromptSettingsPage() {
           style={{ minHeight: 360, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
         <div className="muted">{errorCorrectionPrompt.length.toLocaleString()} / 30 000 символов</div>
+      </div>
+
+
+      <div className="panel stack">
+        <div>
+          <h2 style={{ margin: 0 }}>Brand Guide</h2>
+          <p className="muted" style={{ marginBottom: 0 }}>
+            Главный визуальный стандарт Mindcrafti. Коннектор ChatGPT получает отсюда актуальную версию перед созданием PDF,
+            домашних заданий, диагностик, отчётов, презентаций и других фирменных материалов.
+          </p>
+        </div>
+
+        <textarea
+          className="input"
+          value={brandGuideText}
+          maxLength={30000}
+          onChange={(event) => { setBrandGuideText(event.target.value); setSaved(false); }}
+          placeholder="Правила Brand Guide…"
+          style={{ minHeight: 300, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+        <div className="muted">{brandGuideText.length.toLocaleString()} / 30 000 символов</div>
+
+        <div className="stack" style={{ gap: 8 }}>
+          <div>
+            <strong>PDF:</strong>{' '}
+            {brandGuideHasPdf
+              ? (brandGuideFilename ?? 'Mindcrafti Brand Guide')
+              : 'ещё не загружен'}
+          </div>
+          {brandGuideUpdatedAt && (
+            <div className="muted">
+              Обновлено: {new Date(brandGuideUpdatedAt).toLocaleString()}
+            </div>
+          )}
+          <input
+            className="input"
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(event) => {
+              setBrandGuideFile(event.target.files?.[0] ?? null);
+              setSaved(false);
+            }}
+          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {brandGuideHasPdf && (
+              <button
+                className="btn btn--secondary"
+                type="button"
+                onClick={() => void brandGuideApi.openPdf().catch((e) => setError(e instanceof Error ? e.message : 'Не удалось открыть Brand Guide'))}
+              >
+                Открыть текущий PDF
+              </button>
+            )}
+            <button
+              className="btn"
+              type="button"
+              disabled={brandGuideSaving}
+              onClick={() => {
+                setBrandGuideSaving(true);
+                setSaved(false);
+                setError(null);
+                const action = brandGuideFile
+                  ? brandGuideApi.uploadPdf(brandGuideFile, brandGuideText)
+                  : brandGuideApi.updateText(brandGuideText);
+                void action
+                  .then((brandGuide) => {
+                    setBrandGuideText(brandGuide.guideText ?? '');
+                    setBrandGuideFilename(brandGuide.filename);
+                    setBrandGuideHasPdf(brandGuide.hasPdf);
+                    setBrandGuideUpdatedAt(brandGuide.updatedAt);
+                    setBrandGuideFile(null);
+                    setSaved(true);
+                  })
+                  .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось сохранить Brand Guide'))
+                  .finally(() => setBrandGuideSaving(false));
+              }}
+            >
+              {brandGuideSaving ? 'Сохраняем Brand Guide…' : (brandGuideFile ? 'Сохранить текст и загрузить PDF' : 'Сохранить Brand Guide')}
+            </button>
+          </div>
+        </div>
       </div>
 
       <button className="btn" type="button" disabled={saving} onClick={() => void save()} style={{ alignSelf: 'flex-start' }}>
