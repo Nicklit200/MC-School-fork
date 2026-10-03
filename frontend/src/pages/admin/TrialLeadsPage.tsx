@@ -16,6 +16,7 @@ const STATUS_LABELS: Record<TrialLeadStatus, string> = {
   BOOKED: 'Забронирован',
   CONTACTED: 'Связались',
   CONTRACT: 'Контракт',
+  NO_RESPONSE: 'Не ответили',
   DECLINED: 'Отказ',
 };
 
@@ -69,9 +70,11 @@ export function TrialLeadsPage() {
 
   const summary = useMemo(() => ({
     total: leads.length,
-    newCount: leads.filter((lead) => !['CALENDAR_OPENED', 'BOOKED', 'CONTACTED', 'CONTRACT', 'DECLINED'].includes(lead.status)).length,
+    inProgress: leads.filter((lead) => !['NO_RESPONSE', 'CONTRACT', 'DECLINED'].includes(lead.status)).length,
+    noResponse: leads.filter((lead) => lead.status === 'NO_RESPONSE').length,
     calendar: leads.filter((lead) => lead.status === 'CALENDAR_OPENED').length,
     booked: leads.filter((lead) => lead.status === 'BOOKED').length,
+    contracts: leads.filter((lead) => lead.status === 'CONTRACT').length,
   }), [leads]);
 
   async function changeStatus(lead: TrialLead, status: TrialLeadStatus) {
@@ -121,9 +124,11 @@ export function TrialLeadsPage() {
 
       <div className="trial-leads-summary">
         <div><span>Всего заявок</span><strong>{summary.total}</strong></div>
-        <div><span>В процессе</span><strong>{summary.newCount}</strong></div>
+        <div><span>В процессе</span><strong>{summary.inProgress}</strong></div>
+        <div><span>Не ответили</span><strong>{summary.noResponse}</strong></div>
         <div><span>Открыли календарь</span><strong>{summary.calendar}</strong></div>
         <div><span>Забронировано</span><strong>{summary.booked}</strong></div>
+        <div><span>Контракты</span><strong>{summary.contracts}</strong></div>
       </div>
 
       {error && <div className="trial-leads-error">{error}</div>}
