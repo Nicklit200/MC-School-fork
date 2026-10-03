@@ -7,6 +7,8 @@ export type SchoolPromptSettings = {
   individualLessonPrompt: string;
   diagnosticLessonPrompt: string;
   errorCorrectionPrompt: string;
+  workbookPrompt: string;
+  homeworkPrompt: string;
   updatedAt: string | null;
 };
 
@@ -28,6 +30,20 @@ async function promptRequest<T>(method: string, body?: unknown): Promise<T> {
 
 export const promptSettingsApi = {
   get: () => promptRequest<SchoolPromptSettings>('GET'),
-  update: (groupLessonPrompt: string, individualLessonPrompt: string, diagnosticLessonPrompt: string, errorCorrectionPrompt: string) =>
-    promptRequest<SchoolPromptSettings>('PUT', { groupLessonPrompt, individualLessonPrompt, diagnosticLessonPrompt, errorCorrectionPrompt }),
+  update: (
+    groupLessonPrompt: string,
+    individualLessonPrompt: string,
+    diagnosticLessonPrompt: string,
+    errorCorrectionPrompt: string,
+    workbookPrompt: string,
+    homeworkPrompt: string,
+  ) =>
+    promptRequest<SchoolPromptSettings>('PUT', {
+      groupLessonPrompt,
+      individualLessonPrompt,
+      diagnosticLessonPrompt,
+      errorCorrectionPrompt,
+      workbookPrompt,
+      homeworkPrompt,
+    }),
 };
