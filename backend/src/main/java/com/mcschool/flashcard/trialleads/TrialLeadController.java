@@ -48,6 +48,7 @@ public class TrialLeadController {
             "BOOKED",
             "CONTACTED",
             "CONTRACT",
+            "NO_RESPONSE",
             "DECLINED"
     );
 
