@@ -80,6 +80,12 @@ public class User {
     @Column(name = "chatgpt_project_url", length = 2000)
     private String chatGptProjectUrl;
 
+    @Column(name = "ai_lesson_pilot_enabled", nullable = false)
+    private boolean aiLessonPilotEnabled;
+
+    @Column(name = "ai_preparation_time", length = 5)
+    private String aiPreparationTime;
+
     @Column(name = "google_calendar_refresh_token", columnDefinition = "text")
     private String googleCalendarRefreshToken;
 
@@ -191,6 +197,11 @@ public class User {
     public void changeGoogleDriveHomeworkFolderId(String folderId) { this.googleDriveHomeworkFolderId = normalizeOptionalValue(folderId); }
     public void changeGoogleDriveTranscriptFolderId(String folderId) { this.googleDriveTranscriptFolderId = normalizeOptionalValue(folderId); }
     public void changeGoogleDriveTrialTranscriptFolderId(String folderId) { this.googleDriveTrialTranscriptFolderId = normalizeOptionalValue(folderId); }
+
+    public void configureAiLessonPilot(boolean enabled, String preparationTime) {
+        this.aiLessonPilotEnabled = enabled;
+        this.aiPreparationTime = preparationTime == null || preparationTime.isBlank() ? "10:00" : preparationTime.trim();
+    }
 
     public void changeChatGptProjectUrl(String projectUrl) {
         String normalized = normalizeOptionalValue(projectUrl);
