@@ -7,6 +7,8 @@ export function AdminPromptSettingsPage() {
   const [individualPrompt, setIndividualPrompt] = useState('');
   const [diagnosticPrompt, setDiagnosticPrompt] = useState('');
   const [errorCorrectionPrompt, setErrorCorrectionPrompt] = useState('');
+  const [workbookPrompt, setWorkbookPrompt] = useState('');
+  const [homeworkPrompt, setHomeworkPrompt] = useState('');
   const [brandGuideText, setBrandGuideText] = useState('');
   const [brandGuideFilename, setBrandGuideFilename] = useState<string | null>(null);
   const [brandGuideHasPdf, setBrandGuideHasPdf] = useState(false);
@@ -25,6 +27,8 @@ export function AdminPromptSettingsPage() {
         setIndividualPrompt(settings.individualLessonPrompt);
         setDiagnosticPrompt(settings.diagnosticLessonPrompt);
         setErrorCorrectionPrompt(settings.errorCorrectionPrompt ?? '');
+        setWorkbookPrompt(settings.workbookPrompt ?? '');
+        setHomeworkPrompt(settings.homeworkPrompt ?? '');
         setBrandGuideText(brandGuide.guideText ?? '');
         setBrandGuideFilename(brandGuide.filename);
         setBrandGuideHasPdf(brandGuide.hasPdf);
@@ -39,11 +43,20 @@ export function AdminPromptSettingsPage() {
     setSaved(false);
     setError(null);
     try {
-      const settings = await promptSettingsApi.update(groupPrompt, individualPrompt, diagnosticPrompt, errorCorrectionPrompt);
+      const settings = await promptSettingsApi.update(
+        groupPrompt,
+        individualPrompt,
+        diagnosticPrompt,
+        errorCorrectionPrompt,
+        workbookPrompt,
+        homeworkPrompt,
+      );
       setGroupPrompt(settings.groupLessonPrompt);
       setIndividualPrompt(settings.individualLessonPrompt);
       setDiagnosticPrompt(settings.diagnosticLessonPrompt);
       setErrorCorrectionPrompt(settings.errorCorrectionPrompt ?? '');
+      setWorkbookPrompt(settings.workbookPrompt ?? '');
+      setHomeworkPrompt(settings.homeworkPrompt ?? '');
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось сохранить промты');
@@ -69,7 +82,7 @@ export function AdminPromptSettingsPage() {
       <div className="panel stack">
         <div>
           <h2 style={{ margin: 0 }}>Групповые уроки</h2>
-          <p className="muted">Главный промт для подготовки материалов, домашней работы и работы с группой.</p>
+          <p className="muted">Промт для логики и содержания группового урока. Workbook и домашняя работа настраиваются отдельно ниже.</p>
         </div>
         <textarea
           className="input"
@@ -85,7 +98,7 @@ export function AdminPromptSettingsPage() {
       <div className="panel stack">
         <div>
           <h2 style={{ margin: 0 }}>Индивидуальные уроки</h2>
-          <p className="muted">Главный промт для подготовки индивидуального занятия и домашней работы конкретного ученика.</p>
+          <p className="muted">Промт для логики и содержания индивидуального урока. Workbook и домашняя работа настраиваются отдельно ниже.</p>
         </div>
         <textarea
           className="input"
@@ -96,6 +109,42 @@ export function AdminPromptSettingsPage() {
           style={{ minHeight: 280, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
         <div className="muted">{individualPrompt.length.toLocaleString()} / 30 000 символов</div>
+      </div>
+
+      <div className="panel stack">
+        <div>
+          <h2 style={{ margin: 0 }}>Рабочая тетрадь / Workbook</h2>
+          <p className="muted">
+            Отдельный промт только для создания ученической рабочей тетради урока и ответов преподавателю. Домашка сюда не входит.
+          </p>
+        </div>
+        <textarea
+          className="input"
+          value={workbookPrompt}
+          maxLength={30000}
+          onChange={(event) => { setWorkbookPrompt(event.target.value); setSaved(false); }}
+          placeholder="Вставьте промт для создания рабочей тетради…"
+          style={{ minHeight: 320, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+        <div className="muted">{workbookPrompt.length.toLocaleString()} / 30 000 символов</div>
+      </div>
+
+      <div className="panel stack">
+        <div>
+          <h2 style={{ margin: 0 }}>Домашняя работа</h2>
+          <p className="muted">
+            Отдельный промт только для создания домашних заданий. Рабочая тетрадь урока сюда не входит.
+          </p>
+        </div>
+        <textarea
+          className="input"
+          value={homeworkPrompt}
+          maxLength={30000}
+          onChange={(event) => { setHomeworkPrompt(event.target.value); setSaved(false); }}
+          placeholder="Вставьте промт для создания домашней работы…"
+          style={{ minHeight: 320, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+        <div className="muted">{homeworkPrompt.length.toLocaleString()} / 30 000 символов</div>
       </div>
 
       <div className="panel stack">
