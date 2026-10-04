@@ -26,6 +26,12 @@ public class SkillMasteryController {
         return service.listStudents(caller);
     }
 
+    @GetMapping("/groups")
+    public List<SkillMasteryService.GroupOption> groups(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return service.listGroups(caller);
+    }
+
     @GetMapping("/{boardId}/students")
     public List<SkillMasteryService.StudentOption> boardStudents(
             @PathVariable String boardId,
