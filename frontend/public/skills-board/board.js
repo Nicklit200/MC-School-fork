@@ -89,7 +89,8 @@ function saveTrackFilterState(){
 const activeSchoolTypes=()=>currentTrackFilters().schools;
 const boardIdForSelection=()=>{
   const chosen=selectedStudents(),grades=selectedGrades();
-  if(!chosen.length||grades.length!==1||chosen.some(student=>student.grade==null))return "";
+  if(!chosen.length||grades.length!==1)return "";
+  if(!selectedGroupId&&chosen[0]?.grade==null)return "";
   return boardIdByGrade.get(grades[0])||"";
 };
 const directTrackDefaults={
@@ -307,11 +308,18 @@ window.addEventListener("message",async event=>{
       $("empty").replaceChildren(element("strong","","Выберите группу или ученика"),element("p","","Откроется карта нужного класса с процентами выбранных учеников."));
       status();return;
     }
-    if(grades.length!==1||chosen.some(student=>student.grade==null)){
-      $("board-grade").textContent="класс не определён";
-      $("source-note").replaceChildren(element("strong","","Нужен один класс"),document.createElement("br"),document.createTextNode("У всех учеников выбранной группы должен быть указан один и тот же класс."));
+    if(grades.length!==1){
+      $("board-grade").textContent=grades.length>1?"разные классы":"класс не определён";
+      $("source-note").replaceChildren(
+        element("strong","",grades.length>1?"В группе разные классы":"Класс не указан"),
+        document.createElement("br"),
+        document.createTextNode(grades.length>1?"Для одной карты у группы должен быть один класс.":"Укажите класс хотя бы одному ученику группы.")
+      );
       $("empty").hidden=false;
-      $("empty").replaceChildren(element("strong","","Нельзя выбрать одну карту"),element("p","","Проверьте класс учеников в их учебных профилях."));
+      $("empty").replaceChildren(
+        element("strong","",grades.length>1?"Нельзя выбрать одну карту":"Карта класса не определена"),
+        element("p","",grades.length>1?"Проверьте классы учеников в их учебных профилях.":"Укажите класс ученика в учебном профиле.")
+      );
       status();return;
     }
     if(!boardId){
@@ -325,13 +333,14 @@ window.addEventListener("message",async event=>{
     snapshot=await request("GET",boardPath());
     validateBoard(snapshot.data);data=clone(snapshot.data);
     $("board-grade").textContent=boardTitle();
-    const sourceNote=$("source-note"),schools=[...activeSchoolTypes()].map(type=>schoolLabels[type]||type);
+    const sourceNote=$("source-note"),schools=[...activeSchoolTypes()].map(type=>schoolLabels[type]||type),unknownGrade=chosen.filter(student=>student.grade==null);
     sourceNote.replaceChildren(
       element("strong","","Источник программы"),
       document.createElement("br"),
       document.createTextNode(snapshot.data.source||"Источник не указан."),
       document.createElement("br"),document.createElement("br"),
-      document.createTextNode(`Выбрано: ${selectedTargetLabel()} · ${grades[0]} класс${schools.length?" · "+schools.join(" + "):""}.`)
+      document.createTextNode(`Выбрано: ${selectedTargetLabel()} · ${grades[0]} класс${schools.length?" · "+schools.join(" + "):""}.`),
+      ...(unknownGrade.length?[document.createElement("br"),document.createTextNode(`Без указанного класса: ${unknownGrade.map(student=>student.fullName).join(", ")}. Карта взята по остальным ученикам группы.`)]:[])
     );
 
     masteryLoading=true;renderStudentFilter();
