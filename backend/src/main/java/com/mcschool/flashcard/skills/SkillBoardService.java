@@ -14,7 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 public class SkillBoardService {
     public record Node(String id, String kind, String title, String de, String description,
                        String example, String source, String color, double x, double y, boolean archived,
-                       boolean core, List<String> schoolTypes) {
+                       Boolean core, List<String> schoolTypes) {
         public Node(String id, String kind, String title, String de, String description,
                     String example, String source, String color, double x, double y, boolean archived) {
             this(id, kind, title, de, description, example, source, color, x, y, archived, false, null);
