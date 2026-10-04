@@ -3,8 +3,10 @@ package com.mcschool.flashcard.lessons;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.StudentLessonResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -52,11 +54,18 @@ public class StudentLessonController {
 
         String filename = preparation.getWorkbookFilename() == null
                 ? "lesson-shared-document.pdf"
-                : preparation.getWorkbookFilename().replace(""", "");
+                : preparation.getWorkbookFilename()
+                        .replaceAll("[\\r\\n\\x00-\\x1F\\x7F]", "_")
+                        .replace('/', '_')
+                        .replace('\\\\', '_');
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename="" + filename + """)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline()
+                                .filename(filename, StandardCharsets.UTF_8)
+                                .build()
+                                .toString())
                 .body(preparation.getWorkbookPdf());
     }
 
