@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { CardSummary, DailyReviewHistoryItem, GroupLesson, Homework, StudentListItem } from '../../api/types';
+import type { CardSummary, DailyReviewHistoryItem, GroupLesson, Homework, LearningPace, SchoolType, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 
 export function StudentProfilePage() {
@@ -48,7 +48,9 @@ export function StudentProfilePage() {
     <nav className="group-detail-tabs" aria-label={tr('Разделы ученика', 'Schülerbereiche')}>
       {tabs.map(([path, label]) => { const url = `${base}${path ? `/${path}` : ''}`; const active = location.pathname.replace(/\/$/, '') === url; return <button key={path} type="button" className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => navigate(url)}><span>{label}</span></button>; })}
     </nav>
-    {overview ? loading ? <p className="muted">{tr('Загружаем данные ученика…', 'Laden…')}</p> : !error && <div className="group-overview-grid">
+    {overview ? loading ? <p className="muted">{tr('Загружаем данные ученика…', 'Laden…')}</p> : !error && student && <>
+      <LearningProfileCard student={student} language={language} onSaved={setStudent} />
+      <div className="group-overview-grid">
       <section className="group-overview-card"><div className="group-overview-card__header"><h2>{tr('Обзор домашних заданий', 'Hausaufgabenübersicht')}</h2><button className="group-refresh-btn" onClick={() => setRevision(n => n + 1)}>{tr('Обновить', 'Aktualisieren')}</button></div>
         {pdfs.length === 0 ? <p className="muted">{tr('Домашних заданий пока нет.', 'Keine Hausaufgaben.')}</p> : pdfs.slice(0, 7).map(h => <Link key={h.id} className="list-row" to={`/teacher/students/${studentId}/homeworks/${h.id}`} style={{ color: 'inherit', textDecoration: 'none', gap: 12 }}><span>{date(h.startDate)} · {h.worksheetFilename}</span><span aria-label={h.submitted ? tr('Сдано', 'Abgegeben') : tr('Не сдано', 'Offen')} className={`group-status-dot ${h.submitted ? 'is-done' : 'is-missed'}`}>{h.submitted ? '✓' : '×'}</span></Link>)}
         <Link className="btn btn--secondary group-show-all" to={`${base}/homeworks`}>{tr('Все домашние задания', 'Alle Hausaufgaben')} →</Link>
@@ -57,6 +59,143 @@ export function StudentProfilePage() {
         {history.length === 0 ? <p className="muted">{tr('Повторений пока нет.', 'Noch keine Wiederholungen.')}</p> : [...history].sort((a,b) => b.date.localeCompare(a.date)).slice(0,7).map(day => <div key={day.date} className="list-row"><span>{date(day.date)}</span><span>{day.completedCount}/{day.dueCount}</span><span className={`group-status-dot ${day.status === 'COMPLETED' ? 'is-done' : 'is-missed'}`}>{day.status === 'COMPLETED' ? '✓' : day.status === 'PARTIAL' ? '◐' : '×'}</span></div>)}
         <Link className="btn btn--secondary group-show-all" to={`${base}/cards`}>{tr('Все карточки и ответы', 'Alle Karten und Antworten')} →</Link>
       </section>
-    </div> : <Outlet />}
+    </div>
+    </> : <Outlet />}
   </div>;
+}
+
+function LearningProfileCard({ student, language, onSaved }: {
+  student: StudentListItem;
+  language: 'DE' | 'RU';
+  onSaved: (student: StudentListItem) => void;
+}) {
+  const tr = (ru: string, de: string) => language === 'DE' ? de : ru;
+  const [grade, setGrade] = useState(student.grade == null ? '' : String(student.grade));
+  const [schoolType, setSchoolType] = useState<SchoolType | ''>(student.schoolType ?? '');
+  const [learningPace, setLearningPace] = useState<LearningPace | ''>(student.learningPace ?? '');
+  const [learningStrengths, setLearningStrengths] = useState(student.learningStrengths ?? '');
+  const [learningDifficulties, setLearningDifficulties] = useState(student.learningDifficulties ?? '');
+  const [explanationStyle, setExplanationStyle] = useState(student.explanationStyle ?? '');
+  const [learningNotes, setLearningNotes] = useState(student.learningNotes ?? '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setGrade(student.grade == null ? '' : String(student.grade));
+    setSchoolType(student.schoolType ?? '');
+    setLearningPace(student.learningPace ?? '');
+    setLearningStrengths(student.learningStrengths ?? '');
+    setLearningDifficulties(student.learningDifficulties ?? '');
+    setExplanationStyle(student.explanationStyle ?? '');
+    setLearningNotes(student.learningNotes ?? '');
+  }, [student]);
+
+  async function saveProfile() {
+    setSaving(true);
+    setMessage(null);
+    setSaveError(null);
+    try {
+      const saved = await api.students.updateLearningProfile(student.id, {
+        grade: grade ? Number(grade) : null,
+        schoolType: schoolType || null,
+        learningPace: learningPace || null,
+        learningStrengths,
+        learningDifficulties,
+        explanationStyle,
+        learningNotes,
+      });
+      onSaved(saved);
+      setMessage(tr('Учебный профиль сохранён.', 'Lernprofil gespeichert.'));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const schoolOptions: Array<[SchoolType, string]> = [
+    ['GYMNASIUM', 'Gymnasium'],
+    ['REALSCHULE', 'Realschule'],
+    ['MITTELSCHULE', 'Mittelschule'],
+    ['WIRTSCHAFTSSCHULE', 'Wirtschaftsschule'],
+    ['GESAMTSCHULE', 'Gesamtschule'],
+    ['WERKREALSCHULE', 'Werkrealschule'],
+    ['OTHER', tr('Другая школа', 'Andere Schule')],
+  ];
+
+  return (
+    <section className="group-overview-card" style={{ marginBottom: 18 }}>
+      <div className="group-overview-card__header">
+        <div>
+          <h2>{tr('Учебный профиль', 'Lernprofil')}</h2>
+          <p className="muted" style={{ margin: '5px 0 0' }}>
+            {tr('Вся информация, которая помогает правильно учить этого ребёнка.', 'Alle Angaben, die helfen, diesen Schüler passend zu unterrichten.')}
+          </p>
+        </div>
+        <button className="btn" type="button" onClick={() => void saveProfile()} disabled={saving}>
+          {saving ? tr('Сохраняем…', 'Speichern…') : tr('Сохранить', 'Speichern')}
+        </button>
+      </div>
+
+      {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
+      {saveError && <div className="banner banner--error" style={{ marginBottom: 14 }}>{saveError}</div>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+        <label className="field">
+          <span className="field__label">{tr('Класс', 'Klasse')}</span>
+          <select className="input" value={grade} onChange={(e) => setGrade(e.target.value)}>
+            <option value="">{tr('Не выбран', 'Nicht gewählt')}</option>
+            {Array.from({ length: 13 }, (_, index) => index + 1).map((value) => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span className="field__label">{tr('Тип школы', 'Schulart')}</span>
+          <select className="input" value={schoolType} onChange={(e) => setSchoolType(e.target.value as SchoolType | '')}>
+            <option value="">{tr('Не выбран', 'Nicht gewählt')}</option>
+            {schoolOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+
+        <label className="field">
+          <span className="field__label">{tr('Темп объяснения', 'Erklärungstempo')}</span>
+          <select className="input" value={learningPace} onChange={(e) => setLearningPace(e.target.value as LearningPace | '')}>
+            <option value="">{tr('Не выбран', 'Nicht gewählt')}</option>
+            <option value="SLOW">{tr('Медленно, пошагово', 'Langsam, Schritt für Schritt')}</option>
+            <option value="NORMAL">{tr('Обычный темп', 'Normales Tempo')}</option>
+            <option value="FAST">{tr('Быстро, можно идти вперёд', 'Schnell, kann zügig weitergehen')}</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 14, marginTop: 14 }}>
+        <label className="field">
+          <span className="field__label">{tr('Что даётся хорошо / сильные стороны', 'Stärken')}</span>
+          <textarea className="input" rows={4} value={learningStrengths} onChange={(e) => setLearningStrengths(e.target.value)} placeholder={tr('Например: быстро считает устно, хорошо понимает графики…', 'Zum Beispiel: stark im Kopfrechnen, versteht Graphen schnell…')} />
+        </label>
+
+        <label className="field">
+          <span className="field__label">{tr('Что даётся тяжело', 'Schwierigkeiten')}</span>
+          <textarea className="input" rows={4} value={learningDifficulties} onChange={(e) => setLearningDifficulties(e.target.value)} placeholder={tr('Например: теряется при скобках, путает знаки, боится текстовых задач…', 'Zum Beispiel: Klammern, Vorzeichen, Textaufgaben…')} />
+        </label>
+
+        <label className="field">
+          <span className="field__label">{tr('Как лучше объяснять', 'Wie am besten erklären')}</span>
+          <textarea className="input" rows={4} value={explanationStyle} onChange={(e) => setExplanationStyle(e.target.value)} placeholder={tr('Например: сначала один пример вместе, затем похожий самостоятельно; больше визуальных схем…', 'Zum Beispiel: erst ein Beispiel gemeinsam, dann selbstständig; mehr Visualisierung…')} />
+        </label>
+
+        <label className="field">
+          <span className="field__label">{tr('Дополнительные учебные заметки', 'Weitere Lernnotizen')}</span>
+          <textarea className="input" rows={4} value={learningNotes} onChange={(e) => setLearningNotes(e.target.value)} placeholder={tr('Цели, особенности, мотивация, что важно учитывать на уроках…', 'Ziele, Motivation und alles, was im Unterricht berücksichtigt werden soll…')} />
+        </label>
+      </div>
+
+      <p className="muted" style={{ margin: '12px 0 0', fontSize: 13 }}>
+        {tr('Класс будет использоваться для автоматического выбора карты навыков ученика.', 'Die Klasse steuert künftig automatisch die passende Kompetenzkarte.')}
+      </p>
+    </section>
+  );
 }
