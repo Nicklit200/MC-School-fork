@@ -1,0 +1,55 @@
+name: Skill mastery evidence verification
+on:
+  push:
+    branches: [feature/skill-evidence-v1]
+permissions:
+  contents: read
+concurrency:
+  group: skill-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: evidence_test
+          POSTGRES_PASSWORD: evidence_test
+          POSTGRES_DB: evidence_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: Check skills board JavaScript
+        run: node --check frontend/public/skills-board/board.js
+      - name: Build school frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Compile backend
+        working-directory: backend
+        run: mvn -B -DskipTests package
+      - name: Validate mastery evidence migrations
+        env:
+          PGPASSWORD: evidence_test
+        run: |
+          psql -h localhost -U evidence_test -d evidence_test -v ON_ERROR_STOP=1 -c 'CREATE TABLE users(id UUID PRIMARY KEY); CREATE TABLE skill_boards(id VARCHAR(64) PRIMARY KEY);'
+          psql -h localhost -U evidence_test -d evidence_test -v ON_ERROR_STOP=1 -f backend/src/main/resources/db/migration/V66__add_student_skill_mastery.sql
+          psql -h localhost -U evidence_test -d evidence_test -v ON_ERROR_STOP=1 -f backend/src/main/resources/db/migration/V67__add_skill_mastery_evidence_history.sql
+          psql -h localhost -U evidence_test -d evidence_test -v ON_ERROR_STOP=1 -c "SELECT reason, evidence FROM student_skill_mastery_history WHERE false;"
