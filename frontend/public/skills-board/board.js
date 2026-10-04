@@ -65,7 +65,13 @@ const selectedStudents=()=>{
   const student=selectedStudent();return student?[student]:[];
 };
 const selectedTargetLabel=()=>selectedGroupId?(selectedGroup()?.name||"Группа"):(selectedStudent()?.fullName||"Ученик");
-const selectedGrades=()=>[...new Set(selectedStudents().map(student=>Number(student.grade)).filter(Number.isInteger))];
+const selectedGrades=()=>[...new Set(
+  selectedStudents()
+    .map(student=>student.grade)
+    .filter(grade=>grade!==null&&grade!==undefined&&grade!=="")
+    .map(Number)
+    .filter(grade=>Number.isInteger(grade)&&grade>=1&&grade<=13)
+)];
 const defaultTrackFilterState=()=>({core:true,schools:new Set(selectedStudents().map(student=>student.schoolType).filter(Boolean))});
 const trackFilterKey=()=>`mindcrafti.skills.trackFilters.${selectedGroupId?"g:"+selectedGroupId:selectedStudentId?"s:"+selectedStudentId:"none"}`;
 function loadTrackFilterState(){
