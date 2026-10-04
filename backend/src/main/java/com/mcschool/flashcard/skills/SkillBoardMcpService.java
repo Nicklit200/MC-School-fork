@@ -13,7 +13,7 @@ import static com.mcschool.flashcard.skills.SkillBoardService.*;
 @Service
 public class SkillBoardMcpService {
     public static final Set<String> TOOL_NAMES = Set.of("get_skill_board", "edit_skill_board");
-    private static final Set<String> NODE_FIELDS = Set.of("kind", "title", "de", "description", "example", "source", "color", "x", "y", "archived");
+    private static final Set<String> NODE_FIELDS = Set.of("kind", "title", "de", "description", "example", "source", "color", "x", "y", "archived", "core", "schoolTypes");
     private final SkillBoardService boards;
     private final ObjectMapper mapper;
 
@@ -31,7 +31,7 @@ public class SkillBoardMcpService {
         editProperties.put("boardId", boardProperty);
         editProperties.put("expectedRevision", Map.of("type", "integer", "minimum", 1, "description", "Exact revision returned by the latest get_skill_board. A stale revision is rejected without writing. Read again and reconcile; never blindly retry with a new number."));
         editProperties.put("operationsJson", Map.of("type", "string", "description",
-            "JSON array of 1-100 explicit edits, applied atomically. Supported shapes: {op:'add_node',node:{id?:string,kind?:'skill'|'topic'|'note',title:string,de?:string,description?:string,example?:string,source?:string,color?:'orange'|'blue'|'violet'|'teal'|'green',x?:number,y?:number},parentId?:string}; {op:'update_node',id:string,fields:{title?:string,de?:string,description?:string,example?:string,source?:string,kind?:string,color?:string,x?:number,y?:number,archived?:boolean}}; {op:'set_parent',id:string,parentId:string}; {op:'add_edge',id?:string,source:string,target:string,kind:'contains'|'prerequisite'}; {op:'remove_edge',id:string}. Use valid JSON with double quotes. To remove/restore a card, update archived=true/false; permanent node deletion is not supported. A prerequisite arrow points FROM the needed skill TO the later skill. A contains arrow points FROM section TO child. Use IDs from the live read; preserve unrelated fields and positions. New IDs may be supplied to reference new nodes within the same batch. No percentages or pupil results belong in this catalog."));
+            "JSON array of 1-100 explicit edits, applied atomically. Supported shapes: {op:'add_node',node:{id?:string,kind?:'skill'|'topic'|'note',title:string,de?:string,description?:string,example?:string,source?:string,color?:'orange'|'blue'|'violet'|'teal'|'green',x?:number,y?:number,core?:boolean,schoolTypes?:string[]},parentId?:string}; {op:'update_node',id:string,fields:{title?:string,de?:string,description?:string,example?:string,source?:string,kind?:string,color?:string,x?:number,y?:number,archived?:boolean,core?:boolean,schoolTypes?:string[]}}; {op:'set_parent',id:string,parentId:string}; {op:'add_edge',id?:string,source:string,target:string,kind:'contains'|'prerequisite'}; {op:'remove_edge',id:string}. Use valid JSON with double quotes. To remove/restore a card, update archived=true/false; permanent node deletion is not supported. A prerequisite arrow points FROM the needed skill TO the later skill. A contains arrow points FROM section TO child. Use IDs from the live read; preserve unrelated fields and positions. New IDs may be supplied to reference new nodes within the same batch. No percentages or pupil results belong in this catalog."));
         var edit = definition("edit_skill_board",
             "Save explicitly requested changes to the live Mindcrafti skills board. OAuth ADMIN only; preserves existing node IDs, unrelated content, audit snapshots and database revision-conflict protection. Use only for the user's requested curriculum/board edits, not to infer or record pupil mastery. Read with get_skill_board first. No change is saved on error. Read back after success. Editing updates the same board visible at /skills; an already open browser must reload after saving its own draft.",
             editProperties, List.of("expectedRevision", "operationsJson"), false);
@@ -92,7 +92,7 @@ public class SkillBoardMcpService {
                     String id = text(fields, "id", "node_" + UUID.randomUUID());
                     fields.remove("id");
                     if (nodes.containsKey(id)) throw bad("Node ID already exists: " + id);
-                    Node base = new Node(id, "skill", "", "", "", "", "", "blue", 600, 300, false);
+                    Node base = new Node(id, "skill", "", "", "", "", "", "blue", 600, 300, false, false, List.of());
                     Node added = update(base, fields);
                     if (added.kind().equals("root")) throw bad("Adding another curriculum root is not supported");
                     nodes.put(id, added);
@@ -144,9 +144,25 @@ public class SkillBoardMcpService {
             if (!(fields.get("archived") instanceof Boolean value)) throw bad("archived must be boolean");
             archived = value;
         }
+        boolean core = n.core();
+        if (fields.containsKey("core")) {
+            if (!(fields.get("core") instanceof Boolean value)) throw bad("core must be boolean");
+            core = value;
+        }
+        List<String> schoolTypes = n.schoolTypes();
+        if (fields.containsKey("schoolTypes")) {
+            if (!(fields.get("schoolTypes") instanceof List<?> raw)) throw bad("schoolTypes must be an array");
+            var parsed = new ArrayList<String>();
+            for (Object value : raw) {
+                if (!(value instanceof String type)) throw bad("schoolTypes values must be strings");
+                parsed.add(type);
+            }
+            schoolTypes = List.copyOf(parsed);
+        }
         return new Node(n.id(), text(fields,"kind",n.kind()), text(fields,"title",n.title()), text(fields,"de",n.de()),
             text(fields,"description",n.description()), text(fields,"example",n.example()), text(fields,"source",n.source()),
-            text(fields,"color",n.color()), coordinate(fields,"x",n.x()), coordinate(fields,"y",n.y()), archived);
+            text(fields,"color",n.color()), coordinate(fields,"x",n.x()), coordinate(fields,"y",n.y()), archived,
+            core, schoolTypes);
     }
 
     private static void setParent(Map<String, Node> nodes, Map<String, Edge> edges, String id, String parentId) {
