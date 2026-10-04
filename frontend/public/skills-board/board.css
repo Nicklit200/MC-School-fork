@@ -32,3 +32,39 @@ textarea{resize:vertical;min-height:82px;line-height:1.5}input[type=checkbox]{ac
 @media(max-width:580px){.student-filter select{min-width:120px;max-width:140px}}
 
 .node .kind-meta{display:flex;align-items:center;gap:7px;margin-left:auto}.node.kind-root .mastery-badge{background:#ffffff18;border-color:#ffffff33;color:#fff}.node.kind-root .mastery-badge.low,.node.kind-root .mastery-badge.mid,.node.kind-root .mastery-badge.high{color:#fff}
+
+.school-filters{display:flex;align-items:center;gap:5px;flex-wrap:wrap;max-width:360px}
+.school-filters[hidden]{display:none}
+.track-filter{display:inline-flex;align-items:center;gap:4px;padding:5px 7px;border:1px solid #e2e7ef;border-radius:999px;background:#f7f9fc;color:#8994a7;font-size:10px;font-weight:800;letter-spacing:.3px;white-space:nowrap}
+.track-filter input{width:12px;height:12px;margin:0;accent-color:#ee6528}
+.track-filter.active{background:#fff;border-color:#c9d4e4;color:#42516b}
+.track-filter.core{background:#fff2e9;border-color:#f4c4a9;color:#bd531f}
+
+.track-badges{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:18px}
+.track-badge{display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.35px;border:1px solid #dfe5ed;background:#f2f4f8;color:#7b8799}
+.track-badge.core{background:#fff0e5;border-color:#f4c3a8;color:#c2551f}
+.track-badge.school-gymnasium.active{background:#edf4ff;border-color:#bfd4f7;color:#2e62aa}
+.track-badge.school-realschule.active{background:#f4efff;border-color:#d8c7f5;color:#7353aa}
+.track-badge.school-wirtschaftsschule.active{background:#eef8ef;border-color:#c8e4cb;color:#3f7948}
+.track-badge.school-mittelschule.active{background:#eaf8f8;border-color:#bde1e1;color:#347979}
+.track-badge.school-gesamtschule.active,.track-badge.school-werkrealschule.active{background:#f5f1ea;border-color:#ddd2c0;color:#75624a}
+.node.track-other{opacity:.42}
+.node.track-other.selected,.node.track-other.dependency-before,.node.track-other.dependency-after{opacity:1}
+.node.track-core{box-shadow:0 0 0 2px #f3a27355,0 8px 20px #2736530b}
+.node.track-relevant{box-shadow:0 0 0 1px #8fa7c733,0 6px 16px #2736530a}
+.node.group-mode .de{-webkit-line-clamp:1}
+.mastery-list{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:4px;border-top:1px solid #eef1f5}
+.mastery-person{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;line-height:1.4}
+.mastery-person-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#66758b}
+.mastery-person-value{font-weight:900;color:#6d788c}
+.mastery-person-value.low{color:#aa3d3d}.mastery-person-value.mid{color:#936416}.mastery-person-value.high{color:#28763b}
+.mastery-more{font-size:8px;color:#98a2b2}
+.mastery-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 72px auto;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid #eef1f5}
+.mastery-editor-row:last-of-type{border-bottom:0}.mastery-editor-name{font-size:11px;font-weight:700;color:#52627a;overflow:hidden;text-overflow:ellipsis}
+.mastery-editor-row input{width:72px}.mastery-editor-row button{padding:7px 8px;font-size:10px}
+.mastery-editor-value{justify-self:end;font-size:14px;font-weight:900}.mastery-editor-value.low{color:#aa3d3d}.mastery-editor-value.mid{color:#936416}.mastery-editor-value.high{color:#28763b}
+.track-edit-label{margin-bottom:7px!important}.track-edit-check{display:flex!important;align-items:center;gap:6px;margin:7px 0!important;font-size:11px!important;letter-spacing:0!important;color:#53637b!important;font-weight:600!important}
+.track-edit-check input{width:auto!important;margin:0}.track-edit-title{font-size:10px;font-weight:700;letter-spacing:.3px;color:#7c89a0;margin:14px 0 7px}
+.track-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px}
+@media(max-width:1100px){.school-filters{max-width:250px}.track-filter{padding:4px 6px}}
+@media(max-width:850px){.school-filters{display:none}}
