@@ -183,6 +183,41 @@ public class GoogleCalendarLessonService {
     }
 
     @Transactional
+    public List<GroupLessonResponse> listStudentLessons(AuthenticatedUser student) {
+        User studentEntity = userRepository.findById(student.id())
+                .filter(user -> user.getRole() == Role.STUDENT)
+                .filter(user -> !user.isArchived())
+                .orElseThrow(() -> new ResourceNotFoundException("Student account no longer exists"));
+        User teacher = studentEntity.getTeacher();
+        if (teacher == null) return List.of();
+
+        AuthenticatedUser teacherCaller = new AuthenticatedUser(
+                teacher.getId(),
+                teacher.getEmail(),
+                Role.TEACHER
+        );
+        return listGroupLessons(teacherCaller).stream()
+                .filter(lesson -> student.id().equals(lesson.studentId())
+                        || (lesson.participantStudentIds() != null
+                        && lesson.participantStudentIds().contains(student.id())))
+                .sorted(Comparator.comparing(GroupLessonResponse::startsAt))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public UUID teacherIdForStudent(AuthenticatedUser student) {
+        User studentEntity = userRepository.findById(student.id())
+                .filter(user -> user.getRole() == Role.STUDENT)
+                .filter(user -> !user.isArchived())
+                .orElseThrow(() -> new ResourceNotFoundException("Student account no longer exists"));
+        User teacher = studentEntity.getTeacher();
+        if (teacher == null) {
+            throw new ResourceNotFoundException("Teacher is not assigned");
+        }
+        return teacher.getId();
+    }
+
+    @Transactional
     public void bindStudent(AuthenticatedUser teacher, String bindingKey, UUID studentId) {
         if (bindingKey == null || bindingKey.isBlank()) {
             throw new IllegalArgumentException("Calendar event key is required");
