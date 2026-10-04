@@ -1,7 +1,7 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
-let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],selectedStudentId="",mastery={},masteryLoading=false;
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryLoading=false;
 const boardIdByGrade=new Map([[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
@@ -48,27 +48,157 @@ async function request(method,path,body){
   if(!response.ok){const error=Error(response.status===401?"Вход истёк. Вернитесь в Mindcrafti и войдите заново.":result?.message||`Ошибка сервера ${response.status}`);error.status=response.status;throw error;}
   return result;
 }
-const selectedStudent=()=>students.find(s=>s.id===selectedStudentId)||null;
+const schoolLabels={
+  GYMNASIUM:"Gymnasium",REALSCHULE:"Realschule",MITTELSCHULE:"Mittelschule",
+  WIRTSCHAFTSSCHULE:"Wirtschaftsschule",GESAMTSCHULE:"Gesamtschule",
+  WERKREALSCHULE:"Werkrealschule",OTHER:"Andere"
+};
+const schoolShort={
+  GYMNASIUM:"GYM",REALSCHULE:"RS",MITTELSCHULE:"MS",WIRTSCHAFTSSCHULE:"WS",
+  GESAMTSCHULE:"GS",WERKREALSCHULE:"WRS",OTHER:"OTHER"
+};
+const allSchoolTypes=Object.keys(schoolLabels);
+const selectedStudent=()=>students.find(student=>student.id===selectedStudentId)||null;
+const selectedGroup=()=>groups.find(group=>group.id===selectedGroupId)||null;
+const selectedStudents=()=>{
+  if(selectedGroupId)return selectedGroup()?.students||[];
+  const student=selectedStudent();return student?[student]:[];
+};
+const selectedTargetLabel=()=>selectedGroupId?(selectedGroup()?.name||"Группа"):(selectedStudent()?.fullName||"Ученик");
+const selectedGrades=()=>[...new Set(selectedStudents().map(student=>Number(student.grade)).filter(Number.isInteger))];
+const activeSchoolTypes=()=>new Set(selectedStudents().map(student=>student.schoolType).filter(Boolean));
+const boardIdForSelection=()=>{
+  const chosen=selectedStudents(),grades=selectedGrades();
+  if(!chosen.length||grades.length!==1||chosen.some(student=>student.grade==null))return "";
+  return boardIdByGrade.get(grades[0])||"";
+};
+const directTrackDefaults={
+  "mc8-1-1":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-2":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-3":{schools:["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-4":{schools:["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-5":{schools:["GYMNASIUM","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-6":{schools:["GYMNASIUM","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-7":{schools:["MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-1-8":{schools:["WIRTSCHAFTSSCHULE"]},
+  "mc8-2-1":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-2-2":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-2-3":{schools:["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-2-4":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-2-5":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-1":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-2":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-3":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-4":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-5":{schools:["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-6":{schools:["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-7":{schools:["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-8":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-3-9":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-3-10":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-4-1":{schools:["GYMNASIUM","WIRTSCHAFTSSCHULE"]},
+  "mc8-4-2":{schools:["GYMNASIUM","WIRTSCHAFTSSCHULE"]},
+  "mc8-4-3":{schools:["GYMNASIUM","WIRTSCHAFTSSCHULE"]},
+  "mc8-4-4":{schools:["GYMNASIUM","WIRTSCHAFTSSCHULE"]},
+  "mc8-5-1":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-5-2":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-5-3":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-5-4":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-5-5":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-5-6":{schools:["GYMNASIUM"]},
+  "mc8-6-1":{schools:["MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-6-2":{schools:["MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-6-3":{schools:["MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-6-4":{schools:["WIRTSCHAFTSSCHULE"]},
+  "mc8-6-5":{schools:["WIRTSCHAFTSSCHULE"]},
+  "mc8-7-1":{schools:["REALSCHULE"]},
+  "mc8-7-2":{schools:["REALSCHULE"]},
+  "mc8-7-3":{schools:["REALSCHULE"]},
+  "mc8-7-4":{schools:["REALSCHULE"]},
+  "mc8-7-5":{schools:["MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-7-6":{schools:["GYMNASIUM","MITTELSCHULE"]},
+  "mc8-7-7":{schools:["GYMNASIUM"]},
+  "mc8-8-1":{schools:["GYMNASIUM","REALSCHULE"]},
+  "mc8-8-2":{schools:["REALSCHULE"]},
+  "mc8-8-3":{schools:["GYMNASIUM","MITTELSCHULE"]},
+  "mc8-8-4":{schools:["GYMNASIUM","MITTELSCHULE"]},
+  "mc8-8-5":{schools:["REALSCHULE"]},
+  "mc8-8-6":{schools:["REALSCHULE"]},
+  "mc8-8-7":{schools:["REALSCHULE"]},
+  "mc8-9-1":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-9-2":{schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE"]},
+  "mc8-9-3":{schools:["GYMNASIUM"]},
+  "mc8-9-4":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-9-5":{schools:["MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
+  "mc8-9-6":{schools:["WIRTSCHAFTSSCHULE"]}
+};
+function skillTrack(skill){
+  const fallback=directTrackDefaults[skill.id]||{};
+  return{
+    core:typeof skill.core==="boolean"?skill.core:Boolean(fallback.core),
+    schools:Array.isArray(skill.schoolTypes)&&skill.schoolTypes.length?skill.schoolTypes:(fallback.schools||[])
+  };
+}
+function nodeTrackInfo(n){
+  if(!n)return{core:false,schools:[]};
+  const skills=n.kind==="skill"?[n]:data.nodes.filter(skill=>skill.kind==="skill"&&!skill.archived&&descendants(data,n.id).has(skill.id));
+  const schools=new Set();let core=false;
+  for(const skill of skills){const info=skillTrack(skill);if(info.core)core=true;for(const type of info.schools)schools.add(type);}
+  return{core,schools:[...schools]};
+}
+function renderSchoolFilters(){
+  const host=$("school-filters");if(!host)return;host.replaceChildren();
+  if(!selectedStudents().length){host.hidden=true;return;}
+  host.hidden=false;
+  const core=element("label","track-filter core");const coreInput=element("input");coreInput.type="checkbox";coreInput.checked=true;coreInput.disabled=true;core.append(coreInput,document.createTextNode("CORE"));host.append(core);
+  const active=activeSchoolTypes();
+  for(const type of ["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE","MITTELSCHULE","GESAMTSCHULE","WERKREALSCHULE"]){
+    const label=element("label","track-filter"+(active.has(type)?" active":""));const input=element("input");input.type="checkbox";input.checked=active.has(type);input.disabled=true;
+    label.append(input,document.createTextNode(schoolShort[type]));label.title=schoolLabels[type];host.append(label);
+  }
+}
 function renderStudentFilter(){
   const select=$("student-filter");if(!select)return;
-  select.replaceChildren();const none=element("option","","Выберите ученика");none.value="";select.append(none);
-  for(const student of students){
-    const meta=[student.grade?`${student.grade} кл.`:"класс не указан",student.schoolType||""].filter(Boolean).join(" · ");
-    const option=element("option","",meta?`${student.fullName} · ${meta}`:student.fullName);option.value=student.id;select.append(option);
+  select.replaceChildren();const none=element("option","","Выберите группу или ученика");none.value="";select.append(none);
+  if(groups.length){
+    const groupOptions=element("optgroup");groupOptions.label="Группы";
+    for(const group of groups){
+      const grades=[...new Set((group.students||[]).map(student=>student.grade).filter(Boolean))];
+      const schools=[...new Set((group.students||[]).map(student=>schoolShort[student.schoolType]).filter(Boolean))];
+      const meta=[grades.length===1?`${grades[0]} кл.`:grades.length>1?"разные классы":"класс не указан",schools.join("+")].filter(Boolean).join(" · ");
+      const option=element("option","",meta?`${group.name} · ${meta}`:group.name);option.value=`g:${group.id}`;groupOptions.append(option);
+    }
+    select.append(groupOptions);
   }
-  select.value=selectedStudentId;select.disabled=masteryLoading||students.length===0;
+  if(students.length){
+    const studentOptions=element("optgroup");studentOptions.label="Ученики";
+    for(const student of students){
+      const meta=[student.grade?`${student.grade} кл.`:"класс не указан",schoolLabels[student.schoolType]||""].filter(Boolean).join(" · ");
+      const option=element("option","",meta?`${student.fullName} · ${meta}`:student.fullName);option.value=`s:${student.id}`;studentOptions.append(option);
+    }
+    select.append(studentOptions);
+  }
+  select.value=selectedGroupId?`g:${selectedGroupId}`:selectedStudentId?`s:${selectedStudentId}`:"";
+  select.disabled=masteryLoading||(!students.length&&!groups.length);
+  renderSchoolFilters();
 }
-async function chooseStudent(id){
+async function chooseStudent(value){
   if(!flushForm()){renderStudentFilter();return;}
-  const nextId=students.some(student=>student.id===id)?id:"";
-  if(nextId===selectedStudentId)return;
-  if(dirty&&!confirm("Есть несохранённые изменения карты. Переключить ученика без сохранения?")){renderStudentFilter();return;}
-  selectedStudentId=nextId;
-  try{if(selectedStudentId)localStorage.setItem("mindcrafti.skills.student",selectedStudentId);else localStorage.removeItem("mindcrafti.skills.student");}catch{/* Preference is optional. */}
+  const [type,id]=String(value||"").split(":");
+  const nextStudentId=type==="s"&&students.some(student=>student.id===id)?id:"";
+  const nextGroupId=type==="g"&&groups.some(group=>group.id===id)?id:"";
+  if(nextStudentId===selectedStudentId&&nextGroupId===selectedGroupId)return;
+  if(dirty&&!confirm("Есть несохранённые изменения карты. Переключить без сохранения?")){renderStudentFilter();return;}
+  selectedStudentId=nextStudentId;selectedGroupId=nextGroupId;
+  try{
+    const target=selectedGroupId?`g:${selectedGroupId}`:selectedStudentId?`s:${selectedStudentId}`:"";
+    if(target)localStorage.setItem("mindcrafti.skills.target",target);else localStorage.removeItem("mindcrafti.skills.target");
+  }catch{/* Preference is optional. */}
   location.reload();
 }
-function masteryPercent(n){
-  if(!selectedStudentId||!n)return 0;
+function masteryPercent(n,studentId){
+  if(!studentId||!n)return 0;
+  const mastery=masteryByStudent[studentId]||{};
   if(n.kind==="skill")return Math.max(0,Math.min(100,Number(mastery[n.id])||0));
   const ids=descendants(data,n.id),skills=data.nodes.filter(x=>ids.has(x.id)&&x.kind==="skill"&&!x.archived);
   if(!skills.length)return 0;
@@ -100,15 +230,16 @@ function directDependencies(id){
     after:data.edges.filter(e=>e.kind==="prerequisite"&&e.source===id).map(e=>node(e.target)).filter(Boolean)
   };
 }
-async function saveSkillMastery(skillId,value){
-  if(!selectedStudentId||masteryLoading)return;
+async function saveSkillMastery(studentId,skillId,value){
+  if(!studentId||masteryLoading)return;
   const parsed=Number(value);
   if(!Number.isInteger(parsed)||parsed<0||parsed>100){notice("Процент должен быть целым числом от 0 до 100.",true);return;}
   masteryLoading=true;renderStudentFilter();
   try{
-    const result=await request("PUT",`${boardPath()}/students/${selectedStudentId}/mastery/${skillId}`,{mastery:parsed});
-    mastery=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
-    notice(`Освоение сохранено: ${selectedStudent()?.fullName||"ученик"} · ${parsed}%`);
+    const result=await request("PUT",`${boardPath()}/students/${studentId}/mastery/${skillId}`,{mastery:parsed});
+    masteryByStudent[studentId]=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
+    const student=students.find(item=>item.id===studentId)||selectedStudents().find(item=>item.id===studentId);
+    notice(`Освоение сохранено: ${student?.fullName||"ученик"} · ${parsed}%`);
   }catch(error){notice(error.message,true);}
   finally{masteryLoading=false;renderStudentFilter();render();showNode(skillId);}
 }
@@ -118,50 +249,63 @@ window.addEventListener("message",async event=>{
   if(typeof incoming.apiBase!=="string"||!incoming.token){notice("Для открытия карты нужно войти в Mindcrafti.",true);return;}
   config=incoming;
   try{
-    students=await request("GET","/skill-boards/students");
+    [students,groups]=await Promise.all([
+      request("GET","/skill-boards/students"),
+      request("GET","/skill-boards/groups")
+    ]);
     try{
-      const remembered=localStorage.getItem("mindcrafti.skills.student")||"";
-      selectedStudentId=students.some(student=>student.id===remembered)?remembered:"";
-    }catch{selectedStudentId="";}
+      const remembered=localStorage.getItem("mindcrafti.skills.target")||"";
+      if(remembered.startsWith("g:")&&groups.some(group=>group.id===remembered.slice(2)))selectedGroupId=remembered.slice(2);
+      else if(remembered.startsWith("s:")&&students.some(student=>student.id===remembered.slice(2)))selectedStudentId=remembered.slice(2);
+      else{
+        const oldStudent=localStorage.getItem("mindcrafti.skills.student")||"";
+        if(students.some(student=>student.id===oldStudent))selectedStudentId=oldStudent;
+      }
+    }catch{selectedStudentId="";selectedGroupId="";}
     renderStudentFilter();
 
-    const student=selectedStudent();
-    boardId=boardIdForStudent(student);
-    if(!selectedStudentId){
-      $("board-grade").textContent="выберите ученика";
-      $("source-note").replaceChildren(element("strong","","Класс выбирается автоматически"),document.createElement("br"),document.createTextNode("Выберите ученика сверху — откроется карта его класса."));
+    const chosen=selectedStudents(),grades=selectedGrades();
+    boardId=boardIdForSelection();
+    if(!chosen.length){
+      $("board-grade").textContent="выберите группу или ученика";
+      $("source-note").replaceChildren(element("strong","","Класс выбирается автоматически"),document.createElement("br"),document.createTextNode("Выберите группу или ученика сверху."));
       $("empty").hidden=false;
-      $("empty").replaceChildren(element("strong","","Выберите ученика"),element("p","","Карта навыков нужного класса откроется автоматически."));
-      status();
-      return;
+      $("empty").replaceChildren(element("strong","","Выберите группу или ученика"),element("p","","Откроется карта нужного класса с процентами выбранных учеников."));
+      status();return;
+    }
+    if(grades.length!==1||chosen.some(student=>student.grade==null)){
+      $("board-grade").textContent="класс не определён";
+      $("source-note").replaceChildren(element("strong","","Нужен один класс"),document.createElement("br"),document.createTextNode("У всех учеников выбранной группы должен быть указан один и тот же класс."));
+      $("empty").hidden=false;
+      $("empty").replaceChildren(element("strong","","Нельзя выбрать одну карту"),element("p","","Проверьте класс учеников в их учебных профилях."));
+      status();return;
     }
     if(!boardId){
-      const gradeText=student?.grade?`${student.grade} класс`:"класс не указан";
-      $("board-grade").textContent=gradeText;
-      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode("Укажите класс в учебном профиле ученика. Сейчас доступны карты 6 и 8 класса."));
+      $("board-grade").textContent=`${grades[0]} класс`;
+      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode("Сейчас доступны карты 6 и 8 класса."));
       $("empty").hidden=false;
-      $("empty").replaceChildren(element("strong","",`Для ${student?.fullName||"ученика"} карта пока не открыта`),element("p","",student?.grade?"Для этого класса карта ещё не создана.":"Сначала выберите класс в профиле ученика."));
-      status();
-      return;
+      $("empty").replaceChildren(element("strong","",`Для ${grades[0]} класса карта пока не создана`));
+      status();return;
     }
 
     snapshot=await request("GET",boardPath());
     validateBoard(snapshot.data);data=clone(snapshot.data);
     $("board-grade").textContent=boardTitle();
-    const sourceNote=$("source-note");sourceNote.replaceChildren(
+    const sourceNote=$("source-note"),schools=[...activeSchoolTypes()].map(type=>schoolLabels[type]||type);
+    sourceNote.replaceChildren(
       element("strong","","Источник программы"),
       document.createElement("br"),
       document.createTextNode(snapshot.data.source||"Источник не указан."),
       document.createElement("br"),document.createElement("br"),
-      document.createTextNode(`Карта выбрана автоматически по профилю: ${student?.fullName||"ученик"} · ${student?.grade||"—"} класс.`)
+      document.createTextNode(`Выбрано: ${selectedTargetLabel()} · ${grades[0]} класс${schools.length?" · "+schools.join(" + "):""}.`)
     );
 
     masteryLoading=true;renderStudentFilter();
     try{
-      const current=await request("GET",`${boardPath()}/students/${selectedStudentId}/mastery`);
-      mastery=current?.mastery&&typeof current.mastery==="object"?current.mastery:{};
+      const snapshots=await Promise.all(chosen.map(student=>request("GET",`${boardPath()}/students/${student.id}/mastery`)));
+      masteryByStudent={};
+      chosen.forEach((student,index)=>{masteryByStudent[student.id]=snapshots[index]?.mastery&&typeof snapshots[index].mastery==="object"?snapshots[index].mastery:{};});
     }finally{masteryLoading=false;renderStudentFilter();}
-
     let pending=null;
     try{
       const draft=JSON.parse(localStorage.getItem(draftKey())||"null");
@@ -202,7 +346,7 @@ async function save(){
     notice(error.status===409?"Карта уже изменена в другой вкладке. Ваш черновик сохранён в этом браузере. Выгрузите JSON и обновите страницу; изменения не перезаписаны.":error.message,true);
   }finally{saving=false;render();}
 }
-const cardMetrics=()=>viewMode==="hierarchy"?{w:220,h:112}:{w:260,h:148};
+const cardMetrics=()=>{const rows=selectedGroupId?Math.min(4,selectedStudents().length):0;return viewMode==="hierarchy"?{w:220,h:112+rows*22}:{w:260,h:148+rows*22};};
 function displayPosition(n){return hierarchyPositions.get(n.id)||{x:n.x,y:n.y};}
 function storedOrder(a,b){return (a.x-b.x)||(a.y-b.y)||a.title.localeCompare(b.title,"ru");}
 function buildHierarchyLayout(items){
@@ -293,21 +437,43 @@ function renderSearch(){
 }
 function renderNodes(){
   if(!data)return;
-  layer.replaceChildren();const highlights=dependencyHighlights();
+  layer.replaceChildren();const highlights=dependencyHighlights(),activeTracks=activeSchoolTypes(),chosen=selectedStudents();
   for(const n of visibleNodes()){
+    const track=nodeTrackInfo(n),trackRelevant=track.core||track.schools.some(type=>activeTracks.has(type));
+    const trackClass=track.core?" track-core":trackRelevant?" track-relevant":" track-other";
     const relationClass=highlights.beforeNodes.has(n.id)?" dependency-before":highlights.afterNodes.has(n.id)?" dependency-after":highlights.active&&selection?.id!==n.id&&n.kind==="skill"?" dependency-dim":"";
-    const e=element("div",`node kind-${n.kind}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}`);
-    const p=displayPosition(n);e.dataset.id=n.id;e.style.left=p.x+"px";e.style.top=p.y+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
+    const groupClass=selectedGroupId?" group-mode":"";
+    const e=element("div",`node kind-${n.kind}${groupClass}${trackClass}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}`);
+    const p=displayPosition(n),metrics=cardMetrics();e.dataset.id=n.id;e.style.left=p.x+"px";e.style.top=p.y+"px";e.style.height=metrics.h+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
     e.setAttribute("role","button");e.setAttribute("aria-label",`${kindLabels[n.kind]}: ${n.title}`);
     const count=n.kind==="topic"?descendants(data,n.id).size:null;
     const kind=element("div","kind",kindLabels[n.kind]),meta=element("span","kind-meta");
     if(count!==null)meta.append(element("span","",`${count} →`));
-    const pct=masteryPercent(n),badge=element("span",`mastery-badge ${masteryClass(pct)}`,`${pct}%`);
-    badge.title=selectedStudentId?(n.kind==="skill"?`Освоение: ${selectedStudent()?.fullName||"ученик"}`:"Среднее по дочерним навыкам"):"Выберите ученика, чтобы увидеть его прогресс";
-    meta.append(badge);kind.append(meta);
+    if(!selectedGroupId&&selectedStudentId){
+      const pct=masteryPercent(n,selectedStudentId),badge=element("span",`mastery-badge ${masteryClass(pct)}`,`${pct}%`);
+      badge.title=n.kind==="skill"?`Освоение: ${selectedStudent()?.fullName||"ученик"}`:"Среднее по дочерним навыкам";
+      meta.append(badge);
+    }
+    kind.append(meta);
     e.append(kind,element("div","title",n.title),element("div","de",n.de||"Добавьте описание навыка"));
+    if(track.core||track.schools.length){
+      const tags=element("div","track-badges");
+      if(track.core)tags.append(element("span","track-badge core","CORE"));
+      for(const type of track.schools)tags.append(element("span",`track-badge school school-${type.toLowerCase()}${activeTracks.has(type)?" active":""}`,schoolShort[type]||type));
+      e.append(tags);
+    }
+    if(selectedGroupId){
+      const list=element("div","mastery-list");
+      for(const student of chosen.slice(0,4)){
+        const row=element("div","mastery-person");
+        row.append(element("span","mastery-person-name",student.fullName),element("span",`mastery-person-value ${masteryClass(masteryPercent(n,student.id))}`,`${masteryPercent(n,student.id)}%`));
+        list.append(row);
+      }
+      if(chosen.length>4)list.append(element("div","mastery-more",`+ ещё ${chosen.length-4}`));
+      e.append(list);
+    }
     if(config.canEdit){
-      for(const side of ["in","out"]){const p=element("button","port "+(side==="in"?"in":""));p.type="button";p.dataset.port=side;p.title=side==="in"?"Конец стрелки":"Потяните для создания стрелки";p.setAttribute("aria-label",p.title);e.append(p);}
+      for(const side of ["in","out"]){const port=element("button","port "+(side==="in"?"in":""));port.type="button";port.dataset.port=side;port.title=side==="in"?"Конец стрелки":"Потяните для создания стрелки";port.setAttribute("aria-label",port.title);e.append(port);}
     }
     e.addEventListener("dblclick",ev=>{ev.stopPropagation();if(n.kind==="topic"||n.kind==="root")openSection(n.kind==="root"?"overview":n.id);});
     e.addEventListener("keydown",ev=>{if(ev.key==="Enter"){selectNode(n.id);if(n.kind==="topic")openSection(n.id);}});
@@ -389,7 +555,7 @@ function showHelp(){
   $("inspector-heading").textContent="Как работать";
   $("inspector-body").replaceChildren();
   const help=element("div","help");
-  help.innerHTML="<h2>Программа, которую можно менять</h2><p><strong>Выберите ученика</strong> сверху — на каждой карточке появится его процент. Для раздела показывается среднее по дочерним навыкам.</p><p><strong>Нажмите на навык:</strong> синим подсветится, от чего он зависит, зелёным — где используется дальше.</p><p><strong>Вид «Карта»</strong> сохраняет ваше свободное расположение карточек.</p><p><strong>Вид «Дерево»</strong> автоматически показывает всю иерархию: программа → раздел → навыки.</p><p><strong>Сплошная стрелка</strong> — входит в тему.<br><strong>Пунктирная стрелка</strong> — нужно знать прежде.</p><p>Процент ученика сохраняется отдельно от структуры программы.</p>";
+  help.innerHTML="<h2>Карта группы и ученика</h2><p><strong>Выберите группу или ученика</strong> сверху. Для группы на карточке показываются проценты каждого ребёнка отдельно.</p><p><strong>CORE</strong> — общее ядро. Метки GYM / RS / WS / MS показывают, в каких школьных программах встречается навык. Темы, не относящиеся к школам выбранной группы, приглушаются.</p><p><strong>Нажмите на навык:</strong> синим подсветится, от чего он зависит, зелёным — где используется дальше.</p><p><strong>Вид «Карта»</strong> сохраняет свободное расположение карточек, а <strong>«Дерево»</strong> показывает иерархию.</p><p>Проценты каждого ученика сохраняются отдельно от структуры программы.</p>";
   if(!config?.canEdit)help.append(element("p","","Просмотр для преподавателя. Общую программу редактирует администратор."));
   $("inspector-body").append(help);
   if(innerWidth<850)$("inspector").classList.add("closed");
@@ -403,16 +569,21 @@ function field(form,label,name,value,kind="input",max=4000){
 function showNode(id){
   const n=node(id);if(!n)return;selection={type:"node",id};
   $("inspector").classList.remove("closed");$("inspector-heading").textContent=n.archived?"Карточка в архиве":"Свойства карточки";
-  const masteryBox=element("div","mastery-box"),masteryTitle=element("div","mastery-title",selectedStudentId?`ОСВОЕНИЕ · ${selectedStudent()?.fullName||"УЧЕНИК"}`:"ОСВОЕНИЕ");
+  const chosen=selectedStudents(),masteryBox=element("div","mastery-box"),masteryTitle=element("div","mastery-title",`ОСВОЕНИЕ · ${selectedTargetLabel()}`);
   masteryBox.append(masteryTitle);
-  const masteryRow=element("div","mastery-row");
-  if(!selectedStudentId){
-    masteryRow.append(element("div","computed","0%"));masteryBox.append(masteryRow,element("div","mastery-note","Выберите ученика сверху. Пока ученик не выбран, карта показывает 0%."));
-  }else if(n.kind==="skill"){
-    const input=element("input");input.type="number";input.min="0";input.max="100";input.step="1";input.value=String(masteryPercent(n));input.setAttribute("aria-label","Процент освоения");
-    masteryRow.append(input,button("Сохранить %",()=>void saveSkillMastery(n.id,input.value),"primary"));masteryBox.append(masteryRow,element("div","mastery-note","0–100%. Сохраняется сразу и не меняет структуру карты."));
+  if(!chosen.length){
+    masteryBox.append(element("div","mastery-note","Выберите группу или ученика сверху."));
   }else{
-    masteryRow.append(element("div","computed",`${masteryPercent(n)}%`));masteryBox.append(masteryRow,element("div","mastery-note","Среднее значение по всем дочерним навыкам этого раздела."));
+    for(const student of chosen){
+      const row=element("div","mastery-editor-row"),name=element("span","mastery-editor-name",student.fullName);
+      row.append(name);
+      if(n.kind==="skill"){
+        const input=element("input");input.type="number";input.min="0";input.max="100";input.step="1";input.value=String(masteryPercent(n,student.id));input.setAttribute("aria-label",`Процент освоения: ${student.fullName}`);
+        row.append(input,button("Сохранить",()=>void saveSkillMastery(student.id,n.id,input.value),"primary"));
+      }else row.append(element("span",`mastery-editor-value ${masteryClass(masteryPercent(n,student.id))}`,`${masteryPercent(n,student.id)}%`));
+      masteryBox.append(row);
+    }
+    masteryBox.append(element("div","mastery-note",n.kind==="skill"?"Процент хранится отдельно для каждого ученика.":"Для раздела показано среднее по дочерним навыкам."));
   }
   const form=element("form");form.id="node-form";form.dataset.id=id;form.dataset.changed="false";
   field(form,"НАЗВАНИЕ","title",n.title,"input",200);field(form,"НЕМЕЦКИЙ ТЕРМИН","de",n.de,"input",300);
@@ -429,6 +600,16 @@ function showNode(id){
     const option=element("option","",candidate.title);option.value=candidate.id;parent.append(option);
   }
   parent.value=data.edges.find(e=>e.kind==="contains"&&e.target===id)?.source||"";form.append(parentLabel,parent);
+  if(n.kind==="skill"){
+    const info=skillTrack(n),coreLabel=element("label","track-edit-label","ПРОГРАММА НАВЫКА"),coreWrap=element("label","track-edit-check"),coreInput=element("input");
+    coreInput.type="checkbox";coreInput.name="core";coreInput.checked=info.core;coreInput.disabled=!canEdit();coreWrap.append(coreInput,document.createTextNode(" CORE — общее ядро"));form.append(coreLabel,coreWrap);
+    const schoolTitle=element("div","track-edit-title","ШКОЛЬНЫЕ ТРЕКИ"),schoolWrap=element("div","track-edit-grid");
+    for(const type of allSchoolTypes){
+      const label=element("label","track-edit-check"),input=element("input");input.type="checkbox";input.name="schoolTypes";input.value=type;input.checked=info.schools.includes(type);input.disabled=!canEdit();
+      label.append(input,document.createTextNode(" "+(schoolShort[type]||type)));label.title=schoolLabels[type]||type;schoolWrap.append(label);
+    }
+    form.append(schoolTitle,schoolWrap);
+  }
   const colorLabel=element("label","","ЦВЕТ РАЗДЕЛА"),color=element("select");color.name="color";color.disabled=!canEdit();
   for(const [v,t]of Object.entries({orange:"Оранжевый",blue:"Синий",violet:"Сиреневый",teal:"Бирюзовый",green:"Зелёный"})){const option=element("option","",t);option.value=v;color.append(option);}color.value=n.color;form.append(colorLabel,color);
   form.addEventListener("input",()=>{form.dataset.changed="true";$("save").disabled=!canEdit();$("save-state").textContent="Правки в карточке";stash();});
@@ -466,6 +647,12 @@ function applyForm(form){
   const next=clone(data),n=next.nodes.find(x=>x.id===form.dataset.id);if(!n)return false;
   const values=new FormData(form);
   for(const key of ["title","de","kind","description","example","source","color"])n[key]=String(values.get(key)||"").trim();
+  if(n.kind==="skill"){
+    n.core=values.has("core");
+    n.schoolTypes=values.getAll("schoolTypes").map(String);
+  }else{
+    n.core=false;n.schoolTypes=[];
+  }
   const parent=String(values.get("parent")||"");
   const current=next.edges.find(e=>e.kind==="contains"&&e.target===n.id);
   if((current?.source||"")!==parent){
@@ -491,7 +678,7 @@ function addNode(kind="skill",point=null){
   if(!canEdit()||!data||!flushForm())return;
   const next=clone(data),id=uid("skill");
   const p=point||{x:(canvas.clientWidth/2-view.x)/view.z-130,y:(canvas.clientHeight/2-view.y)/view.z-74};
-  next.nodes.push({id,kind,title:kind==="topic"?"Новый раздел":"Новый навык",de:"",description:"",example:"",source:"Добавлено вручную. Требования нужно уточнить.",color:node(scope)?.color||"orange",x:Math.round(p.x),y:Math.round(p.y),archived:false});
+  next.nodes.push({id,kind,title:kind==="topic"?"Новый раздел":"Новый навык",de:"",description:"",example:"",source:"Добавлено вручную. Требования нужно уточнить.",color:node(scope)?.color||"orange",x:Math.round(p.x),y:Math.round(p.y),archived:false,core:false,schoolTypes:[]});
   const parent=scope!=="overview"?scope:kind==="topic"?data.nodes.find(n=>n.kind==="root"&&!n.archived)?.id:null;
   if(parent)next.edges.push({id:uid("edge"),kind:"contains",source:parent,target:id});
   if(mutate(next)){selectNode(id);$("field-title")?.focus();$("field-title")?.select();}
