@@ -473,8 +473,11 @@ function renderNodes(){
   if(!data)return;
   layer.replaceChildren();const highlights=dependencyHighlights(),filters=currentTrackFilters(),activeTracks=filters.schools,chosen=selectedStudents();
   for(const n of visibleNodes()){
-    const track=nodeTrackInfo(n),trackRelevant=(track.core&&filters.core)||track.schools.some(type=>activeTracks.has(type));
-    const trackClass=!track.configured?" track-neutral":!trackRelevant?" track-other":track.core&&filters.core?" track-core":" track-relevant";
+    const track=nodeTrackInfo(n);
+    const trackRelevant=n.kind==="skill"
+      ?(track.core?filters.core:track.schools.some(type=>activeTracks.has(type)))
+      :data.nodes.some(skill=>skill.kind==="skill"&&!skill.archived&&descendants(data,n.id).has(skill.id)&&(()=>{const info=skillTrack(skill);return info.core?filters.core:info.schools.some(type=>activeTracks.has(type));})());
+    const trackClass=!track.configured?" track-neutral":!trackRelevant?" track-other":n.kind==="skill"&&track.core&&filters.core?" track-core":" track-relevant";
     const relationClass=highlights.beforeNodes.has(n.id)?" dependency-before":highlights.afterNodes.has(n.id)?" dependency-after":highlights.active&&selection?.id!==n.id&&n.kind==="skill"?" dependency-dim":"";
     const groupClass=selectedGroupId?" group-mode":"";
     const e=element("div",`node kind-${n.kind}${groupClass}${trackClass}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}`);
