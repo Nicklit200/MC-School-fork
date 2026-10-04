@@ -56,6 +56,10 @@ textarea{resize:vertical;min-height:82px;line-height:1.5}input[type=checkbox]{ac
 .mastery-list{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:4px;border-top:1px solid #eef1f5}
 .mastery-person{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;line-height:1.4}
 .mastery-person-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#66758b}
+.mastery-group-total{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0 5px;margin-bottom:2px;border-bottom:1px solid #e4e9f0;font-size:9px}
+.mastery-group-total-label{font-weight:800;color:#3f4f67}
+.mastery-group-total-value{font-size:12px;font-weight:900;color:#6d788c}
+.mastery-group-total-value.low{color:#aa3d3d}.mastery-group-total-value.mid{color:#936416}.mastery-group-total-value.high{color:#28763b}
 .mastery-person-value{font-weight:900;color:#6d788c}
 .mastery-person-value.low{color:#aa3d3d}.mastery-person-value.mid{color:#936416}.mastery-person-value.high{color:#28763b}
 .mastery-more{font-size:8px;color:#98a2b2}
