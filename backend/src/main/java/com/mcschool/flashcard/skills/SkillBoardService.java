@@ -13,7 +13,8 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class SkillBoardService {
     public record Node(String id, String kind, String title, String de, String description,
-                       String example, String source, String color, double x, double y, boolean archived) {}
+                       String example, String source, String color, double x, double y, boolean archived,
+                       boolean core, List<String> schoolTypes) {}
     public record Edge(String id, String source, String target, String kind) {}
     public record Board(int schemaVersion, String title, int grade, String source, List<Node> nodes, List<Edge> edges) {}
     public record Snapshot(String id, long revision, Instant updatedAt, Board data) {}
@@ -71,6 +72,14 @@ public class SkillBoardService {
             if (n.kind() == null || !Set.of("root","topic","skill","note").contains(n.kind())) throw bad("Неизвестный тип карточки");
             text(n.title(), 200, true); text(n.de(), 300, false);
             text(n.description(), 4000, false); text(n.example(), 4000, false); text(n.source(), 4000, false);
+            if (n.schoolTypes() != null) {
+                Set<String> allowedSchoolTypes = Set.of(
+                        "GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE",
+                        "GESAMTSCHULE","WERKREALSCHULE","OTHER");
+                if (n.schoolTypes().size() > allowedSchoolTypes.size()
+                        || n.schoolTypes().stream().anyMatch(type -> type == null || !allowedSchoolTypes.contains(type)))
+                    throw bad("Неизвестный тип школы у навыка");
+            }
             if (n.color() == null || !Set.of("orange","blue","violet","teal","green").contains(n.color()))
                 throw bad("Неизвестный цвет");
             if (!Double.isFinite(n.x()) || !Double.isFinite(n.y()) || Math.abs(n.x()) > 100000 || Math.abs(n.y()) > 100000)
