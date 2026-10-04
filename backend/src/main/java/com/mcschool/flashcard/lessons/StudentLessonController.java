@@ -57,7 +57,7 @@ public class StudentLessonController {
                 : preparation.getWorkbookFilename()
                         .replaceAll("[\\r\\n\\x00-\\x1F\\x7F]", "_")
                         .replace('/', '_')
-                        .replace('\\\\', '_');
+                        .replace('\\', '_');
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
