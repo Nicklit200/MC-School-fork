@@ -320,8 +320,9 @@ function renderNodes(){
     const count=n.kind==="topic"?descendants(data,n.id).size:null;
     const kind=element("div","kind",kindLabels[n.kind]),meta=element("span","kind-meta");
     if(count!==null)meta.append(element("span","",`${count} →`));
-    const pct=masteryPercent(n),badge=element("span",`mastery-badge ${masteryClass(pct)}`,`${pct}%`);
-    badge.title=selectedStudentId?(n.kind==="skill"?`Освоение: ${selectedStudent()?.fullName||"ученик"}`:"Среднее по дочерним навыкам"):"Выберите ученика, чтобы увидеть его прогресс";
+    const pct=masteryPercent(n),verified=n.kind!=="skill"||!selectedStudentId||masteryEvidenceVerified[n.id]===true;
+    const badge=element("span",`mastery-badge ${masteryClass(pct)}${verified?"":" unverified"}`,`${pct}%${verified?"":" !"}`);
+    badge.title=selectedStudentId?(n.kind==="skill"?(verified?`Освоение подтверждено доказательством: ${selectedStudent()?.fullName||"ученик"}`:"У процента нет прикреплённого доказательства"):"Среднее по дочерним навыкам"):"Выберите ученика, чтобы увидеть его прогресс";
     meta.append(badge);kind.append(meta);
     e.append(kind,element("div","title",n.title),element("div","de",n.de||"Добавьте описание навыка"));
     if(config.canEdit){
@@ -428,7 +429,25 @@ function showNode(id){
     masteryRow.append(element("div","computed","0%"));masteryBox.append(masteryRow,element("div","mastery-note","Выберите ученика сверху. Пока ученик не выбран, карта показывает 0%."));
   }else if(n.kind==="skill"){
     const input=element("input");input.type="number";input.min="0";input.max="100";input.step="1";input.value=String(masteryPercent(n));input.setAttribute("aria-label","Процент освоения");
-    masteryRow.append(input,button("Сохранить %",()=>void saveSkillMastery(n.id,input.value),"primary"));masteryBox.append(masteryRow,element("div","mastery-note","0–100%. Сохраняется сразу и не меняет структуру карты."));
+    masteryRow.append(input);masteryBox.append(masteryRow);
+    const verified=masteryEvidenceVerified[n.id]===true;
+    masteryBox.append(element("div",verified?"mastery-proof-state verified":"mastery-proof-state missing",verified?"✓ Текущий процент подтверждён доказательством":"⚠ У текущего процента нет подтверждённого доказательства"));
+    const reason=element("textarea");reason.placeholder="Почему именно такой процент?";reason.rows=2;
+    const source=element("input");source.placeholder="Источник, например: Домашка 02.10.2026";
+    const sourceDate=element("input");sourceDate.type="date";
+    const observation=element("textarea");observation.placeholder="Конкретное доказательство: задание, ответ ученика и что это показывает";observation.rows=3;
+    masteryBox.append(
+      element("label","mastery-field-label","ОБОСНОВАНИЕ"),reason,
+      element("label","mastery-field-label","ИСТОЧНИК"),source,
+      element("label","mastery-field-label","ДАТА ИСТОЧНИКА"),sourceDate,
+      element("label","mastery-field-label","КОНКРЕТНОЕ ДОКАЗАТЕЛЬСТВО"),observation,
+      button("Сохранить % + доказательство",()=>void saveSkillMastery(n.id,input.value,reason.value,source.value,sourceDate.value,observation.value),"primary"),
+      element("div","mastery-note","Процент нельзя изменить без объяснения и доказательства. Каждое изменение сохраняется в истории.")
+    );
+    const historyBox=element("div","evidence-history");
+    historyBox.append(element("h3","","ИСТОРИЯ И ДОКАЗАТЕЛЬСТВА"));
+    const historyBody=element("div","evidence-history-body");historyBox.append(historyBody);masteryBox.append(historyBox);
+    void loadMasteryHistory(n.id,historyBody);
   }else{
     masteryRow.append(element("div","computed",`${masteryPercent(n)}%`));masteryBox.append(masteryRow,element("div","mastery-note","Среднее значение по всем дочерним навыкам этого раздела."));
   }
