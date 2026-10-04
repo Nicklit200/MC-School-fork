@@ -35,14 +35,14 @@ textarea{resize:vertical;min-height:82px;line-height:1.5}input[type=checkbox]{ac
 
 .school-filters{display:flex;align-items:center;gap:5px;flex-wrap:wrap;max-width:360px}
 .school-filters[hidden]{display:none}
-.track-filter{display:inline-flex;align-items:center;gap:4px;padding:5px 7px;border:1px solid #e2e7ef;border-radius:999px;background:#f7f9fc;color:#8994a7;font-size:10px;font-weight:800;letter-spacing:.3px;white-space:nowrap}
+.track-filter{display:inline-flex;align-items:center;gap:4px;padding:5px 7px;border:1px solid #e2e7ef;border-radius:999px;background:#f7f9fc;color:#8994a7;font-size:10px;font-weight:800;letter-spacing:.3px;white-space:nowrap;cursor:pointer;user-select:none}
 .track-filter input{width:12px;height:12px;margin:0;accent-color:#ee6528}
 .track-filter.active{background:#fff;border-color:#c9d4e4;color:#42516b}
-.track-filter.core{background:#fff2e9;border-color:#f4c4a9;color:#bd531f}
+.track-filter.core.active{background:#fff2e9;border-color:#f4c4a9;color:#bd531f}
 
 .track-badges{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:18px}
 .track-badge{display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.35px;border:1px solid #dfe5ed;background:#f2f4f8;color:#7b8799}
-.track-badge.core{background:#fff0e5;border-color:#f4c3a8;color:#c2551f}
+.track-badge.core.active{background:#fff0e5;border-color:#f4c3a8;color:#c2551f}
 .track-badge.school-gymnasium.active{background:#edf4ff;border-color:#bfd4f7;color:#2e62aa}
 .track-badge.school-realschule.active{background:#f4efff;border-color:#d8c7f5;color:#7353aa}
 .track-badge.school-wirtschaftsschule.active{background:#eef8ef;border-color:#c8e4cb;color:#3f7948}
