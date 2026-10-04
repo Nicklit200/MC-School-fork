@@ -498,7 +498,7 @@ function addNode(kind="skill",point=null){
 }
 function addEdge(source,target){
   if(!canEdit()||source===target)return false;
-  const next=clone(data);next.edges.push({id:uid("edge"),source,target,kind:$("edge-kind").value});
+  const next=clone(data);next.edges.push({id:uid("edge"),source,target,kind:"prerequisite"});
   if(mutate(next)){connectMode=false;linkSource=null;render();return true;}return false;
 }
 canvas.addEventListener("pointerdown",event=>{
@@ -565,7 +565,7 @@ window.addEventListener("beforeunload",e=>{if(dirty||$("node-form")?.dataset.cha
 function undo(){if(!canEdit()||!flushForm()||!history.length)return;data=history.pop();dirty=true;stash();selection=null;render();showHelp();}
 $("save").onclick=()=>{if($("node-form")?.dataset.changed==="true"&&!applyForm($("node-form")))return;void save();};
 $("add").onclick=()=>addNode();$("add-topic").onclick=()=>addNode("topic");
-$("connect").onclick=()=>{if(!flushForm())return;connectMode=!connectMode;linkSource=null;notice(connectMode?"Выберите начало и конец стрелки. Для «Входит в тему» сначала выбирайте родительский раздел.":"");render();};
+$("connect").onclick=()=>{if(!flushForm())return;connectMode=!connectMode;linkSource=null;notice(connectMode?"Выберите начало и конец стрелки.":"");render();};
 function setViewMode(mode){
   if(!["free","hierarchy"].includes(mode)||!flushForm())return;
   viewMode=mode;selection=null;connectMode=false;linkSource=null;
