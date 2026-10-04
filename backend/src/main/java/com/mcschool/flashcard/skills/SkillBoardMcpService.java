@@ -144,7 +144,7 @@ public class SkillBoardMcpService {
             if (!(fields.get("archived") instanceof Boolean value)) throw bad("archived must be boolean");
             archived = value;
         }
-        boolean core = n.core();
+        boolean core = Boolean.TRUE.equals(n.core());
         if (fields.containsKey("core")) {
             if (!(fields.get("core") instanceof Boolean value)) throw bad("core must be boolean");
             core = value;
