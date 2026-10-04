@@ -52,7 +52,8 @@ public class SkillMasteryService {
             FROM student_skill_mastery
             WHERE student_id = ? AND board_id = ?
             ORDER BY skill_id
-            """, rs -> values.put(rs.getString(1), rs.getInt(2)), studentId, boardId);
+            """, (rs, rowNum) -> Map.entry(rs.getString(1), rs.getInt(2)), studentId, boardId)
+            .forEach(entry -> values.put(entry.getKey(), entry.getValue()));
         Instant updatedAt = jdbc.query("""
             SELECT max(updated_at) FROM student_skill_mastery
             WHERE student_id = ? AND board_id = ?
