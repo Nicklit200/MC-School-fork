@@ -2,7 +2,9 @@ package com.mcschool.flashcard.skills;
 import static org.junit.jupiter.api.Assertions.*;
 import java.nio.file.*;
 import java.util.*;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.web.server.ResponseStatusException;
@@ -10,12 +12,20 @@ import tools.jackson.databind.json.JsonMapper;
 import com.mcschool.flashcard.skills.SkillBoardService.*;
 class SkillBoardDatabaseTest {
     JdbcTemplate jdbc; SkillBoardService service;
+    @TempDir Path migrations;
     @BeforeEach void isolatedTestDatabase() throws Exception {
         String url=System.getenv("SKILLS_TEST_DATABASE_URL");
         Assumptions.assumeTrue(url!=null && url.startsWith("jdbc:postgresql://localhost:"),"Only runs against the explicitly configured local CI test database");
-        jdbc=new JdbcTemplate(new DriverManagerDataSource(url,"skills_test","skills_test"));
-        jdbc.execute("DROP TABLE IF EXISTS skill_board_revisions; DROP TABLE IF EXISTS skill_boards");
-        jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V65__add_skill_boards.sql")));
+        var source=new DriverManagerDataSource(url,"skills_test","skills_test");
+        jdbc=new JdbcTemplate(source);
+        jdbc.execute("DROP TABLE IF EXISTS skill_board_revisions; DROP TABLE IF EXISTS skill_boards; DROP TABLE IF EXISTS flyway_schema_history");
+        // Exercise the exact production migration parser, not just JDBC execution.
+        for(String file:List.of("V65__add_skill_boards.sql","V65__add_skill_boards.sql.conf")) {
+            Files.copy(Path.of("src/main/resources/db/migration",file),migrations.resolve(file));
+        }
+        var flyway=Flyway.configure().dataSource(source).locations("filesystem:"+migrations.toAbsolutePath()).load();
+        assertEquals(1,flyway.migrate().migrationsExecuted);
+        assertEquals(0,flyway.migrate().migrationsExecuted);
         service=new SkillBoardService(jdbc,JsonMapper.builder().build());
     }
     @Test void persistsReloadsAuditsAndRejectsStaleRevision() {
