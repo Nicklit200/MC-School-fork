@@ -2,8 +2,8 @@ import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],selectedStudentId="",mastery={},masteryLoading=false;
-const boardIds=new Set(["grade-6","grade-8-m8"]);let boardId="grade-6";
-try{const saved=localStorage.getItem("mindcrafti.skills.board");if(boardIds.has(saved))boardId=saved;}catch{/* Optional preference. */}
+const boardIdByGrade=new Map([[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
+const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map();
 try{if(localStorage.getItem("mindcrafti.skills.viewMode")==="hierarchy")viewMode="hierarchy";}catch{/* View preference is optional. */}
 const canvas=$("canvas"),world=$("world"),layer=$("node-layer"),edgeLayer=$("edge-layer");
@@ -11,7 +11,7 @@ const canEdit=()=>Boolean(config?.canEdit)&&!saving;
 const node=id=>data?.nodes.find(n=>n.id===id);
 const uid=prefix=>prefix+"_"+crypto.randomUUID();
 const draftKey=()=>`mindcrafti.skills.draft.${config.userId}.${boardId}`;
-const boardTitle=()=>snapshot?.data?.grade===8?"8 класс · M8":`${snapshot?.data?.grade||6} класс`;
+const boardTitle=()=>snapshot?.data?.grade?`${snapshot.data.grade} класс`:"класс не указан";
 const boardPath=()=>`/skill-boards/${boardId}`;
 const element=(tag,className,text)=>{const e=document.createElement(tag);if(className)e.className=className;if(text!=null)e.textContent=text;return e;};
 function button(text,fn,className=""){const e=element("button",className,text);e.type="button";e.addEventListener("click",fn);return e;}
@@ -48,21 +48,21 @@ async function request(method,path,body){
 const selectedStudent=()=>students.find(s=>s.id===selectedStudentId)||null;
 function renderStudentFilter(){
   const select=$("student-filter");if(!select)return;
-  select.replaceChildren();const none=element("option","","Без ученика · 0%");none.value="";select.append(none);
-  for(const student of students){const option=element("option","",student.fullName);option.value=student.id;select.append(option);}
-  select.value=selectedStudentId;select.disabled=!data||masteryLoading;
+  select.replaceChildren();const none=element("option","","Выберите ученика");none.value="";select.append(none);
+  for(const student of students){
+    const meta=[student.grade?`${student.grade} кл.`:"класс не указан",student.schoolType||""].filter(Boolean).join(" · ");
+    const option=element("option","",meta?`${student.fullName} · ${meta}`:student.fullName);option.value=student.id;select.append(option);
+  }
+  select.value=selectedStudentId;select.disabled=masteryLoading||students.length===0;
 }
 async function chooseStudent(id){
   if(!flushForm()){renderStudentFilter();return;}
-  selectedStudentId=students.some(s=>s.id===id)?id:"";mastery={};
+  const nextId=students.some(student=>student.id===id)?id:"";
+  if(nextId===selectedStudentId)return;
+  if(dirty&&!confirm("Есть несохранённые изменения карты. Переключить ученика без сохранения?")){renderStudentFilter();return;}
+  selectedStudentId=nextId;
   try{if(selectedStudentId)localStorage.setItem("mindcrafti.skills.student",selectedStudentId);else localStorage.removeItem("mindcrafti.skills.student");}catch{/* Preference is optional. */}
-  if(!selectedStudentId){renderStudentFilter();render();if(selection?.type==="node")showNode(selection.id);return;}
-  masteryLoading=true;renderStudentFilter();render();
-  try{
-    const result=await request("GET",`${boardPath()}/students/${selectedStudentId}/mastery`);
-    mastery=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
-  }catch(error){selectedStudentId="";mastery={};notice(error.message,true);}
-  finally{masteryLoading=false;renderStudentFilter();render();if(selection?.type==="node")showNode(selection.id);}
+  location.reload();
 }
 function masteryPercent(n){
   if(!selectedStudentId||!n)return 0;
@@ -115,26 +115,50 @@ window.addEventListener("message",async event=>{
   if(typeof incoming.apiBase!=="string"||!incoming.token){notice("Для открытия карты нужно войти в Mindcrafti.",true);return;}
   config=incoming;
   try{
-    const loaded=await Promise.all([request("GET",boardPath()),request("GET",`${boardPath()}/students`)]);
-    snapshot=loaded[0];students=Array.isArray(loaded[1])?loaded[1]:[];
+    students=await request("GET","/skill-boards/students");
+    try{
+      const remembered=localStorage.getItem("mindcrafti.skills.student")||"";
+      selectedStudentId=students.some(student=>student.id===remembered)?remembered:"";
+    }catch{selectedStudentId="";}
+    renderStudentFilter();
+
+    const student=selectedStudent();
+    boardId=boardIdForStudent(student);
+    if(!selectedStudentId){
+      $("board-grade").textContent="выберите ученика";
+      $("source-note").replaceChildren(element("strong","","Класс выбирается автоматически"),document.createElement("br"),document.createTextNode("Выберите ученика сверху — откроется карта его класса."));
+      $("empty").hidden=false;
+      $("empty").replaceChildren(element("strong","","Выберите ученика"),element("p","","Карта навыков нужного класса откроется автоматически."));
+      status();
+      return;
+    }
+    if(!boardId){
+      const gradeText=student?.grade?`${student.grade} класс`:"класс не указан";
+      $("board-grade").textContent=gradeText;
+      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode("Укажите класс в учебном профиле ученика. Сейчас доступны карты 6 и 8 класса."));
+      $("empty").hidden=false;
+      $("empty").replaceChildren(element("strong","",`Для ${student?.fullName||"ученика"} карта пока не открыта`),element("p","",student?.grade?"Для этого класса карта ещё не создана.":"Сначала выберите класс в профиле ученика."));
+      status();
+      return;
+    }
+
+    snapshot=await request("GET",boardPath());
     validateBoard(snapshot.data);data=clone(snapshot.data);
-    $("board-filter").value=boardId;$("board-grade").textContent=boardTitle();
+    $("board-grade").textContent=boardTitle();
     const sourceNote=$("source-note");sourceNote.replaceChildren(
       element("strong","","Источник программы"),
       document.createElement("br"),
       document.createTextNode(snapshot.data.source||"Источник не указан."),
       document.createElement("br"),document.createElement("br"),
-      document.createTextNode(boardId==="grade-8-m8"?"M8-компетенции отделены от повторительной базы и дополнительных школьных тем. Проценты старого трекера не переносятся автоматически.":"Это каталог навыков, не оценка учеников.")
+      document.createTextNode(`Карта выбрана автоматически по профилю: ${student?.fullName||"ученик"} · ${student?.grade||"—"} класс.`)
     );
+
+    masteryLoading=true;renderStudentFilter();
     try{
-      const remembered=localStorage.getItem("mindcrafti.skills.student")||"";
-      if(students.some(s=>s.id===remembered)){
-        selectedStudentId=remembered;
-        const current=await request("GET",`${boardPath()}/students/${selectedStudentId}/mastery`);
-        mastery=current?.mastery&&typeof current.mastery==="object"?current.mastery:{};
-      }
-    }catch{selectedStudentId="";mastery={};}
-    renderStudentFilter();
+      const current=await request("GET",`${boardPath()}/students/${selectedStudentId}/mastery`);
+      mastery=current?.mastery&&typeof current.mastery==="object"?current.mastery:{};
+    }finally{masteryLoading=false;renderStudentFilter();}
+
     let pending=null;
     try{
       const draft=JSON.parse(localStorage.getItem(draftKey())||"null");
@@ -547,12 +571,6 @@ function setViewMode(mode){
 }
 $("undo").onclick=undo;$("overview").onclick=()=>openSection("overview");
 $("view-free").onclick=()=>setViewMode("free");$("view-hierarchy").onclick=()=>setViewMode("hierarchy");
-$("board-filter").onchange=e=>{
-  const next=e.target.value;if(!boardIds.has(next)){e.target.value=boardId;return;}
-  if(dirty&&!confirm("Есть несохранённые изменения карты. Переключить программу без сохранения?")){e.target.value=boardId;return;}
-  try{localStorage.setItem("mindcrafti.skills.board",next);}catch{/* Optional preference. */}
-  location.reload();
-};
 $("student-filter").onchange=e=>void chooseStudent(e.target.value);$("search").oninput=()=>{showArchived=false;renderSearch();};
 $("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
 $("prerequisites").onchange=renderEdges;$("zoom-in").onclick=()=>zoomAt(1.2);$("zoom-out").onclick=()=>zoomAt(1/1.2);$("fit").onclick=fit;
