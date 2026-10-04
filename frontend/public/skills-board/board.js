@@ -2,7 +2,8 @@ import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false;
-let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false;
+let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map();
+try{if(localStorage.getItem("mindcrafti.skills.viewMode")==="hierarchy")viewMode="hierarchy";}catch{/* View preference is optional. */}
 const canvas=$("canvas"),world=$("world"),layer=$("node-layer"),edgeLayer=$("edge-layer");
 const canEdit=()=>Boolean(config?.canEdit)&&!saving;
 const node=id=>data?.nodes.find(n=>n.id===id);
@@ -88,9 +89,56 @@ async function save(){
     notice(error.status===409?"Карта уже изменена в другой вкладке. Ваш черновик сохранён в этом браузере. Выгрузите JSON и обновите страницу; изменения не перезаписаны.":error.message,true);
   }finally{saving=false;render();}
 }
+const cardMetrics=()=>viewMode==="hierarchy"?{w:220,h:112}:{w:260,h:148};
+function displayPosition(n){return hierarchyPositions.get(n.id)||{x:n.x,y:n.y};}
+function storedOrder(a,b){return (a.x-b.x)||(a.y-b.y)||a.title.localeCompare(b.title,"ru");}
+function buildHierarchyLayout(items){
+  const result=new Map();if(!items.length)return result;
+  const byId=new Map(items.map(n=>[n.id,n])),ids=new Set(byId.keys()),children=new Map(items.map(n=>[n.id,[]])),parents=new Map();
+  for(const edge of data.edges){
+    if(edge.kind!=="contains"||!ids.has(edge.source)||!ids.has(edge.target))continue;
+    children.get(edge.source).push(byId.get(edge.target));parents.set(edge.target,edge.source);
+  }
+  for(const list of children.values())list.sort(storedOrder);
+  const root=scope!=="overview"&&byId.has(scope)?byId.get(scope):items.find(n=>n.kind==="root"&&!parents.has(n.id))||items.find(n=>n.kind==="root")||items.find(n=>!parents.has(n.id))||items[0];
+  const {w,h}=cardMetrics(),colGap=w+54,rowGap=h+34,topY=220;
+  const direct=(children.get(root.id)||[]).slice();
+  if(scope!=="overview"){
+    result.set(root.id,{x:0,y:0});let y=topY;
+    const walk=(parent,depth)=>{
+      for(const child of children.get(parent.id)||[]){
+        result.set(child.id,{x:Math.min(depth,4)*30,y});y+=rowGap;walk(child,depth+1);
+      }
+    };
+    walk(root,0);
+    let orphanY=topY;
+    for(const n of items.filter(n=>!result.has(n.id)).sort(storedOrder)){result.set(n.id,{x:colGap,y:orphanY});orphanY+=rowGap;}
+    return result;
+  }
+  let branches=direct;
+  if(!branches.length)branches=items.filter(n=>n.id!==root.id&&!parents.has(n.id)).sort(storedOrder);
+  result.set(root.id,{x:Math.max(0,(branches.length-1)*colGap/2),y:0});
+  branches.forEach((branch,index)=>{
+    const baseX=index*colGap;result.set(branch.id,{x:baseX,y:topY});let y=topY+rowGap;
+    const walk=(parent,depth)=>{
+      for(const child of children.get(parent.id)||[]){
+        result.set(child.id,{x:baseX+Math.min(depth,3)*24,y});y+=rowGap;walk(child,depth+1);
+      }
+    };
+    walk(branch,1);
+  });
+  let extraX=branches.length*colGap,extraY=topY;
+  for(const n of items.filter(n=>!result.has(n.id)).sort(storedOrder)){result.set(n.id,{x:extraX,y:extraY});extraY+=rowGap;}
+  return result;
+}
 function visibleNodes(){
   if(!data)return [];
   const active=data.nodes.filter(n=>!n.archived);
+  if(viewMode==="hierarchy"){
+    if(scope==="overview")return active;
+    const ids=descendants(data,scope);ids.add(scope);
+    return active.filter(n=>ids.has(n.id));
+  }
   if(scope==="overview"){
     const ids=new Set(active.map(n=>n.id));
     return active.filter(n=>["root","topic"].includes(n.kind)||!data.edges.some(e=>e.kind==="contains"&&e.target===n.id&&ids.has(e.source)));
@@ -100,10 +148,14 @@ function visibleNodes(){
 }
 function render(){
   if(!data)return;
+  const items=visibleNodes();hierarchyPositions=viewMode==="hierarchy"?buildHierarchyLayout(items):new Map();
+  canvas.classList.toggle("hierarchy-view",viewMode==="hierarchy");
+  $("view-free").classList.toggle("active",viewMode==="free");$("view-hierarchy").classList.toggle("active",viewMode==="hierarchy");
   status();renderCatalog();renderNodes();renderEdges();transform();
   $("count").textContent=data.nodes.filter(n=>n.kind==="skill"&&!n.archived).length;
   $("archive-count").textContent=data.nodes.filter(n=>n.archived).length;
-  $("breadcrumb").textContent=scope==="overview"?"6 класс / Обзор программы":`6 класс / ${node(scope)?.title||"Раздел"}`;
+  const base=scope==="overview"?"6 класс / Обзор программы":`6 класс / ${node(scope)?.title||"Раздел"}`;
+  $("breadcrumb").textContent=base+(viewMode==="hierarchy"?" / Дерево":" / Карта");
 }
 function renderCatalog(){
   const container=$("sections");container.replaceChildren();
@@ -131,7 +183,7 @@ function renderNodes(){
   layer.replaceChildren();
   for(const n of visibleNodes()){
     const e=element("div",`node kind-${n.kind}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}`);
-    e.dataset.id=n.id;e.style.left=n.x+"px";e.style.top=n.y+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
+    const p=displayPosition(n);e.dataset.id=n.id;e.style.left=p.x+"px";e.style.top=p.y+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
     e.setAttribute("role","button");e.setAttribute("aria-label",`${kindLabels[n.kind]}: ${n.title}`);
     const count=n.kind==="topic"?descendants(data,n.id).size:null;
     const kind=element("div","kind",kindLabels[n.kind]);if(count!==null)kind.append(element("span","",`${count} →`));
@@ -145,9 +197,14 @@ function renderNodes(){
   }
 }
 function pathBetween(a,b){
-  const vertical=b.y>a.y+170&&Math.abs(b.x-a.x)<600;
-  const sx=vertical?a.x+130:a.x+260,sy=vertical?a.y+148:a.y+74;
-  const tx=vertical?b.x+130:b.x,ty=vertical?b.y:b.y+74;
+  const {w,h}=cardMetrics();
+  if(viewMode==="hierarchy"){
+    const sx=a.x+w/2,sy=a.y+h,tx=b.x+w/2,ty=b.y,d=Math.max(45,Math.abs(ty-sy)/2);
+    return `M${sx},${sy} C${sx},${sy+d} ${tx},${ty-d} ${tx},${ty}`;
+  }
+  const vertical=b.y>a.y+h+22&&Math.abs(b.x-a.x)<600;
+  const sx=vertical?a.x+w/2:a.x+w,sy=vertical?a.y+h:a.y+h/2;
+  const tx=vertical?b.x+w/2:b.x,ty=vertical?b.y:b.y+h/2;
   if(vertical){const d=Math.max(55,Math.abs(ty-sy)/2);return `M${sx},${sy} C${sx},${sy+d} ${tx},${ty-d} ${tx},${ty}`;}
   const d=Math.max(65,Math.abs(tx-sx)/2);return `M${sx},${sy} C${sx+d},${sy} ${tx-d},${ty} ${tx},${ty}`;
 }
@@ -156,7 +213,7 @@ function renderEdges(){
   edgeLayer.replaceChildren();const ids=new Set(visibleNodes().map(n=>n.id));
   for(const edge of data.edges){
     if(!ids.has(edge.source)||!ids.has(edge.target)||edge.kind==="prerequisite"&&!$("prerequisites").checked)continue;
-    const d=pathBetween(node(edge.source),node(edge.target));
+    const d=pathBetween(displayPosition(node(edge.source)),displayPosition(node(edge.target)));
     for(const hit of [true,false]){
       const e=document.createElementNS(svgNS,"path");e.setAttribute("d",d);
       e.setAttribute("class",hit?"edge-hit":`edge ${edge.kind}${selection?.type==="edge"&&selection.id===edge.id?" selected":""}`);
@@ -165,7 +222,7 @@ function renderEdges(){
     }
   }
   if(linkSource&&node(linkSource)){
-    const e=document.createElementNS(svgNS,"path");e.setAttribute("d",pathBetween(node(linkSource),{x:lastPoint.x,y:lastPoint.y-74}));
+    const source=displayPosition(node(linkSource));const e=document.createElementNS(svgNS,"path");e.setAttribute("d",pathBetween(source,{x:lastPoint.x,y:lastPoint.y-cardMetrics().h/2}));
     e.setAttribute("class","edge prerequisite");e.style.pointerEvents="none";edgeLayer.append(e);
   }
 }
@@ -176,8 +233,9 @@ function transform(){
 }
 function fit(){
   const items=visibleNodes();if(!items.length)return;
-  const minX=Math.min(...items.map(n=>n.x)),maxX=Math.max(...items.map(n=>n.x+260)),minY=Math.min(...items.map(n=>n.y)),maxY=Math.max(...items.map(n=>n.y+148));
-  const w=canvas.clientWidth,h=canvas.clientHeight;view.z=Math.max(.12,Math.min(1,(w-90)/(maxX-minX),(h-150)/(maxY-minY)));
+  const {w:cardW,h:cardH}=cardMetrics(),positions=items.map(n=>displayPosition(n));
+  const minX=Math.min(...positions.map(p=>p.x)),maxX=Math.max(...positions.map(p=>p.x+cardW)),minY=Math.min(...positions.map(p=>p.y)),maxY=Math.max(...positions.map(p=>p.y+cardH));
+  const w=canvas.clientWidth,h=canvas.clientHeight;view.z=Math.max(.12,Math.min(1,(w-90)/(maxX-minX||cardW),(h-150)/(maxY-minY||cardH)));
   view.x=(w-(maxX-minX)*view.z)/2-minX*view.z;view.y=(h-(maxY-minY)*view.z)/2-minY*view.z;transform();
 }
 function zoomAt(factor,x=canvas.clientWidth/2,y=canvas.clientHeight/2){
@@ -197,7 +255,7 @@ function focusNode(id){
     while(!seen.has(parent)){seen.add(parent);const edge=data.edges.find(e=>e.kind==="contains"&&e.target===parent);if(!edge)break;parent=edge.source;if(node(parent)?.kind==="topic")break;}
     scope=node(parent)?.kind==="topic"?parent:"overview";render();
   }
-  view.z=1;view.x=canvas.clientWidth/2-(n.x+130);view.y=canvas.clientHeight/2-(n.y+74);transform();return true;
+  const p=displayPosition(n),m=cardMetrics();view.z=1;view.x=canvas.clientWidth/2-(p.x+m.w/2);view.y=canvas.clientHeight/2-(p.y+m.h/2);transform();return true;
 }
 function selectNode(id){
   if(!flushForm())return false;
@@ -207,7 +265,7 @@ function showHelp(){
   $("inspector-heading").textContent="Как работать";
   $("inspector-body").replaceChildren();
   const help=element("div","help");
-  help.innerHTML="<h2>Программа, которую можно менять</h2><p><strong>Откройте раздел</strong> слева или двойным щелчком по карточке.</p><p><strong>Нажмите на навык</strong>, чтобы изменить формулировку, пример и источник.</p><p><strong>Сплошная стрелка</strong> — входит в тему.<br><strong>Пунктирная стрелка</strong> — нужно знать прежде.</p><p>Стрелки предпосылок — стартовая методическая модель. Её можно уточнять.</p><p>Изменения попадают в базу после нажатия <strong>«Сохранить»</strong>. Цвет обозначает раздел, не уровень ученика.</p>";
+  help.innerHTML="<h2>Программа, которую можно менять</h2><p><strong>Вид «Карта»</strong> сохраняет ваше свободное расположение карточек.</p><p><strong>Вид «Дерево»</strong> автоматически показывает всю иерархию: программа → раздел → навыки. В нём карточки не перетаскиваются, чтобы структура всегда оставалась читаемой.</p><p><strong>Откройте раздел</strong> слева или двойным щелчком по карточке.</p><p><strong>Нажмите на навык</strong>, чтобы изменить формулировку, пример и источник.</p><p><strong>Сплошная стрелка</strong> — входит в тему.<br><strong>Пунктирная стрелка</strong> — нужно знать прежде.</p><p>Изменения попадают в базу после нажатия <strong>«Сохранить»</strong>. Цвет обозначает раздел, не уровень ученика.</p>";
   if(!config?.canEdit)help.append(element("p","","Просмотр для преподавателя. Общую программу редактирует администратор."));
   $("inspector-body").append(help);
   if(innerWidth<850)$("inspector").classList.add("closed");
@@ -317,7 +375,7 @@ canvas.addEventListener("pointerdown",event=>{
   }
   if(card&&!space&&event.button===0){
     if(!selectNode(card.dataset.id))return;
-    if(canEdit())op={type:"node",id:event.pointerId,nodeId:card.dataset.id,start:pos,original:clone(data),x:node(card.dataset.id).x,y:node(card.dataset.id).y,moved:false};
+    if(canEdit()&&viewMode==="free")op={type:"node",id:event.pointerId,nodeId:card.dataset.id,start:pos,original:clone(data),x:node(card.dataset.id).x,y:node(card.dataset.id).y,moved:false};
   }else{op={type:"pan",id:event.pointerId,start:pos,x:view.x,y:view.y};canvas.classList.add("dragging");}
   if(op){canvas.setPointerCapture(event.pointerId);event.preventDefault();}
 });
@@ -365,7 +423,14 @@ function undo(){if(!canEdit()||!flushForm()||!history.length)return;data=history
 $("save").onclick=()=>{if($("node-form")?.dataset.changed==="true"&&!applyForm($("node-form")))return;void save();};
 $("add").onclick=()=>addNode();$("add-topic").onclick=()=>addNode("topic");
 $("connect").onclick=()=>{if(!flushForm())return;connectMode=!connectMode;linkSource=null;notice(connectMode?"Выберите начало и конец стрелки. Для «Входит в тему» сначала выбирайте родительский раздел.":"");render();};
+function setViewMode(mode){
+  if(!["free","hierarchy"].includes(mode)||!flushForm())return;
+  viewMode=mode;selection=null;connectMode=false;linkSource=null;
+  try{localStorage.setItem("mindcrafti.skills.viewMode",mode);}catch{/* Preference is optional. */}
+  render();showHelp();fit();
+}
 $("undo").onclick=undo;$("overview").onclick=()=>openSection("overview");
+$("view-free").onclick=()=>setViewMode("free");$("view-hierarchy").onclick=()=>setViewMode("hierarchy");
 $("search").oninput=()=>{showArchived=false;renderSearch();};
 $("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
 $("prerequisites").onchange=renderEdges;$("zoom-in").onclick=()=>zoomAt(1.2);$("zoom-out").onclick=()=>zoomAt(1/1.2);$("fit").onclick=fit;
