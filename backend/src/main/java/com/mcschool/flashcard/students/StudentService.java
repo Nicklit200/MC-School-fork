@@ -18,6 +18,7 @@ import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentLearningProfileRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentTranscriptDriveFolderRequest;
 import com.mcschool.flashcard.users.Invitations;
 import com.mcschool.flashcard.users.Role;
@@ -144,6 +145,23 @@ public class StudentService {
     }
 
     @Transactional
+    public StudentListResponse updateLearningProfile(AuthenticatedUser teacher, UUID studentId,
+                                                     UpdateStudentLearningProfileRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        String schoolType = normalizeSchoolType(request.schoolType());
+        String learningPace = normalizeLearningPace(request.learningPace());
+        student.changeLearningProfile(
+                request.grade(),
+                schoolType,
+                learningPace,
+                request.learningStrengths(),
+                request.learningDifficulties(),
+                request.explanationStyle(),
+                request.learningNotes());
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
     public void resetStudentPassword(AuthenticatedUser teacher, UUID studentId, ChangePasswordRequest request) {
         User student = requireOwnedStudent(teacher.id(), studentId);
         prepareManagedStudent(student);
@@ -250,6 +268,25 @@ public class StudentService {
 
     private LocalDate reviewToday() {
         return LocalDate.now(reviewReminderZone);
+    }
+
+    private static String normalizeSchoolType(String schoolType) {
+        if (schoolType == null || schoolType.isBlank()) return null;
+        String value = schoolType.trim().toUpperCase(Locale.ROOT);
+        return switch (value) {
+            case "GYMNASIUM", "REALSCHULE", "MITTELSCHULE", "WIRTSCHAFTSSCHULE",
+                 "GESAMTSCHULE", "WERKREALSCHULE", "OTHER" -> value;
+            default -> throw new IllegalArgumentException("Unsupported school type");
+        };
+    }
+
+    private static String normalizeLearningPace(String learningPace) {
+        if (learningPace == null || learningPace.isBlank()) return null;
+        String value = learningPace.trim().toUpperCase(Locale.ROOT);
+        return switch (value) {
+            case "SLOW", "NORMAL", "FAST" -> value;
+            default -> throw new IllegalArgumentException("Unsupported learning pace");
+        };
     }
 
     private static String normalizeOptionalEmail(String email) {
