@@ -140,11 +140,14 @@ function skillTrack(skill){
   };
 }
 function nodeTrackInfo(n){
-  if(!n)return{core:false,schools:[]};
+  if(!n)return{core:false,schools:[],configured:false};
   const skills=n.kind==="skill"?[n]:data.nodes.filter(skill=>skill.kind==="skill"&&!skill.archived&&descendants(data,n.id).has(skill.id));
-  const schools=new Set();let core=false;
-  for(const skill of skills){const info=skillTrack(skill);if(info.core)core=true;for(const type of info.schools)schools.add(type);}
-  return{core,schools:[...schools]};
+  const schools=new Set();let core=false,configured=false;
+  for(const skill of skills){
+    if(Array.isArray(skill.schoolTypes)||directTrackDefaults[skill.id])configured=true;
+    const info=skillTrack(skill);if(info.core)core=true;for(const type of info.schools)schools.add(type);
+  }
+  return{core,schools:[...schools],configured};
 }
 function renderSchoolFilters(){
   const host=$("school-filters");if(!host)return;host.replaceChildren();
@@ -440,7 +443,7 @@ function renderNodes(){
   layer.replaceChildren();const highlights=dependencyHighlights(),activeTracks=activeSchoolTypes(),chosen=selectedStudents();
   for(const n of visibleNodes()){
     const track=nodeTrackInfo(n),trackRelevant=track.core||track.schools.some(type=>activeTracks.has(type));
-    const trackClass=track.core?" track-core":trackRelevant?" track-relevant":" track-other";
+    const trackClass=!track.configured?" track-neutral":track.core?" track-core":trackRelevant?" track-relevant":" track-other";
     const relationClass=highlights.beforeNodes.has(n.id)?" dependency-before":highlights.afterNodes.has(n.id)?" dependency-after":highlights.active&&selection?.id!==n.id&&n.kind==="skill"?" dependency-dim":"";
     const groupClass=selectedGroupId?" group-mode":"";
     const e=element("div",`node kind-${n.kind}${groupClass}${trackClass}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}`);
