@@ -1,0 +1,25 @@
+name: Verify group map unknown grade fix
+on:
+  push:
+    branches: [fix/group-map-with-unknown-grade]
+permissions:
+  contents: read
+concurrency:
+  group: verify-group-map-unknown-grade-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Check skills board JavaScript
+        run: node --check frontend/public/skills-board/board.js
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
