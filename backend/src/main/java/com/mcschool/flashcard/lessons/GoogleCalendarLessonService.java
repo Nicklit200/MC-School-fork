@@ -91,7 +91,7 @@ public class GoogleCalendarLessonService {
                 + "?singleEvents=true"
                 + "&orderBy=startTime"
                 + "&timeMin=" + enc(now.minus(HISTORY_DAYS, ChronoUnit.DAYS).toString())
-                + "&timeMax=" + enc(now.plus(21, ChronoUnit.DAYS).toString())
+                + "&timeMax=" + enc(now.plus(120, ChronoUnit.DAYS).toString())
                 + "&maxResults=2500"
                 + "&fields=" + enc("items(id,recurringEventId,summary,start,end,hangoutLink,htmlLink,conferenceData(entryPoints(entryPointType,uri)))");
 
