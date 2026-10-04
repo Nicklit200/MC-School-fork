@@ -2,13 +2,17 @@ import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],selectedStudentId="",mastery={},masteryLoading=false;
+const boardIds=new Set(["grade-6","grade-8-m8"]);let boardId="grade-6";
+try{const saved=localStorage.getItem("mindcrafti.skills.board");if(boardIds.has(saved))boardId=saved;}catch{/* Optional preference. */}
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map();
 try{if(localStorage.getItem("mindcrafti.skills.viewMode")==="hierarchy")viewMode="hierarchy";}catch{/* View preference is optional. */}
 const canvas=$("canvas"),world=$("world"),layer=$("node-layer"),edgeLayer=$("edge-layer");
 const canEdit=()=>Boolean(config?.canEdit)&&!saving;
 const node=id=>data?.nodes.find(n=>n.id===id);
 const uid=prefix=>prefix+"_"+crypto.randomUUID();
-const draftKey=()=>`mindcrafti.skills.draft.${config.userId}.grade-6`;
+const draftKey=()=>`mindcrafti.skills.draft.${config.userId}.${boardId}`;
+const boardTitle=()=>snapshot?.data?.grade===8?"8 класс · M8":`${snapshot?.data?.grade||6} класс`;
+const boardPath=()=>`/skill-boards/${boardId}`;
 const element=(tag,className,text)=>{const e=document.createElement(tag);if(className)e.className=className;if(text!=null)e.textContent=text;return e;};
 function button(text,fn,className=""){const e=element("button",className,text);e.type="button";e.addEventListener("click",fn);return e;}
 function notice(text,error=false){$("notice").textContent=text;$("notice").className=error?"error":"";$("notice").hidden=!text;}
@@ -55,7 +59,7 @@ async function chooseStudent(id){
   if(!selectedStudentId){renderStudentFilter();render();if(selection?.type==="node")showNode(selection.id);return;}
   masteryLoading=true;renderStudentFilter();render();
   try{
-    const result=await request("GET",`/skill-boards/grade-6/students/${selectedStudentId}/mastery`);
+    const result=await request("GET",`${boardPath()}/students/${selectedStudentId}/mastery`);
     mastery=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
   }catch(error){selectedStudentId="";mastery={};notice(error.message,true);}
   finally{masteryLoading=false;renderStudentFilter();render();if(selection?.type==="node")showNode(selection.id);}
@@ -99,7 +103,7 @@ async function saveSkillMastery(skillId,value){
   if(!Number.isInteger(parsed)||parsed<0||parsed>100){notice("Процент должен быть целым числом от 0 до 100.",true);return;}
   masteryLoading=true;renderStudentFilter();
   try{
-    const result=await request("PUT",`/skill-boards/grade-6/students/${selectedStudentId}/mastery/${skillId}`,{mastery:parsed});
+    const result=await request("PUT",`${boardPath()}/students/${selectedStudentId}/mastery/${skillId}`,{mastery:parsed});
     mastery=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
     notice(`Освоение сохранено: ${selectedStudent()?.fullName||"ученик"} · ${parsed}%`);
   }catch(error){notice(error.message,true);}
@@ -111,14 +115,22 @@ window.addEventListener("message",async event=>{
   if(typeof incoming.apiBase!=="string"||!incoming.token){notice("Для открытия карты нужно войти в Mindcrafti.",true);return;}
   config=incoming;
   try{
-    const loaded=await Promise.all([request("GET","/skill-boards/grade-6"),request("GET","/skill-boards/grade-6/students")]);
+    const loaded=await Promise.all([request("GET",boardPath()),request("GET",`${boardPath()}/students`)]);
     snapshot=loaded[0];students=Array.isArray(loaded[1])?loaded[1]:[];
     validateBoard(snapshot.data);data=clone(snapshot.data);
+    $("board-filter").value=boardId;$("board-grade").textContent=boardTitle();
+    const sourceNote=$("source-note");sourceNote.replaceChildren(
+      element("strong","","Источник программы"),
+      document.createElement("br"),
+      document.createTextNode(snapshot.data.source||"Источник не указан."),
+      document.createElement("br"),document.createElement("br"),
+      document.createTextNode(boardId==="grade-8-m8"?"M8-компетенции отделены от повторительной базы и дополнительных школьных тем. Проценты старого трекера не переносятся автоматически.":"Это каталог навыков, не оценка учеников.")
+    );
     try{
       const remembered=localStorage.getItem("mindcrafti.skills.student")||"";
       if(students.some(s=>s.id===remembered)){
         selectedStudentId=remembered;
-        const current=await request("GET",`/skill-boards/grade-6/students/${selectedStudentId}/mastery`);
+        const current=await request("GET",`${boardPath()}/students/${selectedStudentId}/mastery`);
         mastery=current?.mastery&&typeof current.mastery==="object"?current.mastery:{};
       }
     }catch{selectedStudentId="";mastery={};}
@@ -158,7 +170,7 @@ async function save(){
   const form=$("node-form");if(form&&form.dataset.changed==="true"&&!applyForm(form))return;
   if(!dirty)return;
   saving=true;status();
-  try{snapshot=await request("PUT","/skill-boards/grade-6",{expectedRevision:snapshot.revision,data});data=clone(snapshot.data);dirty=false;history=[];stash();notice("");}
+  try{snapshot=await request("PUT",boardPath(),{expectedRevision:snapshot.revision,data});data=clone(snapshot.data);dirty=false;history=[];stash();notice("");}
   catch(error){
     notice(error.status===409?"Карта уже изменена в другой вкладке. Ваш черновик сохранён в этом браузере. Выгрузите JSON и обновите страницу; изменения не перезаписаны.":error.message,true);
   }finally{saving=false;render();}
@@ -228,7 +240,7 @@ function render(){
   status();renderCatalog();renderNodes();renderEdges();transform();
   $("count").textContent=data.nodes.filter(n=>n.kind==="skill"&&!n.archived).length;
   $("archive-count").textContent=data.nodes.filter(n=>n.archived).length;
-  const base=scope==="overview"?"6 класс / Обзор программы":`6 класс / ${node(scope)?.title||"Раздел"}`;
+  const label=boardTitle();const base=scope==="overview"?`${label} / Обзор программы`:`${label} / ${node(scope)?.title||"Раздел"}`;
   $("breadcrumb").textContent=base+(viewMode==="hierarchy"?" / Дерево":" / Карта");
 }
 function renderCatalog(){
@@ -535,6 +547,12 @@ function setViewMode(mode){
 }
 $("undo").onclick=undo;$("overview").onclick=()=>openSection("overview");
 $("view-free").onclick=()=>setViewMode("free");$("view-hierarchy").onclick=()=>setViewMode("hierarchy");
+$("board-filter").onchange=e=>{
+  const next=e.target.value;if(!boardIds.has(next)){e.target.value=boardId;return;}
+  if(dirty&&!confirm("Есть несохранённые изменения карты. Переключить программу без сохранения?")){e.target.value=boardId;return;}
+  try{localStorage.setItem("mindcrafti.skills.board",next);}catch{/* Optional preference. */}
+  location.reload();
+};
 $("student-filter").onchange=e=>void chooseStudent(e.target.value);$("search").oninput=()=>{showArchived=false;renderSearch();};
 $("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
 $("prerequisites").onchange=renderEdges;$("zoom-in").onclick=()=>zoomAt(1.2);$("zoom-out").onclick=()=>zoomAt(1/1.2);$("fit").onclick=fit;
@@ -542,7 +560,7 @@ $("fullscreen").onclick=async()=>{try{if(document.fullscreenElement)await docume
 $("close-inspector").onclick=()=>{if(!flushForm())return;selection=null;renderNodes();renderEdges();showHelp();$("inspector").classList.add("closed");};
 $("export").onclick=()=>{
   if(!data||!flushForm())return;const blob=new Blob([JSON.stringify({id:snapshot.id,revision:snapshot.revision,exportedAt:new Date().toISOString(),data},null,2)],{type:"application/json"});
-  const url=URL.createObjectURL(blob),a=element("a");a.href=url;a.download="mindcrafti-skills-grade-6.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const url=URL.createObjectURL(blob),a=element("a");a.href=url;a.download=`mindcrafti-skills-${boardId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 new ResizeObserver(()=>transform()).observe(canvas);
 showHelp();status();
