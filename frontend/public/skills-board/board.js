@@ -1,7 +1,7 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
-let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],selectedStudentId="",mastery={},masteryLoading=false;
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],selectedStudentId="",mastery={},masteryEvidenceVerified={},masteryLoading=false;
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map();
 try{if(localStorage.getItem("mindcrafti.skills.viewMode")==="hierarchy")viewMode="hierarchy";}catch{/* View preference is optional. */}
 const canvas=$("canvas"),world=$("world"),layer=$("node-layer"),edgeLayer=$("edge-layer");
@@ -50,14 +50,15 @@ function renderStudentFilter(){
 }
 async function chooseStudent(id){
   if(!flushForm()){renderStudentFilter();return;}
-  selectedStudentId=students.some(s=>s.id===id)?id:"";mastery={};
+  selectedStudentId=students.some(s=>s.id===id)?id:"";mastery={};masteryEvidenceVerified={};
   try{if(selectedStudentId)localStorage.setItem("mindcrafti.skills.student",selectedStudentId);else localStorage.removeItem("mindcrafti.skills.student");}catch{/* Preference is optional. */}
   if(!selectedStudentId){renderStudentFilter();render();if(selection?.type==="node")showNode(selection.id);return;}
   masteryLoading=true;renderStudentFilter();render();
   try{
     const result=await request("GET",`/skill-boards/grade-6/students/${selectedStudentId}/mastery`);
     mastery=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
-  }catch(error){selectedStudentId="";mastery={};notice(error.message,true);}
+    masteryEvidenceVerified=result?.evidenceVerified&&typeof result.evidenceVerified==="object"?result.evidenceVerified:{};
+  }catch(error){selectedStudentId="";mastery={};masteryEvidenceVerified={};notice(error.message,true);}
   finally{masteryLoading=false;renderStudentFilter();render();if(selection?.type==="node")showNode(selection.id);}
 }
 function masteryPercent(n){
@@ -93,17 +94,72 @@ function directDependencies(id){
     after:data.edges.filter(e=>e.kind==="prerequisite"&&e.source===id).map(e=>node(e.target)).filter(Boolean)
   };
 }
-async function saveSkillMastery(skillId,value){
+async function saveSkillMastery(skillId,value,reason,sourceTitle,sourceDate,observation){
   if(!selectedStudentId||masteryLoading)return;
-  const parsed=Number(value);
+  const parsed=Number(value),cleanReason=String(reason||"").trim(),cleanSource=String(sourceTitle||"").trim(),cleanObservation=String(observation||"").trim();
   if(!Number.isInteger(parsed)||parsed<0||parsed>100){notice("Процент должен быть целым числом от 0 до 100.",true);return;}
+  if(!cleanReason){notice("Объясни, почему меняется процент.",true);return;}
+  if(!cleanSource||!cleanObservation){notice("Укажи источник и конкретное доказательство.",true);return;}
   masteryLoading=true;renderStudentFilter();
   try{
-    const result=await request("PUT",`/skill-boards/grade-6/students/${selectedStudentId}/mastery/${skillId}`,{mastery:parsed});
+    const result=await request("PUT",`/skill-boards/grade-6/students/${selectedStudentId}/mastery/${skillId}`,{
+      mastery:parsed,
+      reason:cleanReason,
+      evidence:[{
+        sourceType:"manual_check",
+        sourceTitle:cleanSource,
+        sourceDate:String(sourceDate||"").trim(),
+        observation:cleanObservation,
+        result:"OBSERVED",
+        impact:cleanReason
+      }]
+    });
     mastery=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
-    notice(`Освоение сохранено: ${selectedStudent()?.fullName||"ученик"} · ${parsed}%`);
+    masteryEvidenceVerified=result?.evidenceVerified&&typeof result.evidenceVerified==="object"?result.evidenceVerified:{};
+    notice(`Освоение сохранено с доказательством: ${selectedStudent()?.fullName||"ученик"} · ${parsed}%`);
   }catch(error){notice(error.message,true);}
   finally{masteryLoading=false;renderStudentFilter();render();showNode(skillId);}
+}
+function formatWhen(value){
+  if(!value)return "";
+  try{return new Intl.DateTimeFormat("ru-RU",{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));}catch{return String(value);}
+}
+async function loadMasteryHistory(skillId,container){
+  if(!selectedStudentId||!container)return;
+  container.replaceChildren(element("div","mastery-note","Загружаем доказательства…"));
+  try{
+    const items=await request("GET",`/skill-boards/grade-6/students/${selectedStudentId}/mastery/${skillId}/history`);
+    if(selection?.type!=="node"||selection.id!==skillId)return;
+    container.replaceChildren();
+    if(!Array.isArray(items)||!items.length){
+      container.append(element("div","mastery-note","Истории изменений пока нет."));
+      return;
+    }
+    for(const change of items){
+      const card=element("div","evidence-change"),head=element("div","evidence-change-head");
+      head.append(element("strong","",`${change.oldMastery==null?"—":change.oldMastery+"%"} → ${change.newMastery}%`),element("span","",formatWhen(change.changedAt)));
+      card.append(head,element("div","evidence-reason",change.reason||"Без объяснения"));
+      const evidence=Array.isArray(change.evidence)?change.evidence:[];
+      if(!evidence.length){
+        card.append(element("div","evidence-missing","⚠ Для этой старой записи доказательство ещё не прикреплено."));
+      }else{
+        for(const item of evidence){
+          const proof=element("div","evidence-item"),title=element("div","evidence-source",item.sourceTitle||item.sourceType||"Источник");
+          if(item.sourceDate)title.append(element("span","",` · ${item.sourceDate}`));
+          proof.append(title,element("div","",item.observation||""));
+          if(item.studentAnswer||item.correctAnswer)proof.append(element("div","evidence-answer",`Ответ: ${item.studentAnswer||"—"} · Правильно: ${item.correctAnswer||"—"}`));
+          if(item.impact)proof.append(element("div","evidence-impact",item.impact));
+          if(item.link){
+            const a=element("a","evidence-link","Открыть источник ↗");a.href=item.link;a.target="_blank";a.rel="noopener noreferrer";proof.append(a);
+          }else if(item.sourceId){
+            proof.append(element("div","evidence-id",`ID источника: ${item.sourceId}`));
+          }
+          card.append(proof);
+        }
+      }
+      container.append(card);
+    }
+  }catch(error){container.replaceChildren(element("div","evidence-missing",error.message));}
 }
 window.addEventListener("message",async event=>{
   if(event.origin!==location.origin||event.source!==window.parent||window.parent===window||event.data?.type!=="mindcrafti-skills-config"||config)return;
@@ -120,8 +176,9 @@ window.addEventListener("message",async event=>{
         selectedStudentId=remembered;
         const current=await request("GET",`/skill-boards/grade-6/students/${selectedStudentId}/mastery`);
         mastery=current?.mastery&&typeof current.mastery==="object"?current.mastery:{};
+        masteryEvidenceVerified=current?.evidenceVerified&&typeof current.evidenceVerified==="object"?current.evidenceVerified:{};
       }
-    }catch{selectedStudentId="";mastery={};}
+    }catch{selectedStudentId="";mastery={};masteryEvidenceVerified={};}
     renderStudentFilter();
     let pending=null;
     try{
