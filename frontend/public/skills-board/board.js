@@ -133,10 +133,10 @@ const directTrackDefaults={
   "mc8-9-6":{schools:["WIRTSCHAFTSSCHULE"]}
 };
 function skillTrack(skill){
-  const fallback=directTrackDefaults[skill.id]||{};
+  const fallback=directTrackDefaults[skill.id]||{},persisted=Array.isArray(skill.schoolTypes);
   return{
-    core:typeof skill.core==="boolean"?skill.core:Boolean(fallback.core),
-    schools:Array.isArray(skill.schoolTypes)&&skill.schoolTypes.length?skill.schoolTypes:(fallback.schools||[])
+    core:persisted?Boolean(skill.core):Boolean(fallback.core),
+    schools:persisted?skill.schoolTypes:(fallback.schools||[])
   };
 }
 function nodeTrackInfo(n){
