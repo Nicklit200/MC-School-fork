@@ -353,12 +353,12 @@ export function GroupDetailPage() {
       </div>
 
       <div className="group-detail-tabs">
-        <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}>▤ <span>Обзор</span></button>
-        <button className={pageTab === 'students' ? 'active' : ''} onClick={() => setPageTab('students')}>♙ <span>Ученики</span></button>
-        <button className={pageTab === 'lessons' ? 'active' : ''} onClick={() => setPageTab('lessons')}>▦ <span>Уроки</span></button>
-        <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}>▣ <span>Домашние задания</span></button>
-        <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}>▥ <span>Карточки</span></button>
-        <button type="button" onClick={() => navigate(`/groups/${groupId}/month-plan`)}>▤ <span>План на месяц</span></button>
+        <button className={pageTab === 'overview' ? 'active' : ''} onClick={() => setPageTab('overview')}><span>Обзор</span></button>
+        <button className={pageTab === 'students' ? 'active' : ''} onClick={() => setPageTab('students')}><span>Ученики</span></button>
+        <button className={pageTab === 'lessons' ? 'active' : ''} onClick={() => setPageTab('lessons')}><span>Уроки</span></button>
+        <button className={pageTab === 'homework' ? 'active' : ''} onClick={() => setPageTab('homework')}><span>Домашние задания</span></button>
+        <button className={pageTab === 'cards' ? 'active' : ''} onClick={() => setPageTab('cards')}><span>Карточки</span></button>
+        <button type="button" onClick={() => navigate(`/groups/${groupId}/month-plan`)}><span>План на месяц</span></button>
         <div className="group-detail-tabs__spacer" />
         <button className="group-message-btn" type="button" disabled>✉ <span>Написать группе</span></button>
         <button className="teacher-more-btn" type="button" title="Дополнительно">⋮</button>
