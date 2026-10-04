@@ -51,7 +51,6 @@ export function Layout({ children }: { children: ReactNode }) {
       { to: '/parents', label: 'Родители' },
       { to: '/groups', label: 'Мои группы' },
       { to: '/teacher/lessons', label: 'Уроки' },
-      { to: '/teacher/prompts', label: 'Промты школы' },
       { to: '/teacher/settings', label: 'Настройки' },
       { to: '/students', label: 'Домашние задания', disabled: true },
       { to: '/students', label: 'Материалы', disabled: true },
