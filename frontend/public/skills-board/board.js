@@ -83,7 +83,7 @@ async function save(){
   const form=$("node-form");if(form&&form.dataset.changed==="true"&&!applyForm(form))return;
   if(!dirty)return;
   saving=true;status();
-  try{snapshot=await request("PUT","/skill-boards/grade-6",{expectedRevision:snapshot.revision,data});data=clone(snapshot.data);dirty=false;stash();notice("");}
+  try{snapshot=await request("PUT","/skill-boards/grade-6",{expectedRevision:snapshot.revision,data});data=clone(snapshot.data);dirty=false;history=[];stash();notice("");}
   catch(error){
     notice(error.status===409?"Карта уже изменена в другой вкладке. Ваш черновик сохранён в этом браузере. Выгрузите JSON и обновите страницу; изменения не перезаписаны.":error.message,true);
   }finally{saving=false;render();}
@@ -201,7 +201,7 @@ function focusNode(id){
 }
 function selectNode(id){
   if(!flushForm())return false;
-  selection={type:"node",id};renderNodes();renderEdges();showNode(id);return true;
+  selection={type:"node",id};for(const el of layer.querySelectorAll(".node"))el.classList.toggle("selected",el.dataset.id===id);renderEdges();showNode(id);return true;
 }
 function showHelp(){
   $("inspector-heading").textContent="Как работать";

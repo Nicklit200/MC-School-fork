@@ -1,3 +1,4 @@
+import { SkillsPage } from './pages/SkillsPage';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -47,6 +48,7 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="/skills" element={<ProtectedRoute><Layout><SkillsPage /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivatePage />} />
 
