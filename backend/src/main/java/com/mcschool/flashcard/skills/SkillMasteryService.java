@@ -15,7 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class SkillMasteryService {
-    public record StudentOption(UUID id, String fullName) {}
+    public record StudentOption(UUID id, String fullName, Integer grade, String schoolType) {}
     public record MasterySnapshot(UUID studentId, String studentName, Map<String,Integer> mastery, Instant updatedAt) {}
     public record UpdateRequest(int mastery) {}
 
@@ -39,7 +39,7 @@ public class SkillMasteryService {
             visible = users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(caller.id(), Role.STUDENT)
                     .stream().filter(u -> u.getStatus() == UserStatus.ACTIVE).toList();
         }
-        return visible.stream().map(u -> new StudentOption(u.getId(), u.getFullName())).toList();
+        return visible.stream().map(u -> new StudentOption(u.getId(), u.getFullName(), u.getGrade(), u.getSchoolType())).toList();
     }
 
     @Transactional(readOnly = true)
