@@ -48,19 +48,7 @@ export function StudentProfilePage() {
     <nav className="group-detail-tabs" aria-label={tr('Разделы ученика', 'Schülerbereiche')}>
       {tabs.map(([path, label]) => { const url = `${base}${path ? `/${path}` : ''}`; const active = location.pathname.replace(/\/$/, '') === url; return <button key={path} type="button" className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => navigate(url)}><span>{label}</span></button>; })}
     </nav>
-    {overview ? loading ? <p className="muted">{tr('Загружаем данные ученика…', 'Laden…')}</p> : !error && student && <>
-      <LearningProfileCard student={student} language={language} onSaved={setStudent} />
-      <div className="group-overview-grid">
-      <section className="group-overview-card"><div className="group-overview-card__header"><h2>{tr('Обзор домашних заданий', 'Hausaufgabenübersicht')}</h2><button className="group-refresh-btn" onClick={() => setRevision(n => n + 1)}>{tr('Обновить', 'Aktualisieren')}</button></div>
-        {pdfs.length === 0 ? <p className="muted">{tr('Домашних заданий пока нет.', 'Keine Hausaufgaben.')}</p> : pdfs.slice(0, 7).map(h => <Link key={h.id} className="list-row" to={`/teacher/students/${studentId}/homeworks/${h.id}`} style={{ color: 'inherit', textDecoration: 'none', gap: 12 }}><span>{date(h.startDate)} · {h.worksheetFilename}</span><span aria-label={h.submitted ? tr('Сдано', 'Abgegeben') : tr('Не сдано', 'Offen')} className={`group-status-dot ${h.submitted ? 'is-done' : 'is-missed'}`}>{h.submitted ? '✓' : '×'}</span></Link>)}
-        <Link className="btn btn--secondary group-show-all" to={`${base}/homeworks`}>{tr('Все домашние задания', 'Alle Hausaufgaben')} →</Link>
-      </section>
-      <section className="group-overview-card"><div className="group-overview-card__header"><h2>{tr('Обзор карточек', 'Kartenübersicht')}</h2></div>
-        {history.length === 0 ? <p className="muted">{tr('Повторений пока нет.', 'Noch keine Wiederholungen.')}</p> : [...history].sort((a,b) => b.date.localeCompare(a.date)).slice(0,7).map(day => <div key={day.date} className="list-row"><span>{date(day.date)}</span><span>{day.completedCount}/{day.dueCount}</span><span className={`group-status-dot ${day.status === 'COMPLETED' ? 'is-done' : 'is-missed'}`}>{day.status === 'COMPLETED' ? '✓' : day.status === 'PARTIAL' ? '◐' : '×'}</span></div>)}
-        <Link className="btn btn--secondary group-show-all" to={`${base}/cards`}>{tr('Все карточки и ответы', 'Alle Karten und Antworten')} →</Link>
-      </section>
-    </div>
-    </> : <Outlet />}
+    {overview ? loading ? <p className="muted">{tr('Загружаем данные ученика…', 'Laden…')}</p> : !error && student && <LearningProfileCard student={student} language={language} onSaved={setStudent} /> : <Outlet />}
   </div>;
 }
 
