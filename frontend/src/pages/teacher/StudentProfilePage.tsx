@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { CardSummary, DailyReviewHistoryItem, GroupLesson, Homework, SchoolType, StudentListItem } from '../../api/types';
+import type { CardSummary, GroupLesson, Homework, SchoolType, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 
 export function StudentProfilePage() {
@@ -15,7 +15,6 @@ export function StudentProfilePage() {
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [summary, setSummary] = useState<CardSummary | null>(null);
-  const [history, setHistory] = useState<DailyReviewHistoryItem[]>([]);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +22,10 @@ export function StudentProfilePage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setError(null);
-    Promise.all([api.students.get(studentId), api.homeworks.listForStudent(studentId), api.cards.summaryForStudent(studentId), api.students.reviewHistory(studentId), api.lessons.groupLessons()])
-      .then(([pupil, work, cards, reviews, events]) => {
+    Promise.all([api.students.get(studentId), api.homeworks.listForStudent(studentId), api.cards.summaryForStudent(studentId), api.lessons.groupLessons()])
+      .then(([pupil, work, cards, events]) => {
         if (cancelled) return;
-        setStudent(pupil); setHomeworks(work); setSummary(cards); setHistory(reviews);
+        setStudent(pupil); setHomeworks(work); setSummary(cards);
         setLessons(events.filter(e => e.studentId === studentId || (e.participantStudentIds ?? []).includes(studentId)));
       }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
