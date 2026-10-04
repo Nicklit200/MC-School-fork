@@ -4,8 +4,11 @@ const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],selectedStudentId="",mastery={},masteryLoading=false;
 const boardIdByGrade=new Map([[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
-let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map();
-try{if(localStorage.getItem("mindcrafti.skills.viewMode")==="hierarchy")viewMode="hierarchy";}catch{/* View preference is optional. */}
+let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
+try{
+  if(localStorage.getItem("mindcrafti.skills.viewMode")==="hierarchy")viewMode="hierarchy";
+  catalogCollapsed=localStorage.getItem("mindcrafti.skills.catalogCollapsed")==="true";
+}catch{/* View preferences are optional. */}
 const canvas=$("canvas"),world=$("world"),layer=$("node-layer"),edgeLayer=$("edge-layer");
 const canEdit=()=>Boolean(config?.canEdit)&&!saving;
 const node=id=>data?.nodes.find(n=>n.id===id);
@@ -570,6 +573,18 @@ function setViewMode(mode){
   render();showHelp();fit();
 }
 $("undo").onclick=undo;$("overview").onclick=()=>openSection("overview");
+function setCatalogCollapsed(collapsed){
+  catalogCollapsed=Boolean(collapsed);
+  const catalog=$("catalog"),toggle=$("catalog-toggle");
+  catalog.classList.toggle("collapsed",catalogCollapsed);
+  toggle.textContent=catalogCollapsed?"›":"‹";
+  toggle.title=catalogCollapsed?"Развернуть разделы":"Свернуть разделы";
+  toggle.setAttribute("aria-label",toggle.title);
+  toggle.setAttribute("aria-expanded",String(!catalogCollapsed));
+  try{localStorage.setItem("mindcrafti.skills.catalogCollapsed",String(catalogCollapsed));}catch{/* Preference is optional. */}
+}
+$("catalog-toggle").onclick=()=>setCatalogCollapsed(!catalogCollapsed);
+setCatalogCollapsed(catalogCollapsed);
 $("view-free").onclick=()=>setViewMode("free");$("view-hierarchy").onclick=()=>setViewMode("hierarchy");
 $("student-filter").onchange=e=>void chooseStudent(e.target.value);$("search").oninput=()=>{showArchived=false;renderSearch();};
 $("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
