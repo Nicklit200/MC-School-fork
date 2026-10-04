@@ -51,6 +51,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/public/trial-leads", "/api/v1/public/site-visits").permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/public/trial-leads/**", "/api/v1/public/site-visits/**").permitAll()
+                        // These two read-only routes validate expiry, file kind, revision and HMAC themselves.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/public/homework-files/*/submission.pdf",
+                                "/api/v1/public/homework-files/*/worksheet.pdf").permitAll()
+                        .requestMatchers(HttpMethod.HEAD,
+                                "/api/v1/public/homework-files/*/submission.pdf",
+                                "/api/v1/public/homework-files/*/worksheet.pdf").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/google-meet/events").permitAll()

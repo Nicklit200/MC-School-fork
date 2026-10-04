@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.mcschool.flashcard.config.JwtProperties;
 import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.homeworks.HomeworkFileLinkService;
 import com.mcschool.flashcard.notifications.AppLinks;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -39,7 +41,10 @@ class McpHomeworkSubmissionToolsTest {
                 homeworkRepository,
                 mock(StudentGroupMemberRepository.class),
                 mock(GoogleCalendarLessonService.class),
-                new AppLinks("https://app.mindcrafti.de/"));
+                new AppLinks("https://app.mindcrafti.de/"),
+                new HomeworkFileLinkService(homeworkRepository,
+                        new JwtProperties("test-only-homework-files-key-0123456789", 1440),
+                        "https://api.example.com/", 60));
     }
 
     @Test
@@ -52,10 +57,7 @@ class McpHomeworkSubmissionToolsTest {
 
         Homework insideRange = Homework.create(student, LocalDate.of(2026, 9, 13));
         insideRange.attachWorksheet("inside.pdf", fakePdf(), 1);
-        insideRange.submitWorksheet(
-                "inside-submitted.pdf",
-                fakePdf(),
-                Instant.parse("2026-09-13T16:00:00Z"));
+        insideRange.submitWorksheet("inside-submitted.pdf", fakePdf(), Instant.parse("2026-09-13T16:00:00Z"));
 
         Homework afterRange = Homework.create(student, LocalDate.of(2026, 9, 16));
         afterRange.attachWorksheet("after.pdf", fakePdf(), 1);
@@ -64,13 +66,8 @@ class McpHomeworkSubmissionToolsTest {
         when(homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(student.getId()))
                 .thenReturn(List.of(afterRange, insideRange, beforeRange));
 
-        Map<String, Object> result = service.findStudentHomeworks(
-                null,
-                true,
-                student.getId(),
-                LocalDate.of(2026, 9, 11),
-                LocalDate.of(2026, 9, 15));
-
+        Map<String, Object> result = service.findStudentHomeworks(null, true, student.getId(),
+                LocalDate.of(2026, 9, 11), LocalDate.of(2026, 9, 15));
         assertThat(result.get("homeworkCount")).isEqualTo(1);
         assertThat(result.get("submittedCount")).isEqualTo(1L);
 
@@ -82,6 +79,7 @@ class McpHomeworkSubmissionToolsTest {
         assertThat(homeworks.get(0).get("submitted")).isEqualTo(true);
         assertThat(homeworks.get(0).get("mcpSubmissionTool")).isEqualTo("get_homework_submission");
         assertThat(homeworks.get(0).get("mcpPagesTool")).isEqualTo("get_homework_submission_pages");
+        assertThat(homeworks.get(0).get("submittedPdfUrl").toString()).contains("/submission.pdf?");
     }
 
     @Test
@@ -89,22 +87,17 @@ class McpHomeworkSubmissionToolsTest {
         User teacher = activeTeacher("Teacher A");
         User student = activeStudent("Vitalina", teacher);
         byte[] submittedPdf = twoPagePdf();
-
         Homework homework = Homework.create(student, LocalDate.of(2026, 9, 15));
         homework.attachWorksheet("worksheet.pdf", submittedPdf, 2);
-        homework.submitWorksheet(
-                "vitalina-submitted.pdf",
-                submittedPdf,
-                Instant.parse("2026-09-15T18:45:01Z"));
-
+        homework.submitWorksheet("vitalina-submitted.pdf", submittedPdf, Instant.parse("2026-09-15T18:45:01Z"));
         when(homeworkRepository.findById(homework.getId())).thenReturn(Optional.of(homework));
         when(userRepository.findById(student.getId())).thenReturn(Optional.of(student));
 
         Map<String, Object> result = service.submissionPages(null, true, homework.getId(), 1, 1);
-
         assertThat(result.get("totalPageCount")).isEqualTo(2);
         assertThat(result.get("renderedPageCount")).isEqualTo(1);
         assertThat(result.get("nextStartPage")).isEqualTo(2);
+        assertThat(result.get("submittedPdfUrl").toString()).contains("/submission.pdf?");
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> pages = (List<Map<String, Object>>) result.get("pages");
@@ -113,7 +106,6 @@ class McpHomeworkSubmissionToolsTest {
         assertThat(pages.get(0).get("mimeType")).isEqualTo("image/png");
         assertThat((Integer) pages.get(0).get("widthPx")).isGreaterThan(0);
         assertThat((Integer) pages.get(0).get("heightPx")).isGreaterThan(0);
-
         byte[] png = Base64.getDecoder().decode((String) pages.get(0).get("base64"));
         assertThat(png.length).isGreaterThan(8);
         assertThat(png[0]).isEqualTo((byte) 0x89);
@@ -136,22 +128,15 @@ class McpHomeworkSubmissionToolsTest {
     }
 
     private User activeTeacher(String name) {
-        User teacher = User.invitedTeacher(
-                name,
-                name.toLowerCase().replace(' ', '.') + "@example.com",
-                UUID.randomUUID().toString(),
-                Instant.now().plusSeconds(3600));
+        User teacher = User.invitedTeacher(name, name.toLowerCase().replace(' ', '.') + "@example.com",
+                UUID.randomUUID().toString(), Instant.now().plusSeconds(3600));
         teacher.activate("hash");
         return teacher;
     }
 
     private User activeStudent(String name, User teacher) {
-        User student = User.invitedStudent(
-                name,
-                name.toLowerCase() + "@example.com",
-                teacher,
-                UUID.randomUUID().toString(),
-                Instant.now().plusSeconds(3600));
+        User student = User.invitedStudent(name, name.toLowerCase() + "@example.com", teacher,
+                UUID.randomUUID().toString(), Instant.now().plusSeconds(3600));
         student.activate("hash");
         return student;
     }

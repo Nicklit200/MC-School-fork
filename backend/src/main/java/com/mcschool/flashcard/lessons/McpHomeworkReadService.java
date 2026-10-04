@@ -5,6 +5,7 @@ import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkDeadlinePolicy;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.homeworks.HomeworkFileLinkService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.notifications.AppLinks;
 import com.mcschool.flashcard.users.Role;
@@ -47,18 +48,21 @@ public class McpHomeworkReadService {
     private final StudentGroupMemberRepository groupMemberRepository;
     private final GoogleCalendarLessonService calendarLessonService;
     private final AppLinks appLinks;
+    private final HomeworkFileLinkService fileLinks;
 
     public McpHomeworkReadService(
             UserRepository userRepository,
             HomeworkRepository homeworkRepository,
             StudentGroupMemberRepository groupMemberRepository,
             GoogleCalendarLessonService calendarLessonService,
-            AppLinks appLinks) {
+            AppLinks appLinks,
+            HomeworkFileLinkService fileLinks) {
         this.userRepository = userRepository;
         this.homeworkRepository = homeworkRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.calendarLessonService = calendarLessonService;
         this.appLinks = appLinks;
+        this.fileLinks = fileLinks;
     }
 
     /**
@@ -182,6 +186,7 @@ public class McpHomeworkReadService {
         result.put("sizeBytes", pdf.length);
         result.put("base64", Base64.getEncoder().encodeToString(pdf));
         result.put("teacherSiteUrl", appLinks.teacherHomeworkLink(student.getId(), homework.getId()));
+        result.putAll(fileLinks.linksFor(homework));
         result.put("source", "mindcrafti_database");
         return result;
     }
@@ -241,6 +246,7 @@ public class McpHomeworkReadService {
             result.put("nextStartPage", endPage < totalPageCount ? endPage + 1 : null);
             result.put("pages", pages);
             result.put("teacherSiteUrl", appLinks.teacherHomeworkLink(student.getId(), homework.getId()));
+            result.putAll(fileLinks.linksFor(homework));
             result.put("source", "mindcrafti_database");
             return result;
         } catch (IOException ex) {
@@ -291,6 +297,7 @@ public class McpHomeworkReadService {
                 ? null : homework.getSubmittedAt().atZone(SCHOOL_ZONE).toString());
         row.put("submissionSizeBytes", homework.getSubmittedPdf() == null ? null : homework.getSubmittedPdf().length);
         row.put("teacherSiteUrl", appLinks.teacherHomeworkLink(homework.getStudent().getId(), homework.getId()));
+        row.putAll(fileLinks.linksFor(homework));
         row.put("submissionApiPath", homework.isSubmitted()
                 ? "/api/v1/homeworks/" + homework.getId() + "/submission" : null);
         row.put("mcpSubmissionTool", homework.isSubmitted() ? "get_homework_submission" : null);
@@ -309,6 +316,7 @@ public class McpHomeworkReadService {
         row.put("submittedAfterLatestLesson", latestLesson != null
                 && !homework.getSubmittedAt().isBefore(latestLesson.endsAt()));
         row.put("teacherSiteUrl", appLinks.teacherHomeworkLink(homework.getStudent().getId(), homework.getId()));
+        row.putAll(fileLinks.linksFor(homework));
         row.put("submissionApiPath", "/api/v1/homeworks/" + homework.getId() + "/submission");
         row.put("mcpSubmissionTool", "get_homework_submission");
         row.put("mcpPagesTool", "get_homework_submission_pages");

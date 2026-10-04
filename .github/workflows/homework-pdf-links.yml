@@ -1,0 +1,39 @@
+name: Homework PDF links
+
+on:
+  push:
+    branches: [feature/submitted-pdf-links]
+  pull_request:
+    branches: [integration/railway-and-ux]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/homework-pdf-links.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homework-pdf-links-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run homework and MCP regression tests
+        run: mvn -B -ntp -Dtest=HomeworkFileLinkServiceTest,McpHomeworkReadServiceTest,McpHomeworkSubmissionToolsTest,MindcraftiMcpContentAdviceTest,HomeworkResponseTest test
+      - name: Package backend
+        run: mvn -B -ntp -DskipTests package
