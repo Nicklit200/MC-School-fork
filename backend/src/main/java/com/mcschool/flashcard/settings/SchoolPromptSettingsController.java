@@ -21,7 +21,7 @@ public class SchoolPromptSettingsController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','TEACHER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public SchoolPromptSettingsResponse get(@AuthenticationPrincipal AuthenticatedUser caller) {
         return service.readForStaff(caller);
     }
