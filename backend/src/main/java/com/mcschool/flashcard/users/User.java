@@ -80,6 +80,27 @@ public class User {
     @Column(name = "chatgpt_project_url", length = 2000)
     private String chatGptProjectUrl;
 
+    @Column
+    private Integer grade;
+
+    @Column(name = "school_type", length = 40)
+    private String schoolType;
+
+    @Column(name = "learning_pace", length = 20)
+    private String learningPace;
+
+    @Column(name = "learning_strengths", columnDefinition = "text")
+    private String learningStrengths;
+
+    @Column(name = "learning_difficulties", columnDefinition = "text")
+    private String learningDifficulties;
+
+    @Column(name = "explanation_style", columnDefinition = "text")
+    private String explanationStyle;
+
+    @Column(name = "learning_notes", columnDefinition = "text")
+    private String learningNotes;
+
     @Column(name = "ai_lesson_pilot_enabled", nullable = false)
     private boolean aiLessonPilotEnabled;
 
@@ -209,6 +230,20 @@ public class User {
             throw new IllegalArgumentException("ChatGPT project URL must be a chatgpt.com link");
         }
         this.chatGptProjectUrl = normalized;
+    }
+
+    public void changeLearningProfile(Integer grade, String schoolType, String learningPace,
+                                      String learningStrengths, String learningDifficulties,
+                                      String explanationStyle, String learningNotes) {
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can have a learning profile");
+        if (grade != null && (grade < 1 || grade > 13)) throw new IllegalArgumentException("Grade must be between 1 and 13");
+        this.grade = grade;
+        this.schoolType = normalizeOptionalValue(schoolType);
+        this.learningPace = normalizeOptionalValue(learningPace);
+        this.learningStrengths = normalizeOptionalValue(learningStrengths);
+        this.learningDifficulties = normalizeOptionalValue(learningDifficulties);
+        this.explanationStyle = normalizeOptionalValue(explanationStyle);
+        this.learningNotes = normalizeOptionalValue(learningNotes);
     }
 
     public void beginGoogleCalendarOauth(String state, Instant expiresAt) {
