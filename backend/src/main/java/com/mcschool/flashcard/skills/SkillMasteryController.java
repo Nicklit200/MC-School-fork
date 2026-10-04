@@ -20,8 +20,14 @@ public class SkillMasteryController {
         this.service = service;
     }
 
-    @GetMapping("/{boardId}/students")
+    @GetMapping("/students")
     public List<SkillMasteryService.StudentOption> students(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return service.listStudents(caller);
+    }
+
+    @GetMapping("/{boardId}/students")
+    public List<SkillMasteryService.StudentOption> boardStudents(
             @PathVariable String boardId,
             @AuthenticationPrincipal AuthenticatedUser caller) {
         return service.listStudents(caller);
