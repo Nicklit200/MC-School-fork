@@ -198,6 +198,8 @@ public class GoogleCalendarLessonService {
         );
         return listGroupLessons(teacherCaller).stream()
                 .filter(lesson -> student.id().equals(lesson.studentId())
+                        || (lesson.groupId() != null
+                        && groupMemberRepository.existsByGroupIdAndStudentId(lesson.groupId(), student.id()))
                         || (lesson.participantStudentIds() != null
                         && lesson.participantStudentIds().contains(student.id())))
                 .sorted(Comparator.comparing(GroupLessonResponse::startsAt))
