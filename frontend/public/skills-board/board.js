@@ -1,0 +1,379 @@
+import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
+const $=id=>document.getElementById(id);
+const svgNS="http://www.w3.org/2000/svg";
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false;
+let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false;
+const canvas=$("canvas"),world=$("world"),layer=$("node-layer"),edgeLayer=$("edge-layer");
+const canEdit=()=>Boolean(config?.canEdit)&&!saving;
+const node=id=>data?.nodes.find(n=>n.id===id);
+const uid=prefix=>prefix+"_"+crypto.randomUUID();
+const draftKey=()=>`mindcrafti.skills.draft.${config.userId}.grade-6`;
+const element=(tag,className,text)=>{const e=document.createElement(tag);if(className)e.className=className;if(text!=null)e.textContent=text;return e;};
+function button(text,fn,className=""){const e=element("button",className,text);e.type="button";e.addEventListener("click",fn);return e;}
+function notice(text,error=false){$("notice").textContent=text;$("notice").className=error?"error":"";$("notice").hidden=!text;}
+function pendingForm(){
+  const form=$("node-form");
+  return form?.dataset.changed==="true"?{id:form.dataset.id,values:Object.fromEntries(new FormData(form))}:null;
+}
+function stash(){
+  if(!data||!config?.canEdit)return;
+  try{const pending=pendingForm();if(dirty||pending)localStorage.setItem(draftKey(),JSON.stringify({revision:snapshot.revision,data,pending}));else localStorage.removeItem(draftKey());}
+  catch{/* Server save remains available even if browser storage is full. */}
+}
+function flushForm(){
+  const form=$("node-form");
+  return !form||form.dataset.changed!=="true"||applyForm(form);
+}
+function status(){
+  $("save-state").textContent=saving?"Сохраняем…":dirty?"Есть изменения":snapshot?`Сохранено · версия ${snapshot.revision}`:"Подключение…";
+  $("save").disabled=!canEdit()||(!dirty&&!pendingForm());
+  $("inspector-body").inert=saving;
+  for(const id of ["add","add-topic","connect"])$(id).disabled=!data||!canEdit();
+  $("undo").disabled=!canEdit()||history.length===0;
+  $("export").disabled=!data;$("connect").classList.toggle("active",connectMode);
+  canvas.classList.toggle("connecting",connectMode);
+}
+async function request(method,path,body){
+  const response=await fetch(config.apiBase.replace(/\/$/,"")+path,{method,headers:{Authorization:`Bearer ${config.token}`,...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,cache:"no-store"});
+  const text=await response.text();let result;
+  try{result=text?JSON.parse(text):null;}catch{throw Error("Сервер вернул неожиданный ответ. Попробуйте позже");}
+  if(!response.ok){const error=Error(response.status===401?"Вход истёк. Вернитесь в Mindcrafti и войдите заново.":result?.message||`Ошибка сервера ${response.status}`);error.status=response.status;throw error;}
+  return result;
+}
+window.addEventListener("message",async event=>{
+  if(event.origin!==location.origin||event.source!==window.parent||window.parent===window||event.data?.type!=="mindcrafti-skills-config"||config)return;
+  const incoming=event.data;
+  if(typeof incoming.apiBase!=="string"||!incoming.token){notice("Для открытия карты нужно войти в Mindcrafti.",true);return;}
+  config=incoming;
+  try{
+    snapshot=await request("GET","/skill-boards/grade-6");
+    validateBoard(snapshot.data);data=clone(snapshot.data);
+    let pending=null;
+    try{
+      const draft=JSON.parse(localStorage.getItem(draftKey())||"null");
+      if(config.canEdit&&draft?.data){
+        if(draft.revision===snapshot.revision&&confirm("Есть несохранённый черновик карты. Восстановить его?")){
+          validateBoard(draft.data);data=draft.data;dirty=true;pending=draft.pending;
+        }else if(draft.revision!==snapshot.revision){
+          notice("Найдена старая локальная копия. Серверная версия новее; старый черновик не применён.");
+        }
+      }
+    }catch{/* Invalid local drafts must never prevent reading the server. */}
+    $("empty").hidden=true;render();showHelp();fit();
+    if(pending?.id&&node(pending.id)&&pending.values){
+      focusNode(pending.id);showNode(pending.id);
+      const form=$("node-form");
+      for(const key of ["title","de","kind","description","example","source","parent","color"]){
+        const input=form.elements.namedItem(key);
+        if(input&&typeof pending.values[key]==="string")input.value=pending.values[key];
+      }
+      form.dataset.changed="true";status();notice("Черновик восстановлен. Примените правки карточки и сохраните карту.");
+    }
+  }catch(error){notice(error.message,true);$("empty").replaceChildren(element("strong","", "Не удалось загрузить карту"),element("p","",error.message),button("Повторить",()=>location.reload()));}
+});
+function mutate(next){
+  if(!canEdit())return false;
+  try{validateBoard(next);}catch(error){notice(error.message,true);return false;}
+  if(JSON.stringify(next)===JSON.stringify(data))return true;
+  history.push(clone(data));if(history.length>40)history.shift();
+  data=next;dirty=true;stash();notice("");render();return true;
+}
+async function save(){
+  if(!data||!canEdit())return;
+  const form=$("node-form");if(form&&form.dataset.changed==="true"&&!applyForm(form))return;
+  if(!dirty)return;
+  saving=true;status();
+  try{snapshot=await request("PUT","/skill-boards/grade-6",{expectedRevision:snapshot.revision,data});data=clone(snapshot.data);dirty=false;stash();notice("");}
+  catch(error){
+    notice(error.status===409?"Карта уже изменена в другой вкладке. Ваш черновик сохранён в этом браузере. Выгрузите JSON и обновите страницу; изменения не перезаписаны.":error.message,true);
+  }finally{saving=false;render();}
+}
+function visibleNodes(){
+  if(!data)return [];
+  const active=data.nodes.filter(n=>!n.archived);
+  if(scope==="overview"){
+    const ids=new Set(active.map(n=>n.id));
+    return active.filter(n=>["root","topic"].includes(n.kind)||!data.edges.some(e=>e.kind==="contains"&&e.target===n.id&&ids.has(e.source)));
+  }
+  const ids=descendants(data,scope);ids.add(scope);
+  return active.filter(n=>ids.has(n.id));
+}
+function render(){
+  if(!data)return;
+  status();renderCatalog();renderNodes();renderEdges();transform();
+  $("count").textContent=data.nodes.filter(n=>n.kind==="skill"&&!n.archived).length;
+  $("archive-count").textContent=data.nodes.filter(n=>n.archived).length;
+  $("breadcrumb").textContent=scope==="overview"?"6 класс / Обзор программы":`6 класс / ${node(scope)?.title||"Раздел"}`;
+}
+function renderCatalog(){
+  const container=$("sections");container.replaceChildren();
+  for(const n of data.nodes.filter(n=>n.kind==="topic"&&!n.archived)){
+    const e=button("",()=>openSection(n.id),"section"+(scope===n.id?" active":""));
+    const dot=element("span","dot");dot.style.setProperty("--accent",colors[n.color]);
+    const ids=descendants(data,n.id);
+    e.append(dot,element("span","",n.title),element("span","number",data.nodes.filter(x=>ids.has(x.id)&&!x.archived&&x.kind==="skill").length));
+    container.append(e);
+  }
+  $("overview").classList.toggle("active",scope==="overview");renderSearch();
+}
+function renderSearch(){
+  if(!data)return;
+  const q=$("search").value.trim().toLocaleLowerCase();
+  const matches=data.nodes.filter(n=>showArchived?n.archived:!n.archived&&q&&[n.title,n.de,n.description].join(" ").toLocaleLowerCase().includes(q));
+  $("results").hidden=!q&&!showArchived;$("sections").hidden=Boolean(q)||showArchived;$("overview").hidden=Boolean(q)||showArchived;
+  $("results").replaceChildren();
+  for(const n of matches)$("results").append(button(n.title,()=>{if(focusNode(n.id))showNode(n.id);},"search-result"));
+  if((q||showArchived)&&matches.length===0)$("results").append(element("p","help","Ничего не найдено"));
+  $("archives").classList.toggle("active",showArchived);
+}
+function renderNodes(){
+  if(!data)return;
+  layer.replaceChildren();
+  for(const n of visibleNodes()){
+    const e=element("div",`node kind-${n.kind}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}`);
+    e.dataset.id=n.id;e.style.left=n.x+"px";e.style.top=n.y+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
+    e.setAttribute("role","button");e.setAttribute("aria-label",`${kindLabels[n.kind]}: ${n.title}`);
+    const count=n.kind==="topic"?descendants(data,n.id).size:null;
+    const kind=element("div","kind",kindLabels[n.kind]);if(count!==null)kind.append(element("span","",`${count} →`));
+    e.append(kind,element("div","title",n.title),element("div","de",n.de||"Добавьте описание навыка"));
+    if(config.canEdit){
+      for(const side of ["in","out"]){const p=element("button","port "+(side==="in"?"in":""));p.type="button";p.dataset.port=side;p.title=side==="in"?"Конец стрелки":"Потяните для создания стрелки";p.setAttribute("aria-label",p.title);e.append(p);}
+    }
+    e.addEventListener("dblclick",ev=>{ev.stopPropagation();if(n.kind==="topic"||n.kind==="root")openSection(n.kind==="root"?"overview":n.id);});
+    e.addEventListener("keydown",ev=>{if(ev.key==="Enter"){selectNode(n.id);if(n.kind==="topic")openSection(n.id);}});
+    layer.append(e);
+  }
+}
+function pathBetween(a,b){
+  const vertical=b.y>a.y+170&&Math.abs(b.x-a.x)<600;
+  const sx=vertical?a.x+130:a.x+260,sy=vertical?a.y+148:a.y+74;
+  const tx=vertical?b.x+130:b.x,ty=vertical?b.y:b.y+74;
+  if(vertical){const d=Math.max(55,Math.abs(ty-sy)/2);return `M${sx},${sy} C${sx},${sy+d} ${tx},${ty-d} ${tx},${ty}`;}
+  const d=Math.max(65,Math.abs(tx-sx)/2);return `M${sx},${sy} C${sx+d},${sy} ${tx-d},${ty} ${tx},${ty}`;
+}
+function renderEdges(){
+  if(!data)return;
+  edgeLayer.replaceChildren();const ids=new Set(visibleNodes().map(n=>n.id));
+  for(const edge of data.edges){
+    if(!ids.has(edge.source)||!ids.has(edge.target)||edge.kind==="prerequisite"&&!$("prerequisites").checked)continue;
+    const d=pathBetween(node(edge.source),node(edge.target));
+    for(const hit of [true,false]){
+      const e=document.createElementNS(svgNS,"path");e.setAttribute("d",d);
+      e.setAttribute("class",hit?"edge-hit":`edge ${edge.kind}${selection?.type==="edge"&&selection.id===edge.id?" selected":""}`);
+      if(!hit)e.setAttribute("marker-end",`url(#${edge.kind==="contains"?"arrow-hierarchy":"arrow-pre"})`);
+      e.dataset.edge=edge.id;edgeLayer.append(e);
+    }
+  }
+  if(linkSource&&node(linkSource)){
+    const e=document.createElementNS(svgNS,"path");e.setAttribute("d",pathBetween(node(linkSource),{x:lastPoint.x,y:lastPoint.y-74}));
+    e.setAttribute("class","edge prerequisite");e.style.pointerEvents="none";edgeLayer.append(e);
+  }
+}
+function transform(){
+  world.style.transform=`translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  canvas.style.backgroundSize=`${22*view.z}px ${22*view.z}px`;
+  canvas.style.backgroundPosition=`${view.x}px ${view.y}px`;$("zoom").textContent=Math.round(view.z*100)+"%";
+}
+function fit(){
+  const items=visibleNodes();if(!items.length)return;
+  const minX=Math.min(...items.map(n=>n.x)),maxX=Math.max(...items.map(n=>n.x+260)),minY=Math.min(...items.map(n=>n.y)),maxY=Math.max(...items.map(n=>n.y+148));
+  const w=canvas.clientWidth,h=canvas.clientHeight;view.z=Math.max(.12,Math.min(1,(w-90)/(maxX-minX),(h-150)/(maxY-minY)));
+  view.x=(w-(maxX-minX)*view.z)/2-minX*view.z;view.y=(h-(maxY-minY)*view.z)/2-minY*view.z;transform();
+}
+function zoomAt(factor,x=canvas.clientWidth/2,y=canvas.clientHeight/2){
+  const z=Math.max(.12,Math.min(2.5,view.z*factor)),ratio=z/view.z;
+  view.x=x-(x-view.x)*ratio;view.y=y-(y-view.y)*ratio;view.z=z;transform();
+}
+function openSection(id){
+  if(!flushForm())return;
+  scope=id;selection=null;connectMode=false;linkSource=null;showArchived=false;$("search").value="";
+  render();showHelp();fit();
+}
+function focusNode(id){
+  if(!flushForm())return false;
+  const n=node(id);if(!n)return;
+  if(!n.archived&&!visibleNodes().some(x=>x.id===id)){
+    let parent=id,seen=new Set();
+    while(!seen.has(parent)){seen.add(parent);const edge=data.edges.find(e=>e.kind==="contains"&&e.target===parent);if(!edge)break;parent=edge.source;if(node(parent)?.kind==="topic")break;}
+    scope=node(parent)?.kind==="topic"?parent:"overview";render();
+  }
+  view.z=1;view.x=canvas.clientWidth/2-(n.x+130);view.y=canvas.clientHeight/2-(n.y+74);transform();return true;
+}
+function selectNode(id){
+  if(!flushForm())return false;
+  selection={type:"node",id};renderNodes();renderEdges();showNode(id);return true;
+}
+function showHelp(){
+  $("inspector-heading").textContent="Как работать";
+  $("inspector-body").replaceChildren();
+  const help=element("div","help");
+  help.innerHTML="<h2>Программа, которую можно менять</h2><p><strong>Откройте раздел</strong> слева или двойным щелчком по карточке.</p><p><strong>Нажмите на навык</strong>, чтобы изменить формулировку, пример и источник.</p><p><strong>Сплошная стрелка</strong> — входит в тему.<br><strong>Пунктирная стрелка</strong> — нужно знать прежде.</p><p>Стрелки предпосылок — стартовая методическая модель. Её можно уточнять.</p><p>Изменения попадают в базу после нажатия <strong>«Сохранить»</strong>. Цвет обозначает раздел, не уровень ученика.</p>";
+  if(!config?.canEdit)help.append(element("p","","Просмотр для преподавателя. Общую программу редактирует администратор."));
+  $("inspector-body").append(help);
+  if(innerWidth<850)$("inspector").classList.add("closed");
+}
+function field(form,label,name,value,kind="input",max=4000){
+  const caption=element("label","",label);caption.htmlFor="field-"+name;
+  const e=element(kind);e.id="field-"+name;e.name=name;e.value=value||"";e.maxLength=max;e.disabled=!canEdit();
+  if(name==="title"){e.required=true;e.maxLength=200;}
+  form.append(caption,e);return e;
+}
+function showNode(id){
+  const n=node(id);if(!n)return;selection={type:"node",id};
+  $("inspector").classList.remove("closed");$("inspector-heading").textContent=n.archived?"Карточка в архиве":"Свойства карточки";
+  const form=element("form");form.id="node-form";form.dataset.id=id;form.dataset.changed="false";
+  field(form,"НАЗВАНИЕ","title",n.title,"input",200);field(form,"НЕМЕЦКИЙ ТЕРМИН","de",n.de,"input",300);
+  const caption=element("label","","ТИП КАРТОЧКИ");const kind=element("select");kind.name="kind";kind.disabled=!canEdit();
+  for(const [v,t]of Object.entries(kindLabels)){const option=element("option","",t);option.value=v;kind.append(option);}kind.value=n.kind;form.append(caption,kind);
+  field(form,"ЧТО РЕБЁНОК ДОЛЖЕН УМЕТЬ","description",n.description,"textarea");
+  field(form,"ПРИМЕР ПРОВЕРКИ","example",n.example,"textarea");
+  field(form,"ИСТОЧНИК / ПРИМЕЧАНИЕ","source",n.source,"textarea");
+  const parentLabel=element("label","","РОДИТЕЛЬСКИЙ РАЗДЕЛ"),parent=element("select");parent.name="parent";parent.disabled=!canEdit();
+  const none=element("option","","Без родителя");none.value="";parent.append(none);
+  const excluded=descendants(data,id);excluded.add(id);
+  const currentParent=data.edges.find(e=>e.kind==="contains"&&e.target===id)?.source;
+  for(const candidate of data.nodes.filter(x=>(!x.archived||x.id===currentParent)&&!excluded.has(x.id))){
+    const option=element("option","",candidate.title);option.value=candidate.id;parent.append(option);
+  }
+  parent.value=data.edges.find(e=>e.kind==="contains"&&e.target===id)?.source||"";form.append(parentLabel,parent);
+  const colorLabel=element("label","","ЦВЕТ РАЗДЕЛА"),color=element("select");color.name="color";color.disabled=!canEdit();
+  for(const [v,t]of Object.entries({orange:"Оранжевый",blue:"Синий",violet:"Сиреневый",teal:"Бирюзовый",green:"Зелёный"})){const option=element("option","",t);option.value=v;color.append(option);}color.value=n.color;form.append(colorLabel,color);
+  form.addEventListener("input",()=>{form.dataset.changed="true";$("save").disabled=!canEdit();$("save-state").textContent="Правки в карточке";stash();});
+  const actions=element("div","actions");
+  if(config.canEdit){
+    actions.append(button("Применить",()=>applyForm(form),"primary"));
+    actions.append(button(n.archived?"Восстановить":"В архив",()=>{
+      if(!canEdit()||!flushForm())return;
+      if(!n.archived&&!confirm("Убрать карточку в архив? История сохранится. Дочерние карточки не удаляются."))return;
+      const next=clone(data);next.nodes.find(x=>x.id===id).archived=!n.archived;
+      if(mutate(next)){showNode(id);}
+    },n.archived?"":"danger"));
+  }
+  form.append(actions,element("div","id",`Постоянный ID: ${id}`));
+  const relations=data.edges.filter(e=>e.source===id||e.target===id);
+  if(relations.length)form.append(element("label","","СВЯЗИ"));
+  for(const e of relations){
+    const title=`${node(e.source)?.title} → ${node(e.target)?.title}`;
+    const label=element("div","relation",`${e.kind==="contains"?"Входит в тему":"Нужно знать прежде"}: ${title}`);
+    label.append(button("Открыть связь",()=>showEdge(e.id)));form.append(label);
+  }
+  form.addEventListener("submit",e=>{e.preventDefault();applyForm(form);});
+  $("inspector-body").replaceChildren(form);
+}
+function applyForm(form){
+  if(!canEdit()||!form.reportValidity())return false;
+  const next=clone(data),n=next.nodes.find(x=>x.id===form.dataset.id);if(!n)return false;
+  const values=new FormData(form);
+  for(const key of ["title","de","kind","description","example","source","color"])n[key]=String(values.get(key)||"").trim();
+  const parent=String(values.get("parent")||"");
+  const current=next.edges.find(e=>e.kind==="contains"&&e.target===n.id);
+  if((current?.source||"")!==parent){
+    next.edges=next.edges.filter(e=>!(e.kind==="contains"&&e.target===n.id));
+    if(parent)next.edges.push({id:uid("edge"),kind:"contains",source:parent,target:n.id});
+  }
+  const ok=mutate(next);if(ok){form.dataset.changed="false";showNode(n.id);stash();}
+  return ok;
+}
+function showEdge(id){
+  if(!flushForm())return;
+  const e=data.edges.find(x=>x.id===id);if(!e)return;
+  selection={type:"edge",id};renderEdges();renderNodes();$("inspector").classList.remove("closed");
+  $("inspector-heading").textContent="Свойства стрелки";const body=$("inspector-body");body.replaceChildren();
+  body.append(element("p","help",`${node(e.source)?.title} → ${node(e.target)?.title}`));
+  body.append(element("p","help",e.kind==="contains"?"Источник — родительский раздел. Цель — вложенная карточка.":"Сначала осваивается навык у начала стрелки; затем — навык у наконечника."));
+  if(config.canEdit){
+    body.append(button("Изменить тип",()=>{const next=clone(data);next.edges.find(x=>x.id===id).kind=e.kind==="contains"?"prerequisite":"contains";if(mutate(next))showEdge(id);}));
+    body.append(button("Удалить стрелку",()=>{const next=clone(data);next.edges=next.edges.filter(x=>x.id!==id);if(mutate(next)){selection=null;showHelp();}},"danger"));
+  }
+}
+function addNode(kind="skill",point=null){
+  if(!canEdit()||!data||!flushForm())return;
+  const next=clone(data),id=uid("skill");
+  const p=point||{x:(canvas.clientWidth/2-view.x)/view.z-130,y:(canvas.clientHeight/2-view.y)/view.z-74};
+  next.nodes.push({id,kind,title:kind==="topic"?"Новый раздел":"Новый навык",de:"",description:"",example:"",source:"Добавлено вручную. Требования нужно уточнить.",color:node(scope)?.color||"orange",x:Math.round(p.x),y:Math.round(p.y),archived:false});
+  const parent=scope!=="overview"?scope:kind==="topic"?data.nodes.find(n=>n.kind==="root"&&!n.archived)?.id:null;
+  if(parent)next.edges.push({id:uid("edge"),kind:"contains",source:parent,target:id});
+  if(mutate(next)){selectNode(id);$("field-title")?.focus();$("field-title")?.select();}
+}
+function addEdge(source,target){
+  if(!canEdit()||source===target)return false;
+  const next=clone(data);next.edges.push({id:uid("edge"),source,target,kind:$("edge-kind").value});
+  if(mutate(next)){connectMode=false;linkSource=null;render();return true;}return false;
+}
+canvas.addEventListener("pointerdown",event=>{
+  if(!data||![0,1].includes(event.button)||op)return;
+  if(event.target.closest("button")&&!event.target.closest(".port"))return;
+  const edge=event.target.closest("[data-edge]");
+  if(edge){showEdge(edge.dataset.edge);event.preventDefault();return;}
+  const card=event.target.closest(".node"),port=event.target.closest(".port");
+  const pos={x:event.clientX,y:event.clientY};
+  if(port&&canEdit()){
+    if(!flushForm())return;
+    connectMode=true;linkSource=card.dataset.id;op={type:"link",id:event.pointerId};canvas.setPointerCapture(event.pointerId);render();event.preventDefault();return;
+  }
+  if(card&&connectMode&&canEdit()){
+    if(!linkSource)linkSource=card.dataset.id;else if(linkSource!==card.dataset.id)addEdge(linkSource,card.dataset.id);
+    render();return;
+  }
+  if(card&&!space&&event.button===0){
+    if(!selectNode(card.dataset.id))return;
+    if(canEdit())op={type:"node",id:event.pointerId,nodeId:card.dataset.id,start:pos,original:clone(data),x:node(card.dataset.id).x,y:node(card.dataset.id).y,moved:false};
+  }else{op={type:"pan",id:event.pointerId,start:pos,x:view.x,y:view.y};canvas.classList.add("dragging");}
+  if(op){canvas.setPointerCapture(event.pointerId);event.preventDefault();}
+});
+canvas.addEventListener("pointermove",event=>{
+  const rect=canvas.getBoundingClientRect();lastPoint={x:(event.clientX-rect.left-view.x)/view.z,y:(event.clientY-rect.top-view.y)/view.z};
+  if(linkSource)renderEdges();
+  if(!op||op.id!==event.pointerId)return;
+  if(op.type==="pan"){view.x=op.x+event.clientX-op.start.x;view.y=op.y+event.clientY-op.start.y;transform();}
+  if(op.type==="node"){
+    const dx=(event.clientX-op.start.x)/view.z,dy=(event.clientY-op.start.y)/view.z;
+    if(Math.abs(dx)+Math.abs(dy)>3)op.moved=true;
+    if(op.moved){const n=node(op.nodeId);n.x=Math.max(-100000,Math.min(100000,Math.round(op.x+dx)));n.y=Math.max(-100000,Math.min(100000,Math.round(op.y+dy)));renderNodes();renderEdges();}
+  }
+});
+function finishPointer(event,cancel=false){
+  if(!op||op.id!==event.pointerId)return;const ended=op;op=null;
+  if(ended.type==="node"&&ended.moved){
+    if(cancel)data=ended.original;
+    else{history.push(ended.original);if(history.length>40)history.shift();dirty=true;stash();}
+    render();
+  }
+  if(ended.type==="link"&&!cancel){
+    const target=document.elementFromPoint(event.clientX,event.clientY)?.closest(".node");
+    if(target&&target.dataset.id!==linkSource)addEdge(linkSource,target.dataset.id);
+  }
+  if(cancel){connectMode=false;linkSource=null;render();}
+  if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
+  canvas.classList.remove("dragging");
+}
+canvas.addEventListener("pointerup",e=>finishPointer(e));canvas.addEventListener("pointercancel",e=>finishPointer(e,true));
+canvas.addEventListener("wheel",e=>{e.preventDefault();const r=canvas.getBoundingClientRect();zoomAt(Math.exp(-e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+canvas.addEventListener("dblclick",e=>{if(data&&!e.target.closest(".node")&&!e.target.closest("button")&&!e.target.closest("[data-edge]"))addNode("skill",lastPoint);});
+window.addEventListener("keydown",e=>{
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if(e.key==="Escape"){connectMode=false;linkSource=null;render();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if($("node-form")?.dataset.changed==="true")applyForm($("node-form"));void save();}
+  if(typing)return;
+  if(e.code==="Space"){space=true;e.preventDefault();}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();undo();}
+});
+window.addEventListener("keyup",e=>{if(e.code==="Space")space=false;});
+window.addEventListener("blur",()=>{space=false;});
+window.addEventListener("beforeunload",e=>{if(dirty||$("node-form")?.dataset.changed==="true"){stash();e.preventDefault();e.returnValue="";}});
+function undo(){if(!canEdit()||!flushForm()||!history.length)return;data=history.pop();dirty=true;stash();selection=null;render();showHelp();}
+$("save").onclick=()=>{if($("node-form")?.dataset.changed==="true"&&!applyForm($("node-form")))return;void save();};
+$("add").onclick=()=>addNode();$("add-topic").onclick=()=>addNode("topic");
+$("connect").onclick=()=>{if(!flushForm())return;connectMode=!connectMode;linkSource=null;notice(connectMode?"Выберите начало и конец стрелки. Для «Входит в тему» сначала выбирайте родительский раздел.":"");render();};
+$("undo").onclick=undo;$("overview").onclick=()=>openSection("overview");
+$("search").oninput=()=>{showArchived=false;renderSearch();};
+$("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
+$("prerequisites").onchange=renderEdges;$("zoom-in").onclick=()=>zoomAt(1.2);$("zoom-out").onclick=()=>zoomAt(1/1.2);$("fit").onclick=fit;
+$("fullscreen").onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();setTimeout(fit,100);}catch{notice("Полноэкранный режим недоступен в этом браузере.");}};
+$("close-inspector").onclick=()=>{if(!flushForm())return;selection=null;renderNodes();renderEdges();showHelp();$("inspector").classList.add("closed");};
+$("export").onclick=()=>{
+  if(!data||!flushForm())return;const blob=new Blob([JSON.stringify({id:snapshot.id,revision:snapshot.revision,exportedAt:new Date().toISOString(),data},null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob),a=element("a");a.href=url;a.download="mindcrafti-skills-grade-6.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+new ResizeObserver(()=>transform()).observe(canvas);
+showHelp();status();
