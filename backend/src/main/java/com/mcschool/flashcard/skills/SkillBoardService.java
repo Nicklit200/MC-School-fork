@@ -14,7 +14,12 @@ import tools.jackson.databind.ObjectMapper;
 public class SkillBoardService {
     public record Node(String id, String kind, String title, String de, String description,
                        String example, String source, String color, double x, double y, boolean archived,
-                       boolean core, List<String> schoolTypes) {}
+                       boolean core, List<String> schoolTypes) {
+        public Node(String id, String kind, String title, String de, String description,
+                    String example, String source, String color, double x, double y, boolean archived) {
+            this(id, kind, title, de, description, example, source, color, x, y, archived, false, null);
+        }
+    }
     public record Edge(String id, String source, String target, String kind) {}
     public record Board(int schemaVersion, String title, int grade, String source, List<Node> nodes, List<Edge> edges) {}
     public record Snapshot(String id, long revision, Instant updatedAt, Board data) {}
