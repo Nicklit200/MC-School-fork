@@ -1,0 +1,36 @@
+name: Verify skills groups and tracks
+on:
+  push:
+    branches: [feature/skills-groups-school-tracks]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-skills-groups-tracks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: Check skills board JavaScript
+        run: node --check frontend/public/skills-board/board.js
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Compile backend
+        working-directory: backend
+        run: mvn -B -DskipTests package
