@@ -18,10 +18,12 @@ class SkillBoardMcpServiceTest {
     SkillBoardMcpService service;
     JsonMapper mapper;
     User admin;
+    UUID adminId;
     Snapshot initial;
     @BeforeEach void setup() {
         boards = mock(SkillBoardService.class); mapper = JsonMapper.builder().build();
         service = new SkillBoardMcpService(boards, mapper); admin = user(Role.ADMIN);
+        adminId = admin.getId();
         var root = new Node("grade6", "root", "Grade 6", "Klasse 6", "", "", "Textbook", "orange", 0, 0, false);
         var topic = new Node("fractions", "topic", "Fractions", "Brueche", "", "", "Textbook", "blue", 300, 0, false);
         var skill = new Node("reduce", "skill", "Reduce fractions", "Kuerzen", "Find common factor", "6/8", "Chapter 7", "blue", 700, 200, false);
@@ -30,7 +32,7 @@ class SkillBoardMcpServiceTest {
             List.of(new Edge("r-t", "grade6", "fractions", "contains"), new Edge("t-s", "fractions", "reduce", "contains"), new Edge("t-a", "fractions", "add", "contains"), new Edge("s-a", "reduce", "add", "prerequisite")));
         initial = new Snapshot("grade-6", 3, Instant.now(), board);
         when(boards.get("grade-6")).thenReturn(initial);
-        when(boards.save(eq("grade-6"), any(), eq(admin.getId()))).thenAnswer(inv -> new Snapshot("grade-6", 4, Instant.now(), ((SaveRequest) inv.getArgument(1)).data()));
+        when(boards.save(eq("grade-6"), any(), eq(adminId))).thenAnswer(inv -> new Snapshot("grade-6", 4, Instant.now(), ((SaveRequest) inv.getArgument(1)).data()));
     }
     User user(Role role) { User u=mock(User.class); when(u.getId()).thenReturn(UUID.randomUUID()); when(u.getRole()).thenReturn(role); return u; }
     Map<String,Object> edit(long revision, String json, User caller) { return service.call("edit_skill_board", Map.of("expectedRevision", revision, "operationsJson", json), caller); }
@@ -54,7 +56,7 @@ class SkillBoardMcpServiceTest {
     @Test void preservesFieldsPositionsAndUnrelatedNodesWhenRenaming() {
         var r=edit(3,"[{\"op\":\"update_node\",\"id\":\"reduce\",\"fields\":{\"title\":\"Equivalent fractions\"}}]",admin);
         assertEquals(false,r.get("isError")); assertEquals(true,structured(r).get("saved"));
-        var captor=ArgumentCaptor.forClass(SaveRequest.class); verify(boards).save(eq("grade-6"),captor.capture(),eq(admin.getId()));
+        var captor=ArgumentCaptor.forClass(SaveRequest.class); verify(boards).save(eq("grade-6"),captor.capture(),eq(adminId));
         var next=captor.getValue().data(); assertEquals(3,captor.getValue().expectedRevision());
         assertEquals(initial.data().nodes().get(3),next.nodes().get(3));
         assertEquals("Chapter 7",next.nodes().get(2).source()); assertEquals(700,next.nodes().get(2).x());
@@ -106,7 +108,7 @@ class SkillBoardMcpServiceTest {
         String json="{\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"edit_skill_board\",\"arguments\":{\"expectedRevision\":3,\"operationsJson\":\"[{\\\"op\\\":\\\"update_node\\\",\\\"id\\\":\\\"reduce\\\",\\\"fields\\\":{\\\"title\\\":\\\"Renamed via MCP\\\"}}]\"}}}";
         @SuppressWarnings("unchecked") Map<String,Object> request=mapper.readValue(json,Map.class);
         var response=controller.post("Bearer skills-test-token",null,request);
-        assertTrue(mapper.writeValueAsString(response.getBody()).contains("Renamed via MCP")); verify(boards).save(anyString(),any(),eq(admin.getId()));
+        assertTrue(mapper.writeValueAsString(response.getBody()).contains("Renamed via MCP")); verify(boards).save(anyString(),any(),eq(adminId));
         clearInvocations(boards);
         var denied=controller.post(null,null,request); assertTrue(mapper.writeValueAsString(denied.getBody()).contains("requires authentication")); noSave();
     }
