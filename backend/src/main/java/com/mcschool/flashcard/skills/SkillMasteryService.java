@@ -1,6 +1,9 @@
 package com.mcschool.flashcard.skills;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.groups.StudentGroup;
+import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
+import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -16,17 +19,23 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class SkillMasteryService {
     public record StudentOption(UUID id, String fullName, Integer grade, String schoolType) {}
+    public record GroupOption(UUID id, String name, List<StudentOption> students) {}
     public record MasterySnapshot(UUID studentId, String studentName, Map<String,Integer> mastery, Instant updatedAt) {}
     public record UpdateRequest(int mastery) {}
 
     private final JdbcTemplate jdbc;
     private final UserRepository users;
     private final SkillBoardService boards;
+    private final StudentGroupRepository groups;
+    private final StudentGroupMemberRepository groupMembers;
 
-    public SkillMasteryService(JdbcTemplate jdbc, UserRepository users, SkillBoardService boards) {
+    public SkillMasteryService(JdbcTemplate jdbc, UserRepository users, SkillBoardService boards,
+                               StudentGroupRepository groups, StudentGroupMemberRepository groupMembers) {
         this.jdbc = jdbc;
         this.users = users;
         this.boards = boards;
+        this.groups = groups;
+        this.groupMembers = groupMembers;
     }
 
     @Transactional(readOnly = true)
@@ -40,6 +49,29 @@ public class SkillMasteryService {
                     .stream().filter(u -> u.getStatus() == UserStatus.ACTIVE).toList();
         }
         return visible.stream().map(u -> new StudentOption(u.getId(), u.getFullName(), u.getGrade(), u.getSchoolType())).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<GroupOption> listGroups(AuthenticatedUser caller) {
+        requireReader(caller);
+        List<StudentGroup> visible = caller.role() == Role.ADMIN
+                ? groups.findAll()
+                : groups.findAllByTeacherIdOrderByNameAsc(caller.id());
+        return visible.stream()
+                .sorted(Comparator.comparing(StudentGroup::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(group -> new GroupOption(
+                        group.getId(),
+                        group.getName(),
+                        groupMembers.findAllByGroupIdOrderByStudentFullNameAsc(group.getId()).stream()
+                                .map(member -> member.getStudent())
+                                .filter(student -> !student.isArchived() && student.getStatus() == UserStatus.ACTIVE)
+                                .map(student -> new StudentOption(
+                                        student.getId(),
+                                        student.getFullName(),
+                                        student.getGrade(),
+                                        student.getSchoolType()))
+                                .toList()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
