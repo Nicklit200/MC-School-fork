@@ -175,6 +175,7 @@ export function Layout({ children }: { children: ReactNode }) {
     ? [
         { to: '/today', label: 'nav.today' },
         { to: '/my-cards', label: 'nav.myCards' },
+        { to: '/student/lessons', label: language === 'DE' ? 'Mein Unterricht' : 'Мои уроки' },
         { to: '/settings', label: 'nav.settings' },
       ]
     : isParent
