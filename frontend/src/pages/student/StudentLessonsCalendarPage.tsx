@@ -125,6 +125,71 @@ export function StudentLessonsCalendarPage() {
     }
   }
 
+  function renderMonthLessonCard(lesson: StudentLesson) {
+    const started = new Date(lesson.startsAt).getTime() <= Date.now();
+    const ended = new Date(lesson.endsAt).getTime() < Date.now();
+
+    return (
+      <div
+        key={lesson.eventId}
+        style={{
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: 15,
+          background: '#fff',
+          boxShadow: '0 5px 16px rgba(30, 45, 70, .05)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{formatStartTime(lesson.startsAt, language)}</div>
+          <div className="muted" style={{ fontSize: 12 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
+        </div>
+        <div style={{ marginTop: 6, fontWeight: 800, lineHeight: 1.3 }}>{lesson.title}</div>
+        {lesson.groupName && (
+          <div className="muted" style={{ marginTop: 5, fontSize: 12 }}>
+            {language === 'DE' ? 'Gruppe' : 'Группа'}: {lesson.groupName}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gap: 8, marginTop: 13 }}>
+          <button
+            type="button"
+            className="btn"
+            disabled={!lesson.hasSharedDocument || openingDocumentId === lesson.eventId}
+            onClick={() => void openSharedDocument(lesson)}
+            style={{ width: '100%' }}
+          >
+            {openingDocumentId === lesson.eventId
+              ? (language === 'DE' ? 'Unterricht wird geöffnet…' : 'Открываем урок…')
+              : lesson.hasSharedDocument
+                ? (language === 'DE' ? 'Unterricht öffnen' : 'Открыть урок')
+                : (language === 'DE' ? 'Unterricht noch nicht bereit' : 'Урок ещё не готов')}
+          </button>
+
+          {lesson.meetUrl ? (
+            <a
+              className="btn btn--secondary"
+              href={lesson.meetUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ width: '100%', textAlign: 'center' }}
+            >
+              {ended
+                ? (language === 'DE' ? 'Meet-Link öffnen' : 'Открыть ссылку урока')
+                : started
+                  ? (language === 'DE' ? 'Jetzt beitreten' : 'Подключиться сейчас')
+                  : (language === 'DE' ? 'Zum Unterricht' : 'Подключиться к уроку')}
+            </a>
+          ) : (
+            <button className="btn btn--secondary" type="button" disabled style={{ width: '100%' }}>
+              {language === 'DE' ? 'Meet-Link noch nicht bereit' : 'Ссылка на урок ещё не готова'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function renderLessonCard(lesson: StudentLesson) {
     const started = new Date(lesson.startsAt).getTime() <= Date.now();
     const ended = new Date(lesson.endsAt).getTime() < Date.now();
@@ -268,10 +333,72 @@ export function StudentLessonsCalendarPage() {
           </div>
         </div>
       ) : (
-        <>
-          <section className="panel" style={{ padding: 20, margin: 0, overflowX: 'auto' }}>
-            <div style={{ minWidth: 980 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 64px', alignItems: 'center', marginBottom: 18 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(320px, 390px) minmax(760px, 1fr)',
+            gap: 22,
+            alignItems: 'start',
+          }}
+        >
+          <aside
+            className="panel"
+            style={{
+              margin: 0,
+              padding: 18,
+              minHeight: 500,
+              position: 'sticky',
+              top: 86,
+            }}
+          >
+            <div style={{ paddingBottom: 13, borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 750, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                {language === 'DE' ? 'Unterricht an diesem Tag' : 'Уроки в этот день'}
+              </div>
+              <h2 style={{ margin: '6px 0 0', fontSize: 20, lineHeight: 1.25 }}>
+                {selectedMonthDayKey
+                  ? formatSelectedDayTitle(selectedMonthDayKey, language)
+                  : (language === 'DE' ? 'Wähle einen Tag' : 'Выбери день')}
+              </h2>
+            </div>
+
+            {!selectedMonthDayKey ? (
+              <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+                {language === 'DE'
+                  ? 'Klicke rechts im Kalender auf einen Tag.'
+                  : 'Нажми справа на нужный день в календаре.'}
+              </div>
+            ) : selectedMonthLessons.length === 0 ? (
+              <div style={{ padding: '12px 4px' }}>
+                <div style={{ fontWeight: 800, marginBottom: 5 }}>
+                  {language === 'DE' ? 'Kein Unterricht' : 'Уроков нет'}
+                </div>
+                <div className="muted" style={{ fontSize: 13, lineHeight: 1.45 }}>
+                  {language === 'DE'
+                    ? 'Für diesen Tag ist kein Unterricht geplant.'
+                    : 'На этот день у ученика нет запланированных уроков.'}
+                </div>
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: 10 }}>
+                {selectedMonthLessons.map(renderMonthLessonCard)}
+              </div>
+            )}
+          </aside>
+
+          <section
+            className="panel"
+            style={{
+              padding: 16,
+              margin: 0,
+              overflowX: 'auto',
+              width: '100%',
+              maxWidth: 1160,
+              justifySelf: 'end',
+            }}
+          >
+            <div style={{ minWidth: 760 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '52px 1fr 52px', alignItems: 'center', marginBottom: 12 }}>
                 <button
                   type="button"
                   aria-label={language === 'DE' ? 'Vorheriger Monat' : 'Предыдущий месяц'}
@@ -279,11 +406,11 @@ export function StudentLessonsCalendarPage() {
                     setMonthCursor((value) => addMonths(value, -1));
                     setSelectedMonthDayKey(null);
                   }}
-                  style={monthNavButtonStyle}
+                  style={{ ...monthNavButtonStyle, width: 38, height: 38, fontSize: 26 }}
                 >
                   ‹
                 </button>
-                <div style={{ textAlign: 'center', fontSize: 28, fontWeight: 850, color: '#1f2933' }}>
+                <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 850, color: '#1f2933' }}>
                   {formatMonthTitle(monthCursor, language)}
                 </div>
                 <button
@@ -293,7 +420,7 @@ export function StudentLessonsCalendarPage() {
                     setMonthCursor((value) => addMonths(value, 1));
                     setSelectedMonthDayKey(null);
                   }}
-                  style={{ ...monthNavButtonStyle, justifySelf: 'end' }}
+                  style={{ ...monthNavButtonStyle, width: 38, height: 38, fontSize: 26, justifySelf: 'end' }}
                 >
                   ›
                 </button>
@@ -301,7 +428,7 @@ export function StudentLessonsCalendarPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #e8e9ec' }}>
                 {weekdayLabels(language).map((label) => (
-                  <div key={label} style={{ textAlign: 'center', padding: '8px 6px 12px', fontSize: 13, fontWeight: 800, color: '#7b8493' }}>
+                  <div key={label} style={{ textAlign: 'center', padding: '6px 4px 9px', fontSize: 12, fontWeight: 800, color: '#7b8493' }}>
                     {label}
                   </div>
                 ))}
@@ -326,59 +453,49 @@ export function StudentLessonsCalendarPage() {
                         border: 'none',
                         borderRight: '1px solid #eceef1',
                         borderBottom: '1px solid #eceef1',
-                        background: selected ? '#fff7f1' : hasLessons && inMonth ? '#fffaf6' : '#fff',
-                        minHeight: 132,
-                        padding: 12,
-                        textAlign: 'left',
+                        background: selected ? '#fff5ed' : '#fff',
+                        minHeight: 86,
+                        padding: 7,
                         cursor: 'pointer',
-                        opacity: inMonth ? 1 : 0.34,
+                        opacity: inMonth ? 1 : 0.30,
                         outline: selected ? '2px solid #ffb27a' : 'none',
                         outlineOffset: -2,
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 9 }}>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
                         <div
                           style={{
-                            width: 38,
-                            height: 38,
+                            width: 34,
+                            height: 34,
                             borderRadius: '50%',
                             display: 'grid',
                             placeItems: 'center',
-                            fontSize: 17,
+                            fontSize: 15,
                             fontWeight: 850,
                             background: hasLessons && inMonth ? '#ff6a00' : '#fff',
                             color: hasLessons && inMonth ? '#fff' : inMonth ? '#1f2933' : '#8f98a6',
                             border: !hasLessons && today && inMonth ? '2px solid #ff6a00' : '2px solid transparent',
-                            boxShadow: hasLessons && inMonth ? '0 5px 12px rgba(255, 106, 0, .22)' : 'none',
+                            boxShadow: hasLessons && inMonth ? '0 4px 10px rgba(255, 106, 0, .20)' : 'none',
                           }}
                         >
                           {date.getDate()}
                         </div>
                       </div>
 
-                      {inMonth && dayLessons.slice(0, 2).map((lesson) => (
+                      {inMonth && hasLessons && (
                         <div
-                          key={lesson.eventId}
                           style={{
-                            marginTop: 5,
-                            padding: '5px 7px',
-                            borderRadius: 8,
-                            background: '#fff0e5',
-                            color: '#9f4100',
-                            fontSize: 11,
-                            fontWeight: 750,
-                            lineHeight: 1.25,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            marginTop: 7,
+                            textAlign: 'center',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            color: '#c04b00',
+                            lineHeight: 1.2,
                           }}
                         >
-                          {formatStartTime(lesson.startsAt, language)} · {lesson.title}
-                        </div>
-                      ))}
-                      {inMonth && dayLessons.length > 2 && (
-                        <div style={{ marginTop: 5, fontSize: 11, color: '#c14d00', fontWeight: 750 }}>
-                          +{dayLessons.length - 2} {language === 'DE' ? 'weitere' : 'ещё'}
+                          {dayLessons.length === 1
+                            ? (language === 'DE' ? '1 Unterricht' : '1 урок')
+                            : (language === 'DE' ? dayLessons.length + ' Unterrichte' : dayLessons.length + ' урока')}
                         </div>
                       )}
                     </button>
@@ -387,32 +504,7 @@ export function StudentLessonsCalendarPage() {
               </div>
             </div>
           </section>
-
-          <section style={{ marginTop: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-              <h2 style={{ margin: 0, fontSize: 21 }}>
-                {selectedMonthDayKey
-                  ? formatSelectedDayTitle(selectedMonthDayKey, language)
-                  : (language === 'DE' ? 'Wähle einen Unterrichtstag' : 'Выбери день с уроком')}
-              </h2>
-              {selectedMonthLessons.length > 0 && (
-                <span className="muted" style={{ fontSize: 13 }}>
-                  {selectedMonthLessons.length} {language === 'DE' ? 'Unterricht(e)' : 'урок(а)'}
-                </span>
-              )}
-            </div>
-
-            {selectedMonthDayKey && selectedMonthLessons.length === 0 ? (
-              <div className="panel" style={{ margin: 0 }}>
-                <span className="muted">{language === 'DE' ? 'An diesem Tag gibt es keinen Unterricht.' : 'В этот день уроков нет.'}</span>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 14 }}>
-                {selectedMonthLessons.map(renderLessonCard)}
-              </div>
-            )}
-          </section>
-        </>
+        </div>
       )}
 
       <div className="banner banner--info" style={{ marginTop: 18 }}>
