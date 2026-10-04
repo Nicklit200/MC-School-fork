@@ -48,7 +48,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.17.0";
+    private static final String SERVER_VERSION = "1.17.1";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -319,6 +319,9 @@ public class MindcraftiMcpController {
             status.put("mode", auth.authenticated() ? "full" : "diagnostic");
             status.put("authentication", auth.apiKey() ? "api_key" : auth.user() != null ? "oauth" : "none");
             if (auth.user() != null) status.put("role", auth.user().getRole().name());
+            List<Map<String, Object>> visibleTools = tools(auth.authenticated());
+            status.put("availableToolCount", visibleTools.size());
+            status.put("availableToolNames", visibleTools.stream().map(tool -> String.valueOf(tool.get("name"))).toList());
             return toolResult(status);
         }
         if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
