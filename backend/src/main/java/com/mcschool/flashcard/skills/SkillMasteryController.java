@@ -35,6 +35,15 @@ public class SkillMasteryController {
         return service.get(boardId, studentId, caller);
     }
 
+    @GetMapping("/{boardId}/students/{studentId}/mastery/{skillId}/history")
+    public List<SkillMasteryService.MasteryChange> history(
+            @PathVariable String boardId,
+            @PathVariable UUID studentId,
+            @PathVariable String skillId,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return service.history(boardId, studentId, skillId, caller);
+    }
+
     @PutMapping("/{boardId}/students/{studentId}/mastery/{skillId}")
     public SkillMasteryService.MasterySnapshot update(
             @PathVariable String boardId,
@@ -42,8 +51,17 @@ public class SkillMasteryController {
             @PathVariable String skillId,
             @RequestBody SkillMasteryService.UpdateRequest request,
             @AuthenticationPrincipal AuthenticatedUser caller) {
-        if (request == null) throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Укажите процент");
-        return service.update(boardId, studentId, skillId, request.mastery(), caller);
+        if (request == null || request.mastery() == null)
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Укажите процент");
+        return service.update(
+                boardId,
+                studentId,
+                skillId,
+                request.mastery(),
+                request.reason(),
+                request.evidence(),
+                Boolean.TRUE.equals(request.manualOverride()),
+                caller);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
