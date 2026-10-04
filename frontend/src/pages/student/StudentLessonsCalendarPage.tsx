@@ -83,9 +83,17 @@ export function StudentLessonsCalendarPage() {
   if (loading) return <p className="muted">{t('common.loading')}</p>;
 
   return (
-    <div style={{ maxWidth: 1600, margin: '0 auto' }}>
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ marginBottom: 6 }}>{language === 'DE' ? 'Mein Unterricht' : 'Мои уроки'}</h1>
+    <div
+      style={{
+        width: 'calc(100vw - 32px)',
+        maxWidth: 'none',
+        marginLeft: '50%',
+        transform: 'translateX(-50%)',
+        paddingBottom: 16,
+      }}
+    >
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ marginBottom: 8, fontSize: 30 }}>{language === 'DE' ? 'Mein Unterricht' : 'Мои уроки'}</h1>
         <p className="muted" style={{ margin: 0 }}>
           {language === 'DE'
             ? 'Dein Stundenplan für die nächsten 7 Tage. Öffne das gemeinsame Dokument oder tritt dem Unterricht bei.'
@@ -95,13 +103,13 @@ export function StudentLessonsCalendarPage() {
 
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
 
-      <div style={{ overflowX: 'auto', paddingBottom: 10 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(220px, 1fr))', gap: 12, minWidth: 1540 }}>
+      <div style={{ overflowX: 'auto', paddingBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(210px, 1fr))', gap: 16, minWidth: 1470 }}>
           {scheduleDays.map((day, index) => (
-            <section key={day.key} className="panel" style={{ padding: 14, margin: 0, minHeight: 280 }}>
-              <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>{formatDayTitle(day.date, index, language)}</div>
-                <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>{formatDayDate(day.date, language)}</div>
+            <section key={day.key} className="panel" style={{ padding: 18, margin: 0, minHeight: 360 }}>
+              <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+                <div style={{ fontWeight: 850, fontSize: 18 }}>{formatDayTitle(day.date, index, language)}</div>
+                <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>{formatDayDate(day.date, language)}</div>
               </div>
 
               {day.lessons.length === 0 ? (
@@ -118,13 +126,13 @@ export function StudentLessonsCalendarPage() {
                         key={lesson.eventId}
                         style={{
                           border: '1px solid var(--border)',
-                          borderRadius: 12,
-                          padding: 12,
+                          borderRadius: 14,
+                          padding: 16,
                           background: '#fff',
                           boxShadow: '0 6px 18px rgba(30, 45, 70, .05)',
                         }}
                       >
-                        <div style={{ fontSize: 18, fontWeight: 900 }}>{formatStartTime(lesson.startsAt, language)}</div>
+                        <div style={{ fontSize: 21, fontWeight: 900 }}>{formatStartTime(lesson.startsAt, language)}</div>
                         <div style={{ marginTop: 5, fontWeight: 800, lineHeight: 1.3 }}>{lesson.title}</div>
                         <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
                           {formatLessonTime(lesson.startsAt, lesson.endsAt, language)}
