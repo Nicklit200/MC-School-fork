@@ -72,10 +72,8 @@ function LearningProfileCard({ student, language, onSaved }: {
   const tr = (ru: string, de: string) => language === 'DE' ? de : ru;
   const [grade, setGrade] = useState(student.grade == null ? '' : String(student.grade));
   const [schoolType, setSchoolType] = useState<SchoolType | ''>(student.schoolType ?? '');
-  const [learningStrengths, setLearningStrengths] = useState(student.learningStrengths ?? '');
   const [learningDifficulties, setLearningDifficulties] = useState(student.learningDifficulties ?? '');
   const [explanationStyle, setExplanationStyle] = useState(student.explanationStyle ?? '');
-  const [learningNotes, setLearningNotes] = useState(student.learningNotes ?? '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -83,10 +81,8 @@ function LearningProfileCard({ student, language, onSaved }: {
   useEffect(() => {
     setGrade(student.grade == null ? '' : String(student.grade));
     setSchoolType(student.schoolType ?? '');
-    setLearningStrengths(student.learningStrengths ?? '');
     setLearningDifficulties(student.learningDifficulties ?? '');
     setExplanationStyle(student.explanationStyle ?? '');
-    setLearningNotes(student.learningNotes ?? '');
   }, [student]);
 
   async function saveProfile() {
@@ -98,10 +94,10 @@ function LearningProfileCard({ student, language, onSaved }: {
         grade: grade ? Number(grade) : null,
         schoolType: schoolType || null,
         learningPace: null,
-        learningStrengths,
+        learningStrengths: student.learningStrengths ?? '',
         learningDifficulties,
         explanationStyle,
-        learningNotes,
+        learningNotes: student.learningNotes ?? '',
       });
       onSaved(saved);
       setMessage(tr('Учебный профиль сохранён.', 'Lernprofil gespeichert.'));
@@ -162,11 +158,6 @@ function LearningProfileCard({ student, language, onSaved }: {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 14, marginTop: 14 }}>
         <label className="field">
-          <span className="field__label">{tr('Что даётся хорошо / сильные стороны', 'Stärken')}</span>
-          <textarea className="input" rows={4} value={learningStrengths} onChange={(e) => setLearningStrengths(e.target.value)} placeholder={tr('Например: быстро считает устно, хорошо понимает графики…', 'Zum Beispiel: stark im Kopfrechnen, versteht Graphen schnell…')} />
-        </label>
-
-        <label className="field">
           <span className="field__label">{tr('Что даётся тяжело', 'Schwierigkeiten')}</span>
           <textarea className="input" rows={4} value={learningDifficulties} onChange={(e) => setLearningDifficulties(e.target.value)} placeholder={tr('Например: теряется при скобках, путает знаки, боится текстовых задач…', 'Zum Beispiel: Klammern, Vorzeichen, Textaufgaben…')} />
         </label>
@@ -176,10 +167,6 @@ function LearningProfileCard({ student, language, onSaved }: {
           <textarea className="input" rows={4} value={explanationStyle} onChange={(e) => setExplanationStyle(e.target.value)} placeholder={tr('Например: сначала один пример вместе, затем похожий самостоятельно; больше визуальных схем…', 'Zum Beispiel: erst ein Beispiel gemeinsam, dann selbstständig; mehr Visualisierung…')} />
         </label>
 
-        <label className="field">
-          <span className="field__label">{tr('Дополнительные учебные заметки', 'Weitere Lernnotizen')}</span>
-          <textarea className="input" rows={4} value={learningNotes} onChange={(e) => setLearningNotes(e.target.value)} placeholder={tr('Цели, особенности, мотивация, что важно учитывать на уроках…', 'Ziele, Motivation und alles, was im Unterricht berücksichtigt werden soll…')} />
-        </label>
       </div>
 
       <p className="muted" style={{ margin: '12px 0 0', fontSize: 13 }}>
