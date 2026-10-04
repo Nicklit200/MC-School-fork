@@ -516,6 +516,15 @@ function renderNodes(){
     }
     if(selectedGroupId){
       const list=element("div","mastery-list");
+      if(n.kind==="root"&&chosen.length){
+        const groupPct=Math.round(chosen.reduce((sum,student)=>sum+masteryPercent(n,student.id),0)/chosen.length);
+        const total=element("div","mastery-group-total");
+        total.append(
+          element("span","mastery-group-total-label","Общий процент группы"),
+          element("span",`mastery-group-total-value ${masteryClass(groupPct)}`,`${groupPct}%`)
+        );
+        list.append(total);
+      }
       for(const student of chosen.slice(0,4)){
         const row=element("div","mastery-person");
         row.append(element("span","mastery-person-name",student.fullName),element("span",`mastery-person-value ${masteryClass(masteryPercent(n,student.id))}`,`${masteryPercent(n,student.id)}%`));
