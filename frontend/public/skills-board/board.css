@@ -30,3 +30,5 @@ textarea{resize:vertical;min-height:82px;line-height:1.5}input[type=checkbox]{ac
 .dependency-block{margin:18px 0 4px}.dependency-block h3{font-size:11px;letter-spacing:.4px;color:#6f7d93;margin:14px 0 7px}.dependency-list{display:flex;flex-direction:column;gap:6px}.dependency-list button{white-space:normal;text-align:left;font-size:11px;line-height:1.35;padding:8px 9px}.dependency-list.before button{border-color:#bfdbfe;color:#1d4ed8;background:#eff6ff}.dependency-list.after button{border-color:#bbf7d0;color:#15803d;background:#f0fdf4}.dependency-empty{font-size:10px;color:#98a2b2;line-height:1.45}
 @media(max-width:850px){.student-filter span{display:none}.student-filter select{min-width:135px;max-width:170px}}
 @media(max-width:580px){.student-filter select{min-width:120px;max-width:140px}}
+
+.node .kind-meta{display:flex;align-items:center;gap:7px;margin-left:auto}.node.kind-root .mastery-badge{background:#ffffff18;border-color:#ffffff33;color:#fff}.node.kind-root .mastery-badge.low,.node.kind-root .mastery-badge.mid,.node.kind-root .mastery-badge.high{color:#fff}
