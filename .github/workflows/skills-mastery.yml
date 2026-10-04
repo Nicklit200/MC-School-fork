@@ -1,7 +1,7 @@
 name: Skills mastery verification
 on:
   push:
-    branches: [feature/skills-mastery-v1]
+    branches: [feature/skills-mastery-v1, feature/skill-evidence-v1]
 permissions:
   contents: read
 concurrency:
