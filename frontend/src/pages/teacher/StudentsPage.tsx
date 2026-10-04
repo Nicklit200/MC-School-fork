@@ -223,6 +223,11 @@ export function StudentsPage() {
                   </div>
                   <div className="teacher-student-email">{language === 'DE' ? 'Login' : 'Логин'}: <strong>{student.username ?? '—'}</strong></div>
                   <div className="teacher-student-meta">
+                    {language === 'DE' ? 'Klasse' : 'Класс'}: <strong>{student.grade ?? '—'}</strong>
+                    <span aria-hidden="true"> · </span>
+                    {language === 'DE' ? 'Schultyp' : 'Тип школы'}: <strong>{schoolTypeLabel(student.schoolType, language)}</strong>
+                  </div>
+                  <div className="teacher-student-meta">
                     {student.parentFullName
                       ? `${language === 'DE' ? 'Elternteil' : 'Родитель'}: ${student.parentFullName}`
                       : (language === 'DE' ? 'Elternteil im Bereich „Eltern“ verknüpfen' : 'Родителя можно привязать в разделе «Родители»')}
@@ -305,6 +310,20 @@ function localDateString(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function schoolTypeLabel(schoolType: StudentListItem['schoolType'], language: 'DE' | 'RU') {
+  if (!schoolType) return '—';
+  const labels: Record<NonNullable<StudentListItem['schoolType']>, string> = {
+    GYMNASIUM: 'Gymnasium',
+    REALSCHULE: 'Realschule',
+    MITTELSCHULE: 'Mittelschule',
+    WIRTSCHAFTSSCHULE: 'Wirtschaftsschule',
+    GESAMTSCHULE: 'Gesamtschule',
+    WERKREALSCHULE: 'Werkrealschule',
+    OTHER: language === 'DE' ? 'Andere' : 'Другой',
+  };
+  return labels[schoolType];
 }
 
 function studentInitial(name: string) {
