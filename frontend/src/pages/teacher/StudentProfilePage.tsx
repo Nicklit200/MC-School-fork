@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { CardSummary, DailyReviewHistoryItem, GroupLesson, Homework, LearningPace, SchoolType, StudentListItem } from '../../api/types';
+import type { CardSummary, DailyReviewHistoryItem, GroupLesson, Homework, SchoolType, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 
 export function StudentProfilePage() {
@@ -72,7 +72,6 @@ function LearningProfileCard({ student, language, onSaved }: {
   const tr = (ru: string, de: string) => language === 'DE' ? de : ru;
   const [grade, setGrade] = useState(student.grade == null ? '' : String(student.grade));
   const [schoolType, setSchoolType] = useState<SchoolType | ''>(student.schoolType ?? '');
-  const [learningPace, setLearningPace] = useState<LearningPace | ''>(student.learningPace ?? '');
   const [learningStrengths, setLearningStrengths] = useState(student.learningStrengths ?? '');
   const [learningDifficulties, setLearningDifficulties] = useState(student.learningDifficulties ?? '');
   const [explanationStyle, setExplanationStyle] = useState(student.explanationStyle ?? '');
@@ -84,7 +83,6 @@ function LearningProfileCard({ student, language, onSaved }: {
   useEffect(() => {
     setGrade(student.grade == null ? '' : String(student.grade));
     setSchoolType(student.schoolType ?? '');
-    setLearningPace(student.learningPace ?? '');
     setLearningStrengths(student.learningStrengths ?? '');
     setLearningDifficulties(student.learningDifficulties ?? '');
     setExplanationStyle(student.explanationStyle ?? '');
@@ -99,7 +97,7 @@ function LearningProfileCard({ student, language, onSaved }: {
       const saved = await api.students.updateLearningProfile(student.id, {
         grade: grade ? Number(grade) : null,
         schoolType: schoolType || null,
-        learningPace: learningPace || null,
+        learningPace: null,
         learningStrengths,
         learningDifficulties,
         explanationStyle,
@@ -160,15 +158,6 @@ function LearningProfileCard({ student, language, onSaved }: {
           </select>
         </label>
 
-        <label className="field">
-          <span className="field__label">{tr('Темп объяснения', 'Erklärungstempo')}</span>
-          <select className="input" value={learningPace} onChange={(e) => setLearningPace(e.target.value as LearningPace | '')}>
-            <option value="">{tr('Не выбран', 'Nicht gewählt')}</option>
-            <option value="SLOW">{tr('Медленно, пошагово', 'Langsam, Schritt für Schritt')}</option>
-            <option value="NORMAL">{tr('Обычный темп', 'Normales Tempo')}</option>
-            <option value="FAST">{tr('Быстро, можно идти вперёд', 'Schnell, kann zügig weitergehen')}</option>
-          </select>
-        </label>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 14, marginTop: 14 }}>
