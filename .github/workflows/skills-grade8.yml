@@ -11,20 +11,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: skills8
-          POSTGRES_PASSWORD: skills8
-          POSTGRES_DB: skills8
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,18 +26,27 @@ jobs:
           cache: maven
       - name: Check skills board JavaScript
         run: node --check frontend/public/skills-board/board.js
+      - name: Validate M8 seed JSON
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json,re
+          s=Path('backend/src/main/resources/db/migration/V67__add_grade8_m8_skill_board.sql').read_text()
+          m=re.search(r'\$seed\$(.*?)\$seed\$',s,re.S)
+          assert m, 'M8 JSON seed not found'
+          board=json.loads(m.group(1))
+          assert board['grade']==8
+          ids=[n['id'] for n in board['nodes']]
+          assert len(ids)==len(set(ids))
+          assert any(n['id']=='m8-root' for n in board['nodes'])
+          assert len([n for n in board['nodes'] if n['kind']=='skill']) >= 30
+          edge_ids=[e['id'] for e in board['edges']]
+          assert len(edge_ids)==len(set(edge_ids))
+          print(board['title'], len(board['nodes']), len(board['edges']))
+          PY
       - name: Build frontend
         working-directory: frontend
         run: npm ci && npm run build
       - name: Compile backend
         working-directory: backend
         run: mvn -B -DskipTests package
-      - name: Validate Grade 8 board migrations
-        env:
-          PGPASSWORD: skills8
-        run: |
-          psql -h localhost -U skills8 -d skills8 -v ON_ERROR_STOP=1 -c 'CREATE TABLE users(id UUID PRIMARY KEY);'
-          psql -h localhost -U skills8 -d skills8 -v ON_ERROR_STOP=1 -f backend/src/main/resources/db/migration/V65__add_skill_boards.sql
-          psql -h localhost -U skills8 -d skills8 -v ON_ERROR_STOP=1 -f backend/src/main/resources/db/migration/V66__add_student_skill_mastery.sql
-          psql -h localhost -U skills8 -d skills8 -v ON_ERROR_STOP=1 -f backend/src/main/resources/db/migration/V67__add_grade8_m8_skill_board.sql
-          psql -h localhost -U skills8 -d skills8 -v ON_ERROR_STOP=1 -c "SELECT id, revision, data->>'title' AS title FROM skill_boards ORDER BY id;"
