@@ -32,3 +32,25 @@ textarea{resize:vertical;min-height:82px;line-height:1.5}input[type=checkbox]{ac
 @media(max-width:580px){.student-filter select{min-width:120px;max-width:140px}}
 
 .node .kind-meta{display:flex;align-items:center;gap:7px;margin-left:auto}.node.kind-root .mastery-badge{background:#ffffff18;border-color:#ffffff33;color:#fff}.node.kind-root .mastery-badge.low,.node.kind-root .mastery-badge.mid,.node.kind-root .mastery-badge.high{color:#fff}
+
+.mastery-badge.unverified{border-style:dashed;box-shadow:inset 0 0 0 1px #d97706;color:#9a5b17}
+.mastery-proof-state{margin:8px 0 4px;padding:7px 9px;border-radius:8px;font-size:10px;font-weight:700;line-height:1.4}
+.mastery-proof-state.verified{background:#edf9ef;color:#28763b;border:1px solid #bae1c2}
+.mastery-proof-state.missing{background:#fff7e8;color:#9a5b17;border:1px solid #f3d19e}
+.mastery-field-label{display:block;margin:10px 0 5px!important;font-size:9px!important;letter-spacing:.6px!important;color:#7b879b!important}
+.mastery-box textarea,.mastery-box input{width:100%;font-size:11px;margin-bottom:5px}
+.mastery-box button.primary{width:100%;margin-top:8px;white-space:normal}
+.evidence-history{margin-top:18px;padding-top:14px;border-top:1px solid #e4e8ef}
+.evidence-history h3{font-size:10px;letter-spacing:.7px;color:#6f7d93;margin:0 0 10px}
+.evidence-history-body{display:flex;flex-direction:column;gap:10px}
+.evidence-change{border:1px solid #e1e6ee;border-radius:10px;background:#fff;padding:9px}
+.evidence-change-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;color:#8792a4}
+.evidence-change-head strong{font-size:12px;color:#2c3d56}
+.evidence-reason{font-size:11px;line-height:1.45;color:#44546d;margin:7px 0}
+.evidence-item{border-left:3px solid #7da1d8;background:#f7faff;padding:7px 8px;margin-top:7px;border-radius:0 7px 7px 0;font-size:10px;line-height:1.45;color:#52617a}
+.evidence-source{font-weight:800;color:#355273;margin-bottom:4px}
+.evidence-answer{margin-top:4px;color:#5e6d84}
+.evidence-impact{margin-top:5px;font-style:italic;color:#66758a}
+.evidence-link{display:inline-block;margin-top:5px;color:#2563eb;text-decoration:none;font-weight:700}
+.evidence-id{margin-top:5px;color:#8c98a8;overflow-wrap:anywhere}
+.evidence-missing{font-size:10px;line-height:1.45;color:#9a5b17;background:#fff7e8;border:1px solid #f3d19e;border-radius:7px;padding:7px 8px}
