@@ -2,7 +2,7 @@ import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryLoading=false,trackFilterState=null;
-const boardIdByGrade=new Map([[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
+const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
 try{
@@ -330,7 +330,7 @@ window.addEventListener("message",async event=>{
     }
     if(!boardId){
       $("board-grade").textContent=`${grades[0]} класс`;
-      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode("Сейчас доступны карты 6 и 8 класса."));
+      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode("Сейчас доступны карты 5, 6 и 8 класса."));
       $("empty").hidden=false;
       $("empty").replaceChildren(element("strong","",`Для ${grades[0]} класса карта пока не создана`));
       status();return;
