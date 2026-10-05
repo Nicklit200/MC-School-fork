@@ -395,7 +395,9 @@ async function save(){
     notice(error.status===409?"Карта уже изменена в другой вкладке. Ваш черновик сохранён в этом браузере. Выгрузите JSON и обновите страницу; изменения не перезаписаны.":error.message,true);
   }finally{saving=false;render();}
 }
-const cardMetrics=()=>{const rows=selectedGroupId?Math.min(4,selectedStudents().length):0;return viewMode==="hierarchy"?{w:220,h:112+rows*22}:{w:260,h:148+rows*22};};
+const fallbackCardMetrics=()=>{const rows=selectedGroupId?Math.min(4,selectedStudents().length):0,compact=innerWidth<=580,narrow=innerWidth<=380;return viewMode==="hierarchy"?{w:narrow?200:compact?210:220,h:112+rows*22}:{w:narrow?220:compact?236:260,h:148+rows*22};};
+function cardElement(id){for(const child of layer.children)if(child.dataset?.id===id)return child;return null;}
+function cardMetrics(target=null){const id=typeof target==="string"?target:target?.id,card=id?cardElement(id):null;return card?{w:card.offsetWidth,h:card.offsetHeight}:fallbackCardMetrics();}
 function displayPosition(n){return hierarchyPositions.get(n.id)||{x:n.x,y:n.y};}
 function storedOrder(a,b){return (a.x-b.x)||(a.y-b.y)||a.title.localeCompare(b.title,"ru");}
 function buildHierarchyLayout(items){
@@ -407,34 +409,34 @@ function buildHierarchyLayout(items){
   }
   for(const list of children.values())list.sort(storedOrder);
   const root=scope!=="overview"&&byId.has(scope)?byId.get(scope):items.find(n=>n.kind==="root"&&!parents.has(n.id))||items.find(n=>n.kind==="root")||items.find(n=>!parents.has(n.id))||items[0];
-  const {w,h}=cardMetrics(),colGap=w+54,rowGap=h+34,topY=220;
+  const gap=34,maxW=Math.max(fallbackCardMetrics().w,...items.map(n=>cardMetrics(n).w)),colGap=maxW+54,topY=cardMetrics(root).h+108;
   const direct=(children.get(root.id)||[]).slice();
   if(scope!=="overview"){
     result.set(root.id,{x:0,y:0});let y=topY;
     const walk=(parent,depth)=>{
       for(const child of children.get(parent.id)||[]){
-        result.set(child.id,{x:Math.min(depth,4)*30,y});y+=rowGap;walk(child,depth+1);
+        result.set(child.id,{x:Math.min(depth,4)*30,y});y+=cardMetrics(child).h+gap;walk(child,depth+1);
       }
     };
     walk(root,0);
     let orphanY=topY;
-    for(const n of items.filter(n=>!result.has(n.id)).sort(storedOrder)){result.set(n.id,{x:colGap,y:orphanY});orphanY+=rowGap;}
+    for(const n of items.filter(n=>!result.has(n.id)).sort(storedOrder)){result.set(n.id,{x:colGap,y:orphanY});orphanY+=cardMetrics(n).h+gap;}
     return result;
   }
   let branches=direct;
   if(!branches.length)branches=items.filter(n=>n.id!==root.id&&!parents.has(n.id)).sort(storedOrder);
   result.set(root.id,{x:Math.max(0,(branches.length-1)*colGap/2),y:0});
   branches.forEach((branch,index)=>{
-    const baseX=index*colGap;result.set(branch.id,{x:baseX,y:topY});let y=topY+rowGap;
+    const baseX=index*colGap;result.set(branch.id,{x:baseX,y:topY});let y=topY+cardMetrics(branch).h+gap;
     const walk=(parent,depth)=>{
       for(const child of children.get(parent.id)||[]){
-        result.set(child.id,{x:baseX+Math.min(depth,3)*24,y});y+=rowGap;walk(child,depth+1);
+        result.set(child.id,{x:baseX+Math.min(depth,3)*24,y});y+=cardMetrics(child).h+gap;walk(child,depth+1);
       }
     };
     walk(branch,1);
   });
   let extraX=branches.length*colGap,extraY=topY;
-  for(const n of items.filter(n=>!result.has(n.id)).sort(storedOrder)){result.set(n.id,{x:extraX,y:extraY});extraY+=rowGap;}
+  for(const n of items.filter(n=>!result.has(n.id)).sort(storedOrder)){result.set(n.id,{x:extraX,y:extraY});extraY+=cardMetrics(n).h+gap;}
   return result;
 }
 function visibleNodes(){
@@ -496,7 +498,7 @@ function renderNodes(){
     const relationClass=highlights.beforeNodes.has(n.id)?" dependency-before":highlights.afterNodes.has(n.id)?" dependency-after":highlights.active&&selection?.id!==n.id&&n.kind==="skill"?" dependency-dim":"";
     const groupClass=selectedGroupId?" group-mode":"";
     const e=element("div",`node kind-${n.kind}${groupClass}${trackClass}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}`);
-    const p=displayPosition(n),metrics=cardMetrics();e.dataset.id=n.id;e.style.left=p.x+"px";e.style.top=p.y+"px";e.style.height=metrics.h+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
+    const p=displayPosition(n);e.dataset.id=n.id;e.style.left=p.x+"px";e.style.top=p.y+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
     e.setAttribute("role","button");e.setAttribute("aria-label",`${kindLabels[n.kind]}: ${n.title}`);
     const count=n.kind==="topic"?descendants(data,n.id).size:null;
     const kind=element("div","kind",kindLabels[n.kind]),meta=element("span","kind-meta");
@@ -541,15 +543,15 @@ function renderNodes(){
     layer.append(e);
   }
 }
-function pathBetween(a,b){
-  const {w,h}=cardMetrics();
+function pathBetween(a,b,aMetrics=fallbackCardMetrics(),bMetrics=fallbackCardMetrics()){
+  const aw=aMetrics.w,ah=aMetrics.h,bw=bMetrics.w,bh=bMetrics.h;
   if(viewMode==="hierarchy"){
-    const sx=a.x+w/2,sy=a.y+h,tx=b.x+w/2,ty=b.y,d=Math.max(45,Math.abs(ty-sy)/2);
+    const sx=a.x+aw/2,sy=a.y+ah,tx=b.x+bw/2,ty=b.y,d=Math.max(45,Math.abs(ty-sy)/2);
     return `M${sx},${sy} C${sx},${sy+d} ${tx},${ty-d} ${tx},${ty}`;
   }
-  const vertical=b.y>a.y+h+22&&Math.abs(b.x-a.x)<600;
-  const sx=vertical?a.x+w/2:a.x+w,sy=vertical?a.y+h:a.y+h/2;
-  const tx=vertical?b.x+w/2:b.x,ty=vertical?b.y:b.y+h/2;
+  const vertical=b.y>a.y+ah+22&&Math.abs(b.x-a.x)<600;
+  const sx=vertical?a.x+aw/2:a.x+aw,sy=vertical?a.y+ah:a.y+ah/2;
+  const tx=vertical?b.x+bw/2:b.x,ty=vertical?b.y:b.y+bh/2;
   if(vertical){const d=Math.max(55,Math.abs(ty-sy)/2);return `M${sx},${sy} C${sx},${sy+d} ${tx},${ty-d} ${tx},${ty}`;}
   const d=Math.max(65,Math.abs(tx-sx)/2);return `M${sx},${sy} C${sx+d},${sy} ${tx-d},${ty} ${tx},${ty}`;
 }
@@ -558,7 +560,8 @@ function renderEdges(){
   edgeLayer.replaceChildren();const ids=new Set(visibleNodes().map(n=>n.id)),highlights=dependencyHighlights();
   for(const edge of data.edges){
     if(!ids.has(edge.source)||!ids.has(edge.target)||edge.kind==="prerequisite"&&!$("prerequisites").checked)continue;
-    const d=pathBetween(displayPosition(node(edge.source)),displayPosition(node(edge.target)));
+    const sourceNode=node(edge.source),targetNode=node(edge.target);
+    const d=pathBetween(displayPosition(sourceNode),displayPosition(targetNode),cardMetrics(sourceNode),cardMetrics(targetNode));
     let dependencyClass="",marker=edge.kind==="contains"?"arrow-hierarchy":"arrow-pre";
     if(edge.kind==="prerequisite"){
       if(highlights.beforeEdges.has(edge.id)){dependencyClass=" dependency-before";marker="arrow-before";}
@@ -573,7 +576,7 @@ function renderEdges(){
     }
   }
   if(linkSource&&node(linkSource)){
-    const source=displayPosition(node(linkSource));const e=document.createElementNS(svgNS,"path");e.setAttribute("d",pathBetween(source,{x:lastPoint.x,y:lastPoint.y-cardMetrics().h/2}));
+    const sourceNode=node(linkSource),source=displayPosition(sourceNode);const e=document.createElementNS(svgNS,"path");e.setAttribute("d",pathBetween(source,{x:lastPoint.x,y:lastPoint.y},cardMetrics(sourceNode),{w:0,h:0}));
     e.setAttribute("class","edge prerequisite");e.style.pointerEvents="none";edgeLayer.append(e);
   }
 }
@@ -584,10 +587,11 @@ function transform(){
 }
 function fit(){
   const items=visibleNodes();if(!items.length)return;
-  const {w:cardW,h:cardH}=cardMetrics(),positions=items.map(n=>displayPosition(n));
-  const minX=Math.min(...positions.map(p=>p.x)),maxX=Math.max(...positions.map(p=>p.x+cardW)),minY=Math.min(...positions.map(p=>p.y)),maxY=Math.max(...positions.map(p=>p.y+cardH));
-  const w=canvas.clientWidth,h=canvas.clientHeight;view.z=Math.max(.12,Math.min(1,(w-90)/(maxX-minX||cardW),(h-150)/(maxY-minY||cardH)));
-  view.x=(w-(maxX-minX)*view.z)/2-minX*view.z;view.y=(h-(maxY-minY)*view.z)/2-minY*view.z;transform();
+  const boxes=items.map(n=>({p:displayPosition(n),m:cardMetrics(n)})),fallback=fallbackCardMetrics();
+  const minX=Math.min(...boxes.map(({p})=>p.x)),maxX=Math.max(...boxes.map(({p,m})=>p.x+m.w)),minY=Math.min(...boxes.map(({p})=>p.y)),maxY=Math.max(...boxes.map(({p,m})=>p.y+m.h));
+  const spanW=maxX-minX||fallback.w,spanH=maxY-minY||fallback.h,w=canvas.clientWidth,h=canvas.clientHeight;
+  view.z=Math.max(.12,Math.min(1,(w-90)/spanW,(h-150)/spanH));
+  view.x=(w-spanW*view.z)/2-minX*view.z;view.y=(h-spanH*view.z)/2-minY*view.z;transform();
 }
 function zoomAt(factor,x=canvas.clientWidth/2,y=canvas.clientHeight/2){
   const z=Math.max(.12,Math.min(2.5,view.z*factor)),ratio=z/view.z;
@@ -606,7 +610,7 @@ function focusNode(id){
     while(!seen.has(parent)){seen.add(parent);const edge=data.edges.find(e=>e.kind==="contains"&&e.target===parent);if(!edge)break;parent=edge.source;if(node(parent)?.kind==="topic")break;}
     scope=node(parent)?.kind==="topic"?parent:"overview";render();
   }
-  const p=displayPosition(n),m=cardMetrics();view.z=1;view.x=canvas.clientWidth/2-(p.x+m.w/2);view.y=canvas.clientHeight/2-(p.y+m.h/2);transform();return true;
+  const p=displayPosition(n),m=cardMetrics(n);view.z=1;view.x=canvas.clientWidth/2-(p.x+m.w/2);view.y=canvas.clientHeight/2-(p.y+m.h/2);transform();return true;
 }
 function selectNode(id){
   if(!flushForm())return false;
@@ -738,7 +742,7 @@ function showEdge(id){
 function addNode(kind="skill",point=null){
   if(!canEdit()||!data||!flushForm())return;
   const next=clone(data),id=uid("skill");
-  const p=point||{x:(canvas.clientWidth/2-view.x)/view.z-130,y:(canvas.clientHeight/2-view.y)/view.z-74};
+  const m=fallbackCardMetrics(),p=point||{x:(canvas.clientWidth/2-view.x)/view.z-m.w/2,y:(canvas.clientHeight/2-view.y)/view.z-m.h/2};
   next.nodes.push({id,kind,title:kind==="topic"?"Новый раздел":"Новый навык",de:"",description:"",example:"",source:"Добавлено вручную. Требования нужно уточнить.",color:node(scope)?.color||"orange",x:Math.round(p.x),y:Math.round(p.y),archived:false,core:false,schoolTypes:[]});
   const parent=scope!=="overview"?scope:kind==="topic"?data.nodes.find(n=>n.kind==="root"&&!n.archived)?.id:null;
   if(parent)next.edges.push({id:uid("edge"),kind:"contains",source:parent,target:id});
@@ -843,5 +847,6 @@ $("export").onclick=()=>{
   if(!data||!flushForm())return;const blob=new Blob([JSON.stringify({id:snapshot.id,revision:snapshot.revision,exportedAt:new Date().toISOString(),data},null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob),a=element("a");a.href=url;a.download=`mindcrafti-skills-${boardId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-new ResizeObserver(()=>transform()).observe(canvas);
+let resizeFrame=0;
+new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(data){render();fit();}else transform();});}).observe(canvas);
 showHelp();status();
