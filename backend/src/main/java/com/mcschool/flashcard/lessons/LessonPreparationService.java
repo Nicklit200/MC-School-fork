@@ -6,8 +6,12 @@ import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Locale;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +79,28 @@ public class LessonPreparationService {
         LessonPreparation saved = repository.save(preparation);
         driveArchiveService.archiveAnswersBestEffort(teacher, eventId, filename, pdf);
         return response(saved);
+    }
+
+    @Transactional
+    public LessonPreparationResponse uploadTranscript(
+            AuthenticatedUser teacher, String eventId, String filename, byte[] fileBytes) throws Exception {
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
+        String normalizedFilename = filename == null ? "" : filename.trim().toLowerCase(Locale.ROOT);
+        String transcript;
+        if (normalizedFilename.endsWith(".pdf")) {
+            try (var document = Loader.loadPDF(fileBytes)) {
+                transcript = new PDFTextStripper().getText(document);
+            }
+        } else if (normalizedFilename.endsWith(".txt")) {
+            transcript = new String(fileBytes, StandardCharsets.UTF_8);
+        } else {
+            throw new IllegalArgumentException("Transcript file must be PDF or TXT");
+        }
+        if (transcript == null || transcript.isBlank()) {
+            throw new IllegalArgumentException("Transcript file does not contain readable text");
+        }
+        preparation.attachTranscript(transcript);
+        return response(repository.save(preparation));
     }
 
     @Transactional(readOnly = true)
