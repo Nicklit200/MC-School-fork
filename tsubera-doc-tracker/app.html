@@ -15,7 +15,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .btn.alt{background:white;color:#111827;border:1px solid #dfe3ea}.btn.small{padding:7px 9px;font-size:12px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
-.toolbar{display:flex;gap:10px;padding:12px}.toolbar input{border:1px solid #dfe3ea;border-radius:10px;padding:11px}.toolbar #q{flex:1}.toolbar #vehicleFilter{width:260px}
+.toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
 .table{overflow-x:auto}.head,.row{min-width:1660px;display:grid;grid-template-columns:105px 145px 145px 190px 115px 205px 220px 245px 125px 130px 34px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
@@ -35,7 +35,8 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .field input,.field select{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .docs{display:flex;flex-direction:column;gap:8px;margin-top:16px}.doc{display:grid;grid-template-columns:165px 1fr auto;gap:8px;align-items:center;border:1px solid #eee;border-radius:10px;padding:9px}
 .legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.tid{font-weight:800;letter-spacing:.2px;color:#111827;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:3px}.customer-ref{color:#4b5563;font-size:12px}.detailbox{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}.detailrow{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #eee}.detailrow:last-child{border-bottom:0}.detailrow b{font-size:12px;color:#6b7280}.vehicle-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.vehicle-chip{padding:7px 9px;border-radius:999px;background:#e9f2ff;color:#1857a4;font-weight:700;font-size:12px}.vehicle-select-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}.vehicle-choice{display:flex;align-items:center;gap:9px;border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fff}.vehicle-choice input{width:18px;height:18px}.vehicle-choice strong{display:block}.vehicle-choice small{display:block;color:#6b7280;margin-top:2px}.vehicle-panel{padding:16px}.vehicle-form{display:grid;grid-template-columns:220px 1fr auto;gap:10px;margin-bottom:16px}.vehicle-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.vehicle-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.vehicle-card{border:1px solid #e5e7eb;border-radius:12px;padding:13px;background:#fff}.vehicle-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.vehicle-plate{font-size:18px;font-weight:850;letter-spacing:.4px}.vehicle-meta{font-size:12px;color:#6b7280;margin-top:5px}
-@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form{grid-template-columns:1fr}.vehicle-grid{grid-template-columns:1fr}.toolbar{flex-direction:column}.toolbar #vehicleFilter{width:100%}}
+.company-panel{padding:16px}.company-form{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,2fr) auto;gap:10px;margin-bottom:16px}.company-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.company-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.company-card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff}.company-card.inactive{background:#f9fafb;opacity:.78}.company-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.company-name{font-size:17px;font-weight:800}.company-meta{font-size:12px;color:#6b7280;margin-top:5px}.company-state{margin-top:9px}
+@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter{width:100%}.filter-check{padding:4px 0}}
 </style>
 </head>
 <body>
@@ -54,7 +55,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
     <button class="btn" id="add">+ Добавить рейс</button>
   </div>
 
-  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button></div>
+  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button></div>
 
   <section id="tripsView">
   <div class="stats">
@@ -65,7 +66,12 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
   </div>
 
   <div class="panel">
-    <div class="toolbar"><input id="q" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате или фирме..."><input id="vehicleFilter" list="vehicleDatalist" placeholder="Фильтр по машине / Kennzeichen"><datalist id="vehicleDatalist"></datalist></div>
+    <div class="toolbar">
+      <input id="q" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате или фирме...">
+      <select id="companyFilter"><option value="">Все текущие фирмы</option></select>
+      <input id="vehicleFilter" list="vehicleDatalist" placeholder="Фильтр по машине / Kennzeichen"><datalist id="vehicleDatalist"></datalist>
+      <label class="filter-check"><input id="showHiddenCompanies" type="checkbox"> Показать скрытые фирмы</label>
+    </div>
     <div class="table">
       <div class="head">
         <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Цена</div><div>Auftrag</div>
@@ -75,6 +81,20 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
       <div id="rows"></div>
     </div>
   </div>
+  </section>
+
+  <section id="companiesView" class="hidden">
+    <div class="panel company-panel">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
+        <div><h2 style="margin:0 0 5px">Фирмы-заказчики</h2><div class="muted">Скрытая фирма остаётся в базе со всеми старыми рейсами, но не показывается в основной таблице. В любой момент можно вернуть её обратно.</div></div>
+      </div>
+      <form id="companyForm" class="company-form">
+        <input id="newCompanyName" placeholder="Название фирмы" required>
+        <input id="newCompanyNote" placeholder="Комментарий (необязательно)">
+        <button class="btn">+ Добавить фирму</button>
+      </form>
+      <div id="companyRows" class="company-grid"></div>
+    </div>
   </section>
 
   <section id="vehiclesView" class="hidden">
@@ -98,7 +118,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
     <div class="grid">
       <div class="field"><label>Дата рейса</label><input type="date" name="date" required></div>
       <div class="field"><label>№ заказа / Tour-Nr. заказчика</label><input name="trip" placeholder="например GD26090270"></div>
-      <div class="field"><label>Заказчик</label><input name="customer" value="DC Cargo Sp. z o.o." required></div>
+      <div class="field"><label>Заказчик</label><input name="customer" list="companyDatalist" placeholder="Выбери или введи новую фирму" required><datalist id="companyDatalist"></datalist></div>
       <div class="field"><label>Цена (€)</label><input name="priceEur" type="number" min="0" step="0.01" inputmode="decimal" placeholder="например 280"></div>
     </div>
     <div class="actions"><button class="btn alt" type="button" id="cancelAdd">Отмена</button><button class="btn">Сохранить</button></div>
@@ -142,7 +162,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 </div>
 
 <script>
-let trips=[],vehicles=[],activeTrip=null,activeDetailTrip=null,currentTab='trips';
+let trips=[],vehicles=[],companies=[],activeTrip=null,activeDetailTrip=null,currentTab='trips';
 const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
@@ -167,19 +187,37 @@ function mainDoc(t,key,missingLabel,color=''){
   return '<span class="status wait">Нет '+esc(missingLabel)+'</span>';
 }
 async function load(){
-  const [td,vd]=await Promise.all([api('/api/trips'),api('/api/vehicles')]);
-  trips=td.trips||[];vehicles=vd.vehicles||[];
-  render();renderVehicles();renderVehicleDatalist();$('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
+  const [td,vd,cd]=await Promise.all([api('/api/trips'),api('/api/vehicles'),api('/api/companies')]);
+  trips=td.trips||[];vehicles=vd.vehicles||[];companies=cd.companies||[];
+  renderCompanyFilter();renderCompanyDatalist();render();renderCompanies();renderVehicles();renderVehicleDatalist();
+  $('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
+  $('companyCount').textContent=companies.length?'('+companies.length+')':'';
+}
+function normCompany(v){return String(v||'').trim().replace(/\s+/g,' ').toLowerCase()}
+function companyForTrip(t){const n=normCompany(t?.customer);return companies.find(c=>normCompany(c.name)===n)||null}
+function renderCompanyFilter(){
+  const sel=$('companyFilter'),old=sel.value,showHidden=$('showHiddenCompanies').checked;
+  const allowed=companies.filter(c=>showHidden||c.active);
+  sel.innerHTML='<option value="">'+(showHidden?'Все фирмы':'Все текущие фирмы')+'</option>'+allowed.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+(c.active?'':' · скрыта')+'</option>').join('');
+  if(allowed.some(c=>c.id===old))sel.value=old;
+}
+function renderCompanyDatalist(){
+  $('companyDatalist').innerHTML=companies.filter(c=>c.active).map(c=>'<option value="'+esc(c.name)+'"></option>').join('');
 }
 function render(){
   let q=$('q').value.toLowerCase();
   let vf=$('vehicleFilter').value.toLowerCase().trim();
-  let list=trips.filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
+  const showHidden=$('showHiddenCompanies').checked;
+  const selectedCompany=companies.find(c=>c.id===$('companyFilter').value)||null;
+  let list=trips
+    .filter(t=>showHidden||(companyForTrip(t)?.active!==false))
+    .filter(t=>!selectedCompany||normCompany(t.customer)===normCompany(selectedCompany.name))
+    .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
-  $('total').textContent=trips.length;
-  $('loaded').textContent=trips.filter(t=>t.cmrLoaded).length;
-  $('unloaded').textContent=trips.filter(t=>t.cmrUnloaded).length;
-  $('ready').textContent=trips.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrLoaded&&t.cmrUnloaded).length;
+  $('total').textContent=list.length;
+  $('loaded').textContent=list.filter(t=>t.cmrLoaded).length;
+  $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
+  $('ready').textContent=list.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrLoaded&&t.cmrUnloaded).length;
   $('rows').innerHTML=list.map(t=>`
     <div class="row">
       <div>${esc(t.date)}</div>
@@ -270,13 +308,32 @@ $('upload').onclick=async()=>{
 function setTab(tab){
   currentTab=tab;
   $('tripsView').classList.toggle('hidden',tab!=='trips');
+  $('companiesView').classList.toggle('hidden',tab!=='companies');
   $('vehiclesView').classList.toggle('hidden',tab!=='vehicles');
   $('tabTrips').classList.toggle('active',tab==='trips');
+  $('tabCompanies').classList.toggle('active',tab==='companies');
   $('tabVehicles').classList.toggle('active',tab==='vehicles');
   $('add').classList.toggle('hidden',tab!=='trips');
 }
 $('tabTrips').onclick=()=>setTab('trips');
+$('tabCompanies').onclick=()=>setTab('companies');
 $('tabVehicles').onclick=()=>setTab('vehicles');
+function renderCompanies(){
+  $('companyRows').innerHTML=companies.length?companies.map(c=>
+    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><div class="company-name">'+esc(c.name)+'</div><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+esc(c.note||'Без комментария')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
+  ).join(''):'<div class="muted">Фирм пока нет.</div>';
+}
+window.toggleCompany=async(id,active)=>{
+  await api('/api/companies/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({active})});
+  await load();
+}
+$('companyForm').onsubmit=async e=>{
+  e.preventDefault();
+  const name=$('newCompanyName').value.trim(),note=$('newCompanyNote').value.trim();
+  if(!name)return;
+  await api('/api/companies',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,note,active:true})});
+  $('newCompanyName').value='';$('newCompanyNote').value='';await load();
+}
 function renderVehicleDatalist(){$('vehicleDatalist').innerHTML=vehicles.map(v=>'<option value="'+esc(v.plate)+'"></option>').join('')}
 function renderVehicles(){
   $('vehicleRows').innerHTML=vehicles.length?vehicles.map(v=>'<div class="vehicle-card"><div class="vehicle-card-top"><div><div class="vehicle-plate">'+esc(v.plate)+'</div><div class="vehicle-meta">'+esc(v.note||'Без комментария')+'</div><div class="vehicle-meta">Туров: '+Number(v.tripCount||0)+'</div></div><button class="btn alt small" onclick="delVehicle(\''+v.id+'\')">Удалить</button></div></div>').join(''):'<div class="muted">Машин пока нет. Добавь первый номер выше.</div>';
@@ -295,14 +352,15 @@ $('vehicleForm').onsubmit=async e=>{
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
 $('closeDocs').onclick=()=>$('docsModal').classList.remove('open');
-$('q').oninput=render;$('vehicleFilter').oninput=render;
+$('q').oninput=render;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
+$('showHiddenCompanies').onchange=()=>{renderCompanyFilter();render()};
 $('addForm').onsubmit=async e=>{
   e.preventDefault();let f=new FormData(e.target);
   await api('/api/trips',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
     date:f.get('date'),trip:(f.get('trip')||'').trim(),customer:f.get('customer'),
     priceEur:(f.get('priceEur')||'').trim()===''?null:Number(f.get('priceEur'))
   })});
-  e.target.reset();e.target.customer.value='DC Cargo Sp. z o.o.';$('addModal').classList.remove('open');await load()
+  e.target.reset();$('addModal').classList.remove('open');await load()
 };
 setTab('trips');load().catch(e=>alert(e.message));
 </script>
