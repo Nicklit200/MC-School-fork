@@ -16,7 +16,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
-.table{overflow-x:auto}.head,.row{min-width:1430px;display:grid;grid-template-columns:105px 145px 145px 190px 115px 205px 100px 115px 125px 130px 34px;align-items:center}
+.table{overflow-x:auto}.head,.row{min-width:1320px;display:grid;grid-template-columns:105px 145px 145px 190px 115px 95px 100px 115px 125px 130px 34px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
 .cellcheck{display:flex;justify-content:center}.row input[type=checkbox]{width:18px;height:18px}
@@ -29,6 +29,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .cmr-check{width:30px;height:30px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:18px;line-height:1;color:#9ca3af}
 button.cmr-check{cursor:pointer}.cmr-check.loaded{background:#e8f7ef;border-color:#b7e4c7;color:#087443;font-weight:800}
 button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check.empty{background:#f8fafc;color:#cbd5e1}
+.cmr-check.missing{background:#fff1f2;border-color:#fecdd3;color:#be123c;font-weight:850}
 .docs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.docs-head h2{margin-top:0}.docs-updated{padding-top:4px;text-align:right;white-space:nowrap}
 .dt{width:100%;border:1px solid #dfe3ea;border-radius:8px;padding:7px;font-size:12px;background:#fff}
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
@@ -190,13 +191,14 @@ function mainDoc(t,key,missingLabel,color=''){
   if(key==='auftrag'&&t.auftrag)return '<span class="status ok">✓ Auftrag отмечен</span>';
   return '<span class="status wait">Нет '+esc(missingLabel)+'</span>';
 }
-function cmrCheck(t,key,label){
+function docCheck(t,key,label,missingMark='□'){
   const d=t.mainDocuments?.[key];
   if(d){
     const extra=Number(d.count||1)>1?' · файлов: '+Number(d.count):'';
     return '<div class="cmr-check-wrap"><button type="button" class="cmr-check loaded" aria-label="'+esc(label)+' — открыть файл" title="'+esc(label)+' · '+esc(d.name)+extra+'" onclick="openDoc(\''+d.id+'\')">✓</button></div>';
   }
-  return '<div class="cmr-check-wrap"><span class="cmr-check empty" aria-label="'+esc(label)+' — файла нет" title="'+esc(label)+' · файла нет">□</span></div>';
+  const isCross=missingMark==='×';
+  return '<div class="cmr-check-wrap"><span class="cmr-check '+(isCross?'missing':'empty')+'" aria-label="'+esc(label)+' — файла нет" title="'+esc(label)+' · файла нет">'+missingMark+'</span></div>';
 }
 async function load(){
   const [td,vd,cd]=await Promise.all([api('/api/trips'),api('/api/vehicles'),api('/api/companies')]);
@@ -237,9 +239,9 @@ function render(){
       <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
       <div>${esc(t.customer)}</div>
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
-      <div class="stage">${mainDoc(t,'auftrag','Auftrag')}</div>
-      <div>${cmrCheck(t,'cmrLoading','CMR загрузки')}</div>
-      <div>${cmrCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
+      <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
+      <div>${docCheck(t,'cmrLoading','CMR загрузки')}</div>
+      <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
       <div><button class="btn alt small" onclick="openDocs('${t.id}')">Документы</button></div>
       <div>${status(t)}</div>
       <div><button class="btn alt small" onclick="delTrip('${t.id}')">×</button></div>
