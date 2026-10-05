@@ -640,6 +640,10 @@ function TranscriptUpload({ eventId, target, language, prominent = false }: { ev
 
   async function upload() {
     if (!file || uploading) return;
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError(language === 'DE' ? 'Bitte eine PDF-Transkription auswählen.' : 'Выбери PDF-транскрипцию Soniox.');
+      return;
+    }
     setUploading(true); setError(null); setMessage(null);
     try {
       // Mindcrafti is the primary source for the lesson transcript.
@@ -688,7 +692,7 @@ function TranscriptUpload({ eventId, target, language, prominent = false }: { ev
           {driveId && <>{path.length > 0 && <div className="muted" style={{ fontSize: 12 }}>{path.map((item) => item.name).join(' / ')}</div>}{folders.map((folder) => <button key={folder.id} className="btn btn--ghost" type="button" onClick={() => void enter(folder)}>{folder.name}</button>)}<button className="btn btn--secondary" type="button" onClick={() => void saveCurrentFolder()}>{language === 'DE' ? 'Ordner speichern' : 'Сохранить эту папку'}</button></>}
         </div>
       ) : target.kind !== 'trial' ? <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 8 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button> : null}
-      <input className="input" type="file" accept=".pdf,.txt,application/pdf,text/plain" style={{ marginTop: 10 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+      <input className="input" type="file" accept=".pdf,application/pdf" style={{ marginTop: 10 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       <button className="btn" type="button" disabled={!file || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 8, minHeight: prominent ? 50 : undefined }}>{uploading ? (language === 'DE' ? 'Speichern…' : 'Загружаем…') : (language === 'DE' ? 'Transkription speichern' : 'Загрузить транскрипцию')}</button>
     </div>
   );
