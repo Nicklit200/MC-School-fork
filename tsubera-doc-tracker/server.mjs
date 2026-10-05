@@ -59,6 +59,16 @@ CREATE TABLE IF NOT EXISTS vehicles (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON vehicles(plate);
+CREATE TABLE IF NOT EXISTS companies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  active INTEGER NOT NULL DEFAULT 1,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
+CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active);
 `);
 
 const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
@@ -85,6 +95,52 @@ const priceEurToCents = v => {
 };
 const priceCentsToEur = v => v === null || v === undefined ? null : Number((Number(v) / 100).toFixed(2));
 const normalizePlate = v => String(v || "").trim().replace(/\s+/g," ").toUpperCase();
+const normalizeCompanyName = v => String(v || "").trim().replace(/\s+/g," ");
+const defaultCompanyActive = name => !/(^|\b)dc\s*cargo\b|(^|\b)semi\s*cargo\b/i.test(normalizeCompanyName(name));
+const companyOut = row => row ? ({
+  id: row.id,
+  name: row.name,
+  active: !!row.active,
+  note: row.note || "",
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+}) : null;
+function ensureCompany(name, note = "", active) {
+  const n = normalizeCompanyName(name);
+  if (!n) return null;
+  const existing = db.prepare("SELECT * FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(n);
+  if (existing) {
+    if (note && !existing.note) db.prepare("UPDATE companies SET note=?,updated_at=? WHERE id=?").run(String(note).trim(), now(), existing.id);
+    return companyOut(db.prepare("SELECT * FROM companies WHERE id=?").get(existing.id));
+  }
+  const id = crypto.randomUUID(), ts = now();
+  const isActive = active === undefined ? defaultCompanyActive(n) : !!active;
+  db.prepare("INSERT INTO companies (id,name,active,note,created_at,updated_at) VALUES (?,?,?,?,?,?)")
+    .run(id,n,bool(isActive),String(note||"").trim(),ts,ts);
+  return companyOut(db.prepare("SELECT * FROM companies WHERE id=?").get(id));
+}
+function listCompanies() {
+  const rows = db.prepare("SELECT * FROM companies ORDER BY active DESC, name COLLATE NOCASE").all();
+  return rows.map(r => {
+    const tripCount = db.prepare("SELECT COUNT(*) c FROM trips WHERE LOWER(customer)=LOWER(?)").get(r.name).c;
+    return { ...companyOut(r), tripCount };
+  });
+}
+function updateCompany(id, changes = {}) {
+  const row = db.prepare("SELECT * FROM companies WHERE id=?").get(id);
+  if (!row) return null;
+  const oldName = row.name;
+  const nextName = changes.name === undefined ? row.name : normalizeCompanyName(changes.name);
+  if (!nextName) throw new Error("company name is required");
+  const nextActive = changes.active === undefined ? !!row.active : !!changes.active;
+  const nextNote = changes.note === undefined ? row.note : String(changes.note || "").trim();
+  const duplicate = db.prepare("SELECT id FROM companies WHERE LOWER(name)=LOWER(?) AND id<>? LIMIT 1").get(nextName,id);
+  if (duplicate) throw new Error("A company with this name already exists");
+  db.prepare("UPDATE companies SET name=?,active=?,note=?,updated_at=? WHERE id=?")
+    .run(nextName,bool(nextActive),nextNote,now(),id);
+  if (nextName !== oldName) db.prepare("UPDATE trips SET customer=?,updated_at=? WHERE LOWER(customer)=LOWER(?)").run(nextName,now(),oldName);
+  return listCompanies().find(c => c.id === id) || companyOut(db.prepare("SELECT * FROM companies WHERE id=?").get(id));
+}
 const vehicleOut = row => row ? ({
   id: row.id,
   plate: row.plate,
@@ -136,6 +192,9 @@ function appendVehicleToTrip(tripId, plate) {
 
 for (const row of db.prepare("SELECT vehicle_plates FROM trips WHERE TRIM(COALESCE(vehicle_plates,'')) <> ''").all()) {
   for (const p of platesToArray(row.vehicle_plates)) ensureVehicle(p);
+}
+for (const row of db.prepare("SELECT DISTINCT customer FROM trips WHERE TRIM(COALESCE(customer,'')) <> ''").all()) {
+  ensureCompany(row.customer);
 }
 
 function internalPrefix(date) {
@@ -364,6 +423,8 @@ function systemOverview() {
     missingDocuments: rows.filter(t => readiness(t) === "missing_documents").length,
     rechnungenCreated: rows.filter(t => readiness(t) === "rechnung_created").length,
     totalVehicles: db.prepare("SELECT COUNT(*) c FROM vehicles").get().c,
+    totalCompanies: db.prepare("SELECT COUNT(*) c FROM companies").get().c,
+    activeCompanies: db.prepare("SELECT COUNT(*) c FROM companies WHERE active=1").get().c,
     database: "SQLite on persistent Railway volume",
     files: "Persistent Railway volume at /data/documents",
     connector: "Read/write MCP"
@@ -447,6 +508,43 @@ const toolDefs = [
     description: "Get metadata for one uploaded document and a temporary download URL valid for 15 minutes.",
     inputSchema: { type: "object", properties: { document_id: { type: "string" } }, required: ["document_id"], additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "list_companies",
+    description: "List customer companies from the Tsubera company registry, including whether each company is active in the default trips view and its trip count.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "create_company",
+    description: "Add a customer company to the Tsubera company registry. New companies are active by default unless active=false is provided.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        active: { type: "boolean", description: "Whether the company's trips should be visible in the default current view." },
+        note: { type: "string" }
+      },
+      required: ["name"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  {
+    name: "update_company",
+    description: "Update a customer company name, note, or active/default-visible state. Renaming also updates existing trips that use the old company name.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        company_id: { type: "string" },
+        name: { type: "string" },
+        active: { type: "boolean" },
+        note: { type: "string" }
+      },
+      required: ["company_id"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   {
     name: "list_vehicles",
@@ -637,6 +735,17 @@ async function callTool(name, args, req) {
     const t = tripOut(db.prepare("SELECT * FROM trips WHERE id = ?").get(row.trip_id));
     return { found: true, document: docOut(row), trip: t, downloadUrl: tempFileUrl(req, row.id) };
   }
+  if (name === "list_companies") return { companies: listCompanies(), count: listCompanies().length };
+  if (name === "create_company") {
+    const company = ensureCompany(args.name, args.note || "", args.active);
+    if (!company) throw new Error("name is required");
+    return { created: true, company: listCompanies().find(c => c.id === company.id) || company };
+  }
+  if (name === "update_company") {
+    const company = updateCompany(args.company_id, { name: args.name, active: args.active, note: args.note });
+    if (!company) return { updated: false, error: "Company not found" };
+    return { updated: true, company };
+  }
   if (name === "list_vehicles") return { vehicles: listVehicles(), count: listVehicles().length };
   if (name === "create_vehicle") {
     const vehicle = ensureVehicle(args.plate, args.note || "");
@@ -653,6 +762,7 @@ async function callTool(name, args, req) {
   }
   if (name === "create_trip") {
     if (!args.date || !args.customer) throw new Error("date and customer are required");
+    const company = ensureCompany(args.customer);
     const id = crypto.randomUUID();
     const ts = now();
     const internalTripId = nextInternalTripId(args.date);
@@ -665,7 +775,7 @@ async function callTool(name, args, req) {
         internalTripId,
         args.date,
         args.trip_number || "",
-        args.customer,
+        company.name,
         bool(args.auftrag),
         bool(cmrLoaded),
         bool(cmrUnloaded),
@@ -698,6 +808,7 @@ async function callTool(name, args, req) {
       priceEur: args.price_eur === undefined ? old.priceEur : args.price_eur,
       rechnungCode: args.rechnung_number ?? old.rechnungCode
     };
+    next.customer = ensureCompany(next.customer)?.name || next.customer;
     db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
       .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),old.id);
     const t = getTripByAny(old.id);
@@ -910,6 +1021,21 @@ const server = http.createServer(async (req, res) => {
 
       if (p === "/api/overview" && req.method === "GET") return json(res, 200, systemOverview());
 
+      if (p === "/api/companies" && req.method === "GET") return json(res, 200, { companies: listCompanies() });
+      if (p === "/api/companies" && req.method === "POST") {
+        const b = await readJson(req);
+        const company = ensureCompany(b.name, b.note || "", b.active);
+        if (!company) return json(res, 400, { error: "name is required" });
+        return json(res, 201, { company: listCompanies().find(c => c.id === company.id) || company });
+      }
+      const companyMatch = p.match(/^\/api\/companies\/([^/]+)$/);
+      if (companyMatch && req.method === "PATCH") {
+        const b = await readJson(req);
+        const company = updateCompany(companyMatch[1], b);
+        if (!company) return json(res, 404, { error: "Company not found" });
+        return json(res, 200, { company });
+      }
+
       if (p === "/api/vehicles" && req.method === "GET") return json(res, 200, { vehicles: listVehicles() });
       if (p === "/api/vehicles" && req.method === "POST") {
         const b = await readJson(req);
@@ -940,6 +1066,7 @@ const server = http.createServer(async (req, res) => {
       if (p === "/api/trips" && req.method === "POST") {
         const b = await readJson(req);
         if (!b.date || !b.customer) return json(res, 400, { error: "date and customer are required" });
+        const company = ensureCompany(b.customer);
         const id = crypto.randomUUID();
         const ts = now();
         const internalTripId = nextInternalTripId(b.date);
@@ -947,7 +1074,7 @@ const server = http.createServer(async (req, res) => {
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
         db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, internalTripId, b.date, b.trip || "", b.customer, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", ts, ts);
+          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
@@ -967,6 +1094,7 @@ const server = http.createServer(async (req, res) => {
           priceEur: b.priceEur === undefined ? old.priceEur : b.priceEur,
           rechnungCode: b.rechnungCode ?? old.rechnungCode
         };
+        next.customer = ensureCompany(next.customer)?.name || next.customer;
         db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
           .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),id);
         return json(res, 200, { trip: getTripByAny(id) });
