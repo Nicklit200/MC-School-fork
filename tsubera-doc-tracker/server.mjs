@@ -69,15 +69,6 @@ if (!tripColumns.has("loaded_at")) db.exec("ALTER TABLE trips ADD COLUMN loaded_
 if (!tripColumns.has("unloaded_at")) db.exec("ALTER TABLE trips ADD COLUMN unloaded_at TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN vehicle_plates TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("price_cents")) db.exec("ALTER TABLE trips ADD COLUMN price_cents INTEGER");
-const knownPriceBackfill = [
-  ["GD26090083", 70000],
-  ["0380/09/2026", 34000],
-  ["ZL2900/2026/KS", 20000],
-  ["14634664", 28000]
-];
-for (const [tripNumber, priceCents] of knownPriceBackfill) {
-  db.prepare("UPDATE trips SET price_cents=? WHERE trip_number=? AND price_cents IS NULL").run(priceCents, tripNumber);
-}
 db.exec("UPDATE trips SET cmr_loaded = 1 WHERE cmr = 1 AND cmr_loaded = 0");
 db.exec("UPDATE trips SET cmr_unloaded = 1 WHERE pod = 1 AND cmr_unloaded = 0");
 db.exec("UPDATE documents SET doc_type = 'cmr_loading' WHERE doc_type = 'cmr'");
