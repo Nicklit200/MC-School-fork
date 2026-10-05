@@ -100,6 +100,7 @@ function LearningProfileCard({ student, language, onSaved }: {
     ['REALSCHULE', 'Realschule'],
     ['MITTELSCHULE', 'Mittelschule'],
     ['WIRTSCHAFTSSCHULE', 'Wirtschaftsschule'],
+    ['FACHOBERSCHULE', 'Fachoberschule (FOS)'],
     ['GESAMTSCHULE', 'Gesamtschule'],
     ['WERKREALSCHULE', 'Werkrealschule'],
     ['OTHER', tr('Другая школа', 'Andere Schule')],
