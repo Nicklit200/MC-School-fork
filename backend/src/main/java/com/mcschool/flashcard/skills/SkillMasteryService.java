@@ -21,6 +21,8 @@ public class SkillMasteryService {
     public record StudentOption(UUID id, String fullName, Integer grade, String schoolType) {}
     public record GroupOption(UUID id, String name, List<StudentOption> students) {}
     public record MasterySnapshot(UUID studentId, String studentName, Map<String,Integer> mastery, Instant updatedAt) {}
+    public record MasteryHistoryEntry(long id, UUID studentId, String studentName, String skillId,
+                                      int previousMastery, int mastery, Instant updatedAt, UUID updatedBy) {}
     public record UpdateRequest(int mastery) {}
 
     private final JdbcTemplate jdbc;
@@ -93,6 +95,28 @@ public class SkillMasteryService {
         return new MasterySnapshot(studentId, student.getFullName(), values, updatedAt);
     }
 
+    @Transactional(readOnly = true)
+    public List<MasteryHistoryEntry> history(String boardId, UUID studentId, AuthenticatedUser caller) {
+        User student = requireVisibleStudent(caller, studentId);
+        boards.get(boardId);
+        return jdbc.query("""
+            SELECT id, skill_id, previous_mastery, mastery, updated_at, updated_by
+            FROM student_skill_mastery_history
+            WHERE student_id = ? AND board_id = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 500
+            """, (rs, rowNum) -> new MasteryHistoryEntry(
+                rs.getLong("id"),
+                studentId,
+                student.getFullName(),
+                rs.getString("skill_id"),
+                rs.getInt("previous_mastery"),
+                rs.getInt("mastery"),
+                rs.getTimestamp("updated_at").toInstant(),
+                rs.getObject("updated_by", UUID.class)
+            ), studentId, boardId);
+    }
+
     @Transactional
     public MasterySnapshot update(String boardId, UUID studentId, String skillId, int mastery, AuthenticatedUser caller) {
         if (mastery < 0 || mastery > 100) throw bad("Процент должен быть от 0 до 100");
@@ -101,12 +125,22 @@ public class SkillMasteryService {
         boolean exists = board.data().nodes().stream()
                 .anyMatch(n -> n.id().equals(skillId) && n.kind().equals("skill") && !n.archived());
         if (!exists) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Навык не найден или находится в архиве");
+        int previous = jdbc.query("""
+            SELECT mastery FROM student_skill_mastery
+            WHERE student_id = ? AND board_id = ? AND skill_id = ?
+            """, rs -> rs.next() ? rs.getInt(1) : 0, studentId, boardId, skillId);
+        if (previous == mastery) return get(boardId, studentId, caller);
         jdbc.update("""
             INSERT INTO student_skill_mastery(student_id, board_id, skill_id, mastery, updated_at, updated_by)
             VALUES (?, ?, ?, ?, now(), ?)
             ON CONFLICT(student_id, board_id, skill_id)
             DO UPDATE SET mastery = excluded.mastery, updated_at = now(), updated_by = excluded.updated_by
             """, studentId, boardId, skillId, mastery, caller.id());
+        jdbc.update("""
+            INSERT INTO student_skill_mastery_history(
+                student_id, board_id, skill_id, previous_mastery, mastery, updated_at, updated_by
+            ) VALUES (?, ?, ?, ?, ?, now(), ?)
+            """, studentId, boardId, skillId, previous, mastery, caller.id());
         return get(boardId, studentId, caller);
     }
 
