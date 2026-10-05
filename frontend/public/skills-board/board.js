@@ -50,11 +50,11 @@ async function request(method,path,body){
 }
 const schoolLabels={
   GYMNASIUM:"Gymnasium",REALSCHULE:"Realschule",MITTELSCHULE:"Mittelschule",
-  WIRTSCHAFTSSCHULE:"Wirtschaftsschule",GESAMTSCHULE:"Gesamtschule",
+  WIRTSCHAFTSSCHULE:"Wirtschaftsschule",FACHOBERSCHULE:"Fachoberschule (FOS)",GESAMTSCHULE:"Gesamtschule",
   WERKREALSCHULE:"Werkrealschule",OTHER:"Andere"
 };
 const schoolShort={
-  GYMNASIUM:"GYM",REALSCHULE:"RS",MITTELSCHULE:"MS",WIRTSCHAFTSSCHULE:"WS",
+  GYMNASIUM:"GYM",REALSCHULE:"RS",MITTELSCHULE:"MS",WIRTSCHAFTSSCHULE:"WS",FACHOBERSCHULE:"FOS",
   GESAMTSCHULE:"GS",WERKREALSCHULE:"WRS",OTHER:"OTHER"
 };
 const allSchoolTypes=Object.keys(schoolLabels);
@@ -187,7 +187,7 @@ function renderSchoolFilters(){
     filters.core=coreInput.checked;saveTrackFilterState();renderSchoolFilters();renderNodes();renderEdges();
   };
   core.append(coreInput,document.createTextNode("CORE"));core.title="Показывать ядро";host.append(core);
-  for(const type of ["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE","MITTELSCHULE","GESAMTSCHULE","WERKREALSCHULE"]){
+  for(const type of ["GYMNASIUM","REALSCHULE","WIRTSCHAFTSSCHULE","MITTELSCHULE","FACHOBERSCHULE","GESAMTSCHULE","WERKREALSCHULE"]){
     const checked=filters.schools.has(type),label=element("label","track-filter"+(checked?" active":"")),input=element("input");
     input.type="checkbox";input.checked=checked;
     input.onchange=()=>{
