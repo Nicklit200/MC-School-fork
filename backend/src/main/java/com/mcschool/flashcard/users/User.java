@@ -104,8 +104,8 @@ public class User {
     @Column(name = "ai_lesson_pilot_enabled", nullable = false)
     private boolean aiLessonPilotEnabled;
 
-    @Column(name = "ai_preparation_time", length = 5)
-    private String aiPreparationTime;
+    @Column(name = "ai_preparation_time", nullable = false, length = 5)
+    private String aiPreparationTime = "10:00";
 
     @Column(name = "google_calendar_refresh_token", columnDefinition = "text")
     private String googleCalendarRefreshToken;
