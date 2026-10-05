@@ -46,7 +46,12 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .docs{display:flex;flex-direction:column;gap:8px;margin-top:16px}.doc{display:grid;grid-template-columns:165px 1fr auto;gap:8px;align-items:center;border:1px solid #eee;border-radius:10px;padding:9px}
 .legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.tid{font-weight:800;letter-spacing:.2px;color:#111827;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:3px}.customer-ref{color:#4b5563;font-size:12px}.detailbox{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}.detailrow{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #eee}.detailrow:last-child{border-bottom:0}.detailrow b{font-size:12px;color:#6b7280}.vehicle-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.vehicle-chip{padding:7px 9px;border-radius:999px;background:#e9f2ff;color:#1857a4;font-weight:700;font-size:12px}.vehicle-select-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}.vehicle-choice{display:flex;align-items:center;gap:9px;border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fff}.vehicle-choice input{width:18px;height:18px}.vehicle-choice strong{display:block}.vehicle-choice small{display:block;color:#6b7280;margin-top:2px}.vehicle-panel{padding:16px}.vehicle-form{display:grid;grid-template-columns:220px 1fr auto;gap:10px;margin-bottom:16px}.vehicle-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.vehicle-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.vehicle-card{border:1px solid #e5e7eb;border-radius:12px;padding:13px;background:#fff}.vehicle-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.vehicle-plate{font-size:18px;font-weight:850;letter-spacing:.4px}.vehicle-meta{font-size:12px;color:#6b7280;margin-top:5px}
 .company-panel{padding:16px}.company-form{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,2fr) auto;gap:10px;margin-bottom:16px}.company-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.company-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.company-card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff}.company-card.inactive{background:#f9fafb;opacity:.78}.company-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.company-name{font-size:17px;font-weight:800}.company-meta{font-size:12px;color:#6b7280;margin-top:5px}.company-state{margin-top:9px}
-@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter{width:100%}.filter-check{padding:4px 0}}
+.company-link{border:0;background:transparent;padding:0;color:#111827;font:inherit;text-align:left;cursor:pointer;font-weight:650}
+.company-link:hover{text-decoration:underline;text-decoration-color:#94a3b8;text-underline-offset:3px}
+.company-rule-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.company-rule-grid .full{grid-column:1/-1}
+.company-rule-grid textarea{min-height:96px;resize:vertical;padding:10px;border:1px solid #dfe3ea;border-radius:9px;font:inherit;line-height:1.4}
+.company-rule-grid input{width:100%}.rules-empty{padding:10px 12px;border-radius:10px;background:#fff4d6;color:#925f00;font-size:13px;margin-bottom:12px}
+@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter{width:100%}.filter-check{padding:4px 0}}
 </style>
 </head>
 <body>
@@ -120,6 +125,24 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   </section>
 </main>
 
+<div class="modal" id="companyRulesModal">
+  <div class="dialog">
+    <div class="docs-head"><div><h2 id="companyRulesTitle">Правила фирмы</h2><div id="companyRulesState" class="muted"></div></div><div id="companyRulesUpdated" class="muted docs-updated"></div></div>
+    <div id="companyRulesEmpty" class="rules-empty hidden">Правила отправки Rechnung для этой фирмы пока не подтверждены. Их можно заполнить здесь, когда найдём Auftrag или официальную инструкцию.</div>
+    <div class="company-rule-grid">
+      <div class="field full"><label>Как отправлять Rechnung</label><textarea id="companyBillingChannel" placeholder="Например: только email / оригиналы почтой + скан email"></textarea></div>
+      <div class="field"><label>Email для Rechnung / документов</label><input id="companyInvoiceEmail" placeholder="invoice@firma.de"></div>
+      <div class="field"><label>Тема письма</label><input id="companyInvoiceSubject" placeholder="Если есть обязательная тема"></div>
+      <div class="field full"><label>Почтовый адрес для оригиналов</label><textarea id="companyPostalAddress" placeholder="Если оригиналы надо отправлять почтой"></textarea></div>
+      <div class="field full"><label>Какие документы приложить</label><textarea id="companyRequiredDocuments" placeholder="CMR, POD, Lieferschein, подписанный Auftrag и т.д."></textarea></div>
+      <div class="field full"><label>Срок отправки</label><textarea id="companySubmissionDeadline" placeholder="Например: в течение 10 дней после разгрузки"></textarea></div>
+      <div class="field full"><label>Особые требования</label><textarea id="companySpecialRules" placeholder="ZUGFeRD, лимит размера, имя файла, оригиналы и т.д."></textarea></div>
+      <div class="field full"><label>Источник правил</label><input id="companyRulesSource" placeholder="Какой Auftrag / инструкция подтверждает правила"></div>
+    </div>
+    <div class="actions"><button class="btn" id="saveCompanyRules">Сохранить правила</button><button class="btn alt" id="closeCompanyRules">Закрыть</button></div>
+  </div>
+</div>
+
 <div class="modal" id="addModal">
   <form class="dialog" id="addForm">
     <h2>Добавить рейс</h2>
@@ -168,7 +191,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 </div>
 
 <script>
-let trips=[],vehicles=[],companies=[],activeTrip=null,activeDetailTrip=null,currentTab='trips';
+let trips=[],vehicles=[],companies=[],activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
 const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
@@ -210,6 +233,29 @@ async function load(){
 }
 function normCompany(v){return String(v||'').trim().replace(/\s+/g,' ').toLowerCase()}
 function companyForTrip(t){const n=normCompany(t?.customer);return companies.find(c=>normCompany(c.name)===n)||null}
+function companyHasRules(c){return !![c?.billingChannel,c?.invoiceEmail,c?.invoiceSubject,c?.postalAddress,c?.requiredDocuments,c?.submissionDeadline,c?.specialRules].some(v=>String(v||'').trim())}
+window.openCompanyRulesFromTrip=id=>{
+  const t=trips.find(x=>x.id===id),c=companyForTrip(t);
+  if(!c)return alert('Фирма не найдена в базе фирм');
+  openCompanyRules(c.id);
+}
+window.openCompanyRules=id=>{
+  const c=companies.find(x=>x.id===id); if(!c)return;
+  activeCompanyId=id;
+  $('companyRulesTitle').textContent='Правила · '+c.name;
+  $('companyRulesState').textContent=c.active?'Показывается в текущих рейсах':'Фирма сейчас скрыта из текущих рейсов';
+  $('companyRulesUpdated').textContent=c.updatedAt?'Обновлено: '+whenFull(c.updatedAt):'';
+  $('companyRulesEmpty').classList.toggle('hidden',companyHasRules(c));
+  $('companyBillingChannel').value=c.billingChannel||'';
+  $('companyInvoiceEmail').value=c.invoiceEmail||'';
+  $('companyInvoiceSubject').value=c.invoiceSubject||'';
+  $('companyPostalAddress').value=c.postalAddress||'';
+  $('companyRequiredDocuments').value=c.requiredDocuments||'';
+  $('companySubmissionDeadline').value=c.submissionDeadline||'';
+  $('companySpecialRules').value=c.specialRules||'';
+  $('companyRulesSource').value=c.rulesSource||'';
+  $('companyRulesModal').classList.add('open');
+}
 function renderCompanyFilter(){
   const sel=$('companyFilter'),old=sel.value,showHidden=$('showHiddenCompanies').checked;
   const allowed=companies.filter(c=>showHidden||c.active);
@@ -237,7 +283,7 @@ function render(){
       <div>${esc(t.date)}</div>
       <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
       <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
-      <div>${esc(t.customer)}</div>
+      <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(t.customer)}</button></div>
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
@@ -354,13 +400,29 @@ $('tabCompanies').onclick=()=>setTab('companies');
 $('tabVehicles').onclick=()=>setTab('vehicles');
 function renderCompanies(){
   $('companyRows').innerHTML=companies.length?companies.map(c=>
-    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><div class="company-name">'+esc(c.name)+'</div><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+esc(c.note||'Без комментария')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
+    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(c.name)+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
   ).join(''):'<div class="muted">Фирм пока нет.</div>';
 }
 window.toggleCompany=async(id,active)=>{
   await api('/api/companies/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({active})});
   await load();
 }
+$('saveCompanyRules').onclick=async()=>{
+  if(!activeCompanyId)return;
+  await api('/api/companies/'+activeCompanyId,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({
+    billingChannel:$('companyBillingChannel').value.trim(),
+    invoiceEmail:$('companyInvoiceEmail').value.trim(),
+    invoiceSubject:$('companyInvoiceSubject').value.trim(),
+    postalAddress:$('companyPostalAddress').value.trim(),
+    requiredDocuments:$('companyRequiredDocuments').value.trim(),
+    submissionDeadline:$('companySubmissionDeadline').value.trim(),
+    specialRules:$('companySpecialRules').value.trim(),
+    rulesSource:$('companyRulesSource').value.trim()
+  })});
+  await load();
+  const c=companies.find(x=>x.id===activeCompanyId); if(c)openCompanyRules(c.id);
+}
+$('closeCompanyRules').onclick=()=>$('companyRulesModal').classList.remove('open');
 $('companyForm').onsubmit=async e=>{
   e.preventDefault();
   const name=$('newCompanyName').value.trim(),note=$('newCompanyNote').value.trim();
