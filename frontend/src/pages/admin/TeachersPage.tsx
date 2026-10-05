@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, getAccessToken, setAccessToken } from '../../api/client';
+import { api, getPersistentAccessToken, setSessionAccessToken } from '../../api/client';
 import type { User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { useAuth } from '../../auth/AuthContext';
@@ -51,7 +51,7 @@ export function TeachersPage() {
 
   async function enterAsTeacher(teacher: User) {
     if (enteringTeacherId) return;
-    const adminToken = getAccessToken();
+    const adminToken = getPersistentAccessToken();
     if (!adminToken) {
       setError('Административная сессия не найдена. Войдите в аккаунт администратора снова.');
       return;
@@ -62,7 +62,7 @@ export function TeachersPage() {
     try {
       const auth = await api.auth.impersonateTeacher(teacher.id);
       saveAdminImpersonation(adminToken, teacher, `/admin/lessons?teacherId=${teacher.id}`);
-      setAccessToken(auth.accessToken);
+      setSessionAccessToken(auth.accessToken);
       setUser(auth.user);
       navigate('/teacher/lessons');
     } catch (e) {
