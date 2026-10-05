@@ -52,6 +52,9 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
   const [pageUrls, setPageUrls] = useState<Record<number, string>>({});
   const drawingsRef = useRef<Record<number, PageDrawing>>({});
   const [tool, setTool] = useState<Tool>('pen');
+  const [touchDrawingEnabled, setTouchDrawingEnabled] = useState(() =>
+    typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+  );
   const [penColor, setPenColor] = useState<PenColor>('#2563eb');
   const [penSize, setPenSize] = useState(5);
   const [desktopZoom, setDesktopZoom] = useState(100);
@@ -210,6 +213,14 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
                 <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
                   {language === 'DE' ? 'Radierer' : 'Ластик'}
                 </button>
+                <button
+                  type="button"
+                  className={`btn ${touchDrawingEnabled ? '' : 'btn--secondary'}`}
+                  onClick={() => setTouchDrawingEnabled(!touchDrawingEnabled)}
+                  title={language === 'DE' ? 'Für Android-Stifte, die als Touch erkannt werden' : 'Для Android-стилусов, которые определяются как касание'}
+                >
+                  {language === 'DE' ? 'Android/Finger' : 'Android/палец'}
+                </button>
                 <ColorPicker language={language} value={penColor} onChange={(color) => { setPenColor(color); setTool('pen'); }} />
                 <SizePicker language={language} value={penSize} onChange={(size) => { setPenSize(size); setTool('pen'); }} />
               </div>
@@ -239,6 +250,8 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
           initialDrawing={drawingsRef.current[pageIndex]}
           tool={tool}
           setTool={setTool}
+          touchDrawingEnabled={touchDrawingEnabled}
+          setTouchDrawingEnabled={setTouchDrawingEnabled}
           penColor={penColor}
           setPenColor={setPenColor}
           penSize={penSize}
@@ -263,8 +276,8 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
           </button>
           <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
             {language === 'DE'
-              ? 'Apple Pencil schreibt. Mit zwei Fingern zoomst du die Seite; Farbe und Stiftbreite kannst du in der Werkzeugleiste ändern.'
-              : 'Apple Pencil пишет. Двумя пальцами масштабируется страница. Цвет и толщину ручки можно менять в панели инструментов.'}
+              ? 'Apple Pencil oder Android-Stift schreibt. Auf Android kann Einfinger-Schreiben aktiviert werden; mit zwei Fingern zoomst und verschiebst du die Seite.'
+              : 'Apple Pencil и Android-стилус пишут прямо по листу. На Android можно включить режим «1 палец/стилус пишет», а двумя пальцами двигать и масштабировать страницу.'}
           </p>
         </div>
       )}
@@ -389,11 +402,13 @@ async function pageDrawingToDataUrl(drawing: PageDrawing): Promise<string> {
   });
 }
 
-function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, setPenColor, penSize, setPenSize, language, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange }: {
+function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingEnabled, setTouchDrawingEnabled, penColor, setPenColor, penSize, setPenSize, language, desktopControls, desktopZoom, viewport, toolbarScale, pageIndex, pageCount, setPageIndex, onDesktopZoomChange, onChange }: {
   pageUrl: string;
   initialDrawing?: PageDrawing;
   tool: Tool;
   setTool: (tool: Tool) => void;
+  touchDrawingEnabled: boolean;
+  setTouchDrawingEnabled: (enabled: boolean) => void;
   penColor: PenColor;
   setPenColor: (color: PenColor) => void;
   penSize: number;
@@ -412,6 +427,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
   const imageRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingPointerIdRef = useRef<number | null>(null);
+  const activeTouchPointersRef = useRef<Set<number>>(new Set());
   const strokeGeometryRef = useRef<StrokeGeometry | null>(null);
   const strokesRef = useRef<DrawingStroke[]>(initialDrawing?.strokes.map((stroke) => ({
     ...stroke,
@@ -421,22 +437,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
   const lastPointRef = useRef<StrokePoint | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(strokesRef.current.length);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const guardTouch = (event: TouchEvent) => {
-      if (event.touches.length < 2) event.preventDefault();
-    };
-
-    canvas.addEventListener('touchstart', guardTouch, { passive: false });
-    canvas.addEventListener('touchmove', guardTouch, { passive: false });
-    return () => {
-      canvas.removeEventListener('touchstart', guardTouch);
-      canvas.removeEventListener('touchmove', guardTouch);
-    };
-  }, []);
 
   function emitDrawing() {
     const canvas = canvasRef.current;
@@ -480,8 +480,27 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
     };
   }
 
+  function canDrawWithPointer(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (event.pointerType !== 'touch') return true;
+    return touchDrawingEnabled && activeTouchPointersRef.current.size <= 1;
+  }
+
   function start(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch') return;
+    if (event.pointerType === 'touch') {
+      activeTouchPointersRef.current.add(event.pointerId);
+      // The second finger belongs to browser pinch/pan. If a one-finger stroke
+      // was in progress, cancel it instead of drawing an accidental line.
+      if (activeTouchPointersRef.current.size > 1) {
+        if (drawingPointerIdRef.current !== null) {
+          activeStrokeRef.current = null;
+          lastPointRef.current = null;
+          drawingPointerIdRef.current = null;
+          strokeGeometryRef.current = null;
+        }
+        return;
+      }
+    }
+    if (!canDrawWithPointer(event)) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -508,7 +527,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
   }
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+    if (!canDrawWithPointer(event) || drawingPointerIdRef.current !== event.pointerId) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -532,7 +551,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
   }
 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.pointerType === 'touch' || drawingPointerIdRef.current !== event.pointerId) return;
+    if (event.pointerType === 'touch') activeTouchPointersRef.current.delete(event.pointerId);
+    if (drawingPointerIdRef.current !== event.pointerId) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -601,6 +621,15 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
         >
           <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')} title={language === 'DE' ? 'Stift' : 'Ручка'}>✎</button>
           <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')} title={language === 'DE' ? 'Radierer' : 'Ластик'}>⌫</button>
+          <button
+            type="button"
+            className={`btn ${touchDrawingEnabled ? '' : 'btn--secondary'}`}
+            onClick={() => setTouchDrawingEnabled(!touchDrawingEnabled)}
+            title={language === 'DE' ? 'Android/Finger schreiben' : 'Android: писать стилусом/пальцем'}
+            aria-pressed={touchDrawingEnabled}
+          >
+            ☝
+          </button>
           <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
           {PEN_COLORS.map((color) => (
             <button
@@ -685,7 +714,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, penColor, set
               inset: 0,
               width: '100%',
               height: '100%',
-              touchAction: 'pinch-zoom',
+              touchAction: touchDrawingEnabled ? 'none' : 'pinch-zoom',
               cursor: tool === 'eraser' ? 'cell' : 'crosshair',
               opacity: ready ? 1 : 0,
             }}
