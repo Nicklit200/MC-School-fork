@@ -48,7 +48,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.17.2";
+    private static final String SERVER_VERSION = "1.18.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -186,8 +186,9 @@ public class MindcraftiMcpController {
         tools.add(tool("get_school_prompt", "Get the current administrator-managed Mindcrafti school prompt. Use this whenever the teacher asks to create a lesson, homework or teaching material 'по промту' / 'по школьному промту' / 'using the prompt'. Choose group for group-lesson logic, individual for one-to-one lesson logic, workbook for creating a lesson workbook/teacher answers, homework for creating homework, diagnostic for a trial/diagnostic lesson, and error_correction for a personalised work-on-mistakes document. Always fetch it fresh instead of relying on a prompt remembered from earlier chat messages. Teacher-specific extra instructions may be applied on top of the returned prompt.", schema(Map.of("lessonType", property("string", "Prompt type: group, individual, workbook, homework, diagnostic or error_correction.")), List.of("lessonType")), readOnlyAnnotations()));
         tools.add(tool("get_brand_guide", "Get the current administrator-managed Mindcrafti Brand Guide, including its searchable rules and the uploaded source PDF as base64 when available. ALWAYS use this before creating or redesigning any Mindcrafti-branded PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document or other visual material. Fetch it fresh instead of relying on a Brand Guide remembered from chat history.", schema(Map.of(), List.of()), readOnlyAnnotations()));
         tools.add(tool("find_lessons", "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.", schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()), readOnlyAnnotations()));
-        tools.add(tool("get_lesson_preparation", "Read workbook, teacher answers, homework notes, difficulties and lesson plan for one lesson.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
-        tools.add(tool("download_lesson_pdf", "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons."), "kind", property("string", "PDF kind: workbook or answers.")), List.of("teacherId", "eventId", "kind")), readOnlyAnnotations()));
+        tools.add(tool("get_lesson_preparation", "Read lesson metadata, homework notes, difficulties, lesson plan, and which PDF documents are attached. Transcript text is not returned when a transcript PDF exists; use download_lesson_transcript when the actual document is needed.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
+        tools.add(tool("download_lesson_pdf", "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons."), "kind", property("string", "PDF kind: workbook, answers or transcript.")), List.of("teacherId", "eventId", "kind")), readOnlyAnnotations()));
+        tools.add(tool("download_lesson_transcript", "Download the original transcript PDF stored on one lesson. Use this whenever you need to inspect or reuse a lesson transcript; the normal lesson-preparation response intentionally does not inline the full transcript.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
 
         Map<String, Object> prepareProperties = new LinkedHashMap<>();
         prepareProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
@@ -215,7 +216,7 @@ public class MindcraftiMcpController {
         transcriptProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
         transcriptProperties.put("driveFileId", property("string", "Google Drive raw file ID or Drive URL containing the transcript PDF."));
         transcriptProperties.put("filename", property("string", "Optional transcript PDF filename. Used for Drive fallback lookup."));
-        tools.add(tool("attach_lesson_transcript", "Copy a transcript PDF from Google Drive into one concrete Mindcrafti lesson and extract its text into transcriptText.", schema(transcriptProperties, List.of("teacherId", "eventId", "driveFileId")), writeAnnotations()));
+        tools.add(tool("attach_lesson_transcript", "Copy the original transcript PDF from Google Drive into one concrete Mindcrafti lesson. The PDF becomes the primary transcript document; full text is extracted only on demand for analysis.", schema(transcriptProperties, List.of("teacherId", "eventId", "driveFileId")), writeAnnotations()));
 
         Map<String, Object> targetProperties = new LinkedHashMap<>();
         targetProperties.put("query", property("string", "Optional student or group name filter, for example Виталина, Christian or Группа 1."));
@@ -342,6 +343,7 @@ public class MindcraftiMcpController {
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
             case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
+            case "download_lesson_transcript" -> toolResult(downloadLessonTranscript(arguments, auth));
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
             case "attach_lesson_transcript" -> toolResult(attachLessonTranscript(arguments, auth));
@@ -504,13 +506,24 @@ public class MindcraftiMcpController {
             pdf = preparation.getAnswersPdf();
             filename = preparation.getAnswersFilename();
             if (filename == null || filename.isBlank()) filename = "lesson-answers.pdf";
-        } else throw new IllegalArgumentException("kind must be workbook or answers");
+        } else if ("transcript".equals(kind)) {
+            if (!preparation.hasTranscriptPdf()) throw new IllegalArgumentException("This lesson does not have a transcript PDF");
+            pdf = preparation.getTranscriptPdf();
+            filename = preparation.getTranscriptFilename();
+            if (filename == null || filename.isBlank()) filename = "lesson-transcript.pdf";
+        } else throw new IllegalArgumentException("kind must be workbook, answers or transcript");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("filename", filename);
         result.put("mimeType", MediaType.APPLICATION_PDF_VALUE);
         result.put("sizeBytes", pdf.length);
         result.put("base64", Base64.getEncoder().encodeToString(pdf));
         return result;
+    }
+
+    private Map<String, Object> downloadLessonTranscript(Map<String, Object> arguments, AuthContext auth) {
+        Map<String, Object> transcriptArguments = new LinkedHashMap<>(arguments);
+        transcriptArguments.put("kind", "transcript");
+        return downloadLessonPdf(transcriptArguments, auth);
     }
 
     private LessonPreparationResponse prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {
