@@ -524,16 +524,24 @@ public class MindcraftiMcpController {
         LessonPreparationResponse result = preparationService.update(teacher, eventId, new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan, null));
 
         String workbookBase64 = string(arguments.get("workbookBase64"));
-        String workbookFilename = normalizedPdfFilename(string(arguments.get("workbookFilename")), "lesson-workbook.pdf");
+        String rawWorkbookFilename = string(arguments.get("workbookFilename")).trim();
+        boolean transcriptCompatibilityImport = "__TRANSCRIPT__".equals(rawWorkbookFilename);
+        String workbookFilename = normalizedPdfFilename(
+                transcriptCompatibilityImport ? "lesson-transcript.pdf" : rawWorkbookFilename,
+                transcriptCompatibilityImport ? "lesson-transcript.pdf" : "lesson-workbook.pdf");
         String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
         if (!workbookBase64.isBlank() && !driveWorkbookFileId.isBlank()) throw new IllegalArgumentException("Use either workbookBase64 or driveWorkbookFileId, not both");
         if (!workbookBase64.isBlank()) {
             byte[] pdf = decodePdfBase64(workbookBase64, "workbookBase64");
-            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+            result = transcriptCompatibilityImport
+                    ? preparationService.uploadTranscript(teacher, eventId, workbookFilename, pdf)
+                    : preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
         } else if (!driveWorkbookFileId.isBlank()) {
             byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveWorkbookFileId, workbookFilename);
             if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
-            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+            result = transcriptCompatibilityImport
+                    ? preparationService.uploadTranscript(teacher, eventId, workbookFilename, pdf)
+                    : preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
         }
 
         String answersBase64 = string(arguments.get("answersBase64"));
