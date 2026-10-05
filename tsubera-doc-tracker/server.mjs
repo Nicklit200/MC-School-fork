@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS companies (
   name TEXT NOT NULL UNIQUE COLLATE NOCASE,
   active INTEGER NOT NULL DEFAULT 1,
   note TEXT NOT NULL DEFAULT '',
+  billing_channel TEXT NOT NULL DEFAULT '',
+  invoice_email TEXT NOT NULL DEFAULT '',
+  invoice_subject TEXT NOT NULL DEFAULT '',
+  postal_address TEXT NOT NULL DEFAULT '',
+  required_documents TEXT NOT NULL DEFAULT '',
+  submission_deadline TEXT NOT NULL DEFAULT '',
+  special_rules TEXT NOT NULL DEFAULT '',
+  rules_source TEXT NOT NULL DEFAULT '',
+  rules_seeded INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -79,6 +88,22 @@ if (!tripColumns.has("loaded_at")) db.exec("ALTER TABLE trips ADD COLUMN loaded_
 if (!tripColumns.has("unloaded_at")) db.exec("ALTER TABLE trips ADD COLUMN unloaded_at TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN vehicle_plates TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("price_cents")) db.exec("ALTER TABLE trips ADD COLUMN price_cents INTEGER");
+
+const companyColumns = new Set(db.prepare("PRAGMA table_info(companies)").all().map(r => r.name));
+for (const [name, ddl] of [
+  ["billing_channel","TEXT NOT NULL DEFAULT ''"],
+  ["invoice_email","TEXT NOT NULL DEFAULT ''"],
+  ["invoice_subject","TEXT NOT NULL DEFAULT ''"],
+  ["postal_address","TEXT NOT NULL DEFAULT ''"],
+  ["required_documents","TEXT NOT NULL DEFAULT ''"],
+  ["submission_deadline","TEXT NOT NULL DEFAULT ''"],
+  ["special_rules","TEXT NOT NULL DEFAULT ''"],
+  ["rules_source","TEXT NOT NULL DEFAULT ''"],
+  ["rules_seeded","INTEGER NOT NULL DEFAULT 0"]
+]) {
+  if (!companyColumns.has(name)) db.exec(`ALTER TABLE companies ADD COLUMN ${name} ${ddl}`);
+}
+
 db.exec("UPDATE trips SET cmr_loaded = 1 WHERE cmr = 1 AND cmr_loaded = 0");
 db.exec("UPDATE trips SET cmr_unloaded = 1 WHERE pod = 1 AND cmr_unloaded = 0");
 db.exec("UPDATE documents SET doc_type = 'cmr_loading' WHERE doc_type = 'cmr'");
@@ -102,6 +127,14 @@ const companyOut = row => row ? ({
   name: row.name,
   active: !!row.active,
   note: row.note || "",
+  billingChannel: row.billing_channel || "",
+  invoiceEmail: row.invoice_email || "",
+  invoiceSubject: row.invoice_subject || "",
+  postalAddress: row.postal_address || "",
+  requiredDocuments: row.required_documents || "",
+  submissionDeadline: row.submission_deadline || "",
+  specialRules: row.special_rules || "",
+  rulesSource: row.rules_source || "",
   createdAt: row.created_at,
   updatedAt: row.updated_at
 }) : null;
@@ -115,8 +148,8 @@ function ensureCompany(name, note = "", active) {
   }
   const id = crypto.randomUUID(), ts = now();
   const isActive = active === undefined ? defaultCompanyActive(n) : !!active;
-  db.prepare("INSERT INTO companies (id,name,active,note,created_at,updated_at) VALUES (?,?,?,?,?,?)")
-    .run(id,n,bool(isActive),String(note||"").trim(),ts,ts);
+  db.prepare("INSERT INTO companies (id,name,active,note,billing_channel,invoice_email,invoice_subject,postal_address,required_documents,submission_deadline,special_rules,rules_source,rules_seeded,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id,n,bool(isActive),String(note||"").trim(),"","","","","","","","",0,ts,ts);
   return companyOut(db.prepare("SELECT * FROM companies WHERE id=?").get(id));
 }
 function listCompanies() {
@@ -134,10 +167,18 @@ function updateCompany(id, changes = {}) {
   if (!nextName) throw new Error("company name is required");
   const nextActive = changes.active === undefined ? !!row.active : !!changes.active;
   const nextNote = changes.note === undefined ? row.note : String(changes.note || "").trim();
+  const nextBillingChannel = changes.billingChannel === undefined ? row.billing_channel : String(changes.billingChannel || "").trim();
+  const nextInvoiceEmail = changes.invoiceEmail === undefined ? row.invoice_email : String(changes.invoiceEmail || "").trim();
+  const nextInvoiceSubject = changes.invoiceSubject === undefined ? row.invoice_subject : String(changes.invoiceSubject || "").trim();
+  const nextPostalAddress = changes.postalAddress === undefined ? row.postal_address : String(changes.postalAddress || "").trim();
+  const nextRequiredDocuments = changes.requiredDocuments === undefined ? row.required_documents : String(changes.requiredDocuments || "").trim();
+  const nextSubmissionDeadline = changes.submissionDeadline === undefined ? row.submission_deadline : String(changes.submissionDeadline || "").trim();
+  const nextSpecialRules = changes.specialRules === undefined ? row.special_rules : String(changes.specialRules || "").trim();
+  const nextRulesSource = changes.rulesSource === undefined ? row.rules_source : String(changes.rulesSource || "").trim();
   const duplicate = db.prepare("SELECT id FROM companies WHERE LOWER(name)=LOWER(?) AND id<>? LIMIT 1").get(nextName,id);
   if (duplicate) throw new Error("A company with this name already exists");
-  db.prepare("UPDATE companies SET name=?,active=?,note=?,updated_at=? WHERE id=?")
-    .run(nextName,bool(nextActive),nextNote,now(),id);
+  db.prepare("UPDATE companies SET name=?,active=?,note=?,billing_channel=?,invoice_email=?,invoice_subject=?,postal_address=?,required_documents=?,submission_deadline=?,special_rules=?,rules_source=?,updated_at=? WHERE id=?")
+    .run(nextName,bool(nextActive),nextNote,nextBillingChannel,nextInvoiceEmail,nextInvoiceSubject,nextPostalAddress,nextRequiredDocuments,nextSubmissionDeadline,nextSpecialRules,nextRulesSource,now(),id);
   if (nextName !== oldName) db.prepare("UPDATE trips SET customer=?,updated_at=? WHERE LOWER(customer)=LOWER(?)").run(nextName,now(),oldName);
   return listCompanies().find(c => c.id === id) || companyOut(db.prepare("SELECT * FROM companies WHERE id=?").get(id));
 }
@@ -195,6 +236,58 @@ for (const row of db.prepare("SELECT vehicle_plates FROM trips WHERE TRIM(COALES
 }
 for (const row of db.prepare("SELECT DISTINCT customer FROM trips WHERE TRIM(COALESCE(customer,'')) <> ''").all()) {
   ensureCompany(row.customer);
+}
+const knownCompanyRules = [
+  {
+    name: "DC Cargo Sp. z o.o.",
+    billingChannel: "Только электронно. Бумажные Rechnung и документы не принимаются.",
+    invoiceEmail: "invoice.gd@dccargo.pl",
+    invoiceSubject: "",
+    postalAddress: "",
+    requiredDocuments: "Rechnung + все релевантные Ablieferungsnachweise: CMR, Lieferschein, Palettenschein и, если применимо, grenzüberschreitende Dokumente. Всё должно быть объединено в один файл на один Transportauftrag.",
+    submissionDeadline: "Полный корректный комплект должен поступить в течение 10 дней после рейса.",
+    specialRules: "1 Transportauftrag = 1 отдельная Rechnung. E-Rechnung только ZUGFeRD PDF с XML. Максимум 7 MB. На Rechnung и релевантных документах должны быть Tour-Nr./Fahrtnummer и Fahrer-ID. Имя файла без спецсимволов и обязательно с Tour-Nr. или Fahrtnummer.",
+    rulesSource: "Transportauftrag GD26090083 · Abschnitt 3 Abrechnung"
+  },
+  {
+    name: "SemiCargo",
+    billingChannel: "Оригиналы Rechnung и документов отправляются обычной почтой или курьером. Дополнительно после разгрузки сканы/фото документов отправляются диспетчеру по email.",
+    invoiceEmail: "Email диспетчера из конкретного Auftrag; для 0380/09/2026: oskar.jedrowiak@semicargo.pl",
+    invoiceSubject: "",
+    postalAddress: "SEMICARGO Sp. z o.o., os. Wyzwolenia 28/35, PL 62-700 Turek",
+    requiredDocuments: "Rechnung + 2 оригинальных комплекта документов, подтверждённых получателем (читаемая подпись, дата разгрузки, печать) + подписанный Auftrag. CMR/DPL/PAKI, если применимо, отправляются в оригинале.",
+    submissionDeadline: "Сканы/фото после разгрузки — в течение 24 часов. Rechnung с оригиналами — в течение 10 дней после разгрузки.",
+    specialRules: "Rechnung должна быть выставлена в месяце выполнения услуги. Для EUR требуется двухвалютная Rechnung и два банковских счёта: PLN и EUR. При Skonto информация должна быть на Rechnung и на конверте.",
+    rulesSource: "Zlecenie transportowe 0380/09/2026 · Termin i warunki płatności"
+  },
+  {
+    name: "Simple Solutions Sp. z o.o.",
+    billingChannel: "Сначала читаемый скан транспортной документации диспетчеру по email, затем оригиналы документов и Rechnung почтой.",
+    invoiceEmail: "Email диспетчера, ведущего конкретный Auftrag; для ZL2900/2026/KS: k.samsel@simple-solutions.com.pl",
+    invoiceSubject: "",
+    postalAddress: "Simple Solutions Sp. z o.o., Warmińska 21/1, PL 10-545 Olsztyn",
+    requiredDocuments: "Оригинал транспортного документа + Rechnung + остальные сопроводительные документы. Для температурных перевозок — также распечатка температуры.",
+    submissionDeadline: "Скан документации — не позднее 72 часов после разгрузки. Оригиналы транспортного документа, Rechnung и сопроводительные документы — в течение 14 дней после разгрузки.",
+    specialRules: "Rechnung должна быть выставлена в месяце выполнения Auftrag. Стандартный срок оплаты — 60 дней от получения оригинальных документов.",
+    rulesSource: "ZL2900/2026/KS · OWU pkt 23–24 oraz §5"
+  },
+  {
+    name: "inTime Express Logistik GmbH",
+    billingChannel: "Rechnung по email; транспортные документы/POD отдельным PDF. Оригиналы транспортных документов дополнительно отправляются почтой в центральный офис.",
+    invoiceEmail: "invoice@intime.de или rechnungseingang@intime.de; POD для текущего Auftrag также: pod@intime.de",
+    invoiceSubject: "Тема письма строго: Rechnung, Invoice или Faktura",
+    postalAddress: "inTime Express Logistik GmbH, Am Kirchhorster See 1, D-30916 Isernhagen",
+    requiredDocuments: "Rechnung отдельным PDF (макс. 2 MB). Transportbelege/POD отдельным PDF (макс. 2 MB), названным Belege, POD, Anhang или Attachement. Если сканы уже отправлены через inTime DriverApp, повторно цифрово отправлять их не нужно.",
+    submissionDeadline: "Оригинальный Ablieferbeleg должен быть возвращён не позднее 4-го рабочего дня после окончания транспорта.",
+    specialRules: "Только одна Rechnung на одно email. Rechnung должна быть машинно создана. Не отправлять Rechnung дополнительно почтой. Важную информацию не писать в тексте email, т.к. ящик обрабатывается автоматически.",
+    rulesSource: "invoicing_details_de.pdf + procedure_of_evidence_de.pdf + Auftrag 14634664"
+  }
+];
+for (const rule of knownCompanyRules) {
+  const row = db.prepare("SELECT * FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(rule.name);
+  if (!row || row.rules_seeded) continue;
+  db.prepare("UPDATE companies SET billing_channel=?,invoice_email=?,invoice_subject=?,postal_address=?,required_documents=?,submission_deadline=?,special_rules=?,rules_source=?,rules_seeded=1,updated_at=? WHERE id=?")
+    .run(rule.billingChannel,rule.invoiceEmail,rule.invoiceSubject,rule.postalAddress,rule.requiredDocuments,rule.submissionDeadline,rule.specialRules,rule.rulesSource,now(),row.id);
 }
 
 function internalPrefix(date) {
@@ -523,7 +616,15 @@ const toolDefs = [
       properties: {
         name: { type: "string" },
         active: { type: "boolean", description: "Whether the company's trips should be visible in the default current view." },
-        note: { type: "string" }
+        note: { type: "string" },
+        billing_channel: { type: "string" },
+        invoice_email: { type: "string" },
+        invoice_subject: { type: "string" },
+        postal_address: { type: "string" },
+        required_documents: { type: "string" },
+        submission_deadline: { type: "string" },
+        special_rules: { type: "string" },
+        rules_source: { type: "string" }
       },
       required: ["name"],
       additionalProperties: false
@@ -539,7 +640,15 @@ const toolDefs = [
         company_id: { type: "string" },
         name: { type: "string" },
         active: { type: "boolean" },
-        note: { type: "string" }
+        note: { type: "string" },
+        billing_channel: { type: "string" },
+        invoice_email: { type: "string" },
+        invoice_subject: { type: "string" },
+        postal_address: { type: "string" },
+        required_documents: { type: "string" },
+        submission_deadline: { type: "string" },
+        special_rules: { type: "string" },
+        rules_source: { type: "string" }
       },
       required: ["company_id"],
       additionalProperties: false
@@ -739,10 +848,34 @@ async function callTool(name, args, req) {
   if (name === "create_company") {
     const company = ensureCompany(args.name, args.note || "", args.active);
     if (!company) throw new Error("name is required");
+    if ([args.billing_channel,args.invoice_email,args.invoice_subject,args.postal_address,args.required_documents,args.submission_deadline,args.special_rules,args.rules_source].some(v => v !== undefined)) {
+      updateCompany(company.id, {
+        billingChannel: args.billing_channel,
+        invoiceEmail: args.invoice_email,
+        invoiceSubject: args.invoice_subject,
+        postalAddress: args.postal_address,
+        requiredDocuments: args.required_documents,
+        submissionDeadline: args.submission_deadline,
+        specialRules: args.special_rules,
+        rulesSource: args.rules_source
+      });
+    }
     return { created: true, company: listCompanies().find(c => c.id === company.id) || company };
   }
   if (name === "update_company") {
-    const company = updateCompany(args.company_id, { name: args.name, active: args.active, note: args.note });
+    const company = updateCompany(args.company_id, {
+      name: args.name,
+      active: args.active,
+      note: args.note,
+      billingChannel: args.billing_channel,
+      invoiceEmail: args.invoice_email,
+      invoiceSubject: args.invoice_subject,
+      postalAddress: args.postal_address,
+      requiredDocuments: args.required_documents,
+      submissionDeadline: args.submission_deadline,
+      specialRules: args.special_rules,
+      rulesSource: args.rules_source
+    });
     if (!company) return { updated: false, error: "Company not found" };
     return { updated: true, company };
   }
