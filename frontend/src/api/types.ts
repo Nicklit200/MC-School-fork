@@ -17,7 +17,7 @@ export interface StudentLearningProfileUpdate { grade: number | null; schoolType
 export interface StudentGroup { id: string; name: string; googleDriveTranscriptFolderId: string | null; students: User[]; }
 export interface GroupLesson { eventId: string; bindingKey: string; groupId: string | null; groupName: string | null; studentId: string | null; studentName: string | null; participantStudentIds: string[]; title: string; startsAt: string; endsAt: string; meetUrl: string | null; calendarUrl: string | null; }
 export interface StudentLesson { eventId: string; title: string; groupName: string | null; startsAt: string; endsAt: string; meetUrl: string | null; hasSharedDocument: boolean; sharedDocumentFilename: string | null; }
-export interface LessonPreparation { eventId: string; homeworkNotes: string | null; difficulties: string | null; lessonPlan: string | null; transcriptText: string | null; hasWorkbook: boolean; workbookFilename: string | null; hasAnswers: boolean; answersFilename: string | null; answersUploadHint?: string | null; }
+export interface LessonPreparation { eventId: string; homeworkNotes: string | null; difficulties: string | null; lessonPlan: string | null; transcriptText: string | null; hasTranscript: boolean; transcriptFilename: string | null; hasWorkbook: boolean; workbookFilename: string | null; hasAnswers: boolean; answersFilename: string | null; answersUploadHint?: string | null; siteOpenedAt?: string | null; }
 export interface GoogleCalendarConnection { connected: boolean; authorizationUrl: string | null; }
 export interface GoogleMeetEventStatus { configured: boolean; subscribed: boolean; lastLeftAt: string | null; }
 export interface AuthResponse { accessToken: string; tokenType: string; expiresAt: string; user: User; }
