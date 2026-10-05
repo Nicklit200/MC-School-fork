@@ -80,6 +80,15 @@ export const lessonPreparationApi = {
   uploadAnswers(eventId: string, file: File) {
     return uploadPdf(eventId, 'answers', file);
   },
+  uploadTranscript(eventId: string, file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/transcript`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: form,
+    }).then(parse<LessonPreparation>);
+  },
   workbookUrl(eventId: string) {
     return pdfUrl(eventId, 'workbook');
   },
