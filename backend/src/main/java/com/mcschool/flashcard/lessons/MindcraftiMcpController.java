@@ -48,7 +48,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.17.1";
+    private static final String SERVER_VERSION = "1.17.2";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -210,6 +210,13 @@ public class MindcraftiMcpController {
         answerProperties.put("filename", property("string", "Optional PDF filename. Used for Drive fallback lookup."));
         tools.add(tool("attach_lesson_answers", "Copy a teacher-answer PDF from Google Drive into one concrete lesson, using the selected teacher's Drive access when needed.", schema(answerProperties, List.of("teacherId", "eventId", "driveFileId")), writeAnnotations()));
 
+        Map<String, Object> transcriptProperties = new LinkedHashMap<>();
+        transcriptProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
+        transcriptProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
+        transcriptProperties.put("driveFileId", property("string", "Google Drive raw file ID or Drive URL containing the transcript PDF."));
+        transcriptProperties.put("filename", property("string", "Optional transcript PDF filename. Used for Drive fallback lookup."));
+        tools.add(tool("attach_lesson_transcript", "Copy a transcript PDF from Google Drive into one concrete Mindcrafti lesson and extract its text into transcriptText.", schema(transcriptProperties, List.of("teacherId", "eventId", "driveFileId")), writeAnnotations()));
+
         Map<String, Object> targetProperties = new LinkedHashMap<>();
         targetProperties.put("query", property("string", "Optional student or group name filter, for example Виталина, Christian or Группа 1."));
         targetProperties.put("teacherId", property("string", "Optional teacher UUID. Teachers never need it. Admins may omit it to search across every active teacher."));
@@ -337,6 +344,7 @@ public class MindcraftiMcpController {
             case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
+            case "attach_lesson_transcript" -> toolResult(attachLessonTranscript(arguments, auth));
             case "find_homework_targets" -> toolResult(findHomeworkTargets(arguments, auth));
             case "get_month_plan" -> toolResult(getMonthPlan(arguments, auth));
             case "update_month_plan" -> toolResult(updateMonthPlan(arguments, auth));
@@ -552,6 +560,17 @@ public class MindcraftiMcpController {
         byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveFileId, filename);
         if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
         return preparationService.uploadAnswers(teacher, eventId, filename, pdf);
+    }
+
+    private LessonPreparationResponse attachLessonTranscript(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser teacher = requireTeacher(arguments, auth);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        String driveFileId = required(arguments, "driveFileId");
+        String filename = normalizedPdfFilename(string(arguments.get("filename")), "lesson-transcript.pdf");
+        byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveFileId, filename);
+        if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
+        return preparationService.uploadTranscript(teacher, eventId, filename, pdf);
     }
 
     private MonthlyPlanResponse getMonthPlan(Map<String, Object> arguments, AuthContext auth) {
