@@ -30,6 +30,11 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 button.cmr-check{cursor:pointer}.cmr-check.loaded{background:#e8f7ef;border-color:#b7e4c7;color:#087443;font-weight:800}
 button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check.empty{background:#f8fafc;color:#cbd5e1}
 .cmr-check.missing{background:#fff1f2;border-color:#fecdd3;color:#be123c;font-weight:850}
+.action-menu-wrap{position:relative;display:flex;justify-content:flex-end}
+.action-dots{width:34px;height:34px;border:1px solid #dfe3ea;border-radius:10px;background:#fff;color:#111827;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 0 8px}
+.action-dots:hover{background:#f8fafc}.action-menu{position:absolute;right:0;top:40px;min-width:180px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 14px 32px #11182724;padding:6px;z-index:15;display:none}
+.action-menu.open{display:block}.action-menu button{width:100%;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:8px;font:inherit;font-size:13px;cursor:pointer;color:#111827}
+.action-menu button:hover{background:#f3f4f6}.action-menu button.danger{color:#b91c1c}.action-menu button.danger:hover{background:#fff1f2}
 .docs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.docs-head h2{margin-top:0}.docs-updated{padding-top:4px;text-align:right;white-space:nowrap}
 .dt{width:100%;border:1px solid #dfe3ea;border-radius:8px;padding:7px;font-size:12px;background:#fff}
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
@@ -240,7 +245,14 @@ function render(){
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
       <div><button class="btn alt small" onclick="openDocs('${t.id}')">Документы</button></div>
       <div>${status(t)}</div>
-      <div><button class="btn alt small" onclick="delTrip('${t.id}')">×</button></div>
+      <div class="action-menu-wrap">
+        <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
+        <div class="action-menu" id="tripMenu-${t.id}">
+          <button type="button" onclick="menuTripProperties('${t.id}')">Свойства</button>
+          <button type="button" onclick="hideTripCompany('${t.id}')">Скрыть эту фирму</button>
+          <button type="button" class="danger" onclick="menuDeleteTrip('${t.id}')">Удалить рейс</button>
+        </div>
+      </div>
     </div>`).join('');
 }
 window.toggle=async(id,k,v)=>{
@@ -254,6 +266,24 @@ window.saveInlinePrice=async(id,value)=>{
   const t=trips.find(x=>x.id===id);
   if(t&&d.trip){t.priceEur=d.trip.priceEur;t.updatedAt=d.trip.updatedAt}
 }
+function closeTripMenus(){document.querySelectorAll('.action-menu.open').forEach(x=>x.classList.remove('open'))}
+window.toggleTripMenu=(ev,id)=>{
+  ev.stopPropagation();
+  const el=$('tripMenu-'+id),wasOpen=el?.classList.contains('open');
+  closeTripMenus();
+  if(el&&!wasOpen)el.classList.add('open');
+}
+window.menuTripProperties=id=>{closeTripMenus();openTrip(id)}
+window.menuDeleteTrip=id=>{closeTripMenus();delTrip(id)}
+window.hideTripCompany=async id=>{
+  closeTripMenus();
+  const t=trips.find(x=>x.id===id); if(!t)return;
+  const c=companyForTrip(t); if(!c)return alert('Фирма не найдена в базе фирм');
+  if(!confirm('Скрыть фирму «'+c.name+'» и её рейсы с главного экрана? Позже её можно вернуть во вкладке «Фирмы».'))return;
+  await api('/api/companies/'+c.id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({active:false})});
+  await load();
+}
+document.addEventListener('click',()=>closeTripMenus());
 window.delTrip=async id=>{if(confirm('Удалить рейс и все его документы?')){await api('/api/trips/'+id,{method:'DELETE'});await load()}}
 window.openTrip=id=>{
   activeDetailTrip=id;
