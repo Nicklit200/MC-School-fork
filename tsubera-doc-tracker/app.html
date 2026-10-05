@@ -13,10 +13,10 @@ main{max-width:1620px;margin:auto;padding:26px 18px}
 h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:650;cursor:pointer;background:#111827;color:#fff}
 .btn.alt{background:white;color:#111827;border:1px solid #dfe3ea}.btn.small{padding:7px 9px;font-size:12px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
-.table{overflow-x:auto}.head,.row{min-width:1320px;display:grid;grid-template-columns:105px 145px 145px 190px 115px 95px 100px 115px 125px 130px 34px;align-items:center}
+.table{overflow-x:auto}.head,.row{min-width:1210px;display:grid;grid-template-columns:105px 145px 145px 190px 115px 95px 115px 125px 130px 34px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
 .cellcheck{display:flex;justify-content:center}.row input[type=checkbox]{width:18px;height:18px}
@@ -49,10 +49,9 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   <div class="top">
     <div>
       <h1>Tsubera · Transport Documents</h1>
-      <div class="muted">Auftrag → CMR загрузка → CMR выгрузка / POD → Rechnung</div>
+      <div class="muted">Auftrag → CMR выгрузка / POD → Rechnung</div>
       <div class="legend">
         <span class="status wait">Auftrag erhalten</span>
-        <span class="status route">Beladen / Unterwegs</span>
         <span class="status ok">Entladen</span>
         <span class="status done">Rechnung erstellt</span>
       </div>
@@ -65,7 +64,6 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   <section id="tripsView">
   <div class="stats">
     <div class="card"><span>Всего рейсов</span><b id="total">0</b></div>
-    <div class="card"><span>Загружены</span><b id="loaded">0</b></div>
     <div class="card"><span>Выгружены</span><b id="unloaded">0</b></div>
     <div class="card"><span>Готовы к Rechnung</span><b id="ready">0</b></div>
   </div>
@@ -80,7 +78,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     <div class="table">
       <div class="head">
         <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Цена</div><div>Auftrag</div>
-        <div>CMR загрузка</div><div>CMR выгрузка / POD</div>
+        <div>CMR выгрузка / POD</div>
         <div>Документы</div><div>Статус</div><div></div>
       </div>
       <div id="rows"></div>
@@ -174,10 +172,9 @@ async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=
 function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · загрузка',cmr_unloading:'CMR · выгрузка / POD',cmr:'CMR · загрузка',pod:'CMR · выгрузка / POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
 function status(t){
   if(t.rechnungCode)return '<span class="status done">Rechnung erstellt</span>';
-  if(t.auftrag&&t.cmrLoaded&&t.cmrUnloaded)return '<span class="status ok">Entladen · готов к Rechnung</span>';
-  if(t.cmrUnloaded)return '<span class="status ok">Entladen · не хватает Auftrag/CMR загрузки</span>';
-  if(t.cmrLoaded)return '<span class="status route">Beladen · Unterwegs</span>';
-  if(t.auftrag)return '<span class="status wait">Auftrag erhalten · ещё не загружен</span>';
+  if(t.auftrag&&t.cmrUnloaded)return '<span class="status ok">Entladen · готов к Rechnung</span>';
+  if(t.cmrUnloaded)return '<span class="status ok">Entladen · не хватает Auftrag</span>';
+  if(t.auftrag)return '<span class="status wait">Auftrag erhalten</span>';
   return '<span class="status wait">Не хватает документов</span>';
 }
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
@@ -229,9 +226,8 @@ function render(){
     .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
   $('total').textContent=list.length;
-  $('loaded').textContent=list.filter(t=>t.cmrLoaded).length;
   $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
-  $('ready').textContent=list.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrLoaded&&t.cmrUnloaded).length;
+  $('ready').textContent=list.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrUnloaded).length;
   $('rows').innerHTML=list.map(t=>`
     <div class="row">
       <div>${esc(t.date)}</div>
@@ -240,7 +236,6 @@ function render(){
       <div>${esc(t.customer)}</div>
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
-      <div>${docCheck(t,'cmrLoading','CMR загрузки')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
       <div><button class="btn alt small" onclick="openDocs('${t.id}')">Документы</button></div>
       <div>${status(t)}</div>
