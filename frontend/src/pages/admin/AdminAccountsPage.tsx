@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, getAccessToken, setAccessToken } from '../../api/client';
+import { api, getPersistentAccessToken, setSessionAccessToken } from '../../api/client';
 import type { User } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { homePathForRole } from '../../auth/roleRoutes';
@@ -51,7 +51,7 @@ export function AdminAccountsPage() {
 
   async function enterAs(account: User) {
     if (enteringId) return;
-    const adminToken = getAccessToken();
+    const adminToken = getPersistentAccessToken();
     if (!adminToken) {
       setError('Административная сессия не найдена. Войдите в аккаунт администратора снова.');
       return;
@@ -63,7 +63,7 @@ export function AdminAccountsPage() {
         ? await api.auth.impersonateStudent(account.id)
         : await api.auth.impersonateParent(account.id);
       saveAdminImpersonation(adminToken, account, `/admin/accounts?role=${account.role}`);
-      setAccessToken(auth.accessToken);
+      setSessionAccessToken(auth.accessToken);
       setUser(auth.user);
       navigate(homePathForRole(auth.user.role));
     } catch (e) {
