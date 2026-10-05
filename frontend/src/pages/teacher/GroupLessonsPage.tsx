@@ -342,11 +342,11 @@ export function GroupLessonsPage() {
               : (language === 'DE' ? 'Lade jetzt die Soniox-Transkription hoch.' : 'Теперь загрузи транскрипцию Soniox.')}
           </div>
           {returnedGroup ? (
-            <TranscriptUpload eventId={returnedLesson.eventId} target={{ kind: 'group', id: returnedGroup.id, initialFolderId: returnedGroup.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
+            <TranscriptUpload eventId={returnedLesson?.eventId ?? returnedLessonId ?? ''} target={{ kind: 'group', id: returnedGroup.id, initialFolderId: returnedGroup.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
           ) : returnedStudent ? (
-            <TranscriptUpload eventId={returnedLesson.eventId} target={{ kind: 'student', id: returnedStudent.id, initialFolderId: returnedStudent.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
+            <TranscriptUpload eventId={returnedLesson?.eventId ?? returnedLessonId ?? ''} target={{ kind: 'student', id: returnedStudent.id, initialFolderId: returnedStudent.googleDriveTranscriptFolderId ?? null }} language={language} prominent />
           ) : teacher ? (
-            <TranscriptUpload eventId={lesson.eventId} target={{ kind: 'trial', id: teacher.id, initialFolderId: teacher.googleDriveTrialTranscriptFolderId ?? null }} language={language} prominent />
+            <TranscriptUpload eventId={returnedLesson?.eventId ?? returnedLessonId ?? ''} target={{ kind: 'trial', id: teacher.id, initialFolderId: teacher.googleDriveTrialTranscriptFolderId ?? null }} language={language} prominent />
           ) : null}
         </div>
       )}
@@ -639,40 +639,43 @@ function TranscriptUpload({ eventId, target, language, prominent = false }: { ev
   }
 
   async function upload() {
-    if (!folderId || !file || uploading) return;
+    if (!file || uploading) return;
     setUploading(true); setError(null); setMessage(null);
     try {
       // Mindcrafti is the primary source for the lesson transcript.
       // Google Drive remains a convenient archive copy.
       await lessonPreparationApi.uploadTranscript(eventId, file);
-      try {
-        const result = await driveApi.upload(folderId, file);
+      if (folderId) {
+        try {
+          const result = await driveApi.upload(folderId, file);
+          setMessage(language === 'DE'
+            ? `Transkription im Unterricht gespeichert und in Google Drive archiviert: ${result.name}`
+            : `Транскрипция сохранена в уроке Mindcrafti и скопирована в Google Drive: ${result.name}`);
+        } catch (driveError) {
+          setMessage(language === 'DE'
+            ? 'Transkription ist im Unterricht gespeichert. Die Google-Drive-Kopie ist fehlgeschlagen.'
+            : 'Транскрипция сохранена в уроке Mindcrafti. Копию в Google Drive сохранить не удалось.');
+          setError(driveError instanceof Error ? driveError.message : String(driveError));
+        }
+      } else {
         setMessage(language === 'DE'
-          ? `Transkription im Unterricht gespeichert und in Google Drive archiviert: ${result.name}`
-          : `Транскрипция сохранена в уроке Mindcrafti и скопирована в Google Drive: ${result.name}`);
-      } catch (driveError) {
-        setMessage(language === 'DE'
-          ? 'Transkription ist im Unterricht gespeichert. Die Google-Drive-Kopie ist fehlgeschlagen.'
-          : 'Транскрипция сохранена в уроке Mindcrafti. Копию в Google Drive сохранить не удалось.');
-        setError(driveError instanceof Error ? driveError.message : String(driveError));
+          ? 'Transkription ist im Unterricht gespeichert. Kein Google-Drive-Ordner ist eingerichtet.'
+          : 'Транскрипция сохранена в уроке Mindcrafti. Папка Google Drive не настроена, поэтому копия туда не создавалась.');
       }
       setFile(null);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setUploading(false); }
   }
 
-  if (target.kind === 'trial' && !folderId) {
-    return <div className="banner banner--info" style={{ marginTop: 10 }}>
-      {language === 'DE'
-        ? 'Für Probeunterricht ist noch kein Google-Drive-Ordner eingerichtet. Der Administrator kann ihn bei diesem Lehrer unter „Google Drive“ auswählen.'
-        : 'Для пробных уроков у этого преподавателя ещё не настроена папка Google Drive. Администратор может выбрать её в разделе «Учителя» → «Google Drive».'}
-    </div>;
-  }
-
   return (
     <div style={prominent ? { marginTop: 8 } : { marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
       <strong style={{ fontSize: prominent ? 16 : 12 }}>{target.kind === 'trial' ? (language === 'DE' ? 'Probeunterricht · Soniox-Transkription' : 'Пробный урок · транскрипция Soniox') : (language === 'DE' ? 'Soniox-Transkription' : 'Транскрипция Soniox')}</strong>
       {folderId && <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{target.kind === 'trial' ? (language === 'DE' ? 'Der Ordner für Probeunterricht ist eingerichtet.' : 'Папка пробных уроков уже настроена администратором.') : (language === 'DE' ? 'Zielordner ist gespeichert.' : 'Папка для транскрипций уже настроена.')}</div>}
+      {!folderId && <div className="banner banner--info" style={{ marginTop: 8, fontSize: 12 }}>
+        {language === 'DE'
+          ? 'Die Transkription wird trotzdem im Unterricht gespeichert. Ohne Drive-Ordner wird nur keine Archivkopie erstellt.'
+          : 'Транскрипция всё равно сохранится в самом уроке. Без папки Drive просто не будет дополнительной копии.'}
+      </div>}
       {error && <div className="banner banner--error" style={{ marginTop: 8 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginTop: 8 }}>{message}</div>}
       {target.kind !== 'trial' && (!folderId || folderPickerOpen) ? (
@@ -686,7 +689,7 @@ function TranscriptUpload({ eventId, target, language, prominent = false }: { ev
         </div>
       ) : target.kind !== 'trial' ? <button className="btn btn--ghost" type="button" onClick={() => setFolderPickerOpen(true)} style={{ marginTop: 8 }}>{language === 'DE' ? 'Ordner ändern' : 'Изменить папку'}</button> : null}
       <input className="input" type="file" accept=".pdf,.txt,application/pdf,text/plain" style={{ marginTop: 10 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <button className="btn" type="button" disabled={!file || !folderId || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 8, minHeight: prominent ? 50 : undefined }}>{uploading ? (language === 'DE' ? 'Speichern…' : 'Загружаем…') : (language === 'DE' ? 'Transkription speichern' : 'Загрузить транскрипцию')}</button>
+      <button className="btn" type="button" disabled={!file || uploading} onClick={() => void upload()} style={{ width: '100%', marginTop: 8, minHeight: prominent ? 50 : undefined }}>{uploading ? (language === 'DE' ? 'Speichern…' : 'Загружаем…') : (language === 'DE' ? 'Transkription speichern' : 'Загрузить транскрипцию')}</button>
     </div>
   );
 }
