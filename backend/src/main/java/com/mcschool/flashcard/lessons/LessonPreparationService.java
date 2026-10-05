@@ -6,8 +6,6 @@ import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Locale;
 import org.apache.pdfbox.Loader;
@@ -83,24 +81,44 @@ public class LessonPreparationService {
 
     @Transactional
     public LessonPreparationResponse uploadTranscript(
-            AuthenticatedUser teacher, String eventId, String filename, byte[] fileBytes) throws Exception {
+            AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) throws Exception {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
-        String normalizedFilename = filename == null ? "" : filename.trim().toLowerCase(Locale.ROOT);
-        String transcript;
-        if (normalizedFilename.endsWith(".pdf")) {
-            try (var document = Loader.loadPDF(fileBytes)) {
-                transcript = new PDFTextStripper().getText(document);
+        String storedFilename = filename == null || filename.isBlank() ? "lesson-transcript.pdf" : filename.trim();
+        if (!storedFilename.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            throw new IllegalArgumentException("Transcript file must be PDF");
+        }
+        if (!looksLikePdf(pdf)) {
+            throw new IllegalArgumentException("Transcript file does not contain a valid PDF");
+        }
+
+        // Validate once at upload time so unreadable/corrupt PDFs never become the lesson source.
+        try (var document = Loader.loadPDF(pdf)) {
+            String extracted = new PDFTextStripper().getText(document);
+            if (extracted == null || extracted.isBlank()) {
+                throw new IllegalArgumentException("Transcript PDF does not contain readable text");
             }
-        } else if (normalizedFilename.endsWith(".txt")) {
-            transcript = new String(fileBytes, StandardCharsets.UTF_8);
-        } else {
-            throw new IllegalArgumentException("Transcript file must be PDF or TXT");
         }
-        if (transcript == null || transcript.isBlank()) {
-            throw new IllegalArgumentException("Transcript file does not contain readable text");
-        }
-        preparation.attachTranscript(transcript);
+
+        preparation.attachTranscriptPdf(storedFilename, pdf);
         return response(repository.save(preparation));
+    }
+
+    @Transactional(readOnly = true)
+    public String transcriptTextForAnalysis(AuthenticatedUser teacher, String eventId) {
+        return transcriptTextForAnalysis(require(teacher, eventId));
+    }
+
+    public String transcriptTextForAnalysis(LessonPreparation preparation) {
+        if (preparation.hasTranscriptPdf()) {
+            try (var document = Loader.loadPDF(preparation.getTranscriptPdf())) {
+                String extracted = new PDFTextStripper().getText(document);
+                return extracted == null ? "" : extracted.trim();
+            } catch (Exception ex) {
+                throw new IllegalArgumentException("Stored transcript PDF could not be read", ex);
+            }
+        }
+        String legacy = preparation.getTranscriptText();
+        return legacy == null ? "" : legacy.trim();
     }
 
     @Transactional(readOnly = true)
@@ -153,13 +171,20 @@ public class LessonPreparationService {
         return cleaned;
     }
 
+    private boolean looksLikePdf(byte[] bytes) {
+        return bytes != null && bytes.length >= 5
+                && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F' && bytes[4] == '-';
+    }
+
     private LessonPreparationResponse response(LessonPreparation preparation) {
         return new LessonPreparationResponse(
                 preparation.getEventId(),
                 preparation.getHomeworkNotes(),
                 preparation.getDifficulties(),
                 preparation.getLessonPlan(),
-                preparation.getTranscriptText(),
+                preparation.hasTranscriptPdf() ? null : preparation.getTranscriptText(),
+                preparation.hasTranscript(),
+                preparation.getTranscriptFilename(),
                 preparation.hasWorkbook(),
                 preparation.getWorkbookFilename(),
                 preparation.hasAnswers(),
