@@ -172,9 +172,10 @@ async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=
 function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · загрузка',cmr_unloading:'CMR · выгрузка / POD',cmr:'CMR · загрузка',pod:'CMR · выгрузка / POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
 function status(t){
   if(t.rechnungCode)return '<span class="status done">Rechnung erstellt</span>';
-  if(t.auftrag&&t.cmrUnloaded)return '<span class="status ok">Entladen · готов к Rechnung</span>';
-  if(t.cmrUnloaded)return '<span class="status ok">Entladen · не хватает Auftrag</span>';
-  if(t.auftrag)return '<span class="status wait">Auftrag erhalten</span>';
+  if(t.auftrag&&t.cmrUnloaded)return '<span class="status ok">Готов к Rechnung</span>';
+  if(!t.auftrag&&!t.cmrUnloaded)return '<span class="status wait">Не хватает Auftrag и CMR/POD</span>';
+  if(!t.auftrag)return '<span class="status wait">Не хватает Auftrag</span>';
+  if(!t.cmrUnloaded)return '<span class="status wait">Не хватает CMR/POD</span>';
   return '<span class="status wait">Не хватает документов</span>';
 }
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
