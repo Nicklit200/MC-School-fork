@@ -319,6 +319,7 @@ function schoolTypeLabel(schoolType: StudentListItem['schoolType'], language: 'D
     REALSCHULE: 'Realschule',
     MITTELSCHULE: 'Mittelschule',
     WIRTSCHAFTSSCHULE: 'Wirtschaftsschule',
+    FACHOBERSCHULE: 'Fachoberschule (FOS)',
     GESAMTSCHULE: 'Gesamtschule',
     WERKREALSCHULE: 'Werkrealschule',
     OTHER: language === 'DE' ? 'Andere' : 'Другой',
