@@ -19,7 +19,7 @@ export function validateBoard(data){
     if(typeof n.title!=="string"||!n.title.trim()||n.title.length>200)throw Error("Введите название до 200 символов");
     for(const key of ["de","description","example","source"])if(n[key]!=null&&(typeof n[key]!=="string"||n[key].length>(key==="de"?300:4000)))throw Error("Слишком длинный текст");
     if(n.core!=null&&typeof n.core!=="boolean")throw Error("Неверная метка CORE");
-    const allowedSchoolTypes=new Set(["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE","GESAMTSCHULE","WERKREALSCHULE","OTHER"]);
+    const allowedSchoolTypes=new Set(["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE","FACHOBERSCHULE","GESAMTSCHULE","WERKREALSCHULE","OTHER"]);
     if(n.schoolTypes!=null&&(!Array.isArray(n.schoolTypes)||n.schoolTypes.some(type=>!allowedSchoolTypes.has(type))))throw Error("Неверная школьная программа");
     if(!Number.isFinite(n.x)||!Number.isFinite(n.y)||Math.abs(n.x)>100000||Math.abs(n.y)>100000)throw Error("Недопустимые координаты");
   }
