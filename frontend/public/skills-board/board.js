@@ -1,7 +1,7 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
-let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryLoading=false,trackFilterState=null;
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null;
 const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
@@ -245,6 +245,90 @@ function masteryPercent(n,studentId){
   return Math.round(skills.reduce((sum,x)=>sum+Math.max(0,Math.min(100,Number(mastery[x.id])||0)),0)/skills.length);
 }
 function masteryClass(value){return value>=80?"high":value>=50?"mid":value>0?"low":"";}
+const historyWindowMs=5*60*1000;
+function collapsedHistoryEntries(entries){
+  const sorted=[...(entries||[])].sort((a,b)=>(Date.parse(a.updatedAt)-Date.parse(b.updatedAt))||((Number(a.id)||0)-(Number(b.id)||0)));
+  const byKey=new Map();
+  for(const entry of sorted){
+    const key=`${entry.studentId}|${entry.skillId}`,current=byKey.get(key);
+    if(!current)byKey.set(key,{...entry});
+    else{current.mastery=entry.mastery;current.updatedAt=entry.updatedAt;current.id=entry.id;}
+  }
+  return [...byKey.values()];
+}
+function historyGroups(){
+  const entries=selectedStudents().flatMap(student=>(masteryHistoryByStudent[student.id]||[]).map(entry=>({
+    ...entry,studentId:entry.studentId||student.id,studentName:entry.studentName||student.fullName
+  })));
+  entries.sort((a,b)=>(Date.parse(b.updatedAt)-Date.parse(a.updatedAt))||((Number(b.id)||0)-(Number(a.id)||0)));
+  const groups=[];
+  for(const entry of entries){
+    const at=Date.parse(entry.updatedAt)||0,actor=entry.updatedBy||"",last=groups.at(-1);
+    if(last&&last.updatedBy===actor&&last.oldestAt-at<=historyWindowMs){
+      last.entries.push(entry);last.oldestAt=at;
+    }else groups.push({id:`${entry.updatedAt}|${entry.id}`,updatedAt:entry.updatedAt,updatedBy:actor,newestAt:at,oldestAt:at,entries:[entry]});
+  }
+  return groups;
+}
+function selectedHistoryGroup(){
+  if(!selectedHistoryUpdate)return null;
+  return historyGroups().find(group=>group.id===selectedHistoryUpdate)||null;
+}
+function formatHistoryDate(value){
+  try{return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}
+  catch{return value||"";}
+}
+function historyDelta(entry){return Number(entry.mastery)-Number(entry.previousMastery);}
+function historyDeltaText(entry){const delta=historyDelta(entry);return `${entry.previousMastery}% → ${entry.mastery}% (${delta>0?"+":""}${delta})`;}
+function selectedHistoryEntriesForSkill(skillId){
+  const group=selectedHistoryGroup();
+  return group?collapsedHistoryEntries(group.entries).filter(entry=>entry.skillId===skillId):[];
+}
+function selectHistoryUpdate(id){
+  if(!flushForm())return;
+  selectedHistoryUpdate=selectedHistoryUpdate===id?null:id;
+  selection=null;connectMode=false;linkSource=null;
+  if(selectedHistoryUpdate)scope="overview";
+  render();fit();
+}
+function renderHistoryPanel(){
+  const body=$("history-body"),count=$("history-count");if(!body||!count)return;
+  const groups=historyGroups();count.textContent=String(groups.length);body.replaceChildren();
+  if(!selectedStudents().length){
+    body.append(element("p","history-empty","Выберите группу или ученика — здесь появится история изменения процентов."));return;
+  }
+  if(!groups.length){
+    body.append(element("p","history-empty","История пока пустая. Новые изменения процентов будут сохраняться здесь автоматически."));return;
+  }
+  for(const group of groups){
+    const changes=collapsedHistoryEntries(group.entries),isSelected=group.id===selectedHistoryUpdate;
+    const skills=new Set(changes.map(entry=>entry.skillId)),names=[...new Set(changes.map(entry=>entry.studentName).filter(Boolean))];
+    const card=element("div","history-update"+(isSelected?" selected":""));card.tabIndex=0;card.setAttribute("role","button");
+    card.setAttribute("aria-pressed",String(isSelected));
+    const top=element("div","history-update-top");
+    top.append(element("span","history-date",formatHistoryDate(group.updatedAt)),element("span","history-items-count",`${changes.length} изм.`));
+    card.append(top,element("div","history-summary",`${skills.size} навыков${names.length?" · "+names.slice(0,2).join(", ")+(names.length>2?" +"+(names.length-2):""):""}`));
+    if(isSelected){
+      const list=element("div","history-changes");
+      for(const entry of changes){
+        const row=element("div","history-change-row"),skill=node(entry.skillId);
+        row.tabIndex=0;row.setAttribute("role","button");row.title="Открыть навык на карте";
+        row.append(
+          element("span","history-skill",skill?.title||entry.skillId),
+          element("span","history-person",entry.studentName||"Ученик"),
+          element("span","history-delta"+(historyDelta(entry)<0?" negative":""),historyDeltaText(entry))
+        );
+        row.addEventListener("click",event=>{event.stopPropagation();if(focusNode(entry.skillId))selectNode(entry.skillId);});
+        row.addEventListener("keydown",event=>{if(event.key==="Enter"){event.stopPropagation();if(focusNode(entry.skillId))selectNode(entry.skillId);}});
+        list.append(row);
+      }
+      card.append(list);
+    }
+    card.addEventListener("click",()=>selectHistoryUpdate(group.id));
+    card.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();selectHistoryUpdate(group.id);}});
+    body.append(card);
+  }
+}
 function dependencyHighlights(){
   const beforeEdges=new Set(),afterEdges=new Set(),beforeNodes=new Set(),afterNodes=new Set();
   if(!data||selection?.type!=="node")return{beforeEdges,afterEdges,beforeNodes,afterNodes,active:false};
@@ -278,6 +362,7 @@ async function saveSkillMastery(studentId,skillId,value){
   try{
     const result=await request("PUT",`${boardPath()}/students/${studentId}/mastery/${skillId}`,{mastery:parsed});
     masteryByStudent[studentId]=result?.mastery&&typeof result.mastery==="object"?result.mastery:{};
+    masteryHistoryByStudent[studentId]=await request("GET",`${boardPath()}/students/${studentId}/mastery/history`);
     const student=students.find(item=>item.id===studentId)||selectedStudents().find(item=>item.id===studentId);
     notice(`Освоение сохранено: ${student?.fullName||"ученик"} · ${parsed}%`);
   }catch(error){notice(error.message,true);}
@@ -351,9 +436,18 @@ window.addEventListener("message",async event=>{
 
     masteryLoading=true;renderStudentFilter();
     try{
-      const snapshots=await Promise.all(chosen.map(student=>request("GET",`${boardPath()}/students/${student.id}/mastery`)));
-      masteryByStudent={};
-      chosen.forEach((student,index)=>{masteryByStudent[student.id]=snapshots[index]?.mastery&&typeof snapshots[index].mastery==="object"?snapshots[index].mastery:{};});
+      const snapshots=await Promise.all(chosen.map(async student=>{
+        const [masterySnapshot,historyEntries]=await Promise.all([
+          request("GET",`${boardPath()}/students/${student.id}/mastery`),
+          request("GET",`${boardPath()}/students/${student.id}/mastery/history`)
+        ]);
+        return{student,masterySnapshot,historyEntries};
+      }));
+      masteryByStudent={};masteryHistoryByStudent={};
+      for(const item of snapshots){
+        masteryByStudent[item.student.id]=item.masterySnapshot?.mastery&&typeof item.masterySnapshot.mastery==="object"?item.masterySnapshot.mastery:{};
+        masteryHistoryByStudent[item.student.id]=Array.isArray(item.historyEntries)?item.historyEntries:[];
+      }
     }finally{masteryLoading=false;renderStudentFilter();}
     let pending=null;
     try{
@@ -442,6 +536,7 @@ function buildHierarchyLayout(items){
 function visibleNodes(){
   if(!data)return [];
   const active=data.nodes.filter(n=>!n.archived);
+  if(selectedHistoryGroup())return active;
   if(viewMode==="hierarchy"){
     if(scope==="overview")return active;
     const ids=descendants(data,scope);ids.add(scope);
@@ -459,11 +554,11 @@ function render(){
   const items=visibleNodes();hierarchyPositions=viewMode==="hierarchy"?buildHierarchyLayout(items):new Map();
   canvas.classList.toggle("hierarchy-view",viewMode==="hierarchy");
   $("view-free").classList.toggle("active",viewMode==="free");$("view-hierarchy").classList.toggle("active",viewMode==="hierarchy");
-  status();renderCatalog();renderNodes();renderEdges();transform();
+  status();renderCatalog();renderNodes();renderEdges();renderHistoryPanel();transform();
   $("count").textContent=data.nodes.filter(n=>n.kind==="skill"&&!n.archived).length;
   $("archive-count").textContent=data.nodes.filter(n=>n.archived).length;
-  const label=boardTitle();const base=scope==="overview"?`${label} / Обзор программы`:`${label} / ${node(scope)?.title||"Раздел"}`;
-  $("breadcrumb").textContent=base+(viewMode==="hierarchy"?" / Дерево":" / Карта");
+  const activeHistory=selectedHistoryGroup(),label=boardTitle(),base=scope==="overview"?`${label} / Обзор программы`:`${label} / ${node(scope)?.title||"Раздел"}`;
+  $("breadcrumb").textContent=activeHistory?`Изменения · ${formatHistoryDate(activeHistory.updatedAt)}`:base+(viewMode==="hierarchy"?" / Дерево":" / Карта");
 }
 function renderCatalog(){
   const container=$("sections");container.replaceChildren();
@@ -488,7 +583,7 @@ function renderSearch(){
 }
 function renderNodes(){
   if(!data)return;
-  layer.replaceChildren();const highlights=dependencyHighlights(),filters=currentTrackFilters(),activeTracks=filters.schools,chosen=selectedStudents();
+  layer.replaceChildren();const highlights=dependencyHighlights(),filters=currentTrackFilters(),activeTracks=filters.schools,chosen=selectedStudents(),historySelection=selectedHistoryGroup();
   for(const n of visibleNodes()){
     const track=nodeTrackInfo(n);
     const trackRelevant=n.kind==="skill"
@@ -496,8 +591,9 @@ function renderNodes(){
       :data.nodes.some(skill=>skill.kind==="skill"&&!skill.archived&&descendants(data,n.id).has(skill.id)&&(()=>{const info=skillTrack(skill);return info.core?filters.core:info.schools.some(type=>activeTracks.has(type));})());
     const trackClass=!track.configured?" track-neutral":!trackRelevant?" track-other":n.kind==="skill"&&track.core&&filters.core?" track-core":" track-relevant";
     const relationClass=highlights.beforeNodes.has(n.id)?" dependency-before":highlights.afterNodes.has(n.id)?" dependency-after":highlights.active&&selection?.id!==n.id&&n.kind==="skill"?" dependency-dim":"";
+    const historyEntries=selectedHistoryEntriesForSkill(n.id),historyClass=historySelection?(historyEntries.length?" history-changed":" history-dim"):"";
     const groupClass=selectedGroupId?" group-mode":"";
-    const e=element("div",`node kind-${n.kind}${groupClass}${trackClass}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}`);
+    const e=element("div",`node kind-${n.kind}${groupClass}${trackClass}${selection?.type==="node"&&selection.id===n.id?" selected":""}${linkSource===n.id?" link-source":""}${relationClass}${historyClass}`);
     const p=displayPosition(n);e.dataset.id=n.id;e.style.left=p.x+"px";e.style.top=p.y+"px";e.style.setProperty("--accent",colors[n.color]);e.tabIndex=0;
     e.setAttribute("role","button");e.setAttribute("aria-label",`${kindLabels[n.kind]}: ${n.title}`);
     const count=n.kind==="topic"?descendants(data,n.id).size:null;
@@ -507,6 +603,12 @@ function renderNodes(){
       const pct=masteryPercent(n,selectedStudentId),badge=element("span",`mastery-badge ${masteryClass(pct)}`,`${pct}%`);
       badge.title=n.kind==="skill"?`Освоение: ${selectedStudent()?.fullName||"ученик"}`:"Среднее по дочерним навыкам";
       meta.append(badge);
+    }
+    if(historyEntries.length){
+      if(historyEntries.length===1){
+        const delta=historyDelta(historyEntries[0]),badge=element("span","history-delta-badge"+(delta<0?" negative":""),`${delta>0?"+":""}${delta}%`);
+        badge.title=historyDeltaText(historyEntries[0]);meta.append(badge);
+      }else meta.append(element("span","history-delta-badge",`${historyEntries.length} изм.`));
     }
     kind.append(meta);
     e.append(kind,element("div","title",n.title),element("div","de",n.de||"Добавьте описание навыка"));
