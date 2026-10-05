@@ -35,7 +35,7 @@ async function parse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
-async function pdfUrl(eventId: string, kind: 'workbook' | 'answers') {
+async function pdfUrl(eventId: string, kind: 'workbook' | 'answers' | 'transcript') {
   const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/${kind}`, { headers: authHeaders() });
   if (!response.ok) throw new ApiRequestError(response.status, kind.toUpperCase(), response.statusText);
   return URL.createObjectURL(await response.blob());
@@ -94,6 +94,9 @@ export const lessonPreparationApi = {
   },
   answersUrl(eventId: string) {
     return pdfUrl(eventId, 'answers');
+  },
+  transcriptUrl(eventId: string) {
+    return pdfUrl(eventId, 'transcript');
   },
   archiveToDrive(eventId: string) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/drive-archive`, {
