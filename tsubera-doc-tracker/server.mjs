@@ -286,11 +286,11 @@ function fileSig(id, exp) {
   return crypto.createHmac("sha256", CONNECTOR_TOKEN || SITE_PASSWORD || "tsubera")
     .update(id + ":" + exp).digest("hex");
 }
-function tempFileUrl(req, id, seconds = 900) {
+function tempFileUrl(req, id, seconds = 900, download = false) {
   const exp = Math.floor(Date.now() / 1000) + seconds;
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers.host;
-  return proto + "://" + host + "/file/" + encodeURIComponent(id) + "?exp=" + exp + "&sig=" + fileSig(id, exp);
+  return proto + "://" + host + "/file/" + encodeURIComponent(id) + "?exp=" + exp + "&sig=" + fileSig(id, exp) + (download ? "&download=1" : "");
 }
 function uploadTicketSig(ticket, exp) {
   return crypto.createHmac("sha256", CONNECTOR_TOKEN || SITE_PASSWORD || "tsubera")
@@ -340,6 +340,19 @@ function docRow(id) {
 function listDocsForTrip(tripId) {
   return db.prepare("SELECT * FROM documents WHERE trip_id = ? ORDER BY created_at DESC").all(tripId).map(docOut);
 }
+function mainDocumentsForTrip(tripId) {
+  const rows = db.prepare("SELECT * FROM documents WHERE trip_id = ? ORDER BY created_at DESC").all(tripId);
+  const pick = types => {
+    const matches = rows.filter(r => types.includes(r.doc_type));
+    if (!matches.length) return null;
+    return { ...docOut(matches[0]), count: matches.length };
+  };
+  return {
+    auftrag: pick(["auftrag"]),
+    cmrLoading: pick(["cmr_loading","cmr"]),
+    cmrUnloading: pick(["cmr_unloading","pod"])
+  };
+}
 function systemOverview() {
   const total = db.prepare("SELECT COUNT(*) c FROM trips").get().c;
   const docs = db.prepare("SELECT COUNT(*) c FROM documents").get().c;
@@ -372,7 +385,12 @@ function queryTrips(args = {}) {
   sql += " ORDER BY date DESC, created_at DESC LIMIT 500";
   let rows = db.prepare(sql).all(...vals).map(tripOut);
   if (args.readiness) rows = rows.filter(t => readiness(t) === args.readiness);
-  return rows.map(t => ({ ...t, readiness: readiness(t), missing: missingForTrip(t) }));
+  return rows.map(t => ({
+    ...t,
+    readiness: readiness(t),
+    missing: missingForTrip(t),
+    mainDocuments: mainDocumentsForTrip(t.id)
+  }));
 }
 
 const toolDefs = [
@@ -842,7 +860,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, {
         "content-type": row.mime || "application/octet-stream",
         "content-length": row.size,
-        "content-disposition": 'inline; filename*=UTF-8\'\'' + encodeURIComponent(row.original_name)
+        "content-disposition": (url.searchParams.get("download") === "1" ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(row.original_name)
       });
       return fs.createReadStream(fp).pipe(res);
     }
@@ -1004,7 +1022,7 @@ const server = http.createServer(async (req, res) => {
       if (docLink && req.method === "GET") {
         const row = docRow(docLink[1]);
         if (!row) return json(res, 404, { error: "Document not found" });
-        return json(res, 200, { url: tempFileUrl(req, row.id) });
+        return json(res, 200, { url: tempFileUrl(req, row.id, 900, url.searchParams.get("download") === "1") });
       }
 
       const docDel = p.match(/^\/api\/documents\/([^/]+)$/);
