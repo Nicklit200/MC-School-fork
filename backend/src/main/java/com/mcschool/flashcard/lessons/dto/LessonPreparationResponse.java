@@ -8,6 +8,8 @@ public record LessonPreparationResponse(
         String difficulties,
         String lessonPlan,
         String transcriptText,
+        boolean hasTranscript,
+        String transcriptFilename,
         boolean hasWorkbook,
         String workbookFilename,
         boolean hasAnswers,
