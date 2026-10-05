@@ -47,6 +47,14 @@ public class SkillMasteryController {
         return service.get(boardId, studentId, caller);
     }
 
+    @GetMapping("/{boardId}/students/{studentId}/mastery/history")
+    public List<SkillMasteryService.MasteryHistoryEntry> history(
+            @PathVariable String boardId,
+            @PathVariable UUID studentId,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return service.history(boardId, studentId, caller);
+    }
+
     @PutMapping("/{boardId}/students/{studentId}/mastery/{skillId}")
     public SkillMasteryService.MasterySnapshot update(
             @PathVariable String boardId,
