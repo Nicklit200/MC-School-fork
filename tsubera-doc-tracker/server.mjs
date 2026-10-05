@@ -219,6 +219,7 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_internal_trip_id ON trips(i
 
 const tripOut = row => {
   if (!row) return null;
+  const hasAuftrag = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type='auftrag' LIMIT 1").get(row.id);
   const hasLoadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_loading','cmr') LIMIT 1").get(row.id);
   const hasUnloadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_unloading','pod') LIMIT 1").get(row.id);
   return {
@@ -227,7 +228,7 @@ const tripOut = row => {
     date: row.date,
     trip: row.trip_number || "",
     customer: row.customer,
-    auftrag: !!row.auftrag,
+    auftrag: hasAuftrag,
     cmrLoaded: hasLoadingCmr,
     cmrUnloaded: hasUnloadingCmr,
     loadedAt: row.loaded_at || "",
