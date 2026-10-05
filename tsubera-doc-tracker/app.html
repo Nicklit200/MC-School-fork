@@ -16,11 +16,16 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px}.toolbar input{border:1px solid #dfe3ea;border-radius:10px;padding:11px}.toolbar #q{flex:1}.toolbar #vehicleFilter{width:260px}
-.table{overflow-x:auto}.head,.row{min-width:1560px;display:grid;grid-template-columns:105px 145px 145px 190px 105px 80px 180px 190px 125px 120px 170px 34px;align-items:center}
+.table{overflow-x:auto}.head,.row{min-width:1660px;display:grid;grid-template-columns:105px 145px 145px 190px 115px 205px 220px 245px 125px 130px 34px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
 .cellcheck{display:flex;justify-content:center}.row input[type=checkbox]{width:18px;height:18px}
 .stage{display:flex;align-items:flex-start;gap:8px;flex-direction:column}.stage-line{display:flex;align-items:center;gap:7px;font-weight:600}
+.price-inline{width:96px;border:1px solid #dfe3ea;border-radius:9px;padding:8px 9px;font:inherit;background:#fff}
+.price-inline:focus{outline:2px solid #c7d2fe;outline-offset:1px;border-color:#a5b4fc}
+.main-doc-link{border:0;background:transparent;padding:0;color:#1f6f54;font:inherit;font-weight:650;cursor:pointer;text-align:left;max-width:100%;display:inline-flex;align-items:center;gap:5px}
+.main-doc-link.blue{color:#1857a4}.main-doc-link:hover{text-decoration:underline}.main-doc-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.docs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.docs-head h2{margin-top:0}.docs-updated{padding-top:4px;text-align:right;white-space:nowrap}
 .dt{width:100%;border:1px solid #dfe3ea;border-radius:8px;padding:7px;font-size:12px;background:#fff}
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
 .ok{background:#e8f7ef;color:#087443}.route{background:#e9f2ff;color:#1857a4}.wait{background:#fff4d6;color:#925f00}.done{background:#eef0ff;color:#4338ca}
@@ -65,7 +70,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
       <div class="head">
         <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Цена</div><div>Auftrag</div>
         <div>CMR загрузка</div><div>CMR выгрузка / POD</div>
-        <div>Документы</div><div>Статус</div><div>Обновлено</div><div></div>
+        <div>Документы</div><div>Статус</div><div></div>
       </div>
       <div id="rows"></div>
     </div>
@@ -115,7 +120,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 
 <div class="modal" id="docsModal">
   <div class="dialog">
-    <h2 id="docsTitle">Документы</h2>
+    <div class="docs-head"><h2 id="docsTitle">Документы</h2><div id="docsUpdated" class="muted docs-updated"></div></div>
     <div class="grid">
       <div class="field">
         <label>Тип документа</label>
@@ -151,6 +156,16 @@ function status(t){
   return '<span class="status wait">Не хватает документов</span>';
 }
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+function whenFull(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function mainDoc(t,key,missingLabel,color=''){
+  const d=t.mainDocuments?.[key];
+  if(d){
+    const more=Number(d.count||1)>1?' +'+(Number(d.count)-1):'';
+    return '<button type="button" class="main-doc-link '+color+'" title="'+esc(d.name)+'" onclick="openDoc(\''+d.id+'\')">✓ <span>'+esc(d.name)+more+'</span></button>';
+  }
+  if(key==='auftrag'&&t.auftrag)return '<span class="status ok">✓ Auftrag отмечен</span>';
+  return '<span class="status wait">Нет '+esc(missingLabel)+'</span>';
+}
 async function load(){
   const [td,vd]=await Promise.all([api('/api/trips'),api('/api/vehicles')]);
   trips=td.trips||[];vehicles=vd.vehicles||[];
@@ -171,22 +186,25 @@ function render(){
       <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
       <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
       <div>${esc(t.customer)}</div>
-      <div>${t.priceEur==null?'—':esc(Number(t.priceEur).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}))+' €'}</div>
-      <div class="cellcheck"><input aria-label="Auftrag" type="checkbox" ${t.auftrag?'checked':''} onchange="toggle('${t.id}','auftrag',this.checked)"></div>
-      <div class="stage">
-        <span class="status ${t.cmrLoaded?'route':'wait'}">${t.cmrLoaded?'✓ CMR загрузки загружен':'Нет CMR загрузки'}</span>
-      </div>
-      <div class="stage">
-        <span class="status ${t.cmrUnloaded?'ok':'wait'}">${t.cmrUnloaded?'✓ CMR выгрузки / POD загружен':'Нет CMR выгрузки'}</span>
-      </div>
+      <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
+      <div class="stage">${mainDoc(t,'auftrag','Auftrag')}</div>
+      <div class="stage">${mainDoc(t,'cmrLoading','CMR загрузки','blue')}</div>
+      <div class="stage">${mainDoc(t,'cmrUnloading','CMR выгрузки / POD')}</div>
       <div><button class="btn alt small" onclick="openDocs('${t.id}')">Документы</button></div>
       <div>${status(t)}</div>
-      <div class="muted">${esc(when(t.updatedAt))}</div>
       <div><button class="btn alt small" onclick="delTrip('${t.id}')">×</button></div>
     </div>`).join('');
 }
 window.toggle=async(id,k,v)=>{
   await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({[k]:v})});await load()
+}
+window.saveInlinePrice=async(id,value)=>{
+  const raw=String(value??'').trim().replace(',','.');
+  const priceEur=raw===''?null:Number(raw);
+  if(raw!==''&&(!Number.isFinite(priceEur)||priceEur<0))return alert('Укажи корректную цену');
+  const d=await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({priceEur})});
+  const t=trips.find(x=>x.id===id);
+  if(t&&d.trip){t.priceEur=d.trip.priceEur;t.updatedAt=d.trip.updatedAt}
 }
 window.delTrip=async id=>{if(confirm('Удалить рейс и все его документы?')){await api('/api/trips/'+id,{method:'DELETE'});await load()}}
 window.openTrip=id=>{
@@ -225,23 +243,29 @@ $('closeTrip').onclick=()=>$('tripModal').classList.remove('open');
 window.openDocs=async id=>{
   activeTrip=id;let t=trips.find(x=>x.id===id);
   $('docsTitle').textContent='Документы · '+(t?.internalTripId||'рейс')+(t?.trip?' · '+t.trip:'');
+  $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
   renderDocVehicleOptions(t);
   $('docsModal').classList.add('open');await loadDocs()
+}
+function updateDocsTimestamp(){
+  const t=trips.find(x=>x.id===activeTrip);
+  $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
 }
 function renderDocVehicleOptions(t){
   const selected=(t?.vehiclePlates||[])[0]||'';
   $('docVehicle').innerHTML='<option value="">Не назначать машину</option>'+vehicles.map(v=>'<option value="'+esc(v.plate)+'" '+(v.plate===selected?'selected':'')+'>'+esc(v.plate)+(v.note?' · '+esc(v.note):'')+'</option>').join('');
 }
-async function loadDocs(){let d=await api('/api/trips/'+activeTrip+'/documents');$('docList').innerHTML=(d.documents||[]).map(x=>`<div class="doc"><b>${esc(docLabel(x.docType))}</b><div><div>${esc(x.name)}</div><div class="muted">${Math.round((x.size||0)/1024)} KB</div></div><div><button class="btn alt small" onclick="openDoc('${x.id}')">Открыть</button> <button class="btn alt small" onclick="delDoc('${x.id}')">Удалить</button></div></div>`).join('')||'<div class="muted">Документов пока нет</div>'}
-window.openDoc=async id=>{let d=await api('/api/documents/'+id+'/link');window.open(d.url,'_blank')}
-window.delDoc=async id=>{if(confirm('Удалить файл?')){await api('/api/documents/'+id,{method:'DELETE'});await loadDocs();await load()}}
+async function loadDocs(){let d=await api('/api/trips/'+activeTrip+'/documents');$('docList').innerHTML=(d.documents||[]).map(x=>`<div class="doc"><b>${esc(docLabel(x.docType))}</b><div><div>${esc(x.name)}</div><div class="muted">${Math.round((x.size||0)/1024)} KB</div></div><div><button class="btn alt small" onclick="openDoc('${x.id}')">Открыть</button> <button class="btn alt small" onclick="downloadDoc('${x.id}')">Скачать</button> <button class="btn alt small" onclick="delDoc('${x.id}')">Удалить</button></div></div>`).join('')||'<div class="muted">Документов пока нет</div>'}
+window.openDoc=async id=>{const w=window.open('about:blank','_blank');try{let d=await api('/api/documents/'+id+'/link');if(w)w.location=d.url;else window.open(d.url,'_blank')}catch(e){if(w)w.close();alert(e.message)}}
+window.downloadDoc=async id=>{let d=await api('/api/documents/'+id+'/link?download=1');let a=document.createElement('a');a.href=d.url;a.download='';document.body.appendChild(a);a.click();a.remove()}
+window.delDoc=async id=>{if(confirm('Удалить файл?')){await api('/api/documents/'+id,{method:'DELETE'});await loadDocs();await load();updateDocsTimestamp()}}
 $('upload').onclick=async()=>{
   let fs=[...$('files').files];if(!fs.length)return alert('Выбери файл');
   for(const f of fs){
     let b64=await new Promise((ok,no)=>{let r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=no;r.readAsDataURL(f)});
     await api('/api/trips/'+activeTrip+'/documents',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({docType:$('docType').value,name:f.name,mime:f.type||'application/octet-stream',vehiclePlate:$('docVehicle').value||'',dataBase64:b64})})
   }
-  $('files').value='';await loadDocs();await load()
+  $('files').value='';await loadDocs();await load();updateDocsTimestamp()
 }
 function setTab(tab){
   currentTab=tab;
