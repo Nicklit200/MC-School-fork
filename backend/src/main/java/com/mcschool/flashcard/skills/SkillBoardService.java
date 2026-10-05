@@ -80,7 +80,7 @@ public class SkillBoardService {
             if (n.schoolTypes() != null) {
                 Set<String> allowedSchoolTypes = Set.of(
                         "GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE",
-                        "GESAMTSCHULE","WERKREALSCHULE","OTHER");
+                        "FACHOBERSCHULE","GESAMTSCHULE","WERKREALSCHULE","OTHER");
                 if (n.schoolTypes().size() > allowedSchoolTypes.size()
                         || n.schoolTypes().stream().anyMatch(type -> type == null || !allowedSchoolTypes.contains(type)))
                     throw bad("Неизвестный тип школы у навыка");
