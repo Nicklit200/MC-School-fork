@@ -16,7 +16,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
-.table{overflow-x:auto}.head,.row{width:100%;min-width:1210px;display:grid;grid-template-columns:105px 145px 145px minmax(220px,1.6fr) 115px 95px 125px 125px minmax(170px,1fr) 44px;align-items:center}
+.table{overflow-x:auto}.head,.row{width:100%;min-width:1090px;display:grid;grid-template-columns:105px 145px 145px minmax(240px,1.8fr) 115px 95px 135px minmax(190px,1.1fr) 44px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
 .cellcheck{display:flex;justify-content:center}.row input[type=checkbox]{width:18px;height:18px}
@@ -40,7 +40,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
 .ok{background:#e8f7ef;color:#087443}.route{background:#e9f2ff;color:#1857a4}.wait{background:#fff4d6;color:#925f00}.done{background:#eef0ff;color:#4338ca}
 .modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;padding:20px;z-index:20}.modal.open{display:flex}
-.dialog{background:white;border-radius:16px;padding:20px;width:min(720px,100%);max-height:90vh;overflow:auto}
+.dialog{background:white;border-radius:16px;padding:20px;width:min(920px,100%);max-height:90vh;overflow:auto}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.full{grid-column:1/-1}
 .field input,.field select{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .docs{display:flex;flex-direction:column;gap:8px;margin-top:16px}.doc{display:grid;grid-template-columns:165px 1fr auto;gap:8px;align-items:center;border:1px solid #eee;border-radius:10px;padding:9px}
@@ -84,7 +84,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="head">
         <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Цена</div><div>Auftrag</div>
         <div>CMR выгрузка / POD</div>
-        <div>Документы</div><div>Статус</div><div></div>
+        <div>Статус</div><div></div>
       </div>
       <div id="rows"></div>
     </div>
@@ -135,20 +135,17 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 
 <div class="modal" id="tripModal">
   <div class="dialog">
-    <h2 id="tripTitle">Тур</h2>
+    <div class="docs-head"><h2 id="tripTitle">Свойства тура</h2><div id="docsUpdated" class="muted docs-updated"></div></div>
     <div id="tripInfo" class="detailbox"></div>
+
     <div class="field full" style="margin-top:14px">
       <label><b>Машины, выполнившие тур</b></label>
       <div class="muted">Выбери одну или несколько машин из вкладки «Машины».</div>
       <div id="tripVehicleChoices" class="vehicle-select-list"></div>
     </div>
-    <div class="actions"><button class="btn alt" id="tripDocs">Документы</button><button class="btn" id="saveTrip">Сохранить</button><button class="btn alt" id="closeTrip">Закрыть</button></div>
-  </div>
-</div>
 
-<div class="modal" id="docsModal">
-  <div class="dialog">
-    <div class="docs-head"><h2 id="docsTitle">Документы</h2><div id="docsUpdated" class="muted docs-updated"></div></div>
+    <div style="border-top:1px solid #e5e7eb;margin:20px 0 16px"></div>
+    <h3 style="margin:0 0 12px">Документы</h3>
     <div class="grid">
       <div class="field">
         <label>Тип документа</label>
@@ -163,9 +160,10 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="field"><label>Файлы</label><input id="files" type="file" multiple></div>
       <div class="field full"><label>Машина по этому документу</label><select id="docVehicle"><option value="">Не назначать машину</option></select><div class="muted">Если номер виден на CMR/POD, выбери его здесь. Машина добавится к туру.</div></div>
     </div>
-    <div class="actions"><button class="btn" id="upload">Загрузить</button></div>
+    <div class="actions"><button class="btn" id="upload">Загрузить документ</button></div>
     <div id="docList" class="docs"></div>
-    <div class="actions"><button class="btn alt" id="closeDocs">Закрыть</button></div>
+
+    <div class="actions"><button class="btn" id="saveTrip">Сохранить свойства</button><button class="btn alt" id="closeTrip">Закрыть</button></div>
   </div>
 </div>
 
@@ -243,7 +241,6 @@ function render(){
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
-      <div><button class="btn alt small" onclick="openDocs('${t.id}')">Документы</button></div>
       <div>${status(t)}</div>
       <div class="action-menu-wrap">
         <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
@@ -285,11 +282,13 @@ window.hideTripCompany=async id=>{
 }
 document.addEventListener('click',()=>closeTripMenus());
 window.delTrip=async id=>{if(confirm('Удалить рейс и все его документы?')){await api('/api/trips/'+id,{method:'DELETE'});await load()}}
-window.openTrip=id=>{
+window.openTrip=async id=>{
   activeDetailTrip=id;
+  activeTrip=id;
   const t=trips.find(x=>x.id===id);
   if(!t)return;
-  $('tripTitle').textContent=(t.internalTripId||'Тур')+(t.trip?' · '+t.trip:'');
+  $('tripTitle').textContent='Свойства · '+(t.internalTripId||'Тур')+(t.trip?' · '+t.trip:'');
+  $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
   $('tripInfo').innerHTML=
     '<div class="detailrow"><b>Дата</b><div>'+esc(t.date||'—')+'</div></div>'+
     '<div class="detailrow"><b>Tsubera Tour-ID</b><div>'+esc(t.internalTripId||'—')+'</div></div>'+
@@ -298,7 +297,9 @@ window.openTrip=id=>{
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
     '<div class="detailrow"><b>Статус</b><div>'+status(t)+'</div></div>';
   renderTripVehicleChoices(t);
+  renderDocVehicleOptions(t);
   $('tripModal').classList.add('open');
+  await loadDocs();
 }
 function renderTripVehicleChoices(t){
   const selected=new Set((t?.vehiclePlates||[]).map(x=>String(x).toUpperCase()));
@@ -314,20 +315,13 @@ $('saveTrip').onclick=async()=>{
   if(priceRaw!==''&&!Number.isFinite(priceEur))return alert('Укажи корректную цену');
   await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates,priceEur})});
   await load();
-  const t=trips.find(x=>x.id===activeDetailTrip); if(t)renderTripVehicleChoices(t);
+  const t=trips.find(x=>x.id===activeDetailTrip);
+  if(t){renderTripVehicleChoices(t);renderDocVehicleOptions(t);updateDocsTimestamp()}
 }
-$('tripDocs').onclick=()=>{if(activeDetailTrip){$('tripModal').classList.remove('open');openDocs(activeDetailTrip)}}
 $('closeTrip').onclick=()=>$('tripModal').classList.remove('open');
-window.openDocs=async id=>{
-  activeTrip=id;let t=trips.find(x=>x.id===id);
-  $('docsTitle').textContent='Документы · '+(t?.internalTripId||'рейс')+(t?.trip?' · '+t.trip:'');
-  $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
-  renderDocVehicleOptions(t);
-  $('docsModal').classList.add('open');await loadDocs()
-}
 function updateDocsTimestamp(){
   const t=trips.find(x=>x.id===activeTrip);
-  $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
+  if($('docsUpdated'))$('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
 }
 function renderDocVehicleOptions(t){
   const selected=(t?.vehiclePlates||[])[0]||'';
@@ -391,7 +385,6 @@ $('vehicleForm').onsubmit=async e=>{
 }
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
-$('closeDocs').onclick=()=>$('docsModal').classList.remove('open');
 $('q').oninput=render;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
 $('showHiddenCompanies').onchange=()=>{renderCompanyFilter();render()};
 $('addForm').onsubmit=async e=>{
