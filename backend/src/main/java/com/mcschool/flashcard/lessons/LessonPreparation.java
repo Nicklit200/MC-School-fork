@@ -102,6 +102,10 @@ public class LessonPreparation {
         this.answersPdf = pdf;
     }
 
+    public void attachTranscript(String transcriptText) {
+        this.transcriptText = normalize(transcriptText);
+    }
+
     public void markSiteOpened(Instant openedAt) {
         this.siteOpenedAt = openedAt;
     }
