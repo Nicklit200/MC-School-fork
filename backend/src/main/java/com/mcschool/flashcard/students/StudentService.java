@@ -275,7 +275,7 @@ public class StudentService {
         String value = schoolType.trim().toUpperCase(Locale.ROOT);
         return switch (value) {
             case "GYMNASIUM", "REALSCHULE", "MITTELSCHULE", "WIRTSCHAFTSSCHULE",
-                 "GESAMTSCHULE", "WERKREALSCHULE", "OTHER" -> value;
+                 "FACHOBERSCHULE", "GESAMTSCHULE", "WERKREALSCHULE", "OTHER" -> value;
             default -> throw new IllegalArgumentException("Unsupported school type");
         };
     }
