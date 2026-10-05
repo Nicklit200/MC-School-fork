@@ -86,6 +86,16 @@ public class LessonPreparationController {
         return service.uploadTranscript(teacher, eventId, file.getOriginalFilename(), file.getBytes());
     }
 
+    @GetMapping("/{eventId}/transcript")
+    public ResponseEntity<byte[]> transcript(
+            @AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable String eventId) {
+        LessonPreparation preparation = service.require(teacher, eventId);
+        if (!preparation.hasTranscriptPdf()) return ResponseEntity.notFound().build();
+        String filename = preparation.getTranscriptFilename() == null ? "lesson-transcript.pdf" : preparation.getTranscriptFilename();
+        return pdf(filename, preparation.getTranscriptPdf());
+    }
+
     @GetMapping("/{eventId}/answers")
     public ResponseEntity<byte[]> answers(@AuthenticationPrincipal AuthenticatedUser teacher,
                                           @PathVariable String eventId) {
