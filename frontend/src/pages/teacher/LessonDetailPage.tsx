@@ -18,7 +18,7 @@ type HomeworkSummary = {
 
 type LessonStudent = Pick<StudentListItem, 'id' | 'fullName' | 'chatGptProjectUrl'>;
 type TextSectionKind = 'homework' | 'difficulties' | 'plan';
-type MaterialKind = 'workbook' | 'answers';
+type MaterialKind = 'workbook' | 'answers' | 'transcript';
 
 type LessonHomeworkItem = {
   studentId: string;
@@ -51,10 +51,12 @@ export function LessonDetailPage() {
   const [lessonHomeworks, setLessonHomeworks] = useState<LessonHomeworkItem[]>([]);
   const [workbookUrl, setWorkbookUrl] = useState<string | null>(null);
   const [answersUrl, setAnswersUrl] = useState<string | null>(null);
+  const [transcriptUrl, setTranscriptUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingWorkbook, setUploadingWorkbook] = useState(false);
   const [uploadingAnswers, setUploadingAnswers] = useState(false);
+  const [uploadingTranscript, setUploadingTranscript] = useState(false);
   const [openingChatGpt, setOpeningChatGpt] = useState<MaterialKind | null>(null);
   const [archivingDrive, setArchivingDrive] = useState(false);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
@@ -88,6 +90,9 @@ export function LessonDetailPage() {
         }
         if (prep.hasAnswers) {
           try { if (!cancelled) setAnswersUrl(await lessonPreparationApi.answersUrl(eventId)); } catch { /* page still works */ }
+        }
+        if (prep.hasTranscript) {
+          try { if (!cancelled) setTranscriptUrl(await lessonPreparationApi.transcriptUrl(eventId)); } catch { /* page still works */ }
         }
         if (currentLesson) {
           const [summary, students, homeworkItems] = await Promise.all([
@@ -137,6 +142,10 @@ export function LessonDetailPage() {
   useEffect(() => () => {
     if (answersUrl) URL.revokeObjectURL(answersUrl);
   }, [answersUrl]);
+
+  useEffect(() => () => {
+    if (transcriptUrl) URL.revokeObjectURL(transcriptUrl);
+  }, [transcriptUrl]);
 
   const dateText = useMemo(() => {
     if (!lesson) return '';
@@ -196,23 +205,35 @@ export function LessonDetailPage() {
       setError('Нужен PDF-файл.');
       return;
     }
-    const isWorkbook = kind === 'workbook';
-    if (isWorkbook ? uploadingWorkbook : uploadingAnswers) return;
-    isWorkbook ? setUploadingWorkbook(true) : setUploadingAnswers(true);
+    if (kind === 'workbook' && uploadingWorkbook) return;
+    if (kind === 'answers' && uploadingAnswers) return;
+    if (kind === 'transcript' && uploadingTranscript) return;
+    if (kind === 'workbook') setUploadingWorkbook(true);
+    if (kind === 'answers') setUploadingAnswers(true);
+    if (kind === 'transcript') setUploadingTranscript(true);
     setError(null);
     setMessage(null);
     try {
-      const updated = isWorkbook
+      const updated = kind === 'workbook'
         ? await lessonPreparationApi.uploadWorkbook(eventId, file)
-        : await lessonPreparationApi.uploadAnswers(eventId, file);
-      setPreparation(updated);
-      if (isWorkbook) setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId));
-      else setAnswersUrl(await lessonPreparationApi.answersUrl(eventId));
-      setMessage(isWorkbook ? 'Рабочая тетрадь обновлена.' : 'Ответы для учителя обновлены.');
+        : kind === 'answers'
+          ? await lessonPreparationApi.uploadAnswers(eventId, file)
+          : await lessonPreparationApi.uploadTranscript(eventId, file);
+      applyPreparation(updated);
+      if (kind === 'workbook') setWorkbookUrl(await lessonPreparationApi.workbookUrl(eventId));
+      if (kind === 'answers') setAnswersUrl(await lessonPreparationApi.answersUrl(eventId));
+      if (kind === 'transcript') setTranscriptUrl(await lessonPreparationApi.transcriptUrl(eventId));
+      setMessage(kind === 'workbook'
+        ? 'Рабочая тетрадь обновлена.'
+        : kind === 'answers'
+          ? 'Ответы для учителя обновлены.'
+          : 'PDF транскрипции сохранён в уроке.');
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
-      isWorkbook ? setUploadingWorkbook(false) : setUploadingAnswers(false);
+      if (kind === 'workbook') setUploadingWorkbook(false);
+      if (kind === 'answers') setUploadingAnswers(false);
+      if (kind === 'transcript') setUploadingTranscript(false);
     }
   }
 
@@ -243,7 +264,7 @@ export function LessonDetailPage() {
     if (chatTab) chatTab.opener = null;
 
     try {
-      downloadObjectUrl(url, filename || (kind === 'workbook' ? 'lesson-workbook.pdf' : 'lesson-answers.pdf'));
+      downloadObjectUrl(url, filename || (kind === 'workbook' ? 'lesson-workbook.pdf' : kind === 'answers' ? 'lesson-answers.pdf' : 'lesson-transcript.pdf'));
       const lessonLabel = lesson?.groupName
         ? `группы «${lesson.groupName}»`
         : lesson?.studentName
@@ -251,7 +272,9 @@ export function LessonDetailPage() {
           : 'этого урока';
       const instruction = kind === 'workbook'
         ? `Отредактируй прикреплённую рабочую тетрадь для ${lessonLabel}. Меняй только то, что я попрошу в чате. Сохрани формат страниц, структуру заданий и удобство для ученика. Верни результат снова PDF-файлом.`
-        : `Отредактируй прикреплённый PDF с ответами для учителя к уроку ${lessonLabel}. Меняй только то, что я попрошу в чате. Сохрани соответствие рабочей тетради и верни результат снова PDF-файлом.`;
+        : kind === 'answers'
+          ? `Отредактируй прикреплённый PDF с ответами для учителя к уроку ${lessonLabel}. Меняй только то, что я попрошу в чате. Сохрани соответствие рабочей тетради и верни результат снова PDF-файлом.`
+          : `Проанализируй прикреплённую PDF-транскрипцию урока ${lessonLabel}. Используй именно этот документ как первичный источник фактов о проведённом уроке.`;
       try {
         await navigator.clipboard.writeText(instruction);
       } catch {
@@ -321,7 +344,7 @@ export function LessonDetailPage() {
             <button
               className="btn btn--secondary"
               type="button"
-              disabled={!aiConfigured || aiRunning !== null || !transcriptText.trim()}
+              disabled={!aiConfigured || aiRunning !== null || (!preparation?.hasTranscript && !transcriptText.trim())}
               onClick={() => void runAiPilot('analyze')}
             >
               {aiRunning === 'analyze' ? 'AI разбирает урок…' : 'AI разобрать транскрипцию и сделать домашку'}
@@ -357,6 +380,17 @@ export function LessonDetailPage() {
           editingInChatGpt={openingChatGpt === 'answers'}
           onUpload={(file) => void uploadPdf('answers', file)}
           onEditInChatGpt={() => void editPdfInChatGpt('answers', answersUrl, preparation?.answersFilename)}
+        />
+        <MaterialPanel
+          title="Транскрипция урока"
+          subtitle="Оригинальный PDF Soniox хранится прямо внутри этого урока"
+          filename={preparation?.transcriptFilename}
+          url={transcriptUrl}
+          emptyText="PDF транскрипции ещё не добавлен"
+          uploading={uploadingTranscript}
+          editingInChatGpt={openingChatGpt === 'transcript'}
+          onUpload={(file) => void uploadPdf('transcript', file)}
+          onEditInChatGpt={() => void editPdfInChatGpt('transcript', transcriptUrl, preparation?.transcriptFilename)}
         />
       </div>
 
@@ -443,22 +477,15 @@ export function LessonDetailPage() {
           </div>
         </section>
 
-        <section className="panel" style={{ padding: 20, margin: 0 }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Транскрипция урока</h2>
-            <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>Полный текст занятия хранится прямо в Mindcrafti.</div>
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <textarea
-              className="input"
-              rows={transcriptText ? 14 : 6}
-              value={transcriptText}
-              onChange={(e) => setTranscriptText(e.target.value)}
-              placeholder="Транскрипция пока не добавлена. Вставьте текст Soniox или будущую автоматическую транскрипцию."
-              style={{ width: '100%', resize: 'vertical', lineHeight: 1.55 }}
-            />
-          </div>
-        </section>
+        {transcriptText && !preparation?.hasTranscript && (
+          <section className="panel" style={{ padding: 20, margin: 0 }}>
+            <h2 style={{ margin: 0 }}>Старая текстовая транскрипция</h2>
+            <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+              Это старый формат. Новые транскрипции сохраняются как PDF-документы.
+            </div>
+            <textarea className="input" rows={8} value={transcriptText} onChange={(e) => setTranscriptText(e.target.value)} style={{ marginTop: 12, width: '100%', resize: 'vertical' }} />
+          </section>
+        )}
 
         <section className="panel" style={{ padding: 20, margin: 0 }}>
           <div>
