@@ -37,9 +37,46 @@ export class ApiRequestError extends Error {
   }
 }
 
-let accessToken: string | null = localStorage.getItem('accessToken');
-export function setAccessToken(token: string | null): void { accessToken = token; if (token) localStorage.setItem('accessToken', token); else localStorage.removeItem('accessToken'); }
+const ACCESS_TOKEN_KEY = 'accessToken';
+const SESSION_ACCESS_TOKEN_KEY = 'mindcrafti.impersonation.accessToken';
+const LEGACY_ADMIN_TOKEN_KEY = 'mindcrafti.impersonation.adminToken';
+
+// Migration from the old impersonation flow:
+// previously the impersonated token replaced accessToken in localStorage while
+// the real admin token lived only in sessionStorage. Repair that state once so
+// the admin token becomes persistent and the impersonated token becomes tab-local.
+const legacyAdminToken = sessionStorage.getItem(LEGACY_ADMIN_TOKEN_KEY);
+const legacyCurrentToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+if (!sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)
+    && legacyAdminToken
+    && legacyCurrentToken
+    && legacyAdminToken !== legacyCurrentToken) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, legacyAdminToken);
+  sessionStorage.setItem(SESSION_ACCESS_TOKEN_KEY, legacyCurrentToken);
+  localStorage.removeItem('authUser');
+}
+
+let accessToken: string | null =
+  sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY) ?? localStorage.getItem(ACCESS_TOKEN_KEY);
+
+/** Set the real account token. This is the only token persisted across tabs. */
+export function setAccessToken(token: string | null): void {
+  sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
+  accessToken = token;
+  if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  else localStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
+/** Set a temporary impersonation token for this browser tab only. */
+export function setSessionAccessToken(token: string | null): void {
+  if (token) sessionStorage.setItem(SESSION_ACCESS_TOKEN_KEY, token);
+  else sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
+  accessToken = token ?? localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
 export function getAccessToken(): string | null { return accessToken; }
+export function getPersistentAccessToken(): string | null { return localStorage.getItem(ACCESS_TOKEN_KEY); }
+export function hasSessionAccessToken(): boolean { return Boolean(sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)); }
 function authHeaders(): Record<string, string> { return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}; }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
