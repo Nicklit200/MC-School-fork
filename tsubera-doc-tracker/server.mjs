@@ -281,6 +281,28 @@ const knownCompanyRules = [
     submissionDeadline: "Оригинальный Ablieferbeleg должен быть возвращён не позднее 4-го рабочего дня после окончания транспорта.",
     specialRules: "Только одна Rechnung на одно email. Rechnung должна быть машинно создана. Не отправлять Rechnung дополнительно почтой. Важную информацию не писать в тексте email, т.к. ящик обрабатывается автоматически.",
     rulesSource: "invoicing_details_de.pdf + procedure_of_evidence_de.pdf + Auftrag 14634664"
+  },
+  {
+    name: "zipmend / Nörpel / Auftraggeber noch zu prüfen",
+    billingChannel: "Только по email. Отправить Rechnung и Ablieferbeleg/POD двумя отдельными PDF-файлами в одном письме.",
+    invoiceEmail: "invoice@zipmend.com",
+    invoiceSubject: "Rechnung für Auftrag <Auftragsnummer>",
+    postalAddress: "",
+    requiredDocuments: "Rechnung.pdf + Ablieferbeleg/POD.pdf отдельными вложениями. На Rechnung обязательно указать Auftragsnummer zipmend. Для перевозчика с местом регистрации в другой стране ЕС: указать USt-IdNr. zipmend DE304638568 и Reverse-Charge.",
+    submissionDeadline: "Отдельного крайнего срока отправки Rechnung на публичной странице не указано. zipmend заявляет оплату не позднее 14 дней после получения Rechnung вместе с Ablieferbeleg.",
+    specialRules: "Без читаемого Ablieferbeleg/POD Rechnung не допускается к оплате. Rechnung должна быть цифровым PDF, не рукописная и не Word. Эти правила применять, если Auftraggeber по конкретному рейсу действительно zipmend.",
+    rulesSource: "Официальный сайт zipmend · Abrechnung von Transportaufträgen / Transportpartner FAQ"
+  },
+  {
+    name: "MAN Truck & Bus / Auftraggeber noch zu prüfen",
+    billingChannel: "Только электронная Rechnung: EDI в действующем VDA-формате, EN16931 (ZUGFeRD / Factur-X / XRechnung), назначенный provider или согласованный электронный канал. Обычный PDF MAN не принимает.",
+    invoiceEmail: "",
+    invoiceSubject: "",
+    postalAddress: "",
+    requiredDocuments: "Rechnung должна содержать MAN-Lieferantennummer, Bestellnummer, Lieferscheinnummer, MAN Materialnummer и имя Ansprechpartner у MAN. Все необходимые Abrechnungsunterlagen должны быть приложены.",
+    submissionDeadline: "Если не согласовано иначе: оплата через 30 дней после полной и корректной поставки/услуги; если корректная Rechnung поступает позже — через 30 дней после получения корректной Rechnung.",
+    specialRules: "Для оплаты нужна правильная и проверяемая Rechnung. MAN может удерживать оплату при ненадлежащем исполнении до устранения проблемы. ВАЖНО: эти правила применять к нашему рейсу только после подтверждения, что Auftraggeber действительно MAN Truck & Bus, а не другая Spedition.",
+    rulesSource: "MAN Truck & Bus SE · Einkaufsbedingungen Bereich Beschaffung Allgemein · разделы 5 Rechnungsstellung и 14.3 Zahlung"
   }
 ];
 for (const rule of knownCompanyRules) {
