@@ -381,7 +381,6 @@ function createDirectUploadUrl(req, args, seconds = 900) {
 function missingForTrip(t) {
   const missing = [];
   if (!t.auftrag) missing.push("Transportauftrag");
-  if (!t.cmrLoaded) missing.push("CMR nach Beladung");
   if (!t.cmrUnloaded) missing.push("CMR nach Entladung / POD");
   return missing;
 }
