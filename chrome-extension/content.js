@@ -61,10 +61,12 @@
   function buildSafeReturnUrl(origin, context) {
     const params = new URLSearchParams();
     params.set('mindcraftiReturn', 'lesson');
-    const path = context?.lessonId
-      ? `/teacher/lessons/${encodeURIComponent(context.lessonId)}`
-      : '/teacher/lessons';
-    return `${origin}${path}?${params.toString()}`;
+    if (context?.lessonId) params.set('completedLesson', context.lessonId);
+
+    // Return through the root document. main.ts converts this into
+    // /teacher/lessons?fromMeet=1&completedLesson=..., which reliably opens
+    // the post-lesson transcript uploader even on hosts without SPA fallback.
+    return `${origin}/?${params.toString()}`;
   }
 
   async function resolveReturnUrl() {
