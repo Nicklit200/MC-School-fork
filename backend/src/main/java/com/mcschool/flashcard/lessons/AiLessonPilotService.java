@@ -168,8 +168,9 @@ public class AiLessonPilotService {
         requireConfiguredPilot(teacher);
         LessonContext context = context(teacher, eventId);
         LessonPreparationResponse current = preparationService.getOrCreate(teacher, eventId);
-        if (current.transcriptText() == null || current.transcriptText().isBlank()) {
-            throw new IllegalArgumentException("Сначала сохраните транскрипцию урока.");
+        String transcript = preparationService.transcriptTextForAnalysis(teacher, eventId);
+        if (transcript.isBlank()) {
+            throw new IllegalArgumentException("Сначала сохраните PDF транскрипции урока.");
         }
 
         String userPrompt = """
@@ -194,7 +195,7 @@ public class AiLessonPilotService {
                 """.formatted(
                 context.lessonDescription(),
                 emptyFallback(context.monthPlanJson(), "План на месяц пока не заполнен."),
-                truncate(current.transcriptText(), 30000));
+                truncate(transcript, 30000));
 
         GeneratedDraft draft = callOpenAi(context.schoolPrompt(), userPrompt);
         String difficulties = draft.difficulties();
@@ -263,7 +264,7 @@ public class AiLessonPilotService {
     private String previousTranscript(AuthenticatedUser teacher, GroupLessonResponse previous) {
         if (previous == null) return "";
         return preparationRepository.findByTeacherIdAndEventId(teacher.id(), previous.eventId())
-                .map(LessonPreparation::getTranscriptText)
+                .map(preparationService::transcriptTextForAnalysis)
                 .map(value -> truncate(value, 30000))
                 .orElse("");
     }
