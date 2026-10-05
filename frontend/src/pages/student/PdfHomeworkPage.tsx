@@ -714,7 +714,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
               inset: 0,
               width: '100%',
               height: '100%',
-              touchAction: touchDrawingEnabled ? 'none' : 'pinch-zoom',
+              touchAction: 'pinch-zoom',
               cursor: tool === 'eraser' ? 'cell' : 'crosshair',
               opacity: ready ? 1 : 0,
             }}
