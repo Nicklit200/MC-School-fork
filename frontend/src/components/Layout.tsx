@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n/I18nContext';
-import { api, setAccessToken } from '../api/client';
+import { api, setAccessToken, setSessionAccessToken } from '../api/client';
 import type { TranslationKey } from '../i18n/translations';
 import { clearAdminImpersonation, readAdminImpersonation } from '../auth/adminImpersonation';
 
@@ -21,12 +21,22 @@ export function Layout({ children }: { children: ReactNode }) {
   const isImpersonating = Boolean(user && impersonation?.adminToken);
 
   async function returnToAdmin() {
-    if (!impersonation?.adminToken || returningToAdmin) return;
+    if (!impersonation || returningToAdmin) return;
     const returnTo = impersonation.returnTo || '/teachers';
     setReturningToAdmin(true);
     try {
-      setAccessToken(impersonation.adminToken);
-      const admin = await api.auth.me();
+      // Normal path: drop the tab-local impersonation token and reveal the
+      // persistent admin token that never left localStorage.
+      setSessionAccessToken(null);
+      let admin = await api.auth.me();
+
+      // Backward-compatible recovery for tabs that were opened before this fix.
+      if (admin.role !== 'ADMIN' && impersonation.adminToken) {
+        setAccessToken(impersonation.adminToken);
+        admin = await api.auth.me();
+      }
+      if (admin.role !== 'ADMIN') throw new Error('Admin session is unavailable');
+
       setUser(admin);
       clearAdminImpersonation();
       navigate(returnTo);
