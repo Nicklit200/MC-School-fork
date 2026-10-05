@@ -76,6 +76,16 @@ public class LessonPreparationController {
         return service.uploadAnswers(teacher, eventId, file.getOriginalFilename(), file.getBytes());
     }
 
+
+    @PostMapping(value = "/{eventId}/transcript", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public LessonPreparationResponse uploadTranscript(
+            @AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable String eventId,
+            @RequestParam("file") MultipartFile file) throws Exception {
+        requireLesson(teacher, eventId);
+        return service.uploadTranscript(teacher, eventId, file.getOriginalFilename(), file.getBytes());
+    }
+
     @GetMapping("/{eventId}/answers")
     public ResponseEntity<byte[]> answers(@AuthenticationPrincipal AuthenticatedUser teacher,
                                           @PathVariable String eventId) {
