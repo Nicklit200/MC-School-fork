@@ -13,6 +13,8 @@ const DOCS_DIR = path.join(DATA_DIR, "documents");
 const DB_PATH = path.join(DATA_DIR, "tsubera.sqlite");
 const SITE_PASSWORD = process.env.SITE_PASSWORD || "";
 const CONNECTOR_TOKEN = process.env.CONNECTOR_TOKEN || "";
+const FAKTUROWNIA_BASE_URL = (process.env.FAKTUROWNIA_BASE_URL || "").trim().replace(/\/+$/, "");
+const FAKTUROWNIA_API_TOKEN = (process.env.FAKTUROWNIA_API_TOKEN || "").trim();
 
 fs.mkdirSync(DOCS_DIR, { recursive: true });
 const db = new DatabaseSync(DB_PATH);
@@ -494,6 +496,152 @@ function createDirectUploadUrl(req, args, seconds = 900) {
     expiresAt: new Date(exp * 1000).toISOString()
   };
 }
+function fakturowniaConfigured() {
+  return !!FAKTUROWNIA_BASE_URL && !!FAKTUROWNIA_API_TOKEN;
+}
+function fakturowniaBase() {
+  if (!fakturowniaConfigured()) {
+    throw new Error("Fakturownia is not configured. Set FAKTUROWNIA_BASE_URL and FAKTUROWNIA_API_TOKEN in Railway.");
+  }
+  let u;
+  try {
+    u = new URL(FAKTUROWNIA_BASE_URL);
+  } catch {
+    throw new Error("FAKTUROWNIA_BASE_URL is invalid.");
+  }
+  const host = u.hostname.toLowerCase();
+  if (u.protocol !== "https:" || !(host === "fakturownia.pl" || host.endsWith(".fakturownia.pl"))) {
+    throw new Error("FAKTUROWNIA_BASE_URL must be an HTTPS fakturownia.pl address.");
+  }
+  return u.origin;
+}
+function fakturowniaUrl(pathname, params = {}) {
+  const u = new URL(String(pathname || "").replace(/^\/+/, ""), fakturowniaBase() + "/");
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v === undefined || v === null || v === "") continue;
+    u.searchParams.set(k, String(v));
+  }
+  return u;
+}
+async function fakturowniaFetch(pathname, params = {}, { accept = "application/json" } = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(fakturowniaUrl(pathname, params), {
+      method: "GET",
+      headers: {
+        "Accept": accept,
+        "Authorization": "Bearer " + FAKTUROWNIA_API_TOKEN
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error("Fakturownia API returned HTTP " + response.status + (body ? ": " + body.slice(0, 500) : ""));
+    }
+    return response;
+  } catch (e) {
+    if (e?.name === "AbortError") throw new Error("Fakturownia API request timed out.");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function fakturowniaJson(pathname, params = {}) {
+  const response = await fakturowniaFetch(pathname, params);
+  return await response.json();
+}
+function fakturowniaInvoiceSummary(inv = {}) {
+  return {
+    id: inv.id ?? null,
+    number: inv.number ?? "",
+    kind: inv.kind ?? "",
+    issueDate: inv.issue_date ?? "",
+    sellDate: inv.sell_date ?? "",
+    paymentTo: inv.payment_to ?? "",
+    buyerName: inv.buyer_name ?? "",
+    buyerTaxNo: inv.buyer_tax_no ?? "",
+    sellerName: inv.seller_name ?? "",
+    sellerTaxNo: inv.seller_tax_no ?? "",
+    totalGross: inv.total_price_gross ?? inv.price_gross ?? null,
+    totalNet: inv.total_price_net ?? inv.price_net ?? null,
+    currency: inv.currency ?? "",
+    status: inv.status ?? "",
+    paid: inv.paid ?? null,
+    income: inv.income ?? null,
+    clientId: inv.client_id ?? null,
+    oid: inv.oid ?? "",
+    description: inv.description ?? "",
+    viewUrl: inv.view_url ?? ""
+  };
+}
+function fakturowniaClientSummary(client = {}) {
+  return {
+    id: client.id ?? null,
+    name: client.name ?? "",
+    taxNo: client.tax_no ?? "",
+    email: client.email ?? "",
+    phone: client.phone ?? "",
+    street: client.street ?? "",
+    postCode: client.post_code ?? "",
+    city: client.city ?? "",
+    country: client.country ?? "",
+    externalId: client.external_id ?? null
+  };
+}
+function fakturowniaListParams(args = {}, defaults = {}) {
+  const page = Math.max(1, Number(args.page || defaults.page || 1));
+  const perPage = Math.max(1, Math.min(100, Number(args.per_page || defaults.per_page || 25)));
+  const params = { page, per_page: perPage };
+  for (const key of ["period","date_from","date_to","income","kind","status","client_id","oid"]) {
+    if (args[key] !== undefined && args[key] !== null && args[key] !== "") params[key] = args[key];
+  }
+  return params;
+}
+function fakturowniaInvoiceHaystack(inv = {}) {
+  const positions = Array.isArray(inv.positions) ? inv.positions.map(p => [p?.name,p?.description,p?.code].filter(Boolean).join(" ")) : [];
+  return [
+    inv.id, inv.number, inv.kind, inv.buyer_name, inv.buyer_tax_no, inv.buyer_email,
+    inv.seller_name, inv.seller_tax_no, inv.oid, inv.description, inv.internal_note,
+    inv.place, inv.invoice_issuer, ...positions
+  ].filter(v => v !== undefined && v !== null).join(" ").toLowerCase();
+}
+async function searchFakturowniaInvoices(args = {}) {
+  const q = String(args.query || "").trim().toLowerCase();
+  if (!q) throw new Error("query is required");
+  const limit = Math.max(1, Math.min(100, Number(args.limit || 25)));
+  const maxPages = Math.max(1, Math.min(10, Number(args.max_pages || 5)));
+  const params = fakturowniaListParams({ ...args, page: 1, per_page: 100 }, { per_page: 100 });
+  const results = [];
+  let searchedPages = 0;
+  let scanned = 0;
+  for (let page = 1; page <= maxPages && results.length < limit; page++) {
+    const data = await fakturowniaJson("/invoices.json", { ...params, page, per_page: 100 });
+    const rows = Array.isArray(data) ? data : [];
+    searchedPages = page;
+    scanned += rows.length;
+    for (const inv of rows) {
+      if (fakturowniaInvoiceHaystack(inv).includes(q)) results.push(fakturowniaInvoiceSummary(inv));
+      if (results.length >= limit) break;
+    }
+    if (rows.length < 100) break;
+  }
+  return { results, count: results.length, scanned, searchedPages, limit, maxPages };
+}
+function fakturowniaPdfSig(id, exp) {
+  return crypto.createHmac("sha256", CONNECTOR_TOKEN || SITE_PASSWORD || "tsubera")
+    .update("fakturownia-pdf:" + id + ":" + exp).digest("hex");
+}
+function tempFakturowniaPdfUrl(req, id, seconds = 900) {
+  const exp = Math.floor(Date.now() / 1000) + seconds;
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers.host;
+  return {
+    downloadUrl: proto + "://" + host + "/fakturownia/invoices/" + encodeURIComponent(id) + ".pdf?exp=" + exp + "&sig=" + fakturowniaPdfSig(id, exp),
+    expiresAt: new Date(exp * 1000).toISOString()
+  };
+}
+
 function missingForTrip(t) {
   const missing = [];
   if (!t.auftrag) missing.push("Transportauftrag");
@@ -575,6 +723,87 @@ const toolDefs = [
     description: "Return a read-only overview of the Tsubera transport document system, counts, storage locations and readiness totals.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "get_fakturownia_status",
+    description: "Check whether the read-only Fakturownia connection is configured and reachable. Does not expose the API token.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
+  {
+    name: "search_fakturownia_invoices",
+    description: "Search recent Fakturownia invoices/expenses by invoice number, customer/supplier name, tax number, order ID, description, or line item text. Searches up to 10 pages of 100 records each.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        period: { type: "string", description: "Optional Fakturownia period filter, e.g. this_month." },
+        date_from: { type: "string", description: "Optional date filter accepted by Fakturownia, YYYY-MM-DD." },
+        date_to: { type: "string", description: "Optional date filter accepted by Fakturownia, YYYY-MM-DD." },
+        income: { type: "string", enum: ["yes","no"], description: "yes = income invoices, no = expenses." },
+        kind: { type: "string" },
+        status: { type: "string" },
+        client_id: { type: ["string","number"] },
+        oid: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+        max_pages: { type: "integer", minimum: 1, maximum: 10 }
+      },
+      required: ["query"],
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
+  {
+    name: "list_fakturownia_invoices",
+    description: "List Fakturownia invoices or expenses using read-only API filters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        period: { type: "string", description: "Optional period, e.g. this_month." },
+        date_from: { type: "string", description: "YYYY-MM-DD." },
+        date_to: { type: "string", description: "YYYY-MM-DD." },
+        income: { type: "string", enum: ["yes","no"], description: "yes = income invoices, no = expenses." },
+        kind: { type: "string" },
+        status: { type: "string" },
+        client_id: { type: ["string","number"] },
+        oid: { type: "string" },
+        page: { type: "integer", minimum: 1 },
+        per_page: { type: "integer", minimum: 1, maximum: 100 }
+      },
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
+  {
+    name: "get_fakturownia_invoice",
+    description: "Get the full read-only Fakturownia invoice JSON by invoice ID, including positions when returned by Fakturownia.",
+    inputSchema: { type: "object", properties: { invoice_id: { type: "string" } }, required: ["invoice_id"], additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
+  {
+    name: "get_fakturownia_invoice_pdf",
+    description: "Get a secure temporary PDF link for a Fakturownia invoice. The Fakturownia API token stays server-side and is never placed in the returned URL.",
+    inputSchema: { type: "object", properties: { invoice_id: { type: "string" } }, required: ["invoice_id"], additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
+  {
+    name: "list_fakturownia_clients",
+    description: "List Fakturownia clients using the read-only API.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page: { type: "integer", minimum: 1 },
+        per_page: { type: "integer", minimum: 1, maximum: 100 }
+      },
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
+  {
+    name: "get_fakturownia_client",
+    description: "Get one Fakturownia client by client ID.",
+    inputSchema: { type: "object", properties: { client_id: { type: "string" } }, required: ["client_id"], additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
   },
   {
     name: "search",
@@ -839,6 +1068,45 @@ const toolDefs = [
 
 async function callTool(name, args, req) {
   if (name === "get_system_overview") return systemOverview();
+  if (name === "get_fakturownia_status") {
+    const baseUrl = FAKTUROWNIA_BASE_URL || null;
+    if (!fakturowniaConfigured()) return { configured: false, reachable: false, baseUrl, missing: [!FAKTUROWNIA_BASE_URL ? "FAKTUROWNIA_BASE_URL" : null, !FAKTUROWNIA_API_TOKEN ? "FAKTUROWNIA_API_TOKEN" : null].filter(Boolean) };
+    const data = await fakturowniaJson("/invoices.json", { page: 1, per_page: 1 });
+    return { configured: true, reachable: true, baseUrl, sampleCount: Array.isArray(data) ? data.length : 0 };
+  }
+  if (name === "search_fakturownia_invoices") return await searchFakturowniaInvoices(args);
+  if (name === "list_fakturownia_invoices") {
+    const params = fakturowniaListParams(args);
+    const data = await fakturowniaJson("/invoices.json", params);
+    const rows = Array.isArray(data) ? data : [];
+    return { invoices: rows.map(fakturowniaInvoiceSummary), count: rows.length, page: params.page, perPage: params.per_page };
+  }
+  if (name === "get_fakturownia_invoice") {
+    const id = String(args.invoice_id || "").trim();
+    if (!/^\d+$/.test(id)) throw new Error("invoice_id must be numeric");
+    const invoice = await fakturowniaJson("/invoices/" + encodeURIComponent(id) + ".json");
+    return { found: true, invoice };
+  }
+  if (name === "get_fakturownia_invoice_pdf") {
+    const id = String(args.invoice_id || "").trim();
+    if (!/^\d+$/.test(id)) throw new Error("invoice_id must be numeric");
+    const invoice = await fakturowniaJson("/invoices/" + encodeURIComponent(id) + ".json");
+    const link = tempFakturowniaPdfUrl(req, id);
+    return { found: true, invoice: fakturowniaInvoiceSummary(invoice), ...link };
+  }
+  if (name === "list_fakturownia_clients") {
+    const page = Math.max(1, Number(args.page || 1));
+    const perPage = Math.max(1, Math.min(100, Number(args.per_page || 25)));
+    const data = await fakturowniaJson("/clients.json", { page, per_page: perPage });
+    const rows = Array.isArray(data) ? data : [];
+    return { clients: rows.map(fakturowniaClientSummary), count: rows.length, page, perPage };
+  }
+  if (name === "get_fakturownia_client") {
+    const id = String(args.client_id || "").trim();
+    if (!/^\d+$/.test(id)) throw new Error("client_id must be numeric");
+    const client = await fakturowniaJson("/clients/" + encodeURIComponent(id) + ".json");
+    return { found: true, client };
+  }
   if (name === "search") {
     return { results: queryTrips({ query: args.query }).map(t => ({ id: t.id, title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t })) };
   }
@@ -1058,7 +1326,7 @@ async function handleMcp(req, res, token) {
         protocolVersion: requested,
         capabilities: { tools: {} },
         serverInfo: { name: "tsubera-transport-documents", version: "1.0.0" },
-        instructions: "Access to Tsubera transport trips and uploaded transport documents. Read tools can search and inspect. Write tools can create/update trips, upload files, and correct document types. Use search/list before modifying when the target trip is ambiguous. For a file already uploaded in ChatGPT or available on the local working filesystem, prefer create_document_upload_url and POST the raw file bytes to the returned signed URL; this avoids base64 and Google Drive staging."
+        instructions: "Access to Tsubera transport trips and uploaded transport documents, plus read-only access to Fakturownia invoices, expenses, clients and invoice PDFs when configured. Fakturownia tools never expose the API token. Tsubera write tools can create/update trips, upload files, and correct document types. Use search/list before modifying when the target trip is ambiguous. For a file already uploaded in ChatGPT or available on the local working filesystem, prefer create_document_upload_url and POST the raw file bytes to the returned signed URL; this avoids base64 and Google Drive staging."
       }});
     }
     if (msg.method === "ping") return json(res, 200, { ...base, result: {} });
@@ -1072,7 +1340,15 @@ async function handleMcp(req, res, token) {
         name === "get_document" && data?.found && data?.document?.id
       ) ? data : (
         name === "fetch" && data?.type === "document" && data?.downloadUrl
-      ) ? data : null;
+      ) ? data : (
+        name === "get_fakturownia_invoice_pdf" && data?.found && data?.downloadUrl
+      ) ? {
+        downloadUrl: data.downloadUrl,
+        document: {
+          name: (data.invoice?.number || ("invoice-" + (args.invoice_id || "document"))) + ".pdf",
+          mime: "application/pdf"
+        }
+      } : null;
       if (linkedDocument?.downloadUrl) {
         const d = linkedDocument.document || linkedDocument.data || {};
         content.push({
@@ -1110,7 +1386,29 @@ const server = http.createServer(async (req, res) => {
       return await handleMcp(req, res, token);
     }
 
-    if (p === "/health") return json(res, 200, { ok: true, ...systemOverview() });
+    if (p === "/health") return json(res, 200, { ok: true, ...systemOverview(), fakturowniaConfigured: fakturowniaConfigured() });
+
+    if (p.startsWith("/fakturownia/invoices/") && p.endsWith(".pdf") && req.method === "GET") {
+      const rawId = p.slice("/fakturownia/invoices/".length, -4);
+      const id = decodeURIComponent(rawId);
+      const exp = Number(url.searchParams.get("exp"));
+      const sig = url.searchParams.get("sig") || "";
+      if (!/^\d+$/.test(id) || !exp || exp < Math.floor(Date.now()/1000) || !safeHexEqual(sig, fakturowniaPdfSig(id, exp))) {
+        return json(res, 403, { error: "Expired or invalid link" });
+      }
+      const upstream = await fakturowniaFetch("/invoices/" + encodeURIComponent(id) + ".pdf", {}, { accept: "application/pdf" });
+      const contentLength = Number(upstream.headers.get("content-length") || 0);
+      if (contentLength > 25 * 1024 * 1024) return json(res, 413, { error: "Invoice PDF is too large" });
+      const buffer = Buffer.from(await upstream.arrayBuffer());
+      if (buffer.length > 25 * 1024 * 1024) return json(res, 413, { error: "Invoice PDF is too large" });
+      res.writeHead(200, {
+        "content-type": upstream.headers.get("content-type") || "application/pdf",
+        "content-length": buffer.length,
+        "cache-control": "private, no-store",
+        "content-disposition": "inline; filename*=UTF-8''" + encodeURIComponent("fakturownia-" + id + ".pdf")
+      });
+      return res.end(buffer);
+    }
 
     if (p.startsWith("/file/") && req.method === "GET") {
       const id = p.slice("/file/".length);
