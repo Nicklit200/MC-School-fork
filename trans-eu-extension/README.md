@@ -1,6 +1,6 @@
 # Tsubera Trans.eu Capture
 
-Chrome/Chromium Manifest V3 extension for capturing freight offers rendered on Trans.eu, open freight detail cards, and active transports, then sending them to Tsubera.
+Chrome/Chromium Manifest V3 extension for capturing freight offers rendered on Trans.eu, open freight detail cards, active transports, and Trans.eu Aufträge/Archiv, then sending them to Tsubera.
 
 ## Install
 1. Download this folder.
@@ -31,3 +31,20 @@ It stores the Trans.eu publication/account IDs plus the visible route, loading/u
 
 Backend detail endpoint:
 `https://tsubera-doc-tracker-production.up.railway.app/api/trans/freights/detail/import`
+
+
+## Aufträge archive and invoice reconciliation
+Open Trans.eu -> **Aufträge** and click **Собрать Archiv Aufträge с 11.08** in the extension popup.
+
+The extension switches to **Archiv** when possible, captures the visible order rows, and automatically advances through pages until it reaches orders from 11.08.2026 or there are no more pages. Captured fields include the Trans.eu Auftragsnummer, status, vehicle, tariff, distance, route and visible customer data.
+
+Backend order endpoint:
+`https://tsubera-doc-tracker-production.up.railway.app/api/trans/orders/import`
+
+Tsubera's **Сверка** view combines the captured Trans.eu orders with CMR/POD already stored in Tsubera and Fakturownia invoices:
+- Auftrag + CMR/POD + Rechnung -> complete
+- CMR/POD but no Rechnung -> invoice action
+- Auftrag but no CMR/POD -> ask Dawid whether the transport was actually performed
+- ambiguous invoice match -> manual check
+
+The Fakturownia connection requires `FAKTUROWNIA_BASE_URL` and `FAKTUROWNIA_API_TOKEN` in Railway. The token is never exposed to the browser extension.
