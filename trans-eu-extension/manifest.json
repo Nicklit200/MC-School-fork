@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Tsubera Trans.eu Capture",
+  "version": "0.1.0",
+  "description": "Captures freight offers rendered on Trans.eu and sends them to Tsubera.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://*.trans.eu/*",
+    "https://tsubera-doc-tracker-production.up.railway.app/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Tsubera Trans.eu Capture",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.trans.eu/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
