@@ -73,7 +73,7 @@ $("scan").addEventListener("click", async () => {
 
 $("archive").addEventListener("click", async () => {
   $("status").className = "";
-  $("status").textContent = "Собираю Archiv Aufträge с 11.08.2026… Не закрывай вкладку Trans.eu.";
+  $("status").textContent = "Собираю Aktiv + Archiv Aufträge с 11.08.2026… Не закрывай вкладку Trans.eu.";
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     $("status").className = "bad";
@@ -81,10 +81,10 @@ $("archive").addEventListener("click", async () => {
     return;
   }
   try {
-    const result = await chrome.tabs.sendMessage(tab.id, { type: "tsubera:scanOrderArchive", since: "2026-08-11" });
-    if (!result?.ok) throw new Error(result?.error || "Не удалось собрать архив");
+    const result = await chrome.tabs.sendMessage(tab.id, { type: "tsubera:scanAllOrders", since: "2026-08-11" });
+    if (!result?.ok) throw new Error(result?.error || "Не удалось собрать Aufträge");
     $("status").className = "ok";
-    $("status").textContent = "Готово: " + (result.sent || 0) + " Aufträge, страниц: " + (result.pages || 0) + ".";
+    $("status").textContent = "Готово: Aktiv " + (result.active?.sent || 0) + " + Archiv " + (result.archive?.sent || 0) + " = " + (result.sent || 0) + " Aufträge.";
     setTimeout(load, 1200);
   } catch (e) {
     $("status").className = "bad";
