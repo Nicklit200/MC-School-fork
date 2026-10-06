@@ -7,7 +7,7 @@ Chrome/Chromium Manifest V3 extension for capturing freight offers already rende
 2. Open `chrome://extensions`.
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and choose this folder.
-5. Open the extension, enter the same Tsubera site password, and save.
+5. Open the extension, enter the capture password `tsubera2026`, and save.
 6. Open Trans.eu → **Fracht suchen**. A small Tsubera badge appears in the bottom-right corner.
 
 The extension scans the currently rendered results every 30 seconds and after result-table changes. It does not store or transmit Trans.eu login credentials/cookies.
