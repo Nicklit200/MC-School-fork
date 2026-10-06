@@ -938,3 +938,7 @@ h1{font-size:15px;margin:0}
   bottom:72px;
 }
 .board-help{opacity:.72}
+
+
+/* Native hidden attribute must win over the flex empty-state layout */
+.empty-state[hidden]{display:none!important}
