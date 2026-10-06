@@ -93,12 +93,28 @@
 
       <span class="toolbar-separator"></span>
 
+      <button id="review-toggle" class="review-toggle" type="button" title="Повторения">
+        Повторить <span id="review-count" class="review-count">0</span>
+      </button>
       <button id="history-toggle" type="button" title="История">История</button>
     </div>
 
     <aside id="inspector" class="floating-panel inspector closed">
       <button id="close-inspector" class="close" type="button" aria-label="Закрыть">×</button>
       <div id="inspector-content"></div>
+    </aside>
+
+    <aside id="review-panel" class="floating-panel review-panel closed">
+      <div class="review-panel-head">
+        <div>
+          <div class="panel-label">ПОВТОРЕНИЕ</div>
+          <h2>Что закрепить сегодня</h2>
+        </div>
+        <button id="close-review" class="close-inline" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div id="review-summary" class="review-summary"></div>
+      <div id="review-list" class="review-list"></div>
+      <div id="review-upcoming" class="review-upcoming"></div>
     </aside>
 
     <aside id="history-panel" class="floating-panel history-panel closed">
