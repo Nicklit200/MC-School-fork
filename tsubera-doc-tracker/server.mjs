@@ -107,6 +107,41 @@ CREATE TABLE IF NOT EXISTS trans_freights (
 CREATE INDEX IF NOT EXISTS idx_trans_freights_last_seen ON trans_freights(last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_trans_freights_route ON trans_freights(load_text, unload_text);
 CREATE INDEX IF NOT EXISTS idx_trans_freights_company ON trans_freights(company);
+CREATE TABLE IF NOT EXISTS trans_freight_details (
+  id TEXT PRIMARY KEY,
+  publication_id TEXT NOT NULL UNIQUE,
+  account_id TEXT NOT NULL DEFAULT '',
+  load_text TEXT NOT NULL DEFAULT '',
+  unload_text TEXT NOT NULL DEFAULT '',
+  load_window_text TEXT NOT NULL DEFAULT '',
+  unload_window_text TEXT NOT NULL DEFAULT '',
+  vehicle_text TEXT NOT NULL DEFAULT '',
+  weight_t REAL,
+  distance_km INTEGER,
+  approach_km INTEGER,
+  destination_offset_km INTEGER,
+  price_amount REAL,
+  currency TEXT NOT NULL DEFAULT '',
+  price_per_km REAL,
+  payment_days INTEGER,
+  company TEXT NOT NULL DEFAULT '',
+  company_rating REAL,
+  contact_name TEXT NOT NULL DEFAULT '',
+  view_mode TEXT NOT NULL DEFAULT '',
+  route_text TEXT NOT NULL DEFAULT '',
+  details_text TEXT NOT NULL DEFAULT '',
+  company_text TEXT NOT NULL DEFAULT '',
+  reviews_text TEXT NOT NULL DEFAULT '',
+  negotiations_text TEXT NOT NULL DEFAULT '',
+  raw_text TEXT NOT NULL DEFAULT '',
+  source_url TEXT NOT NULL DEFAULT '',
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  seen_count INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_trans_freight_details_last_seen ON trans_freight_details(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_trans_freight_details_route ON trans_freight_details(load_text, unload_text);
+CREATE INDEX IF NOT EXISTS idx_trans_freight_details_company ON trans_freight_details(company);
 CREATE TABLE IF NOT EXISTS trans_active_transports (
   id TEXT PRIMARY KEY,
   fingerprint TEXT NOT NULL UNIQUE,
@@ -892,6 +927,144 @@ function transFreightStatus() {
 }
 
 
+function transFreightDetailOut(row) {
+  return row ? {
+    id: row.id,
+    publicationId: row.publication_id || "",
+    accountId: row.account_id || "",
+    loadText: row.load_text || "",
+    unloadText: row.unload_text || "",
+    loadWindowText: row.load_window_text || "",
+    unloadWindowText: row.unload_window_text || "",
+    vehicleText: row.vehicle_text || "",
+    weightT: row.weight_t === null || row.weight_t === undefined ? null : Number(row.weight_t),
+    distanceKm: row.distance_km === null || row.distance_km === undefined ? null : Number(row.distance_km),
+    approachKm: row.approach_km === null || row.approach_km === undefined ? null : Number(row.approach_km),
+    destinationOffsetKm: row.destination_offset_km === null || row.destination_offset_km === undefined ? null : Number(row.destination_offset_km),
+    priceAmount: row.price_amount === null || row.price_amount === undefined ? null : Number(row.price_amount),
+    currency: row.currency || "",
+    pricePerKm: row.price_per_km === null || row.price_per_km === undefined ? null : Number(row.price_per_km),
+    paymentDays: row.payment_days === null || row.payment_days === undefined ? null : Number(row.payment_days),
+    company: row.company || "",
+    companyRating: row.company_rating === null || row.company_rating === undefined ? null : Number(row.company_rating),
+    contactName: row.contact_name || "",
+    viewMode: row.view_mode || "",
+    routeText: row.route_text || "",
+    detailsText: row.details_text || "",
+    companyText: row.company_text || "",
+    reviewsText: row.reviews_text || "",
+    negotiationsText: row.negotiations_text || "",
+    rawText: row.raw_text || "",
+    sourceUrl: row.source_url || "",
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    seenCount: Number(row.seen_count || 0)
+  } : null;
+}
+function importTransFreightDetail(body = {}) {
+  const raw = body.detail || {};
+  const publicationId = transClean(raw.publicationId, 120);
+  if (!publicationId) throw new Error("publicationId is required");
+  const observedAtRaw = transClean(body.scannedAt, 80);
+  const observedAt = /^\d{4}-\d{2}-\d{2}T/.test(observedAtRaw) ? observedAtRaw : now();
+  const sourceUrl = transClean(body.pageUrl, 1500);
+  const item = {
+    publicationId,
+    accountId: transClean(raw.accountId, 120),
+    loadText: transClean(raw.loadText, 300),
+    unloadText: transClean(raw.unloadText, 300),
+    loadWindowText: transClean(raw.loadWindowText, 220),
+    unloadWindowText: transClean(raw.unloadWindowText, 220),
+    vehicleText: transClean(raw.vehicleText, 1000),
+    weightT: transNumber(raw.weightT),
+    distanceKm: transInteger(raw.distanceKm),
+    approachKm: transInteger(raw.approachKm),
+    destinationOffsetKm: transInteger(raw.destinationOffsetKm),
+    priceAmount: transNumber(raw.priceAmount),
+    currency: transClean(raw.currency, 12).toUpperCase(),
+    pricePerKm: transNumber(raw.pricePerKm),
+    paymentDays: transInteger(raw.paymentDays),
+    company: transClean(raw.company, 300),
+    companyRating: transNumber(raw.companyRating),
+    contactName: transClean(raw.contactName, 300),
+    viewMode: transClean(raw.viewMode, 120),
+    routeText: transClean(raw.routeText, 20000),
+    detailsText: transClean(raw.detailsText, 20000),
+    companyText: transClean(raw.companyText, 20000),
+    reviewsText: transClean(raw.reviewsText, 20000),
+    negotiationsText: transClean(raw.negotiationsText, 20000),
+    rawText: transClean(raw.rawText, 20000)
+  };
+  if (!item.loadText || !item.unloadText) throw new Error("loadText and unloadText are required");
+  const existing = db.prepare("SELECT id FROM trans_freight_details WHERE publication_id=?").get(publicationId);
+  const id = existing?.id || crypto.randomUUID();
+  db.prepare(`INSERT INTO trans_freight_details (
+    id,publication_id,account_id,load_text,unload_text,load_window_text,unload_window_text,vehicle_text,weight_t,distance_km,approach_km,destination_offset_km,price_amount,currency,price_per_km,payment_days,company,company_rating,contact_name,view_mode,route_text,details_text,company_text,reviews_text,negotiations_text,raw_text,source_url,first_seen_at,last_seen_at,seen_count
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+  ON CONFLICT(publication_id) DO UPDATE SET
+    account_id=CASE WHEN excluded.account_id<>'' THEN excluded.account_id ELSE trans_freight_details.account_id END,
+    load_text=CASE WHEN excluded.load_text<>'' THEN excluded.load_text ELSE trans_freight_details.load_text END,
+    unload_text=CASE WHEN excluded.unload_text<>'' THEN excluded.unload_text ELSE trans_freight_details.unload_text END,
+    load_window_text=CASE WHEN excluded.load_window_text<>'' THEN excluded.load_window_text ELSE trans_freight_details.load_window_text END,
+    unload_window_text=CASE WHEN excluded.unload_window_text<>'' THEN excluded.unload_window_text ELSE trans_freight_details.unload_window_text END,
+    vehicle_text=CASE WHEN excluded.vehicle_text<>'' THEN excluded.vehicle_text ELSE trans_freight_details.vehicle_text END,
+    weight_t=COALESCE(excluded.weight_t,trans_freight_details.weight_t),
+    distance_km=COALESCE(excluded.distance_km,trans_freight_details.distance_km),
+    approach_km=COALESCE(excluded.approach_km,trans_freight_details.approach_km),
+    destination_offset_km=COALESCE(excluded.destination_offset_km,trans_freight_details.destination_offset_km),
+    price_amount=COALESCE(excluded.price_amount,trans_freight_details.price_amount),
+    currency=CASE WHEN excluded.currency<>'' THEN excluded.currency ELSE trans_freight_details.currency END,
+    price_per_km=COALESCE(excluded.price_per_km,trans_freight_details.price_per_km),
+    payment_days=COALESCE(excluded.payment_days,trans_freight_details.payment_days),
+    company=CASE WHEN excluded.company<>'' THEN excluded.company ELSE trans_freight_details.company END,
+    company_rating=COALESCE(excluded.company_rating,trans_freight_details.company_rating),
+    contact_name=CASE WHEN excluded.contact_name<>'' THEN excluded.contact_name ELSE trans_freight_details.contact_name END,
+    view_mode=CASE WHEN excluded.view_mode<>'' THEN excluded.view_mode ELSE trans_freight_details.view_mode END,
+    route_text=CASE WHEN excluded.route_text<>'' THEN excluded.route_text ELSE trans_freight_details.route_text END,
+    details_text=CASE WHEN excluded.details_text<>'' THEN excluded.details_text ELSE trans_freight_details.details_text END,
+    company_text=CASE WHEN excluded.company_text<>'' THEN excluded.company_text ELSE trans_freight_details.company_text END,
+    reviews_text=CASE WHEN excluded.reviews_text<>'' THEN excluded.reviews_text ELSE trans_freight_details.reviews_text END,
+    negotiations_text=CASE WHEN excluded.negotiations_text<>'' THEN excluded.negotiations_text ELSE trans_freight_details.negotiations_text END,
+    raw_text=CASE WHEN excluded.raw_text<>'' THEN excluded.raw_text ELSE trans_freight_details.raw_text END,
+    source_url=CASE WHEN excluded.source_url<>'' THEN excluded.source_url ELSE trans_freight_details.source_url END,
+    last_seen_at=excluded.last_seen_at,
+    seen_count=trans_freight_details.seen_count+1`).run(
+      id,item.publicationId,item.accountId,item.loadText,item.unloadText,item.loadWindowText,item.unloadWindowText,item.vehicleText,item.weightT,item.distanceKm,item.approachKm,item.destinationOffsetKm,item.priceAmount,item.currency,item.pricePerKm,item.paymentDays,item.company,item.companyRating,item.contactName,item.viewMode,item.routeText,item.detailsText,item.companyText,item.reviewsText,item.negotiationsText,item.rawText,sourceUrl,observedAt,observedAt
+    );
+  db.prepare("DELETE FROM trans_freight_details WHERE julianday(last_seen_at) < julianday('now','-14 days')").run();
+  return { received: 1, inserted: existing ? 0 : 1, updated: existing ? 1 : 0, publicationId, scannedAt: observedAt };
+}
+function queryTransFreightDetails(args = {}) {
+  const where = [];
+  const params = [];
+  const q = transClean(args.query, 300);
+  if (q) {
+    const like = "%" + q.toLowerCase() + "%";
+    where.push("(LOWER(publication_id) LIKE ? OR LOWER(load_text) LIKE ? OR LOWER(unload_text) LIKE ? OR LOWER(vehicle_text) LIKE ? OR LOWER(company) LIKE ? OR LOWER(contact_name) LIKE ? OR LOWER(raw_text) LIKE ? OR LOWER(details_text) LIKE ? OR LOWER(company_text) LIKE ? OR LOWER(reviews_text) LIKE ? OR LOWER(negotiations_text) LIKE ?)");
+    params.push(like,like,like,like,like,like,like,like,like,like,like);
+  }
+  const maxAge = Math.max(1, Math.min(14 * 24 * 60, Number(args.max_age_minutes || 180)));
+  where.push("julianday(last_seen_at) >= julianday('now', ?)");
+  params.push("-" + maxAge + " minutes");
+  const limit = Math.max(1, Math.min(100, Number(args.limit || 50)));
+  const sql = "SELECT * FROM trans_freight_details " + (where.length ? "WHERE " + where.join(" AND ") : "") + " ORDER BY last_seen_at DESC LIMIT ?";
+  params.push(limit);
+  return db.prepare(sql).all(...params).map(transFreightDetailOut);
+}
+function transFreightDetailStatus() {
+  const total = Number(db.prepare("SELECT COUNT(*) c FROM trans_freight_details").get()?.c || 0);
+  const fresh = Number(db.prepare("SELECT COUNT(*) c FROM trans_freight_details WHERE julianday(last_seen_at)>=julianday('now','-180 minutes')").get()?.c || 0);
+  const latest = db.prepare("SELECT last_seen_at,source_url,publication_id,view_mode FROM trans_freight_details ORDER BY last_seen_at DESC LIMIT 1").get();
+  return {
+    totalStored: total,
+    freshLast3Hours: fresh,
+    lastCaptureAt: latest?.last_seen_at || null,
+    lastSourceUrl: latest?.source_url || null,
+    lastPublicationId: latest?.publication_id || null,
+    lastViewMode: latest?.view_mode || null
+  };
+}
+
 function transActiveFingerprint(item) {
   const stable = [
     transClean(item.startText, 300).toLowerCase(),
@@ -1355,7 +1528,7 @@ const toolDefs = [
 ];
 
 async function callTool(name, args, req) {
-  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus(), transActiveCapture: transActiveStatus() };
+  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus() };
   if (name === "get_trans_freight_status") return transFreightStatus();
   if (name === "search_trans_freights") { const freights = queryTransFreights(args); return { freights, count: freights.length, ...transFreightStatus() }; }
   if (name === "get_fakturownia_status") {
@@ -1399,9 +1572,10 @@ async function callTool(name, args, req) {
   }
   if (name === "search") {
     const tripResults = queryTrips({ query: args.query }).map(t => ({ id: t.id, type: "trip", title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t }));
+    const freightDetailResults = queryTransFreightDetails({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight_detail", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
     const freightResults = queryTransFreights({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
     const activeTransportResults = queryTransActive({ query: args.query, max_age_minutes: 180, limit: 100 }).map(t => ({ id: t.id, type: "trans_active_transport", title: (t.startText || "?") + " → " + (t.endText || "?"), ...t }));
-    return { results: [...tripResults, ...freightResults, ...activeTransportResults], tripResults, freightResults, activeTransportResults, transFreightCapture: transFreightStatus(), transActiveCapture: transActiveStatus() };
+    return { results: [...tripResults, ...freightDetailResults, ...freightResults, ...activeTransportResults], tripResults, freightDetailResults, freightResults, activeTransportResults, transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus() };
   }
   if (name === "list_trips") return { trips: queryTrips(args), count: queryTrips(args).length };
   if (name === "get_trip") {
@@ -1778,6 +1952,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req, 4 * 1024 * 1024);
       return json(res, 200, importTransFreights(body));
     }
+    if (p === "/api/trans/freights/detail/import" && req.method === "POST") {
+      if (!transCaptureAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
+      const body = await readJson(req, 4 * 1024 * 1024);
+      return json(res, 200, importTransFreightDetail(body));
+    }
     if (p === "/api/trans/active/import" && req.method === "POST") {
       if (!transCaptureAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
       const body = await readJson(req, 4 * 1024 * 1024);
@@ -1802,6 +1981,15 @@ const server = http.createServer(async (req, res) => {
         };
         const freights = queryTransFreights(args);
         return json(res, 200, { freights, count: freights.length, ...transFreightStatus() });
+      }
+      if (p === "/api/trans/freights/details" && req.method === "GET") {
+        const args = {
+          query: url.searchParams.get("q") || undefined,
+          max_age_minutes: url.searchParams.get("max_age_minutes") || undefined,
+          limit: url.searchParams.get("limit") || undefined
+        };
+        const details = queryTransFreightDetails(args);
+        return json(res, 200, { details, count: details.length, ...transFreightDetailStatus() });
       }
       if (p === "/api/trans/active/status" && req.method === "GET") return json(res, 200, transActiveStatus());
       if (p === "/api/trans/active" && req.method === "GET") {
