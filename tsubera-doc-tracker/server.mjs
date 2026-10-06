@@ -1235,7 +1235,7 @@ const toolDefs = [
 ];
 
 async function callTool(name, args, req) {
-  if (name === "get_system_overview") return systemOverview();
+  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus() };
   if (name === "get_trans_freight_status") return transFreightStatus();
   if (name === "search_trans_freights") { const freights = queryTransFreights(args); return { freights, count: freights.length, ...transFreightStatus() }; }
   if (name === "get_fakturownia_status") {
@@ -1278,7 +1278,9 @@ async function callTool(name, args, req) {
     return { found: true, client };
   }
   if (name === "search") {
-    return { results: queryTrips({ query: args.query }).map(t => ({ id: t.id, title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t })) };
+    const tripResults = queryTrips({ query: args.query }).map(t => ({ id: t.id, type: "trip", title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t }));
+    const freightResults = queryTransFreights({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
+    return { results: [...tripResults, ...freightResults], tripResults, freightResults, transFreightCapture: transFreightStatus() };
   }
   if (name === "list_trips") return { trips: queryTrips(args), count: queryTrips(args).length };
   if (name === "get_trip") {
