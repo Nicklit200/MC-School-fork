@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS trips (
   cmr_unloaded INTEGER NOT NULL DEFAULT 0,
   loaded_at TEXT NOT NULL DEFAULT '',
   unloaded_at TEXT NOT NULL DEFAULT '',
+  loading_place TEXT NOT NULL DEFAULT '',
+  unloading_place TEXT NOT NULL DEFAULT '',
   vehicle_plates TEXT NOT NULL DEFAULT '',
   price_cents INTEGER,
   rechnung_code TEXT NOT NULL DEFAULT '',
@@ -113,6 +115,8 @@ if (!tripColumns.has("cmr_loaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_lo
 if (!tripColumns.has("cmr_unloaded")) db.exec("ALTER TABLE trips ADD COLUMN cmr_unloaded INTEGER NOT NULL DEFAULT 0");
 if (!tripColumns.has("loaded_at")) db.exec("ALTER TABLE trips ADD COLUMN loaded_at TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("unloaded_at")) db.exec("ALTER TABLE trips ADD COLUMN unloaded_at TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("loading_place")) db.exec("ALTER TABLE trips ADD COLUMN loading_place TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("unloading_place")) db.exec("ALTER TABLE trips ADD COLUMN unloading_place TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN vehicle_plates TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("price_cents")) db.exec("ALTER TABLE trips ADD COLUMN price_cents INTEGER");
 
@@ -375,6 +379,8 @@ const tripOut = row => {
     cmrUnloaded: hasUnloadingCmr,
     loadedAt: row.loaded_at || "",
     unloadedAt: row.unloaded_at || "",
+    loadingPlace: row.loading_place || "",
+    unloadingPlace: row.unloading_place || "",
     vehiclePlates: String(row.vehicle_plates || "").split(/\r?\n|,|;/).map(s=>s.trim()).filter(Boolean),
     priceEur: priceCentsToEur(row.price_cents),
     cmr: hasLoadingCmr,
@@ -729,9 +735,9 @@ function queryTrips(args = {}) {
   let sql = "SELECT * FROM trips WHERE 1=1";
   const vals = [];
   if (args.query) {
-    sql += " AND (LOWER(COALESCE(internal_trip_id,'')) LIKE ? OR LOWER(COALESCE(trip_number,'')) LIKE ? OR LOWER(customer) LIKE ? OR LOWER(COALESCE(vehicle_plates,'')) LIKE ? OR date LIKE ? OR LOWER(rechnung_code) LIKE ?)";
+    sql += " AND (LOWER(COALESCE(internal_trip_id,'')) LIKE ? OR LOWER(COALESCE(trip_number,'')) LIKE ? OR LOWER(customer) LIKE ? OR LOWER(COALESCE(vehicle_plates,'')) LIKE ? OR LOWER(COALESCE(loading_place,'')) LIKE ? OR LOWER(COALESCE(unloading_place,'')) LIKE ? OR date LIKE ? OR LOWER(rechnung_code) LIKE ?)";
     const q = "%" + String(args.query).toLowerCase() + "%";
-    vals.push(q, q, q, q, q, q);
+    vals.push(q, q, q, q, q, q, q, q);
   }
   if (args.date_from) { sql += " AND date >= ?"; vals.push(args.date_from); }
   if (args.date_to) { sql += " AND date <= ?"; vals.push(args.date_to); }
@@ -1128,6 +1134,8 @@ const toolDefs = [
         cmr_unloaded: { type: "boolean", description: "Whether the final CMR/POD after unloading is present." },
         loaded_at: { type: "string", description: "Loading date/time, preferably ISO local datetime." },
         unloaded_at: { type: "string", description: "Unloading date/time, preferably ISO local datetime." },
+        loading_place: { type: "string", description: "Loading location, preferably country + postcode + city/address." },
+        unloading_place: { type: "string", description: "Unloading location, preferably country + postcode + city/address." },
         vehicle_plates: { type: "array", items: { type: "string" }, description: "Vehicle registration numbers (Kennzeichen) that performed this tour." },
         price_eur: { type: ["number","null"], description: "Trip price in EUR. Use null to leave price empty." },
         cmr: { type: "boolean", description: "Legacy alias for cmr_loaded." },
@@ -1154,6 +1162,8 @@ const toolDefs = [
         cmr_unloaded: { type: "boolean" },
         loaded_at: { type: "string" },
         unloaded_at: { type: "string" },
+        loading_place: { type: "string" },
+        unloading_place: { type: "string" },
         vehicle_plates: { type: "array", items: { type: "string" } },
         price_eur: { type: ["number","null"], description: "Trip price in EUR. Pass null to clear it." },
         cmr: { type: "boolean" },
@@ -1369,8 +1379,8 @@ async function callTool(name, args, req) {
     const internalTripId = nextInternalTripId(args.date);
     const cmrLoaded = args.cmr_loaded ?? args.cmr ?? false;
     const cmrUnloaded = args.cmr_unloaded ?? args.pod ?? false;
-    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
         internalTripId,
@@ -1384,6 +1394,8 @@ async function callTool(name, args, req) {
         bool(cmrUnloaded),
         args.loaded_at || "",
         args.unloaded_at || "",
+        String(args.loading_place || "").trim(),
+        String(args.unloading_place || "").trim(),
         platesToText(args.vehicle_plates || []),
         priceEurToCents(args.price_eur),
         args.rechnung_number || "",
@@ -1405,13 +1417,15 @@ async function callTool(name, args, req) {
       cmrUnloaded: args.cmr_unloaded ?? args.pod ?? old.cmrUnloaded,
       loadedAt: args.loaded_at ?? old.loadedAt,
       unloadedAt: args.unloaded_at ?? old.unloadedAt,
+      loadingPlace: args.loading_place ?? old.loadingPlace,
+      unloadingPlace: args.unloading_place ?? old.unloadingPlace,
       vehiclePlates: args.vehicle_plates ?? old.vehiclePlates,
       priceEur: args.price_eur === undefined ? old.priceEur : args.price_eur,
       rechnungCode: args.rechnung_number ?? old.rechnungCode
     };
     next.customer = ensureCompany(next.customer)?.name || next.customer;
-    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
-      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),old.id);
+    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),old.id);
     const t = getTripByAny(old.id);
     return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
@@ -1731,9 +1745,9 @@ const server = http.createServer(async (req, res) => {
         const internalTripId = nextInternalTripId(b.date);
         const cmrLoaded = b.cmrLoaded ?? b.cmr ?? false;
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
-        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", ts, ts);
+        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", String(b.loadingPlace || "").trim(), String(b.unloadingPlace || "").trim(), platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
@@ -1749,13 +1763,15 @@ const server = http.createServer(async (req, res) => {
           cmrUnloaded: b.cmrUnloaded ?? b.pod ?? old.cmrUnloaded,
           loadedAt: b.loadedAt ?? old.loadedAt,
           unloadedAt: b.unloadedAt ?? old.unloadedAt,
+          loadingPlace: b.loadingPlace ?? old.loadingPlace,
+          unloadingPlace: b.unloadingPlace ?? old.unloadingPlace,
           vehiclePlates: b.vehiclePlates ?? old.vehiclePlates,
           priceEur: b.priceEur === undefined ? old.priceEur : b.priceEur,
           rechnungCode: b.rechnungCode ?? old.rechnungCode
         };
         next.customer = ensureCompany(next.customer)?.name || next.customer;
-        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
-          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),id);
+        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
+          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),id);
         return json(res, 200, { trip: getTripByAny(id) });
       }
       if (tripMatch && req.method === "DELETE") {
