@@ -146,7 +146,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px">
         <div>
           <h2 style="margin:0 0 5px">Сверка рейсов</h2>
-          <div class="muted">Сравниваем Trans.eu напрямую с Fakturownia: фирма → сумма → дата рейса → Rechnung → оплата. CMR в этой сверке не участвует.</div>
+          <div class="muted">Сверяем Trans.eu с Fakturownia по фирме. Если Auftrag найден в счете - связь точная. Если номер Auftrag не указан, ближайший счет той же фирмы показываем с ❓.</div>
         </div>
         <button class="btn alt small" type="button" id="refreshReconciliation">Обновить</button>
       </div>
@@ -173,7 +173,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="recon-stats">
         <div class="recon-stat"><span>Trans.eu Aufträge</span><b id="reconOrders">0</b></div>
         <div class="recon-stat"><span>Точно по Auftrag</span><b id="reconMatched">0</b></div>
-        <div class="recon-stat"><span>Из них оплачено</span><b id="reconPaid">0</b></div>
+        <div class="recon-stat"><span>❓ Нужно проверить</span><b id="reconNeedsCheck">0</b></div>
         <div class="recon-stat"><span>У фирмы счетов нет</span><b id="reconNoInvoice">0</b></div>
       </div>
       <div class="recon-table">
@@ -589,10 +589,11 @@ function renderReconciliation(){
   const counts=d.counts||{};
   const allRows=d.rows||[];
   const withExact=allRows.filter(r=>!!r.invoiceMatch?.invoice).length;
+  const needsCheck=allRows.filter(r=>Number(r.companyInvoiceCount||0)>0&&!r.invoiceMatch?.invoice).length;
   const noCompanyInvoices=allRows.filter(r=>Number(r.companyInvoiceCount||0)===0).length;
   $('reconOrders').textContent=Number(d.transOrders||0);
   $('reconMatched').textContent=withExact;
-  $('reconPaid').textContent=Number(counts.paid||0);
+  $('reconNeedsCheck').textContent=needsCheck;
   $('reconNoInvoice').textContent=noCompanyInvoices;
   $('reconciliationCount').textContent=noCompanyInvoices?'('+noCompanyInvoices+')':'';
 
