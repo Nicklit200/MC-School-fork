@@ -543,7 +543,7 @@ function reconActionLabel(action){
     paid:'<span class="status ok">✅ Есть счет · оплачен</span>',
     invoiced:'<span class="status route">✅ Есть счет · не оплачен</span>',
     partial:'<span class="status wait">✅ Есть счет · частично оплачен</span>',
-    check_invoice:'<span class="status wait">❓ Возможно есть счет</span>',
+    check_invoice:'<span class="status wait">❓ Вероятно этот счет</span>',
     company_has_invoices:'<span class="status wait">⚠️ У фирмы есть счет, но Auftrag не найден</span>',
     no_invoice:'<span class="status wait" style="background:#fff1f2;color:#be123c">❌ Счет не найден</span>',
     connect_fakturownia:'<span class="status route">Подключить Fakturownia</span>'
@@ -555,22 +555,33 @@ function reconInvoiceCell(r){
     const d=exact.sellDate||exact.issueDate||'';
     return '<div><b style="color:#087443">✅ Auftrag найден</b><div class="recon-sub">'+esc(exact.number||'')+(d?' · '+esc(d):'')+'</div></div>';
   }
+  const candidate=r.invoiceCandidate;
+  if(candidate?.invoice){
+    const inv=candidate.invoice;
+    const d=candidate.matchDate||inv.sellDate||inv.issueDate||'';
+    const days=Number(candidate.dayDistance);
+    const delta=Number.isFinite(days)?' · разница '+days+' дн.':'';
+    return '<div><b style="color:#925f00">❓ Вероятный счет</b><div class="recon-sub">'+esc(inv.number||'')+(d?' · '+esc(d):'')+esc(delta)+'</div></div>';
+  }
   const companyInvoices=Array.isArray(r.companyInvoices)?r.companyInvoices:[];
   if(companyInvoices.length){
-    const first=companyInvoices[0]||{};
-    const more=companyInvoices.length>1?' · ещё '+(companyInvoices.length-1):'';
-    return '<div><b style="color:#925f00">⚠️ У фирмы есть счет</b><div class="recon-sub">'+esc(first.number||'')+esc(more)+' · Auftrag не найден</div></div>';
+    return '<div><b style="color:#925f00">⚠️ У фирмы есть счета</b><div class="recon-sub">Но по дате подходящий не выбран</div></div>';
   }
   return '<span style="color:#be123c;font-weight:700">❌ У фирмы счетов нет</span>';
 }
 function reconPaymentCell(r){
-  const inv=r.invoiceMatch?.invoice;
+  const exact=r.invoiceMatch?.invoice;
+  const probable=!exact?r.invoiceCandidate?.invoice:null;
+  const inv=exact||probable;
   if(!inv)return '<span class="muted">—</span>';
   const paid=Number(inv.paid||0);
   const total=Number(inv.totalGross??inv.totalNet??0);
-  if(r.paymentState==='paid')return '<span class="status ok">✓ '+esc(paid||total)+' '+esc(inv.currency||'EUR')+'</span>';
-  if(r.paymentState==='partial')return '<span class="status wait">'+esc(paid)+' / '+esc(total)+' '+esc(inv.currency||'EUR')+'</span>';
-  return '<div><span class="status wait">Не оплачен</span>'+(inv.paymentTo?'<div class="recon-sub">до '+esc(inv.paymentTo)+'</div>':'')+'</div>';
+  const paidState=String(inv.status||'').toLowerCase()==='paid'||(Number.isFinite(total)&&total>0&&paid>=total-0.02);
+  const partial=paid>0&&!paidState;
+  const prefix=probable?'? ':'';
+  if(paidState)return '<span class="status ok">'+prefix+'Оплачен</span>';
+  if(partial)return '<span class="status wait">'+prefix+'Частично '+esc(paid)+' / '+esc(total)+' '+esc(inv.currency||'EUR')+'</span>';
+  return '<div><span class="status wait">'+prefix+'Не оплачен</span>'+(inv.paymentTo?'<div class="recon-sub">до '+esc(inv.paymentTo)+'</div>':'')+'</div>';
 }
 function renderReconciliation(){
   const d=reconciliation||{rows:[],counts:{},fakturownia:{}};
