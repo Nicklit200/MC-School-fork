@@ -2,7 +2,7 @@ const DEFAULT_API = "https://tsubera-doc-tracker-production.up.railway.app";
 const $ = id => document.getElementById(id);
 
 async function load() {
-  const data = await chrome.storage.local.get(["apiBase","capturePassword","enabled","lastPushAt","lastPushCount","lastPushResult","lastDetailPushAt","lastDetailPublicationId","lastDetailPushResult","lastActivePushAt","lastActivePushCount","lastActivePushResult"]);
+  const data = await chrome.storage.local.get(["apiBase","capturePassword","enabled","lastPushAt","lastPushCount","lastPushResult","lastDetailPushAt","lastDetailPublicationId","lastDetailPushResult","lastActivePushAt","lastActivePushCount","lastActivePushResult","lastOrderPushAt","lastOrderPushCount","lastOrderPushResult"]);
   $("password").value = data.capturePassword || "";
   $("enabled").checked = data.enabled !== false;
   renderStatus(data);
@@ -18,9 +18,14 @@ function renderStatus(data) {
   const latest = [
     data.lastPushAt ? { type: "freights", at: data.lastPushAt } : null,
     data.lastDetailPushAt ? { type: "detail", at: data.lastDetailPushAt } : null,
-    data.lastActivePushAt ? { type: "active", at: data.lastActivePushAt } : null
+    data.lastActivePushAt ? { type: "active", at: data.lastActivePushAt } : null,
+    data.lastOrderPushAt ? { type: "orders", at: data.lastOrderPushAt } : null
   ].filter(Boolean).sort((a,b) => new Date(b.at) - new Date(a.at))[0];
-  if (latest?.type === "detail") {
+  if (latest?.type === "orders") {
+    const t = new Date(data.lastOrderPushAt).toLocaleString();
+    status.className = "ok";
+    status.textContent = "Последняя отправка: " + t + "\nAufträge в последнем скане: " + (data.lastOrderPushCount || 0);
+  } else if (latest?.type === "detail") {
     const t = new Date(data.lastDetailPushAt).toLocaleString();
     status.className = "ok";
     status.textContent = "Последняя отправка: " + t + "\nКарточка груза: " + (data.lastDetailPublicationId || "сохранена");
@@ -63,6 +68,27 @@ $("scan").addEventListener("click", async () => {
   } catch (e) {
     $("status").className = "bad";
     $("status").textContent = "Открой Trans.eu → Fracht suchen, карточку груза или Laufende Transporte и попробуй снова.";
+  }
+});
+
+$("archive").addEventListener("click", async () => {
+  $("status").className = "";
+  $("status").textContent = "Собираю Archiv Aufträge с 11.08.2026… Не закрывай вкладку Trans.eu.";
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    $("status").className = "bad";
+    $("status").textContent = "Не вижу активную вкладку.";
+    return;
+  }
+  try {
+    const result = await chrome.tabs.sendMessage(tab.id, { type: "tsubera:scanOrderArchive", since: "2026-08-11" });
+    if (!result?.ok) throw new Error(result?.error || "Не удалось собрать архив");
+    $("status").className = "ok";
+    $("status").textContent = "Готово: " + (result.sent || 0) + " Aufträge, страниц: " + (result.pages || 0) + ".";
+    setTimeout(load, 1200);
+  } catch (e) {
+    $("status").className = "bad";
+    $("status").textContent = "Открой Trans.eu → Aufträge и попробуй снова. " + (e?.message || "");
   }
 });
 
