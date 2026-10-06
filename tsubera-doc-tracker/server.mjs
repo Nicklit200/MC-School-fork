@@ -873,7 +873,7 @@ function transFreightOut(row) {
     priceAmount: row.price_amount === null || row.price_amount === undefined ? null : Number(row.price_amount),
     currency: row.currency || "",
     paymentDays: row.payment_days === null || row.payment_days === undefined ? null : Number(row.payment_days),
-    company: row.company || "",
+    company: row.company || inferTransOrderCompany(row.raw_text) || "",
     companyRating: row.company_rating === null || row.company_rating === undefined ? null : Number(row.company_rating),
     publishedText: row.published_text || "",
     rawText: row.raw_text || "",
@@ -1184,6 +1184,30 @@ function transOrderDate(orderNumber, loadWindowText = "") {
   if (m) return m[3] + "-" + m[2] + "-" + m[1];
   return "";
 }
+function inferTransOrderCompany(rawText) {
+  const ls = String(rawText || "").replace(/\r/g, "").split("\n").map(x => x.trim()).filter(Boolean);
+  if (!ls.length) return "";
+  let anchor = -1;
+  for (let i = ls.length - 1; i >= 0; i--) {
+    if (/^Dawid\s+Oberszt$/i.test(ls[i])) { anchor = i; break; }
+  }
+  if (anchor < 0) return "";
+  const skip = /^(DO|-|\d+|Auf Bestätigung warten|Bestätigt|Storniert|Abgeschlossen|In Bearbeitung|Warten auf Bedingungen|Wird vorbereitet|Vorinformationen vervollständigen)$/i;
+  for (let i = anchor - 1; i >= Math.max(0, anchor - 8); i--) {
+    const v = ls[i];
+    if (!v || skip.test(v)) continue;
+    if (/^20\d{2}\/\d{2}\/\d{2}\/\d+$/.test(v)) continue;
+    if (/^\d{2}\.\d{2}\.\d{4}/.test(v)) continue;
+    if (/^\d{1,2}:\d{2}(?:\s*-\s*\d{1,2}:\d{2})?$/.test(v)) continue;
+    if (/^\d[\d .]*(?:[.,]\d+)?\s*(?:EUR|PLN|GBP|CHF)$/i.test(v)) continue;
+    if (/^\d[\d .]*\s*km$/i.test(v)) continue;
+    if (/^(?:DE|PL|GB|BE|NL|FR|CZ|AT|IT|SK|HU|RO|BG|ES|PT|DK|SE|NO|FI|LT|LV|EE|SI|HR|CH|LU)\b/i.test(v)) continue;
+    if (/^[A-ZÄÖÜ]{1,3}\s*[A-ZÄÖÜ]{1,3}\s*\d{1,4}$/i.test(v.replace(/-/g," "))) continue;
+    return v.slice(0, 400);
+  }
+  return "";
+}
+
 function transOrderOut(row) {
   return row ? {
     id: row.id,
@@ -1246,7 +1270,7 @@ function importTransOrders(body = {}) {
         transNumber(order.priceAmount), transClean(order.currency, 12).toUpperCase(),
         transInteger(order.distanceKm), transClean(order.loadText, 400),
         transClean(order.unloadText, 400), transClean(order.loadWindowText, 160),
-        transClean(order.unloadWindowText, 160), transClean(order.company, 400),
+        transClean(order.unloadWindowText, 160), transClean(order.company || inferTransOrderCompany(order.rawText), 400),
         transClean(order.rawText, 12000), sourceUrl, observedAt, observedAt
       );
       if (existed) updated++; else inserted++;
