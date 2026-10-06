@@ -1223,7 +1223,7 @@ function transOrderOut(row) {
     unloadText: row.unload_text || "",
     loadWindowText: row.load_window_text || "",
     unloadWindowText: row.unload_window_text || "",
-    company: row.company || "",
+    company: row.company || inferTransOrderCompany(row.raw_text) || "",
     rawText: row.raw_text || "",
     sourceUrl: row.source_url || "",
     firstSeenAt: row.first_seen_at,
