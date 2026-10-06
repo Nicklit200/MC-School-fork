@@ -486,8 +486,8 @@ const leftPanelToggle = $("left-panel-toggle");
 leftPanelToggle.onclick = () => {
   const collapsed = leftPanel.classList.toggle("collapsed");
   leftPanelToggle.classList.toggle("collapsed", collapsed);
-  leftPanelToggle.textContent = collapsed ? "›" : "‹";
-  leftPanelToggle.title = collapsed ? "Показать панель" : "Скрыть панель";
+  leftPanelToggle.textContent = collapsed ? "☰" : "×";
+  leftPanelToggle.title = collapsed ? "Показать настройки" : "Скрыть настройки";
 };
 
 const historyPanel = $("history-panel");
