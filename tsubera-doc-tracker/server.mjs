@@ -107,6 +107,26 @@ CREATE TABLE IF NOT EXISTS trans_freights (
 CREATE INDEX IF NOT EXISTS idx_trans_freights_last_seen ON trans_freights(last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_trans_freights_route ON trans_freights(load_text, unload_text);
 CREATE INDEX IF NOT EXISTS idx_trans_freights_company ON trans_freights(company);
+CREATE TABLE IF NOT EXISTS trans_active_transports (
+  id TEXT PRIMARY KEY,
+  fingerprint TEXT NOT NULL UNIQUE,
+  status_text TEXT NOT NULL DEFAULT '',
+  status_details TEXT NOT NULL DEFAULT '',
+  start_text TEXT NOT NULL DEFAULT '',
+  end_text TEXT NOT NULL DEFAULT '',
+  eta_text TEXT NOT NULL DEFAULT '',
+  next_eta_text TEXT NOT NULL DEFAULT '',
+  partner TEXT NOT NULL DEFAULT '',
+  vehicle_plate TEXT NOT NULL DEFAULT '',
+  raw_text TEXT NOT NULL,
+  source_url TEXT NOT NULL DEFAULT '',
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  seen_count INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_trans_active_last_seen ON trans_active_transports(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_trans_active_route ON trans_active_transports(start_text, end_text);
+CREATE INDEX IF NOT EXISTS idx_trans_active_vehicle ON trans_active_transports(vehicle_plate);
 `);
 
 const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
@@ -871,6 +891,90 @@ function transFreightStatus() {
   return { totalStored: total, freshLast3Hours: fresh, lastCaptureAt: latest?.last_seen_at || null, lastSourceUrl: latest?.source_url || null };
 }
 
+
+function transActiveFingerprint(item) {
+  const stable = [
+    transClean(item.startText, 300).toLowerCase(),
+    transClean(item.endText, 300).toLowerCase(),
+    transClean(item.partner, 300).toLowerCase(),
+    transClean(item.vehiclePlate, 80).toUpperCase(),
+    transClean(item.rawText, 3500).toLowerCase().replace(/\s+/g, " ")
+  ].join("|");
+  return crypto.createHash("sha256").update(stable).digest("hex");
+}
+function transActiveOut(row) {
+  return row ? {
+    id: row.id,
+    statusText: row.status_text || "",
+    statusDetails: row.status_details || "",
+    startText: row.start_text || "",
+    endText: row.end_text || "",
+    etaText: row.eta_text || "",
+    nextEtaText: row.next_eta_text || "",
+    partner: row.partner || "",
+    vehiclePlate: row.vehicle_plate || "",
+    rawText: row.raw_text || "",
+    sourceUrl: row.source_url || "",
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    seenCount: Number(row.seen_count || 0)
+  } : null;
+}
+function importTransActive(body = {}) {
+  const transports = Array.isArray(body.transports) ? body.transports.slice(0, TRANS_CAPTURE_MAX_ROWS) : [];
+  const observedAtRaw = transClean(body.scannedAt, 80);
+  const observedAt = /^\d{4}-\d{2}-\d{2}T/.test(observedAtRaw) ? observedAtRaw : now();
+  const sourceUrl = transClean(body.pageUrl, 1500);
+  let inserted = 0, updated = 0, ignored = 0;
+  const upsert = db.prepare("INSERT INTO trans_active_transports (id,fingerprint,status_text,status_details,start_text,end_text,eta_text,next_eta_text,partner,vehicle_plate,raw_text,source_url,first_seen_at,last_seen_at,seen_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1) ON CONFLICT(fingerprint) DO UPDATE SET status_text=excluded.status_text,status_details=excluded.status_details,start_text=excluded.start_text,end_text=excluded.end_text,eta_text=excluded.eta_text,next_eta_text=excluded.next_eta_text,partner=excluded.partner,vehicle_plate=excluded.vehicle_plate,raw_text=excluded.raw_text,source_url=excluded.source_url,last_seen_at=excluded.last_seen_at,seen_count=trans_active_transports.seen_count+1");
+  for (const raw of transports) {
+    const item = {
+      statusText: transClean(raw?.statusText, 300),
+      statusDetails: transClean(raw?.statusDetails, 600),
+      startText: transClean(raw?.startText, 400),
+      endText: transClean(raw?.endText, 400),
+      etaText: transClean(raw?.etaText, 180),
+      nextEtaText: transClean(raw?.nextEtaText, 180),
+      partner: transClean(raw?.partner, 400),
+      vehiclePlate: normalizePlate(raw?.vehiclePlate || ""),
+      rawText: transClean(raw?.rawText, 8000)
+    };
+    if (!item.rawText || !item.startText || !item.endText) { ignored++; continue; }
+    const fp = transActiveFingerprint(item);
+    const exists = db.prepare("SELECT id FROM trans_active_transports WHERE fingerprint=?").get(fp);
+    const id = exists?.id || crypto.randomUUID();
+    upsert.run(id,fp,item.statusText,item.statusDetails,item.startText,item.endText,item.etaText,item.nextEtaText,item.partner,item.vehiclePlate,item.rawText,sourceUrl,observedAt,observedAt);
+    if (exists) updated++; else inserted++;
+  }
+  db.prepare("DELETE FROM trans_active_transports WHERE julianday(last_seen_at) < julianday('now','-7 days')").run();
+  return { received: transports.length, inserted, updated, ignored, scannedAt: observedAt };
+}
+function queryTransActive(args = {}) {
+  const where = [];
+  const params = [];
+  const q = transClean(args.query, 300);
+  if (q) {
+    const like = "%" + q.toLowerCase() + "%";
+    where.push("(LOWER(status_text) LIKE ? OR LOWER(status_details) LIKE ? OR LOWER(start_text) LIKE ? OR LOWER(end_text) LIKE ? OR LOWER(partner) LIKE ? OR LOWER(vehicle_plate) LIKE ? OR LOWER(raw_text) LIKE ?)");
+    params.push(like,like,like,like,like,like,like);
+  }
+  const vehicle = normalizePlate(args.vehicle || "");
+  if (vehicle) { where.push("UPPER(vehicle_plate) LIKE ?"); params.push("%"+vehicle+"%"); }
+  const maxAge = Math.max(1, Math.min(7 * 24 * 60, Number(args.max_age_minutes || 180)));
+  where.push("julianday(last_seen_at) >= julianday('now', ?)");
+  params.push("-" + maxAge + " minutes");
+  const limit = Math.max(1, Math.min(200, Number(args.limit || 50)));
+  const sql = "SELECT * FROM trans_active_transports " + (where.length ? "WHERE " + where.join(" AND ") : "") + " ORDER BY last_seen_at DESC LIMIT ?";
+  params.push(limit);
+  return db.prepare(sql).all(...params).map(transActiveOut);
+}
+function transActiveStatus() {
+  const total = Number(db.prepare("SELECT COUNT(*) c FROM trans_active_transports").get()?.c || 0);
+  const fresh = Number(db.prepare("SELECT COUNT(*) c FROM trans_active_transports WHERE julianday(last_seen_at)>=julianday('now','-180 minutes')").get()?.c || 0);
+  const latest = db.prepare("SELECT last_seen_at,source_url FROM trans_active_transports ORDER BY last_seen_at DESC LIMIT 1").get();
+  return { totalStored: total, freshLast3Hours: fresh, lastCaptureAt: latest?.last_seen_at || null, lastSourceUrl: latest?.source_url || null };
+}
+
 const toolDefs = [
   {
     name: "get_system_overview",
@@ -1251,7 +1355,7 @@ const toolDefs = [
 ];
 
 async function callTool(name, args, req) {
-  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus() };
+  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus(), transActiveCapture: transActiveStatus() };
   if (name === "get_trans_freight_status") return transFreightStatus();
   if (name === "search_trans_freights") { const freights = queryTransFreights(args); return { freights, count: freights.length, ...transFreightStatus() }; }
   if (name === "get_fakturownia_status") {
@@ -1296,7 +1400,8 @@ async function callTool(name, args, req) {
   if (name === "search") {
     const tripResults = queryTrips({ query: args.query }).map(t => ({ id: t.id, type: "trip", title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t }));
     const freightResults = queryTransFreights({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
-    return { results: [...tripResults, ...freightResults], tripResults, freightResults, transFreightCapture: transFreightStatus() };
+    const activeTransportResults = queryTransActive({ query: args.query, max_age_minutes: 180, limit: 100 }).map(t => ({ id: t.id, type: "trans_active_transport", title: (t.startText || "?") + " → " + (t.endText || "?"), ...t }));
+    return { results: [...tripResults, ...freightResults, ...activeTransportResults], tripResults, freightResults, activeTransportResults, transFreightCapture: transFreightStatus(), transActiveCapture: transActiveStatus() };
   }
   if (name === "list_trips") return { trips: queryTrips(args), count: queryTrips(args).length };
   if (name === "get_trip") {
@@ -1673,6 +1778,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req, 4 * 1024 * 1024);
       return json(res, 200, importTransFreights(body));
     }
+    if (p === "/api/trans/active/import" && req.method === "POST") {
+      if (!transCaptureAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
+      const body = await readJson(req, 4 * 1024 * 1024);
+      return json(res, 200, importTransActive(body));
+    }
     if (p.startsWith("/api/")) {
       if (!apiAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
 
@@ -1692,6 +1802,17 @@ const server = http.createServer(async (req, res) => {
         };
         const freights = queryTransFreights(args);
         return json(res, 200, { freights, count: freights.length, ...transFreightStatus() });
+      }
+      if (p === "/api/trans/active/status" && req.method === "GET") return json(res, 200, transActiveStatus());
+      if (p === "/api/trans/active" && req.method === "GET") {
+        const args = {
+          query: url.searchParams.get("q") || undefined,
+          vehicle: url.searchParams.get("vehicle") || undefined,
+          max_age_minutes: url.searchParams.get("max_age_minutes") || undefined,
+          limit: url.searchParams.get("limit") || undefined
+        };
+        const transports = queryTransActive(args);
+        return json(res, 200, { transports, count: transports.length, ...transActiveStatus() });
       }
 
       if (p === "/api/companies" && req.method === "GET") return json(res, 200, { companies: listCompanies() });
