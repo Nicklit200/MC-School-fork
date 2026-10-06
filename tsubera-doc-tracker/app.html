@@ -153,6 +153,23 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="recon-toolbar">
         <div class="field"><label>С даты</label><input type="date" id="reconDateFrom" value="2026-08-11"></div>
         <div class="field"><label>По дату</label><input type="date" id="reconDateTo"></div>
+        <div class="field">
+          <label>Фильтр Rechnung</label>
+          <select id="reconStatusFilter">
+            <option value="all">Все</option>
+            <option value="has_invoice">Есть Rechnung</option>
+            <option value="paid">Оплачено</option>
+            <option value="unpaid">Rechnung есть, не оплачен</option>
+            <option value="partial">Частично оплачен</option>
+            <option value="company_has_invoices">У фирмы есть счета, но этот не найден</option>
+            <option value="no_invoice">Rechnung не найден</option>
+            <option value="check_invoice">Нужно проверить совпадение</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Поиск</label>
+          <input id="reconSearch" placeholder="Auftrag или фирма">
+        </div>
       </div>
       <div id="reconConnection" class="recon-banner warn">Загрузка…</div>
       <div class="recon-stats">
@@ -579,7 +596,25 @@ function renderReconciliation(){
     conn.textContent='Сравниваю '+Number(d.transOrders||0)+' Trans.eu Aufträge со счетами Fakturownia · счетов загружено: '+Number(d.fakturownia?.invoiceCount||0);
   }
 
-  const rows=d.rows||[];
+  const filter=$('reconStatusFilter')?.value||'all';
+  const q=String($('reconSearch')?.value||'').trim().toLowerCase();
+  const rows=(d.rows||[]).filter(r=>{
+    const hasInvoice=!!r.invoiceMatch?.invoice;
+    const action=String(r.action||'');
+    let statusOk=true;
+    if(filter==='has_invoice')statusOk=hasInvoice;
+    else if(filter==='paid')statusOk=action==='paid';
+    else if(filter==='unpaid')statusOk=action==='invoiced';
+    else if(filter==='partial')statusOk=action==='partial';
+    else if(filter==='company_has_invoices')statusOk=action==='company_has_invoices';
+    else if(filter==='no_invoice')statusOk=action==='no_invoice';
+    else if(filter==='check_invoice')statusOk=action==='check_invoice';
+    if(!statusOk)return false;
+    if(!q)return true;
+    const o=r.order||{};
+    const hay=[o.orderNumber,o.company,o.loadText,o.unloadText,r.invoiceMatch?.invoice?.number,r.invoiceCandidate?.invoice?.number].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  });
   $('reconciliationRows').innerHTML=rows.length?rows.map(r=>{
     const o=r.order||{};
     const ref=o.orderNumber||'—';
@@ -597,7 +632,7 @@ function renderReconciliation(){
       '<div>'+reconPaymentCell(r)+'</div>'+
       '<div>'+reconActionLabel(r.action)+'</div>'+
     '</div>';
-  }).join(''):'<div class="recon-empty">Пока нет Trans.eu Aufträge в выбранном периоде.</div>';
+  }).join(''):'<div class="recon-empty">По выбранному фильтру ничего нет.</div>';
 }
 async function loadReconciliation(){
   const from=$('reconDateFrom').value||'2026-08-11';
@@ -628,6 +663,8 @@ $('refreshActiveTransports').onclick=async()=>{await load();setTab('active')};
 $('refreshReconciliation').onclick=loadReconciliation;
 $('reconDateFrom').onchange=()=>{reconciliation=null;loadReconciliation()};
 $('reconDateTo').onchange=()=>{reconciliation=null;loadReconciliation()};
+$('reconStatusFilter').onchange=renderReconciliation;
+$('reconSearch').oninput=renderReconciliation;
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
 $('q').oninput=render;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
