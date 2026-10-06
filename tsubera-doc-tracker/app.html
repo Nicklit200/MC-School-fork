@@ -54,7 +54,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .recon-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px}.recon-toolbar .field{min-width:180px}.recon-toolbar input{width:100%;border:1px solid #dfe3ea;border-radius:10px;padding:10px;background:#fff}
 .recon-banner{padding:11px 13px;border-radius:11px;margin:0 0 14px;font-size:13px}.recon-banner.ok{background:#e8f7ef;color:#087443}.recon-banner.warn{background:#fff4d6;color:#925f00}.recon-banner.bad{background:#fff1f2;color:#be123c}
 .recon-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 14px}.recon-stat{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}.recon-stat b{display:block;font-size:23px;margin-top:4px}.recon-stat span{font-size:12px;color:#6b7280}
-.recon-table{overflow-x:auto;border-top:1px solid #eee}.recon-head,.recon-row{min-width:1180px;display:grid;grid-template-columns:95px 155px minmax(210px,1.35fr) 105px 125px 105px 140px minmax(180px,1fr);gap:0;align-items:center}.recon-head{padding:10px 12px;background:#fafafa;color:#6b7280;font-size:12px;border-bottom:1px solid #eee}.recon-row{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.recon-row:last-child{border-bottom:0}.recon-ref{font-weight:700}.recon-sub{font-size:11px;color:#6b7280;margin-top:3px}.recon-price{font-weight:700}.recon-empty{padding:24px;color:#6b7280;text-align:center}
+.recon-table{overflow-x:auto;border-top:1px solid #eee}.recon-head,.recon-row{min-width:1180px;display:grid;grid-template-columns:95px 155px minmax(220px,1.35fr) 105px 110px 165px 135px minmax(190px,1fr);gap:0;align-items:center}.recon-head{padding:10px 12px;background:#fafafa;color:#6b7280;font-size:12px;border-bottom:1px solid #eee}.recon-row{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.recon-row:last-child{border-bottom:0}.recon-ref{font-weight:700}.recon-sub{font-size:11px;color:#6b7280;margin-top:3px}.recon-price{font-weight:700}.recon-empty{padding:24px;color:#6b7280;text-align:center}
 @media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter{width:100%}.filter-check{padding:4px 0}}
 </style>
 </head>
@@ -146,7 +146,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px">
         <div>
           <h2 style="margin:0 0 5px">Сверка рейсов</h2>
-          <div class="muted">Trans.eu Auftrag ↔ CMR/POD ↔ Fakturownia Rechnung. Если Auftrag есть, но подтверждения выполнения нет, рейс попадает в «Спросить Давида».</div>
+          <div class="muted">Сравниваем Trans.eu напрямую с Fakturownia: фирма → сумма → дата рейса → Rechnung → оплата. CMR в этой сверке не участвует.</div>
         </div>
         <button class="btn alt small" type="button" id="refreshReconciliation">Обновить</button>
       </div>
@@ -157,12 +157,12 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div id="reconConnection" class="recon-banner warn">Загрузка…</div>
       <div class="recon-stats">
         <div class="recon-stat"><span>Trans.eu Aufträge</span><b id="reconOrders">0</b></div>
-        <div class="recon-stat"><span>Нет Rechnung</span><b id="reconNoInvoice">0</b></div>
-        <div class="recon-stat"><span>Спросить Давида</span><b id="reconAskDawid">0</b></div>
-        <div class="recon-stat"><span>Всё сопоставлено</span><b id="reconOk">0</b></div>
+        <div class="recon-stat"><span>Rechnung найден</span><b id="reconMatched">0</b></div>
+        <div class="recon-stat"><span>Оплачено</span><b id="reconPaid">0</b></div>
+        <div class="recon-stat"><span>Нет точного Rechnung</span><b id="reconNoInvoice">0</b></div>
       </div>
       <div class="recon-table">
-        <div class="recon-head"><div>Дата</div><div>Auftrag</div><div>Фирма</div><div>Цена</div><div>Машина</div><div>CMR/POD</div><div>Rechnung</div><div>Действие</div></div>
+        <div class="recon-head"><div>Дата</div><div>Auftrag</div><div>Фирма</div><div>Цена</div><div>Счетов фирмы</div><div>Rechnung</div><div>Оплата</div><div>Статус</div></div>
         <div id="reconciliationRows"></div>
       </div>
     </div>
@@ -525,67 +525,85 @@ function renderActiveTransports(){
 
 function reconActionLabel(action){
   return ({
-    ok:'<span class="status ok">✓ Всё сопоставлено</span>',
-    create_invoice:'<span class="status wait" style="background:#fff1f2;color:#be123c">Нет Rechnung</span>',
-    check_invoice:'<span class="status wait">Проверить Rechnung</span>',
-    ask_dawid:'<span class="status wait">Спросить Давида</span>',
+    paid:'<span class="status ok">✓ Оплачен</span>',
+    invoiced:'<span class="status route">Rechnung выставлен</span>',
+    partial:'<span class="status wait">Частично оплачен</span>',
+    check_invoice:'<span class="status wait">Проверить совпадение</span>',
+    company_has_invoices:'<span class="status wait">У фирмы есть другие счета</span>',
+    no_invoice:'<span class="status wait" style="background:#fff1f2;color:#be123c">Rechnung не найден</span>',
     connect_fakturownia:'<span class="status route">Подключить Fakturownia</span>'
   })[action]||'<span class="status wait">'+esc(action||'Проверить')+'</span>';
 }
 function reconInvoiceCell(r){
   const exact=r.invoiceMatch?.invoice;
-  if(exact)return '<div><b>✓ '+esc(exact.number||'Найден')+'</b><div class="recon-sub">'+esc(exact.buyerName||'')+'</div></div>';
+  if(exact){
+    const d=exact.sellDate||exact.issueDate||'';
+    return '<div><b>✓ '+esc(exact.number||'Найден')+'</b><div class="recon-sub">'+esc(exact.buyerName||'')+(d?' · '+esc(d):'')+'</div></div>';
+  }
   const cand=r.invoiceCandidate?.invoice;
-  if(cand)return '<div><b>? '+esc(cand.number||'Кандидат')+'</b><div class="recon-sub">нужно проверить</div></div>';
+  if(cand){
+    const d=cand.sellDate||cand.issueDate||'';
+    return '<div><b>? '+esc(cand.number||'Кандидат')+'</b><div class="recon-sub">'+esc(cand.buyerName||'')+(d?' · '+esc(d):'')+'</div></div>';
+  }
   return '<span class="muted">Нет</span>';
+}
+function reconPaymentCell(r){
+  const inv=r.invoiceMatch?.invoice;
+  if(!inv)return '<span class="muted">—</span>';
+  const paid=Number(inv.paid||0);
+  const total=Number(inv.totalGross??inv.totalNet??0);
+  if(r.paymentState==='paid')return '<span class="status ok">✓ '+esc(paid||total)+' '+esc(inv.currency||'EUR')+'</span>';
+  if(r.paymentState==='partial')return '<span class="status wait">'+esc(paid)+' / '+esc(total)+' '+esc(inv.currency||'EUR')+'</span>';
+  return '<div><span class="status wait">Не оплачен</span>'+(inv.paymentTo?'<div class="recon-sub">до '+esc(inv.paymentTo)+'</div>':'')+'</div>';
 }
 function renderReconciliation(){
   const d=reconciliation||{rows:[],counts:{},fakturownia:{}};
   const counts=d.counts||{};
+  const matched=Number(counts.paid||0)+Number(counts.invoiced||0)+Number(counts.partial||0);
+  const unresolved=Number(counts.no_invoice||0)+Number(counts.check_invoice||0)+Number(counts.company_has_invoices||0)+Number(counts.connect_fakturownia||0);
   $('reconOrders').textContent=Number(d.transOrders||0);
-  $('reconNoInvoice').textContent=Number(counts.create_invoice||0)+Number(counts.check_invoice||0)+Number(counts.connect_fakturownia||0);
-  $('reconAskDawid').textContent=Number(counts.ask_dawid||0);
-  $('reconOk').textContent=Number(counts.ok||0);
-  $('reconciliationCount').textContent=(Number(counts.create_invoice||0)+Number(counts.check_invoice||0)+Number(counts.ask_dawid||0)+Number(counts.connect_fakturownia||0))?'('+(Number(counts.create_invoice||0)+Number(counts.check_invoice||0)+Number(counts.ask_dawid||0)+Number(counts.connect_fakturownia||0))+')':'';
+  $('reconMatched').textContent=matched;
+  $('reconPaid').textContent=Number(counts.paid||0);
+  $('reconNoInvoice').textContent=unresolved;
+  $('reconciliationCount').textContent=unresolved?'('+unresolved+')':'';
 
   const conn=$('reconConnection');
   if(!d.fakturownia?.configured){
     conn.className='recon-banner warn';
-    conn.textContent='Fakturownia ещё не подключена: добавь FAKTUROWNIA_API_TOKEN в Railway. Trans.eu и CMR/POD уже можно собирать.';
+    conn.textContent='Fakturownia ещё не подключена. Trans.eu уже собран, но сравнить Rechnung пока нельзя.';
   }else if(!d.fakturownia?.reachable){
     conn.className='recon-banner bad';
     conn.textContent='Fakturownia подключена, но API сейчас недоступен: '+(d.fakturownia?.error||'проверь соединение');
   }else{
     conn.className='recon-banner ok';
-    conn.textContent='Fakturownia подключена · счетов в выбранном периоде: '+Number(d.fakturownia?.invoiceCount||0);
+    conn.textContent='Сравниваю '+Number(d.transOrders||0)+' Trans.eu Aufträge со счетами Fakturownia · счетов загружено: '+Number(d.fakturownia?.invoiceCount||0);
   }
 
   const rows=d.rows||[];
   $('reconciliationRows').innerHTML=rows.length?rows.map(r=>{
-    const o=r.order||{},t=r.trip||{};
-    const ref=o.orderNumber||t.trip||t.internalTripId||'—';
-    const company=t.customer||o.company||'—';
-    const price=t.priceEur??o.priceAmount;
+    const o=r.order||{};
+    const ref=o.orderNumber||'—';
+    const company=o.company||'—';
+    const price=o.priceAmount;
     const curr=o.currency||'EUR';
-    const plate=o.vehiclePlate||(t.vehiclePlates||[]).join(', ')||'—';
-    const route=(o.loadText||t.loadingPlace||'')&& (o.unloadText||t.unloadingPlace||'') ? (o.loadText||t.loadingPlace)+' → '+(o.unloadText||t.unloadingPlace) : '';
+    const route=(o.loadText&&o.unloadText)?o.loadText+' → '+o.unloadText:'';
     return '<div class="recon-row">'+
       '<div>'+esc(r.date||'—')+'</div>'+
       '<div><div class="recon-ref">'+esc(ref)+'</div>'+(route?'<div class="recon-sub">'+esc(route)+'</div>':'')+'</div>'+
       '<div>'+esc(company)+'</div>'+
       '<div class="recon-price">'+(price==null?'—':esc(price)+' '+esc(curr))+'</div>'+
-      '<div>'+esc(plate)+'</div>'+
-      '<div>'+(r.cmrPresent?'<span class="status ok">✓ Есть</span>':'<span class="status wait">Нет</span>')+'</div>'+
+      '<div>'+(Number(r.companyInvoiceCount||0)?'<b>'+Number(r.companyInvoiceCount||0)+'</b>':'<span class="muted">0</span>')+'</div>'+
       '<div>'+reconInvoiceCell(r)+'</div>'+
+      '<div>'+reconPaymentCell(r)+'</div>'+
       '<div>'+reconActionLabel(r.action)+'</div>'+
     '</div>';
-  }).join(''):'<div class="recon-empty">Пока нет данных для сверки. Сначала собери Trans.eu Aufträge через расширение.</div>';
+  }).join(''):'<div class="recon-empty">Пока нет Trans.eu Aufträge в выбранном периоде.</div>';
 }
 async function loadReconciliation(){
   const from=$('reconDateFrom').value||'2026-08-11';
   const to=$('reconDateTo').value||new Date().toISOString().slice(0,10);
   $('reconConnection').className='recon-banner warn';
-  $('reconConnection').textContent='Сверяю Trans.eu, CMR/POD и Fakturownia…';
+  $('reconConnection').textContent='Сверяю Trans.eu с Fakturownia…';
   try{
     reconciliation=await api('/api/reconciliation?date_from='+encodeURIComponent(from)+'&date_to='+encodeURIComponent(to));
     renderReconciliation();
