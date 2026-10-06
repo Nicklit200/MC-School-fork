@@ -1362,6 +1362,18 @@ function bestTripForOrder(order,trips,claimedTripIds) {
   if (priced.length===1) return { trip:priced[0], confidence:"date_price" };
   return { trip:null, confidence:"" };
 }
+function transOrderServiceDate(order) {
+  const values = [order?.loadWindowText, order?.unloadWindowText];
+  for (const v of values) {
+    const s = String(v || "");
+    let m = s.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+    if (m) return m[1]+"-"+m[2]+"-"+m[3];
+    m = s.match(/\b(\d{2})\.(\d{2})\.(20\d{2})\b/);
+    if (m) return m[3]+"-"+m[2]+"-"+m[1];
+  }
+  return order?.date || "";
+}
+
 function invoiceMatchForRefs(invoices,{refs=[],company="",amount=null,date=""}={}) {
   const strongRefs = refs.map(reconRef).filter(x => x.length>=5);
   const companyNorm = reconNorm(company);
@@ -1441,7 +1453,7 @@ async function buildReconciliation(args={}) {
       refs:[order.orderNumber].filter(Boolean),
       company,
       amount,
-      date:order.date||""
+      date:transOrderServiceDate(order)
     });
 
     const exact = !!im.invoice;
