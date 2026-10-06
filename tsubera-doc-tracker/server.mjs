@@ -15,6 +15,7 @@ const SITE_PASSWORD = process.env.SITE_PASSWORD || "";
 const CONNECTOR_TOKEN = process.env.CONNECTOR_TOKEN || "";
 const FAKTUROWNIA_BASE_URL = (process.env.FAKTUROWNIA_BASE_URL || "").trim().replace(/\/+$/, "");
 const FAKTUROWNIA_API_TOKEN = (process.env.FAKTUROWNIA_API_TOKEN || "").trim();
+const TRANS_CAPTURE_MAX_ROWS = 500;
 
 fs.mkdirSync(DOCS_DIR, { recursive: true });
 const db = new DatabaseSync(DB_PATH);
@@ -80,6 +81,29 @@ CREATE TABLE IF NOT EXISTS companies (
 );
 CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active);
+CREATE TABLE IF NOT EXISTS trans_freights (
+  id TEXT PRIMARY KEY,
+  fingerprint TEXT NOT NULL UNIQUE,
+  load_text TEXT NOT NULL DEFAULT '',
+  unload_text TEXT NOT NULL DEFAULT '',
+  vehicle_text TEXT NOT NULL DEFAULT '',
+  weight_t REAL,
+  distance_km INTEGER,
+  price_amount REAL,
+  currency TEXT NOT NULL DEFAULT '',
+  payment_days INTEGER,
+  company TEXT NOT NULL DEFAULT '',
+  company_rating REAL,
+  published_text TEXT NOT NULL DEFAULT '',
+  raw_text TEXT NOT NULL,
+  source_url TEXT NOT NULL DEFAULT '',
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  seen_count INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_trans_freights_last_seen ON trans_freights(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_trans_freights_route ON trans_freights(load_text, unload_text);
+CREATE INDEX IF NOT EXISTS idx_trans_freights_company ON trans_freights(company);
 `);
 
 const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
@@ -718,11 +742,154 @@ function queryTrips(args = {}) {
   }));
 }
 
+function transClean(value, max = 4000) {
+  return String(value ?? "").replace(/\u0000/g, "").replace(/\r/g, "").trim().slice(0, max);
+}
+function transNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const normalized = String(value).replace(/\s/g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+function transInteger(value) {
+  const n = transNumber(value);
+  return n === null ? null : Math.round(n);
+}
+function transFingerprint(offer) {
+  const stable = [
+    transClean(offer.loadText, 240).toLowerCase(),
+    transClean(offer.unloadText, 240).toLowerCase(),
+    transClean(offer.vehicleText, 500).toLowerCase(),
+    transClean(offer.priceAmount, 40),
+    transClean(offer.currency, 12).toUpperCase(),
+    transClean(offer.company, 240).toLowerCase(),
+    transClean(offer.publishedText, 120).toLowerCase(),
+    transClean(offer.rawText, 3500).toLowerCase().replace(/\b\d{2}:\d{2}(?::\d{2})?\b/g, "").replace(/\s+/g, " ")
+  ].join("|");
+  return crypto.createHash("sha256").update(stable).digest("hex");
+}
+function transFreightOut(row) {
+  return row ? {
+    id: row.id,
+    loadText: row.load_text || "",
+    unloadText: row.unload_text || "",
+    vehicleText: row.vehicle_text || "",
+    weightT: row.weight_t === null || row.weight_t === undefined ? null : Number(row.weight_t),
+    distanceKm: row.distance_km === null || row.distance_km === undefined ? null : Number(row.distance_km),
+    priceAmount: row.price_amount === null || row.price_amount === undefined ? null : Number(row.price_amount),
+    currency: row.currency || "",
+    paymentDays: row.payment_days === null || row.payment_days === undefined ? null : Number(row.payment_days),
+    company: row.company || "",
+    companyRating: row.company_rating === null || row.company_rating === undefined ? null : Number(row.company_rating),
+    publishedText: row.published_text || "",
+    rawText: row.raw_text || "",
+    sourceUrl: row.source_url || "",
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    seenCount: Number(row.seen_count || 0)
+  } : null;
+}
+function importTransFreights(body = {}) {
+  const offers = Array.isArray(body.offers) ? body.offers.slice(0, TRANS_CAPTURE_MAX_ROWS) : [];
+  const observedAtRaw = transClean(body.scannedAt, 80);
+  const observedAt = /^\d{4}-\d{2}-\d{2}T/.test(observedAtRaw) ? observedAtRaw : now();
+  const sourceUrl = transClean(body.pageUrl, 1500);
+  let inserted = 0, updated = 0, ignored = 0;
+  const upsert = db.prepare("INSERT INTO trans_freights (id,fingerprint,load_text,unload_text,vehicle_text,weight_t,distance_km,price_amount,currency,payment_days,company,company_rating,published_text,raw_text,source_url,first_seen_at,last_seen_at,seen_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1) ON CONFLICT(fingerprint) DO UPDATE SET load_text=excluded.load_text,unload_text=excluded.unload_text,vehicle_text=excluded.vehicle_text,weight_t=excluded.weight_t,distance_km=excluded.distance_km,price_amount=excluded.price_amount,currency=excluded.currency,payment_days=excluded.payment_days,company=excluded.company,company_rating=excluded.company_rating,published_text=excluded.published_text,raw_text=excluded.raw_text,source_url=excluded.source_url,last_seen_at=excluded.last_seen_at,seen_count=trans_freights.seen_count+1");
+  for (const raw of offers) {
+    const rawText = transClean(raw?.rawText, 8000);
+    const loadText = transClean(raw?.loadText, 300);
+    const unloadText = transClean(raw?.unloadText, 300);
+    if (!rawText || (!loadText && !unloadText)) { ignored++; continue; }
+    const offer = {
+      loadText, unloadText,
+      vehicleText: transClean(raw?.vehicleText, 1000),
+      weightT: transNumber(raw?.weightT),
+      distanceKm: transInteger(raw?.distanceKm),
+      priceAmount: transNumber(raw?.priceAmount),
+      currency: transClean(raw?.currency, 12).toUpperCase(),
+      paymentDays: transInteger(raw?.paymentDays),
+      company: transClean(raw?.company, 300),
+      companyRating: transNumber(raw?.companyRating),
+      publishedText: transClean(raw?.publishedText, 180),
+      rawText
+    };
+    const fp = transFingerprint(offer);
+    const exists = db.prepare("SELECT id FROM trans_freights WHERE fingerprint=?").get(fp);
+    const id = exists?.id || crypto.randomUUID();
+    upsert.run(id, fp, offer.loadText, offer.unloadText, offer.vehicleText, offer.weightT, offer.distanceKm, offer.priceAmount, offer.currency, offer.paymentDays, offer.company, offer.companyRating, offer.publishedText, offer.rawText, sourceUrl, observedAt, observedAt);
+    if (exists) updated++; else inserted++;
+  }
+  db.prepare("DELETE FROM trans_freights WHERE julianday(last_seen_at) < julianday('now','-14 days')").run();
+  return { received: offers.length, inserted, updated, ignored, scannedAt: observedAt };
+}
+function queryTransFreights(args = {}) {
+  const where = [];
+  const params = [];
+  const q = transClean(args.query, 300);
+  if (q) {
+    const like = "%" + q.toLowerCase() + "%";
+    where.push("(LOWER(load_text) LIKE ? OR LOWER(unload_text) LIKE ? OR LOWER(vehicle_text) LIKE ? OR LOWER(company) LIKE ? OR LOWER(raw_text) LIKE ?)");
+    params.push(like, like, like, like, like);
+  }
+  const from = transClean(args.from, 120);
+  if (from) { where.push("LOWER(load_text) LIKE ?"); params.push("%" + from.toLowerCase() + "%"); }
+  const to = transClean(args.to, 120);
+  if (to) { where.push("LOWER(unload_text) LIKE ?"); params.push("%" + to.toLowerCase() + "%"); }
+  const currency = transClean(args.currency, 12).toUpperCase();
+  if (currency) { where.push("currency=?"); params.push(currency); }
+  const minPrice = transNumber(args.min_price);
+  if (minPrice !== null) { where.push("price_amount>=?"); params.push(minPrice); }
+  const minRating = transNumber(args.min_rating);
+  if (minRating !== null) { where.push("company_rating>=?"); params.push(minRating); }
+  const maxDistance = transInteger(args.max_distance_km);
+  if (maxDistance !== null) { where.push("(distance_km IS NULL OR distance_km<=?)"); params.push(maxDistance); }
+  const maxAge = Math.max(1, Math.min(14 * 24 * 60, Number(args.max_age_minutes || 180)));
+  where.push("julianday(last_seen_at) >= julianday('now', ?)");
+  params.push("-" + maxAge + " minutes");
+  const limit = Math.max(1, Math.min(200, Number(args.limit || 50)));
+  const sql = "SELECT * FROM trans_freights " + (where.length ? "WHERE " + where.join(" AND ") : "") + " ORDER BY last_seen_at DESC, price_amount DESC LIMIT ?";
+  params.push(limit);
+  return db.prepare(sql).all(...params).map(transFreightOut);
+}
+function transFreightStatus() {
+  const total = Number(db.prepare("SELECT COUNT(*) c FROM trans_freights").get()?.c || 0);
+  const fresh = Number(db.prepare("SELECT COUNT(*) c FROM trans_freights WHERE julianday(last_seen_at)>=julianday('now','-180 minutes')").get()?.c || 0);
+  const latest = db.prepare("SELECT last_seen_at,source_url FROM trans_freights ORDER BY last_seen_at DESC LIMIT 1").get();
+  return { totalStored: total, freshLast3Hours: fresh, lastCaptureAt: latest?.last_seen_at || null, lastSourceUrl: latest?.source_url || null };
+}
+
 const toolDefs = [
   {
     name: "get_system_overview",
     description: "Return a read-only overview of the Tsubera transport document system, counts, storage locations and readiness totals.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "get_trans_freight_status",
+    description: "Check when the Chrome extension last captured Trans.eu freight offers and how many recent offers are stored. Only offers rendered in the user logged-in Trans.eu browser session are available.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "search_trans_freights",
+    description: "Search freight offers captured from the user Trans.eu Fracht suchen page by the Tsubera Chrome extension. Captured data can be incomplete because only offers actually rendered in the browser are stored.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        from: { type: "string" },
+        to: { type: "string" },
+        currency: { type: "string" },
+        min_price: { type: "number" },
+        min_rating: { type: "number" },
+        max_distance_km: { type: "integer" },
+        max_age_minutes: { type: "integer", minimum: 1, maximum: 20160 },
+        limit: { type: "integer", minimum: 1, maximum: 200 }
+      },
+      additionalProperties: false
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
   {
@@ -1069,6 +1236,8 @@ const toolDefs = [
 
 async function callTool(name, args, req) {
   if (name === "get_system_overview") return systemOverview();
+  if (name === "get_trans_freight_status") return transFreightStatus();
+  if (name === "search_trans_freights") { const freights = queryTransFreights(args); return { freights, count: freights.length, ...transFreightStatus() }; }
   if (name === "get_fakturownia_status") {
     const baseUrl = FAKTUROWNIA_BASE_URL || null;
     if (!fakturowniaConfigured()) return { configured: false, reachable: false, baseUrl, missing: [!FAKTUROWNIA_BASE_URL ? "FAKTUROWNIA_BASE_URL" : null, !FAKTUROWNIA_API_TOKEN ? "FAKTUROWNIA_API_TOKEN" : null].filter(Boolean) };
@@ -1470,10 +1639,38 @@ const server = http.createServer(async (req, res) => {
       return json(res, 201, result);
     }
 
+    if (p.startsWith("/api/trans/")) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "content-type,x-app-password,authorization");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      if (req.method === "OPTIONS") return res.writeHead(204).end();
+    }
+
+    if (p === "/api/trans/freights/import" && req.method === "POST") {
+      if (!apiAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
+      const body = await readJson(req, 4 * 1024 * 1024);
+      return json(res, 200, importTransFreights(body));
+    }
     if (p.startsWith("/api/")) {
       if (!apiAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
 
       if (p === "/api/overview" && req.method === "GET") return json(res, 200, systemOverview());
+      if (p === "/api/trans/status" && req.method === "GET") return json(res, 200, transFreightStatus());
+      if (p === "/api/trans/freights" && req.method === "GET") {
+        const args = {
+          query: url.searchParams.get("q") || undefined,
+          from: url.searchParams.get("from") || undefined,
+          to: url.searchParams.get("to") || undefined,
+          currency: url.searchParams.get("currency") || undefined,
+          min_price: url.searchParams.get("min_price") || undefined,
+          min_rating: url.searchParams.get("min_rating") || undefined,
+          max_distance_km: url.searchParams.get("max_distance_km") || undefined,
+          max_age_minutes: url.searchParams.get("max_age_minutes") || undefined,
+          limit: url.searchParams.get("limit") || undefined
+        };
+        const freights = queryTransFreights(args);
+        return json(res, 200, { freights, count: freights.length, ...transFreightStatus() });
+      }
 
       if (p === "/api/companies" && req.method === "GET") return json(res, 200, { companies: listCompanies() });
       if (p === "/api/companies" && req.method === "POST") {
