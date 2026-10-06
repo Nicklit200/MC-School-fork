@@ -868,3 +868,73 @@ h1{
   .floating-toolbar{gap:2px}
   .toolbar-separator{display:none}
 }
+
+
+/* Miro-style compact overlays: the board stays visually dominant */
+.floating-topbar{
+  top:12px;
+  left:12px;
+  right:12px;
+  min-height:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  backdrop-filter:none;
+  grid-template-columns:auto minmax(260px,420px) auto;
+  pointer-events:none;
+}
+.floating-topbar > *{pointer-events:auto}
+.brand-block,.top-search,.top-status{
+  background:rgba(255,255,255,.92);
+  border:1px solid rgba(220,227,237,.96);
+  box-shadow:var(--shadow-soft);
+  backdrop-filter:blur(18px);
+}
+.brand-block{
+  width:max-content;
+  max-width:300px;
+  padding:8px 10px;
+  border-radius:14px;
+}
+.brand-mark{width:32px;height:32px;flex-basis:32px;border-radius:9px}
+.brand-copy .eyebrow{display:none}
+h1{font-size:15px;margin:0}
+.top-search{height:40px;border-radius:14px}
+.top-status{
+  justify-self:end;
+  padding:6px;
+  border-radius:14px;
+}
+.updated{display:none}
+.readiness-pill{height:32px;border:0;background:transparent;padding:0 8px}
+.readiness-pill strong{font-size:17px}
+
+.left-panel{
+  top:68px;
+  bottom:72px;
+  width:244px;
+}
+.left-toggle{
+  top:68px;
+  left:250px;
+  width:38px;
+  height:38px;
+  border-radius:12px;
+  font-size:16px;
+  font-weight:900;
+}
+.left-toggle.collapsed{left:12px}
+.exam-cards{display:none}
+.list-view-panel{
+  top:68px;
+  left:12px;
+  right:12px;
+  bottom:72px;
+}
+.inspector,.history-panel{
+  top:68px;
+  bottom:72px;
+}
+.board-help{opacity:.72}
