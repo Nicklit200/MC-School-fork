@@ -14,58 +14,15 @@
           "sourceDocuments": [
             {
               "title": "GE_SWEG_Skript_202627_Orga.pdf",
-              "type": "Vorlesungsskript",
-              "coverage": "Organisation und Einführung, Seiten 1-30"
+              "type": "Präsentation 1 / Vorlesungsskript",
+              "coverage": "Organisation und Einführung, Seiten 1-30",
+              "note": "Nur die erste hochgeladene Präsentation; weitere Themen werden erst aus späteren Unterlagen ergänzt."
             }
           ],
           "topics": [
             {
               "id": "se-intro",
               "title": "Einführung"
-            },
-            {
-              "id": "se-process-1",
-              "title": "Vorgehensmodelle 1"
-            },
-            {
-              "id": "se-requirements",
-              "title": "Anforderungsanalyse"
-            },
-            {
-              "id": "se-metrics",
-              "title": "Qualitätssicherung durch Metriken"
-            },
-            {
-              "id": "se-architecture",
-              "title": "Architektur"
-            },
-            {
-              "id": "se-design",
-              "title": "Design"
-            },
-            {
-              "id": "se-programming",
-              "title": "Programmierung, Metriken"
-            },
-            {
-              "id": "se-test",
-              "title": "Test"
-            },
-            {
-              "id": "se-deployment",
-              "title": "Deployment"
-            },
-            {
-              "id": "se-refactoring",
-              "title": "Refactoring"
-            },
-            {
-              "id": "se-process-2",
-              "title": "Vorgehensmodelle 2"
-            },
-            {
-              "id": "se-final",
-              "title": "Schlussbemerkungen"
             }
           ],
           "skills": [
@@ -198,188 +155,6 @@
               "x": 280,
               "y": 500,
               "evidence": []
-            },
-            {
-              "id": "se-skill-process-models-1",
-              "topicId": "se-process-1",
-              "title": "Vorgehensmodelle kennen und vergleichen",
-              "subtitle": "Stärken und Schwächen",
-              "description": "Verschiedene Vorgehensmodelle zur Software-Erstellung kennen, ihre Stärken und Schwächen erklären und vergleichen.",
-              "mastery": 0,
-              "weight": 1.2,
-              "lastUpdated": null,
-              "x": 620,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-uml",
-              "topicId": "se-requirements",
-              "title": "UML verstehen und anwenden",
-              "subtitle": "Modellierung in verschiedenen Phasen",
-              "description": "UML zur Modellierung in verschiedenen Phasen der Software-Erstellung verstehen und anwenden.",
-              "mastery": 0,
-              "weight": 1.2,
-              "lastUpdated": null,
-              "x": 960,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-use-cases",
-              "topicId": "se-requirements",
-              "title": "OO-Anforderungsanalyse mit Use Cases",
-              "subtitle": "OOA",
-              "description": "Objektorientierte Anforderungsanalyse mit Use Cases verstehen und anwenden.",
-              "mastery": 0,
-              "weight": 1.2,
-              "lastUpdated": null,
-              "x": 960,
-              "y": 660,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-analysis-patterns",
-              "topicId": "se-requirements",
-              "title": "Analysemuster anwenden",
-              "subtitle": "Analysis Patterns",
-              "description": "Analysemuster verstehen, erkennen und in der Anforderungsanalyse anwenden.",
-              "mastery": 0,
-              "weight": 1,
-              "lastUpdated": null,
-              "x": 960,
-              "y": 820,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-quality-metrics",
-              "topicId": "se-metrics",
-              "title": "Metriken zur Qualitätssicherung",
-              "subtitle": "Qualität messen",
-              "description": "Metriken zur Qualitätssicherung verstehen und anwenden.",
-              "mastery": 0,
-              "weight": 1.1,
-              "lastUpdated": null,
-              "x": 1300,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-architecture",
-              "topicId": "se-architecture",
-              "title": "Software-Architektur erstellen",
-              "subtitle": "Architektur",
-              "description": "Eine Software-Architektur für eine Anwendung erstellen und begründen.",
-              "mastery": 0,
-              "weight": 1.3,
-              "lastUpdated": null,
-              "x": 1640,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-oo-design",
-              "topicId": "se-design",
-              "title": "OO Design erstellen",
-              "subtitle": "OOD",
-              "description": "Ein objektorientiertes Design einer Anwendung erstellen.",
-              "mastery": 0,
-              "weight": 1.3,
-              "lastUpdated": null,
-              "x": 1980,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-design-patterns",
-              "topicId": "se-design",
-              "title": "Fortgeschrittene Entwurfsmuster",
-              "subtitle": "Design Patterns",
-              "description": "Fortgeschrittene Entwurfsmuster verstehen, auswählen und anwenden.",
-              "mastery": 0,
-              "weight": 1.2,
-              "lastUpdated": null,
-              "x": 1980,
-              "y": 660,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-programming",
-              "topicId": "se-programming",
-              "title": "Implementierung in OO-Sprache",
-              "subtitle": "Java · C++ · C#",
-              "description": "Die im Kurs geforderte Programmiersprache Java, C++ oder C# zur Umsetzung eines Designs anwenden.",
-              "mastery": 0,
-              "weight": 1,
-              "lastUpdated": null,
-              "x": 2320,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-testing",
-              "topicId": "se-test",
-              "title": "Systematische Testfallermittlung",
-              "subtitle": "Testfälle ableiten",
-              "description": "Methoden zur systematischen Ermittlung von Testfällen verstehen und anwenden.",
-              "mastery": 0,
-              "weight": 1.2,
-              "lastUpdated": null,
-              "x": 2660,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-deployment",
-              "topicId": "se-deployment",
-              "title": "Deployment im Software Engineering",
-              "subtitle": "Übergabe und Deployment",
-              "description": "Deployment als Bestandteil des Software Engineerings einordnen; Detailfähigkeiten werden mit den entsprechenden Vorlesungsunterlagen ergänzt.",
-              "mastery": 0,
-              "weight": 0.8,
-              "lastUpdated": null,
-              "x": 3000,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-refactoring",
-              "topicId": "se-refactoring",
-              "title": "Refactoring verstehen und anwenden",
-              "subtitle": "Struktur verbessern",
-              "description": "Refactoring verstehen und anwenden; konkrete Techniken werden mit den entsprechenden Vorlesungsunterlagen ergänzt.",
-              "mastery": 0,
-              "weight": 1.1,
-              "lastUpdated": null,
-              "x": 3340,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-process-models-2",
-              "topicId": "se-process-2",
-              "title": "Vorgehensmodelle vertiefen",
-              "subtitle": "Vorgehensmodelle 2",
-              "description": "Weiterführende Vorgehensmodelle verstehen und vergleichen; konkrete Inhalte werden mit dem späteren Skript ergänzt.",
-              "mastery": 0,
-              "weight": 1,
-              "lastUpdated": null,
-              "x": 3680,
-              "y": 500,
-              "evidence": []
-            },
-            {
-              "id": "se-skill-enterprise-architect",
-              "topicId": "se-architecture",
-              "title": "Enterprise Architect einordnen",
-              "subtitle": "Optionales Modellierungstool",
-              "description": "Enterprise Architect als optionales Modellierungstool einordnen, insbesondere für UML, Codegenerierung, BPMN, ER-Diagramme, SysML und Mindmaps.",
-              "mastery": 0,
-              "weight": 0.4,
-              "lastUpdated": null,
-              "x": 1640,
-              "y": 680,
-              "evidence": []
             }
           ],
           "relations": [
@@ -414,42 +189,6 @@
             {
               "from": "se-skill-se-scope",
               "to": "se-skill-software-process"
-            },
-            {
-              "from": "se-skill-software-process",
-              "to": "se-skill-process-models-1"
-            },
-            {
-              "from": "se-skill-process-models-1",
-              "to": "se-skill-use-cases"
-            },
-            {
-              "from": "se-skill-use-cases",
-              "to": "se-skill-architecture"
-            },
-            {
-              "from": "se-skill-architecture",
-              "to": "se-skill-oo-design"
-            },
-            {
-              "from": "se-skill-oo-design",
-              "to": "se-skill-programming"
-            },
-            {
-              "from": "se-skill-programming",
-              "to": "se-skill-testing"
-            },
-            {
-              "from": "se-skill-testing",
-              "to": "se-skill-deployment"
-            },
-            {
-              "from": "se-skill-deployment",
-              "to": "se-skill-refactoring"
-            },
-            {
-              "from": "se-skill-refactoring",
-              "to": "se-skill-process-models-2"
             }
           ]
         }
