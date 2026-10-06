@@ -86,6 +86,30 @@ async function pushActiveTransports(payload) {
   return { ok: true, ...data };
 }
 
+
+async function pushOrders(payload) {
+  const cfg = await settings();
+  if (!cfg.enabled) return { ok: false, disabled: true, message: "Capture disabled" };
+  if (!cfg.capturePassword) return { ok: false, needsPassword: true, message: "Set capture password" };
+  const res = await fetch(cfg.apiBase + "/api/trans/orders/import", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-tsubera-capture-token": cfg.capturePassword
+    },
+    body: JSON.stringify(payload)
+  });
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data?.error || ("HTTP " + res.status));
+  await chrome.storage.local.set({
+    lastOrderPushAt: new Date().toISOString(),
+    lastOrderPushCount: Number(data?.received || 0),
+    lastOrderPushResult: data
+  });
+  return { ok: true, ...data };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "tsubera:pushCapture") {
     pushCapture(msg.payload || {})
@@ -101,6 +125,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "tsubera:pushActiveTransports") {
     pushActiveTransports(msg.payload || {})
+      .then(sendResponse)
+      .catch(error => sendResponse({ ok: false, error: error.message || String(error) }));
+    return true;
+  }
+  if (msg?.type === "tsubera:pushOrders") {
+    pushOrders(msg.payload || {})
       .then(sendResponse)
       .catch(error => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
