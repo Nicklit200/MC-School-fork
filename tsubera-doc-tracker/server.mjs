@@ -16,6 +16,7 @@ const CONNECTOR_TOKEN = process.env.CONNECTOR_TOKEN || "";
 const FAKTUROWNIA_BASE_URL = (process.env.FAKTUROWNIA_BASE_URL || "").trim().replace(/\/+$/, "");
 const FAKTUROWNIA_API_TOKEN = (process.env.FAKTUROWNIA_API_TOKEN || "").trim();
 const TRANS_CAPTURE_MAX_ROWS = 500;
+const TRANS_CAPTURE_TOKEN = (process.env.TRANS_CAPTURE_TOKEN || "").trim();
 
 fs.mkdirSync(DOCS_DIR, { recursive: true });
 const db = new DatabaseSync(DB_PATH);
@@ -479,6 +480,11 @@ function apiAuthorized(req) {
   const h = req.headers["x-app-password"];
   const a = req.headers.authorization;
   return h === SITE_PASSWORD || a === "Bearer " + SITE_PASSWORD;
+}
+function transCaptureAuthorized(req) {
+  const token = req.headers["x-tsubera-capture-token"];
+  if (TRANS_CAPTURE_TOKEN && token === TRANS_CAPTURE_TOKEN) return true;
+  return apiAuthorized(req);
 }
 function mcpAuthorized(token) {
   return !!CONNECTOR_TOKEN && token === CONNECTOR_TOKEN;
@@ -1643,13 +1649,13 @@ const server = http.createServer(async (req, res) => {
 
     if (p.startsWith("/api/trans/")) {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "content-type,x-app-password,authorization");
+      res.setHeader("Access-Control-Allow-Headers", "content-type,x-app-password,authorization,x-tsubera-capture-token");
       res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
       if (req.method === "OPTIONS") return res.writeHead(204).end();
     }
 
     if (p === "/api/trans/freights/import" && req.method === "POST") {
-      if (!apiAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
+      if (!transCaptureAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
       const body = await readJson(req, 4 * 1024 * 1024);
       return json(res, 200, importTransFreights(body));
     }
