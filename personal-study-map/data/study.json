@@ -6,7 +6,454 @@
     {
       "id": "ws-2026-27",
       "title": "Wintersemester 2026/27",
-      "exams": []
+      "exams": [
+        {
+          "id": "exam-software-engineering",
+          "title": "Software Engineering",
+          "weight": 1,
+          "sourceDocuments": [
+            {
+              "title": "GE_SWEG_Skript_202627_Orga.pdf",
+              "type": "Vorlesungsskript",
+              "coverage": "Organisation und Einführung, Seiten 1-30"
+            }
+          ],
+          "topics": [
+            {
+              "id": "se-intro",
+              "title": "Einführung"
+            },
+            {
+              "id": "se-process-1",
+              "title": "Vorgehensmodelle 1"
+            },
+            {
+              "id": "se-requirements",
+              "title": "Anforderungsanalyse"
+            },
+            {
+              "id": "se-metrics",
+              "title": "Qualitätssicherung durch Metriken"
+            },
+            {
+              "id": "se-architecture",
+              "title": "Architektur"
+            },
+            {
+              "id": "se-design",
+              "title": "Design"
+            },
+            {
+              "id": "se-programming",
+              "title": "Programmierung, Metriken"
+            },
+            {
+              "id": "se-test",
+              "title": "Test"
+            },
+            {
+              "id": "se-deployment",
+              "title": "Deployment"
+            },
+            {
+              "id": "se-refactoring",
+              "title": "Refactoring"
+            },
+            {
+              "id": "se-process-2",
+              "title": "Vorgehensmodelle 2"
+            },
+            {
+              "id": "se-final",
+              "title": "Schlussbemerkungen"
+            }
+          ],
+          "skills": [
+            {
+              "id": "se-skill-software-definition",
+              "topicId": "se-intro",
+              "title": "Software ≠ nur Computerprogramm",
+              "subtitle": "Was ist Software?",
+              "description": "Erklären, dass Software aus mehr als Programmen besteht und Programme, Konfigurationsdateien, Datenbank, Entwickler- und Benutzerdokumentation, Hilfedateien sowie Webseiten umfassen kann.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-software-components",
+              "topicId": "se-intro",
+              "title": "Bestandteile von Software",
+              "subtitle": "Programme · Konfiguration · DB · Dokumentation",
+              "description": "Die im Skript genannten Bestandteile von Software vollständig aufzählen und ihre Rolle einordnen.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 0,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-software-crisis",
+              "topicId": "se-intro",
+              "title": "Softwarekrise erklären",
+              "subtitle": "1960er · NATO 1968 · Komplexität",
+              "description": "Erklären, was mit Softwarekrise gemeint ist, warum sie entstand und welche Bedeutung die NATO-Tagung 1968 in Garmisch-Partenkirchen für den Begriff Softwareengineering hatte.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 160,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-se-definition",
+              "topicId": "se-intro",
+              "title": "Software Engineering definieren",
+              "subtitle": "Große Systeme · Komplexitätsbewältigung",
+              "description": "Software Engineering als Entwicklung großer Systeme erklären und Komplexitätsbewältigung, Zusammenarbeit von Personen, Benutzerunterstützung und den Balanceakt im Software Engineering beschreiben.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 160,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-se-scope",
+              "topicId": "se-intro",
+              "title": "Umfang des Software Engineerings",
+              "subtitle": "Von Spezifikation bis Betrieb",
+              "description": "Die im Skript genannten Aspekte des Software Engineerings einordnen: Spezifikation, Analyse, Architektur, Design, Programmierung, Test, Deployment, Wartung, Betrieb, Projektmanagement, Metriken, Aufwandsschätzung, Change-, Qualitäts- und Konfigurationsmanagement sowie Methoden, Vorgehensmodelle, Theorien und Tools.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 560,
+              "y": 160,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-software-types",
+              "topicId": "se-intro",
+              "title": "Produkt- vs. projektbasierte Software",
+              "subtitle": "Arten von Software",
+              "description": "Produktbasierte und projektbasierte Software unterscheiden und erklären, wer jeweils die Spezifikation bzw. Anforderungen bestimmt.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 320,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-project-flow",
+              "topicId": "se-intro",
+              "title": "Projektbasiertes Software Engineering",
+              "subtitle": "Kunde → Anforderungen → Software",
+              "description": "Den im Skript gezeigten Ablauf erläutern: Kundin/Kunde hat ein Problem, Anforderungen entstehen mit Entwickler:in, werden implementiert und die Software unterstützt bei der Lösung des Problems.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 320,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-product-flow",
+              "topicId": "se-intro",
+              "title": "Produktbasiertes Software Engineering",
+              "subtitle": "Entwickler:in → Anforderungen → Software",
+              "description": "Den im Skript gezeigten Ablauf erläutern: Entwickler:innen erkennen ein Problem, formulieren daraus Anforderungen, implementieren Software und realisieren damit die Lösung.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 560,
+              "y": 320,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-project-product-compare",
+              "topicId": "se-intro",
+              "title": "Projekt und Produkt vergleichen",
+              "subtitle": "Anforderungen · Support · Zeitplan · Time-to-market",
+              "description": "Projekt- und Produktentwicklung hinsichtlich Entscheidung über Anforderungen, Weiterentwicklung/Support, Ende des Supports bzw. Produktlebenszyklus und Zeitprioritäten vergleichen.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 840,
+              "y": 320,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-software-process",
+              "topicId": "se-intro",
+              "title": "Softwareprozess definieren",
+              "subtitle": "Tätigkeiten · Verantwortlichkeiten · Ergebnisse",
+              "description": "Einen Softwareprozess definieren und die vier im Skript genannten Aktivitäten erklären: Softwarespezifikation, Softwareentwicklung, Software-Validierung und Softwareevolution.",
+              "mastery": 0,
+              "weight": 1.2,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-process-models-1",
+              "topicId": "se-process-1",
+              "title": "Vorgehensmodelle kennen und vergleichen",
+              "subtitle": "Stärken und Schwächen",
+              "description": "Verschiedene Vorgehensmodelle zur Software-Erstellung kennen, ihre Stärken und Schwächen erklären und vergleichen.",
+              "mastery": 0,
+              "weight": 1.2,
+              "lastUpdated": null,
+              "x": 620,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-uml",
+              "topicId": "se-requirements",
+              "title": "UML verstehen und anwenden",
+              "subtitle": "Modellierung in verschiedenen Phasen",
+              "description": "UML zur Modellierung in verschiedenen Phasen der Software-Erstellung verstehen und anwenden.",
+              "mastery": 0,
+              "weight": 1.2,
+              "lastUpdated": null,
+              "x": 960,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-use-cases",
+              "topicId": "se-requirements",
+              "title": "OO-Anforderungsanalyse mit Use Cases",
+              "subtitle": "OOA",
+              "description": "Objektorientierte Anforderungsanalyse mit Use Cases verstehen und anwenden.",
+              "mastery": 0,
+              "weight": 1.2,
+              "lastUpdated": null,
+              "x": 960,
+              "y": 660,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-analysis-patterns",
+              "topicId": "se-requirements",
+              "title": "Analysemuster anwenden",
+              "subtitle": "Analysis Patterns",
+              "description": "Analysemuster verstehen, erkennen und in der Anforderungsanalyse anwenden.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 960,
+              "y": 820,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-quality-metrics",
+              "topicId": "se-metrics",
+              "title": "Metriken zur Qualitätssicherung",
+              "subtitle": "Qualität messen",
+              "description": "Metriken zur Qualitätssicherung verstehen und anwenden.",
+              "mastery": 0,
+              "weight": 1.1,
+              "lastUpdated": null,
+              "x": 1300,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-architecture",
+              "topicId": "se-architecture",
+              "title": "Software-Architektur erstellen",
+              "subtitle": "Architektur",
+              "description": "Eine Software-Architektur für eine Anwendung erstellen und begründen.",
+              "mastery": 0,
+              "weight": 1.3,
+              "lastUpdated": null,
+              "x": 1640,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-oo-design",
+              "topicId": "se-design",
+              "title": "OO Design erstellen",
+              "subtitle": "OOD",
+              "description": "Ein objektorientiertes Design einer Anwendung erstellen.",
+              "mastery": 0,
+              "weight": 1.3,
+              "lastUpdated": null,
+              "x": 1980,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-design-patterns",
+              "topicId": "se-design",
+              "title": "Fortgeschrittene Entwurfsmuster",
+              "subtitle": "Design Patterns",
+              "description": "Fortgeschrittene Entwurfsmuster verstehen, auswählen und anwenden.",
+              "mastery": 0,
+              "weight": 1.2,
+              "lastUpdated": null,
+              "x": 1980,
+              "y": 660,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-programming",
+              "topicId": "se-programming",
+              "title": "Implementierung in OO-Sprache",
+              "subtitle": "Java · C++ · C#",
+              "description": "Die im Kurs geforderte Programmiersprache Java, C++ oder C# zur Umsetzung eines Designs anwenden.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2320,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-testing",
+              "topicId": "se-test",
+              "title": "Systematische Testfallermittlung",
+              "subtitle": "Testfälle ableiten",
+              "description": "Methoden zur systematischen Ermittlung von Testfällen verstehen und anwenden.",
+              "mastery": 0,
+              "weight": 1.2,
+              "lastUpdated": null,
+              "x": 2660,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-deployment",
+              "topicId": "se-deployment",
+              "title": "Deployment im Software Engineering",
+              "subtitle": "Übergabe und Deployment",
+              "description": "Deployment als Bestandteil des Software Engineerings einordnen; Detailfähigkeiten werden mit den entsprechenden Vorlesungsunterlagen ergänzt.",
+              "mastery": 0,
+              "weight": 0.8,
+              "lastUpdated": null,
+              "x": 3000,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-refactoring",
+              "topicId": "se-refactoring",
+              "title": "Refactoring verstehen und anwenden",
+              "subtitle": "Struktur verbessern",
+              "description": "Refactoring verstehen und anwenden; konkrete Techniken werden mit den entsprechenden Vorlesungsunterlagen ergänzt.",
+              "mastery": 0,
+              "weight": 1.1,
+              "lastUpdated": null,
+              "x": 3340,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-process-models-2",
+              "topicId": "se-process-2",
+              "title": "Vorgehensmodelle vertiefen",
+              "subtitle": "Vorgehensmodelle 2",
+              "description": "Weiterführende Vorgehensmodelle verstehen und vergleichen; konkrete Inhalte werden mit dem späteren Skript ergänzt.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3680,
+              "y": 500,
+              "evidence": []
+            },
+            {
+              "id": "se-skill-enterprise-architect",
+              "topicId": "se-architecture",
+              "title": "Enterprise Architect einordnen",
+              "subtitle": "Optionales Modellierungstool",
+              "description": "Enterprise Architect als optionales Modellierungstool einordnen, insbesondere für UML, Codegenerierung, BPMN, ER-Diagramme, SysML und Mindmaps.",
+              "mastery": 0,
+              "weight": 0.4,
+              "lastUpdated": null,
+              "x": 1640,
+              "y": 680,
+              "evidence": []
+            }
+          ],
+          "relations": [
+            {
+              "from": "se-skill-software-definition",
+              "to": "se-skill-software-components"
+            },
+            {
+              "from": "se-skill-software-crisis",
+              "to": "se-skill-se-definition"
+            },
+            {
+              "from": "se-skill-se-definition",
+              "to": "se-skill-se-scope"
+            },
+            {
+              "from": "se-skill-software-types",
+              "to": "se-skill-project-flow"
+            },
+            {
+              "from": "se-skill-software-types",
+              "to": "se-skill-product-flow"
+            },
+            {
+              "from": "se-skill-project-flow",
+              "to": "se-skill-project-product-compare"
+            },
+            {
+              "from": "se-skill-product-flow",
+              "to": "se-skill-project-product-compare"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-skill-software-process"
+            },
+            {
+              "from": "se-skill-software-process",
+              "to": "se-skill-process-models-1"
+            },
+            {
+              "from": "se-skill-process-models-1",
+              "to": "se-skill-use-cases"
+            },
+            {
+              "from": "se-skill-use-cases",
+              "to": "se-skill-architecture"
+            },
+            {
+              "from": "se-skill-architecture",
+              "to": "se-skill-oo-design"
+            },
+            {
+              "from": "se-skill-oo-design",
+              "to": "se-skill-programming"
+            },
+            {
+              "from": "se-skill-programming",
+              "to": "se-skill-testing"
+            },
+            {
+              "from": "se-skill-testing",
+              "to": "se-skill-deployment"
+            },
+            {
+              "from": "se-skill-deployment",
+              "to": "se-skill-refactoring"
+            },
+            {
+              "from": "se-skill-refactoring",
+              "to": "se-skill-process-models-2"
+            }
+          ]
+        }
+      ]
     }
   ],
   "sessions": []
