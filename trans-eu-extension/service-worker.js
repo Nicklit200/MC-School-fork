@@ -1,5 +1,4 @@
 const DEFAULT_API = "https://tsubera-doc-tracker-production.up.railway.app";
-const CAPTURE_TOKEN = "tecap_7ce84b1f6a3d4e8bb6fcd3a2a94e51c0a8f64b29d0c74f4388f6b0c2e39d5a71";
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(["apiBase", "enabled"]);
@@ -10,9 +9,10 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 async function settings() {
-  const data = await chrome.storage.local.get(["apiBase", "enabled"]);
+  const data = await chrome.storage.local.get(["apiBase", "capturePassword", "enabled"]);
   return {
     apiBase: String(data.apiBase || DEFAULT_API).replace(/\/+$/, ""),
+    capturePassword: String(data.capturePassword || ""),
     enabled: data.enabled !== false
   };
 }
@@ -20,11 +20,12 @@ async function settings() {
 async function pushCapture(payload) {
   const cfg = await settings();
   if (!cfg.enabled) return { ok: false, disabled: true, message: "Capture disabled" };
+  if (!cfg.capturePassword) return { ok: false, needsPassword: true, message: "Set capture password" };
   const res = await fetch(cfg.apiBase + "/api/trans/freights/import", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-tsubera-capture-token": CAPTURE_TOKEN
+      "x-tsubera-capture-token": cfg.capturePassword
     },
     body: JSON.stringify(payload)
   });
