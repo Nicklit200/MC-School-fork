@@ -10,7 +10,6 @@
     h1{font-size:16px;margin:0 0 4px}
     p{margin:0 0 14px;color:#61708a;font-size:12px}
     label{display:block;font-weight:650;margin:12px 0 5px}
-    input[type=text],input[type=password]{width:100%;box-sizing:border-box;border:1px solid #d5dce8;border-radius:9px;padding:9px 10px;background:#fff}
     .row{display:flex;gap:8px;margin-top:14px}
     button{flex:1;border:0;border-radius:9px;padding:10px 12px;font-weight:700;cursor:pointer}
     #save{background:#0b6bcb;color:#fff}
@@ -25,8 +24,7 @@
   <h1>Tsubera × Trans.eu</h1>
   <p>Собирает только рейсы, которые уже показаны в твоей авторизованной вкладке Trans.eu.</p>
 
-  <label for="password">Пароль Tsubera</label>
-  <input id="password" type="password" autocomplete="off" placeholder="Тот же пароль, что у сайта Tsubera">
+  <div id="connection" class="ok" style="margin:10px 0 4px;padding:9px 10px;border-radius:9px;background:#edf9f2;border:1px solid #ccebd8">Подключение к Tsubera настроено автоматически ✓</div>
 
   <label class="toggle"><input id="enabled" type="checkbox"> Автосбор каждые 30 секунд</label>
 
