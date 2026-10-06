@@ -141,6 +141,97 @@
     };
   }
 
+  function looksLikeActiveTransport(text) {
+    if (!text || text.length < 35 || text.length > 6000) return false;
+    const locs = locationMatches(text);
+    if (locs.length < 2) return false;
+    if (/START DER ROUTE.*ENDE DER ROUTE/i.test(text)) return false;
+    return /Auf dem Weg|Beladung|Entladung|Route|ETA|\b\d{2}\.\d{2}\.\d{4}\b/i.test(text);
+  }
+
+  function activeCandidateRows() {
+    const selectors = [
+      "tbody tr",
+      "[role='row']",
+      "[class*='transport']",
+      "[class*='route']",
+      "[class*='result']",
+      "[class*='row']"
+    ];
+    const nodes = [];
+    const seenNodes = new Set();
+
+    function consider(el) {
+      if (!el || seenNodes.has(el)) return;
+      seenNodes.add(el);
+      if (!visible(el)) return;
+      const text = clean(el.innerText || el.textContent || "");
+      if (!looksLikeActiveTransport(text)) return;
+      nodes.push({ el, text });
+    }
+
+    for (const selector of selectors) {
+      for (const el of document.querySelectorAll(selector)) consider(el);
+    }
+    if (nodes.length < 2) {
+      for (const el of document.querySelectorAll("div,li,article,section")) consider(el);
+    }
+
+    nodes.sort((a,b) => a.text.length - b.text.length);
+    const unique = [];
+    const signatures = new Set();
+    for (const item of nodes) {
+      const parsed = parseActiveTransport(item.text);
+      const sig = [parsed.startText, parsed.endText, parsed.partner, parsed.vehiclePlate].join("|").toLowerCase();
+      if (!parsed.startText || !parsed.endText || signatures.has(sig)) continue;
+      signatures.add(sig);
+      unique.push(item);
+    }
+    return unique.slice(0, 100);
+  }
+
+  function dateTimes(text) {
+    const out = [];
+    const re = /\b\d{2}\.\d{2}\.\d{4}(?:,?\s+\d{1,2}:\d{2}(?:\s*-\s*\d{1,2}:\d{2})?)?/g;
+    for (const m of text.matchAll(re)) if (!out.includes(m[0])) out.push(m[0]);
+    return out;
+  }
+
+  function pickVehiclePlate(text) {
+    const ls = lines(text);
+    for (const line of ls) {
+      const m = line.match(/\b([A-ZÄÖÜ]{1,3})[-\s]+([A-ZÄÖÜ]{1,3})[-\s]+(\d{1,4})\b/);
+      if (m) return (m[1] + " " + m[2] + " " + m[3]).toUpperCase();
+    }
+    return "";
+  }
+
+  function pickActivePartner(text) {
+    const ls = lines(text);
+    const skip = /^(Auf dem Weg|Beladung|Entladung|Angeben|ETA|DE\b|PL\b|GB\b|BE\b|NL\b|FR\b|CZ\b|AT\b|IT\b|SK\b|HU\b|RO\b|BG\b|ES\b|PT\b|DK\b|SE\b|NO\b|FI\b|LT\b|LV\b|EE\b|SI\b|HR\b|CH\b|LU\b|\d{2}\.\d{2}\.\d{4})/i;
+    const legal = /(Transport|Logistik|Logistics|Spedition|Cargo|GmbH|Sp\.\s*z\.?\s*o\.?\s*o\.?|s\.r\.o\.|B\.V\.|LTD|Limited)/i;
+    return (ls.find(x => legal.test(x) && !skip.test(x)) || "").slice(0,400);
+  }
+
+  function parseActiveTransport(text) {
+    const locs = locationMatches(text);
+    const times = dateTimes(text);
+    const ls = lines(text);
+    const statusLine = ls.find(x => /Auf dem Weg|bei der Beladung|bei der Entladung|Beladen|Entladen|unterwegs|Route/i.test(x) && !/^START DER ROUTE|^ENDE DER ROUTE/i.test(x)) || "";
+    const statusDetails = ls.find(x => x !== statusLine && /Beladung|Entladung|Verspät|Warn|Warten|angekommen|gestartet/i.test(x)) || "";
+    return {
+      statusText: statusLine.slice(0,300),
+      statusDetails: statusDetails.slice(0,600),
+      startText: locs[0] || "",
+      endText: locs[1] || "",
+      etaText: times[1] || times[0] || "",
+      nextEtaText: times[2] || "",
+      partner: pickActivePartner(text),
+      vehiclePlate: pickVehiclePlate(text),
+      rawText: text.slice(0,8000)
+    };
+  }
+
   function setBadge(text, state = "idle") {
     if (!badge) {
       badge = document.createElement("button");
@@ -171,13 +262,45 @@
   async function scanAndPush(force = false) {
     if (running) return;
     const pageText = clean(document.body?.innerText || "");
-    if (!/Fracht suchen/i.test(pageText)) {
-      setBadge("Tsubera: открой Fracht suchen");
+    const activePage = /START DER ROUTE|ENDE DER ROUTE|NÄCHSTE VORGANGS-ETA|Auf dem Weg zur Beladung/i.test(pageText);
+    const freightPage = /Fracht suchen/i.test(pageText);
+
+    if (!activePage && !freightPage) {
+      setBadge("Tsubera: открой Fracht suchen или Laufende Transporte");
       return;
     }
+
     running = true;
     setBadge("Tsubera: сканирую…", "wait");
     try {
+      if (activePage) {
+        const rows = activeCandidateRows();
+        const transports = rows.map(r => parseActiveTransport(r.text)).filter(x => x.startText && x.endText);
+        if (!transports.length) {
+          setBadge("Tsubera: маршруты не найдены", "error");
+          return;
+        }
+        const response = await chrome.runtime.sendMessage({
+          type: "tsubera:pushActiveTransports",
+          payload: {
+            pageUrl: location.href,
+            scannedAt: new Date().toISOString(),
+            transports
+          }
+        });
+        if (response?.ok) {
+          setBadge("Tsubera: " + transports.length + " маршрутов ✓", "ok");
+        } else if (response?.needsPassword) {
+          setBadge("Tsubera: укажи пароль", "error");
+        } else if (response?.disabled) {
+          setBadge("Tsubera: выключено");
+        } else {
+          setBadge("Tsubera: ошибка отправки", "error");
+          console.warn("[Tsubera Active Capture]", response);
+        }
+        return;
+      }
+
       const rows = candidateRows();
       const offers = rows.map(r => parseOffer(r.text)).filter(x => x.loadText && x.unloadText);
       if (!offers.length) {
