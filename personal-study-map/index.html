@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Моя карта знаний</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">PERSONAL STUDY MAP</div>
+        <h1>Моя карта знаний</h1>
+      </div>
+      <div class="topbar-meta">
+        <span id="updated-at">Обновление…</span>
+      </div>
+    </header>
+
+    <section class="dashboard">
+      <div class="dashboard-head">
+        <div>
+          <div class="section-kicker">СЕМЕСТР</div>
+          <select id="semester-select" aria-label="Выбрать семестр"></select>
+        </div>
+        <div class="overall-readiness">
+          <span>Общая готовность</span>
+          <strong id="overall-readiness">0%</strong>
+        </div>
+      </div>
+      <div id="exam-cards" class="exam-cards"></div>
+    </section>
+
+    <section class="workspace-card">
+      <div class="toolbar">
+        <label class="field">
+          <span>Экзамен</span>
+          <select id="exam-select"></select>
+        </label>
+
+        <label class="field search-field">
+          <span>Поиск</span>
+          <input id="search" type="search" placeholder="Навык или тема…" />
+        </label>
+
+        <div class="view-switch" role="group" aria-label="Вид">
+          <button id="map-view" class="active" type="button">Карта</button>
+          <button id="list-view" type="button">Список</button>
+        </div>
+
+        <button id="fit" type="button">Вписать</button>
+      </div>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="sidebar-title">РАЗДЕЛЫ</div>
+          <nav id="topic-list"></nav>
+          <div class="legend">
+            <div><span class="dot low"></span> 0–39% — слабое место</div>
+            <div><span class="dot mid"></span> 40–69% — в работе</div>
+            <div><span class="dot high"></span> 70–89% — уверенно</div>
+            <div><span class="dot mastered"></span> 90–100% — закреплено</div>
+          </div>
+        </aside>
+
+        <main class="main-area">
+          <div id="map" class="map" tabindex="0">
+            <div id="empty-state" class="empty-state" hidden>
+              <strong>Пока карта пустая</strong>
+              <p>Пришли презентации, список тем или требования к экзамену — я разложу их на навыки и заполню карту.</p>
+            </div>
+            <div id="world" class="world">
+              <svg id="edges" aria-hidden="true"></svg>
+              <div id="nodes"></div>
+            </div>
+            <div class="zoom-hint">Колесо — масштаб · тянуть фон — перемещение</div>
+          </div>
+
+          <div id="list" class="list-view-panel" hidden></div>
+        </main>
+
+        <aside id="inspector" class="inspector closed">
+          <button id="close-inspector" class="close" type="button" aria-label="Закрыть">×</button>
+          <div id="inspector-content"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="history-card">
+      <div class="history-head">
+        <div>
+          <div class="section-kicker">ИСТОРИЯ</div>
+          <h2>Последние обновления знаний</h2>
+        </div>
+      </div>
+      <div id="session-history" class="session-history"></div>
+    </section>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
