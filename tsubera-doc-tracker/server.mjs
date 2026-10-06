@@ -1178,9 +1178,9 @@ function transActiveStatus() {
 
 function transOrderDate(orderNumber, loadWindowText = "") {
   const ref = String(orderNumber || "");
-  let m = ref.match(/\\b(20\\d{2})\\/(\\d{2})\\/(\\d{2})\\//);
+  let m = ref.match(/\b(20\d{2})\/(\d{2})\/(\d{2})\//);
   if (m) return m[1] + "-" + m[2] + "-" + m[3];
-  m = String(loadWindowText || "").match(/\\b(\\d{2})\\.(\\d{2})\\.(20\\d{2})\\b/);
+  m = String(loadWindowText || "").match(/\b(\d{2})\.(\d{2})\.(20\d{2})\b/);
   if (m) return m[3] + "-" + m[2] + "-" + m[1];
   return "";
 }
@@ -1210,7 +1210,7 @@ function transOrderOut(row) {
 function importTransOrders(body = {}) {
   const orders = Array.isArray(body.orders) ? body.orders.slice(0, TRANS_CAPTURE_MAX_ROWS) : [];
   const observedAtRaw = transClean(body.scannedAt, 80);
-  const observedAt = /^\\d{4}-\\d{2}-\\d{2}T/.test(observedAtRaw) ? observedAtRaw : now();
+  const observedAt = /^\d{4}-\d{2}-\d{2}T/.test(observedAtRaw) ? observedAtRaw : now();
   const sourceUrl = transClean(body.pageUrl, 1500);
   const viewMode = transClean(body.viewMode, 40);
   let inserted = 0, updated = 0, ignored = 0;
@@ -1285,7 +1285,7 @@ function transOrderStatus() {
   };
 }
 function reconNorm(v) {
-  return String(v || "").toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  return String(v || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 function reconRef(v) {
   return String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
