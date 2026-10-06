@@ -300,6 +300,7 @@ async function load(){
   $('companyCount').textContent=companies.length?'('+companies.length+')':'';
   $('activeTransportCount').textContent=activeTransports.length?'('+activeTransports.length+')':'';
 }
+function displayCompanyName(v){return String(v||'').replace(/\s*\(Stuttgart\)\s*$/i,'').trim()}
 function normCompany(v){return String(v||'').trim().replace(/\s+/g,' ').toLowerCase()}
 function companyForTrip(t){const n=normCompany(t?.customer);return companies.find(c=>normCompany(c.name)===n)||null}
 function companyHasRules(c){return !![c?.billingChannel,c?.invoiceEmail,c?.invoiceSubject,c?.postalAddress,c?.requiredDocuments,c?.submissionDeadline,c?.specialRules].some(v=>String(v||'').trim())}
@@ -311,7 +312,7 @@ window.openCompanyRulesFromTrip=id=>{
 window.openCompanyRules=id=>{
   const c=companies.find(x=>x.id===id); if(!c)return;
   activeCompanyId=id;
-  $('companyRulesTitle').textContent='Правила · '+c.name;
+  $('companyRulesTitle').textContent='Правила · '+displayCompanyName(c.name);
   $('companyRulesState').textContent=c.active?'Показывается в текущих рейсах':'Фирма сейчас скрыта из текущих рейсов';
   $('companyRulesUpdated').textContent=c.updatedAt?'Обновлено: '+whenFull(c.updatedAt):'';
   $('companyRulesEmpty').classList.toggle('hidden',companyHasRules(c));
@@ -352,7 +353,7 @@ function render(){
       <div>${esc(t.date)}</div>
       <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
       <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
-      <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(t.customer)}</button></div>
+      <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(displayCompanyName(t.customer))}</button></div>
       <div><div style="font-weight:650">${esc(t.loadingPlace||'—')} → ${esc(t.unloadingPlace||'—')}</div></div>
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
@@ -409,7 +410,7 @@ window.openTrip=async id=>{
     '<div class="detailrow"><b>Дата</b><div>'+esc(t.date||'—')+'</div></div>'+
     '<div class="detailrow"><b>Tsubera Tour-ID</b><div>'+esc(t.internalTripId||'—')+'</div></div>'+
     '<div class="detailrow"><b>№ заказчика</b><div>'+esc(t.trip||'—')+'</div></div>'+
-    '<div class="detailrow"><b>Заказчик</b><div>'+esc(t.customer||'—')+'</div></div>'+
+    '<div class="detailrow"><b>Заказчик</b><div>'+esc(displayCompanyName(t.customer)||'—')+'</div></div>'+
     '<div class="detailrow"><b>Загрузка</b><div><input id="tripLoadingPlace" class="dt" value="'+esc(t.loadingPlace||'')+'" placeholder="DE 87435 Kempten"></div></div>'+
     '<div class="detailrow"><b>Выгрузка</b><div><input id="tripUnloadingPlace" class="dt" value="'+esc(t.unloadingPlace||'')+'" placeholder="PL 60-101 Poznań"></div></div>'+
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
@@ -481,7 +482,7 @@ $('tabActiveTransports').onclick=()=>setTab('active');
 $('tabReconciliation').onclick=()=>setTab('reconciliation');
 function renderCompanies(){
   $('companyRows').innerHTML=companies.length?companies.map(c=>
-    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(c.name)+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
+    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(displayCompanyName(c.name))+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
   ).join(''):'<div class="muted">Фирм пока нет.</div>';
 }
 window.toggleCompany=async(id,active)=>{
@@ -635,7 +636,7 @@ function renderReconciliation(){
     return '<div class="recon-row">'+
       '<div>'+esc(r.date||'—')+'</div>'+
       '<div><div class="recon-ref">'+esc(ref)+'</div>'+(route?'<div class="recon-sub">'+esc(route)+'</div>':'')+'</div>'+
-      '<div>'+esc(company)+'</div>'+
+      '<div>'+esc(displayCompanyName(company))+'</div>'+
       '<div class="recon-price">'+(price==null?'—':esc(price)+' '+esc(curr))+'</div>'+
       '<div>'+(Number(r.companyInvoiceCount||0)?'<b>'+Number(r.companyInvoiceCount||0)+'</b>':'<span class="muted">0</span>')+'</div>'+
       '<div>'+reconInvoiceCell(r)+'</div>'+
