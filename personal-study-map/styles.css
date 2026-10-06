@@ -942,3 +942,168 @@ h1{font-size:15px;margin:0}
 
 /* Native hidden attribute must win over the flex empty-state layout */
 .empty-state[hidden]{display:none!important}
+
+
+.review-toggle{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.review-count{
+  min-width:20px;
+  height:20px;
+  padding:0 6px;
+  border-radius:999px;
+  display:inline-grid;
+  place-items:center;
+  background:#fff1db;
+  color:#a56500;
+  font-size:10px;
+  font-weight:900;
+}
+.review-count.zero{
+  background:#f1f4f8;
+  color:#8b98aa;
+}
+
+.review-panel{
+  position:absolute;
+  z-index:50;
+  top:68px;
+  right:16px;
+  bottom:72px;
+  width:390px;
+  border-radius:18px;
+  padding:18px;
+  overflow:auto;
+}
+.review-panel.closed{display:none}
+
+.review-panel-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:12px;
+}
+.review-panel-head h2{
+  margin:2px 0 0;
+  font-size:18px;
+}
+
+.review-summary{
+  border:1px solid #e8edf4;
+  background:#f8fafc;
+  border-radius:14px;
+  padding:12px;
+  margin-bottom:12px;
+}
+.review-summary strong{
+  display:block;
+  font-size:24px;
+  margin-bottom:3px;
+}
+.review-summary span{
+  font-size:11px;
+  color:#7f8da2;
+}
+
+.review-list,.review-upcoming{
+  display:grid;
+  gap:8px;
+}
+.review-upcoming{
+  border-top:1px solid var(--line);
+  margin-top:16px;
+  padding-top:14px;
+}
+.review-section-title{
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.08em;
+  color:#97a3b4;
+  margin-bottom:2px;
+}
+
+.review-card{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:12px;
+  padding:11px 12px;
+  cursor:pointer;
+}
+.review-card:hover{
+  border-color:#d5dfec;
+  background:#fbfcfe;
+}
+.review-card-top{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+}
+.review-card-title{
+  font-size:12px;
+  font-weight:850;
+  line-height:1.35;
+}
+.review-card-date{
+  font-size:10px;
+  color:#8f9bad;
+  white-space:nowrap;
+}
+.review-card-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:8px;
+}
+.review-chip{
+  font-size:10px;
+  padding:4px 7px;
+  border-radius:999px;
+  background:#f1f5fb;
+  color:#62738d;
+}
+.review-chip.due{
+  background:#fff1db;
+  color:#a56500;
+}
+.review-chip.urgent{
+  background:#fff0f0;
+  color:#c83d3d;
+}
+.review-empty{
+  padding:16px 10px;
+  text-align:center;
+  color:#7f8da2;
+  font-size:12px;
+  line-height:1.5;
+  border:1px dashed #dfe5ee;
+  border-radius:12px;
+}
+
+.skill-card-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px;
+}
+.review-due-badge{
+  flex:0 0 auto;
+  font-size:9px;
+  font-weight:900;
+  border-radius:999px;
+  padding:3px 6px;
+  background:#fff1db;
+  color:#a56500;
+}
+
+@media(max-width:820px){
+  .review-panel{
+    top:122px;
+    right:10px;
+    bottom:72px;
+    width:min(92vw,380px);
+  }
+}
