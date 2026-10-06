@@ -2,7 +2,7 @@ const DEFAULT_API = "https://tsubera-doc-tracker-production.up.railway.app";
 const $ = id => document.getElementById(id);
 
 async function load() {
-  const data = await chrome.storage.local.get(["apiBase","capturePassword","enabled","lastPushAt","lastPushCount","lastPushResult","lastActivePushAt","lastActivePushCount","lastActivePushResult"]);
+  const data = await chrome.storage.local.get(["apiBase","capturePassword","enabled","lastPushAt","lastPushCount","lastPushResult","lastDetailPushAt","lastDetailPublicationId","lastDetailPushResult","lastActivePushAt","lastActivePushCount","lastActivePushResult"]);
   $("password").value = data.capturePassword || "";
   $("enabled").checked = data.enabled !== false;
   renderStatus(data);
@@ -15,7 +15,16 @@ function renderStatus(data) {
     status.textContent = "Укажи пароль подключения и нажми Сохранить.";
     return;
   }
-  if (data.lastActivePushAt && (!data.lastPushAt || new Date(data.lastActivePushAt) > new Date(data.lastPushAt))) {
+  const latest = [
+    data.lastPushAt ? { type: "freights", at: data.lastPushAt } : null,
+    data.lastDetailPushAt ? { type: "detail", at: data.lastDetailPushAt } : null,
+    data.lastActivePushAt ? { type: "active", at: data.lastActivePushAt } : null
+  ].filter(Boolean).sort((a,b) => new Date(b.at) - new Date(a.at))[0];
+  if (latest?.type === "detail") {
+    const t = new Date(data.lastDetailPushAt).toLocaleString();
+    status.className = "ok";
+    status.textContent = "Последняя отправка: " + t + "\nКарточка груза: " + (data.lastDetailPublicationId || "сохранена");
+  } else if (latest?.type === "active") {
     const t = new Date(data.lastActivePushAt).toLocaleString();
     status.className = "ok";
     status.textContent = "Последняя отправка: " + t + "\nМаршрутов в пути: " + (data.lastActivePushCount || 0);
@@ -25,7 +34,7 @@ function renderStatus(data) {
     status.textContent = "Последняя отправка: " + t + "\nРейсов в последнем скане: " + (data.lastPushCount || 0);
   } else {
     status.className = "";
-    status.textContent = "Настроено. Открой Trans.eu → Fracht suchen или Laufende Transporte.";
+    status.textContent = "Настроено. Открой Fracht suchen, карточку груза или Laufende Transporte.";
   }
 }
 
@@ -53,7 +62,7 @@ $("scan").addEventListener("click", async () => {
     setTimeout(load, 1200);
   } catch (e) {
     $("status").className = "bad";
-    $("status").textContent = "Открой Trans.eu → Fracht suchen или Laufende Transporte и попробуй снова.";
+    $("status").textContent = "Открой Trans.eu → Fracht suchen, карточку груза или Laufende Transporte и попробуй снова.";
   }
 });
 
