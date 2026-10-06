@@ -88,20 +88,12 @@ export function Layout({ children }: { children: ReactNode }) {
               <div className="teacher-brand__text"><span>Mindcrafti</span> School</div>
               <button
                 type="button"
+                className="teacher-brand__close"
                 aria-label="Скрыть меню"
+                title="Скрыть меню"
                 onClick={() => setTeacherMenuOpen(false)}
-                style={{
-                  marginLeft: 'auto',
-                  border: 0,
-                  background: 'transparent',
-                  color: '#59657d',
-                  fontSize: 14,
-                  fontWeight: 650,
-                  cursor: 'pointer',
-                  padding: '8px 4px',
-                }}
               >
-                Скрыть
+                ×
               </button>
             </div>
 
