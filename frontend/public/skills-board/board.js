@@ -293,7 +293,7 @@ function selectHistoryUpdate(id){
 }
 function renderHistoryPanel(){
   const body=$("history-body"),count=$("history-count");if(!body||!count)return;
-  const groups=historyGroups();count.textContent=String(groups.length);body.replaceChildren();
+  const groups=historyGroups();count.textContent=String(groups.length);const toolbarCount=$("history-toolbar-count");if(toolbarCount)toolbarCount.textContent=String(groups.length);body.replaceChildren();
   if(!selectedStudents().length){
     body.append(element("p","history-empty","Выберите группу или ученика — здесь появится история изменения процентов."));return;
   }
@@ -940,6 +940,15 @@ $("view-free").onclick=()=>setViewMode("free");$("view-hierarchy").onclick=()=>s
 $("student-filter").onchange=e=>void chooseStudent(e.target.value);$("search").oninput=()=>{showArchived=false;renderSearch();};
 $("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
 $("prerequisites").onchange=renderEdges;$("zoom-in").onclick=()=>zoomAt(1.2);$("zoom-out").onclick=()=>zoomAt(1/1.2);$("fit").onclick=fit;
+const historyPanel=$("history-panel");
+const historyToggle=$("history-toggle");
+const closeHistory=$("close-history");
+if(historyToggle)historyToggle.onclick=()=>{
+  const opening=historyPanel?.classList.contains("closed");
+  historyPanel?.classList.toggle("closed",!opening);
+  if(opening)$("inspector")?.classList.add("closed");
+};
+if(closeHistory)closeHistory.onclick=()=>historyPanel?.classList.add("closed");
 $("fullscreen").onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();setTimeout(fit,100);}catch{notice("Полноэкранный режим недоступен в этом браузере.");}};
 $("close-inspector").onclick=()=>{if(!flushForm())return;selection=null;renderNodes();renderEdges();showHelp();$("inspector").classList.add("closed");};
 $("export").onclick=()=>{
