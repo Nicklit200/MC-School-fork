@@ -82,7 +82,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <div className="teacher-brand">
               <img
                 className="teacher-brand__logo"
-                src="/brand/Mindcrafti_Logo_M_OFFICIAL.png"
+                src="/brand/Mindcrafti_Logo_M_OFFICIAL.webp"
                 alt="Mindcrafti School"
               />
               <div className="teacher-brand__text"><span>Mindcrafti</span> School</div>
