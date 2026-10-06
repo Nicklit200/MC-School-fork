@@ -37,7 +37,12 @@
               "lastUpdated": null,
               "x": 0,
               "y": 0,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-software-components",
@@ -50,7 +55,12 @@
               "lastUpdated": null,
               "x": 280,
               "y": 0,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-software-crisis",
@@ -63,7 +73,12 @@
               "lastUpdated": null,
               "x": 0,
               "y": 240,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-se-definition",
@@ -76,7 +91,12 @@
               "lastUpdated": null,
               "x": 280,
               "y": 240,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-se-scope",
@@ -89,7 +109,12 @@
               "lastUpdated": null,
               "x": 560,
               "y": 240,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-software-types",
@@ -102,7 +127,12 @@
               "lastUpdated": null,
               "x": 0,
               "y": 500,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-project-flow",
@@ -115,7 +145,12 @@
               "lastUpdated": null,
               "x": 280,
               "y": 500,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-product-flow",
@@ -128,7 +163,12 @@
               "lastUpdated": null,
               "x": 560,
               "y": 500,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-project-product-compare",
@@ -141,7 +181,12 @@
               "lastUpdated": null,
               "x": 840,
               "y": 500,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             },
             {
               "id": "se-skill-software-process",
@@ -154,7 +199,12 @@
               "lastUpdated": null,
               "x": 280,
               "y": 800,
-              "evidence": []
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
             }
           ],
           "relations": [
@@ -195,5 +245,17 @@
       ]
     }
   ],
-  "sessions": []
+  "sessions": [],
+  "reviewSchedule": {
+    "intervalDays": [
+      1,
+      2,
+      4,
+      7,
+      14,
+      30
+    ],
+    "wrongAnswerResetDays": 1,
+    "note": "Same spaced-repetition cadence as the student card system: a clean review advances; a wrong first attempt resets and returns tomorrow."
+  }
 }
