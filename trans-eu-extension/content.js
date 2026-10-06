@@ -3,7 +3,7 @@
   window.__TSUBERA_TRANS_CAPTURE__ = true;
 
   const COUNTRY_CODES = "DE|PL|GB|BE|NL|FR|CZ|AT|IT|SK|HU|RO|BG|ES|PT|DK|SE|NO|FI|LT|LV|EE|SI|HR|CH|LU";
-  const LOCATION_RE = new RegExp("\\b(?:" + COUNTRY_CODES + ")\\s+[A-Z0-9-]{2,10}\\s+[^\\n]{2,70}", "g");
+  const LOCATION_RE = new RegExp("\\b(?:" + COUNTRY_CODES + ")\\s+[A-Z0-9-]{2,10}(?:\\s+[^\\n]{1,80})?", "g");
   let scanTimer = null;
   let intervalId = null;
   let badge = null;
@@ -59,14 +59,26 @@
     ];
     const nodes = [];
     const seenNodes = new Set();
+
+    function consider(el) {
+      if (!el || seenNodes.has(el)) return;
+      seenNodes.add(el);
+      if (!visible(el)) return;
+      const text = clean(el.innerText || el.textContent || "");
+      if (!looksLikeOffer(text)) return;
+      nodes.push({ el, text });
+    }
+
     for (const selector of selectors) {
-      for (const el of document.querySelectorAll(selector)) {
-        if (seenNodes.has(el)) continue;
-        seenNodes.add(el);
-        if (!visible(el)) continue;
-        const text = clean(el.innerText);
-        if (!looksLikeOffer(text)) continue;
-        nodes.push({ el, text });
+      for (const el of document.querySelectorAll(selector)) consider(el);
+    }
+
+    // Trans.eu currently renders the freight table with generic virtualized divs.
+    // If semantic/class selectors did not find enough rows, inspect visible div-like
+    // containers and keep only compact elements that contain two route locations.
+    if (nodes.length < 5) {
+      for (const el of document.querySelectorAll("div,li,article,section")) {
+        consider(el);
       }
     }
 
@@ -77,7 +89,14 @@
     for (const item of nodes) {
       const locs = locationMatches(item.text);
       const price = item.text.match(/(?:^|\s)(\d[\d .]*(?:[.,]\d+)?)\s*(EUR|PLN|GBP|CHF)\b/i);
-      const sig = (locs.slice(0, 2).join("|") + "|" + (price?.[0] || "")).toLowerCase();
+      const published = item.text.match(/\b\d{2}\.\d{2}\.\d{4}\b(?:\s+\d{1,2}:\d{2})?/);
+      const company = pickCompany(item.text);
+      const sig = (
+        locs.slice(0, 2).join("|") + "|" +
+        (price?.[0] || "") + "|" +
+        company + "|" +
+        (published?.[0] || "")
+      ).toLowerCase();
       if (signatures.has(sig)) continue;
       signatures.add(sig);
       unique.push(item);
