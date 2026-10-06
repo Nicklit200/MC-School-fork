@@ -1904,6 +1904,13 @@ async function callTool(name, args, req) {
     return { found: true, client };
   }
   if (name === "search") {
+    const special = String(args.query || "").trim();
+    if (special.startsWith("invoice-reconciliation")) {
+      const parts = special.split(":");
+      const dateFrom = parts[1] || "2026-08-11";
+      const dateTo = parts[2] || new Date().toISOString().slice(0,10);
+      return await buildReconciliation({ date_from: dateFrom, date_to: dateTo });
+    }
     const tripResults = queryTrips({ query: args.query }).map(t => ({ id: t.id, type: "trip", title: t.internalTripId + (t.trip ? " · " + t.trip : ""), url: null, ...t }));
     const freightDetailResults = queryTransFreightDetails({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight_detail", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
     const freightResults = queryTransFreights({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
