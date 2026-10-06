@@ -2585,11 +2585,18 @@ const server = http.createServer(async (req, res) => {
       if (err) {
         fs.readFile(path.join(__dirname,"app.html"), (e,d) => {
           if (e) return text(res,404,"Not found");
-          res.writeHead(200,{"content-type":"text/html; charset=utf-8"});res.end(d);
+          res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store, no-cache, must-revalidate","pragma":"no-cache","expires":"0"});res.end(d);
         });
         return;
       }
-      res.writeHead(200,{"content-type":mimeMap[path.extname(full)] || "application/octet-stream"});res.end(data);
+      const ext = path.extname(full);
+      const headers = {"content-type":mimeMap[ext] || "application/octet-stream"};
+      if ([".html",".js",".css"].includes(ext)) {
+        headers["cache-control"] = "no-store, no-cache, must-revalidate";
+        headers["pragma"] = "no-cache";
+        headers["expires"] = "0";
+      }
+      res.writeHead(200,headers);res.end(data);
     });
   } catch (e) {
     console.error(e);
