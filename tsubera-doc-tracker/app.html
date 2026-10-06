@@ -157,11 +157,11 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
           <label>Счет в Fakturownia</label>
           <select id="reconStatusFilter">
             <option value="all">Все туры</option>
-            <option value="has_invoice">✅ Есть счет</option>
-            <option value="missing_invoice">❌ Счет не найден</option>
-            <option value="paid">💰 Оплачен</option>
-            <option value="unpaid">⏳ Есть счет, не оплачен</option>
-            <option value="needs_check">❓ У фирмы есть счет, тур не сопоставлен</option>
+            <option value="has_invoice">✅ Счет найден именно к туру</option>
+            <option value="missing_invoice">❌ К туру счет не найден</option>
+            <option value="paid">💰 Найден и оплачен</option>
+            <option value="unpaid">⏳ Найден, но не оплачен</option>
+            <option value="needs_check">❓ У фирмы есть счета, но этот тур не сопоставлен</option>
           </select>
         </div>
         <div class="field">
@@ -172,9 +172,9 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div id="reconConnection" class="recon-banner warn">Загрузка…</div>
       <div class="recon-stats">
         <div class="recon-stat"><span>Trans.eu Aufträge</span><b id="reconOrders">0</b></div>
-        <div class="recon-stat"><span>У фирмы есть счет в Fakturownia</span><b id="reconMatched">0</b></div>
+        <div class="recon-stat"><span>Счет найден именно к туру</span><b id="reconMatched">0</b></div>
         <div class="recon-stat"><span>Из них оплачено</span><b id="reconPaid">0</b></div>
-        <div class="recon-stat"><span>Счет не найден</span><b id="reconNoInvoice">0</b></div>
+        <div class="recon-stat"><span>К туру счет не найден</span><b id="reconNoInvoice">0</b></div>
       </div>
       <div class="recon-table">
         <div class="recon-head"><div>Дата</div><div>Auftrag</div><div>Фирма</div><div>Цена</div><div>Счетов фирмы</div><div>Счет в Fakturownia</div><div>Оплата</div><div>Итог</div></div>
@@ -544,7 +544,7 @@ function reconActionLabel(action){
     invoiced:'<span class="status route">✅ Есть счет · не оплачен</span>',
     partial:'<span class="status wait">✅ Есть счет · частично оплачен</span>',
     check_invoice:'<span class="status wait">❓ Возможно есть счет</span>',
-    company_has_invoices:'<span class="status ok">✅ У фирмы есть счет</span>',
+    company_has_invoices:'<span class="status wait">⚠️ У фирмы есть счета, но не к этому туру</span>',
     no_invoice:'<span class="status wait" style="background:#fff1f2;color:#be123c">❌ Счет не найден</span>',
     connect_fakturownia:'<span class="status route">Подключить Fakturownia</span>'
   })[action]||'<span class="status wait">'+esc(action||'Проверить')+'</span>';
@@ -553,21 +553,18 @@ function reconInvoiceCell(r){
   const exact=r.invoiceMatch?.invoice;
   if(exact){
     const d=exact.sellDate||exact.issueDate||'';
-    return '<div><b style="color:#087443">✅ Есть счет</b><div class="recon-sub">'+esc(exact.number||'')+(d?' · '+esc(d):'')+'</div></div>';
+    return '<div><b style="color:#087443">✅ Счет к этому туру</b><div class="recon-sub">'+esc(exact.number||'')+(d?' · '+esc(d):'')+'</div></div>';
   }
   const cand=r.invoiceCandidate?.invoice;
   if(cand){
     const d=cand.sellDate||cand.issueDate||'';
-    return '<div><b style="color:#087443">✅ Есть счет</b><div class="recon-sub">'+esc(cand.number||'')+(d?' · '+esc(d):'')+'</div></div>';
+    return '<div><b style="color:#925f00">❓ Возможный счет</b><div class="recon-sub">'+esc(cand.number||'')+(d?' · '+esc(d):'')+'</div></div>';
   }
   const companyInvoices=Array.isArray(r.companyInvoices)?r.companyInvoices:[];
   if(companyInvoices.length){
-    const first=companyInvoices[0]||{};
-    const d=first.sellDate||first.issueDate||'';
-    const more=companyInvoices.length>1?' · ещё '+(companyInvoices.length-1):'';
-    return '<div><b style="color:#087443">✅ Есть счет</b><div class="recon-sub">'+esc(first.number||'')+(d?' · '+esc(d):'')+esc(more)+'</div></div>';
+    return '<div><b style="color:#925f00">⚠️ У фирмы есть счета</b><div class="recon-sub">Но этот тур не сопоставлен</div></div>';
   }
-  return '<span style="color:#be123c;font-weight:700">❌ Нет счета</span>';
+  return '<span style="color:#be123c;font-weight:700">❌ К туру счет не найден</span>';
 }
 function reconPaymentCell(r){
   const inv=r.invoiceMatch?.invoice;
@@ -582,8 +579,8 @@ function renderReconciliation(){
   const d=reconciliation||{rows:[],counts:{},fakturownia:{}};
   const counts=d.counts||{};
   const allRows=d.rows||[];
-  const withInvoice=allRows.filter(r=>Number(r.companyInvoiceCount||0)>0).length;
-  const withoutInvoice=allRows.filter(r=>Number(r.companyInvoiceCount||0)===0).length;
+  const withInvoice=allRows.filter(r=>!!r.invoiceMatch?.invoice).length;
+  const withoutInvoice=allRows.length-withInvoice;
   $('reconOrders').textContent=Number(d.transOrders||0);
   $('reconMatched').textContent=withInvoice;
   $('reconPaid').textContent=Number(counts.paid||0);
@@ -609,8 +606,8 @@ function renderReconciliation(){
     const hasExactInvoice=!!r.invoiceMatch?.invoice;
     const action=String(r.action||'');
     let statusOk=true;
-    if(filter==='has_invoice')statusOk=hasCompanyInvoice;
-    else if(filter==='missing_invoice')statusOk=!hasCompanyInvoice;
+    if(filter==='has_invoice')statusOk=hasExactInvoice;
+    else if(filter==='missing_invoice')statusOk=!hasExactInvoice;
     else if(filter==='paid')statusOk=action==='paid';
     else if(filter==='unpaid')statusOk=hasExactInvoice&&(action==='invoiced'||action==='partial');
     else if(filter==='needs_check')statusOk=hasCompanyInvoice&&!hasExactInvoice;
