@@ -80,8 +80,12 @@ export function Layout({ children }: { children: ReactNode }) {
         {teacherMenuOpen && (
           <aside className="teacher-sidebar">
             <div className="teacher-brand">
-              <div className="teacher-brand__mark">M</div>
-              <div className="teacher-brand__text"><span>MindCrafti</span> School</div>
+              <img
+                className="teacher-brand__logo"
+                src="/brand/Mindcrafti_Logo_M_OFFICIAL.png"
+                alt="Mindcrafti School"
+              />
+              <div className="teacher-brand__text"><span>Mindcrafti</span> School</div>
               <button
                 type="button"
                 aria-label="Скрыть меню"
