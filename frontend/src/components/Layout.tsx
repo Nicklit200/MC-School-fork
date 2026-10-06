@@ -10,7 +10,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout, setUser } = useAuth();
   const { language, t } = useI18n();
   const navigate = useNavigate();
-  const [teacherMenuOpen, setTeacherMenuOpen] = useState(true);
+  const [teacherMenuOpen, setTeacherMenuOpen] = useState(false);
   const [returningToAdmin, setReturningToAdmin] = useState(false);
 
   const isStudent = user?.role === 'STUDENT';
@@ -111,7 +111,13 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span>{link.label}</span>
                 </div>
               ) : (
-                <NavLink key={link.to} to={link.to} end={link.end} className="teacher-nav-item">
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.end}
+                  className="teacher-nav-item"
+                  onClick={() => setTeacherMenuOpen(false)}
+                >
                   <span>{link.label}</span>
                 </NavLink>
               ))}
