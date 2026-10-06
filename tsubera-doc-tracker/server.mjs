@@ -482,8 +482,8 @@ function apiAuthorized(req) {
   return h === SITE_PASSWORD || a === "Bearer " + SITE_PASSWORD;
 }
 function transCaptureAuthorized(req) {
-  const token = req.headers["x-tsubera-capture-token"];
-  if (TRANS_CAPTURE_TOKEN && token === TRANS_CAPTURE_TOKEN) return true;
+  const token = req.headers["x-tsubera-capture-token"] || req.headers["x-app-password"];
+  if (TRANS_CAPTURE_TOKEN) return token === TRANS_CAPTURE_TOKEN;
   return apiAuthorized(req);
 }
 function mcpAuthorized(token) {
