@@ -16,3 +16,9 @@ Backend:
 `https://tsubera-doc-tracker-production.up.railway.app/api/trans/freights/import`
 
 Captured offers are queryable from the Tsubera backend and MCP tools.
+
+
+## Active transports
+Open Trans.eu -> Laufende Transporte (running transports). The extension also captures the currently rendered active route rows (status, route start, route end, ETA text, partner and vehicle plate when visible) and sends them to the Tsubera "В пути" view.
+
+This lets Tsubera and ChatGPT use the vehicle's next unloading area as the starting point for finding the next freight.
