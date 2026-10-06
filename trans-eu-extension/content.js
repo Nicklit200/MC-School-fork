@@ -8,6 +8,7 @@
   let intervalId = null;
   let badge = null;
   let running = false;
+  let lastDetailSignature = "";
 
   function clean(text) {
     return String(text || "").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -141,6 +142,115 @@
     };
   }
 
+  function detailLocations(text) {
+    const ls = lines(text);
+    const out = [];
+    const countryLine = new RegExp("^(" + COUNTRY_CODES + ")\\s+([A-Z0-9-]{2,10})(?:\\s+(.+))?$", "i");
+    const skipNext = /^(Ladeort|Entladung|Tarif|Zahlung|Route|Details|Bewertungen|Informationen|Verhandlungen|Akzeptieren|Offenes Gespräch|\\d{2}\\.\\d{2}\\.\\d{4})/i;
+    for (let i = 0; i < ls.length; i++) {
+      const m = ls[i].match(countryLine);
+      if (!m) continue;
+      let city = clean(m[3] || "");
+      const next = clean(ls[i + 1] || "");
+      if (!city && next && next.length < 90 && !skipNext.test(next) && !/^[+~]?\\d/.test(next)) city = next;
+      const value = clean(m[1].toUpperCase() + " " + m[2] + (city ? " " + city : ""));
+      if (value && !out.includes(value)) out.push(value);
+    }
+    if (out.length < 2) {
+      for (const value of locationMatches(text)) if (!out.includes(value)) out.push(value);
+    }
+    return out;
+  }
+
+  function freightDetailCandidate() {
+    const marker = /Akzeptieren oder Preis verhandeln|Offenes Gespräch|Routenplanungs-Assistent/i;
+    const nodes = [];
+    for (const el of document.querySelectorAll("[role='dialog'],aside,section,main,div")) {
+      const text = clean(el.innerText || el.textContent || "");
+      if (text.length < 120 || text.length > 30000) continue;
+      if (!marker.test(text) || !/Ladeort/i.test(text) || !/Entladung/i.test(text)) continue;
+      if (detailLocations(text).length < 2) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 320 || r.height < 140 || r.bottom < 0 || r.top > window.innerHeight) continue;
+      const st = getComputedStyle(el);
+      if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity || 1) <= 0) continue;
+      nodes.push({ el, text });
+    }
+    nodes.sort((a, b) => a.text.length - b.text.length);
+    return nodes[0] || null;
+  }
+
+  function activeDetailTab() {
+    const allowed = /^(Route|Details|Informationen über die Firma|Bewertungen|Verhandlungen.*)$/i;
+    for (const el of document.querySelectorAll("[role='tab'][aria-selected='true'],[aria-current='page']")) {
+      const value = clean(el.innerText || el.textContent || "");
+      if (allowed.test(value)) return value;
+    }
+    return "Route";
+  }
+
+  function parseFreightDetail(text) {
+    const full = clean(text);
+    const top = full.split(/Routenplanungs-Assistent/i)[0] || full;
+    const locs = detailLocations(top).length >= 2 ? detailLocations(top) : detailLocations(full);
+    const times = Array.from(top.matchAll(/\\b\\d{2}\\.\\d{2}\\.\\d{4},?\\s+\\d{1,2}:\\d{2}(?:\\s*-\\s*\\d{1,2}:\\d{2})?/g)).map(m => m[0]);
+    const tariff = top.match(/\\bTarif\\s*([\\d .]+(?:[.,]\\d+)?)\\s*(EUR|PLN|GBP|CHF)\\b/i);
+    const pricePerKm = top.match(/~?\\s*(\\d+(?:[.,]\\d+)?)\\s*EUR\\s*\\/\\s*km/i);
+    const payment = top.match(/\\bZahlung\\s*(\\d{1,3})\\s*Tage\\b/i) || top.match(/\\b(\\d{1,3})\\s*Tage\\b/i);
+    const weight = top.match(/\\b(\\d+(?:[.,]\\d+)?)\\s*t\\b/i);
+    const km = top.match(/\\b(\\d[\\d .]{0,8})\\s*km\\b/i);
+    const rating = top.match(/\\b([0-5](?:[.,]\\d)?)\\s*(?:\\(|$)/);
+    const ls = lines(top);
+    const vehicleLine = ls.find(x => /\\b(Standard|Mega|Jumbo|Tautliner|Koffer|Plane|Kühl|Isotherm|offen|Solo|Kleintransporter|Sattel|Anhänger|FTL|LTL|ldm)\\b/i.test(x) && !/Fahrzeugprofil/i.test(x)) || "";
+    const markerIndex = ls.findIndex(x => /Akzeptieren oder Preis verhandeln/i.test(x));
+    let contactName = "";
+    if (markerIndex >= 0) {
+      for (const candidate of ls.slice(markerIndex + 1, markerIndex + 5)) {
+        if (!/^(Tarif|Zahlung|EUR|PLN|GBP|CHF|Akzeptieren)$/i.test(candidate) && !/^\\d/.test(candidate)) {
+          contactName = candidate.slice(0, 200);
+          break;
+        }
+      }
+    }
+    const offsets = Array.from(top.matchAll(/\\+(\\d{1,4})\\s*km\\b/gi)).map(m => Number(m[1]));
+    const currentTab = activeDetailTab();
+    const lowerTab = currentTab.toLowerCase();
+    const sectionText = full.slice(0, 20000);
+    const detail = {
+      publicationId: "",
+      accountId: "",
+      viewMode: currentTab,
+      loadText: locs[0] || "",
+      unloadText: locs[1] || "",
+      loadWindowText: times[0] || "",
+      unloadWindowText: times[1] || "",
+      vehicleText: vehicleLine.slice(0, 1000),
+      weightT: weight ? numberOf(weight[1]) : null,
+      distanceKm: km ? Math.round(numberOf(km[1]) || 0) : null,
+      approachKm: offsets[0] ?? null,
+      destinationOffsetKm: offsets[1] ?? null,
+      priceAmount: tariff ? numberOf(tariff[1]) : null,
+      currency: tariff ? tariff[2].toUpperCase() : "",
+      pricePerKm: pricePerKm ? numberOf(pricePerKm[1]) : null,
+      paymentDays: payment ? Number(payment[1]) : null,
+      company: pickCompany(top),
+      companyRating: rating ? numberOf(rating[1]) : null,
+      contactName,
+      routeText: lowerTab === "route" ? sectionText : "",
+      detailsText: lowerTab === "details" ? sectionText : "",
+      companyText: /informationen über die firma/i.test(lowerTab) ? sectionText : "",
+      reviewsText: lowerTab === "bewertungen" ? sectionText : "",
+      negotiationsText: /verhandlungen/i.test(lowerTab) ? sectionText : "",
+      rawText: sectionText
+    };
+    try {
+      const u = new URL(location.href);
+      detail.publicationId = u.searchParams.get("e1publicationId") || u.searchParams.get("publicationId") || "";
+      detail.accountId = u.searchParams.get("e1accountId") || u.searchParams.get("accountId") || "";
+    } catch {}
+    return detail;
+  }
+
   function looksLikeActiveTransport(text) {
     if (!text || text.length < 35 || text.length > 6000) return false;
     const locs = locationMatches(text);
@@ -262,17 +372,58 @@
   async function scanAndPush(force = false) {
     if (running) return;
     const pageText = clean(document.body?.innerText || "");
+    const detailNode = freightDetailCandidate();
+    const detailPage = !!detailNode;
     const activePage = /START DER ROUTE|ENDE DER ROUTE|NÄCHSTE VORGANGS-ETA|Auf dem Weg zur Beladung/i.test(pageText);
     const freightPage = /Fracht suchen/i.test(pageText);
 
-    if (!activePage && !freightPage) {
-      setBadge("Tsubera: открой Fracht suchen или Laufende Transporte");
+    if (!detailPage && !activePage && !freightPage) {
+      setBadge("Tsubera: открой Fracht suchen, карточку груза или Laufende Transporte");
       return;
     }
 
     running = true;
     setBadge("Tsubera: сканирую…", "wait");
     try {
+      if (detailPage) {
+        const detail = parseFreightDetail(detailNode.text);
+        if (!detail.publicationId || !detail.loadText || !detail.unloadText) {
+          setBadge("Tsubera: карточка не распознана", "error");
+          return;
+        }
+        const signature = [
+          detail.publicationId,
+          detail.viewMode,
+          detail.rawText.length,
+          detail.rawText.slice(0, 180),
+          detail.rawText.slice(-180)
+        ].join("|");
+        if (!force && signature === lastDetailSignature) {
+          setBadge("Tsubera: карточка сохранена ✓", "ok");
+          return;
+        }
+        const response = await chrome.runtime.sendMessage({
+          type: "tsubera:pushFreightDetail",
+          payload: {
+            pageUrl: location.href,
+            scannedAt: new Date().toISOString(),
+            detail
+          }
+        });
+        if (response?.ok) {
+          lastDetailSignature = signature;
+          setBadge("Tsubera: карточка груза ✓", "ok");
+        } else if (response?.needsPassword) {
+          setBadge("Tsubera: укажи пароль", "error");
+        } else if (response?.disabled) {
+          setBadge("Tsubera: выключено");
+        } else {
+          setBadge("Tsubera: ошибка карточки", "error");
+          console.warn("[Tsubera Freight Detail]", response);
+        }
+        return;
+      }
+
       if (activePage) {
         const rows = activeCandidateRows();
         const transports = rows.map(r => parseActiveTransport(r.text)).filter(x => x.startText && x.endText);
