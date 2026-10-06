@@ -69,7 +69,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     <button class="btn" id="add">+ Добавить рейс</button>
   </div>
 
-  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button></div>
+  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button></div>
 
   <section id="tripsView">
   <div class="stats">
@@ -121,6 +121,19 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         <button class="btn">+ Добавить машину</button>
       </form>
       <div id="vehicleRows" class="vehicle-grid"></div>
+    </div>
+  </section>
+
+  <section id="activeTransportsView" class="hidden">
+    <div class="panel vehicle-panel">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <h2 style="margin:0 0 5px">Машины в пути · Trans.eu</h2>
+          <div class="muted">Автоматически собирается из раздела «Laufende Transporte». Показываем только свежие данные за последние 3 часа.</div>
+        </div>
+        <button class="btn alt small" type="button" id="refreshActiveTransports">Обновить</button>
+      </div>
+      <div id="activeTransportRows" class="vehicle-grid"></div>
     </div>
   </section>
 </main>
@@ -193,7 +206,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 </div>
 
 <script>
-let trips=[],vehicles=[],companies=[],activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
+let trips=[],vehicles=[],companies=[],activeTransports=[],activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
 const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
@@ -229,11 +242,17 @@ function docCheck(t,key,label,missingMark='□'){
   return '<div class="cmr-check-wrap"><span class="cmr-check '+(isCross?'missing':'empty')+'" aria-label="'+esc(label)+' — файла нет" title="'+esc(label)+' · файла нет">'+missingMark+'</span></div>';
 }
 async function load(){
-  const [td,vd,cd]=await Promise.all([api('/api/trips'),api('/api/vehicles'),api('/api/companies')]);
-  trips=td.trips||[];vehicles=vd.vehicles||[];companies=cd.companies||[];
-  renderCompanyFilter();renderCompanyDatalist();render();renderCompanies();renderVehicles();renderVehicleDatalist();
+  const [td,vd,cd,ad]=await Promise.all([
+    api('/api/trips'),
+    api('/api/vehicles'),
+    api('/api/companies'),
+    api('/api/trans/active?max_age_minutes=180&limit=100').catch(()=>({transports:[]}))
+  ]);
+  trips=td.trips||[];vehicles=vd.vehicles||[];companies=cd.companies||[];activeTransports=ad.transports||[];
+  renderCompanyFilter();renderCompanyDatalist();render();renderCompanies();renderVehicles();renderActiveTransports();renderVehicleDatalist();
   $('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
   $('companyCount').textContent=companies.length?'('+companies.length+')':'';
+  $('activeTransportCount').textContent=activeTransports.length?'('+activeTransports.length+')':'';
 }
 function normCompany(v){return String(v||'').trim().replace(/\s+/g,' ').toLowerCase()}
 function companyForTrip(t){const n=normCompany(t?.customer);return companies.find(c=>normCompany(c.name)===n)||null}
@@ -399,14 +418,17 @@ function setTab(tab){
   $('tripsView').classList.toggle('hidden',tab!=='trips');
   $('companiesView').classList.toggle('hidden',tab!=='companies');
   $('vehiclesView').classList.toggle('hidden',tab!=='vehicles');
+  $('activeTransportsView').classList.toggle('hidden',tab!=='active');
   $('tabTrips').classList.toggle('active',tab==='trips');
   $('tabCompanies').classList.toggle('active',tab==='companies');
   $('tabVehicles').classList.toggle('active',tab==='vehicles');
+  $('tabActiveTransports').classList.toggle('active',tab==='active');
   $('add').classList.toggle('hidden',tab!=='trips');
 }
 $('tabTrips').onclick=()=>setTab('trips');
 $('tabCompanies').onclick=()=>setTab('companies');
 $('tabVehicles').onclick=()=>setTab('vehicles');
+$('tabActiveTransports').onclick=()=>setTab('active');
 function renderCompanies(){
   $('companyRows').innerHTML=companies.length?companies.map(c=>
     '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(c.name)+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
@@ -440,8 +462,30 @@ $('companyForm').onsubmit=async e=>{
   $('newCompanyName').value='';$('newCompanyNote').value='';await load();
 }
 function renderVehicleDatalist(){$('vehicleDatalist').innerHTML=vehicles.map(v=>'<option value="'+esc(v.plate)+'"></option>').join('')}
+function normPlate(v){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
+function activeForVehicle(plate){
+  const p=normPlate(plate); if(!p)return null;
+  return activeTransports.find(t=>normPlate(t.vehiclePlate)===p)||null;
+}
 function renderVehicles(){
-  $('vehicleRows').innerHTML=vehicles.length?vehicles.map(v=>'<div class="vehicle-card"><div class="vehicle-card-top"><div><div class="vehicle-plate">'+esc(v.plate)+'</div><div class="vehicle-meta">'+esc(v.note||'Без комментария')+'</div><div class="vehicle-meta">Туров: '+Number(v.tripCount||0)+'</div></div><button class="btn alt small" onclick="delVehicle(\''+v.id+'\')">Удалить</button></div></div>').join(''):'<div class="muted">Машин пока нет. Добавь первый номер выше.</div>';
+  $('vehicleRows').innerHTML=vehicles.length?vehicles.map(v=>{
+    const a=activeForVehicle(v.plate);
+    const route=a?'<div class="vehicle-meta" style="margin-top:8px"><b>Сейчас:</b> '+esc(a.startText||'—')+' → '+esc(a.endText||'—')+'</div><div class="vehicle-meta">'+esc(a.statusText||'В пути')+(a.etaText?' · ETA '+esc(a.etaText):'')+'</div>':'';
+    return '<div class="vehicle-card"><div class="vehicle-card-top"><div><div class="vehicle-plate">'+esc(v.plate)+'</div><div class="vehicle-meta">'+esc(v.note||'Без комментария')+'</div><div class="vehicle-meta">Туров: '+Number(v.tripCount||0)+'</div>'+route+'</div><button class="btn alt small" onclick="delVehicle(\''+v.id+'\')">Удалить</button></div></div>';
+  }).join(''):'<div class="muted">Машин пока нет. Добавь первый номер выше.</div>';
+}
+function renderActiveTransports(){
+  $('activeTransportRows').innerHTML=activeTransports.length?activeTransports.map(t=>
+    '<div class="vehicle-card"><div class="vehicle-card-top"><div style="min-width:0">'+
+      '<div class="vehicle-plate">'+esc(t.vehiclePlate||t.statusText||'Текущий транспорт')+'</div>'+
+      '<div class="vehicle-meta" style="margin-top:6px"><b>'+esc(t.startText||'—')+' → '+esc(t.endText||'—')+'</b></div>'+
+      '<div class="vehicle-meta">'+esc(t.statusText||'Статус не распознан')+(t.statusDetails?' · '+esc(t.statusDetails):'')+'</div>'+
+      (t.etaText?'<div class="vehicle-meta">ETA / окно: '+esc(t.etaText)+'</div>':'')+
+      (t.nextEtaText?'<div class="vehicle-meta">Следующий ETA: '+esc(t.nextEtaText)+'</div>':'')+
+      (t.partner?'<div class="vehicle-meta">Партнёр: '+esc(t.partner)+'</div>':'')+
+      '<div class="vehicle-meta">Обновлено: '+esc(whenFull(t.lastSeenAt)||'—')+'</div>'+
+    '</div></div></div>'
+  ).join(''):'<div class="muted">Свежих маршрутов пока нет. Открой Trans.eu → Laufende Transporte с включённым расширением.</div>';
 }
 window.delVehicle=async id=>{
   if(!confirm('Удалить машину из списка? В уже выполненных турах номер останется в истории.'))return;
@@ -454,6 +498,7 @@ $('vehicleForm').onsubmit=async e=>{
   await api('/api/vehicles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({plate,note})});
   $('newVehiclePlate').value='';$('newVehicleNote').value='';await load();
 }
+$('refreshActiveTransports').onclick=async()=>{await load();setTab('active')};
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
 $('q').oninput=render;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
