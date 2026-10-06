@@ -1234,8 +1234,9 @@ function importTransOrders(body = {}) {
     "raw_text=CASE WHEN length(excluded.raw_text)>=length(trans_orders.raw_text) THEN excluded.raw_text ELSE trans_orders.raw_text END, " +
     "source_url=excluded.source_url, last_seen_at=excluded.last_seen_at, seen_count=trans_orders.seen_count+1"
   );
-  const tx = db.transaction((rows) => {
-    for (const order of rows) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const order of orders) {
       const orderNumber = transClean(order?.orderNumber, 120);
       if (!orderNumber) { ignored++; continue; }
       const existed = !!find.get(orderNumber);
@@ -1250,8 +1251,11 @@ function importTransOrders(body = {}) {
       );
       if (existed) updated++; else inserted++;
     }
-  });
-  tx(orders);
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    throw e;
+  }
   return { received: orders.length, inserted, updated, ignored, ...transOrderStatus() };
 }
 function queryTransOrders(args = {}) {
