@@ -1340,97 +1340,118 @@ function bestTripForOrder(order,trips,claimedTripIds) {
 }
 function invoiceMatchForRefs(invoices,{refs=[],company="",amount=null,date=""}={}) {
   const strongRefs = refs.map(reconRef).filter(x => x.length>=5);
+  const companyNorm = reconNorm(company);
+  const sameCompany = [];
   let best = null;
+
   for (const inv of invoices) {
     const hay = reconRef(fakturowniaInvoiceHaystack(inv));
     const exactRef = strongRefs.find(r => hay.includes(r));
     const buyer = reconNorm(inv.buyer_name);
-    const companyNorm = reconNorm(company);
     const companyMatch = !!companyNorm && !!buyer && (buyer.includes(companyNorm) || companyNorm.includes(buyer));
+    if (companyMatch) sameCompany.push(inv);
+
     const amountMatch = sameMoney(inv.total_price_gross ?? inv.price_gross, amount) || sameMoney(inv.total_price_net ?? inv.price_net, amount);
     const invDate = inv.sell_date || inv.issue_date || "";
-    const nearDate = dateDistanceDays(date,invDate) <= 35;
+    const dayDistance = dateDistanceDays(date,invDate);
+    const sameTripDate = dayDistance <= 2;
+    const nearDate = dayDistance <= 14;
+
     let score = 0;
     if (exactRef) score += 100;
-    if (companyMatch) score += 35;
-    if (amountMatch) score += 25;
-    if (nearDate) score += 10;
-    const candidate = { invoice:fakturowniaInvoiceSummary(inv), score, exactRef:exactRef||"", companyMatch, amountMatch, nearDate };
+    if (companyMatch) score += 40;
+    if (amountMatch) score += 35;
+    if (sameTripDate) score += 25;
+    else if (nearDate) score += 10;
+
+    const candidate = {
+      invoice:fakturowniaInvoiceSummary(inv),
+      score,
+      exactRef:exactRef||"",
+      companyMatch,
+      amountMatch,
+      sameTripDate,
+      nearDate,
+      dayDistance
+    };
     if (!best || score>best.score) best=candidate;
   }
-  if (!best) return { invoice:null, candidate:null };
-  if (best.score>=100) return { invoice:best, candidate:null };
-  if (best.score>=60) return { invoice:null, candidate:best };
-  return { invoice:null, candidate:null };
+
+  const companyInvoices = sameCompany.map(fakturowniaInvoiceSummary);
+  if (!best) return { invoice:null, candidate:null, companyInvoices };
+
+  if (best.exactRef || (best.companyMatch && best.amountMatch && best.sameTripDate)) {
+    return { invoice:best, candidate:null, companyInvoices };
+  }
+  if (best.companyMatch && best.amountMatch && best.nearDate) {
+    return { invoice:null, candidate:best, companyInvoices };
+  }
+  return { invoice:null, candidate:null, companyInvoices };
+}
+
+function invoicePaymentState(match) {
+  const inv = match?.invoice;
+  if (!inv) return "unknown";
+  const total = Number(inv.totalGross ?? inv.totalNet);
+  const paid = Number(inv.paid ?? 0);
+  if (String(inv.status||"").toLowerCase()==="paid" || (Number.isFinite(total) && total>0 && paid >= total-0.02)) return "paid";
+  if (paid > 0) return "partial";
+  return "unpaid";
 }
 async function buildReconciliation(args={}) {
   const dateFrom = String(args.date_from || "2026-08-11");
   const dateTo = String(args.date_to || new Date().toISOString().slice(0,10));
   const orders = queryTransOrders({ date_from:dateFrom, date_to:dateTo, limit:1000 });
-  const trips = queryTrips({ date_from:dateFrom, date_to:dateTo });
   let invoices = [], fakturowniaError = "";
+
   if (fakturowniaConfigured()) {
     try { invoices = await loadFakturowniaInvoicesRange(dateFrom,dateTo); }
     catch (e) { fakturowniaError = e?.message || String(e); }
   }
-  const claimedTripIds = new Set();
+
   const rows = [];
   for (const order of orders) {
-    const mt = bestTripForOrder(order,trips,claimedTripIds);
-    const trip = mt.trip;
-    if (trip) claimedTripIds.add(trip.id);
-    const company = trip?.customer || order.company || "";
-    const amount = trip?.priceEur ?? order.priceAmount;
-    const refs = [order.orderNumber,trip?.trip,trip?.internalTripId].filter(Boolean);
-    const im = invoiceMatchForRefs(invoices,{refs,company,amount,date:order.date||trip?.date||""});
-    const hasInvoice = !!im.invoice || !!trip?.rechnungCode;
-    const hasCmr = !!trip?.cmrUnloaded;
-    let action = "ok";
-    if (!trip || !hasCmr) action = "ask_dawid";
-    else if (!hasInvoice && im.candidate) action = "check_invoice";
-    else if (!hasInvoice && !fakturowniaConfigured()) action = "connect_fakturownia";
-    else if (!hasInvoice) action = "create_invoice";
+    const company = order.company || "";
+    const amount = order.priceAmount;
+    const im = invoiceMatchForRefs(invoices,{
+      refs:[order.orderNumber].filter(Boolean),
+      company,
+      amount,
+      date:order.date||""
+    });
+
+    const exact = !!im.invoice;
+    const candidate = !!im.candidate;
+    const paymentState = exact ? invoicePaymentState(im.invoice) : "unknown";
+
+    let action = "no_invoice";
+    if (!fakturowniaConfigured()) action = "connect_fakturownia";
+    else if (exact && paymentState==="paid") action = "paid";
+    else if (exact && paymentState==="partial") action = "partial";
+    else if (exact) action = "invoiced";
+    else if (candidate) action = "check_invoice";
+    else if ((im.companyInvoices||[]).length) action = "company_has_invoices";
+
     rows.push({
       source:"trans_order",
-      date:order.date || trip?.date || "",
+      date:order.date || "",
       order,
-      trip:trip||null,
-      tripMatchConfidence:mt.confidence,
-      cmrPresent:hasCmr,
-      invoicePresent:hasInvoice,
+      companyInvoiceCount:(im.companyInvoices||[]).length,
+      companyInvoices:(im.companyInvoices||[]).slice(0,20),
+      invoicePresent:exact,
       invoiceMatch:im.invoice,
       invoiceCandidate:im.candidate,
+      paymentState,
       action
     });
   }
-  for (const trip of trips) {
-    if (claimedTripIds.has(trip.id)) continue;
-    const im = invoiceMatchForRefs(invoices,{refs:[trip.trip,trip.internalTripId].filter(Boolean),company:trip.customer,amount:trip.priceEur,date:trip.date});
-    const hasInvoice = !!im.invoice || !!trip.rechnungCode;
-    let action = "ok";
-    if (!trip.cmrUnloaded) action = "ask_dawid";
-    else if (!hasInvoice && im.candidate) action = "check_invoice";
-    else if (!hasInvoice && !fakturowniaConfigured()) action = "connect_fakturownia";
-    else if (!hasInvoice) action = "create_invoice";
-    rows.push({
-      source:"tsubera_trip",
-      date:trip.date,
-      order:null,
-      trip,
-      tripMatchConfidence:"",
-      cmrPresent:!!trip.cmrUnloaded,
-      invoicePresent:hasInvoice,
-      invoiceMatch:im.invoice,
-      invoiceCandidate:im.candidate,
-      action
-    });
-  }
+
   rows.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const counts = rows.reduce((acc,r)=>{acc[r.action]=(acc[r.action]||0)+1;return acc;},{});
+
   return {
     dateFrom,dateTo,
     transOrders:orders.length,
-    tsuberaTrips:trips.length,
     fakturownia:{
       configured:fakturowniaConfigured(),
       reachable:fakturowniaConfigured() && !fakturowniaError,
@@ -1468,7 +1489,7 @@ const toolDefs = [
   },
   {
     name: "get_reconciliation",
-    description: "Reconcile captured Trans.eu orders with Tsubera trips/CMR-POD and Fakturownia invoices. Rows needing human confirmation are marked ask_dawid.",
+    description: "Compare captured Trans.eu orders directly with Fakturownia invoices by company, amount and trip date, including invoice payment status.",
     inputSchema: {
       type: "object",
       properties: {
