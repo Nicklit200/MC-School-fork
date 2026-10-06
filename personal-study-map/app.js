@@ -212,18 +212,18 @@ function renderWorkspace() {
   const exam = currentExam();
   const empty = $("empty-state");
 
+  $("map").hidden = false;
+
   if (!exam || !examSkills(exam).length) {
     empty.hidden = false;
     $("world").hidden = true;
     $("list").hidden = true;
-    $("map").hidden = false;
     $("inspector").classList.add("closed");
     return;
   }
 
   empty.hidden = true;
   $("world").hidden = state.viewMode !== "map";
-  $("map").hidden = state.viewMode !== "map";
   $("list").hidden = state.viewMode !== "list";
 
   if (state.viewMode === "map") renderMap(skills);
@@ -333,6 +333,7 @@ function masteryLabel(value) {
 
 function showInspector(skill) {
   const inspector = $("inspector");
+  $("history-panel")?.classList.add("closed");
   const host = $("inspector-content");
   const topic = currentExam()?.topics?.find((t) => t.id === skill.topicId);
   const evidence = skill.evidence || [];
@@ -425,6 +426,22 @@ function escapeHtml(value) {
 
 function applyTransform() {
   $("world").style.transform = `translate(${state.viewport.x}px,${state.viewport.y}px) scale(${state.viewport.z})`;
+  const level = $("zoom-level");
+  if (level) level.textContent = Math.round(state.viewport.z * 100) + "%";
+}
+
+function zoomAtCenter(factor) {
+  const map = $("map");
+  const px = map.clientWidth / 2;
+  const py = map.clientHeight / 2;
+  const oldZ = state.viewport.z;
+  const nextZ = clamp(oldZ * factor, .3, 2);
+  const wx = (px - state.viewport.x) / oldZ;
+  const wy = (py - state.viewport.y) / oldZ;
+  state.viewport.z = nextZ;
+  state.viewport.x = px - wx * nextZ;
+  state.viewport.y = py - wy * nextZ;
+  applyTransform();
 }
 
 function fitMap() {
@@ -461,6 +478,26 @@ $("list-view").onclick = () => {
   renderWorkspace();
 };
 $("fit").onclick = fitMap;
+$("zoom-in").onclick = () => zoomAtCenter(1.2);
+$("zoom-out").onclick = () => zoomAtCenter(1 / 1.2);
+
+const leftPanel = $("left-panel");
+const leftPanelToggle = $("left-panel-toggle");
+leftPanelToggle.onclick = () => {
+  const collapsed = leftPanel.classList.toggle("collapsed");
+  leftPanelToggle.classList.toggle("collapsed", collapsed);
+  leftPanelToggle.textContent = collapsed ? "›" : "‹";
+  leftPanelToggle.title = collapsed ? "Показать панель" : "Скрыть панель";
+};
+
+const historyPanel = $("history-panel");
+$("history-toggle").onclick = () => {
+  const willOpen = historyPanel.classList.contains("closed");
+  historyPanel.classList.toggle("closed", !willOpen);
+  if (willOpen) $("inspector").classList.add("closed");
+};
+$("close-history").onclick = () => historyPanel.classList.add("closed");
+
 $("close-inspector").onclick = () => {
   state.selectedSkillId = "";
   $("inspector").classList.add("closed");
@@ -497,6 +534,14 @@ map.addEventListener("wheel", (event) => {
   state.viewport.y = py - wy * nextZ;
   applyTransform();
 }, { passive: false });
+
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  $("inspector").classList.add("closed");
+  $("history-panel").classList.add("closed");
+});
+
+window.addEventListener("resize", applyTransform);
 
 loadData().then(() => setTimeout(fitMap, 0)).catch((error) => {
   console.error(error);
