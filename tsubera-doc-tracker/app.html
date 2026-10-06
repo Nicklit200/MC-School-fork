@@ -51,6 +51,10 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .company-rule-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.company-rule-grid .full{grid-column:1/-1}
 .company-rule-grid textarea{min-height:96px;resize:vertical;padding:10px;border:1px solid #dfe3ea;border-radius:9px;font:inherit;line-height:1.4}
 .company-rule-grid input{width:100%}.rules-empty{padding:10px 12px;border-radius:10px;background:#fff4d6;color:#925f00;font-size:13px;margin-bottom:12px}
+.recon-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px}.recon-toolbar .field{min-width:180px}.recon-toolbar input{width:100%;border:1px solid #dfe3ea;border-radius:10px;padding:10px;background:#fff}
+.recon-banner{padding:11px 13px;border-radius:11px;margin:0 0 14px;font-size:13px}.recon-banner.ok{background:#e8f7ef;color:#087443}.recon-banner.warn{background:#fff4d6;color:#925f00}.recon-banner.bad{background:#fff1f2;color:#be123c}
+.recon-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 14px}.recon-stat{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}.recon-stat b{display:block;font-size:23px;margin-top:4px}.recon-stat span{font-size:12px;color:#6b7280}
+.recon-table{overflow-x:auto;border-top:1px solid #eee}.recon-head,.recon-row{min-width:1180px;display:grid;grid-template-columns:95px 155px minmax(210px,1.35fr) 105px 125px 105px 140px minmax(180px,1fr);gap:0;align-items:center}.recon-head{padding:10px 12px;background:#fafafa;color:#6b7280;font-size:12px;border-bottom:1px solid #eee}.recon-row{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.recon-row:last-child{border-bottom:0}.recon-ref{font-weight:700}.recon-sub{font-size:11px;color:#6b7280;margin-top:3px}.recon-price{font-weight:700}.recon-empty{padding:24px;color:#6b7280;text-align:center}
 @media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter{width:100%}.filter-check{padding:4px 0}}
 </style>
 </head>
@@ -69,7 +73,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     <button class="btn" id="add">+ Добавить рейс</button>
   </div>
 
-  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button></div>
+  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button><button class="tab" id="tabReconciliation">Сверка <span id="reconciliationCount"></span></button></div>
 
   <section id="tripsView">
   <div class="stats">
@@ -134,6 +138,33 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         <button class="btn alt small" type="button" id="refreshActiveTransports">Обновить</button>
       </div>
       <div id="activeTransportRows" class="vehicle-grid"></div>
+    </div>
+  </section>
+
+  <section id="reconciliationView" class="hidden">
+    <div class="panel" style="padding:16px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <h2 style="margin:0 0 5px">Сверка рейсов</h2>
+          <div class="muted">Trans.eu Auftrag ↔ CMR/POD ↔ Fakturownia Rechnung. Если Auftrag есть, но подтверждения выполнения нет, рейс попадает в «Спросить Давида».</div>
+        </div>
+        <button class="btn alt small" type="button" id="refreshReconciliation">Обновить</button>
+      </div>
+      <div class="recon-toolbar">
+        <div class="field"><label>С даты</label><input type="date" id="reconDateFrom" value="2026-08-11"></div>
+        <div class="field"><label>По дату</label><input type="date" id="reconDateTo"></div>
+      </div>
+      <div id="reconConnection" class="recon-banner warn">Загрузка…</div>
+      <div class="recon-stats">
+        <div class="recon-stat"><span>Trans.eu Aufträge</span><b id="reconOrders">0</b></div>
+        <div class="recon-stat"><span>Нет Rechnung</span><b id="reconNoInvoice">0</b></div>
+        <div class="recon-stat"><span>Спросить Давида</span><b id="reconAskDawid">0</b></div>
+        <div class="recon-stat"><span>Всё сопоставлено</span><b id="reconOk">0</b></div>
+      </div>
+      <div class="recon-table">
+        <div class="recon-head"><div>Дата</div><div>Auftrag</div><div>Фирма</div><div>Цена</div><div>Машина</div><div>CMR/POD</div><div>Rechnung</div><div>Действие</div></div>
+        <div id="reconciliationRows"></div>
+      </div>
     </div>
   </section>
 </main>
@@ -206,7 +237,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 </div>
 
 <script>
-let trips=[],vehicles=[],companies=[],activeTransports=[],activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
+let trips=[],vehicles=[],companies=[],activeTransports=[],reconciliation=null,activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
 const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
@@ -419,16 +450,20 @@ function setTab(tab){
   $('companiesView').classList.toggle('hidden',tab!=='companies');
   $('vehiclesView').classList.toggle('hidden',tab!=='vehicles');
   $('activeTransportsView').classList.toggle('hidden',tab!=='active');
+  $('reconciliationView').classList.toggle('hidden',tab!=='reconciliation');
   $('tabTrips').classList.toggle('active',tab==='trips');
   $('tabCompanies').classList.toggle('active',tab==='companies');
   $('tabVehicles').classList.toggle('active',tab==='vehicles');
   $('tabActiveTransports').classList.toggle('active',tab==='active');
+  $('tabReconciliation').classList.toggle('active',tab==='reconciliation');
   $('add').classList.toggle('hidden',tab!=='trips');
+  if(tab==='reconciliation'&&!reconciliation)loadReconciliation();
 }
 $('tabTrips').onclick=()=>setTab('trips');
 $('tabCompanies').onclick=()=>setTab('companies');
 $('tabVehicles').onclick=()=>setTab('vehicles');
 $('tabActiveTransports').onclick=()=>setTab('active');
+$('tabReconciliation').onclick=()=>setTab('reconciliation');
 function renderCompanies(){
   $('companyRows').innerHTML=companies.length?companies.map(c=>
     '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(c.name)+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
@@ -487,6 +522,79 @@ function renderActiveTransports(){
     '</div></div></div>'
   ).join(''):'<div class="muted">Свежих маршрутов пока нет. Открой Trans.eu → Laufende Transporte с включённым расширением.</div>';
 }
+
+function reconActionLabel(action){
+  return ({
+    ok:'<span class="status ok">✓ Всё сопоставлено</span>',
+    create_invoice:'<span class="status wait" style="background:#fff1f2;color:#be123c">Нет Rechnung</span>',
+    check_invoice:'<span class="status wait">Проверить Rechnung</span>',
+    ask_dawid:'<span class="status wait">Спросить Давида</span>',
+    connect_fakturownia:'<span class="status route">Подключить Fakturownia</span>'
+  })[action]||'<span class="status wait">'+esc(action||'Проверить')+'</span>';
+}
+function reconInvoiceCell(r){
+  const exact=r.invoiceMatch?.invoice;
+  if(exact)return '<div><b>✓ '+esc(exact.number||'Найден')+'</b><div class="recon-sub">'+esc(exact.buyerName||'')+'</div></div>';
+  const cand=r.invoiceCandidate?.invoice;
+  if(cand)return '<div><b>? '+esc(cand.number||'Кандидат')+'</b><div class="recon-sub">нужно проверить</div></div>';
+  return '<span class="muted">Нет</span>';
+}
+function renderReconciliation(){
+  const d=reconciliation||{rows:[],counts:{},fakturownia:{}};
+  const counts=d.counts||{};
+  $('reconOrders').textContent=Number(d.transOrders||0);
+  $('reconNoInvoice').textContent=Number(counts.create_invoice||0)+Number(counts.check_invoice||0)+Number(counts.connect_fakturownia||0);
+  $('reconAskDawid').textContent=Number(counts.ask_dawid||0);
+  $('reconOk').textContent=Number(counts.ok||0);
+  $('reconciliationCount').textContent=(Number(counts.create_invoice||0)+Number(counts.check_invoice||0)+Number(counts.ask_dawid||0)+Number(counts.connect_fakturownia||0))?'('+(Number(counts.create_invoice||0)+Number(counts.check_invoice||0)+Number(counts.ask_dawid||0)+Number(counts.connect_fakturownia||0))+')':'';
+
+  const conn=$('reconConnection');
+  if(!d.fakturownia?.configured){
+    conn.className='recon-banner warn';
+    conn.textContent='Fakturownia ещё не подключена: добавь FAKTUROWNIA_API_TOKEN в Railway. Trans.eu и CMR/POD уже можно собирать.';
+  }else if(!d.fakturownia?.reachable){
+    conn.className='recon-banner bad';
+    conn.textContent='Fakturownia подключена, но API сейчас недоступен: '+(d.fakturownia?.error||'проверь соединение');
+  }else{
+    conn.className='recon-banner ok';
+    conn.textContent='Fakturownia подключена · счетов в выбранном периоде: '+Number(d.fakturownia?.invoiceCount||0);
+  }
+
+  const rows=d.rows||[];
+  $('reconciliationRows').innerHTML=rows.length?rows.map(r=>{
+    const o=r.order||{},t=r.trip||{};
+    const ref=o.orderNumber||t.trip||t.internalTripId||'—';
+    const company=t.customer||o.company||'—';
+    const price=t.priceEur??o.priceAmount;
+    const curr=o.currency||'EUR';
+    const plate=o.vehiclePlate||(t.vehiclePlates||[]).join(', ')||'—';
+    const route=(o.loadText||t.loadingPlace||'')&& (o.unloadText||t.unloadingPlace||'') ? (o.loadText||t.loadingPlace)+' → '+(o.unloadText||t.unloadingPlace) : '';
+    return '<div class="recon-row">'+
+      '<div>'+esc(r.date||'—')+'</div>'+
+      '<div><div class="recon-ref">'+esc(ref)+'</div>'+(route?'<div class="recon-sub">'+esc(route)+'</div>':'')+'</div>'+
+      '<div>'+esc(company)+'</div>'+
+      '<div class="recon-price">'+(price==null?'—':esc(price)+' '+esc(curr))+'</div>'+
+      '<div>'+esc(plate)+'</div>'+
+      '<div>'+(r.cmrPresent?'<span class="status ok">✓ Есть</span>':'<span class="status wait">Нет</span>')+'</div>'+
+      '<div>'+reconInvoiceCell(r)+'</div>'+
+      '<div>'+reconActionLabel(r.action)+'</div>'+
+    '</div>';
+  }).join(''):'<div class="recon-empty">Пока нет данных для сверки. Сначала собери Trans.eu Aufträge через расширение.</div>';
+}
+async function loadReconciliation(){
+  const from=$('reconDateFrom').value||'2026-08-11';
+  const to=$('reconDateTo').value||new Date().toISOString().slice(0,10);
+  $('reconConnection').className='recon-banner warn';
+  $('reconConnection').textContent='Сверяю Trans.eu, CMR/POD и Fakturownia…';
+  try{
+    reconciliation=await api('/api/reconciliation?date_from='+encodeURIComponent(from)+'&date_to='+encodeURIComponent(to));
+    renderReconciliation();
+  }catch(e){
+    $('reconConnection').className='recon-banner bad';
+    $('reconConnection').textContent='Ошибка сверки: '+e.message;
+  }
+}
+
 window.delVehicle=async id=>{
   if(!confirm('Удалить машину из списка? В уже выполненных турах номер останется в истории.'))return;
   await api('/api/vehicles/'+id,{method:'DELETE'});await load();
@@ -499,6 +607,9 @@ $('vehicleForm').onsubmit=async e=>{
   $('newVehiclePlate').value='';$('newVehicleNote').value='';await load();
 }
 $('refreshActiveTransports').onclick=async()=>{await load();setTab('active')};
+$('refreshReconciliation').onclick=loadReconciliation;
+$('reconDateFrom').onchange=()=>{reconciliation=null;loadReconciliation()};
+$('reconDateTo').onchange=()=>{reconciliation=null;loadReconciliation()};
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
 $('q').oninput=render;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
@@ -512,6 +623,7 @@ $('addForm').onsubmit=async e=>{
   })});
   e.target.reset();$('addModal').classList.remove('open');await load()
 };
+$('reconDateTo').value=new Date().toISOString().slice(0,10);
 setTab('trips');load().catch(e=>alert(e.message));
 </script>
 </body>
