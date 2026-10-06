@@ -194,7 +194,7 @@ h2 { font-size: 18px; margin: 0 0 12px; }
   --accent-dark: var(--orange-dark);
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 296px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
   background: linear-gradient(180deg, #ff6a00 0 12px, #f7f8fb 12px 100%);
   padding: 12px;
 }
@@ -203,22 +203,22 @@ h2 { font-size: 18px; margin: 0 0 12px; }
   background: rgba(255,255,255,.97);
   border-radius: 28px 0 0 28px;
   border-right: 1px solid #eef0f4;
-  padding: 34px 22px 24px;
+  padding: 24px 14px 18px;
   display: flex;
   flex-direction: column;
 }
-.teacher-brand { display: flex; align-items: center; gap: 13px; padding: 0 10px 28px; }
+.teacher-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px 20px; }
 .teacher-brand__logo {
-  width: 58px;
-  height: 46px;
+  width: 44px;
+  height: 36px;
   flex: 0 0 auto;
   display: block;
   object-fit: contain;
 }
-.teacher-brand__text { display: flex; flex-direction: column; font-size: 20px; line-height: 1.04; font-weight: 800; color: #070A20; }
+.teacher-brand__text { display: flex; flex-direction: column; font-size: 18px; line-height: 1.04; font-weight: 800; color: #070A20; }
 .teacher-brand__text span { color: #FF6A00; }
 .teacher-sidebar__nav { display: grid; gap: 7px; }
-.teacher-nav-item { display: flex; align-items: center; gap: 14px; min-height: 49px; border-radius: 16px; padding: 0 16px; text-decoration: none; color: #273653; font-weight: 600; font-size: 15px; transition: background .15s, color .15s; }
+.teacher-nav-item { display: flex; align-items: center; gap: 14px; min-height: 44px; border-radius: 13px; padding: 0 12px; text-decoration: none; color: #273653; font-weight: 600; font-size: 15px; transition: background .15s, color .15s; }
 .teacher-nav-item:hover { background: #fff7f2; color: var(--orange); }
 .teacher-nav-item.active { background: linear-gradient(90deg, #fff0e7, #fff7f2); color: var(--orange); }
 .teacher-nav-item--disabled { cursor: default; opacity: .9; }
@@ -274,7 +274,7 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 .teacher-empty-state { border: 1px dashed #ffd8c1; border-radius: 16px; padding: 30px; text-align: center; color: #7b869b; }
 
 @media (max-width: 1180px) {
-  .teacher-shell { grid-template-columns: 230px minmax(0, 1fr); }
+  .teacher-shell { grid-template-columns: 210px minmax(0, 1fr); }
   .teacher-student-card { grid-template-columns: 56px minmax(160px, 1fr) minmax(150px, .7fr); }
   .teacher-student-actions { grid-column: 2 / -1; justify-items: start; }
   .teacher-student-actions__top, .teacher-student-actions__bottom { justify-content: flex-start; }
