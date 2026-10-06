@@ -340,9 +340,12 @@
     return r.width > 0 && r.height > 0 && r.bottom >= 0 && r.top <= window.innerHeight && st.display !== "none" && st.visibility !== "hidden";
   }
 
-  function findArchiveTab() {
-    return Array.from(document.querySelectorAll("[role='tab'],button,a")).find(el => compactVisible(el) && /^Archiv$/i.test(clean(el.innerText || el.textContent || ""))) || null;
+  function findOrderTab(label) {
+    const re = label === "archive" ? /^Archiv$/i : /^Aktiv$/i;
+    return Array.from(document.querySelectorAll("[role='tab'],button,a")).find(el => compactVisible(el) && re.test(clean(el.innerText || el.textContent || ""))) || null;
   }
+  function findArchiveTab() { return findOrderTab("archive"); }
+  function findActiveTab() { return findOrderTab("active"); }
 
   function findNextOrderPageButton() {
     const buttons = Array.from(document.querySelectorAll("button,[role='button'],a")).filter(compactVisible);
@@ -390,20 +393,19 @@
     return false;
   }
 
-  async function scanOrderArchive(since = "2026-08-11") {
-    const pageText = clean(document.body?.innerText || "");
-    if (!/\bAUFTRAGSNUMMER\b/i.test(pageText)) {
-      setBadge("Tsubera: открой Aufträge", "error");
-      return { ok:false, error:"Open Trans.eu → Aufträge first" };
-    }
-    const archiveTab = findArchiveTab();
-    if (archiveTab && orderViewMode() !== "archive") {
-      setBadge("Tsubera: открываю Archiv…", "wait");
-      archiveTab.click();
-      await new Promise(resolve => setTimeout(resolve, 1800));
-    }
-    let pages = 0, sent = 0, stoppedByDate = false;
+  async function switchOrderTab(mode) {
+    if (orderViewMode() === mode) return true;
+    const tab = mode === "archive" ? findArchiveTab() : findActiveTab();
+    if (!tab) return false;
+    setBadge("Tsubera: открываю " + (mode === "archive" ? "Archiv" : "Aktiv") + "…", "wait");
+    tab.click();
+    await new Promise(resolve => setTimeout(resolve, 1800));
+    return orderViewMode() === mode;
+  }
+
+  async function scanCurrentOrderPages({ mode, since = "" } = {}) {
     const visited = new Set();
+    let pages = 0, sent = 0, stoppedByDate = false;
     for (let page=1; page<=50; page++) {
       const sig = currentOrderSignature();
       if (!sig || visited.has(sig)) break;
@@ -412,7 +414,7 @@
       if (!result?.ok) throw new Error(result?.error || "Не удалось отправить Aufträge");
       pages++;
       sent += Number(result.count || 0);
-      setBadge("Tsubera: Archiv " + pages + " стр. · " + sent + " ✓", "wait");
+      setBadge("Tsubera: " + (mode === "archive" ? "Archiv" : "Aktiv") + " " + pages + " стр. · " + sent + " ✓", "wait");
 
       const dates = (result.orders || []).map(o => orderDateFromNumber(o.orderNumber)).filter(Boolean).sort();
       if (since && dates.length && dates[0] <= since) {
@@ -427,8 +429,39 @@
       const changed = await waitForOrderChange(before);
       if (!changed) break;
     }
-    setBadge("Tsubera: Archiv " + sent + " заказов ✓", "ok");
     return { ok:true, pages, sent, stoppedByDate };
+  }
+
+  async function scanAllOrders(since = "2026-08-11") {
+    const pageText = clean(document.body?.innerText || "");
+    if (!/\bAUFTRAGSNUMMER\b/i.test(pageText)) {
+      setBadge("Tsubera: открой Aufträge", "error");
+      return { ok:false, error:"Open Trans.eu → Aufträge first" };
+    }
+
+    let active = { ok:true, pages:0, sent:0 };
+    let archive = { ok:true, pages:0, sent:0, stoppedByDate:false };
+
+    if (await switchOrderTab("active")) {
+      active = await scanCurrentOrderPages({ mode:"active" });
+    }
+
+    if (await switchOrderTab("archive")) {
+      archive = await scanCurrentOrderPages({ mode:"archive", since });
+    }
+
+    // Leave the user on Aktiv so 30-second autoscan keeps refreshing current orders.
+    await switchOrderTab("active");
+
+    const total = Number(active.sent || 0) + Number(archive.sent || 0);
+    setBadge("Tsubera: " + total + " Aufträge ✓", "ok");
+    return {
+      ok:true,
+      sent:total,
+      pages:Number(active.pages || 0)+Number(archive.pages || 0),
+      active,
+      archive
+    };
   }
 
   function looksLikeActiveTransport(text) {
@@ -689,15 +722,15 @@
       scanAndPush(true).then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, error: String(e) }));
       return true;
     }
-    if (msg?.type === "tsubera:scanOrderArchive") {
+    if (msg?.type === "tsubera:scanAllOrders" || msg?.type === "tsubera:scanOrderArchive") {
       if (running) {
         sendResponse({ ok:false, error:"Сканирование уже идёт" });
         return;
       }
       running = true;
-      scanOrderArchive(String(msg.since || "2026-08-11"))
+      scanAllOrders(String(msg.since || "2026-08-11"))
         .then(sendResponse)
-        .catch(e => { setBadge("Tsubera: ошибка Archiv", "error"); sendResponse({ ok:false, error:e?.message || String(e) }); })
+        .catch(e => { setBadge("Tsubera: ошибка Aufträge", "error"); sendResponse({ ok:false, error:e?.message || String(e) }); })
         .finally(() => { running = false; });
       return true;
     }
