@@ -199,6 +199,7 @@ function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · з�
 function status(t){
   if(t.rechnungCode)return '<span class="status done">Rechnung erstellt</span>';
   if(t.auftrag&&t.cmrUnloaded)return '<span class="status ok">Готов к Rechnung</span>';
+  if(t.cmrLoaded)return '<span class="status wait">Загружен</span>';
   if(!t.auftrag&&!t.cmrUnloaded)return '<span class="status wait">Не хватает Auftrag и CMR/POD</span>';
   if(!t.auftrag)return '<span class="status wait">Не хватает Auftrag</span>';
   if(!t.cmrUnloaded)return '<span class="status wait">Не хватает CMR/POD</span>';
