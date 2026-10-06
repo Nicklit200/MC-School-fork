@@ -162,6 +162,29 @@ CREATE TABLE IF NOT EXISTS trans_active_transports (
 CREATE INDEX IF NOT EXISTS idx_trans_active_last_seen ON trans_active_transports(last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_trans_active_route ON trans_active_transports(start_text, end_text);
 CREATE INDEX IF NOT EXISTS idx_trans_active_vehicle ON trans_active_transports(vehicle_plate);
+CREATE TABLE IF NOT EXISTS trans_orders (
+  id TEXT PRIMARY KEY,
+  order_number TEXT NOT NULL UNIQUE,
+  status_text TEXT NOT NULL DEFAULT '',
+  view_mode TEXT NOT NULL DEFAULT '',
+  vehicle_plate TEXT NOT NULL DEFAULT '',
+  price_amount REAL,
+  currency TEXT NOT NULL DEFAULT '',
+  distance_km INTEGER,
+  load_text TEXT NOT NULL DEFAULT '',
+  unload_text TEXT NOT NULL DEFAULT '',
+  load_window_text TEXT NOT NULL DEFAULT '',
+  unload_window_text TEXT NOT NULL DEFAULT '',
+  company TEXT NOT NULL DEFAULT '',
+  raw_text TEXT NOT NULL DEFAULT '',
+  source_url TEXT NOT NULL DEFAULT '',
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  seen_count INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_trans_orders_last_seen ON trans_orders(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_trans_orders_vehicle ON trans_orders(vehicle_plate);
+CREATE INDEX IF NOT EXISTS idx_trans_orders_company ON trans_orders(company);
 `);
 
 const tripColumns = new Set(db.prepare("PRAGMA table_info(trips)").all().map(r => r.name));
@@ -611,6 +634,10 @@ function fakturowniaUrl(pathname, params = {}) {
   for (const [k, v] of Object.entries(params || {})) {
     if (v === undefined || v === null || v === "") continue;
     u.searchParams.set(k, String(v));
+  }
+  // Fakturownia documents JSON GET requests with api_token in the query.
+  if (FAKTUROWNIA_API_TOKEN && !u.searchParams.has("api_token")) {
+    u.searchParams.set("api_token", FAKTUROWNIA_API_TOKEN);
   }
   return u;
 }
@@ -1148,7 +1175,306 @@ function transActiveStatus() {
   return { totalStored: total, freshLast3Hours: fresh, lastCaptureAt: latest?.last_seen_at || null, lastSourceUrl: latest?.source_url || null };
 }
 
+
+function transOrderDate(orderNumber, loadWindowText = "") {
+  const ref = String(orderNumber || "");
+  let m = ref.match(/\\b(20\\d{2})\\/(\\d{2})\\/(\\d{2})\\//);
+  if (m) return m[1] + "-" + m[2] + "-" + m[3];
+  m = String(loadWindowText || "").match(/\\b(\\d{2})\\.(\\d{2})\\.(20\\d{2})\\b/);
+  if (m) return m[3] + "-" + m[2] + "-" + m[1];
+  return "";
+}
+function transOrderOut(row) {
+  return row ? {
+    id: row.id,
+    orderNumber: row.order_number || "",
+    date: transOrderDate(row.order_number, row.load_window_text),
+    statusText: row.status_text || "",
+    viewMode: row.view_mode || "",
+    vehiclePlate: row.vehicle_plate || "",
+    priceAmount: row.price_amount === null || row.price_amount === undefined ? null : Number(row.price_amount),
+    currency: row.currency || "",
+    distanceKm: row.distance_km === null || row.distance_km === undefined ? null : Number(row.distance_km),
+    loadText: row.load_text || "",
+    unloadText: row.unload_text || "",
+    loadWindowText: row.load_window_text || "",
+    unloadWindowText: row.unload_window_text || "",
+    company: row.company || "",
+    rawText: row.raw_text || "",
+    sourceUrl: row.source_url || "",
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    seenCount: Number(row.seen_count || 0)
+  } : null;
+}
+function importTransOrders(body = {}) {
+  const orders = Array.isArray(body.orders) ? body.orders.slice(0, TRANS_CAPTURE_MAX_ROWS) : [];
+  const observedAtRaw = transClean(body.scannedAt, 80);
+  const observedAt = /^\\d{4}-\\d{2}-\\d{2}T/.test(observedAtRaw) ? observedAtRaw : now();
+  const sourceUrl = transClean(body.pageUrl, 1500);
+  const viewMode = transClean(body.viewMode, 40);
+  let inserted = 0, updated = 0, ignored = 0;
+  const find = db.prepare("SELECT id FROM trans_orders WHERE order_number=? LIMIT 1");
+  const upsert = db.prepare(
+    "INSERT INTO trans_orders " +
+    "(id,order_number,status_text,view_mode,vehicle_plate,price_amount,currency,distance_km,load_text,unload_text,load_window_text,unload_window_text,company,raw_text,source_url,first_seen_at,last_seen_at,seen_count) " +
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1) " +
+    "ON CONFLICT(order_number) DO UPDATE SET " +
+    "status_text=CASE WHEN excluded.status_text<>'' THEN excluded.status_text ELSE trans_orders.status_text END, " +
+    "view_mode=CASE WHEN excluded.view_mode<>'' THEN excluded.view_mode ELSE trans_orders.view_mode END, " +
+    "vehicle_plate=CASE WHEN excluded.vehicle_plate<>'' THEN excluded.vehicle_plate ELSE trans_orders.vehicle_plate END, " +
+    "price_amount=COALESCE(excluded.price_amount,trans_orders.price_amount), " +
+    "currency=CASE WHEN excluded.currency<>'' THEN excluded.currency ELSE trans_orders.currency END, " +
+    "distance_km=COALESCE(excluded.distance_km,trans_orders.distance_km), " +
+    "load_text=CASE WHEN excluded.load_text<>'' THEN excluded.load_text ELSE trans_orders.load_text END, " +
+    "unload_text=CASE WHEN excluded.unload_text<>'' THEN excluded.unload_text ELSE trans_orders.unload_text END, " +
+    "load_window_text=CASE WHEN excluded.load_window_text<>'' THEN excluded.load_window_text ELSE trans_orders.load_window_text END, " +
+    "unload_window_text=CASE WHEN excluded.unload_window_text<>'' THEN excluded.unload_window_text ELSE trans_orders.unload_window_text END, " +
+    "company=CASE WHEN excluded.company<>'' THEN excluded.company ELSE trans_orders.company END, " +
+    "raw_text=CASE WHEN length(excluded.raw_text)>=length(trans_orders.raw_text) THEN excluded.raw_text ELSE trans_orders.raw_text END, " +
+    "source_url=excluded.source_url, last_seen_at=excluded.last_seen_at, seen_count=trans_orders.seen_count+1"
+  );
+  const tx = db.transaction((rows) => {
+    for (const order of rows) {
+      const orderNumber = transClean(order?.orderNumber, 120);
+      if (!orderNumber) { ignored++; continue; }
+      const existed = !!find.get(orderNumber);
+      upsert.run(
+        crypto.randomUUID(), orderNumber, transClean(order.statusText, 300),
+        transClean(order.viewMode || viewMode, 40), normalizePlate(order.vehiclePlate),
+        transNumber(order.priceAmount), transClean(order.currency, 12).toUpperCase(),
+        transInteger(order.distanceKm), transClean(order.loadText, 400),
+        transClean(order.unloadText, 400), transClean(order.loadWindowText, 160),
+        transClean(order.unloadWindowText, 160), transClean(order.company, 400),
+        transClean(order.rawText, 12000), sourceUrl, observedAt, observedAt
+      );
+      if (existed) updated++; else inserted++;
+    }
+  });
+  tx(orders);
+  return { received: orders.length, inserted, updated, ignored, ...transOrderStatus() };
+}
+function queryTransOrders(args = {}) {
+  let sql = "SELECT * FROM trans_orders WHERE 1=1";
+  const params = [];
+  if (args.query) {
+    const q = "%" + String(args.query).toLowerCase() + "%";
+    sql += " AND (LOWER(order_number) LIKE ? OR LOWER(status_text) LIKE ? OR LOWER(vehicle_plate) LIKE ? OR LOWER(load_text) LIKE ? OR LOWER(unload_text) LIKE ? OR LOWER(company) LIKE ? OR LOWER(raw_text) LIKE ?)";
+    params.push(q,q,q,q,q,q,q);
+  }
+  if (args.vehicle) { sql += " AND LOWER(vehicle_plate) LIKE ?"; params.push("%" + String(args.vehicle).toLowerCase() + "%"); }
+  if (args.view_mode) { sql += " AND LOWER(view_mode)=LOWER(?)"; params.push(String(args.view_mode)); }
+  sql += " ORDER BY last_seen_at DESC LIMIT 1000";
+  let rows = db.prepare(sql).all(...params).map(transOrderOut);
+  if (args.date_from) rows = rows.filter(x => !x.date || x.date >= args.date_from);
+  if (args.date_to) rows = rows.filter(x => !x.date || x.date <= args.date_to);
+  const limit = Math.max(1, Math.min(1000, Number(args.limit || 250)));
+  return rows.slice(0, limit);
+}
+function transOrderStatus() {
+  const total = Number(db.prepare("SELECT COUNT(*) c FROM trans_orders").get()?.c || 0);
+  const latest = db.prepare("SELECT last_seen_at,source_url,view_mode FROM trans_orders ORDER BY last_seen_at DESC LIMIT 1").get();
+  const dates = db.prepare("SELECT order_number,load_window_text FROM trans_orders").all().map(r => transOrderDate(r.order_number,r.load_window_text)).filter(Boolean).sort();
+  return {
+    totalStored: total,
+    lastCaptureAt: latest?.last_seen_at || null,
+    lastSourceUrl: latest?.source_url || null,
+    lastViewMode: latest?.view_mode || null,
+    oldestCapturedOrderDate: dates[0] || null,
+    newestCapturedOrderDate: dates[dates.length-1] || null
+  };
+}
+function reconNorm(v) {
+  return String(v || "").toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+function reconRef(v) {
+  return String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function sameMoney(a,b) {
+  const x=Number(a), y=Number(b);
+  return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x-y) <= 0.02;
+}
+function dateDistanceDays(a,b) {
+  if (!a || !b) return 9999;
+  const x = new Date(a + "T12:00:00Z"), y = new Date(b + "T12:00:00Z");
+  if (!Number.isFinite(x.getTime()) || !Number.isFinite(y.getTime())) return 9999;
+  return Math.abs(x-y)/86400000;
+}
+let fakturowniaReconCache = { key:"", at:0, invoices:[] };
+async function loadFakturowniaInvoicesRange(dateFrom,dateTo) {
+  if (!fakturowniaConfigured()) return [];
+  const key = [dateFrom||"",dateTo||""].join("|");
+  if (fakturowniaReconCache.key===key && Date.now()-fakturowniaReconCache.at < 60000) return fakturowniaReconCache.invoices;
+  const invoices = [];
+  for (let page=1; page<=20; page++) {
+    const data = await fakturowniaJson("/invoices.json", {
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      include_positions: "true",
+      page,
+      per_page: 100
+    });
+    const rows = Array.isArray(data) ? data : [];
+    invoices.push(...rows);
+    if (rows.length < 100) break;
+  }
+  fakturowniaReconCache = { key, at: Date.now(), invoices };
+  return invoices;
+}
+function bestTripForOrder(order,trips,claimedTripIds) {
+  const exact = trips.find(t => !claimedTripIds.has(t.id) && [t.trip,t.internalTripId].some(v => reconRef(v) && reconRef(v)===reconRef(order.orderNumber)));
+  if (exact) return { trip:exact, confidence:"exact_ref" };
+  const sameDate = trips.filter(t => !claimedTripIds.has(t.id) && order.date && t.date===order.date);
+  const plate = normalizePlate(order.vehiclePlate);
+  const priced = sameDate.filter(t => sameMoney(t.priceEur,order.priceAmount));
+  if (plate) {
+    const both = priced.filter(t => (t.vehiclePlates||[]).map(normalizePlate).includes(plate));
+    if (both.length===1) return { trip:both[0], confidence:"date_price_vehicle" };
+  }
+  if (priced.length===1) return { trip:priced[0], confidence:"date_price" };
+  return { trip:null, confidence:"" };
+}
+function invoiceMatchForRefs(invoices,{refs=[],company="",amount=null,date=""}={}) {
+  const strongRefs = refs.map(reconRef).filter(x => x.length>=5);
+  let best = null;
+  for (const inv of invoices) {
+    const hay = reconRef(fakturowniaInvoiceHaystack(inv));
+    const exactRef = strongRefs.find(r => hay.includes(r));
+    const buyer = reconNorm(inv.buyer_name);
+    const companyNorm = reconNorm(company);
+    const companyMatch = !!companyNorm && !!buyer && (buyer.includes(companyNorm) || companyNorm.includes(buyer));
+    const amountMatch = sameMoney(inv.total_price_gross ?? inv.price_gross, amount) || sameMoney(inv.total_price_net ?? inv.price_net, amount);
+    const invDate = inv.sell_date || inv.issue_date || "";
+    const nearDate = dateDistanceDays(date,invDate) <= 35;
+    let score = 0;
+    if (exactRef) score += 100;
+    if (companyMatch) score += 35;
+    if (amountMatch) score += 25;
+    if (nearDate) score += 10;
+    const candidate = { invoice:fakturowniaInvoiceSummary(inv), score, exactRef:exactRef||"", companyMatch, amountMatch, nearDate };
+    if (!best || score>best.score) best=candidate;
+  }
+  if (!best) return { invoice:null, candidate:null };
+  if (best.score>=100) return { invoice:best, candidate:null };
+  if (best.score>=60) return { invoice:null, candidate:best };
+  return { invoice:null, candidate:null };
+}
+async function buildReconciliation(args={}) {
+  const dateFrom = String(args.date_from || "2026-08-11");
+  const dateTo = String(args.date_to || new Date().toISOString().slice(0,10));
+  const orders = queryTransOrders({ date_from:dateFrom, date_to:dateTo, limit:1000 });
+  const trips = queryTrips({ date_from:dateFrom, date_to:dateTo });
+  let invoices = [], fakturowniaError = "";
+  if (fakturowniaConfigured()) {
+    try { invoices = await loadFakturowniaInvoicesRange(dateFrom,dateTo); }
+    catch (e) { fakturowniaError = e?.message || String(e); }
+  }
+  const claimedTripIds = new Set();
+  const rows = [];
+  for (const order of orders) {
+    const mt = bestTripForOrder(order,trips,claimedTripIds);
+    const trip = mt.trip;
+    if (trip) claimedTripIds.add(trip.id);
+    const company = trip?.customer || order.company || "";
+    const amount = trip?.priceEur ?? order.priceAmount;
+    const refs = [order.orderNumber,trip?.trip,trip?.internalTripId].filter(Boolean);
+    const im = invoiceMatchForRefs(invoices,{refs,company,amount,date:order.date||trip?.date||""});
+    const hasInvoice = !!im.invoice || !!trip?.rechnungCode;
+    const hasCmr = !!trip?.cmrUnloaded;
+    let action = "ok";
+    if (!trip || !hasCmr) action = "ask_dawid";
+    else if (!hasInvoice && im.candidate) action = "check_invoice";
+    else if (!hasInvoice && !fakturowniaConfigured()) action = "connect_fakturownia";
+    else if (!hasInvoice) action = "create_invoice";
+    rows.push({
+      source:"trans_order",
+      date:order.date || trip?.date || "",
+      order,
+      trip:trip||null,
+      tripMatchConfidence:mt.confidence,
+      cmrPresent:hasCmr,
+      invoicePresent:hasInvoice,
+      invoiceMatch:im.invoice,
+      invoiceCandidate:im.candidate,
+      action
+    });
+  }
+  for (const trip of trips) {
+    if (claimedTripIds.has(trip.id)) continue;
+    const im = invoiceMatchForRefs(invoices,{refs:[trip.trip,trip.internalTripId].filter(Boolean),company:trip.customer,amount:trip.priceEur,date:trip.date});
+    const hasInvoice = !!im.invoice || !!trip.rechnungCode;
+    let action = "ok";
+    if (!trip.cmrUnloaded) action = "ask_dawid";
+    else if (!hasInvoice && im.candidate) action = "check_invoice";
+    else if (!hasInvoice && !fakturowniaConfigured()) action = "connect_fakturownia";
+    else if (!hasInvoice) action = "create_invoice";
+    rows.push({
+      source:"tsubera_trip",
+      date:trip.date,
+      order:null,
+      trip,
+      tripMatchConfidence:"",
+      cmrPresent:!!trip.cmrUnloaded,
+      invoicePresent:hasInvoice,
+      invoiceMatch:im.invoice,
+      invoiceCandidate:im.candidate,
+      action
+    });
+  }
+  rows.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const counts = rows.reduce((acc,r)=>{acc[r.action]=(acc[r.action]||0)+1;return acc;},{});
+  return {
+    dateFrom,dateTo,
+    transOrders:orders.length,
+    tsuberaTrips:trips.length,
+    fakturownia:{
+      configured:fakturowniaConfigured(),
+      reachable:fakturowniaConfigured() && !fakturowniaError,
+      invoiceCount:invoices.length,
+      error:fakturowniaError || null
+    },
+    counts,
+    rows
+  };
+}
+
 const toolDefs = [
+  {
+    name: "get_trans_order_status",
+    description: "Check how many Trans.eu Aufträge were captured from the user's logged-in browser, including archive scans.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "search_trans_orders",
+    description: "Search Trans.eu Aufträge captured from the user's logged-in browser. Supports date, vehicle, and archive/active view filters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        date_from: { type: "string", description: "YYYY-MM-DD" },
+        date_to: { type: "string", description: "YYYY-MM-DD" },
+        vehicle: { type: "string" },
+        view_mode: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: 1000 }
+      },
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: "get_reconciliation",
+    description: "Reconcile captured Trans.eu orders with Tsubera trips/CMR-POD and Fakturownia invoices. Rows needing human confirmation are marked ask_dawid.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date_from: { type: "string", description: "YYYY-MM-DD, default 2026-08-11" },
+        date_to: { type: "string", description: "YYYY-MM-DD" }
+      },
+      additionalProperties: false
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+  },
   {
     name: "get_system_overview",
     description: "Return a read-only overview of the Tsubera transport document system, counts, storage locations and readiness totals.",
@@ -1528,7 +1854,10 @@ const toolDefs = [
 ];
 
 async function callTool(name, args, req) {
-  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus() };
+  if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus(), transOrderCapture: transOrderStatus(), fakturowniaConfigured: fakturowniaConfigured() };
+  if (name === "get_trans_order_status") return transOrderStatus();
+  if (name === "search_trans_orders") { const orders = queryTransOrders(args); return { orders, count: orders.length, ...transOrderStatus() }; }
+  if (name === "get_reconciliation") return await buildReconciliation(args);
   if (name === "get_trans_freight_status") return transFreightStatus();
   if (name === "search_trans_freights") { const freights = queryTransFreights(args); return { freights, count: freights.length, ...transFreightStatus() }; }
   if (name === "get_fakturownia_status") {
@@ -1575,7 +1904,8 @@ async function callTool(name, args, req) {
     const freightDetailResults = queryTransFreightDetails({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight_detail", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
     const freightResults = queryTransFreights({ query: args.query, max_age_minutes: 180, limit: 100 }).map(f => ({ id: f.id, type: "trans_freight", title: (f.loadText || "?") + " → " + (f.unloadText || "?"), ...f }));
     const activeTransportResults = queryTransActive({ query: args.query, max_age_minutes: 180, limit: 100 }).map(t => ({ id: t.id, type: "trans_active_transport", title: (t.startText || "?") + " → " + (t.endText || "?"), ...t }));
-    return { results: [...tripResults, ...freightDetailResults, ...freightResults, ...activeTransportResults], tripResults, freightDetailResults, freightResults, activeTransportResults, transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus() };
+    const orderResults = queryTransOrders({ query: args.query, limit: 100 }).map(o => ({ id: o.id, type: "trans_order", title: o.orderNumber || "Trans.eu Auftrag", ...o }));
+    return { results: [...tripResults, ...freightDetailResults, ...freightResults, ...activeTransportResults, ...orderResults], tripResults, freightDetailResults, freightResults, activeTransportResults, orderResults, transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus(), transOrderCapture: transOrderStatus() };
   }
   if (name === "list_trips") return { trips: queryTrips(args), count: queryTrips(args).length };
   if (name === "get_trip") {
@@ -1962,6 +2292,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req, 4 * 1024 * 1024);
       return json(res, 200, importTransActive(body));
     }
+    if (p === "/api/trans/orders/import" && req.method === "POST") {
+      if (!transCaptureAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
+      const body = await readJson(req, 4 * 1024 * 1024);
+      return json(res, 200, importTransOrders(body));
+    }
     if (p.startsWith("/api/")) {
       if (!apiAuthorized(req)) return json(res, 401, { error: "Unauthorized" });
 
@@ -2001,6 +2336,26 @@ const server = http.createServer(async (req, res) => {
         };
         const transports = queryTransActive(args);
         return json(res, 200, { transports, count: transports.length, ...transActiveStatus() });
+      }
+      if (p === "/api/trans/orders/status" && req.method === "GET") return json(res, 200, transOrderStatus());
+      if (p === "/api/trans/orders" && req.method === "GET") {
+        const args = {
+          query: url.searchParams.get("q") || undefined,
+          date_from: url.searchParams.get("date_from") || undefined,
+          date_to: url.searchParams.get("date_to") || undefined,
+          vehicle: url.searchParams.get("vehicle") || undefined,
+          view_mode: url.searchParams.get("view_mode") || undefined,
+          limit: url.searchParams.get("limit") || undefined
+        };
+        const orders = queryTransOrders(args);
+        return json(res, 200, { orders, count: orders.length, ...transOrderStatus() });
+      }
+      if (p === "/api/reconciliation" && req.method === "GET") {
+        const data = await buildReconciliation({
+          date_from: url.searchParams.get("date_from") || undefined,
+          date_to: url.searchParams.get("date_to") || undefined
+        });
+        return json(res, 200, data);
       }
 
       if (p === "/api/companies" && req.method === "GET") return json(res, 200, { companies: listCompanies() });
