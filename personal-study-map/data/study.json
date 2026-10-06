@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "owner": "Николай",
+  "updatedAt": "2026-10-06",
+  "semesters": [
+    {
+      "id": "ws-2026-27",
+      "title": "Wintersemester 2026/27",
+      "exams": []
+    }
+  ],
+  "sessions": []
+}
