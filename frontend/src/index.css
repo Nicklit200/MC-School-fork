@@ -194,7 +194,7 @@ h2 { font-size: 18px; margin: 0 0 12px; }
   --accent-dark: var(--orange-dark);
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
   background: linear-gradient(180deg, #ff6a00 0 12px, #f7f8fb 12px 100%);
   padding: 12px;
 }
@@ -207,16 +207,32 @@ h2 { font-size: 18px; margin: 0 0 12px; }
   display: flex;
   flex-direction: column;
 }
-.teacher-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px 20px; }
+.teacher-brand { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) 28px; align-items: center; gap: 9px; padding: 0 2px 20px; min-width: 0; }
 .teacher-brand__logo {
-  width: 44px;
-  height: 36px;
+  width: 40px;
+  height: 34px;
   flex: 0 0 auto;
   display: block;
   object-fit: contain;
 }
-.teacher-brand__text { display: flex; flex-direction: column; font-size: 18px; line-height: 1.04; font-weight: 800; color: #070A20; }
+.teacher-brand__text { min-width: 0; display: flex; flex-direction: column; font-size: 17px; line-height: 1.02; font-weight: 800; color: #070A20; white-space: nowrap; }
 .teacher-brand__text span { color: #FF6A00; }
+.teacher-brand__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e5e9f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #59657d;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.teacher-brand__close:hover { background: #fff3ec; color: var(--orange); border-color: #ffd7bf; }
 .teacher-sidebar__nav { display: grid; gap: 7px; }
 .teacher-nav-item { display: flex; align-items: center; gap: 14px; min-height: 44px; border-radius: 13px; padding: 0 12px; text-decoration: none; color: #273653; font-weight: 600; font-size: 15px; transition: background .15s, color .15s; }
 .teacher-nav-item:hover { background: #fff7f2; color: var(--orange); }
@@ -274,7 +290,7 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 .teacher-empty-state { border: 1px dashed #ffd8c1; border-radius: 16px; padding: 30px; text-align: center; color: #7b869b; }
 
 @media (max-width: 1180px) {
-  .teacher-shell { grid-template-columns: 210px minmax(0, 1fr); }
+  .teacher-shell { grid-template-columns: 224px minmax(0, 1fr); }
   .teacher-student-card { grid-template-columns: 56px minmax(160px, 1fr) minmax(150px, .7fr); }
   .teacher-student-actions { grid-column: 2 / -1; justify-items: start; }
   .teacher-student-actions__top, .teacher-student-actions__bottom { justify-content: flex-start; }
