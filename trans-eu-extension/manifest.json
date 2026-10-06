@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tsubera Trans.eu Capture",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Captures freight offers rendered on Trans.eu and sends them to Tsubera.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
