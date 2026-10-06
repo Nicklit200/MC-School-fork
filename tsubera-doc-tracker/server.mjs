@@ -1374,11 +1374,12 @@ function transOrderServiceDate(order) {
   return order?.date || "";
 }
 
-function invoiceMatchForRefs(invoices,{refs=[],company=""}={}) {
+function invoiceMatchForRefs(invoices,{refs=[],company="",date=""}={}) {
   const strongRefs = refs.map(reconRef).filter(x => x.length>=5);
   const companyNorm = reconNorm(company);
   const sameCompany = [];
   let exact = null;
+  let probable = null;
 
   for (const inv of invoices) {
     const buyerNorm = reconNorm(inv.buyer_name);
@@ -1396,17 +1397,39 @@ function invoiceMatchForRefs(invoices,{refs=[],company=""}={}) {
         score:100,
         exactRef,
         companyMatch:true,
-        amountMatch:null,
-        sameTripDate:null,
-        nearDate:null,
-        dayDistance:null
+        probable:false,
+        dayDistance:0,
+        matchDate:summary.sellDate || summary.issueDate || ""
+      };
+      continue;
+    }
+
+    const dateCandidates = [summary.sellDate, summary.issueDate].filter(Boolean);
+    let bestDistance = 9999;
+    let matchDate = "";
+    for (const invoiceDate of dateCandidates) {
+      const dist = dateDistanceDays(date, invoiceDate);
+      if (dist < bestDistance) {
+        bestDistance = dist;
+        matchDate = invoiceDate;
+      }
+    }
+    if (bestDistance <= 45 && (!probable || bestDistance < probable.dayDistance)) {
+      probable = {
+        invoice:summary,
+        score:Math.max(1, 60 - Math.min(45, bestDistance)),
+        exactRef:"",
+        companyMatch:true,
+        probable:true,
+        dayDistance:bestDistance,
+        matchDate
       };
     }
   }
 
   return {
     invoice:exact,
-    candidate:null,
+    candidate:exact ? null : probable,
     companyInvoices:sameCompany
   };
 }
@@ -1435,7 +1458,8 @@ async function buildReconciliation(args={}) {
     const company = order.company || "";
     const im = invoiceMatchForRefs(invoices,{
       refs:[order.orderNumber].filter(Boolean),
-      company
+      company,
+      date:transOrderServiceDate(order)
     });
 
     const exact = !!im.invoice;
@@ -1507,7 +1531,7 @@ const toolDefs = [
   },
   {
     name: "get_reconciliation",
-    description: "Compare captured Trans.eu orders with Fakturownia. Company names must match exactly after normalization; a specific tour is matched only when its Trans.eu Auftrag number appears in the invoice."
+    description: "Compare captured Trans.eu orders with Fakturownia. Exact match requires the same company plus the Trans.eu Auftrag number in the invoice; otherwise the nearest-date invoice for the same company is shown only as a probable match."
     inputSchema: {
       type: "object",
       properties: {
