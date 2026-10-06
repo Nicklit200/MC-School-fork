@@ -646,6 +646,7 @@ function missingForTrip(t) {
   const missing = [];
   if (!t.auftrag) missing.push("Transportauftrag");
   if (!t.cmrUnloaded) missing.push("CMR nach Entladung / POD");
+  if (t.cmrUnloaded && t.priceEur == null) missing.push("Preis");
   return missing;
 }
 function readiness(t) {
