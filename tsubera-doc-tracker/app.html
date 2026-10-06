@@ -16,7 +16,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
-.table{overflow-x:auto}.head,.row{width:100%;min-width:1090px;display:grid;grid-template-columns:105px 145px 145px minmax(240px,1.8fr) 115px 95px 135px minmax(190px,1.1fr) 44px;align-items:center}
+.table{overflow-x:auto}.head,.row{width:100%;min-width:1320px;display:grid;grid-template-columns:100px 140px 135px minmax(210px,1.45fr) minmax(220px,1.45fr) 105px 90px 125px minmax(175px,1.05fr) 44px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
 .cellcheck{display:flex;justify-content:center}.row input[type=checkbox]{width:18px;height:18px}
@@ -87,7 +87,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     </div>
     <div class="table">
       <div class="head">
-        <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Цена</div><div>Auftrag</div>
+        <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Маршрут</div><div>Цена</div><div>Auftrag</div>
         <div>CMR выгрузка / POD</div>
         <div>Статус</div><div></div>
       </div>
@@ -151,6 +151,8 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="field"><label>№ заказа / Tour-Nr. заказчика</label><input name="trip" placeholder="например GD26090270"></div>
       <div class="field"><label>Заказчик</label><input name="customer" list="companyDatalist" placeholder="Выбери или введи новую фирму" required><datalist id="companyDatalist"></datalist></div>
       <div class="field"><label>Цена (€)</label><input name="priceEur" type="number" min="0" step="0.01" inputmode="decimal" placeholder="например 280"></div>
+      <div class="field"><label>Загрузка</label><input name="loadingPlace" placeholder="например DE 87435 Kempten"></div>
+      <div class="field"><label>Выгрузка</label><input name="unloadingPlace" placeholder="например PL 60-101 Poznań"></div>
     </div>
     <div class="actions"><button class="btn alt" type="button" id="cancelAdd">Отмена</button><button class="btn">Сохранить</button></div>
   </form>
@@ -275,7 +277,7 @@ function render(){
   let list=trips
     .filter(t=>showHidden||(companyForTrip(t)?.active!==false))
     .filter(t=>!selectedCompany||normCompany(t.customer)===normCompany(selectedCompany.name))
-    .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
+    .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
   $('total').textContent=list.length;
   $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
@@ -286,6 +288,7 @@ function render(){
       <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
       <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
       <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(t.customer)}</button></div>
+      <div><div style="font-weight:650">${esc(t.loadingPlace||'—')} → ${esc(t.unloadingPlace||'—')}</div></div>
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
@@ -341,7 +344,9 @@ window.openTrip=async id=>{
     '<div class="detailrow"><b>Дата</b><div>'+esc(t.date||'—')+'</div></div>'+
     '<div class="detailrow"><b>Tsubera Tour-ID</b><div>'+esc(t.internalTripId||'—')+'</div></div>'+
     '<div class="detailrow"><b>№ заказчика</b><div>'+esc(t.trip||'—')+'</div></div>'+
-    '<div class="detailrow"><b>Заказчик</b><div>'+esc(t.customer||'—')+'</div></div>'+
+    '<div class="detailrow"><b>Заказчик</b><div>'+esc(t.customer||'—')+'</div></div>'+\
+    '<div class="detailrow"><b>Загрузка</b><div><input id="tripLoadingPlace" class="dt" value="'+esc(t.loadingPlace||'')+'" placeholder="DE 87435 Kempten"></div></div>'+\
+    '<div class="detailrow"><b>Выгрузка</b><div><input id="tripUnloadingPlace" class="dt" value="'+esc(t.unloadingPlace||'')+'" placeholder="PL 60-101 Poznań"></div></div>'+
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
     '<div class="detailrow"><b>Статус</b><div>'+status(t)+'</div></div>';
   renderTripVehicleChoices(t);
@@ -361,7 +366,9 @@ $('saveTrip').onclick=async()=>{
   const priceRaw=$('tripPrice')?.value?.trim()??'';
   const priceEur=priceRaw===''?null:Number(priceRaw);
   if(priceRaw!==''&&!Number.isFinite(priceEur))return alert('Укажи корректную цену');
-  await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates,priceEur})});
+  const loadingPlace=$('tripLoadingPlace')?.value?.trim()||'';
+  const unloadingPlace=$('tripUnloadingPlace')?.value?.trim()||'';
+  await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates,priceEur,loadingPlace,unloadingPlace})});
   await load();
   const t=trips.find(x=>x.id===activeDetailTrip);
   if(t){renderTripVehicleChoices(t);renderDocVehicleOptions(t);updateDocsTimestamp()}
@@ -455,6 +462,7 @@ $('addForm').onsubmit=async e=>{
   e.preventDefault();let f=new FormData(e.target);
   await api('/api/trips',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
     date:f.get('date'),trip:(f.get('trip')||'').trim(),customer:f.get('customer'),
+    loadingPlace:(f.get('loadingPlace')||'').trim(),unloadingPlace:(f.get('unloadingPlace')||'').trim(),
     priceEur:(f.get('priceEur')||'').trim()===''?null:Number(f.get('priceEur'))
   })});
   e.target.reset();$('addModal').classList.remove('open');await load()
