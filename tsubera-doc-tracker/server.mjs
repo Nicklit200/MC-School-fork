@@ -1531,7 +1531,7 @@ const toolDefs = [
   },
   {
     name: "get_reconciliation",
-    description: "Compare captured Trans.eu orders with Fakturownia. Exact match requires the same company plus the Trans.eu Auftrag number in the invoice; otherwise the nearest-date invoice for the same company is shown only as a probable match."
+    description: "Compare captured Trans.eu orders with Fakturownia. Exact match requires the same company plus the Trans.eu Auftrag number in the invoice; otherwise the nearest-date invoice for the same company is shown only as a probable match.",
     inputSchema: {
       type: "object",
       properties: {
