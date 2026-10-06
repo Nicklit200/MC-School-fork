@@ -251,6 +251,186 @@
     return detail;
   }
 
+
+  function orderViewMode() {
+    const tabs = Array.from(document.querySelectorAll("[role='tab'],button,a")).filter(el => /^(Aktiv|Archiv)$/i.test(clean(el.innerText || el.textContent || "")));
+    const selected = tabs.find(el => el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-current") === "page" || /active|selected/i.test(String(el.className || "")));
+    const value = clean((selected || tabs[0])?.innerText || (selected || tabs[0])?.textContent || "");
+    if (/archiv/i.test(value) || /archive/i.test(location.href)) return "archive";
+    return "active";
+  }
+
+  function looksLikeOrder(text) {
+    if (!text || text.length < 35 || text.length > 12000) return false;
+    if (!/\b20\d{2}\/\d{2}\/\d{2}\/\d+\b/.test(text)) return false;
+    return /\b(?:EUR|PLN|GBP|CHF)\b|Auf Bestätigung warten|Bestätigt|Storniert|\b\d[\d .]*\s*km\b/i.test(text);
+  }
+
+  function orderCandidateRows() {
+    const selectors = ["tbody tr","[role='row']","[class*='order']","[class*='auftrag']","[class*='row']"];
+    const nodes = [];
+    const seenNodes = new Set();
+    function consider(el) {
+      if (!el || seenNodes.has(el)) return;
+      seenNodes.add(el);
+      if (!visible(el)) return;
+      const text = clean(el.innerText || el.textContent || "");
+      if (!looksLikeOrder(text)) return;
+      nodes.push({ el, text });
+    }
+    for (const selector of selectors) for (const el of document.querySelectorAll(selector)) consider(el);
+    if (!nodes.length) for (const el of document.querySelectorAll("div,li,article,section")) consider(el);
+    nodes.sort((a,b) => a.text.length - b.text.length);
+    const unique = [], seen = new Set();
+    for (const item of nodes) {
+      const m = item.text.match(/\b20\d{2}\/\d{2}\/\d{2}\/\d+\b/);
+      const key = m?.[0] || "";
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+    return unique.slice(0,250);
+  }
+
+  function parseOrder(text) {
+    const ls = lines(text);
+    const orderNumber = text.match(/\b20\d{2}\/\d{2}\/\d{2}\/\d+\b/)?.[0] || "";
+    const price = text.match(/(?:^|\s)(\d[\d .]*(?:[.,]\d+)?)\s*(EUR|PLN|GBP|CHF)\b/i);
+    const km = text.match(/\b(\d[\d .]{0,8})\s*km\b/i);
+    const locs = locationMatches(text);
+    const times = dateTimes(text);
+    const status = ls.find(x => /Auf Bestätigung warten|Bestätigt|Storniert|Abgeschlossen|In Bearbeitung|Warten|Ausgeführt|Erledigt/i.test(x)) || "";
+    return {
+      orderNumber,
+      statusText: status.slice(0,300),
+      viewMode: orderViewMode(),
+      vehiclePlate: pickVehiclePlate(text),
+      priceAmount: price ? numberOf(price[1]) : null,
+      currency: price ? price[2].toUpperCase() : "",
+      distanceKm: km ? Math.round(numberOf(km[1]) || 0) : null,
+      loadText: locs[0] || "",
+      unloadText: locs[1] || "",
+      loadWindowText: times[0] || "",
+      unloadWindowText: times[1] || "",
+      company: pickCompany(text),
+      rawText: text.slice(0,12000)
+    };
+  }
+
+  async function pushOrdersFromCurrentPage() {
+    const rows = orderCandidateRows();
+    const orders = rows.map(r => parseOrder(r.text)).filter(x => x.orderNumber);
+    if (!orders.length) return { ok:false, count:0, error:"orders_not_found" };
+    const response = await chrome.runtime.sendMessage({
+      type: "tsubera:pushOrders",
+      payload: {
+        pageUrl: location.href,
+        scannedAt: new Date().toISOString(),
+        viewMode: orderViewMode(),
+        orders
+      }
+    });
+    return { ...(response || {}), count:orders.length, orders };
+  }
+
+  function compactVisible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && r.bottom >= 0 && r.top <= window.innerHeight && st.display !== "none" && st.visibility !== "hidden";
+  }
+
+  function findArchiveTab() {
+    return Array.from(document.querySelectorAll("[role='tab'],button,a")).find(el => compactVisible(el) && /^Archiv$/i.test(clean(el.innerText || el.textContent || ""))) || null;
+  }
+
+  function findNextOrderPageButton() {
+    const buttons = Array.from(document.querySelectorAll("button,[role='button'],a")).filter(compactVisible);
+    let hit = buttons.find(el => {
+      const label = [el.getAttribute("aria-label"),el.getAttribute("title"),clean(el.innerText || el.textContent || "")].filter(Boolean).join(" ");
+      return /nächste|next|weiter|folgende/i.test(label);
+    });
+    if (hit) return hit;
+    const markers = Array.from(document.querySelectorAll("span,div,p")).filter(el => compactVisible(el) && /^von\s+\d+$/i.test(clean(el.innerText || el.textContent || "")));
+    for (const marker of markers) {
+      const mr = marker.getBoundingClientRect();
+      let parent = marker.parentElement;
+      for (let depth=0; parent && depth<5; depth++, parent=parent.parentElement) {
+        const nearby = Array.from(parent.querySelectorAll("button,[role='button'],a")).filter(el => {
+          if (!compactVisible(el)) return false;
+          const r = el.getBoundingClientRect();
+          return r.left > mr.left && Math.abs(r.top-mr.top) < 80;
+        });
+        if (nearby.length) return nearby.sort((a,b)=>b.getBoundingClientRect().left-a.getBoundingClientRect().left)[0];
+      }
+    }
+    return null;
+  }
+
+  function controlDisabled(el) {
+    return !el || el.disabled || el.getAttribute("aria-disabled") === "true" || /disabled/i.test(String(el.className || ""));
+  }
+
+  function currentOrderSignature() {
+    return orderCandidateRows().map(r => r.text.match(/\b20\d{2}\/\d{2}\/\d{2}\/\d+\b/)?.[0] || "").filter(Boolean).join("|");
+  }
+
+  function orderDateFromNumber(v) {
+    const m = String(v || "").match(/\b(20\d{2})\/(\d{2})\/(\d{2})\//);
+    return m ? m[1]+"-"+m[2]+"-"+m[3] : "";
+  }
+
+  async function waitForOrderChange(before, timeoutMs = 10000) {
+    const started = Date.now();
+    while (Date.now()-started < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, 450));
+      const nowSig = currentOrderSignature();
+      if (nowSig && nowSig !== before) return true;
+    }
+    return false;
+  }
+
+  async function scanOrderArchive(since = "2026-08-11") {
+    const pageText = clean(document.body?.innerText || "");
+    if (!/\bAUFTRAGSNUMMER\b/i.test(pageText)) {
+      setBadge("Tsubera: открой Aufträge", "error");
+      return { ok:false, error:"Open Trans.eu → Aufträge first" };
+    }
+    const archiveTab = findArchiveTab();
+    if (archiveTab && orderViewMode() !== "archive") {
+      setBadge("Tsubera: открываю Archiv…", "wait");
+      archiveTab.click();
+      await new Promise(resolve => setTimeout(resolve, 1800));
+    }
+    let pages = 0, sent = 0, stoppedByDate = false;
+    const visited = new Set();
+    for (let page=1; page<=50; page++) {
+      const sig = currentOrderSignature();
+      if (!sig || visited.has(sig)) break;
+      visited.add(sig);
+      const result = await pushOrdersFromCurrentPage();
+      if (!result?.ok) throw new Error(result?.error || "Не удалось отправить Aufträge");
+      pages++;
+      sent += Number(result.count || 0);
+      setBadge("Tsubera: Archiv " + pages + " стр. · " + sent + " ✓", "wait");
+
+      const dates = (result.orders || []).map(o => orderDateFromNumber(o.orderNumber)).filter(Boolean).sort();
+      if (since && dates.length && dates[0] <= since) {
+        stoppedByDate = true;
+        break;
+      }
+
+      const next = findNextOrderPageButton();
+      if (controlDisabled(next)) break;
+      const before = sig;
+      next.click();
+      const changed = await waitForOrderChange(before);
+      if (!changed) break;
+    }
+    setBadge("Tsubera: Archiv " + sent + " заказов ✓", "ok");
+    return { ok:true, pages, sent, stoppedByDate };
+  }
+
   function looksLikeActiveTransport(text) {
     if (!text || text.length < 35 || text.length > 6000) return false;
     const locs = locationMatches(text);
@@ -374,11 +554,12 @@
     const pageText = clean(document.body?.innerText || "");
     const detailNode = freightDetailCandidate();
     const detailPage = !!detailNode;
+    const orderPage = /\bAUFTRAGSNUMMER\b/i.test(pageText) && /PREIS\s*\/\s*TARIF|GESAMTWERT DES AUFTRAGS/i.test(pageText);
     const activePage = /START DER ROUTE|ENDE DER ROUTE|NÄCHSTE VORGANGS-ETA|Auf dem Weg zur Beladung/i.test(pageText);
     const freightPage = /Fracht suchen/i.test(pageText);
 
-    if (!detailPage && !activePage && !freightPage) {
-      setBadge("Tsubera: открой Fracht suchen, карточку груза или Laufende Transporte");
+    if (!detailPage && !orderPage && !activePage && !freightPage) {
+      setBadge("Tsubera: открой Fracht suchen, Aufträge или Laufende Transporte");
       return;
     }
 
@@ -420,6 +601,20 @@
         } else {
           setBadge("Tsubera: ошибка карточки", "error");
           console.warn("[Tsubera Freight Detail]", response);
+        }
+        return;
+      }
+
+      if (orderPage) {
+        const response = await pushOrdersFromCurrentPage();
+        if (response?.ok) {
+          setBadge("Tsubera: " + response.count + " Auftrag ✓", "ok");
+        } else if (response?.needsPassword) {
+          setBadge("Tsubera: укажи пароль", "error");
+        } else if (response?.disabled) {
+          setBadge("Tsubera: выключено");
+        } else {
+          setBadge("Tsubera: Aufträge не найдены", "error");
         }
         return;
       }
@@ -492,6 +687,18 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === "tsubera:scanNow") {
       scanAndPush(true).then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, error: String(e) }));
+      return true;
+    }
+    if (msg?.type === "tsubera:scanOrderArchive") {
+      if (running) {
+        sendResponse({ ok:false, error:"Сканирование уже идёт" });
+        return;
+      }
+      running = true;
+      scanOrderArchive(String(msg.since || "2026-08-11"))
+        .then(sendResponse)
+        .catch(e => { setBadge("Tsubera: ошибка Archiv", "error"); sendResponse({ ok:false, error:e?.message || String(e) }); })
+        .finally(() => { running = false; });
       return true;
     }
   });
