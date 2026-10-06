@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Tsubera Trans.eu Capture",
-  "version": "0.3.0",
-  "description": "Captures Trans.eu freight offers, open freight cards, and active transports and sends them to Tsubera.",
+  "version": "0.4.0",
+  "description": "Captures Trans.eu freight offers, opened cards, active transports, and Aufträge archive and sends them to Tsubera.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://*.trans.eu/*",
