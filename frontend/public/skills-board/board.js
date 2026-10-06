@@ -719,13 +719,10 @@ function selectNode(id){
   selection={type:"node",id};renderNodes();renderEdges();showNode(id);return true;
 }
 function showHelp(){
-  $("inspector-heading").textContent="Как работать";
+  selection=null;
+  $("inspector-heading").textContent="";
   $("inspector-body").replaceChildren();
-  const help=element("div","help");
-  help.innerHTML="<h2>Карта группы и ученика</h2><p><strong>Выберите группу или ученика</strong> сверху. Для группы на карточке показываются проценты каждого ребёнка отдельно.</p><p><strong>CORE</strong> — общее ядро. Метки GYM / RS / WS / MS показывают, в каких школьных программах встречается навык. Темы, не относящиеся к школам выбранной группы, приглушаются.</p><p><strong>Нажмите на навык:</strong> синим подсветится, от чего он зависит, зелёным — где используется дальше.</p><p><strong>Вид «Карта»</strong> сохраняет свободное расположение карточек, а <strong>«Дерево»</strong> показывает иерархию.</p><p>Проценты каждого ученика сохраняются отдельно от структуры программы.</p>";
-  if(!config?.canEdit)help.append(element("p","","Просмотр для преподавателя. Общую программу редактирует администратор."));
-  $("inspector-body").append(help);
-  if(innerWidth<850)$("inspector").classList.add("closed");
+  $("inspector").classList.add("closed");
 }
 function field(form,label,name,value,kind="input",max=4000){
   const caption=element("label","",label);caption.htmlFor="field-"+name;
