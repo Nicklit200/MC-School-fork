@@ -198,7 +198,8 @@ async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=
 function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · загрузка',cmr_unloading:'CMR · выгрузка / POD',cmr:'CMR · загрузка',pod:'CMR · выгрузка / POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
 function status(t){
   if(t.rechnungCode)return '<span class="status done">Rechnung erstellt</span>';
-  if(t.auftrag&&t.cmrUnloaded)return '<span class="status ok">Готов к Rechnung</span>';
+  if(t.cmrUnloaded&&t.priceEur==null)return '<span class="status wait">Нет цены</span>';
+  if(t.auftrag&&t.cmrUnloaded&&t.priceEur!=null)return '<span class="status ok">Готов к Rechnung</span>';
   if(t.cmrLoaded)return '<span class="status wait">Загружен</span>';
   if(!t.auftrag&&!t.cmrUnloaded)return '<span class="status wait">Не хватает Auftrag и CMR/POD</span>';
   if(!t.auftrag)return '<span class="status wait">Не хватает Auftrag</span>';
@@ -278,7 +279,7 @@ function render(){
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
   $('total').textContent=list.length;
   $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
-  $('ready').textContent=list.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrUnloaded).length;
+  $('ready').textContent=list.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrUnloaded&&t.priceEur!=null).length;
   $('rows').innerHTML=list.map(t=>`
     <div class="row">
       <div>${esc(t.date)}</div>
