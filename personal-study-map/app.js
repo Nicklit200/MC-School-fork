@@ -22,10 +22,48 @@ function readinessClass(value) {
 function fmtDate(value) {
   if (!value) return "—";
   try {
-    return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+    return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value + (String(value).length === 10 ? "T12:00:00" : "")));
   } catch {
     return value;
   }
+}
+
+function todayIso() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function skillReview(skill) {
+  return skill?.review || { repetition: 0, dueDate: null, lastResult: null };
+}
+
+function isSkillDue(skill) {
+  if (Number(skill?.mastery || 0) <= 0) return false;
+  const dueDate = skillReview(skill).dueDate;
+  return !dueDate || dueDate <= todayIso();
+}
+
+function reviewQueues(exam) {
+  const today = todayIso();
+  const candidates = examSkills(exam).filter((skill) =>
+    Number(skill.mastery || 0) > 0 || skillReview(skill).dueDate
+  );
+
+  const due = candidates
+    .filter((skill) => {
+      const date = skillReview(skill).dueDate;
+      return !date || date <= today;
+    })
+    .sort((a, b) => String(skillReview(a).dueDate || "").localeCompare(String(skillReview(b).dueDate || "")));
+
+  const upcoming = candidates
+    .filter((skill) => skillReview(skill).dueDate && skillReview(skill).dueDate > today)
+    .sort((a, b) => skillReview(a).dueDate.localeCompare(skillReview(b).dueDate));
+
+  return { due, upcoming };
 }
 
 function currentSemester() {
@@ -77,6 +115,7 @@ function renderAll() {
   renderTopics();
   renderWorkspace();
   renderHistory();
+  renderReview();
 }
 
 function renderMeta() {
@@ -166,6 +205,7 @@ function renderExamSelect() {
     renderTopics();
     renderWorkspace();
     renderExamCards();
+    renderReview();
     fitMap();
   };
 }
@@ -263,8 +303,12 @@ function renderMap(skills) {
     node.style.top = Number(skill.y || 0) + "px";
     const topic = currentExam()?.topics?.find((t) => t.id === skill.topicId);
     const klass = readinessClass(Number(skill.mastery || 0));
+    const dueBadge = isSkillDue(skill) ? '<span class="review-due-badge">повторить</span>' : '';
     node.innerHTML = `
-      <div class="skill-topic">${escapeHtml(topic?.title || "Навык")}</div>
+      <div class="skill-card-head">
+        <div class="skill-topic">${escapeHtml(topic?.title || "Навык")}</div>
+        ${dueBadge}
+      </div>
       <div class="skill-title">${escapeHtml(skill.title)}</div>
       <div class="skill-subtitle">${escapeHtml(skill.subtitle || "")}</div>
       <div class="skill-bottom">
@@ -334,6 +378,7 @@ function masteryLabel(value) {
 function showInspector(skill) {
   const inspector = $("inspector");
   $("history-panel")?.classList.add("closed");
+  $("review-panel")?.classList.add("closed");
   const host = $("inspector-content");
   const topic = currentExam()?.topics?.find((t) => t.id === skill.topicId);
   const evidence = skill.evidence || [];
@@ -359,6 +404,11 @@ function showInspector(skill) {
     </div>
 
     <div class="inspector-section">
+      <div class="inspector-label">ПОВТОРЕНИЕ</div>
+      <div>${reviewStatusText(skill)}</div>
+    </div>
+
+    <div class="inspector-section">
       <div class="inspector-label">ДОКАЗАТЕЛЬСТВА</div>
       <div id="evidence-list"></div>
     </div>
@@ -379,6 +429,88 @@ function showInspector(skill) {
     }
   }
   inspector.classList.remove("closed");
+}
+
+function reviewStatusText(skill) {
+  const mastery = Number(skill.mastery || 0);
+  const review = skillReview(skill);
+  if (mastery <= 0 && !review.dueDate) {
+    return "Появится после первого изучения навыка.";
+  }
+  if (!review.dueDate || review.dueDate <= todayIso()) {
+    return "Нужно повторить сегодня.";
+  }
+  return `Следующее повторение: ${fmtDate(review.dueDate)} · этап ${Number(review.repetition || 0)}/6`;
+}
+
+function renderReview() {
+  const exam = currentExam();
+  const count = $("review-count");
+  const summary = $("review-summary");
+  const list = $("review-list");
+  const upcomingHost = $("review-upcoming");
+  if (!count || !summary || !list || !upcomingHost) return;
+
+  const { due, upcoming } = reviewQueues(exam);
+  count.textContent = String(due.length);
+  count.classList.toggle("zero", due.length === 0);
+
+  const intervals = state.data?.reviewSchedule?.intervalDays || [1, 2, 4, 7, 14, 30];
+  summary.innerHTML = due.length
+    ? `<strong>${due.length}</strong><span>навыков нужно повторить сегодня · интервалы ${intervals.join(" → ")} дней</span>`
+    : `<strong>0</strong><span>сегодня обязательных повторений нет · интервалы ${intervals.join(" → ")} дней</span>`;
+
+  list.replaceChildren();
+  upcomingHost.replaceChildren();
+
+  const dueTitle = document.createElement("div");
+  dueTitle.className = "review-section-title";
+  dueTitle.textContent = "СЕГОДНЯ";
+  list.append(dueTitle);
+
+  if (!due.length) {
+    const empty = document.createElement("div");
+    empty.className = "review-empty";
+    const hasStudied = examSkills(exam).some((skill) => Number(skill.mastery || 0) > 0);
+    empty.textContent = hasStudied
+      ? "На сегодня всё закреплено. Следующее повторение ниже."
+      : "Пока нечего повторять. После первого занятия я поставлю изученные навыки в интервальное повторение.";
+    list.append(empty);
+  } else {
+    for (const skill of due) list.append(reviewCard(skill, true));
+  }
+
+  if (upcoming.length) {
+    const title = document.createElement("div");
+    title.className = "review-section-title";
+    title.textContent = "ДАЛЬШЕ";
+    upcomingHost.append(title);
+    for (const skill of upcoming.slice(0, 8)) upcomingHost.append(reviewCard(skill, false));
+  }
+}
+
+function reviewCard(skill, due) {
+  const review = skillReview(skill);
+  const card = document.createElement("div");
+  card.className = "review-card";
+  const overdue = review.dueDate && review.dueDate < todayIso();
+  card.innerHTML = `
+    <div class="review-card-top">
+      <div class="review-card-title">${escapeHtml(skill.title)}</div>
+      <div class="review-card-date">${due ? (overdue ? "просрочено" : "сегодня") : fmtDate(review.dueDate)}</div>
+    </div>
+    <div class="review-card-meta">
+      <span class="review-chip ${overdue ? "urgent" : due ? "due" : ""}">${Number(skill.mastery || 0)}% знания</span>
+      <span class="review-chip">этап ${Number(review.repetition || 0)}/6</span>
+    </div>
+  `;
+  card.onclick = () => {
+    state.selectedSkillId = skill.id;
+    $("review-panel").classList.add("closed");
+    showInspector(skill);
+    if (state.viewMode === "map") renderMap(filteredSkills());
+  };
+  return card;
 }
 
 function renderHistory() {
@@ -490,11 +622,26 @@ leftPanelToggle.onclick = () => {
   leftPanelToggle.title = collapsed ? "Показать настройки" : "Скрыть настройки";
 };
 
+const reviewPanel = $("review-panel");
+$("review-toggle").onclick = () => {
+  renderReview();
+  const willOpen = reviewPanel.classList.contains("closed");
+  reviewPanel.classList.toggle("closed", !willOpen);
+  if (willOpen) {
+    $("inspector").classList.add("closed");
+    $("history-panel").classList.add("closed");
+  }
+};
+$("close-review").onclick = () => reviewPanel.classList.add("closed");
+
 const historyPanel = $("history-panel");
 $("history-toggle").onclick = () => {
   const willOpen = historyPanel.classList.contains("closed");
   historyPanel.classList.toggle("closed", !willOpen);
-  if (willOpen) $("inspector").classList.add("closed");
+  if (willOpen) {
+    $("inspector").classList.add("closed");
+    $("review-panel").classList.add("closed");
+  }
 };
 $("close-history").onclick = () => historyPanel.classList.add("closed");
 
@@ -539,6 +686,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   $("inspector").classList.add("closed");
   $("history-panel").classList.add("closed");
+  $("review-panel").classList.add("closed");
 });
 
 window.addEventListener("resize", applyTransform);
