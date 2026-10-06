@@ -114,7 +114,7 @@ db.exec("UPDATE documents SET doc_type = 'cmr_unloading' WHERE doc_type = 'pod'"
 const now = () => new Date().toISOString();
 const bool = v => v ? 1 : 0;
 const priceEurToCents = v => {
-  if (v === undefined) return undefined;
+  if (v === undefined) return null;
   if (v === null || v === "") return null;
   const n = Number(String(v).replace(",", "."));
   if (!Number.isFinite(n) || n < 0) throw new Error("price_eur must be a non-negative number");
