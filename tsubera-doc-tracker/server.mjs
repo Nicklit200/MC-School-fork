@@ -1374,57 +1374,42 @@ function transOrderServiceDate(order) {
   return order?.date || "";
 }
 
-function invoiceMatchForRefs(invoices,{refs=[],company="",amount=null,date=""}={}) {
+function invoiceMatchForRefs(invoices,{refs=[],company=""}={}) {
   const strongRefs = refs.map(reconRef).filter(x => x.length>=5);
   const companyNorm = reconNorm(company);
   const sameCompany = [];
-  let best = null;
+  let exact = null;
 
   for (const inv of invoices) {
+    const buyerNorm = reconNorm(inv.buyer_name);
+    const companyMatch = !!companyNorm && !!buyerNorm && buyerNorm === companyNorm;
+    if (!companyMatch) continue;
+
+    const summary = fakturowniaInvoiceSummary(inv);
+    sameCompany.push(summary);
+
     const hay = reconRef(fakturowniaInvoiceHaystack(inv));
     const exactRef = strongRefs.find(r => hay.includes(r));
-    const buyer = reconNorm(inv.buyer_name);
-    const companyMatch = !!companyNorm && !!buyer && (buyer.includes(companyNorm) || companyNorm.includes(buyer));
-    if (companyMatch) sameCompany.push(inv);
-
-    const amountMatch = sameMoney(inv.total_price_gross ?? inv.price_gross, amount) || sameMoney(inv.total_price_net ?? inv.price_net, amount);
-    const invDate = inv.sell_date || inv.issue_date || "";
-    const dayDistance = dateDistanceDays(date,invDate);
-    const sameTripDate = dayDistance <= 2;
-    const nearDate = dayDistance <= 14;
-
-    let score = 0;
-    if (exactRef) score += 100;
-    if (companyMatch) score += 40;
-    if (amountMatch) score += 35;
-    if (sameTripDate) score += 25;
-    else if (nearDate) score += 10;
-
-    const candidate = {
-      invoice:fakturowniaInvoiceSummary(inv),
-      score,
-      exactRef:exactRef||"",
-      companyMatch,
-      amountMatch,
-      sameTripDate,
-      nearDate,
-      dayDistance
-    };
-    if (!best || score>best.score) best=candidate;
+    if (exactRef && !exact) {
+      exact = {
+        invoice:summary,
+        score:100,
+        exactRef,
+        companyMatch:true,
+        amountMatch:null,
+        sameTripDate:null,
+        nearDate:null,
+        dayDistance:null
+      };
+    }
   }
 
-  const companyInvoices = sameCompany.map(fakturowniaInvoiceSummary);
-  if (!best) return { invoice:null, candidate:null, companyInvoices };
-
-  if (best.exactRef || (best.companyMatch && best.amountMatch && best.sameTripDate)) {
-    return { invoice:best, candidate:null, companyInvoices };
-  }
-  if (best.companyMatch && best.amountMatch && best.nearDate) {
-    return { invoice:null, candidate:best, companyInvoices };
-  }
-  return { invoice:null, candidate:null, companyInvoices };
+  return {
+    invoice:exact,
+    candidate:null,
+    companyInvoices:sameCompany
+  };
 }
-
 function invoicePaymentState(match) {
   const inv = match?.invoice;
   if (!inv) return "unknown";
@@ -1441,19 +1426,16 @@ async function buildReconciliation(args={}) {
   let invoices = [], fakturowniaError = "";
 
   if (fakturowniaConfigured()) {
-    try { invoices = await loadFakturowniaInvoicesRange(dateFrom,dateTo); }
+    try { invoices = await loadFakturowniaInvoicesRange("",""); }
     catch (e) { fakturowniaError = e?.message || String(e); }
   }
 
   const rows = [];
   for (const order of orders) {
     const company = order.company || "";
-    const amount = order.priceAmount;
     const im = invoiceMatchForRefs(invoices,{
       refs:[order.orderNumber].filter(Boolean),
-      company,
-      amount,
-      date:transOrderServiceDate(order)
+      company
     });
 
     const exact = !!im.invoice;
@@ -1525,7 +1507,7 @@ const toolDefs = [
   },
   {
     name: "get_reconciliation",
-    description: "Compare captured Trans.eu orders directly with Fakturownia invoices by company, amount and trip date, including invoice payment status.",
+    description: "Compare captured Trans.eu orders with Fakturownia. Company names must match exactly after normalization; a specific tour is matched only when its Trans.eu Auftrag number appears in the invoice."
     inputSchema: {
       type: "object",
       properties: {
