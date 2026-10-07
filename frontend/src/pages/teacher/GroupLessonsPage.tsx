@@ -52,43 +52,11 @@ export function GroupLessonsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('fromMeet') !== '1') return;
-
     const completedLesson = params.get('completedLesson');
-    const returnedStartedAt = Number(params.get('lessonStartedAt') ?? 0);
-    const locallyStartedLesson = localStorage.getItem(STARTED_LESSON_KEY);
-    const locallyStartedAt = Number(localStorage.getItem(STARTED_LESSON_AT_KEY) ?? 0);
-    const maxLessonContextAgeMs = 12 * 60 * 60 * 1000;
-    const now = Date.now();
-
-    const localContextIsFresh = Boolean(
-      locallyStartedLesson
-      && locallyStartedAt > 0
-      && now >= locallyStartedAt
-      && now - locallyStartedAt <= maxLessonContextAgeMs,
-    );
-    const returnedContextIsFresh = Boolean(
-      completedLesson
-      && returnedStartedAt > 0
-      && now >= returnedStartedAt
-      && now - returnedStartedAt <= maxLessonContextAgeMs,
-    );
-
-    // The browser that started the lesson is the source of truth. The extension
-    // return parameter is only a fallback because Chrome storage can survive an
-    // interrupted/old lesson and otherwise point a fresh transcript at it.
-    const resolvedCompletedLesson = localContextIsFresh
-      ? locallyStartedLesson
-      : returnedContextIsFresh
-        ? completedLesson
-        : null;
-
-    if (resolvedCompletedLesson) {
-      setReturnedLessonId(resolvedCompletedLesson);
-      setFinishedLessonId(resolvedCompletedLesson);
-    } else if (completedLesson) {
-      console.warn('Ignoring stale Mindcrafti lesson return context', completedLesson);
+    if (completedLesson) {
+      setReturnedLessonId(completedLesson);
+      setFinishedLessonId(completedLesson);
     }
-
     setStartedLessonId(null);
     setFinishReminderLessonId(null);
     localStorage.removeItem(STARTED_LESSON_KEY);
