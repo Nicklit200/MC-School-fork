@@ -1536,9 +1536,9 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
   box-shadow:inset 0 0 0 2px #7aa5f6;
 }
 .calendar-day.good{
-  border-color:#9bd9b9;
-  background:#eaf8f1;
-  color:#167247;
+  border-color:#7fcf9f;
+  background:#dcfce7;
+  color:#166534;
 }
 .calendar-day.logged{
   border-color:#d5ddea;
