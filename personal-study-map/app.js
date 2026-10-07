@@ -298,16 +298,17 @@ function renderMap(skills) {
 
   for (const skill of skills) {
     const node = document.createElement("article");
-    node.className = "skill-node" + (state.selectedSkillId === skill.id ? " selected" : "");
+    node.className = "skill-node" + (skill.examRequired ? " exam-required" : "") + (state.selectedSkillId === skill.id ? " selected" : "");
     node.style.left = Number(skill.x || 0) + "px";
     node.style.top = Number(skill.y || 0) + "px";
     const topic = currentExam()?.topics?.find((t) => t.id === skill.topicId);
     const klass = readinessClass(Number(skill.mastery || 0));
     const dueBadge = isSkillDue(skill) ? '<span class="review-due-badge">повторить</span>' : '';
+    const examBadge = skill.examRequired ? `<span class="exam-required-badge">EXAM ×${Number(skill.examFrequency?.count || 1)}</span>` : "";
     node.innerHTML = `
       <div class="skill-card-head">
         <div class="skill-topic">${escapeHtml(topic?.title || "Навык")}</div>
-        ${dueBadge}
+        <div class="skill-card-badges">${examBadge}${dueBadge}</div>
       </div>
       <div class="skill-title">${escapeHtml(skill.title)}</div>
       <div class="skill-subtitle">${escapeHtml(skill.subtitle || "")}</div>
@@ -349,10 +350,10 @@ function renderList(skills) {
     block.append(heading);
     for (const skill of topicSkills) {
       const row = document.createElement("div");
-      row.className = "list-row";
+      row.className = "list-row" + (skill.examRequired ? " exam-required" : "");
       row.innerHTML = `
         <div>
-          <div class="list-row-title">${escapeHtml(skill.title)}</div>
+          <div class="list-row-title">${escapeHtml(skill.title)} ${skill.examRequired ? `<span class="exam-required-inline">EXAM ×${Number(skill.examFrequency?.count || 1)}</span>` : ""}</div>
           <div class="list-row-sub">${escapeHtml(skill.subtitle || "")}</div>
         </div>
         <div class="list-row-percent">${Number(skill.mastery || 0)}%</div>
@@ -386,6 +387,7 @@ function showInspector(skill) {
   host.innerHTML = `
     <h2>${escapeHtml(skill.title)}</h2>
     <div class="de">${escapeHtml(skill.subtitle || topic?.title || "")}</div>
+    ${skill.examRequired ? `<div class="exam-required-panel">EXAM ×${Number(skill.examFrequency?.count || 1)} · ${escapeHtml((skill.examYears || []).join(", "))}</div>` : ""}
 
     <div class="inspector-section">
       <div class="inspector-label">ТЕКУЩЕЕ ОСВОЕНИЕ</div>
