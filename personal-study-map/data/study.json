@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Николай",
-  "updatedAt": "2026-10-06",
+  "updatedAt": "2026-10-07",
   "semesters": [
     {
       "id": "ws-2026-27",
@@ -17,12 +17,54 @@
               "type": "Präsentation 1 / Vorlesungsskript",
               "coverage": "Organisation und Einführung, Seiten 1-30",
               "note": "Nur die erste hochgeladene Präsentation; weitere Themen werden erst aus späteren Unterlagen ergänzt."
+            },
+            {
+              "title": "Rekonstruktion_WS22-23.pdf",
+              "type": "Altklausur / Rekonstruktion",
+              "coverage": "WS 2022/23, Aufgaben 1-7",
+              "note": "Rekonstruktion nennt die Klausur als identisch zu SS2022 und WS21/22; starke Wiederholungsmuster."
+            },
+            {
+              "title": "Rekonstruktion_WS23-24.pdf",
+              "type": "Altklausur / Rekonstruktion",
+              "coverage": "WS 2023/24, Aufgaben 1-7",
+              "note": "Sehr ähnliche Struktur wie WS22/23; Zustandsdiagramm, Muster, Tests, Metriken und Kontrollfluss wiederholen sich."
+            },
+            {
+              "title": "Software Engineering Hagel WS24-25(1).pdf",
+              "type": "Altklausur / Rekonstruktion",
+              "coverage": "WS 2024/25, Aufgaben 1-9",
+              "note": "Neuere Rekonstruktion; bestätigt wiederkehrende Kernblöcke und ergänzt UML-Pakete sowie Komponenten."
             }
           ],
           "topics": [
             {
               "id": "se-intro",
               "title": "Einführung"
+            },
+            {
+              "id": "se-state-machines",
+              "title": "Zustände & Zustandsmuster"
+            },
+            {
+              "id": "se-design-patterns",
+              "title": "Entwurfsmuster"
+            },
+            {
+              "id": "se-testing",
+              "title": "Testfallermittlung"
+            },
+            {
+              "id": "se-metrics",
+              "title": "Softwaremetriken"
+            },
+            {
+              "id": "se-control-flow",
+              "title": "Kontrollfluss & Überdeckung"
+            },
+            {
+              "id": "se-uml-structure",
+              "title": "UML Pakete & Komponenten"
             }
           ],
           "skills": [
@@ -205,6 +247,860 @@
                 "dueDate": null,
                 "lastResult": null
               }
+            },
+            {
+              "id": "se-exam-state-diagram",
+              "topicId": "se-state-machines",
+              "title": "Zustandsdiagramm aus Anforderungen erstellen",
+              "subtitle": "Zustände · Events · Sensoren · Aktionen",
+              "description": "Aus einer textuellen Gerätebeschreibung ein vollständiges UML-Zustandsdiagramm ableiten: Zustände, Übergänge, Tasten/Ereignisse, Sensorbedingungen sowie Motor-/Lichtverhalten korrekt modellieren.",
+              "x": 0,
+              "y": 1120,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A1a",
+                "A1a",
+                "A1a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-state-pattern-uml",
+              "topicId": "se-state-machines",
+              "title": "Zustandsmuster in UML modellieren",
+              "subtitle": "State Pattern auf konkretes Problem übertragen",
+              "description": "Das Zustandsmuster nicht nur auswendig zeichnen, sondern auf das konkrete Prüfungsproblem übertragen und die beteiligten Zustände/Klassen passend modellieren.",
+              "x": 280,
+              "y": 1120,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A1b",
+                "A1b",
+                "A1b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-adapter-recognize",
+              "topicId": "se-design-patterns",
+              "title": "Adapter-Muster erkennen",
+              "subtitle": "Inkompatible Schnittstellen → passendes Muster",
+              "description": "Erkennen, dass eine vorhandene Sensor-Schnittstelle in eine vom Client erwartete Schnittstelle umgewandelt werden muss, und dafür das passende Entwurfsmuster auswählen.",
+              "x": 0,
+              "y": 1380,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A2a",
+                "A2a",
+                "A2a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-adapter-uml",
+              "topicId": "se-design-patterns",
+              "title": "Adapter-Muster in UML modellieren",
+              "subtitle": "Client · Target · Adapter · vorhandener Sensor",
+              "description": "Das ausgewählte Adapter-Muster für den konkreten Sensor-Fall als UML-Klassendiagramm modellieren.",
+              "x": 280,
+              "y": 1380,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A2b",
+                "A2b",
+                "A2b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-adapter-code",
+              "topicId": "se-design-patterns",
+              "title": "Adapter-Umwandlung in C++ implementieren",
+              "subtitle": "Umwandlungsklasse bestimmen · Methode programmieren",
+              "description": "Bestimmen, in welcher Klasse die Umwandlung stattfindet, und die verlangte Adapter-Methode in C++ implementieren.",
+              "x": 560,
+              "y": 1380,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A2c-d",
+                "A2c-d",
+                "A2c-d"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-strategy",
+              "topicId": "se-design-patterns",
+              "title": "Strategiemuster auf ein Problem anwenden",
+              "subtitle": "Strategy Pattern konkret modellieren",
+              "description": "Das Strategiemuster auf einen konkreten Anwendungsfall übertragen, statt nur das allgemeine Muster auswendig wiederzugeben.",
+              "x": 840,
+              "y": 1380,
+              "examYears": [
+                "WS22/23",
+                "WS23/24"
+              ],
+              "examTasks": [
+                "A3a",
+                "A3a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 2,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-pattern-combination",
+              "topicId": "se-design-patterns",
+              "title": "Zusammenspiel von Entwurfsmustern erkennen",
+              "subtitle": "Welches Muster wird automatisch mitverwendet?",
+              "description": "Bei einer Musterlösung erkennen und benennen, welches weitere Entwurfsmuster durch die gewählte Struktur automatisch mitverwendet wird.",
+              "x": 0,
+              "y": 1640,
+              "examYears": [
+                "WS22/23",
+                "WS23/24"
+              ],
+              "examTasks": [
+                "A3b",
+                "A3b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 2,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-pattern-properties",
+              "topicId": "se-design-patterns",
+              "title": "Eigenschaften von Entwurfsmustern beurteilen",
+              "subtitle": "flexibel · erweiterbar · wiederverwendbar · getestet",
+              "description": "Aussagen über Entwurfsmuster fachlich beurteilen und typische gewünschte Eigenschaften von falschen Aussagen unterscheiden.",
+              "x": 280,
+              "y": 1640,
+              "examYears": [
+                "WS23/24"
+              ],
+              "examTasks": [
+                "A3c-d"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 1,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-class-inheritance-uml",
+              "topicId": "se-design-patterns",
+              "title": "Vererbung im UML-Klassendiagramm darstellen",
+              "subtitle": "Basisklasse · Unterklassen · Abhängigkeiten",
+              "description": "Eine textuell beschriebene Klassenhierarchie korrekt als UML-Klassendiagramm darstellen.",
+              "x": 560,
+              "y": 1640,
+              "examYears": [
+                "WS22/23",
+                "WS23/24"
+              ],
+              "examTasks": [
+                "A4a",
+                "A4a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 2,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-decorator-uml",
+              "topicId": "se-design-patterns",
+              "title": "Decorator-Muster in UML ergänzen",
+              "subtitle": "Funktionalität erweitern ohne Basisklasse zu ändern",
+              "description": "Ein vorhandenes Klassendiagramm um das Dekorator-Muster erweitern und die Rollen im konkreten Beispiel korrekt zuordnen.",
+              "x": 840,
+              "y": 1640,
+              "examYears": [
+                "WS22/23",
+                "WS23/24"
+              ],
+              "examTasks": [
+                "A4b",
+                "A4b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 2,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-decorator-code",
+              "topicId": "se-design-patterns",
+              "title": "Decorator-Funktion in C++ implementieren",
+              "subtitle": "Logging-Methode programmieren",
+              "description": "Eine im Dekorator geforderte Zusatzfunktion als C++-Methode implementieren.",
+              "x": 0,
+              "y": 1900,
+              "examYears": [
+                "WS22/23"
+              ],
+              "examTasks": [
+                "A4c"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 1,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-decorator-recursion",
+              "topicId": "se-design-patterns",
+              "title": "Rekursion im Decorator erklären",
+              "subtitle": "Auslöser und Basis der Rekursion bestimmen",
+              "description": "Im Dekorator-Aufbau bestimmen, welche Klasse die Rekursion auslöst und welche Klasse die Basis bzw. das Ende der Rekursion bildet.",
+              "x": 280,
+              "y": 1900,
+              "examYears": [
+                "WS22/23",
+                "WS23/24"
+              ],
+              "examTasks": [
+                "A4d-e",
+                "A4c-d"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 2,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-structured-testing",
+              "topicId": "se-testing",
+              "title": "Strukturierte Testfallermittlung durchführen",
+              "subtitle": "Wertebereiche · Grenzen · gültig/ungültig",
+              "description": "Für eine vorgegebene numerische Spezifikation systematisch Testfälle aus Bereichen und Grenzwerten ableiten.",
+              "x": 0,
+              "y": 2160,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A5",
+                "A5",
+                "A3"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-cv-ov-noa",
+              "topicId": "se-metrics",
+              "title": "CV, OV und NOA aus Code bestimmen",
+              "subtitle": "Code-Metriken für Methoden/Klassen",
+              "description": "Für gegebenen Code die in der Vorlesung verwendeten Kennzahlen CV, OV und NOA korrekt bestimmen.",
+              "x": 0,
+              "y": 2420,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A6a",
+                "A6a",
+                "A7a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-ploc-sloc",
+              "topicId": "se-metrics",
+              "title": "PLOC und SLOC aus Code bestimmen",
+              "subtitle": "Physische und logische Codezeilen",
+              "description": "Für Methoden und Konstruktoren die verlangten PLOC- und SLOC-Werte aus einem Codeschnipsel ermitteln.",
+              "x": 280,
+              "y": 2420,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A6b",
+                "A6b",
+                "A7b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-mccabe",
+              "topicId": "se-metrics",
+              "title": "Zyklomatische Komplexität / McCabe bestimmen",
+              "subtitle": "Entscheidungen und atomare Bedingungen korrekt zählen",
+              "description": "Die zyklomatische Komplexität für Methoden/Konstruktoren berechnen und die dazugehörigen Zählregeln fachlich beurteilen.",
+              "x": 560,
+              "y": 2420,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A6c",
+                "A6c",
+                "A4 + A7c"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-wmc",
+              "topicId": "se-metrics",
+              "title": "WMC berechnen",
+              "subtitle": "Komplexitätswerte einer Klasse zusammenführen",
+              "description": "Aus den zuvor berechneten Komplexitätswerten den WMC-Wert einer Klasse bestimmen.",
+              "x": 840,
+              "y": 2420,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A6d",
+                "A6d",
+                "A7d"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-inheritance-metrics",
+              "topicId": "se-metrics",
+              "title": "DOI/DIT, NOD/NOC und NORM bestimmen",
+              "subtitle": "Vererbungs- und Überschreibungsmetriken",
+              "description": "Die in den Rekonstruktionen genannten Vererbungs-/Klassenmetriken aus der Klassenstruktur bestimmen; die Bezeichnungen variieren dort teils zwischen DOI/DIT und NOD/NOC.",
+              "x": 0,
+              "y": 2680,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A6e",
+                "A6e",
+                "A7e"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-control-flow-graph",
+              "topicId": "se-control-flow",
+              "title": "Kontrollflussgraph erstellen",
+              "subtitle": "Code → Kontrollfluss",
+              "description": "Aus einem Codeschnipsel einen korrekten Kontrollflussgraphen mit Verzweigungen und Schleifen erstellen.",
+              "x": 0,
+              "y": 2940,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A7a",
+                "A7a",
+                "A8/A9b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-statement-coverage",
+              "topicId": "se-control-flow",
+              "title": "Minimale Anweisungsüberdeckung bestimmen",
+              "subtitle": "Testwerte + Pfad",
+              "description": "Minimale Testwerte für vollständige Anweisungsüberdeckung bestimmen und den zugehörigen Pfad angeben.",
+              "x": 280,
+              "y": 2940,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A7b",
+                "A7b",
+                "A9c"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-branch-coverage",
+              "topicId": "se-control-flow",
+              "title": "Minimale Zweigüberdeckung bestimmen",
+              "subtitle": "Testwerte + Pfade",
+              "description": "Minimale Testwerte für Zweigüberdeckung bestimmen und die benötigten Pfade angeben.",
+              "x": 560,
+              "y": 2940,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A7c",
+                "A7c",
+                "A9d"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-path-coverage",
+              "topicId": "se-control-flow",
+              "title": "Minimale Pfadüberdeckung bestimmen",
+              "subtitle": "relevante Ausführungspfade",
+              "description": "Für den gegebenen Kontrollfluss die geforderte minimale Pfadüberdeckung bestimmen.",
+              "x": 840,
+              "y": 2940,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A7d",
+                "A7d",
+                "A9e"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-halstead",
+              "topicId": "se-control-flow",
+              "title": "Halstead-Metriken aus Code berechnen",
+              "subtitle": "Operatoren · Operanden · Kennzahlen",
+              "description": "Die in der Prüfung verlangten Halstead-Werte aus einem Codeschnipsel berechnen; in den Rekonstruktionen werden Volumen und Bugs teils ausdrücklich ausgenommen.",
+              "x": 0,
+              "y": 3200,
+              "examYears": [
+                "WS22/23",
+                "WS23/24",
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A7e-f",
+                "A7e",
+                "A9a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 3,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-package-nesting",
+              "topicId": "se-uml-structure",
+              "title": "Verschachtelte UML-Pakete darstellen",
+              "subtitle": "Pakete in Paketen · drei Notationen",
+              "description": "Enthaltene Softwarepakete in den verlangten unterschiedlichen UML-Notationen darstellen.",
+              "x": 0,
+              "y": 3460,
+              "examYears": [
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A5a"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 1,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-package-import",
+              "topicId": "se-uml-structure",
+              "title": "Package-Import in UML darstellen",
+              "subtitle": "Paket enthält Klasse · anderes Paket importiert",
+              "description": "Eine Paket-Klasse-Beziehung und den Import dieser Klasse durch ein anderes Paket in den verlangten UML-Darstellungen modellieren.",
+              "x": 280,
+              "y": 3460,
+              "examYears": [
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A5b"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 1,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-exam-component-uml",
+              "topicId": "se-uml-structure",
+              "title": "Komponente kompakt in UML darstellen",
+              "subtitle": "Ports · Interfaces · Artifact",
+              "description": "Eine vorgegebene Komponentenstruktur mit Schnittstellen/Ports und Artifact in die zusammengefasste UML-Darstellung aus der Vorlesung übertragen.",
+              "x": 560,
+              "y": 3460,
+              "examYears": [
+                "WS24/25"
+              ],
+              "examTasks": [
+                "A6"
+              ],
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "examRequired": true,
+              "examFrequency": {
+                "count": 1,
+                "total": 3
+              },
+              "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
             }
           ],
           "relations": [
@@ -239,6 +1135,54 @@
             {
               "from": "se-skill-se-scope",
               "to": "se-skill-software-process"
+            },
+            {
+              "from": "se-exam-state-diagram",
+              "to": "se-exam-state-pattern-uml"
+            },
+            {
+              "from": "se-exam-adapter-recognize",
+              "to": "se-exam-adapter-uml"
+            },
+            {
+              "from": "se-exam-adapter-uml",
+              "to": "se-exam-adapter-code"
+            },
+            {
+              "from": "se-exam-strategy",
+              "to": "se-exam-pattern-combination"
+            },
+            {
+              "from": "se-exam-class-inheritance-uml",
+              "to": "se-exam-decorator-uml"
+            },
+            {
+              "from": "se-exam-decorator-uml",
+              "to": "se-exam-decorator-code"
+            },
+            {
+              "from": "se-exam-decorator-uml",
+              "to": "se-exam-decorator-recursion"
+            },
+            {
+              "from": "se-exam-mccabe",
+              "to": "se-exam-wmc"
+            },
+            {
+              "from": "se-exam-control-flow-graph",
+              "to": "se-exam-statement-coverage"
+            },
+            {
+              "from": "se-exam-control-flow-graph",
+              "to": "se-exam-branch-coverage"
+            },
+            {
+              "from": "se-exam-control-flow-graph",
+              "to": "se-exam-path-coverage"
+            },
+            {
+              "from": "se-exam-package-nesting",
+              "to": "se-exam-package-import"
             }
           ]
         }
