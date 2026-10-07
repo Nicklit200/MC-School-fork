@@ -48,7 +48,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.19.0";
+    private static final String SERVER_VERSION = "1.20.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -57,6 +57,7 @@ public class MindcraftiMcpController {
     private final McpOAuthService oauthService;
     private final GoogleCalendarLessonService calendarLessonService;
     private final LessonPreparationService preparationService;
+    private final LessonPreparationRepository preparationRepository;
     private final TranscriptLessonGuard transcriptLessonGuard;
     private final TeacherGoogleDriveDownloadService teacherDriveDownloadService;
     private final McpHomeworkSeriesService homeworkSeriesService;
@@ -75,6 +76,7 @@ public class MindcraftiMcpController {
             McpOAuthService oauthService,
             GoogleCalendarLessonService calendarLessonService,
             LessonPreparationService preparationService,
+            LessonPreparationRepository preparationRepository,
             TranscriptLessonGuard transcriptLessonGuard,
             TeacherGoogleDriveDownloadService teacherDriveDownloadService,
             McpHomeworkSeriesService homeworkSeriesService,
@@ -91,6 +93,7 @@ public class MindcraftiMcpController {
         this.oauthService = oauthService;
         this.calendarLessonService = calendarLessonService;
         this.preparationService = preparationService;
+        this.preparationRepository = preparationRepository;
         this.transcriptLessonGuard = transcriptLessonGuard;
         this.teacherDriveDownloadService = teacherDriveDownloadService;
         this.homeworkSeriesService = homeworkSeriesService;
@@ -189,6 +192,7 @@ public class MindcraftiMcpController {
         tools.add(tool("get_school_prompt", "Get the current administrator-managed Mindcrafti school prompt. Use this whenever the teacher asks to create a lesson, homework or teaching material 'по промту' / 'по школьному промту' / 'using the prompt'. Choose group for group-lesson logic, individual for one-to-one lesson logic, workbook for creating a lesson workbook/teacher answers, homework for creating homework, diagnostic for a trial/diagnostic lesson, and error_correction for a personalised work-on-mistakes document. Always fetch it fresh instead of relying on a prompt remembered from earlier chat messages. Teacher-specific extra instructions may be applied on top of the returned prompt.", schema(Map.of("lessonType", property("string", "Prompt type: group, individual, workbook, homework, diagnostic or error_correction.")), List.of("lessonType")), readOnlyAnnotations()));
         tools.add(tool("get_brand_guide", "Get the current administrator-managed Mindcrafti Brand Guide, including its searchable rules and the uploaded source PDF as base64 when available. ALWAYS use this before creating or redesigning any Mindcrafti-branded PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document or other visual material. Fetch it fresh instead of relying on a Brand Guide remembered from chat history.", schema(Map.of(), List.of()), readOnlyAnnotations()));
         tools.add(tool("find_lessons", "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.", schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()), readOnlyAnnotations()));
+        tools.add(tool("find_trial_lessons", "Find trial/diagnostic lessons. Admins can search trial lessons across the whole school; teachers see only their own. Returns the concrete teacherId/eventId and whether an original transcript PDF is stored, so download_lesson_transcript can be used next.", schema(Map.of("query", property("string", "Optional teacher name, lesson title, phone number or date text filter.")), List.of()), readOnlyAnnotations()));
         tools.add(tool("get_lesson_preparation", "Read lesson metadata, homework notes, difficulties, lesson plan, and which PDF documents are attached. Transcript text is not returned when a transcript PDF exists; use download_lesson_transcript when the actual document is needed.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
         tools.add(tool("download_lesson_pdf", "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons."), "kind", property("string", "PDF kind: workbook, answers or transcript.")), List.of("teacherId", "eventId", "kind")), readOnlyAnnotations()));
         tools.add(tool("download_lesson_transcript", "Download the original transcript PDF stored on one lesson. Use this whenever you need to inspect or reuse a lesson transcript; the normal lesson-preparation response intentionally does not inline the full transcript.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
@@ -345,6 +349,7 @@ public class MindcraftiMcpController {
             case "get_school_prompt" -> toolResult(getSchoolPrompt(arguments));
             case "get_brand_guide" -> toolResult(schoolBrandGuideService.readForMcp());
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
+            case "find_trial_lessons" -> toolResult(findTrialLessons(string(arguments.get("query")), auth));
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
             case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
             case "download_lesson_transcript" -> toolResult(downloadLessonTranscript(arguments, auth));
@@ -477,6 +482,55 @@ public class MindcraftiMcpController {
                 result.add(item);
             }
         }
+        return result;
+    }
+
+    private List<Map<String, Object>> findTrialLessons(String query, AuthContext auth) {
+        String normalizedQuery = normalize(query);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (User teacher : accessibleTeachers(auth)) {
+            if (teacher.isArchived()) continue;
+
+            AuthenticatedUser principal = principal(teacher);
+            List<GroupLessonResponse> lessons;
+            try {
+                lessons = calendarLessonService.listGroupLessons(principal);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+
+            for (GroupLessonResponse lesson : lessons) {
+                if (lesson.groupId() != null || lesson.studentId() != null) continue;
+
+                LessonPreparation preparation = preparationRepository
+                        .findByTeacherIdAndEventId(teacher.getId(), lesson.eventId())
+                        .orElse(null);
+                boolean hasTranscript = preparation != null && preparation.hasTranscriptPdf();
+
+                if (!hasTranscript && !AdminTrialLessonController.looksLikeTrialTitle(lesson.title())) continue;
+
+                String haystack = normalize(String.join(" ",
+                        teacher.getFullName() == null ? "" : teacher.getFullName(),
+                        lesson.title() == null ? "" : lesson.title(),
+                        lesson.startsAt() == null ? "" : lesson.startsAt().toString()));
+                if (!normalizedQuery.isBlank() && !haystack.contains(normalizedQuery)) continue;
+
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("teacherId", teacher.getId().toString());
+                item.put("teacherName", teacher.getFullName());
+                item.put("eventId", lesson.eventId());
+                item.put("title", lesson.title());
+                item.put("startsAt", lesson.startsAt() == null ? null : lesson.startsAt().toString());
+                item.put("endsAt", lesson.endsAt() == null ? null : lesson.endsAt().toString());
+                item.put("hasTranscript", hasTranscript);
+                item.put("transcriptFilename", preparation == null ? null : preparation.getTranscriptFilename());
+                result.add(item);
+            }
+        }
+
+        result.sort((left, right) -> String.valueOf(right.get("startsAt"))
+                .compareTo(String.valueOf(left.get("startsAt"))));
         return result;
     }
 
