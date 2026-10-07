@@ -1229,5 +1229,12 @@
     ],
     "wrongAnswerResetDays": 1,
     "note": "Same spaced-repetition cadence as the student card system: a clean review advances; a wrong first attempt resets and returns tomorrow."
+  },
+  "planner": {
+    "lectureWeekdays": [
+      2,
+      3
+    ],
+    "note": "Постоянные дни лекций пользователя: вторник и среда. Задачи «до следующей лекции» используют ближайший следующий из этих дней."
   }
 }
