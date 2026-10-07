@@ -150,6 +150,10 @@ function renderSection() {
       $(id)?.classList.add("closed");
     }
   }
+  if (state.section !== "nutrition") {
+    const nutritionPanel = $("nutrition-add-panel");
+    if (nutritionPanel) nutritionPanel.hidden = true;
+  }
 
   for (const button of document.querySelectorAll(".section-tab")) {
     button.classList.toggle("active", button.dataset.section === state.section);
@@ -1237,6 +1241,17 @@ for (const button of document.querySelectorAll(".section-tab")) {
   button.onclick = () => switchSection(button.dataset.section);
 }
 
+const nutritionAddPanel = $("nutrition-add-panel");
+$("nutrition-add-toggle").onclick = () => {
+  nutritionAddPanel.hidden = !nutritionAddPanel.hidden;
+  if (!nutritionAddPanel.hidden) {
+    $("nutrition-name")?.focus();
+  }
+};
+$("nutrition-add-close").onclick = () => {
+  nutritionAddPanel.hidden = true;
+};
+
 $("nutrition-date").value = todayIso();
 $("workout-date").value = todayIso();
 $("nutrition-date").onchange = loadNutrition;
@@ -1263,6 +1278,7 @@ $("nutrition-form").onsubmit = async (event) => {
   });
   event.target.reset();
   $("nutrition-date").value = $("nutrition-date").value || todayIso();
+  $("nutrition-add-panel").hidden = true;
   await loadNutrition();
 };
 
