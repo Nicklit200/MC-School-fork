@@ -1292,6 +1292,27 @@ h1{font-size:15px;margin:0}
 .floating-topbar{grid-template-columns:auto minmax(240px,420px) auto}
 .brand-block{gap:12px}
 .section-nav{display:flex;gap:5px;margin-left:12px}
+body [hidden]{display:none!important}
+
+.section-tab[data-section="study"].active{
+  background:#edf4ff;
+  border-color:#b8d0ff;
+  color:#275fc4;
+}
+.section-tab[data-section="nutrition"].active{
+  background:#ecf9f0;
+  border-color:#b9e4c6;
+  color:#1f7a46;
+}
+.section-tab[data-section="workouts"].active{
+  background:#fff4e8;
+  border-color:#ffd0a3;
+  color:#b86616;
+}
+body[data-section="study"] .brand-mark{background:#edf4ff;color:#275fc4}
+body[data-section="nutrition"] .brand-mark{background:#ecf9f0;color:#1f7a46}
+body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
+
 .section-tab{
   height:34px;
   padding:0 12px;
@@ -1302,7 +1323,7 @@ h1{font-size:15px;margin:0}
   font-weight:800;
   cursor:pointer;
 }
-.section-tab.active{background:#edf4ff;border-color:#b8d0ff;color:#275fc4}
+.section-tab.active{font-weight:800}
 
 .life-view{
   position:absolute;
