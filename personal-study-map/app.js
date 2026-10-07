@@ -5,6 +5,13 @@ const state = {
   section: "study",
   nutritionEntries: [],
   workoutEntries: [],
+  nutritionCalendarEntries: [],
+  workoutCalendarEntries: [],
+  calendarMonth: {
+    study: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    nutrition: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    workouts: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  },
   semesterId: "",
   examId: "",
   topicId: "all",
@@ -141,6 +148,7 @@ function switchSection(section) {
   renderSection();
   if (section === "study") {
     renderWorkspace();
+    renderCalendar("study");
     setTimeout(fitMap, 0);
   } else if (section === "nutrition") {
     loadNutrition();
@@ -148,6 +156,144 @@ function switchSection(section) {
     loadWorkouts();
   }
 }
+
+
+function isoDateFromParts(year, monthIndex, day) {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function monthTitle(date) {
+  return new Intl.DateTimeFormat("ru-RU", { month:"long", year:"numeric" }).format(date);
+}
+
+function shiftCalendarMonth(section, delta) {
+  const current = state.calendarMonth[section] || new Date();
+  state.calendarMonth[section] = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+  renderCalendar(section);
+}
+
+function studyActivityDates() {
+  const dates = new Set();
+  for (const session of state.data?.sessions || []) {
+    if (session?.date) dates.add(String(session.date).slice(0, 10));
+  }
+  for (const task of state.lectureTasks || []) {
+    if (task.done && task.completedAt) dates.add(String(task.completedAt).slice(0, 10));
+  }
+  return dates;
+}
+
+function workoutActivityDates() {
+  return new Set((state.workoutCalendarEntries || []).map((item) => String(item.date || "").slice(0, 10)).filter(Boolean));
+}
+
+function nutritionDayStatus() {
+  const byDate = new Map();
+  for (const item of state.nutritionCalendarEntries || []) {
+    const date = String(item.date || "").slice(0, 10);
+    if (!date) continue;
+    const current = byDate.get(date) || { kcal:0, count:0 };
+    current.kcal += Number(item.kcal || 0);
+    current.count += 1;
+    byDate.set(date, current);
+  }
+  const maxKcal = Number(state.data?.personalGoals?.nutrition?.kcalMax || 0);
+  const statuses = new Map();
+  for (const [date, info] of byDate) {
+    if (maxKcal > 0) {
+      statuses.set(date, info.kcal > 0 && info.kcal <= maxKcal ? "good" : "logged");
+    } else {
+      statuses.set(date, "logged");
+    }
+  }
+  return { statuses, maxKcal };
+}
+
+function calendarStatus(section, dateIso) {
+  if (section === "study") return studyActivityDates().has(dateIso) ? "good" : "";
+  if (section === "workouts") return workoutActivityDates().has(dateIso) ? "good" : "";
+  if (section === "nutrition") return nutritionDayStatus().statuses.get(dateIso) || "";
+  return "";
+}
+
+function calendarHost(section) {
+  if (section === "study") return $("study-calendar");
+  if (section === "nutrition") return $("nutrition-calendar");
+  if (section === "workouts") return $("workout-calendar");
+  return null;
+}
+
+function renderCalendar(section) {
+  const host = calendarHost(section);
+  if (!host) return;
+
+  const month = state.calendarMonth[section] || new Date();
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const firstDay = new Date(year, monthIndex, 1).getDay();
+  const mondayOffset = (firstDay + 6) % 7;
+  const today = todayIso();
+  const nutritionInfo = section === "nutrition" ? nutritionDayStatus() : null;
+
+  host.innerHTML = `
+    <div class="calendar-head">
+      <button type="button" class="calendar-nav prev" aria-label="Предыдущий месяц">‹</button>
+      <div>
+        <div class="calendar-title">${escapeHtml(monthTitle(month))}</div>
+        <div class="calendar-subtitle">${
+          section === "workouts" ? "Зелёный - была тренировка" :
+          section === "study" ? "Зелёный - была учебная активность" :
+          nutritionInfo?.maxKcal > 0 ? "Зелёный - питание в пределах нормы" : "Пока отмечаем дни, где питание записано"
+        }</div>
+      </div>
+      <button type="button" class="calendar-nav next" aria-label="Следующий месяц">›</button>
+    </div>
+    <div class="calendar-weekdays">
+      <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+    </div>
+    <div class="calendar-grid"></div>
+  `;
+
+  const grid = host.querySelector(".calendar-grid");
+  for (let i = 0; i < mondayOffset; i++) {
+    const blank = document.createElement("span");
+    blank.className = "calendar-day empty";
+    grid.append(blank);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateIso = isoDateFromParts(year, monthIndex, day);
+    const status = calendarStatus(section, dateIso);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "calendar-day" + (status ? " " + status : "") + (dateIso === today ? " today" : "");
+    button.textContent = String(day);
+    button.title = dateIso;
+    if (section === "workouts") {
+      button.onclick = () => {
+        $("workout-date").value = dateIso;
+        loadWorkouts();
+      };
+    } else if (section === "nutrition") {
+      button.onclick = () => {
+        $("nutrition-date").value = dateIso;
+        loadNutrition();
+      };
+    }
+    grid.append(button);
+  }
+
+  host.querySelector(".prev").onclick = () => shiftCalendarMonth(section, -1);
+  host.querySelector(".next").onclick = () => shiftCalendarMonth(section, 1);
+}
+
+function renderAllCalendars() {
+  renderCalendar("study");
+  renderCalendar("nutrition");
+  renderCalendar("workouts");
+}
+
 
 function numberOrNull(id) {
   const raw = $(id)?.value;
@@ -160,8 +306,14 @@ async function loadNutrition() {
   const date = $("nutrition-date").value || todayIso();
   $("nutrition-date").value = date;
   try {
-    state.nutritionEntries = await api("/api/nutrition?date=" + encodeURIComponent(date));
+    const [dayEntries, calendarEntries] = await Promise.all([
+      api("/api/nutrition?date=" + encodeURIComponent(date)),
+      api("/api/nutrition")
+    ]);
+    state.nutritionEntries = dayEntries;
+    state.nutritionCalendarEntries = calendarEntries;
     renderNutrition();
+    renderCalendar("nutrition");
   } catch (error) {
     $("nutrition-list").innerHTML = '<div class="review-empty">Не удалось загрузить питание.</div>';
     console.error(error);
@@ -213,8 +365,14 @@ async function loadWorkouts() {
   const date = $("workout-date").value || todayIso();
   $("workout-date").value = date;
   try {
-    state.workoutEntries = await api("/api/workouts?date=" + encodeURIComponent(date));
+    const [dayEntries, calendarEntries] = await Promise.all([
+      api("/api/workouts?date=" + encodeURIComponent(date)),
+      api("/api/workouts")
+    ]);
+    state.workoutEntries = dayEntries;
+    state.workoutCalendarEntries = calendarEntries;
     renderWorkouts();
+    renderCalendar("workouts");
   } catch (error) {
     $("workout-list").innerHTML = '<div class="review-empty">Не удалось загрузить тренировки.</div>';
     console.error(error);
@@ -334,6 +492,7 @@ function renderAll() {
   renderHistory();
   renderReview();
   renderHomework();
+  renderAllCalendars();
 }
 
 function renderMeta() {
@@ -799,6 +958,7 @@ function renderHomework() {
         saveLectureTasks();
       }
       renderHomework();
+      renderCalendar("study");
     };
     row.querySelector(".homework-delete").onclick = async () => {
       try {
@@ -958,6 +1118,7 @@ $("review-toggle").onclick = () => {
     $("inspector").classList.add("closed");
     $("history-panel").classList.add("closed");
     $("homework-panel").classList.add("closed");
+    $("study-calendar-panel").classList.add("closed");
   }
 };
 $("close-review").onclick = () => reviewPanel.classList.add("closed");
@@ -970,9 +1131,24 @@ $("history-toggle").onclick = () => {
     $("inspector").classList.add("closed");
     $("review-panel").classList.add("closed");
     $("homework-panel").classList.add("closed");
+    $("study-calendar-panel").classList.add("closed");
   }
 };
 $("close-history").onclick = () => historyPanel.classList.add("closed");
+
+const studyCalendarPanel = $("study-calendar-panel");
+$("study-calendar-toggle").onclick = () => {
+  renderCalendar("study");
+  const willOpen = studyCalendarPanel.classList.contains("closed");
+  studyCalendarPanel.classList.toggle("closed", !willOpen);
+  if (willOpen) {
+    $("inspector").classList.add("closed");
+    $("review-panel").classList.add("closed");
+    $("history-panel").classList.add("closed");
+    $("homework-panel").classList.add("closed");
+  }
+};
+$("close-study-calendar").onclick = () => studyCalendarPanel.classList.add("closed");
 
 const homeworkPanel = $("homework-panel");
 $("homework-toggle").onclick = () => {
@@ -983,6 +1159,7 @@ $("homework-toggle").onclick = () => {
     $("inspector").classList.add("closed");
     $("review-panel").classList.add("closed");
     $("history-panel").classList.add("closed");
+    $("study-calendar-panel").classList.add("closed");
   }
 };
 $("close-homework").onclick = () => homeworkPanel.classList.add("closed");
@@ -1095,6 +1272,7 @@ window.addEventListener("keydown", (event) => {
   $("history-panel").classList.add("closed");
   $("review-panel").classList.add("closed");
   $("homework-panel").classList.add("closed");
+  $("study-calendar-panel").classList.add("closed");
 });
 
 window.addEventListener("resize", applyTransform);
