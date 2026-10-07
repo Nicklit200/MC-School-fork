@@ -1,6 +1,7 @@
 (() => {
   const OVERLAY_ID = 'mindcrafti-soniox-reminder';
   const CHECK_INTERVAL_MS = 500;
+  const MAX_ACTIVE_LESSON_AGE_MS = 12 * 60 * 60 * 1000;
   let shownForCurrentLeave = false;
 
   const leavePhrases = [
@@ -58,10 +59,21 @@
     return hasRejoin && !hasActiveLeaveControl;
   }
 
+  function isFreshLessonContext(context) {
+    const startedAt = Number(context?.startedAt ?? 0);
+    return Boolean(
+      context?.lessonId
+      && startedAt > 0
+      && Date.now() >= startedAt
+      && Date.now() - startedAt <= MAX_ACTIVE_LESSON_AGE_MS
+    );
+  }
+
   function buildSafeReturnUrl(origin, context) {
     const params = new URLSearchParams();
     params.set('mindcraftiReturn', 'lesson');
     if (context?.lessonId) params.set('completedLesson', context.lessonId);
+    if (context?.startedAt) params.set('lessonStartedAt', String(context.startedAt));
 
     // Return through the root document. main.ts converts this into
     // /teacher/lessons?fromMeet=1&completedLesson=..., which reliably opens
@@ -72,16 +84,22 @@
   async function resolveReturnUrl() {
     try {
       const stored = await chrome.storage.local.get(['mindcraftiActiveLesson', 'mindcraftiReturnOrigin']);
-      const context = stored?.mindcraftiActiveLesson;
+      const storedContext = stored?.mindcraftiActiveLesson;
+      const context = isFreshLessonContext(storedContext) ? storedContext : null;
 
-      // Prefer the exact URL captured when this lesson was started.
-      // This prevents another Railway/test tab from overwriting the return origin.
-      if (context?.returnUrl) {
+      if (storedContext && !context) {
+        // Old Chrome storage must never choose the event for a new transcript.
+        await chrome.storage.local.remove('mindcraftiActiveLesson');
+      }
+
+      // Prefer the exact origin captured when the lesson was started, but only
+      // attach an event id when the context is still fresh.
+      if (storedContext?.returnUrl) {
         try {
-          const url = new URL(context.returnUrl);
+          const url = new URL(storedContext.returnUrl);
           return buildSafeReturnUrl(url.origin, context);
         } catch {
-          return context.returnUrl;
+          if (context) return storedContext.returnUrl;
         }
       }
 
