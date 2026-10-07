@@ -97,6 +97,9 @@
         Повторить <span id="review-count" class="review-count">0</span>
       </button>
       <button id="history-toggle" type="button" title="История">История</button>
+      <button id="homework-toggle" class="review-toggle" type="button" title="Задачи до следующей лекции">
+        До лекции <span id="homework-count" class="review-count">0</span>
+      </button>
     </div>
 
     <aside id="inspector" class="floating-panel inspector closed">
@@ -126,6 +129,36 @@
         <button id="close-history" class="close-inline" type="button" aria-label="Закрыть">×</button>
       </div>
       <div id="session-history" class="session-history"></div>
+    </aside>
+
+    <aside id="homework-panel" class="floating-panel homework-panel closed">
+      <div class="history-panel-head">
+        <div>
+          <div class="panel-label">ДО СЛЕДУЮЩЕЙ ЛЕКЦИИ</div>
+          <h2>Что нужно сделать</h2>
+        </div>
+        <button id="close-homework" class="close-inline" type="button" aria-label="Закрыть">×</button>
+      </div>
+
+      <div id="next-lecture-summary" class="next-lecture-summary"></div>
+
+      <form id="homework-form" class="homework-form">
+        <label>
+          <span>ЗАДАЧА</span>
+          <input id="homework-input" type="text" maxlength="180" placeholder="Например: повторить State Pattern" autocomplete="off" />
+        </label>
+        <label>
+          <span>К КАКОЙ ЛЕКЦИИ</span>
+          <select id="homework-day">
+            <option value="auto">Ближайшая лекция</option>
+            <option value="2">Вторник</option>
+            <option value="3">Среда</option>
+          </select>
+        </label>
+        <button type="submit">Добавить</button>
+      </form>
+
+      <div id="homework-list" class="homework-list"></div>
     </aside>
 
     <div class="board-help">Перемещение — тянуть фон · Масштаб — колесо</div>
