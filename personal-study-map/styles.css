@@ -1545,8 +1545,28 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
   background:#f2f5f9;
   color:#53657d;
 }
+.calendar-day.over{
+  border-color:#f0a3a3;
+  background:#fff0f0;
+  color:#b42318;
+}
+.calendar-day-number{
+  display:block;
+  font-size:14px;
+  font-weight:900;
+  line-height:1;
+}
+.calendar-day-kcal{
+  display:block;
+  margin-top:7px;
+  font-size:10px;
+  font-weight:850;
+  line-height:1.15;
+  white-space:nowrap;
+}
 .calendar-day.good:after,
-.calendar-day.logged:after{
+.calendar-day.logged:after,
+.calendar-day.over:after{
   content:"";
   position:absolute;
   left:50%;
