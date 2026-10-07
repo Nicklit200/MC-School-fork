@@ -45,6 +45,7 @@ export function GroupLessonsPage() {
   const [startedLessonId, setStartedLessonId] = useState<string | null>(() => localStorage.getItem(STARTED_LESSON_KEY));
   const [finishedLessonId, setFinishedLessonId] = useState<string | null>(null);
   const [returnedLessonId, setReturnedLessonId] = useState<string | null>(null);
+  const [unsafeReturnContext, setUnsafeReturnContext] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
   const [selectedMonthDayKey, setSelectedMonthDayKey] = useState<string | null>(null);
@@ -52,11 +53,45 @@ export function GroupLessonsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('fromMeet') !== '1') return;
+
     const completedLesson = params.get('completedLesson');
-    if (completedLesson) {
-      setReturnedLessonId(completedLesson);
-      setFinishedLessonId(completedLesson);
+    const returnedStartedAt = Number(params.get('lessonStartedAt') ?? 0);
+    const locallyStartedLesson = localStorage.getItem(STARTED_LESSON_KEY);
+    const locallyStartedAt = Number(localStorage.getItem(STARTED_LESSON_AT_KEY) ?? 0);
+    const maxLessonContextAgeMs = 12 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const localContextIsFresh = Boolean(
+      locallyStartedLesson
+      && locallyStartedAt > 0
+      && now >= locallyStartedAt
+      && now - locallyStartedAt <= maxLessonContextAgeMs,
+    );
+    const returnedContextIsFresh = Boolean(
+      completedLesson
+      && returnedStartedAt > 0
+      && now >= returnedStartedAt
+      && now - returnedStartedAt <= maxLessonContextAgeMs,
+    );
+
+    // The lesson started in this browser is authoritative. Chrome extension
+    // storage may contain an abandoned older lesson, so its eventId is only a
+    // fallback when it carries a fresh startedAt timestamp.
+    const resolvedCompletedLesson = localContextIsFresh
+      ? locallyStartedLesson
+      : returnedContextIsFresh
+        ? completedLesson
+        : null;
+
+    if (resolvedCompletedLesson) {
+      setReturnedLessonId(resolvedCompletedLesson);
+      setFinishedLessonId(resolvedCompletedLesson);
+      setUnsafeReturnContext(false);
+    } else if (completedLesson) {
+      setUnsafeReturnContext(true);
+      console.warn('Ignored stale Mindcrafti lesson return context', completedLesson);
     }
+
     setStartedLessonId(null);
     setFinishReminderLessonId(null);
     localStorage.removeItem(STARTED_LESSON_KEY);
@@ -332,6 +367,13 @@ export function GroupLessonsPage() {
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
+      {unsafeReturnContext && (
+        <div className="banner banner--error" style={{ marginBottom: 14 }}>
+          {language === 'DE'
+            ? 'Der zurückgegebene Unterricht konnte nicht sicher zugeordnet werden. Öffne den richtigen Termin in Mindcrafti und lade die Transkription dort hoch.'
+            : 'Не удалось безопасно определить завершённый урок. Открой нужный урок в Mindcrafti и загрузи транскрипцию именно в него.'}
+        </div>
+      )}
 
       {returnedLessonId && (
         <div className="panel" style={{ marginBottom: 18, padding: 22, border: '2px solid #ff6a00', boxShadow: '0 12px 32px rgba(255,106,0,.10)' }}>
