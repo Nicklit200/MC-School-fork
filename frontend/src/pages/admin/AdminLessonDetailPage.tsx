@@ -21,6 +21,7 @@ export function AdminLessonDetailPage() {
   const [lessonPlan, setLessonPlan] = useState('');
   const [workbookUrl, setWorkbookUrl] = useState<string | null>(null);
   const [answersUrl, setAnswersUrl] = useState<string | null>(null);
+  const [transcriptUrl, setTranscriptUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<MaterialKind | null>(null);
@@ -59,6 +60,12 @@ export function AdminLessonDetailPage() {
             if (!cancelled) setAnswersUrl(URL.createObjectURL(blob));
           } catch { /* page remains usable */ }
         }
+        if (prep.hasTranscript) {
+          try {
+            const blob = await adminLessonsApi.transcript(teacherId, decodedEventId);
+            if (!cancelled) setTranscriptUrl(URL.createObjectURL(blob));
+          } catch { /* page remains usable */ }
+        }
       } catch (e) {
         if (!cancelled) setError(toErrorMessage(e, t));
       } finally {
@@ -71,6 +78,7 @@ export function AdminLessonDetailPage() {
 
   useEffect(() => () => { if (workbookUrl) URL.revokeObjectURL(workbookUrl); }, [workbookUrl]);
   useEffect(() => () => { if (answersUrl) URL.revokeObjectURL(answersUrl); }, [answersUrl]);
+  useEffect(() => () => { if (transcriptUrl) URL.revokeObjectURL(transcriptUrl); }, [transcriptUrl]);
 
   async function save() {
     if (saving) return;
@@ -194,6 +202,13 @@ export function AdminLessonDetailPage() {
           uploading={uploading === 'answers'}
           onUpload={(file) => void upload('answers', file)}
         />
+        <AdminMaterialCard
+          title="Транскрипция урока"
+          description="Оригинальный PDF Soniox, привязанный именно к этому уроку"
+          filename={preparation?.transcriptFilename}
+          url={transcriptUrl}
+          uploading={false}
+        />
       </div>
 
       <div className="stack" style={{ gap: 14 }}>
@@ -236,7 +251,7 @@ function AdminMaterialCard({ title, description, filename, url, uploading, onUpl
   filename?: string | null;
   url: string | null;
   uploading: boolean;
-  onUpload: (file: File) => void;
+  onUpload?: (file: File) => void;
 }) {
   return (
     <section className="panel" style={{ padding: 18, margin: 0 }}>
@@ -255,23 +270,25 @@ function AdminMaterialCard({ title, description, filename, url, uploading, onUpl
         </div>
       )}
 
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-        <GoogleDrivePdfPicker disabled={uploading} onSelect={onUpload} />
-        <label className="btn btn--ghost" style={{ cursor: uploading ? 'default' : 'pointer' }}>
-          {uploading ? 'Загружаем…' : url ? 'Заменить PDF' : 'Загрузить PDF'}
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            hidden
-            disabled={uploading}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onUpload(file);
-              e.currentTarget.value = '';
-            }}
-          />
-        </label>
-      </div>
+      {onUpload && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <GoogleDrivePdfPicker disabled={uploading} onSelect={onUpload} />
+          <label className="btn btn--ghost" style={{ cursor: uploading ? 'default' : 'pointer' }}>
+            {uploading ? 'Загружаем…' : url ? 'Заменить PDF' : 'Загрузить PDF'}
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              hidden
+              disabled={uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onUpload(file);
+                e.currentTarget.value = '';
+              }}
+            />
+          </label>
+        </div>
+      )}
     </section>
   );
 }
