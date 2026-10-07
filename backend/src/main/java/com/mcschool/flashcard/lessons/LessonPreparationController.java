@@ -5,10 +5,15 @@ import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,11 +27,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/lesson-preparations")
 @PreAuthorize("hasRole('TEACHER')")
 public class LessonPreparationController {
+    private static final ZoneId LESSON_TIMEZONE = ZoneId.of("Europe/Berlin");
+    private static final Pattern ISO_DATE_IN_FILENAME = Pattern.compile("(?<!\\d)(\\d{4}-\\d{2}-\\d{2})(?!\\d)");
+
     private final LessonPreparationService service;
     private final GoogleCalendarLessonService lessonService;
     private final McpHomeworkSeriesService homeworkSeriesService;
@@ -82,7 +91,8 @@ public class LessonPreparationController {
             @AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable String eventId,
             @RequestParam("file") MultipartFile file) throws Exception {
-        requireLesson(teacher, eventId);
+        GroupLessonResponse lesson = requireLesson(teacher, eventId);
+        validateTranscriptFilenameDate(lesson, file.getOriginalFilename());
         return service.uploadTranscript(teacher, eventId, file.getOriginalFilename(), file.getBytes());
     }
 
@@ -130,6 +140,27 @@ public class LessonPreparationController {
                     teacher, "student", lesson.studentId(), startDate, days, files);
         }
         throw new IllegalArgumentException("Lesson must be linked to a group or student before assigning homework");
+    }
+
+    private void validateTranscriptFilenameDate(GroupLessonResponse lesson, String filename) {
+        if (filename == null || filename.isBlank()) return;
+
+        Matcher matcher = ISO_DATE_IN_FILENAME.matcher(filename);
+        if (!matcher.find()) return;
+
+        LocalDate transcriptDate;
+        try {
+            transcriptDate = LocalDate.parse(matcher.group(1));
+        } catch (DateTimeParseException ignored) {
+            return;
+        }
+
+        LocalDate lessonDate = lesson.startsAt().atZone(LESSON_TIMEZONE).toLocalDate();
+        if (!lessonDate.equals(transcriptDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Transcript date " + transcriptDate + " does not match lesson date " + lessonDate);
+        }
     }
 
     private GroupLessonResponse requireLesson(AuthenticatedUser teacher, String eventId) {
