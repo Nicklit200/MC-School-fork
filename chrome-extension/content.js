@@ -1,7 +1,6 @@
 (() => {
   const OVERLAY_ID = 'mindcrafti-soniox-reminder';
   const CHECK_INTERVAL_MS = 500;
-  const MAX_ACTIVE_LESSON_AGE_MS = 12 * 60 * 60 * 1000;
   let shownForCurrentLeave = false;
 
   const leavePhrases = [
@@ -59,21 +58,10 @@
     return hasRejoin && !hasActiveLeaveControl;
   }
 
-  function isFreshLessonContext(context) {
-    const startedAt = Number(context?.startedAt ?? 0);
-    return Boolean(
-      context?.lessonId
-      && startedAt > 0
-      && Date.now() >= startedAt
-      && Date.now() - startedAt <= MAX_ACTIVE_LESSON_AGE_MS
-    );
-  }
-
   function buildSafeReturnUrl(origin, context) {
     const params = new URLSearchParams();
     params.set('mindcraftiReturn', 'lesson');
     if (context?.lessonId) params.set('completedLesson', context.lessonId);
-    if (context?.startedAt) params.set('lessonStartedAt', String(context.startedAt));
 
     // Return through the root document. main.ts converts this into
     // /teacher/lessons?fromMeet=1&completedLesson=..., which reliably opens
@@ -84,23 +72,16 @@
   async function resolveReturnUrl() {
     try {
       const stored = await chrome.storage.local.get(['mindcraftiActiveLesson', 'mindcraftiReturnOrigin']);
-      const storedContext = stored?.mindcraftiActiveLesson;
-      const context = isFreshLessonContext(storedContext) ? storedContext : null;
-
-      if (storedContext && !context) {
-        // Never let an abandoned lesson from hours/days ago select the target
-        // event for a new transcript.
-        await chrome.storage.local.remove('mindcraftiActiveLesson');
-      }
+      const context = stored?.mindcraftiActiveLesson;
 
       // Prefer the exact URL captured when this lesson was started.
       // This prevents another Railway/test tab from overwriting the return origin.
-      if (storedContext?.returnUrl) {
+      if (context?.returnUrl) {
         try {
-          const url = new URL(storedContext.returnUrl);
+          const url = new URL(context.returnUrl);
           return buildSafeReturnUrl(url.origin, context);
         } catch {
-          if (context) return storedContext.returnUrl;
+          return context.returnUrl;
         }
       }
 
