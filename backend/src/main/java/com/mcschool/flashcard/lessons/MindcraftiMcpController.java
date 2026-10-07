@@ -48,7 +48,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.18.0";
+    private static final String SERVER_VERSION = "1.19.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -57,6 +57,7 @@ public class MindcraftiMcpController {
     private final McpOAuthService oauthService;
     private final GoogleCalendarLessonService calendarLessonService;
     private final LessonPreparationService preparationService;
+    private final TranscriptLessonGuard transcriptLessonGuard;
     private final TeacherGoogleDriveDownloadService teacherDriveDownloadService;
     private final McpHomeworkSeriesService homeworkSeriesService;
     private final McpAnalyticsService analyticsService;
@@ -74,6 +75,7 @@ public class MindcraftiMcpController {
             McpOAuthService oauthService,
             GoogleCalendarLessonService calendarLessonService,
             LessonPreparationService preparationService,
+            TranscriptLessonGuard transcriptLessonGuard,
             TeacherGoogleDriveDownloadService teacherDriveDownloadService,
             McpHomeworkSeriesService homeworkSeriesService,
             McpAnalyticsService analyticsService,
@@ -89,6 +91,7 @@ public class MindcraftiMcpController {
         this.oauthService = oauthService;
         this.calendarLessonService = calendarLessonService;
         this.preparationService = preparationService;
+        this.transcriptLessonGuard = transcriptLessonGuard;
         this.teacherDriveDownloadService = teacherDriveDownloadService;
         this.homeworkSeriesService = homeworkSeriesService;
         this.analyticsService = analyticsService;
@@ -189,6 +192,7 @@ public class MindcraftiMcpController {
         tools.add(tool("get_lesson_preparation", "Read lesson metadata, homework notes, difficulties, lesson plan, and which PDF documents are attached. Transcript text is not returned when a transcript PDF exists; use download_lesson_transcript when the actual document is needed.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
         tools.add(tool("download_lesson_pdf", "Download one PDF already stored in a lesson directly from Mindcrafti. Returns the PDF as base64 so it can be saved or reused without Google Drive.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons."), "kind", property("string", "PDF kind: workbook, answers or transcript.")), List.of("teacherId", "eventId", "kind")), readOnlyAnnotations()));
         tools.add(tool("download_lesson_transcript", "Download the original transcript PDF stored on one lesson. Use this whenever you need to inspect or reuse a lesson transcript; the normal lesson-preparation response intentionally does not inline the full transcript.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
+        tools.add(tool("audit_lesson_transcripts", "Admin-only, read-only. Audit every stored lesson transcript across the school and report wrong lesson/date links plus legacy filenames that cannot be verified automatically.", schema(Map.of(), List.of()), readOnlyAnnotations()));
 
         Map<String, Object> prepareProperties = new LinkedHashMap<>();
         prepareProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
@@ -216,7 +220,7 @@ public class MindcraftiMcpController {
         transcriptProperties.put("eventId", property("string", "Google Calendar event ID returned by find_lessons."));
         transcriptProperties.put("driveFileId", property("string", "Google Drive raw file ID or Drive URL containing the transcript PDF."));
         transcriptProperties.put("filename", property("string", "Optional transcript PDF filename. Used for Drive fallback lookup."));
-        tools.add(tool("attach_lesson_transcript", "Copy the original transcript PDF from Google Drive into one concrete Mindcrafti lesson. The PDF becomes the primary transcript document; full text is extracted only on demand for analysis.", schema(transcriptProperties, List.of("teacherId", "eventId", "driveFileId")), writeAnnotations()));
+        tools.add(tool("attach_lesson_transcript", "Copy the original Soniox transcript PDF from Google Drive into one concrete Mindcrafti lesson. Mindcrafti validates the date/time in the original filename against the selected event before attaching it.", schema(transcriptProperties, List.of("teacherId", "eventId", "driveFileId", "filename")), writeAnnotations()));
 
         Map<String, Object> targetProperties = new LinkedHashMap<>();
         targetProperties.put("query", property("string", "Optional student or group name filter, for example Виталина, Christian or Группа 1."));
@@ -344,6 +348,7 @@ public class MindcraftiMcpController {
             case "get_lesson_preparation" -> toolResult(getPreparation(arguments, auth));
             case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
             case "download_lesson_transcript" -> toolResult(downloadLessonTranscript(arguments, auth));
+            case "audit_lesson_transcripts" -> toolResult(auditLessonTranscripts(auth));
             case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
             case "attach_lesson_transcript" -> toolResult(attachLessonTranscript(arguments, auth));
@@ -539,22 +544,19 @@ public class MindcraftiMcpController {
         String workbookBase64 = string(arguments.get("workbookBase64"));
         String rawWorkbookFilename = string(arguments.get("workbookFilename")).trim();
         boolean transcriptCompatibilityImport = "__TRANSCRIPT__".equals(rawWorkbookFilename);
-        String workbookFilename = normalizedPdfFilename(
-                transcriptCompatibilityImport ? "lesson-transcript.pdf" : rawWorkbookFilename,
-                transcriptCompatibilityImport ? "lesson-transcript.pdf" : "lesson-workbook.pdf");
+        if (transcriptCompatibilityImport) {
+            throw new IllegalArgumentException("Transcript import through prepare_lesson is disabled. Use attach_lesson_transcript with the original Soniox PDF filename so Mindcrafti can verify the target lesson.");
+        }
+        String workbookFilename = normalizedPdfFilename(rawWorkbookFilename, "lesson-workbook.pdf");
         String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
         if (!workbookBase64.isBlank() && !driveWorkbookFileId.isBlank()) throw new IllegalArgumentException("Use either workbookBase64 or driveWorkbookFileId, not both");
         if (!workbookBase64.isBlank()) {
             byte[] pdf = decodePdfBase64(workbookBase64, "workbookBase64");
-            result = transcriptCompatibilityImport
-                    ? preparationService.uploadTranscript(teacher, eventId, workbookFilename, pdf)
-                    : preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
         } else if (!driveWorkbookFileId.isBlank()) {
             byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveWorkbookFileId, workbookFilename);
             if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
-            result = transcriptCompatibilityImport
-                    ? preparationService.uploadTranscript(teacher, eventId, workbookFilename, pdf)
-                    : preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
         }
 
         String answersBase64 = string(arguments.get("answersBase64"));
@@ -588,10 +590,19 @@ public class MindcraftiMcpController {
         String eventId = required(arguments, "eventId");
         requireLesson(teacher, eventId);
         String driveFileId = required(arguments, "driveFileId");
-        String filename = normalizedPdfFilename(string(arguments.get("filename")), "lesson-transcript.pdf");
+        String rawFilename = required(arguments, "filename");
+        String filename = normalizedPdfFilename(rawFilename, "lesson-transcript.pdf");
+        transcriptLessonGuard.validate(teacher, eventId, filename);
         byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveFileId, filename);
         if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveFileId does not point to a PDF file");
         return preparationService.uploadTranscript(teacher, eventId, filename, pdf);
+    }
+
+    private Map<String, Object> auditLessonTranscripts(AuthContext auth) {
+        if (!auth.apiKey() && (auth.user() == null || auth.user().getRole() != Role.ADMIN)) {
+            throw new IllegalArgumentException("audit_lesson_transcripts is admin-only");
+        }
+        return transcriptLessonGuard.auditAll();
     }
 
     private MonthlyPlanResponse getMonthPlan(Map<String, Object> arguments, AuthContext auth) {
