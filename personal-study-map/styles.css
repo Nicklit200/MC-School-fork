@@ -1350,6 +1350,59 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
 .life-view-head input[type="date"]{
   height:38px;border:1px solid #dfe5ee;border-radius:10px;padding:0 10px;background:#fff
 }
+.life-view-actions{
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+.life-add-button{
+  height:38px;
+  border:0;
+  border-radius:10px;
+  padding:0 14px;
+  background:#2f6fed;
+  color:#fff;
+  font-weight:850;
+  cursor:pointer;
+}
+.life-add-button:hover{filter:brightness(.97)}
+.nutrition-add-panel{
+  position:absolute;
+  z-index:80;
+  top:78px;
+  right:22px;
+  width:min(460px,calc(100% - 44px));
+  border:1px solid #dfe5ee;
+  border-radius:18px;
+  background:rgba(255,255,255,.99);
+  box-shadow:0 18px 48px rgba(34,52,78,.20);
+  padding:16px;
+  backdrop-filter:blur(18px);
+}
+.nutrition-add-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:12px;
+}
+.nutrition-add-head h3{margin:3px 0 0;font-size:18px}
+.nutrition-popup-form{
+  border:0;
+  background:transparent;
+  padding:0;
+}
+.nutrition-day-content{
+  max-width:100%;
+}
+.nutrition-day-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin:6px 0 10px;
+}
+.nutrition-day-head h3{margin:3px 0 0;font-size:18px}
 .life-grid{
   display:grid;
   grid-template-columns:minmax(280px,380px) minmax(0,1fr);
@@ -1533,4 +1586,11 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
   .month-calendar{padding:10px}
   .calendar-weekdays,.calendar-grid{gap:4px}
   .calendar-day{border-radius:8px;font-size:12px}
+}
+
+@media(max-width:720px){
+  .life-view-head{align-items:flex-start;flex-direction:column}
+  .life-view-actions{width:100%;justify-content:space-between}
+  .life-add-button{flex:1}
+  .nutrition-add-panel{top:118px;left:12px;right:12px;width:auto}
 }
