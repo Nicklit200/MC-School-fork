@@ -23,15 +23,80 @@
       </div>
 
       <div id="list" class="list-view-panel" hidden></div>
+
+      <section id="nutrition-view" class="life-view" hidden>
+        <div class="life-view-head">
+          <div>
+            <div class="eyebrow">ПИТАНИЕ</div>
+            <h2>Дневник питания</h2>
+          </div>
+          <input id="nutrition-date" type="date" />
+        </div>
+
+        <div class="life-grid">
+          <form id="nutrition-form" class="life-form">
+            <label><span>Приём пищи</span>
+              <select id="nutrition-meal">
+                <option value="Завтрак">Завтрак</option>
+                <option value="Обед">Обед</option>
+                <option value="Ужин">Ужин</option>
+                <option value="Перекус">Перекус</option>
+              </select>
+            </label>
+            <label class="wide"><span>Что съел</span><input id="nutrition-name" type="text" placeholder="Например: рис с лососем" required /></label>
+            <label><span>Количество</span><input id="nutrition-quantity" type="number" step="0.1" placeholder="200" /></label>
+            <label><span>Единица</span><input id="nutrition-unit" type="text" placeholder="г" /></label>
+            <label><span>Ккал</span><input id="nutrition-kcal" type="number" step="0.1" /></label>
+            <label><span>Белки</span><input id="nutrition-protein" type="number" step="0.1" /></label>
+            <label><span>Углеводы</span><input id="nutrition-carbs" type="number" step="0.1" /></label>
+            <label><span>Жиры</span><input id="nutrition-fat" type="number" step="0.1" /></label>
+            <label class="wide"><span>Заметка</span><input id="nutrition-notes" type="text" placeholder="Необязательно" /></label>
+            <button class="wide" type="submit">Добавить еду</button>
+          </form>
+
+          <div>
+            <div id="nutrition-summary" class="life-summary"></div>
+            <div id="nutrition-list" class="life-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="workouts-view" class="life-view" hidden>
+        <div class="life-view-head">
+          <div>
+            <div class="eyebrow">ТРЕНИРОВКИ</div>
+            <h2>Дневник тренировок</h2>
+          </div>
+          <input id="workout-date" type="date" />
+        </div>
+
+        <div class="life-grid">
+          <form id="workout-form" class="life-form">
+            <label class="wide"><span>Тренировка</span><input id="workout-title" type="text" placeholder="Например: Грудь + трицепс" required /></label>
+            <label><span>Минут</span><input id="workout-duration" type="number" min="0" step="1" placeholder="60" /></label>
+            <label class="wide"><span>Упражнения</span><textarea id="workout-exercises" rows="6" placeholder="Жим лёжа - 4x8&#10;Разводка - 3x12"></textarea></label>
+            <label class="wide"><span>Заметка</span><input id="workout-notes" type="text" placeholder="Самочувствие, веса, прогресс..." /></label>
+            <button class="wide" type="submit">Сохранить тренировку</button>
+          </form>
+
+          <div id="workout-list" class="life-list"></div>
+        </div>
+      </section>
     </main>
 
     <header class="floating-topbar">
       <div class="brand-block">
         <div class="brand-mark">N</div>
         <div class="brand-copy">
-          <div class="eyebrow">PERSONAL STUDY MAP</div>
-          <h1>Моя карта знаний</h1>
+          <div class="eyebrow">PERSONAL OS</div>
+          <h1>Моя система</h1>
         </div>
+
+        <nav class="section-nav" aria-label="Разделы">
+          <button class="section-tab active" data-section="study" type="button">Учёба</button>
+          <button class="section-tab" data-section="nutrition" type="button">Питание</button>
+          <button class="section-tab" data-section="workouts" type="button">Тренировки</button>
+        </nav>
       </div>
 
       <label class="top-search" aria-label="Поиск по карте">
