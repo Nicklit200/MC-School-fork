@@ -1183,6 +1183,34 @@
             {
               "from": "se-exam-package-nesting",
               "to": "se-exam-package-import"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-exam-state-diagram"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-exam-adapter-recognize"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-exam-structured-testing"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-exam-cv-ov-noa"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-exam-control-flow-graph"
+            },
+            {
+              "from": "se-skill-se-scope",
+              "to": "se-exam-package-nesting"
+            },
+            {
+              "from": "se-skill-software-process",
+              "to": "se-exam-structured-testing"
             }
           ]
         }
