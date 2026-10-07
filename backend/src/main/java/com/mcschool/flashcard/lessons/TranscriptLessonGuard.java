@@ -105,6 +105,7 @@ public class TranscriptLessonGuard {
 
         List<LessonHistoryEntry> sameDay = historyRepository.findAllByTeacherIdOrderByStartsAtAsc(teacherId).stream()
                 .filter(item -> item.getStartsAt().atZone(LESSON_TIMEZONE).toLocalDate().equals(stamp.date()))
+                .filter(item -> sameLessonTarget(selected, item))
                 .toList();
 
         if (sameDay.size() <= 1) return new Assessment("ok", "ok", selected.getEventId());
@@ -144,6 +145,18 @@ public class TranscriptLessonGuard {
         }
 
         return new Assessment("ok", "ok", selected.getEventId());
+    }
+
+    private boolean sameLessonTarget(LessonHistoryEntry selected, LessonHistoryEntry candidate) {
+        if (selected.getStudentId() != null) {
+            return selected.getStudentId().equals(candidate.getStudentId());
+        }
+        if (selected.getGroupId() != null) {
+            return selected.getGroupId().equals(candidate.getGroupId());
+        }
+        // Unbound events are typically trial lessons. There is no stable target
+        // identity to compare, so date validation remains the safe server check.
+        return selected.getEventId().equals(candidate.getEventId());
     }
 
     private long distanceSeconds(LocalDateTime timestamp, LessonHistoryEntry lesson) {
