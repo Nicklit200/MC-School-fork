@@ -1389,3 +1389,127 @@ h1{font-size:15px;margin:0}
   .life-grid{grid-template-columns:1fr}
   .life-summary{grid-template-columns:1fr 1fr}
 }
+
+
+/* Monthly activity calendars */
+.month-calendar{
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  padding:14px;
+  margin-bottom:18px;
+}
+.calendar-head{
+  display:grid;
+  grid-template-columns:40px minmax(0,1fr) 40px;
+  align-items:center;
+  gap:8px;
+  margin-bottom:12px;
+}
+.calendar-head>div{text-align:center;min-width:0}
+.calendar-title{
+  font-size:15px;
+  font-weight:900;
+  text-transform:capitalize;
+}
+.calendar-subtitle{
+  margin-top:3px;
+  font-size:10px;
+  color:var(--muted);
+}
+.calendar-nav{
+  width:36px;
+  height:36px;
+  border:1px solid #dfe5ee;
+  border-radius:10px;
+  background:#fff;
+  color:#62728a;
+  font-size:22px;
+  cursor:pointer;
+}
+.calendar-nav:hover{background:#f7f9fc}
+.calendar-weekdays,
+.calendar-grid{
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:6px;
+}
+.calendar-weekdays{
+  margin-bottom:6px;
+  color:#9aa6b6;
+  font-size:9px;
+  font-weight:900;
+  text-align:center;
+  text-transform:uppercase;
+}
+.calendar-day{
+  aspect-ratio:1 / 1;
+  min-width:0;
+  border:1px solid #e4e9f0;
+  border-radius:10px;
+  background:#fafbfd;
+  color:#53657d;
+  font-weight:800;
+  cursor:pointer;
+  position:relative;
+}
+.calendar-day.empty{
+  border-color:transparent;
+  background:transparent;
+  cursor:default;
+}
+.calendar-day.today{
+  box-shadow:inset 0 0 0 2px #7aa5f6;
+}
+.calendar-day.good{
+  border-color:#9bd9b9;
+  background:#eaf8f1;
+  color:#167247;
+}
+.calendar-day.logged{
+  border-color:#d5ddea;
+  background:#f2f5f9;
+  color:#53657d;
+}
+.calendar-day.good:after,
+.calendar-day.logged:after{
+  content:"";
+  position:absolute;
+  left:50%;
+  bottom:5px;
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  transform:translateX(-50%);
+  background:currentColor;
+}
+.study-calendar-panel{
+  position:absolute;
+  z-index:50;
+  top:68px;
+  right:16px;
+  width:380px;
+  border-radius:18px;
+  padding:18px;
+}
+.study-calendar-panel.closed{display:none}
+.study-calendar-panel .month-calendar{
+  border:0;
+  padding:0;
+  margin:0;
+}
+.study-calendar-panel .calendar-day{
+  min-height:38px;
+}
+@media(max-width:820px){
+  .study-calendar-panel{
+    top:122px;
+    right:10px;
+    width:min(92vw,380px);
+  }
+}
+@media(max-width:560px){
+  .month-calendar{padding:10px}
+  .calendar-weekdays,.calendar-grid{gap:4px}
+  .calendar-day{border-radius:8px;font-size:12px}
+}
