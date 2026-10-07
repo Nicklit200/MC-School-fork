@@ -1239,7 +1239,7 @@
   },
   "personalGoals": {
     "nutrition": {
-      "kcalMax": null
+      "kcalMax": 2200
     }
   }
 }
