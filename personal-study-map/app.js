@@ -1,5 +1,10 @@
+const API_BASE = "https://personal-life-api-production.up.railway.app";
+
 const state = {
   data: null,
+  section: "study",
+  nutritionEntries: [],
+  workoutEntries: [],
   semesterId: "",
   examId: "",
   topicId: "all",
@@ -67,12 +72,42 @@ function nextLectureDate(preferredDay = null) {
   return "";
 }
 
-function loadLectureTasks() {
+function localLectureTasks() {
   try {
     const parsed = JSON.parse(localStorage.getItem(LECTURE_TASKS_KEY) || "[]");
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(API_BASE + path, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+  });
+  if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
+  return response.status === 204 ? null : response.json();
+}
+
+async function loadLectureTasks() {
+  try {
+    const remote = await api("/api/tasks");
+    const local = localLectureTasks();
+    if (!remote.length && local.length) {
+      for (const task of local) {
+        try {
+          await api("/api/tasks", { method:"POST", body:JSON.stringify(task) });
+        } catch {}
+      }
+      const migrated = await api("/api/tasks");
+      localStorage.removeItem(LECTURE_TASKS_KEY);
+      return migrated;
+    }
+    return remote;
+  } catch (error) {
+    console.warn("Задачи работают локально: API недоступен", error);
+    return localLectureTasks();
   }
 }
 
@@ -83,6 +118,138 @@ function saveLectureTasks() {
 function openLectureTasks() {
   return state.lectureTasks.filter((task) => !task.done);
 }
+
+
+function renderSection() {
+  const study = state.section === "study";
+  $("map").hidden = !study || state.viewMode !== "map";
+  $("list").hidden = !study || state.viewMode !== "list";
+  $("nutrition-view").hidden = state.section !== "nutrition";
+  $("workouts-view").hidden = state.section !== "workouts";
+  $("left-panel-toggle").hidden = !study;
+  $("left-panel").hidden = !study;
+  document.querySelector(".floating-toolbar").hidden = !study;
+  document.querySelector(".top-search").hidden = !study;
+  document.querySelector(".top-status").hidden = !study;
+  for (const button of document.querySelectorAll(".section-tab")) {
+    button.classList.toggle("active", button.dataset.section === state.section);
+  }
+}
+
+function switchSection(section) {
+  state.section = section;
+  renderSection();
+  if (section === "study") {
+    renderWorkspace();
+    setTimeout(fitMap, 0);
+  } else if (section === "nutrition") {
+    loadNutrition();
+  } else if (section === "workouts") {
+    loadWorkouts();
+  }
+}
+
+function numberOrNull(id) {
+  const raw = $(id)?.value;
+  if (raw === "" || raw == null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function loadNutrition() {
+  const date = $("nutrition-date").value || todayIso();
+  $("nutrition-date").value = date;
+  try {
+    state.nutritionEntries = await api("/api/nutrition?date=" + encodeURIComponent(date));
+    renderNutrition();
+  } catch (error) {
+    $("nutrition-list").innerHTML = '<div class="review-empty">Не удалось загрузить питание.</div>';
+    console.error(error);
+  }
+}
+
+function renderNutrition() {
+  const entries = state.nutritionEntries || [];
+  const totals = entries.reduce((acc, item) => {
+    for (const key of ["kcal","protein","carbs","fat"]) acc[key] += Number(item[key] || 0);
+    return acc;
+  }, {kcal:0,protein:0,carbs:0,fat:0});
+
+  $("nutrition-summary").innerHTML = `
+    <div><span>Ккал</span><strong>${Math.round(totals.kcal)}</strong></div>
+    <div><span>Белки</span><strong>${totals.protein.toFixed(1)} г</strong></div>
+    <div><span>Углеводы</span><strong>${totals.carbs.toFixed(1)} г</strong></div>
+    <div><span>Жиры</span><strong>${totals.fat.toFixed(1)} г</strong></div>
+  `;
+
+  const host = $("nutrition-list");
+  host.replaceChildren();
+  if (!entries.length) {
+    host.innerHTML = '<div class="review-empty">На этот день пока ничего не добавлено.</div>';
+    return;
+  }
+  for (const item of entries) {
+    const card = document.createElement("article");
+    card.className = "life-card";
+    const amount = [item.quantity, item.unit].filter(Boolean).join(" ");
+    card.innerHTML = `
+      <div class="life-card-main">
+        <div class="life-card-kicker">${escapeHtml(item.meal || "Приём пищи")}</div>
+        <div class="life-card-title">${escapeHtml(item.name)}</div>
+        <div class="life-card-meta">${escapeHtml(amount)} ${item.kcal ? "· " + Number(item.kcal) + " ккал" : ""}</div>
+        <div class="life-card-meta">Б ${Number(item.protein || 0)} · У ${Number(item.carbs || 0)} · Ж ${Number(item.fat || 0)}</div>
+      </div>
+      <button class="homework-delete" type="button" aria-label="Удалить">×</button>
+    `;
+    card.querySelector("button").onclick = async () => {
+      await api("/api/nutrition/" + encodeURIComponent(item.id), {method:"DELETE"});
+      loadNutrition();
+    };
+    host.append(card);
+  }
+}
+
+async function loadWorkouts() {
+  const date = $("workout-date").value || todayIso();
+  $("workout-date").value = date;
+  try {
+    state.workoutEntries = await api("/api/workouts?date=" + encodeURIComponent(date));
+    renderWorkouts();
+  } catch (error) {
+    $("workout-list").innerHTML = '<div class="review-empty">Не удалось загрузить тренировки.</div>';
+    console.error(error);
+  }
+}
+
+function renderWorkouts() {
+  const host = $("workout-list");
+  host.replaceChildren();
+  const entries = state.workoutEntries || [];
+  if (!entries.length) {
+    host.innerHTML = '<div class="review-empty">На этот день тренировок пока нет.</div>';
+    return;
+  }
+  for (const item of entries) {
+    const card = document.createElement("article");
+    card.className = "life-card";
+    const exercises = Array.isArray(item.exercises) ? item.exercises : [];
+    card.innerHTML = `
+      <div class="life-card-main">
+        <div class="life-card-kicker">${item.durationMinutes ? Number(item.durationMinutes) + " мин" : "Тренировка"}</div>
+        <div class="life-card-title">${escapeHtml(item.title)}</div>
+        <div class="exercise-lines">${exercises.map((x) => `<div>${escapeHtml(x)}</div>`).join("")}</div>
+        ${item.notes ? `<div class="life-card-meta">${escapeHtml(item.notes)}</div>` : ""}
+      </div>
+      <button class="homework-delete" type="button" aria-label="Удалить">×</button>
+    `;
+    card.querySelector("button").onclick = async () => {
+      await api("/api/workouts/" + encodeURIComponent(item.id), {method:"DELETE"});
+      loadWorkouts();
+    };
+    host.append(card);
+  }
+}
+
 
 function skillReview(skill) {
   return skill?.review || { repetition: 0, dueDate: null, lastResult: null };
@@ -149,7 +316,7 @@ async function loadData() {
   const response = await fetch("./data/study.json", { cache: "no-store" });
   if (!response.ok) throw new Error("Не удалось загрузить данные");
   state.data = await response.json();
-  state.lectureTasks = loadLectureTasks();
+  state.lectureTasks = await loadLectureTasks();
   const firstSemester = state.data.semesters?.[0];
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
@@ -157,6 +324,7 @@ async function loadData() {
 }
 
 function renderAll() {
+  renderSection();
   renderMeta();
   renderSemesterSelect();
   renderExamCards();
@@ -617,13 +785,26 @@ function renderHomework() {
       <button class="homework-delete" type="button" aria-label="Удалить">×</button>
     `;
 
-    row.querySelector('input[type="checkbox"]').onchange = (event) => {
+    row.querySelector('input[type="checkbox"]').onchange = async (event) => {
       task.done = event.target.checked;
       task.completedAt = task.done ? new Date().toISOString() : null;
-      saveLectureTasks();
+      try {
+        const saved = await api("/api/tasks/" + encodeURIComponent(task.id), {
+          method:"PATCH",
+          body:JSON.stringify({done:task.done})
+        });
+        Object.assign(task, saved);
+        localStorage.removeItem(LECTURE_TASKS_KEY);
+      } catch {
+        saveLectureTasks();
+      }
       renderHomework();
     };
-    row.querySelector(".homework-delete").onclick = () => {
+    row.querySelector(".homework-delete").onclick = async () => {
+      try {
+        await api("/api/tasks/" + encodeURIComponent(task.id), {method:"DELETE"});
+        localStorage.removeItem(LECTURE_TASKS_KEY);
+      } catch {}
       state.lectureTasks = state.lectureTasks.filter((item) => item.id !== task.id);
       saveLectureTasks();
       renderHomework();
@@ -632,11 +813,11 @@ function renderHomework() {
   }
 }
 
-function addHomeworkTask(title, targetDay) {
+async function addHomeworkTask(title, targetDay) {
   const clean = String(title || "").trim();
   if (!clean) return;
   const preferred = targetDay === "auto" ? null : Number(targetDay);
-  state.lectureTasks.push({
+  const draft = {
     id: "lecture-task-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
     title: clean,
     semesterId: state.semesterId,
@@ -646,8 +827,15 @@ function addHomeworkTask(title, targetDay) {
     createdAt: new Date().toISOString(),
     done: false,
     completedAt: null
-  });
-  saveLectureTasks();
+  };
+  try {
+    const saved = await api("/api/tasks", {method:"POST", body:JSON.stringify(draft)});
+    state.lectureTasks.push(saved);
+    localStorage.removeItem(LECTURE_TASKS_KEY);
+  } catch {
+    state.lectureTasks.push(draft);
+    saveLectureTasks();
+  }
   renderHomework();
 }
 
@@ -799,13 +987,69 @@ $("homework-toggle").onclick = () => {
 };
 $("close-homework").onclick = () => homeworkPanel.classList.add("closed");
 
-$("homework-form").onsubmit = (event) => {
+$("homework-form").onsubmit = async (event) => {
   event.preventDefault();
   const input = $("homework-input");
   const day = $("homework-day");
-  addHomeworkTask(input.value, day.value);
+  await addHomeworkTask(input.value, day.value);
   input.value = "";
   input.focus();
+};
+
+for (const button of document.querySelectorAll(".section-tab")) {
+  button.onclick = () => switchSection(button.dataset.section);
+}
+
+$("nutrition-date").value = todayIso();
+$("workout-date").value = todayIso();
+$("nutrition-date").onchange = loadNutrition;
+$("workout-date").onchange = loadWorkouts;
+
+$("nutrition-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const name = $("nutrition-name").value.trim();
+  if (!name) return;
+  await api("/api/nutrition", {
+    method:"POST",
+    body:JSON.stringify({
+      date:$("nutrition-date").value || todayIso(),
+      meal:$("nutrition-meal").value,
+      name,
+      quantity:numberOrNull("nutrition-quantity"),
+      unit:$("nutrition-unit").value.trim() || null,
+      kcal:numberOrNull("nutrition-kcal"),
+      protein:numberOrNull("nutrition-protein"),
+      carbs:numberOrNull("nutrition-carbs"),
+      fat:numberOrNull("nutrition-fat"),
+      notes:$("nutrition-notes").value.trim() || null
+    })
+  });
+  event.target.reset();
+  $("nutrition-date").value = $("nutrition-date").value || todayIso();
+  await loadNutrition();
+};
+
+$("workout-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const title = $("workout-title").value.trim();
+  if (!title) return;
+  const exercises = $("workout-exercises").value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  await api("/api/workouts", {
+    method:"POST",
+    body:JSON.stringify({
+      date:$("workout-date").value || todayIso(),
+      title,
+      durationMinutes:numberOrNull("workout-duration"),
+      exercises,
+      notes:$("workout-notes").value.trim() || null
+    })
+  });
+  event.target.reset();
+  $("workout-date").value = $("workout-date").value || todayIso();
+  await loadWorkouts();
 };
 
 $("close-inspector").onclick = () => {
