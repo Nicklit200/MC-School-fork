@@ -77,19 +77,20 @@ export function GroupLessonsPage() {
     // The lesson started in this browser is authoritative. Chrome extension
     // storage may contain an abandoned older lesson, so its eventId is only a
     // fallback when it carries a fresh startedAt timestamp.
-    const resolvedCompletedLesson = localContextIsFresh
-      ? locallyStartedLesson
-      : returnedContextIsFresh
-        ? completedLesson
-        : null;
+    // Only the lesson that this Mindcrafti tab itself started may be selected
+    // automatically. Extension storage is useful for returning to the site, but
+    // it is not authoritative enough to choose where a transcript is stored.
+    // This intentionally fails closed: without a fresh local lesson context the
+    // teacher must open the correct lesson instead of risking a wrong attachment.
+    const resolvedCompletedLesson = localContextIsFresh ? locallyStartedLesson : null;
 
     if (resolvedCompletedLesson) {
       setReturnedLessonId(resolvedCompletedLesson);
       setFinishedLessonId(resolvedCompletedLesson);
       setUnsafeReturnContext(false);
-    } else if (completedLesson) {
+    } else if (completedLesson || returnedContextIsFresh) {
       setUnsafeReturnContext(true);
-      console.warn('Ignored stale Mindcrafti lesson return context', completedLesson);
+      console.warn('Ignored non-authoritative Mindcrafti lesson return context', completedLesson);
     }
 
     setStartedLessonId(null);
