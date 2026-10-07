@@ -122,7 +122,7 @@ public class TranscriptLessonGuard {
                 .sorted(Comparator.comparingLong(LessonDistance::distanceSeconds))
                 .toList();
 
-        long bestDistance = ranked.getFirst().distanceSeconds();
+        long bestDistance = ranked.get(0).distanceSeconds();
         List<LessonDistance> closest = ranked.stream()
                 .filter(item -> item.distanceSeconds() == bestDistance)
                 .toList();
@@ -134,7 +134,7 @@ public class TranscriptLessonGuard {
                     null);
         }
 
-        LessonHistoryEntry nearest = closest.getFirst().lesson();
+        LessonHistoryEntry nearest = closest.get(0).lesson();
         if (!nearest.getEventId().equals(selected.getEventId())) {
             return new Assessment(
                     "wrong_lesson_time",
