@@ -769,6 +769,7 @@ $("review-toggle").onclick = () => {
   if (willOpen) {
     $("inspector").classList.add("closed");
     $("history-panel").classList.add("closed");
+    $("homework-panel").classList.add("closed");
   }
 };
 $("close-review").onclick = () => reviewPanel.classList.add("closed");
@@ -780,6 +781,7 @@ $("history-toggle").onclick = () => {
   if (willOpen) {
     $("inspector").classList.add("closed");
     $("review-panel").classList.add("closed");
+    $("homework-panel").classList.add("closed");
   }
 };
 $("close-history").onclick = () => historyPanel.classList.add("closed");
