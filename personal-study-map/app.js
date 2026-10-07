@@ -4,6 +4,7 @@ const state = {
   data: null,
   section: "study",
   nutritionEntries: [],
+  nutritionAssistantEntries: [],
   workoutEntries: [],
   nutritionCalendarEntries: [],
   workoutCalendarEntries: [],
@@ -302,22 +303,64 @@ function numberOrNull(id) {
   return Number.isFinite(value) ? value : null;
 }
 
+async function loadAssistantNutrition() {
+  try {
+    const response = await fetch("./data/nutrition.json", { cache:"no-store" });
+    if (!response.ok) throw new Error(`nutrition.json ${response.status}`);
+    const payload = await response.json();
+    const entries = Array.isArray(payload) ? payload : payload?.entries;
+    state.nutritionAssistantEntries = Array.isArray(entries) ? entries : [];
+  } catch (error) {
+    console.warn("Питание из чата пока недоступно", error);
+    state.nutritionAssistantEntries = [];
+  }
+  return state.nutritionAssistantEntries;
+}
+
+function mergeNutritionEntries(...groups) {
+  const byId = new Map();
+  for (const group of groups) {
+    for (const item of group || []) {
+      const key = item?.id || [
+        item?.date,
+        item?.meal,
+        item?.name,
+        item?.quantity,
+        item?.kcal
+      ].join("|");
+      byId.set(String(key), item);
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    String(a.createdAt || a.date || "").localeCompare(String(b.createdAt || b.date || ""))
+  );
+}
+
 async function loadNutrition() {
   const date = $("nutrition-date").value || todayIso();
   $("nutrition-date").value = date;
+
+  const assistantEntries = await loadAssistantNutrition();
+  let dayEntries = [];
+  let calendarEntries = [];
+
   try {
-    const [dayEntries, calendarEntries] = await Promise.all([
+    [dayEntries, calendarEntries] = await Promise.all([
       api("/api/nutrition?date=" + encodeURIComponent(date)),
       api("/api/nutrition")
     ]);
-    state.nutritionEntries = dayEntries;
-    state.nutritionCalendarEntries = calendarEntries;
-    renderNutrition();
-    renderCalendar("nutrition");
   } catch (error) {
-    $("nutrition-list").innerHTML = '<div class="review-empty">Не удалось загрузить питание.</div>';
-    console.error(error);
+    console.warn("API питания недоступен, показываю записи из чата", error);
   }
+
+  const assistantDayEntries = assistantEntries.filter((item) =>
+    String(item?.date || "").slice(0, 10) === date
+  );
+
+  state.nutritionEntries = mergeNutritionEntries(assistantDayEntries, dayEntries);
+  state.nutritionCalendarEntries = mergeNutritionEntries(assistantEntries, calendarEntries);
+  renderNutrition();
+  renderCalendar("nutrition");
 }
 
 function renderNutrition() {
@@ -344,19 +387,24 @@ function renderNutrition() {
     const card = document.createElement("article");
     card.className = "life-card";
     const amount = [item.quantity, item.unit].filter(Boolean).join(" ");
+    const fromChat = item.source === "chatgpt" || item.origin === "assistant";
     card.innerHTML = `
       <div class="life-card-main">
         <div class="life-card-kicker">${escapeHtml(item.meal || "Приём пищи")}</div>
         <div class="life-card-title">${escapeHtml(item.name)}</div>
         <div class="life-card-meta">${escapeHtml(amount)} ${item.kcal ? "· " + Number(item.kcal) + " ккал" : ""}</div>
         <div class="life-card-meta">Б ${Number(item.protein || 0)} · У ${Number(item.carbs || 0)} · Ж ${Number(item.fat || 0)}</div>
+        ${fromChat ? '<div class="life-card-meta">Добавлено из чата · оценка по фото</div>' : ""}
       </div>
-      <button class="homework-delete" type="button" aria-label="Удалить">×</button>
+      ${fromChat ? "" : '<button class="homework-delete" type="button" aria-label="Удалить">×</button>'}
     `;
-    card.querySelector("button").onclick = async () => {
-      await api("/api/nutrition/" + encodeURIComponent(item.id), {method:"DELETE"});
-      loadNutrition();
-    };
+    const deleteButton = card.querySelector("button");
+    if (deleteButton) {
+      deleteButton.onclick = async () => {
+        await api("/api/nutrition/" + encodeURIComponent(item.id), {method:"DELETE"});
+        loadNutrition();
+      };
+    }
     host.append(card);
   }
 }
