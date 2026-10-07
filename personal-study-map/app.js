@@ -130,15 +130,27 @@ function openLectureTasks() {
 
 function renderSection() {
   const study = state.section === "study";
+  document.body.dataset.section = state.section;
+
   $("map").hidden = !study || state.viewMode !== "map";
   $("list").hidden = !study || state.viewMode !== "list";
   $("nutrition-view").hidden = state.section !== "nutrition";
   $("workouts-view").hidden = state.section !== "workouts";
-  $("left-panel-toggle").hidden = !study;
-  $("left-panel").hidden = !study;
-  document.querySelector(".floating-toolbar").hidden = !study;
-  document.querySelector(".top-search").hidden = !study;
-  document.querySelector(".top-status").hidden = !study;
+
+  for (const id of ["left-panel-toggle", "left-panel"]) {
+    $(id).hidden = !study;
+  }
+  for (const selector of [".floating-toolbar", ".top-search", ".top-status"]) {
+    const element = document.querySelector(selector);
+    if (element) element.hidden = !study;
+  }
+
+  if (!study) {
+    for (const id of ["inspector", "review-panel", "history-panel", "study-calendar-panel", "homework-panel"]) {
+      $(id)?.classList.add("closed");
+    }
+  }
+
   for (const button of document.querySelectorAll(".section-tab")) {
     button.classList.toggle("active", button.dataset.section === state.section);
   }
