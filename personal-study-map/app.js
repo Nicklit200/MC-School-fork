@@ -7,6 +7,7 @@ const state = {
   selectedSkillId: "",
   viewport: { x: 80, y: 70, z: 1 },
   drag: null,
+  lectureTasks: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -34,6 +35,53 @@ function todayIso() {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+const LECTURE_TASKS_KEY = "personal-study-map:lecture-tasks:v1";
+
+function localIsoDate(date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function lectureWeekdays() {
+  const days = state.data?.planner?.lectureWeekdays;
+  return Array.isArray(days) && days.length ? days.map(Number) : [2, 3];
+}
+
+function weekdayRu(day) {
+  return ({ 0:"воскресенье", 1:"понедельник", 2:"вторник", 3:"среда", 4:"четверг", 5:"пятница", 6:"суббота" })[Number(day)] || "";
+}
+
+function nextLectureDate(preferredDay = null) {
+  const allowed = preferredDay === null ? lectureWeekdays() : [Number(preferredDay)];
+  const base = new Date();
+  base.setHours(12, 0, 0, 0);
+  for (let offset = 1; offset <= 14; offset++) {
+    const candidate = new Date(base);
+    candidate.setDate(base.getDate() + offset);
+    if (allowed.includes(candidate.getDay())) return localIsoDate(candidate);
+  }
+  return "";
+}
+
+function loadLectureTasks() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LECTURE_TASKS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLectureTasks() {
+  localStorage.setItem(LECTURE_TASKS_KEY, JSON.stringify(state.lectureTasks));
+}
+
+function openLectureTasks() {
+  return state.lectureTasks.filter((task) => !task.done);
 }
 
 function skillReview(skill) {
@@ -101,6 +149,7 @@ async function loadData() {
   const response = await fetch("./data/study.json", { cache: "no-store" });
   if (!response.ok) throw new Error("Не удалось загрузить данные");
   state.data = await response.json();
+  state.lectureTasks = loadLectureTasks();
   const firstSemester = state.data.semesters?.[0];
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
@@ -116,6 +165,7 @@ function renderAll() {
   renderWorkspace();
   renderHistory();
   renderReview();
+  renderHomework();
 }
 
 function renderMeta() {
@@ -515,6 +565,93 @@ function reviewCard(skill, due) {
   return card;
 }
 
+
+function renderHomework() {
+  const count = $("homework-count");
+  const summary = $("next-lecture-summary");
+  const host = $("homework-list");
+  if (!count || !summary || !host) return;
+
+  const open = openLectureTasks();
+  count.textContent = String(open.length);
+  count.classList.toggle("zero", open.length === 0);
+
+  const next = nextLectureDate();
+  const nextDate = next ? new Date(next + "T12:00:00") : null;
+  summary.innerHTML = nextDate
+    ? `<div class="next-lecture-label">Следующая лекция</div>
+       <strong>${weekdayRu(nextDate.getDay())}, ${fmtDate(next)}</strong>
+       <span>Расписание: вторник и среда</span>`
+    : `<strong>Расписание лекций не задано</strong>`;
+
+  host.replaceChildren();
+  const tasks = state.lectureTasks.slice().sort((a, b) => {
+    if (Boolean(a.done) !== Boolean(b.done)) return a.done ? 1 : -1;
+    return String(a.dueDate || "").localeCompare(String(b.dueDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+  });
+
+  if (!tasks.length) {
+    host.innerHTML = '<div class="review-empty">Пока задач нет. Добавь то, что нужно сделать до следующей лекции.</div>';
+    return;
+  }
+
+  for (const task of tasks) {
+    const row = document.createElement("article");
+    row.className = "homework-task" + (task.done ? " done" : "");
+    const exam = state.data?.semesters
+      ?.flatMap((semester) => semester.exams || [])
+      .find((item) => item.id === task.examId);
+    const overdue = !task.done && task.dueDate && task.dueDate < todayIso();
+    row.innerHTML = `
+      <label class="homework-check">
+        <input type="checkbox" ${task.done ? "checked" : ""} aria-label="Готово" />
+        <span></span>
+      </label>
+      <div class="homework-task-body">
+        <div class="homework-task-title">${escapeHtml(task.title)}</div>
+        <div class="homework-task-meta">
+          <span>${escapeHtml(exam?.title || "Учёба")}</span>
+          <span class="${overdue ? "overdue" : ""}">${overdue ? "просрочено · " : ""}${fmtDate(task.dueDate)}</span>
+        </div>
+      </div>
+      <button class="homework-delete" type="button" aria-label="Удалить">×</button>
+    `;
+
+    row.querySelector('input[type="checkbox"]').onchange = (event) => {
+      task.done = event.target.checked;
+      task.completedAt = task.done ? new Date().toISOString() : null;
+      saveLectureTasks();
+      renderHomework();
+    };
+    row.querySelector(".homework-delete").onclick = () => {
+      state.lectureTasks = state.lectureTasks.filter((item) => item.id !== task.id);
+      saveLectureTasks();
+      renderHomework();
+    };
+    host.append(row);
+  }
+}
+
+function addHomeworkTask(title, targetDay) {
+  const clean = String(title || "").trim();
+  if (!clean) return;
+  const preferred = targetDay === "auto" ? null : Number(targetDay);
+  state.lectureTasks.push({
+    id: "lecture-task-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    title: clean,
+    semesterId: state.semesterId,
+    examId: state.examId,
+    targetDay: preferred,
+    dueDate: nextLectureDate(preferred),
+    createdAt: new Date().toISOString(),
+    done: false,
+    completedAt: null
+  });
+  saveLectureTasks();
+  renderHomework();
+}
+
+
 function renderHistory() {
   const host = $("session-history");
   host.replaceChildren();
@@ -647,6 +784,28 @@ $("history-toggle").onclick = () => {
 };
 $("close-history").onclick = () => historyPanel.classList.add("closed");
 
+const homeworkPanel = $("homework-panel");
+$("homework-toggle").onclick = () => {
+  renderHomework();
+  const willOpen = homeworkPanel.classList.contains("closed");
+  homeworkPanel.classList.toggle("closed", !willOpen);
+  if (willOpen) {
+    $("inspector").classList.add("closed");
+    $("review-panel").classList.add("closed");
+    $("history-panel").classList.add("closed");
+  }
+};
+$("close-homework").onclick = () => homeworkPanel.classList.add("closed");
+
+$("homework-form").onsubmit = (event) => {
+  event.preventDefault();
+  const input = $("homework-input");
+  const day = $("homework-day");
+  addHomeworkTask(input.value, day.value);
+  input.value = "";
+  input.focus();
+};
+
 $("close-inspector").onclick = () => {
   state.selectedSkillId = "";
   $("inspector").classList.add("closed");
@@ -689,6 +848,7 @@ window.addEventListener("keydown", (event) => {
   $("inspector").classList.add("closed");
   $("history-panel").classList.add("closed");
   $("review-panel").classList.add("closed");
+  $("homework-panel").classList.add("closed");
 });
 
 window.addEventListener("resize", applyTransform);
