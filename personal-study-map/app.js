@@ -214,16 +214,20 @@ function nutritionDayStatus() {
     current.count += 1;
     byDate.set(date, current);
   }
-  const maxKcal = Number(state.data?.personalGoals?.nutrition?.kcalMax || 0);
+
+  const configuredMax = state.data?.personalGoals?.nutrition?.kcalMax;
+  const maxKcal = configuredMax == null || configuredMax === "" ? null : Number(configuredMax);
   const statuses = new Map();
+
   for (const [date, info] of byDate) {
-    if (maxKcal > 0) {
-      statuses.set(date, info.kcal > 0 && info.kcal <= maxKcal ? "good" : "logged");
+    if (Number.isFinite(maxKcal) && maxKcal > 0) {
+      statuses.set(date, info.kcal > maxKcal ? "over" : "good");
     } else {
       statuses.set(date, "logged");
     }
   }
-  return { statuses, maxKcal };
+
+  return { statuses, byDate, maxKcal: Number.isFinite(maxKcal) && maxKcal > 0 ? maxKcal : null };
 }
 
 function calendarStatus(section, dateIso) {
@@ -261,7 +265,9 @@ function renderCalendar(section) {
         <div class="calendar-subtitle">${
           section === "workouts" ? "Зелёный - была тренировка" :
           section === "study" ? "Зелёный - была учебная активность" :
-          nutritionInfo?.maxKcal > 0 ? "Зелёный - питание в пределах нормы" : "Пока отмечаем дни, где питание записано"
+          nutritionInfo?.maxKcal
+            ? `До ${Math.round(nutritionInfo.maxKcal)} ккал - зелёный · выше лимита - красный`
+            : "Калории показываются по дням · лимит пока не задан"
         }</div>
       </div>
       <button type="button" class="calendar-nav next" aria-label="Следующий месяц">›</button>
@@ -285,8 +291,18 @@ function renderCalendar(section) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "calendar-day" + (status ? " " + status : "") + (dateIso === today ? " today" : "");
-    button.textContent = String(day);
-    button.title = dateIso;
+
+    if (section === "nutrition") {
+      const kcal = nutritionInfo?.byDate?.get(dateIso)?.kcal || 0;
+      button.innerHTML = `
+        <span class="calendar-day-number">${day}</span>
+        ${kcal > 0 ? `<span class="calendar-day-kcal">${Math.round(kcal)} ккал</span>` : ""}
+      `;
+      button.title = kcal > 0 ? `${dateIso} · ${Math.round(kcal)} ккал` : dateIso;
+    } else {
+      button.textContent = String(day);
+      button.title = dateIso;
+    }
     if (section === "workouts") {
       button.onclick = () => {
         $("workout-date").value = dateIso;
