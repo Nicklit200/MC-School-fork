@@ -130,6 +130,19 @@ public class AdminLessonManagementController {
         return pdf(filename, preparation.getAnswersPdf());
     }
 
+    @GetMapping("/lesson-preparations/{eventId}/transcript")
+    public ResponseEntity<byte[]> transcript(@PathVariable UUID teacherId,
+                                             @PathVariable String eventId) {
+        AuthenticatedUser teacher = teacherPrincipal(teacherId);
+        requireLesson(teacher, eventId);
+        LessonPreparation preparation = preparationService.require(teacher, eventId);
+        if (!preparation.hasTranscriptPdf()) return ResponseEntity.notFound().build();
+        String filename = preparation.getTranscriptFilename() == null
+                ? "lesson-transcript.pdf"
+                : preparation.getTranscriptFilename();
+        return pdf(filename, preparation.getTranscriptPdf());
+    }
+
     @PostMapping("/lesson-preparations/{eventId}/drive-archive")
     public LessonPreparationResponse archiveToDrive(
             @PathVariable UUID teacherId,
