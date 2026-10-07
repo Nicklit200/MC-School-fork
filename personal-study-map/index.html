@@ -30,13 +30,22 @@
             <div class="eyebrow">ПИТАНИЕ</div>
             <h2>Дневник питания</h2>
           </div>
-          <input id="nutrition-date" type="date" />
+          <div class="life-view-actions">
+            <button id="nutrition-add-toggle" class="life-add-button" type="button">+ Добавить еду</button>
+            <input id="nutrition-date" type="date" />
+          </div>
         </div>
 
-        <div id="nutrition-calendar" class="month-calendar"></div>
+        <div id="nutrition-add-panel" class="nutrition-add-panel" hidden>
+          <div class="nutrition-add-head">
+            <div>
+              <div class="eyebrow">НОВАЯ ЗАПИСЬ</div>
+              <h3>Добавить еду</h3>
+            </div>
+            <button id="nutrition-add-close" class="close-inline" type="button" aria-label="Закрыть">×</button>
+          </div>
 
-        <div class="life-grid">
-          <form id="nutrition-form" class="life-form">
+          <form id="nutrition-form" class="life-form nutrition-popup-form">
             <label><span>Приём пищи</span>
               <select id="nutrition-meal">
                 <option value="Завтрак">Завтрак</option>
@@ -53,13 +62,21 @@
             <label><span>Углеводы</span><input id="nutrition-carbs" type="number" step="0.1" /></label>
             <label><span>Жиры</span><input id="nutrition-fat" type="number" step="0.1" /></label>
             <label class="wide"><span>Заметка</span><input id="nutrition-notes" type="text" placeholder="Необязательно" /></label>
-            <button class="wide" type="submit">Добавить еду</button>
+            <button class="wide" type="submit">Сохранить</button>
           </form>
+        </div>
 
-          <div>
-            <div id="nutrition-summary" class="life-summary"></div>
-            <div id="nutrition-list" class="life-list"></div>
+        <div id="nutrition-calendar" class="month-calendar"></div>
+
+        <div class="nutrition-day-content">
+          <div id="nutrition-summary" class="life-summary"></div>
+          <div class="nutrition-day-head">
+            <div>
+              <div class="eyebrow">ЗА ВЫБРАННЫЙ ДЕНЬ</div>
+              <h3>Еда</h3>
+            </div>
           </div>
+          <div id="nutrition-list" class="life-list"></div>
         </div>
       </section>
 
