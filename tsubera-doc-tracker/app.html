@@ -73,7 +73,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     <button class="btn" id="add">+ Добавить рейс</button>
   </div>
 
-  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button><button class="tab" id="tabReconciliation">Сверка <span id="reconciliationCount"></span></button></div>
+  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabReady">Готовы к Rechnung <span id="readyTabCount"></span></button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button><button class="tab" id="tabReconciliation">Сверка <span id="reconciliationCount"></span></button></div>
 
   <section id="tripsView">
   <div class="stats">
@@ -98,6 +98,27 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div id="rows"></div>
     </div>
   </div>
+  </section>
+
+  <section id="readyView" class="hidden">
+    <div class="stats">
+      <div class="card"><span>Готовы к Rechnung</span><b id="readyViewCount">0</b></div>
+      <div class="card"><span>Сумма готовых рейсов</span><b id="readyViewAmount">0 €</b></div>
+      <div class="card"><span>Условие готовности</span><b style="font-size:15px">Auftrag + CMR/POD + цена</b></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar">
+        <input id="readyQ" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате или фирме...">
+      </div>
+      <div class="table">
+        <div class="head">
+          <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Маршрут</div><div>Цена</div><div>Auftrag</div>
+          <div>CMR выгрузка / POD</div>
+          <div>Статус</div><div></div>
+        </div>
+        <div id="readyRows"></div>
+      </div>
+    </div>
   </section>
 
   <section id="companiesView" class="hidden">
@@ -257,6 +278,9 @@ const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · загрузка',cmr_unloading:'CMR · выгрузка / POD',cmr:'CMR · загрузка',pod:'CMR · выгрузка / POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
+function isReadyForRechnung(t){
+  return t?.readiness==='ready_for_rechnung'||(!t?.rechnungCode&&!!t?.auftrag&&!!t?.cmrUnloaded&&t?.priceEur!=null);
+}
 function status(t){
   if(t.rechnungCode)return '<span class="status done">Rechnung erstellt</span>';
   if(t.cmrUnloaded&&t.priceEur==null)return '<span class="status wait">Нет цены</span>';
@@ -295,7 +319,9 @@ async function load(){
     api('/api/trans/active?max_age_minutes=180&limit=100').catch(()=>({transports:[]}))
   ]);
   trips=td.trips||[];vehicles=vd.vehicles||[];companies=cd.companies||[];activeTransports=ad.transports||[];
-  renderCompanyFilter();renderCompanyDatalist();render();renderCompanies();renderVehicles();renderActiveTransports();renderVehicleDatalist();
+  renderCompanyFilter();renderCompanyDatalist();render();renderReady();renderCompanies();renderVehicles();renderActiveTransports();renderVehicleDatalist();
+  const readyCount=trips.filter(isReadyForRechnung).length;
+  $('readyTabCount').textContent=readyCount?'('+readyCount+')':'';
   $('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
   $('companyCount').textContent=companies.length?'('+companies.length+')':'';
   $('activeTransportCount').textContent=activeTransports.length?'('+activeTransports.length+')':'';
@@ -341,13 +367,14 @@ function render(){
   const showHidden=$('showHiddenCompanies').checked;
   const selectedCompany=companies.find(c=>c.id===$('companyFilter').value)||null;
   let list=trips
+    .filter(t=>!isReadyForRechnung(t))
     .filter(t=>showHidden||(companyForTrip(t)?.active!==false))
     .filter(t=>!selectedCompany||normCompany(t.customer)===normCompany(selectedCompany.name))
     .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
   $('total').textContent=list.length;
   $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
-  $('ready').textContent=list.filter(t=>!t.rechnungCode&&t.auftrag&&t.cmrUnloaded&&t.priceEur!=null).length;
+  $('ready').textContent=trips.filter(isReadyForRechnung).length;
   $('rows').innerHTML=list.map(t=>`
     <div class="row">
       <div>${esc(t.date)}</div>
@@ -368,6 +395,35 @@ function render(){
         </div>
       </div>
     </div>`).join('');
+}
+function renderReady(){
+  const q=String($('readyQ')?.value||'').trim().toLowerCase();
+  const list=trips
+    .filter(isReadyForRechnung)
+    .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q));
+  $('readyViewCount').textContent=list.length;
+  const totalAmount=list.reduce((sum,t)=>sum+(Number(t.priceEur)||0),0);
+  $('readyViewAmount').textContent=totalAmount.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:2})+' €';
+  $('readyRows').innerHTML=list.length?list.map(t=>`
+    <div class="row">
+      <div>${esc(t.date)}</div>
+      <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
+      <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
+      <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(displayCompanyName(t.customer))}</button></div>
+      <div><div style="font-weight:650">${esc(t.loadingPlace||'—')} → ${esc(t.unloadingPlace||'—')}</div></div>
+      <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
+      <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
+      <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
+      <div>${status(t)}</div>
+      <div class="action-menu-wrap">
+        <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
+        <div class="action-menu" id="tripMenu-${t.id}">
+          <button type="button" onclick="menuTripProperties('${t.id}')">Свойства</button>
+          <button type="button" onclick="hideTripCompany('${t.id}')">Скрыть эту фирму</button>
+          <button type="button" class="danger" onclick="menuDeleteTrip('${t.id}')">Удалить рейс</button>
+        </div>
+      </div>
+    </div>`).join(''):'<div class="recon-empty">Сейчас нет рейсов, готовых к Rechnung.</div>';
 }
 window.toggle=async(id,k,v)=>{
   await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({[k]:v})});await load()
@@ -463,19 +519,23 @@ $('upload').onclick=async()=>{
 function setTab(tab){
   currentTab=tab;
   $('tripsView').classList.toggle('hidden',tab!=='trips');
+  $('readyView').classList.toggle('hidden',tab!=='ready');
   $('companiesView').classList.toggle('hidden',tab!=='companies');
   $('vehiclesView').classList.toggle('hidden',tab!=='vehicles');
   $('activeTransportsView').classList.toggle('hidden',tab!=='active');
   $('reconciliationView').classList.toggle('hidden',tab!=='reconciliation');
   $('tabTrips').classList.toggle('active',tab==='trips');
+  $('tabReady').classList.toggle('active',tab==='ready');
   $('tabCompanies').classList.toggle('active',tab==='companies');
   $('tabVehicles').classList.toggle('active',tab==='vehicles');
   $('tabActiveTransports').classList.toggle('active',tab==='active');
   $('tabReconciliation').classList.toggle('active',tab==='reconciliation');
   $('add').classList.toggle('hidden',tab!=='trips');
+  if(tab==='ready')renderReady();
   if(tab==='reconciliation'&&!reconciliation)loadReconciliation();
 }
 $('tabTrips').onclick=()=>setTab('trips');
+$('tabReady').onclick=()=>setTab('ready');
 $('tabCompanies').onclick=()=>setTab('companies');
 $('tabVehicles').onclick=()=>setTab('vehicles');
 $('tabActiveTransports').onclick=()=>setTab('active');
@@ -678,7 +738,7 @@ $('reconStatusFilter').onchange=renderReconciliation;
 $('reconSearch').oninput=renderReconciliation;
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
-$('q').oninput=render;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
+$('q').oninput=render;$('readyQ').oninput=renderReady;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
 $('showHiddenCompanies').onchange=()=>{renderCompanyFilter();render()};
 $('addForm').onsubmit=async e=>{
   e.preventDefault();let f=new FormData(e.target);
