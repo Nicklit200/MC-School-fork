@@ -101,6 +101,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   </section>
 
   <section id="readyView" class="hidden">
+    <input id="readyRechnungFile" type="file" accept=".pdf,application/pdf" hidden>
     <div class="stats">
       <div class="card"><span>Готовы к Rechnung</span><b id="readyViewCount">0</b></div>
       <div class="card"><span>Сумма готовых рейсов</span><b id="readyViewAmount">0 €</b></div>
@@ -430,15 +431,49 @@ function renderReady(){
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD','×')}</div>
       <div>${status(t)}</div>
-      <div class="action-menu-wrap">
-        <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
-        <div class="action-menu" id="tripMenu-${t.id}">
-          <button type="button" onclick="menuTripProperties('${t.id}')">Свойства</button>
-          <button type="button" onclick="hideTripCompany('${t.id}')">Скрыть эту фирму</button>
-          <button type="button" class="danger" onclick="menuDeleteTrip('${t.id}')">Удалить рейс</button>
-        </div>
+      <div>
+        <button class="btn small" type="button" onclick="pickReadyRechnung('${t.id}')">Загрузить Rechnung</button>
       </div>
     </div>`).join(''):'<div class="recon-empty">Сейчас нет рейсов в очереди на Rechnung.</div>';
+}
+let readyRechnungTripId=null;
+window.pickReadyRechnung=id=>{
+  readyRechnungTripId=id;
+  const input=$('readyRechnungFile');
+  input.value='';
+  input.click();
+};
+$('readyRechnungFile').onchange=async()=>{
+  const input=$('readyRechnungFile');
+  const f=input.files?.[0];
+  const tripId=readyRechnungTripId;
+  if(!f||!tripId)return;
+  if(f.type&&f.type!=='application/pdf'&&!f.name.toLowerCase().endsWith('.pdf')){
+    input.value='';
+    readyRechnungTripId=null;
+    return alert('Выбери Rechnung в PDF');
+  }
+  try{
+    const b64=await new Promise((ok,no)=>{
+      const r=new FileReader();
+      r.onload=()=>ok(String(r.result).split(',')[1]);
+      r.onerror=no;
+      r.readAsDataURL(f);
+    });
+    await api('/api/trips/'+tripId+'/documents',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({docType:'rechnung',name:f.name,mime:f.type||'application/pdf',dataBase64:b64})
+    });
+    input.value='';
+    readyRechnungTripId=null;
+    await load();
+    setTab('ready');
+  }catch(e){
+    input.value='';
+    readyRechnungTripId=null;
+    alert('Не удалось загрузить Rechnung: '+e.message);
+  }
 }
 window.toggle=async(id,k,v)=>{
   await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({[k]:v})});await load()
