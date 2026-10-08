@@ -12,7 +12,7 @@ import static com.mcschool.flashcard.skills.SkillBoardService.*;
 /** Narrow, revision-checked curriculum edits. Never changes pupil results. */
 @Service
 public class SkillBoardMcpService {
-    public static final Set<String> TOOL_NAMES = Set.of("get_skill_board", "edit_skill_board");
+    public static final Set<String> TOOL_NAMES = Set.of("list_skill_boards", "get_skill_board", "edit_skill_board");
     private static final Set<String> NODE_FIELDS = Set.of("kind", "title", "de", "description", "example", "source", "color", "x", "y", "archived", "core", "schoolTypes");
     private final SkillBoardService boards;
     private final ObjectMapper mapper;
@@ -24,6 +24,9 @@ public class SkillBoardMcpService {
 
     public static List<Map<String, Object>> definitions() {
         var boardProperty = Map.of("type", "string", "description", "Board ID. Omit for grade-6, the existing grade-six curriculum. Read current data before editing.");
+        var list = definition("list_skill_boards",
+            "List all accessible Mindcrafti curriculum skills boards with real persisted IDs, grade, title, revision and update time. Use before get_skill_board rather than guessing a board ID.",
+            Map.of(), List.of(), true);
         var read = definition("get_skill_board",
             "Read the live Mindcrafti curriculum skills board from the same database used by /skills. Returns stable node/edge IDs, current revision, descriptions, examples, prerequisite and containment arrows, and canvas positions. OAuth ADMIN or TEACHER only. This is a curriculum catalog, NOT evidence of pupil mastery. Fetch fresh before edits; never reconstruct the current board from chat memory.",
             Map.of("boardId", boardProperty), List.of(), true);
@@ -35,7 +38,7 @@ public class SkillBoardMcpService {
         var edit = definition("edit_skill_board",
             "Save explicitly requested changes to the live Mindcrafti skills board. OAuth ADMIN only; preserves existing node IDs, unrelated content, audit snapshots and database revision-conflict protection. Use only for the user's requested curriculum/board edits, not to infer or record pupil mastery. Read with get_skill_board first. No change is saved on error. Read back after success. Editing updates the same board visible at /skills; an already open browser must reload after saving its own draft.",
             editProperties, List.of("expectedRevision", "operationsJson"), false);
-        return List.of(read, edit);
+        return List.of(list, read, edit);
     }
 
     private static Map<String, Object> definition(String name, String description, Map<String, ?> properties, List<String> required, boolean readOnly) {
@@ -51,7 +54,8 @@ public class SkillBoardMcpService {
             requireReader(caller);
             if (name.equals("edit_skill_board") && caller.getRole() != Role.ADMIN)
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a signed-in administrator can edit the shared curriculum");
-            keys(args, name.equals("get_skill_board") ? Set.of("boardId") : Set.of("boardId", "expectedRevision", "operationsJson"));
+            keys(args, name.equals("list_skill_boards") ? Set.of() : name.equals("get_skill_board") ? Set.of("boardId") : Set.of("boardId", "expectedRevision", "operationsJson"));
+            if (name.equals("list_skill_boards")) return result(Map.of("boards", boards.list(), "source", "mindcrafti_database", "pagePath", "/skills"), false);
             String boardId = text(args, "boardId", "grade-6");
             if (name.equals("get_skill_board")) return result(Map.of("board", boards.get(boardId), "canEdit", caller.getRole() == Role.ADMIN, "source", "mindcrafti_database", "pagePath", "/skills"), false);
             return result(edit(boardId, args, caller), false);
