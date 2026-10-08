@@ -104,7 +104,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     <div class="stats">
       <div class="card"><span>Готовы к Rechnung</span><b id="readyViewCount">0</b></div>
       <div class="card"><span>Сумма готовых рейсов</span><b id="readyViewAmount">0 €</b></div>
-      <div class="card"><span>Условие готовности</span><b style="font-size:15px">Auftrag + CMR/POD + цена</b></div>
+      <div class="card"><span>Добавлено из Excel</span><b id="excelReadyCount">0</b></div>
     </div>
     <div class="panel">
       <div class="toolbar">
@@ -274,6 +274,16 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 
 <script>
 let trips=[],vehicles=[],companies=[],activeTransports=[],reconciliation=null,activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
+const excelReadyOrders=[
+  {date:'2026-10-06',trip:'2026/10/06/63',customer:'Acc Logistics Krzysztof Feret',loadingPlace:'Bad Säckingen',unloadingPlace:'Garching bei München',priceEur:360},
+  {date:'2026-10-06',trip:'2026/10/06/149',customer:'WIKLOGISTIC Włodzimierz Leszczyński',loadingPlace:'Weingarten',unloadingPlace:'Maulburg',priceEur:280},
+  {date:'2026-10-06',trip:'2026/10/06/11',customer:'Haug Transport & Logistik GbR',loadingPlace:'Dußlingen',unloadingPlace:'Blaichach',priceEur:250},
+  {date:'2026-10-06',trip:'2026/10/06/291',customer:'Nardo Logistics Sp. z o.o.',loadingPlace:'Leingarten',unloadingPlace:'Friedrichshafen',priceEur:250},
+  {date:'2026-10-01',trip:'2026/10/01/27',customer:'Desmond Marek Sulikowski',loadingPlace:'Fellbach',unloadingPlace:'Blaichach',priceEur:250},
+  {date:'2026-10-01',trip:'2026/10/01/11',customer:'LEGACY s.r.o.',loadingPlace:'Heilbronn',unloadingPlace:'Türkheim',priceEur:150},
+  {date:'2026-09-25',trip:'2026/09/25/1456',customer:'SL Transport Sp. z o.o.',loadingPlace:'Brackenheim',unloadingPlace:'Mindelheim',priceEur:150},
+  {date:'2026-09-24',trip:'2026/09/24/137',customer:'Power&Light Sp. z o. o.',loadingPlace:'Hanau',unloadingPlace:'Garching bei München',priceEur:360}
+];
 const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
@@ -320,7 +330,7 @@ async function load(){
   ]);
   trips=td.trips||[];vehicles=vd.vehicles||[];companies=cd.companies||[];activeTransports=ad.transports||[];
   renderCompanyFilter();renderCompanyDatalist();render();renderReady();renderCompanies();renderVehicles();renderActiveTransports();renderVehicleDatalist();
-  const readyCount=trips.filter(isReadyForRechnung).length;
+  const readyCount=trips.filter(isReadyForRechnung).length+excelReadyOrders.length;
   $('readyTabCount').textContent=readyCount?'('+readyCount+')':'';
   $('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
   $('companyCount').textContent=companies.length?'('+companies.length+')':'';
@@ -398,32 +408,53 @@ function render(){
 }
 function renderReady(){
   const q=String($('readyQ')?.value||'').trim().toLowerCase();
-  const list=trips
-    .filter(isReadyForRechnung)
-    .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q));
-  $('readyViewCount').textContent=list.length;
-  const totalAmount=list.reduce((sum,t)=>sum+(Number(t.priceEur)||0),0);
+  const systemReady=trips.filter(isReadyForRechnung);
+  const systemRows=systemReady.map(t=>({...t,source:'system'}));
+  const excelRows=excelReadyOrders.map((t,i)=>({...t,id:'excel-'+i,internalTripId:'—',source:'excel'}));
+  const list=[...systemRows,...excelRows]
+    .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  $('readyViewCount').textContent=systemRows.length+excelRows.length;
+  $('excelReadyCount').textContent=excelRows.length;
+  const totalAmount=[...systemRows,...excelRows].reduce((sum,t)=>sum+(Number(t.priceEur)||0),0);
   $('readyViewAmount').textContent=totalAmount.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:2})+' €';
-  $('readyRows').innerHTML=list.length?list.map(t=>`
-    <div class="row">
-      <div>${esc(t.date)}</div>
-      <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
-      <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
-      <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(displayCompanyName(t.customer))}</button></div>
-      <div><div style="font-weight:650">${esc(t.loadingPlace||'—')} → ${esc(t.unloadingPlace||'—')}</div></div>
-      <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
-      <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
-      <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
-      <div>${status(t)}</div>
-      <div class="action-menu-wrap">
-        <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
-        <div class="action-menu" id="tripMenu-${t.id}">
-          <button type="button" onclick="menuTripProperties('${t.id}')">Свойства</button>
-          <button type="button" onclick="hideTripCompany('${t.id}')">Скрыть эту фирму</button>
-          <button type="button" class="danger" onclick="menuDeleteTrip('${t.id}')">Удалить рейс</button>
+  $('readyRows').innerHTML=list.length?list.map(t=>{
+    if(t.source==='excel'){
+      return `
+        <div class="row">
+          <div>${esc(t.date)}</div>
+          <div><span class="muted">—</span></div>
+          <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
+          <div>${esc(displayCompanyName(t.customer))}</div>
+          <div><div style="font-weight:650">${esc(t.loadingPlace||'—')} → ${esc(t.unloadingPlace||'—')}</div></div>
+          <div><b>${esc(t.priceEur)} €</b></div>
+          <div><span class="status ok">✓ по Excel</span></div>
+          <div><span class="status ok">✓ по Excel</span></div>
+          <div><span class="status route">Из Excel · к Rechnung</span></div>
+          <div></div>
+        </div>`;
+    }
+    return `
+      <div class="row">
+        <div>${esc(t.date)}</div>
+        <div><span class="tid" onclick="openTrip('${t.id}')">${esc(t.internalTripId||'—')}</span></div>
+        <div><span class="customer-ref">${esc(t.trip||'—')}</span></div>
+        <div><button type="button" class="company-link" onclick="openCompanyRulesFromTrip('${t.id}')">${esc(displayCompanyName(t.customer))}</button></div>
+        <div><div style="font-weight:650">${esc(t.loadingPlace||'—')} → ${esc(t.unloadingPlace||'—')}</div></div>
+        <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
+        <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
+        <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD')}</div>
+        <div>${status(t)}</div>
+        <div class="action-menu-wrap">
+          <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
+          <div class="action-menu" id="tripMenu-${t.id}">
+            <button type="button" onclick="menuTripProperties('${t.id}')">Свойства</button>
+            <button type="button" onclick="hideTripCompany('${t.id}')">Скрыть эту фирму</button>
+            <button type="button" class="danger" onclick="menuDeleteTrip('${t.id}')">Удалить рейс</button>
+          </div>
         </div>
-      </div>
-    </div>`).join(''):'<div class="recon-empty">Сейчас нет рейсов, готовых к Rechnung.</div>';
+      </div>`;
+  }).join(''):'<div class="recon-empty">Сейчас нет рейсов, готовых к Rechnung.</div>';
 }
 window.toggle=async(id,k,v)=>{
   await api('/api/trips/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({[k]:v})});await load()
