@@ -441,6 +441,32 @@ for (const r of db.prepare("SELECT id,date FROM trips WHERE internal_trip_id IS 
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_internal_trip_id ON trips(internal_trip_id)");
 
+const excelConfirmedTrips = [
+  { date:"2026-10-06", trip:"2026/10/06/63", customer:"Acc Logistics Krzysztof Feret", loadingPlace:"DE 79713 Bad Säckingen", unloadingPlace:"DE 85748 Garching bei München", priceEur:360, vehiclePlates:["MM AO 102"] },
+  { date:"2026-10-06", trip:"2026/10/06/149", customer:"WIKLOGISTIC Włodzimierz Leszczyński", loadingPlace:"DE 88250 Weingarten", unloadingPlace:"DE 79689 Maulburg", priceEur:280, vehiclePlates:["MM AO 102"] },
+  { date:"2026-10-06", trip:"2026/10/06/11", customer:"Haug Transport & Logistik GbR", loadingPlace:"DE 72144 Dußlingen", unloadingPlace:"DE 87544 Blaichach", priceEur:250, vehiclePlates:["KE TV 177"] },
+  { date:"2026-10-06", trip:"2026/10/06/291", customer:"Nardo Logistics Sp. z o.o.", loadingPlace:"DE 74211 Leingarten", unloadingPlace:"DE 88045 Friedrichshafen", priceEur:250, vehiclePlates:[] },
+  { date:"2026-10-01", trip:"2026/10/01/27", customer:"Desmond Marek Sulikowski", loadingPlace:"DE 70734 Fellbach", unloadingPlace:"DE 87544 Blaichach", priceEur:250, vehiclePlates:["MM AO 102"] },
+  { date:"2026-10-01", trip:"2026/10/01/11", customer:"LEGACY s.r.o.", loadingPlace:"DE 74072 Heilbronn", unloadingPlace:"DE 86842 Türkheim", priceEur:150, vehiclePlates:["KE TV 177"] },
+  { date:"2026-09-25", trip:"2026/09/25/1456", customer:"SL Transport Sp. z o.o.", loadingPlace:"DE 74336 Brackenheim", unloadingPlace:"DE 87719 Mindelheim", priceEur:150, vehiclePlates:["MN TV 179"] },
+  { date:"2026-09-24", trip:"2026/09/24/137", customer:"Power&Light Sp. z o. o.", loadingPlace:"DE 63456 Hanau", unloadingPlace:"DE 85748 Garching bei München", priceEur:360, vehiclePlates:[] }
+];
+for (const seed of excelConfirmedTrips) {
+  const company = ensureCompany(seed.customer);
+  const existing = db.prepare("SELECT * FROM trips WHERE trip_number=? LIMIT 1").get(seed.trip);
+  const plateText = platesToText(seed.vehiclePlates || []);
+  if (existing) {
+    db.prepare("UPDATE trips SET date=?,customer=?,loading_place=?,unloading_place=?,vehicle_plates=CASE WHEN TRIM(COALESCE(vehicle_plates,''))='' THEN ? ELSE vehicle_plates END,price_cents=?,updated_at=? WHERE id=?")
+      .run(seed.date, company.name, seed.loadingPlace, seed.unloadingPlace, plateText, priceEurToCents(seed.priceEur), now(), existing.id);
+  } else {
+    const id = crypto.randomUUID();
+    const ts = now();
+    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id,nextInternalTripId(seed.date),seed.date,seed.trip,company.name,0,0,0,0,0,"","",seed.loadingPlace,seed.unloadingPlace,plateText,priceEurToCents(seed.priceEur),"",ts,ts);
+  }
+}
+
 const tripOut = row => {
   if (!row) return null;
   const hasAuftrag = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type='auftrag' LIMIT 1").get(row.id);
