@@ -577,6 +577,7 @@ function storeTripDocument(t, { documentType, filename, mimeType, buffer, vehicl
   if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
   else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
   else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
+  else if (documentType === "rechnung") db.prepare("UPDATE trips SET rechnung_code=?, updated_at=? WHERE id=?").run(filename, now(), t.id);
   if (vehiclePlate) appendVehicleToTrip(t.id, vehiclePlate);
   const trip = getTripByAny(t.id);
   return {
@@ -2581,6 +2582,7 @@ const server = http.createServer(async (req, res) => {
         if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
         else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
         else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
+        else if (b.docType === "rechnung") db.prepare("UPDATE trips SET rechnung_code=?, updated_at=? WHERE id=?").run(b.name, now(), t.id);
         if (b.vehiclePlate) appendVehicleToTrip(t.id, b.vehiclePlate);
         return json(res, 201, { document: docOut(docRow(id)), trip: getTripByAny(t.id) });
       }
