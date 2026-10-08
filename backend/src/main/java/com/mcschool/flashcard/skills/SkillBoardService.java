@@ -24,11 +24,24 @@ public class SkillBoardService {
     public record Board(int schemaVersion, String title, int grade, String source, List<Node> nodes, List<Edge> edges) {}
     public record Snapshot(String id, long revision, Instant updatedAt, Board data) {}
     public record SaveRequest(long expectedRevision, Board data) {}
+    public record BoardSummary(String id, String title, int grade, long revision, Instant updatedAt) {}
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     public SkillBoardService(JdbcTemplate jdbc, ObjectMapper mapper) {
         this.jdbc = jdbc; this.mapper = mapper;
     }
+    /** Returns the real persisted IDs of every curriculum board. */
+    @Transactional(readOnly = true)
+    public List<BoardSummary> list() {
+        return jdbc.query("""
+            SELECT id, data->>'title' AS title, CAST(data->>'grade' AS integer) AS grade,
+                   revision, updated_at
+            FROM skill_boards
+            ORDER BY CAST(data->>'grade' AS integer), id
+            """, (rs, row) -> new BoardSummary(rs.getString("id"), rs.getString("title"),
+                rs.getInt("grade"), rs.getLong("revision"), rs.getTimestamp("updated_at").toInstant()));
+    }
+
     @Transactional(readOnly = true)
     public Snapshot get(String id) {
         requireId(id);
