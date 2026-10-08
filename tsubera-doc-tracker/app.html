@@ -13,6 +13,11 @@ main{max-width:1620px;margin:auto;padding:26px 18px}
 h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:650;cursor:pointer;background:#111827;color:#fff}
 .btn.alt{background:white;color:#111827;border:1px solid #dfe3ea}.btn.small{padding:7px 9px;font-size:12px}
+#readyView .head,#readyView .row{min-width:1450px;grid-template-columns:100px 145px 140px minmax(205px,1.2fr) minmax(260px,1.5fr) 105px 90px 135px 165px 160px}
+.ready-action{display:flex;justify-content:flex-end;align-items:center}
+.ready-upload-btn{white-space:nowrap;min-width:142px;height:34px;padding:0 12px;border-radius:9px;font-size:12px;font-weight:750;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.ready-upload-btn::before{content:"↑";font-size:15px;line-height:1}
+.ready-action-empty{color:#cbd5e1;text-align:center;width:100%}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
 .toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
@@ -115,7 +120,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         <div class="head">
           <div>Дата</div><div>Tsubera Tour-ID</div><div>№ заказчика</div><div>Заказчик</div><div>Маршрут</div><div>Цена</div><div>Auftrag</div>
           <div>CMR выгрузка / POD</div>
-          <div>Статус</div><div></div>
+          <div>Статус</div><div style="text-align:right">Rechnung</div>
         </div>
         <div id="readyRows"></div>
       </div>
@@ -431,8 +436,10 @@ function renderReady(){
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD','×')}</div>
       <div>${status(t)}</div>
-      <div>
-        <button class="btn small" type="button" onclick="pickReadyRechnung('${t.id}')">Загрузить Rechnung</button>
+      <div class="ready-action">
+        ${isReadyForRechnung(t)
+          ? `<button class="btn ready-upload-btn" type="button" onclick="pickReadyRechnung('${t.id}')">Загрузить Rechnung</button>`
+          : '<span class="ready-action-empty">—</span>'}
       </div>
     </div>`).join(''):'<div class="recon-empty">Сейчас нет рейсов в очереди на Rechnung.</div>';
 }
