@@ -44,5 +44,5 @@ test('Trip responses and PATCH route support independently saved invoice links',
   assert.match(inline,/window\.editRechnungLink=async id=>/);
   assert.match(inline,/target="_blank" rel="noopener noreferrer"/);
   assert.match(inline,/invoiceLinkControls\(t\)/);
-  assert.match(html,/id=\\"tripRechnungUrl\\"/);
+  assert.match(html,/id="tripRechnungUrl"/);
 });
