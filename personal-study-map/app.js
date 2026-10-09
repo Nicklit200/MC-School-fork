@@ -6,6 +6,7 @@ const state = {
   nutritionEntries: [],
   nutritionAssistantEntries: [],
   workoutEntries: [],
+  workoutAssistantEntries: [],
   nutritionCalendarEntries: [],
   workoutCalendarEntries: [],
   calendarMonth: {
@@ -441,22 +442,54 @@ function renderNutrition() {
   }
 }
 
+async function loadAssistantWorkouts() {
+  try {
+    const response = await fetch("./data/workouts.json", { cache:"no-store" });
+    if (!response.ok) throw new Error("workouts.json " + response.status);
+    const payload = await response.json();
+    const entries = Array.isArray(payload) ? payload : payload?.entries;
+    state.workoutAssistantEntries = Array.isArray(entries) ? entries : [];
+  } catch (error) {
+    console.warn("Тренировки из чата пока недоступны", error);
+    state.workoutAssistantEntries = [];
+  }
+  return state.workoutAssistantEntries;
+}
+
+function mergeWorkoutEntries(...groups) {
+  const byId = new Map();
+  for (const group of groups) {
+    for (const item of group || []) {
+      const key = item.id || [item.date, item.startTime, item.title, item.distanceKm, item.durationMinutes].join("|");
+      byId.set(String(key), item);
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || ""))
+  );
+}
+
 async function loadWorkouts() {
   const date = $("workout-date").value || todayIso();
   $("workout-date").value = date;
+  const assistantEntries = await loadAssistantWorkouts();
+  let dayEntries = [];
+  let calendarEntries = [];
   try {
-    const [dayEntries, calendarEntries] = await Promise.all([
+    [dayEntries, calendarEntries] = await Promise.all([
       api("/api/workouts?date=" + encodeURIComponent(date)),
       api("/api/workouts")
     ]);
-    state.workoutEntries = dayEntries;
-    state.workoutCalendarEntries = calendarEntries;
-    renderWorkouts();
-    renderCalendar("workouts");
   } catch (error) {
-    $("workout-list").innerHTML = '<div class="review-empty">Не удалось загрузить тренировки.</div>';
-    console.error(error);
+    console.warn("API тренировок недоступен, показываю записи из чата", error);
   }
+  const assistantDayEntries = assistantEntries.filter((item) =>
+    String(item?.date || "").slice(0, 10) === date
+  );
+  state.workoutEntries = mergeWorkoutEntries(assistantDayEntries, dayEntries);
+  state.workoutCalendarEntries = mergeWorkoutEntries(assistantEntries, calendarEntries);
+  renderWorkouts();
+  renderCalendar("workouts");
 }
 
 function renderWorkouts() {
@@ -473,17 +506,20 @@ function renderWorkouts() {
     const exercises = Array.isArray(item.exercises) ? item.exercises : [];
     card.innerHTML = `
       <div class="life-card-main">
-        <div class="life-card-kicker">${item.durationMinutes ? Number(item.durationMinutes) + " мин" : "Тренировка"}</div>
+        <div class="life-card-kicker">${item.durationSeconds != null ? (Number(item.durationMinutes) + " мин " + Number(item.durationSeconds) + " сек") : (item.durationMinutes ? Number(item.durationMinutes) + " мин" : "Тренировка")}</div>
         <div class="life-card-title">${escapeHtml(item.title)}</div>
         <div class="exercise-lines">${exercises.map((x) => `<div>${escapeHtml(x)}</div>`).join("")}</div>
         ${item.notes ? `<div class="life-card-meta">${escapeHtml(item.notes)}</div>` : ""}
       </div>
-      <button class="homework-delete" type="button" aria-label="Удалить">×</button>
+      ${item.source === "chatgpt" ? "" : '<button class="homework-delete" type="button" aria-label="Удалить">×</button>'}
     `;
-    card.querySelector("button").onclick = async () => {
-      await api("/api/workouts/" + encodeURIComponent(item.id), {method:"DELETE"});
-      loadWorkouts();
-    };
+    const deleteButton = card.querySelector("button");
+    if (deleteButton) {
+      deleteButton.onclick = async () => {
+        await api("/api/workouts/" + encodeURIComponent(item.id), {method:"DELETE"});
+        loadWorkouts();
+      };
+    }
     host.append(card);
   }
 }
