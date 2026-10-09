@@ -39,8 +39,8 @@ test('Trip responses and PATCH route support independently saved invoice links',
   assert.match(server,/rechnung_url TEXT NOT NULL DEFAULT/);
   assert.match(server,/ALTER TABLE trips ADD COLUMN rechnung_url/);
   assert.match(server,/rechnungUrl: row\.rechnung_url/);
-  assert.match(server,/rechnungUrl: b\.rechnungUrl === undefined/);
-  assert.match(server,/rechnung_code=\?,rechnung_url=\?,updated_at=\?/);
+  assert.match(server,/rechnungUrl:\s*b\.rechnungUrl\s*===\s*undefined/);
+  assert.match(server,/rechnung_code=\?,rechnung_url=\?,status_override=\?,updated_at=\?/);
   assert.match(inline,/window\.editRechnungLink=async id=>/);
   assert.match(inline,/target="_blank" rel="noopener noreferrer"/);
   assert.match(inline,/invoiceLinkControls\(t\)/);

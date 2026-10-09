@@ -1,4 +1,4 @@
-name: Tsubera Rechnung link tests
+name: Tsubera trip editor and invoice link tests
 on:
   push:
     branches: [tsubera-doc-tracker]
@@ -6,6 +6,7 @@ on:
       - 'tsubera-doc-tracker/app.html'
       - 'tsubera-doc-tracker/server.mjs'
       - 'tsubera-doc-tracker/tests/invoice-links.test.mjs'
+      - 'tsubera-doc-tracker/tests/trip-edit.test.mjs'
       - '.github/workflows/tsubera-ui-tests.yml'
 jobs:
   test:
@@ -14,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Check server syntax
         run: node --check tsubera-doc-tracker/server.mjs
       - name: Check inline browser script syntax
@@ -23,3 +24,5 @@ jobs:
           node --check /tmp/tsubera-client.js
       - name: Validate invoice links and storage wiring
         run: node --test tsubera-doc-tracker/tests/invoice-links.test.mjs
+      - name: Exercise editable fields and persistence across server restarts
+        run: node --test tsubera-doc-tracker/tests/trip-edit.test.mjs
