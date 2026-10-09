@@ -7,6 +7,8 @@ on:
       - 'tsubera-doc-tracker/server.mjs'
       - 'tsubera-doc-tracker/tests/invoice-links.test.mjs'
       - 'tsubera-doc-tracker/tests/trip-edit.test.mjs'
+      - 'tsubera-doc-tracker/tests/export-trips.test.mjs'
+      - 'tsubera-doc-tracker/package.json'
       - '.github/workflows/tsubera-ui-tests.yml'
 jobs:
   test:
@@ -16,6 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Install Excel workbook dependency
+        run: npm install --prefix tsubera-doc-tracker --no-audit --no-fund --package-lock=false
       - name: Check server syntax
         run: node --check tsubera-doc-tracker/server.mjs
       - name: Check inline browser script syntax
@@ -26,3 +30,5 @@ jobs:
         run: node --test tsubera-doc-tracker/tests/invoice-links.test.mjs
       - name: Exercise editable fields and persistence across server restarts
         run: node --test tsubera-doc-tracker/tests/trip-edit.test.mjs
+      - name: Verify Excel download structure and clickable invoice links
+        run: node --test tsubera-doc-tracker/tests/export-trips.test.mjs

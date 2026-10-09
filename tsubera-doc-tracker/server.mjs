@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import ExcelJS from "exceljs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -566,6 +567,107 @@ const docOut = row => row ? ({
   size: row.size,
   createdAt: row.created_at
 }) : null;
+
+
+const EXCEL_EXPORT_HEADERS=[
+  'Дата', '№ заказчика', 'Фирма', 'Ссылка на Rechnung',
+  'Маршрут', 'Цена (€)', 'Auftrag', 'CMR выгрузка / POD', 'Статус'
+];
+function tripStatusForExcel(t){
+  const manual={
+    rechnung_created:'Rechnung erstellt',
+    ready_for_rechnung:'Готов к Rechnung',
+    not_invoiced:'Rechnung ещё не выставлен',
+    no_price:'Нет цены',
+    loaded:'Загружен',
+    missing_auftrag:'Не хватает Auftrag',
+    missing_cmr:'Не хватает CMR/POD',
+    missing_both:'Не хватает Auftrag и CMR/POD',
+    missing_documents:'Не хватает документов'
+  };
+  if(t.statusOverride&&manual[t.statusOverride])return manual[t.statusOverride];
+  if(t.rechnungCode)return 'Rechnung erstellt';
+  if(t.cmrUnloaded&&t.priceEur==null)return 'Нет цены';
+  if(t.auftrag&&t.cmrUnloaded&&t.priceEur!=null)return 'Готов к Rechnung';
+  if(t.cmrLoaded)return 'Загружен';
+  if(!t.auftrag&&!t.cmrUnloaded)return 'Не хватает Auftrag и CMR/POD';
+  if(!t.auftrag)return 'Не хватает Auftrag';
+  if(!t.cmrUnloaded)return 'Не хватает CMR/POD';
+  return 'Не хватает документов';
+}
+const excelText=value=>String(value??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,' ').slice(0,32767);
+async function generateTripsExcel(trips){
+  const workbook=new ExcelJS.Workbook();
+  workbook.creator='Tsubera';
+  workbook.created=new Date();
+  workbook.modified=new Date();
+  const sheet=workbook.addWorksheet('Рейсы',{
+    views:[{state:'frozen',xSplit:0,ySplit:1}],
+    properties:{defaultRowHeight:23}
+  });
+  sheet.columns=[
+    {header:EXCEL_EXPORT_HEADERS[0],key:'date',width:16},
+    {header:EXCEL_EXPORT_HEADERS[1],key:'order',width:25},
+    {header:EXCEL_EXPORT_HEADERS[2],key:'company',width:39},
+    {header:EXCEL_EXPORT_HEADERS[3],key:'invoice',width:68},
+    {header:EXCEL_EXPORT_HEADERS[4],key:'route',width:71},
+    {header:EXCEL_EXPORT_HEADERS[5],key:'price',width:17},
+    {header:EXCEL_EXPORT_HEADERS[6],key:'auftrag',width:15},
+    {header:EXCEL_EXPORT_HEADERS[7],key:'cmr',width:24},
+    {header:EXCEL_EXPORT_HEADERS[8],key:'status',width:37}
+  ];
+  const header=sheet.getRow(1);
+  header.height=32;
+  header.eachCell(cell=>{
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF17233D'}};
+    cell.font={name:'Aptos',size:11,bold:true,color:{argb:'FFFFFFFF'}};
+    cell.alignment={vertical:'middle',horizontal:'left',wrapText:true};
+    cell.border={bottom:{style:'thin',color:{argb:'FF0B1225'}}};
+  });
+  trips.forEach((trip,index)=>{
+    const date=String(trip.date||'');
+    const dateValue=/^\d{4}-\d{2}-\d{2}$/.test(date)?new Date(date+'T00:00:00.000Z'):date;
+    const route=[excelText(trip.loadingPlace||'—'),excelText(trip.unloadingPlace||'—')].join(' → ');
+    const row=sheet.addRow({
+      date:dateValue,
+      order:excelText(trip.trip),
+      company:excelText(trip.customer),
+      invoice:'',
+      route,
+      price:trip.priceEur===null?null:Number(trip.priceEur),
+      auftrag:trip.auftrag?'Есть':'Нет',
+      cmr:trip.cmrUnloaded?'Есть':'Нет',
+      status:tripStatusForExcel(trip)
+    });
+    row.height=27;
+    row.eachCell({includeEmpty:true},cell=>{
+      cell.font={name:'Aptos',size:11,color:{argb:'FF19253A'}};
+      cell.alignment={vertical:'middle',wrapText:false};
+      if(index%2===1)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF4F7FB'}};
+    });
+    row.getCell('date').numFmt='dd.mm.yyyy';
+    row.getCell('price').numFmt='#,##0.00 "€";[Red](#,##0.00 "€");"–"';
+    row.getCell('price').alignment={vertical:'middle',horizontal:'right'};
+    let invoiceUrl='';
+    if(trip.rechnungUrl){
+      try{invoiceUrl=normalizeFakturowniaUrl(trip.rechnungUrl);}
+      catch{invoiceUrl='';}
+    }
+    if(invoiceUrl){
+      const cell=row.getCell('invoice');
+      cell.value={text:invoiceUrl,hyperlink:invoiceUrl,tooltip:'Открыть Rechnung в Fakturownia'};
+      cell.font={name:'Aptos',size:10,underline:true,color:{argb:'FF1D4ED8'}};
+      cell.alignment={vertical:'middle',horizontal:'left'};
+    }
+    const statusCell=row.getCell('status');
+    if(tripStatusForExcel(trip)==='Rechnung erstellt'){
+      statusCell.font={name:'Aptos',size:11,bold:true,color:{argb:'FF2447A3'}};
+    }
+  });
+  sheet.autoFilter={from:'A1',to:'I'+(trips.length+1)};
+  sheet.pageSetup={fitToPage:true,fitToWidth:1,orientation:'landscape'};
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
 
 function json(res, status, data, extra = {}) {
   const body = JSON.stringify(data);
@@ -2556,6 +2658,28 @@ const server = http.createServer(async (req, res) => {
         if (!row) return json(res, 404, { error: "Vehicle not found" });
         db.prepare("DELETE FROM vehicles WHERE id=?").run(row.id);
         return json(res, 200, { ok: true, historyPreserved: true });
+      }
+
+
+      if (p === "/api/trips/export.xlsx" && req.method === "POST") {
+        const body=await readJson(req,64*1024);
+        const ids=body.tripIds;
+        if(!Array.isArray(ids)||ids.length<1||ids.length>500||ids.some(id=>typeof id!=='string'||id.length>120)||new Set(ids).size!==ids.length){
+          return json(res,400,{error:'Передай от 1 до 500 уникальных рейсов из таблицы'});
+        }
+        const lookup=db.prepare("SELECT * FROM trips WHERE id=?");
+        const trips=ids.map(id=>tripOut(lookup.get(id)));
+        if(trips.some(x=>!x))return json(res,404,{error:'Некоторые рейсы больше не существуют. Обнови таблицу'});
+        const xlsx=await generateTripsExcel(trips);
+        const filename='tsubera-rechnungen-'+new Date().toISOString().slice(0,10)+'.xlsx';
+        res.writeHead(200,{
+          'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'content-disposition':'attachment; filename="'+filename+'"',
+          'cache-control':'private, no-store',
+          'content-length':xlsx.length,
+          'x-content-type-options':'nosniff'
+        });
+        return res.end(xlsx);
       }
 
       if (p === "/api/trips" && req.method === "GET") {

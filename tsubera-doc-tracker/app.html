@@ -100,6 +100,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         <option value="no_invoice">Без Rechnung</option>
       </select>
       <label class="filter-check"><input id="showHiddenCompanies" type="checkbox"> Показать скрытые фирмы</label>
+      <button class="btn alt small" id="exportTripsExcel" type="button" title="Выгрузить показанные рейсы с ссылками на Rechnung">↓ Скачать Excel</button>
     </div>
     <div class="table">
       <div class="head">
@@ -442,19 +443,54 @@ function renderCompanyFilter(){
 function renderCompanyDatalist(){
   $('companyDatalist').innerHTML=companies.filter(c=>c.active).map(c=>'<option value="'+esc(c.name)+'"></option>').join('');
 }
-function render(){
-  let q=$('q').value.toLowerCase();
-  let vf=$('vehicleFilter').value.toLowerCase().trim();
+function filteredTripsForTable(){
+  const q=$('q').value.toLowerCase();
+  const vf=$('vehicleFilter').value.toLowerCase().trim();
   const showHidden=$('showHiddenCompanies').checked;
   const selectedCompany=companies.find(c=>c.id===$('companyFilter').value)||null;
   const selectedStatus=$('statusFilter').value;
-  let list=trips
+  return trips
     .filter(t=>!isReadyQueueTrip(t))
     .filter(t=>matchesStatusFilter(t,selectedStatus))
     .filter(t=>showHidden||(companyForTrip(t)?.active!==false))
     .filter(t=>!selectedCompany||normCompany(t.customer)===normCompany(selectedCompany.name))
     .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
+}
+async function downloadTripsExcel(){
+  const list=filteredTripsForTable();
+  if(!list.length)return alert('По выбранным фильтрам нет рейсов для Excel');
+  const button=$('exportTripsExcel'),label=button.textContent;
+  button.disabled=true;
+  button.textContent='Готовлю Excel…';
+  try{
+    const response=await fetch('/api/trips/export.xlsx',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({tripIds:list.map(t=>t.id)})
+    });
+    if(!response.ok){
+      const error=await response.json().catch(()=>({}));
+      throw new Error(error.error||('HTTP '+response.status));
+    }
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='tsubera-rechnungen-'+new Date().toISOString().slice(0,10)+'.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(error){
+    alert('Не удалось скачать Excel: '+error.message);
+  }finally{
+    button.disabled=false;
+    button.textContent=label;
+  }
+}
+function render(){
+  const list=filteredTripsForTable();
   $('total').textContent=list.length;
   $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
   $('ready').textContent=trips.filter(isReadyQueueTrip).length;
@@ -930,6 +966,7 @@ $('reconStatusFilter').onchange=renderReconciliation;
 $('reconSearch').oninput=renderReconciliation;
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
+$('exportTripsExcel').onclick=downloadTripsExcel;
 $('q').oninput=render;$('readyQ').oninput=renderReady;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;$('statusFilter').onchange=render;
 $('showHiddenCompanies').onchange=()=>{renderCompanyFilter();render()};
 $('addForm').onsubmit=async e=>{
