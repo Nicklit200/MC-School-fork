@@ -1,0 +1,25 @@
+name: Tsubera Rechnung link tests
+on:
+  push:
+    branches: [tsubera-doc-tracker]
+    paths:
+      - 'tsubera-doc-tracker/app.html'
+      - 'tsubera-doc-tracker/server.mjs'
+      - 'tsubera-doc-tracker/tests/invoice-links.test.mjs'
+      - '.github/workflows/tsubera-ui-tests.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check server syntax
+        run: node --check tsubera-doc-tracker/server.mjs
+      - name: Check inline browser script syntax
+        run: |
+          node -e "const fs=require('node:fs');const html=fs.readFileSync('tsubera-doc-tracker/app.html','utf8');const js=html.match(/<script>([\s\S]*?)<\/script>/);if(!js)throw Error('Inline JS missing');fs.writeFileSync('/tmp/tsubera-client.js',js[1]);"
+          node --check /tmp/tsubera-client.js
+      - name: Validate invoice links and storage wiring
+        run: node --test tsubera-doc-tracker/tests/invoice-links.test.mjs

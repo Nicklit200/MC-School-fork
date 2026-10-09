@@ -43,6 +43,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .docs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.docs-head h2{margin-top:0}.docs-updated{padding-top:4px;text-align:right;white-space:nowrap}
 .dt{width:100%;border:1px solid #dfe3ea;border-radius:8px;padding:7px;font-size:12px;background:#fff}
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
+.rechnung-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px}.rechnung-open{display:inline-flex;align-items:center;padding:3px 6px;background:#eff6ff;border-radius:6px;color:#1d4ed8;font-weight:700;font-size:12px;text-decoration:none}.rechnung-open:hover{text-decoration:underline}.rechnung-edit{background:none;border:0;padding:3px 0;color:#64748b;font-size:11px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}.rechnung-edit:hover{color:#111827}
 .ok{background:#e8f7ef;color:#087443}.route{background:#e9f2ff;color:#1857a4}.wait{background:#fff4d6;color:#925f00}.done{background:#eef0ff;color:#4338ca}
 .modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;padding:20px;z-index:20}.modal.open{display:flex}
 .dialog{background:white;border-radius:16px;padding:20px;width:min(920px,100%);max-height:90vh;overflow:auto}
@@ -323,6 +324,33 @@ function matchesStatusFilter(t,filter){
   if(filter==='no_invoice')return !hasInvoice;
   return true;
 }
+function isValidRechnungUrl(value){
+  try{
+    const url=new URL(value);
+    const host=url.hostname.toLowerCase();
+    return url.protocol==='https:'&&!url.username&&!url.password
+      &&(host==='fakturownia.pl'||host.endsWith('.fakturownia.pl')||host==='fakturownia.net'||host.endsWith('.fakturownia.net'))
+      &&url.pathname.length>1;
+  }catch{return false;}
+}
+function invoiceLinkControls(t){
+  const edit='<button type="button" class="rechnung-edit" onclick="editRechnungLink(\''+esc(t.id)+'\')">'+(t.rechnungUrl?'Изменить':'+ Добавить ссылку')+'</button>';
+  if(!t.rechnungUrl)return '<div class="rechnung-actions">'+edit+'</div>';
+  return '<div class="rechnung-actions"><a class="rechnung-open" target="_blank" rel="noopener noreferrer" href="'+esc(t.rechnungUrl)+'">↗ Fakturownia</a>'+edit+'</div>';
+}
+window.editRechnungLink=async id=>{
+  const t=trips.find(x=>x.id===id);
+  if(!t)return;
+  const raw=prompt('Вставь ссылку на Rechnung в Fakturownia:',t.rechnungUrl||'');
+  if(raw===null)return;
+  const rechnungUrl=raw.trim();
+  if(rechnungUrl&&!isValidRechnungUrl(rechnungUrl))return alert('Нужна HTTPS-ссылка на Fakturownia (например, https://obersztdawid.fakturownia.pl/invoices/577890716?a=created)');
+  if(!rechnungUrl&&t.rechnungUrl&&!confirm('Удалить ссылку на этот Rechnung?'))return;
+  try{
+    await api('/api/trips/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({rechnungUrl})});
+    await load();
+  }catch(e){alert('Не удалось сохранить ссылку: '+e.message);}
+};
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
 function whenFull(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
 function mainDoc(t,key,missingLabel,color=''){
@@ -419,7 +447,7 @@ function render(){
       <div><input class="price-inline" aria-label="Цена рейса в евро" type="number" min="0" step="0.01" inputmode="decimal" value="${t.priceEur==null?'':esc(t.priceEur)}" placeholder="€" onchange="saveInlinePrice('${t.id}',this.value)"></div>
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD','×')}</div>
-      <div>${status(t)}</div>
+      <div>${status(t)}${invoiceLinkControls(t)}</div>
       <div class="action-menu-wrap">
         <button class="action-dots" type="button" aria-label="Действия" onclick="toggleTripMenu(event,'${t.id}')">…</button>
         <div class="action-menu" id="tripMenu-${t.id}">
@@ -571,6 +599,7 @@ window.openTrip=async id=>{
     '<div class="detailrow"><b>Загрузка</b><div><input id="tripLoadingPlace" class="dt" value="'+esc(t.loadingPlace||'')+'" placeholder="DE 87435 Kempten"></div></div>'+
     '<div class="detailrow"><b>Выгрузка</b><div><input id="tripUnloadingPlace" class="dt" value="'+esc(t.unloadingPlace||'')+'" placeholder="PL 60-101 Poznań"></div></div>'+
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
+    '<div class="detailrow"><b>Ссылка Rechnung</b><div><input id="tripRechnungUrl" class="dt" type="url" value="'+esc(t.rechnungUrl||'')+'" placeholder="https://obersztdawid.fakturownia.pl/invoices/..."><div class="muted">Вставь прямую ссылку на счёт из Fakturownia</div></div></div>'+
     '<div class="detailrow"><b>Статус</b><div>'+status(t)+'</div></div>';
   renderTripVehicleChoices(t);
   renderDocVehicleOptions(t);
@@ -589,9 +618,11 @@ $('saveTrip').onclick=async()=>{
   const priceRaw=$('tripPrice')?.value?.trim()??'';
   const priceEur=priceRaw===''?null:Number(priceRaw);
   if(priceRaw!==''&&!Number.isFinite(priceEur))return alert('Укажи корректную цену');
+  const rechnungUrl=$('tripRechnungUrl')?.value?.trim()||'';
+  if(rechnungUrl&&!isValidRechnungUrl(rechnungUrl))return alert('Вставь HTTPS-ссылку на Fakturownia');
   const loadingPlace=$('tripLoadingPlace')?.value?.trim()||'';
   const unloadingPlace=$('tripUnloadingPlace')?.value?.trim()||'';
-  await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates,priceEur,loadingPlace,unloadingPlace})});
+  await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates,priceEur,loadingPlace,unloadingPlace,rechnungUrl})});
   await load();
   const t=trips.find(x=>x.id===activeDetailTrip);
   if(t){renderTripVehicleChoices(t);renderDocVehicleOptions(t);updateDocsTimestamp()}

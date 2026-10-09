@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS trips (
   vehicle_plates TEXT NOT NULL DEFAULT '',
   price_cents INTEGER,
   rechnung_code TEXT NOT NULL DEFAULT '',
+  rechnung_url TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -197,6 +198,7 @@ if (!tripColumns.has("loading_place")) db.exec("ALTER TABLE trips ADD COLUMN loa
 if (!tripColumns.has("unloading_place")) db.exec("ALTER TABLE trips ADD COLUMN unloading_place TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN vehicle_plates TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("price_cents")) db.exec("ALTER TABLE trips ADD COLUMN price_cents INTEGER");
+if (!tripColumns.has("rechnung_url")) db.exec("ALTER TABLE trips ADD COLUMN rechnung_url TEXT NOT NULL DEFAULT ''");
 
 const companyColumns = new Set(db.prepare("PRAGMA table_info(companies)").all().map(r => r.name));
 for (const [name, ddl] of [
@@ -228,6 +230,19 @@ const priceEurToCents = v => {
   return Math.round(n * 100);
 };
 const priceCentsToEur = v => v === null || v === undefined ? null : Number((Number(v) / 100).toFixed(2));
+function normalizeFakturowniaUrl(value){
+  const raw=String(value??'').trim();
+  if(!raw)return '';
+  if(raw.length>2048)throw new Error('Ссылка на Rechnung слишком длинная');
+  let url;
+  try{url=new URL(raw);}catch{throw new Error('Неверная ссылка на Rechnung');}
+  const host=url.hostname.toLowerCase();
+  const allowed=host==='fakturownia.pl'||host.endsWith('.fakturownia.pl')||host==='fakturownia.net'||host.endsWith('.fakturownia.net');
+  if(url.protocol!=='https:'||url.username||url.password||!allowed||url.pathname.length<=1){
+    throw new Error('Укажи HTTPS-ссылку на счет Fakturownia');
+  }
+  return url.toString();
+}
 const normalizePlate = v => String(v || "").trim().replace(/\s+/g," ").toUpperCase();
 const normalizeCompanyName = v => String(v || "").trim().replace(/\s+/g," ");
 const defaultCompanyActive = name => !/(^|\b)dc\s*cargo\b|(^|\b)semi\s*cargo\b/i.test(normalizeCompanyName(name));
@@ -490,6 +505,7 @@ const tripOut = row => {
     cmr: hasLoadingCmr,
     pod: hasUnloadingCmr,
     rechnungCode: row.rechnung_code || "",
+    rechnungUrl: row.rechnung_url || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -2532,11 +2548,12 @@ const server = http.createServer(async (req, res) => {
           unloadingPlace: b.unloadingPlace ?? old.unloadingPlace,
           vehiclePlates: b.vehiclePlates ?? old.vehiclePlates,
           priceEur: b.priceEur === undefined ? old.priceEur : b.priceEur,
-          rechnungCode: b.rechnungCode ?? old.rechnungCode
+          rechnungCode: b.rechnungCode ?? old.rechnungCode,
+          rechnungUrl: b.rechnungUrl === undefined ? old.rechnungUrl : normalizeFakturowniaUrl(b.rechnungUrl)
         };
         next.customer = ensureCompany(next.customer)?.name || next.customer;
-        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
-          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),id);
+        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,updated_at=? WHERE id=?")
+          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,next.rechnungUrl,now(),id);
         return json(res, 200, { trip: getTripByAny(id) });
       }
       if (tripMatch && req.method === "DELETE") {
