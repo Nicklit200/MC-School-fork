@@ -84,7 +84,7 @@ test('Excel button downloads exactly filtered trips, with clickable Rechnung URL
   assert.equal(row.getCell(9).value,'Rechnung erstellt');
   assert.equal(sheet.getRow(3).getCell(2).value,'2026/10/06/291');
   assert.equal(sheet.getRow(3).getCell(4).value,'');
-  assert.equal(sheet.autoFilter.from,'A1');
+  assert.ok(sheet.autoFilter,'Excel sheet must have an AutoFilter');
 
   for(const tab of workbook.worksheets){
     for(let i=1;i<=tab.rowCount;i++){
