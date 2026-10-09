@@ -61,6 +61,32 @@
       "estimated": false,
       "source": "chatgpt",
       "notes": "Пользователь сообщил, что съел две шаурмы общей калорийностью 859 ккал. Белки, жиры и углеводы не указаны."
+    },
+    {
+      "id": "chat-2026-10-09-sushi-500kcal",
+      "date": "2026-10-09",
+      "meal": "Вечерний перекус",
+      "name": "Суши",
+      "kcal": 500,
+      "protein": null,
+      "carbs": null,
+      "fat": null,
+      "estimated": true,
+      "source": "chatgpt",
+      "notes": "Оценка пользователя: примерно 500 ккал. Вид и масса суши не указаны."
+    },
+    {
+      "id": "chat-2026-10-09-pistachios-200kcal",
+      "date": "2026-10-09",
+      "meal": "Перекус",
+      "name": "Фисташки",
+      "kcal": 200,
+      "protein": null,
+      "carbs": null,
+      "fat": null,
+      "estimated": true,
+      "source": "chatgpt",
+      "notes": "Оценка пользователя: 200 ккал. Масса и содержание БЖУ не указаны."
     }
   ]
 }
