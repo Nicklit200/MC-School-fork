@@ -436,13 +436,42 @@ function renderReady(){
       <div>${docCheck(t,'auftrag','Auftrag','×')}</div>
       <div>${docCheck(t,'cmrUnloading','CMR выгрузки / POD','×')}</div>
       <div>${status(t)}</div>
-      <div class="ready-action">
+      <div class="ready-action" style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+        ${t.auftrag&&t.cmrUnloaded ? `<button class="btn alt" type="button" onclick="downloadRechnungDocuments('${t.id}',this)">↓ Auftrag + CMR</button>` : ''}
         ${isReadyForRechnung(t)
           ? `<button class="btn ready-upload-btn" type="button" onclick="pickReadyRechnung('${t.id}')">Загрузить Rechnung</button>`
           : '<span class="ready-action-empty">—</span>'}
       </div>
     </div>`).join(''):'<div class="recon-empty">Сейчас нет рейсов в очереди на Rechnung.</div>';
 }
+// Download the actual Auftrag and final unloading CMR/POD attached to this trip.
+window.downloadRechnungDocuments=async(id,button)=>{
+  const previous=button.textContent;
+  button.disabled=true;
+  button.textContent='Подготовка файлов…';
+  try{
+    const result=await api('/api/trips/'+encodeURIComponent(id)+'/documents');
+    const docs=result.documents||[];
+    const auftrag=docs.find(d=>d.docType==='auftrag');
+    const cmr=docs.find(d=>d.docType==='cmr_unloading'||d.docType==='pod');
+    if(!auftrag||!cmr)throw new Error('У рейса не найдены оба файла: Auftrag и CMR/POD');
+    for(const doc of [auftrag,cmr]){
+      const link=await api('/api/documents/'+encodeURIComponent(doc.id)+'/link?download=1');
+      const response=await fetch(link.url,{credentials:'same-origin'});
+      if(!response.ok)throw new Error('Не удалось получить '+docLabel(doc.docType));
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=doc.name||((doc.docType==='auftrag'?'Auftrag':'CMR')+'.pdf');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }
+  }catch(e){alert('Ошибка скачивания: '+e.message)}
+  finally{button.disabled=false;button.textContent=previous}
+};
 let readyRechnungTripId=null;
 window.pickReadyRechnung=id=>{
   readyRechnungTripId=id;
