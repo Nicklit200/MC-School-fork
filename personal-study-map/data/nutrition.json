@@ -87,6 +87,19 @@
       "estimated": true,
       "source": "chatgpt",
       "notes": "Оценка пользователя: 200 ккал. Масса и содержание БЖУ не указаны."
+    },
+    {
+      "id": "chat-2026-10-09-apfelschorle-100kcal",
+      "date": "2026-10-09",
+      "meal": "Напиток",
+      "name": "Апфельшорле (Apfelschorle)",
+      "kcal": 100,
+      "protein": null,
+      "carbs": null,
+      "fat": null,
+      "estimated": true,
+      "source": "chatgpt",
+      "notes": "Оценка пользователя: напиток Apfelschorle, 100 ккал. Объём не указан."
     }
   ]
 }
