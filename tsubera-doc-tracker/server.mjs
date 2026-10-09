@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS trips (
   price_cents INTEGER,
   rechnung_code TEXT NOT NULL DEFAULT '',
   rechnung_url TEXT NOT NULL DEFAULT '',
+  status_override TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -199,6 +200,7 @@ if (!tripColumns.has("unloading_place")) db.exec("ALTER TABLE trips ADD COLUMN u
 if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN vehicle_plates TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("price_cents")) db.exec("ALTER TABLE trips ADD COLUMN price_cents INTEGER");
 if (!tripColumns.has("rechnung_url")) db.exec("ALTER TABLE trips ADD COLUMN rechnung_url TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("status_override")) db.exec("ALTER TABLE trips ADD COLUMN status_override TEXT NOT NULL DEFAULT ''");
 
 const companyColumns = new Set(db.prepare("PRAGMA table_info(companies)").all().map(r => r.name));
 for (const [name, ddl] of [
@@ -245,6 +247,50 @@ function normalizeFakturowniaUrl(value){
 }
 const normalizePlate = v => String(v || "").trim().replace(/\s+/g," ").toUpperCase();
 const normalizeCompanyName = v => String(v || "").trim().replace(/\s+/g," ");
+function normalizeTripEditDate(value){
+  const date=String(value??'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date){
+    const error=new Error('Дата рейса должна быть в формате YYYY-MM-DD');
+    error.status=400;throw error;
+  }
+  return date;
+}
+function normalizeTripInternalId(value){
+  const id=String(value??'').trim();
+  if(id.length<3||id.length>80||/[\r\n<>]/.test(id)){
+    const error=new Error('Tsubera Tour-ID должен содержать от 3 до 80 символов');
+    error.status=400;throw error;
+  }
+  return id;
+}
+const editableTripStatuses=new Set([
+  '', 'rechnung_created', 'ready_for_rechnung', 'not_invoiced',
+  'no_price', 'loaded', 'missing_auftrag', 'missing_cmr', 'missing_both', 'missing_documents'
+]);
+function normalizeTripStatus(value){
+  const status=String(value??'').trim();
+  if(!editableTripStatuses.has(status)){
+    const error=new Error('Недопустимый статус рейса');
+    error.status=400;throw error;
+  }
+  return status;
+}
+function normalizeTripCustomer(value){
+  const customer=normalizeCompanyName(value);
+  if(!customer||customer.length>250){
+    const error=new Error('Укажи название заказчика длиной до 250 символов');
+    error.status=400;throw error;
+  }
+  return customer;
+}
+function normalizeCustomerOrder(value){
+  const ref=String(value??'').trim();
+  if(ref.length>160){
+    const error=new Error('Номер заказчика не может быть длиннее 160 символов');
+    error.status=400;throw error;
+  }
+  return ref;
+}
 const defaultCompanyActive = name => !/(^|\b)dc\s*cargo\b|(^|\b)semi\s*cargo\b/i.test(normalizeCompanyName(name));
 const companyOut = row => row ? ({
   id: row.id,
@@ -466,20 +512,20 @@ const excelConfirmedTrips = [
   { date:"2026-09-25", trip:"2026/09/25/1456", customer:"SL Transport Sp. z o.o.", loadingPlace:"DE 74336 Brackenheim", unloadingPlace:"DE 87719 Mindelheim", priceEur:150, vehiclePlates:["MN TV 179"] },
   { date:"2026-09-24", trip:"2026/09/24/137", customer:"Power&Light Sp. z o. o.", loadingPlace:"DE 63456 Hanau", unloadingPlace:"DE 85748 Garching bei München", priceEur:360, vehiclePlates:[] }
 ];
-for (const seed of excelConfirmedTrips) {
-  const company = ensureCompany(seed.customer);
-  const existing = db.prepare("SELECT * FROM trips WHERE trip_number=? LIMIT 1").get(seed.trip);
-  const plateText = platesToText(seed.vehiclePlates || []);
-  if (existing) {
-    db.prepare("UPDATE trips SET date=?,customer=?,loading_place=?,unloading_place=?,vehicle_plates=CASE WHEN TRIM(COALESCE(vehicle_plates,''))='' THEN ? ELSE vehicle_plates END,price_cents=?,updated_at=? WHERE id=?")
-      .run(seed.date, company.name, seed.loadingPlace, seed.unloadingPlace, plateText, priceEurToCents(seed.priceEur), now(), existing.id);
-  } else {
-    const id = crypto.randomUUID();
-    const ts = now();
+// Only populate missing example trips once. Never overwrite a manually edited tour on a later restart.
+db.exec("CREATE TABLE IF NOT EXISTS app_seed_meta (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+if (!db.prepare("SELECT 1 FROM app_seed_meta WHERE key=?").get("excel_confirmed_trips_v1")) {
+  for (const seed of excelConfirmedTrips) {
+    const existing = db.prepare("SELECT id FROM trips WHERE trip_number=? LIMIT 1").get(seed.trip);
+    if (existing) continue;
+    const company = ensureCompany(seed.customer);
+    const plateText = platesToText(seed.vehiclePlates || []);
+    const id = crypto.randomUUID(), ts = now();
     db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id,nextInternalTripId(seed.date),seed.date,seed.trip,company.name,0,0,0,0,0,"","",seed.loadingPlace,seed.unloadingPlace,plateText,priceEurToCents(seed.priceEur),"",ts,ts);
   }
+  db.prepare("INSERT INTO app_seed_meta (key,applied_at) VALUES (?,?)").run("excel_confirmed_trips_v1",now());
 }
 
 const tripOut = row => {
@@ -506,6 +552,7 @@ const tripOut = row => {
     pod: hasUnloadingCmr,
     rechnungCode: row.rechnung_code || "",
     rechnungUrl: row.rechnung_url || "",
+    statusOverride: row.status_override || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -811,6 +858,12 @@ function missingForTrip(t) {
   return missing;
 }
 function readiness(t) {
+  if (t.statusOverride) {
+    if (t.statusOverride==="rechnung_created") return "rechnung_created";
+    if (t.statusOverride==="ready_for_rechnung") return "ready_for_rechnung";
+    if (t.statusOverride==="not_invoiced" && !missingForTrip(t).length) return "ready_for_rechnung";
+    return "missing_documents";
+  }
   if (t.rechnungCode) return "rechnung_created";
   return missingForTrip(t).length ? "missing_documents" : "ready_for_rechnung";
 }
@@ -2538,23 +2591,32 @@ const server = http.createServer(async (req, res) => {
         if (!old) return json(res, 404, { error: "Trip not found" });
         const b = await readJson(req);
         const next = {
-          date: b.date ?? old.date, trip: b.trip ?? old.trip, customer: b.customer ?? old.customer,
-          auftrag: b.auftrag ?? old.auftrag,
-          cmrLoaded: b.cmrLoaded ?? b.cmr ?? old.cmrLoaded,
-          cmrUnloaded: b.cmrUnloaded ?? b.pod ?? old.cmrUnloaded,
-          loadedAt: b.loadedAt ?? old.loadedAt,
-          unloadedAt: b.unloadedAt ?? old.unloadedAt,
-          loadingPlace: b.loadingPlace ?? old.loadingPlace,
-          unloadingPlace: b.unloadingPlace ?? old.unloadingPlace,
-          vehiclePlates: b.vehiclePlates ?? old.vehiclePlates,
-          priceEur: b.priceEur === undefined ? old.priceEur : b.priceEur,
-          rechnungCode: b.rechnungCode ?? old.rechnungCode,
-          rechnungUrl: b.rechnungUrl === undefined ? old.rechnungUrl : normalizeFakturowniaUrl(b.rechnungUrl)
+          internalTripId:b.internalTripId===undefined?old.internalTripId:normalizeTripInternalId(b.internalTripId),
+          date:b.date===undefined?old.date:normalizeTripEditDate(b.date),
+          trip:b.trip===undefined?old.trip:normalizeCustomerOrder(b.trip),
+          customer:b.customer===undefined?old.customer:normalizeTripCustomer(b.customer),
+          auftrag:b.auftrag??old.auftrag,
+          cmrLoaded:b.cmrLoaded??b.cmr??old.cmrLoaded,
+          cmrUnloaded:b.cmrUnloaded??b.pod??old.cmrUnloaded,
+          loadedAt:b.loadedAt??old.loadedAt,
+          unloadedAt:b.unloadedAt??old.unloadedAt,
+          loadingPlace:b.loadingPlace??old.loadingPlace,
+          unloadingPlace:b.unloadingPlace??old.unloadingPlace,
+          vehiclePlates:b.vehiclePlates??old.vehiclePlates,
+          priceEur:b.priceEur===undefined?old.priceEur:b.priceEur,
+          rechnungCode:b.rechnungCode??old.rechnungCode,
+          rechnungUrl:b.rechnungUrl===undefined?old.rechnungUrl:normalizeFakturowniaUrl(b.rechnungUrl),
+          statusOverride:b.statusOverride===undefined?old.statusOverride:normalizeTripStatus(b.statusOverride)
         };
-        next.customer = ensureCompany(next.customer)?.name || next.customer;
-        db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,updated_at=? WHERE id=?")
-          .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,next.rechnungUrl,now(),id);
-        return json(res, 200, { trip: getTripByAny(id) });
+        if(next.internalTripId!==old.internalTripId){
+          const clash=db.prepare("SELECT id FROM trips WHERE internal_trip_id=? AND id<>? LIMIT 1").get(next.internalTripId,id);
+          if(clash)return json(res,409,{error:"Этот Tsubera Tour-ID уже используется другим рейсом"});
+        }
+        const priceCents=priceEurToCents(next.priceEur);
+        next.customer=ensureCompany(next.customer)?.name||next.customer;
+        db.prepare("UPDATE trips SET internal_trip_id=?,date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,status_override=?,updated_at=? WHERE id=?")
+          .run(next.internalTripId,next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceCents,next.rechnungCode,next.rechnungUrl,next.statusOverride,now(),id);
+        return json(res,200,{trip:getTripByAny(id)});
       }
       if (tripMatch && req.method === "DELETE") {
         const id = tripMatch[1];

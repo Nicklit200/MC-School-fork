@@ -255,6 +255,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   <div class="dialog">
     <div class="docs-head"><h2 id="tripTitle">Свойства тура</h2><div id="docsUpdated" class="muted docs-updated"></div></div>
     <div id="tripInfo" class="detailbox"></div>
+    <div class="actions" style="align-items:center"><span class="muted" id="tripSaveNotice" role="status" aria-live="polite"></span><button class="btn" type="button" id="saveTripTop">Сохранить изменения</button></div>
 
     <div class="field full" style="margin-top:14px">
       <label><b>Машины, выполнившие тур</b></label>
@@ -301,13 +302,34 @@ const $=id=>document.getElementById(id);
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · загрузка',cmr_unloading:'CMR · выгрузка / POD',cmr:'CMR · загрузка',pod:'CMR · выгрузка / POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
+function isInvoiceCreated(t){
+  if(t?.statusOverride)return t.statusOverride==='rechnung_created';
+  return !!String(t?.rechnungCode||'').trim();
+}
 function isReadyForRechnung(t){
+  if(t?.statusOverride)return t.statusOverride==='ready_for_rechnung'
+    ||(t.statusOverride==='not_invoiced'&&!!t.auftrag&&!!t.cmrUnloaded&&t.priceEur!=null);
   return t?.readiness==='ready_for_rechnung'||(!t?.rechnungCode&&!!t?.auftrag&&!!t?.cmrUnloaded&&t?.priceEur!=null);
 }
 function isReadyQueueTrip(t){
-  return !t?.rechnungCode&&(isReadyForRechnung(t)||excelReadyRefs.has(String(t?.trip||'')));
+  if(isInvoiceCreated(t))return false;
+  if(t?.statusOverride&&t.statusOverride!=='ready_for_rechnung'&&t.statusOverride!=='not_invoiced')return false;
+  return isReadyForRechnung(t)||excelReadyRefs.has(String(t?.trip||''));
 }
 function status(t){
+  const custom={
+    rechnung_created:['done','Rechnung erstellt'],
+    ready_for_rechnung:['ok','Готов к Rechnung'],
+    not_invoiced:['wait','Rechnung ещё не выставлен'],
+    no_price:['wait','Нет цены'],
+    loaded:['wait','Загружен'],
+    missing_auftrag:['wait','Не хватает Auftrag'],
+    missing_cmr:['wait','Не хватает CMR/POD'],
+    missing_both:['wait','Не хватает Auftrag и CMR/POD'],
+    missing_documents:['wait','Не хватает документов']
+  };
+  const label=custom[t?.statusOverride];
+  if(label)return '<span class="status '+label[0]+'">'+label[1]+'</span>';
   if(t.rechnungCode)return '<span class="status done">Rechnung erstellt</span>';
   if(t.cmrUnloaded&&t.priceEur==null)return '<span class="status wait">Нет цены</span>';
   if(t.auftrag&&t.cmrUnloaded&&t.priceEur!=null)return '<span class="status ok">Готов к Rechnung</span>';
@@ -318,10 +340,9 @@ function status(t){
   return '<span class="status wait">Не хватает документов</span>';
 }
 function matchesStatusFilter(t,filter){
-  if(filter==='no_price')return t.priceEur==null;
-  const hasInvoice=!!String(t.rechnungCode||'').trim();
-  if(filter==='has_invoice')return hasInvoice;
-  if(filter==='no_invoice')return !hasInvoice;
+  if(filter==='no_price')return t.priceEur==null||t.statusOverride==='no_price';
+  if(filter==='has_invoice')return isInvoiceCreated(t);
+  if(filter==='no_invoice')return !isInvoiceCreated(t);
   return true;
 }
 function isValidRechnungUrl(value){
@@ -584,6 +605,21 @@ window.hideTripCompany=async id=>{
 }
 document.addEventListener('click',()=>closeTripMenus());
 window.delTrip=async id=>{if(confirm('Удалить рейс и все его документы?')){await api('/api/trips/'+id,{method:'DELETE'});await load()}}
+function tripStatusOptions(t){
+  const choices=[
+    ['', 'Автоматически (по документам)'],
+    ['rechnung_created', 'Rechnung erstellt'],
+    ['ready_for_rechnung', 'Готов к Rechnung'],
+    ['not_invoiced', 'Rechnung ещё не выставлен'],
+    ['no_price', 'Нет цены'],
+    ['loaded', 'Загружен'],
+    ['missing_auftrag', 'Не хватает Auftrag'],
+    ['missing_cmr', 'Не хватает CMR/POD'],
+    ['missing_both', 'Не хватает Auftrag и CMR/POD'],
+    ['missing_documents', 'Не хватает документов']
+  ];
+  return choices.map(([value,label])=>'<option value="'+value+'"'+(value===(t.statusOverride||'')?' selected':'')+'>'+esc(label)+'</option>').join('');
+}
 window.openTrip=async id=>{
   activeDetailTrip=id;
   activeTrip=id;
@@ -592,15 +628,15 @@ window.openTrip=async id=>{
   $('tripTitle').textContent='Свойства · '+(t.internalTripId||'Тур')+(t.trip?' · '+t.trip:'');
   $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
   $('tripInfo').innerHTML=
-    '<div class="detailrow"><b>Дата</b><div>'+esc(t.date||'—')+'</div></div>'+
-    '<div class="detailrow"><b>Tsubera Tour-ID</b><div>'+esc(t.internalTripId||'—')+'</div></div>'+
-    '<div class="detailrow"><b>№ заказчика</b><div>'+esc(t.trip||'—')+'</div></div>'+
-    '<div class="detailrow"><b>Заказчик</b><div>'+esc(displayCompanyName(t.customer)||'—')+'</div></div>'+
+    '<div class="detailrow"><b>Дата</b><div><input id="tripDate" class="dt" type="date" value="'+esc(t.date||'')+'"></div></div>'+
+    '<div class="detailrow"><b>Tsubera Tour-ID</b><div><input id="tripInternalId" class="dt" maxlength="80" value="'+esc(t.internalTripId||'')+'" placeholder="TS-261006-001"></div></div>'+
+    '<div class="detailrow"><b>№ заказчика</b><div><input id="tripCustomerRef" class="dt" maxlength="160" value="'+esc(t.trip||'')+'" placeholder="Номер Auftrag / Tour заказчика"></div></div>'+
+    '<div class="detailrow"><b>Заказчик</b><div><input id="tripCustomer" class="dt" list="companyDatalist" maxlength="250" value="'+esc(t.customer||'')+'" placeholder="Название фирмы"></div></div>'+
     '<div class="detailrow"><b>Загрузка</b><div><input id="tripLoadingPlace" class="dt" value="'+esc(t.loadingPlace||'')+'" placeholder="DE 87435 Kempten"></div></div>'+
     '<div class="detailrow"><b>Выгрузка</b><div><input id="tripUnloadingPlace" class="dt" value="'+esc(t.unloadingPlace||'')+'" placeholder="PL 60-101 Poznań"></div></div>'+
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
     '<div class="detailrow"><b>Ссылка Rechnung</b><div><input id="tripRechnungUrl" class="dt" type="url" value="'+esc(t.rechnungUrl||'')+'" placeholder="https://obersztdawid.fakturownia.pl/invoices/..."><div class="muted">Вставь прямую ссылку на счёт из Fakturownia</div></div></div>'+
-    '<div class="detailrow"><b>Статус</b><div>'+status(t)+'</div></div>';
+    '<div class="detailrow"><b>Статус</b><div><select id="tripStatusOverride" class="dt">'+tripStatusOptions(t)+'</select><div class="muted" style="margin-top:5px">Ручной статус меняет отметку рейса, но не добавляет и не удаляет документы</div></div></div>';
   renderTripVehicleChoices(t);
   renderDocVehicleOptions(t);
   $('tripModal').classList.add('open');
@@ -612,21 +648,45 @@ function renderTripVehicleChoices(t){
     '<label class="vehicle-choice"><input type="checkbox" name="tripVehicle" value="'+esc(v.plate)+'" '+(selected.has(String(v.plate).toUpperCase())?'checked':'')+'><span><strong>'+esc(v.plate)+'</strong><small>'+esc(v.note||'Без комментария')+'</small></span></label>'
   ).join(''):'<div class="muted">Сначала добавь номера во вкладке «Машины».</div>';
 }
-$('saveTrip').onclick=async()=>{
-  if(!activeDetailTrip)return;
+async function saveTripProperties(){
+  const id=activeDetailTrip;
+  if(!id)return;
+  const date=$('tripDate').value;
+  const internalTripId=$('tripInternalId').value.trim();
+  const trip=$('tripCustomerRef').value.trim();
+  const customer=$('tripCustomer').value.trim();
+  const statusOverride=$('tripStatusOverride').value;
+  if(!date)return alert('Укажи дату рейса');
+  if(!internalTripId)return alert('Укажи Tsubera Tour-ID');
+  if(!customer)return alert('Укажи заказчика');
   const vehiclePlates=[...document.querySelectorAll('input[name="tripVehicle"]:checked')].map(x=>x.value);
   const priceRaw=$('tripPrice')?.value?.trim()??'';
   const priceEur=priceRaw===''?null:Number(priceRaw);
-  if(priceRaw!==''&&!Number.isFinite(priceEur))return alert('Укажи корректную цену');
+  if(priceRaw!==''&&(!Number.isFinite(priceEur)||priceEur<0))return alert('Укажи корректную цену');
   const rechnungUrl=$('tripRechnungUrl')?.value?.trim()||'';
   if(rechnungUrl&&!isValidRechnungUrl(rechnungUrl))return alert('Вставь HTTPS-ссылку на Fakturownia');
-  const loadingPlace=$('tripLoadingPlace')?.value?.trim()||'';
-  const unloadingPlace=$('tripUnloadingPlace')?.value?.trim()||'';
-  await api('/api/trips/'+activeDetailTrip,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({vehiclePlates,priceEur,loadingPlace,unloadingPlace,rechnungUrl})});
-  await load();
-  const t=trips.find(x=>x.id===activeDetailTrip);
-  if(t){renderTripVehicleChoices(t);renderDocVehicleOptions(t);updateDocsTimestamp()}
+  const loadingPlace=$('tripLoadingPlace').value.trim();
+  const unloadingPlace=$('tripUnloadingPlace').value.trim();
+  const saveButtons=[$('saveTrip'),$('saveTripTop')];
+  saveButtons.forEach(b=>b.disabled=true);
+  $('tripSaveNotice').textContent='Сохраняю…';
+  try{
+    await api('/api/trips/'+encodeURIComponent(id),{
+      method:'PATCH',headers:{'content-type':'application/json'},
+      body:JSON.stringify({date,internalTripId,trip,customer,loadingPlace,unloadingPlace,priceEur,rechnungUrl,statusOverride,vehiclePlates})
+    });
+    await load();
+    await openTrip(id);
+    $('tripSaveNotice').textContent='Все изменения сохранены';
+  }catch(e){
+    $('tripSaveNotice').textContent='Ошибка сохранения: '+e.message;
+    alert('Не удалось сохранить изменения: '+e.message);
+  }finally{
+    saveButtons.forEach(b=>b.disabled=false);
+  }
 }
+$('saveTrip').onclick=saveTripProperties;
+$('saveTripTop').onclick=saveTripProperties;
 $('closeTrip').onclick=()=>$('tripModal').classList.remove('open');
 function updateDocsTimestamp(){
   const t=trips.find(x=>x.id===activeTrip);
