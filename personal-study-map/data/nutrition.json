@@ -1,7 +1,22 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-07",
+  "updatedAt": "2026-10-09",
   "entries": [
+    {
+      "id": "chat-2026-10-09-breakfast-salmon-cream-cheese-toast",
+      "date": "2026-10-09",
+      "meal": "Завтрак",
+      "name": "Два тоста с копчёным лососем и сливочным сыром",
+      "quantity": 188,
+      "unit": "г",
+      "kcal": 410,
+      "protein": 26.3,
+      "carbs": 30.7,
+      "fat": 19.9,
+      "estimated": false,
+      "source": "chatgpt",
+      "notes": "По фото весов и этикеткам: хлеб Goldblume 61 г, сливочный сыр 33 г, копчёный норвежский лосось 94 г. Общий вес 188 г. Клетчатка около 1,9 г, соль около 3,15 г. КБЖУ рассчитаны по данным на упаковках."
+    },
     {
       "id": "chat-2026-10-07-lunch-pasta-shrimp-cream",
       "date": "2026-10-07",
