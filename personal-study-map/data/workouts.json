@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-09",
+  "entries": [
+    {
+      "id": "chat-2026-10-09-outdoor-run-1017",
+      "date": "2026-10-09",
+      "title": "Бег на улице",
+      "durationMinutes": 21,
+      "durationSeconds": 22,
+      "startTime": "10:17",
+      "endTime": "10:38",
+      "distanceKm": 2.06,
+      "activeKcal": 123,
+      "totalKcal": 160,
+      "averagePace": "10:20 мин/км",
+      "cadenceStepsPerMinute": 113,
+      "elevationGainMeters": 17,
+      "exercises": [
+        "Дистанция: 2,06 км",
+        "Активные калории: 123 ккал",
+        "Всего калорий: 160 ккал",
+        "Время: 21 мин 22 сек",
+        "Средний темп: 10:20 мин/км",
+        "Каденс: 113 шагов/мин",
+        "Набор высоты: 17 м"
+      ],
+      "notes": "Apple Watch, Кемптен, 10:17–10:38. 123 активные ккал включены в 160 ккал общих, не складывать их.",
+      "source": "chatgpt",
+      "estimated": false
+    }
+  ]
+}
