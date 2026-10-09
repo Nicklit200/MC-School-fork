@@ -20,7 +20,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .ready-action-empty{color:#cbd5e1;text-align:center;width:100%}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
-.toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
+.toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.toolbar #statusFilter{width:190px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
 .table{overflow-x:auto}.head,.row{width:100%;min-width:1320px;display:grid;grid-template-columns:100px 140px 135px minmax(210px,1.45fr) minmax(220px,1.45fr) 105px 90px 125px minmax(175px,1.05fr) 44px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
 .row{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}.row:last-child{border-bottom:0}
@@ -60,7 +60,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .recon-banner{padding:11px 13px;border-radius:11px;margin:0 0 14px;font-size:13px}.recon-banner.ok{background:#e8f7ef;color:#087443}.recon-banner.warn{background:#fff4d6;color:#925f00}.recon-banner.bad{background:#fff1f2;color:#be123c}
 .recon-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 14px}.recon-stat{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}.recon-stat b{display:block;font-size:23px;margin-top:4px}.recon-stat span{font-size:12px;color:#6b7280}
 .recon-table{overflow-x:auto;border-top:1px solid #eee}.recon-head,.recon-row{min-width:1180px;display:grid;grid-template-columns:95px 155px minmax(220px,1.35fr) 105px 110px 165px 135px minmax(190px,1fr);gap:0;align-items:center}.recon-head{padding:10px 12px;background:#fafafa;color:#6b7280;font-size:12px;border-bottom:1px solid #eee}.recon-row{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.recon-row:last-child{border-bottom:0}.recon-ref{font-weight:700}.recon-sub{font-size:11px;color:#6b7280;margin-top:3px}.recon-price{font-weight:700}.recon-empty{padding:24px;color:#6b7280;text-align:center}
-@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter{width:100%}.filter-check{padding:4px 0}}
+@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter,.toolbar #statusFilter{width:100%}.filter-check{padding:4px 0}}
 </style>
 </head>
 <body>
@@ -92,6 +92,12 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <input id="q" placeholder="Поиск по Tsubera Tour-ID, номеру заказчика, дате или фирме...">
       <select id="companyFilter"><option value="">Все текущие фирмы</option></select>
       <input id="vehicleFilter" list="vehicleDatalist" placeholder="Фильтр по машине / Kennzeichen"><datalist id="vehicleDatalist"></datalist>
+      <select id="statusFilter" aria-label="Фильтр по статусу Rechnung" title="Фильтр по статусу Rechnung">
+        <option value="">Все статусы</option>
+        <option value="no_price">Нет цены</option>
+        <option value="has_invoice">Rechnung erstellt</option>
+        <option value="no_invoice">Без Rechnung</option>
+      </select>
       <label class="filter-check"><input id="showHiddenCompanies" type="checkbox"> Показать скрытые фирмы</label>
     </div>
     <div class="table">
@@ -310,6 +316,13 @@ function status(t){
   if(!t.cmrUnloaded)return '<span class="status wait">Не хватает CMR/POD</span>';
   return '<span class="status wait">Не хватает документов</span>';
 }
+function matchesStatusFilter(t,filter){
+  if(filter==='no_price')return t.priceEur==null;
+  const hasInvoice=!!String(t.rechnungCode||'').trim();
+  if(filter==='has_invoice')return hasInvoice;
+  if(filter==='no_invoice')return !hasInvoice;
+  return true;
+}
 function when(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
 function whenFull(v){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
 function mainDoc(t,key,missingLabel,color=''){
@@ -385,8 +398,10 @@ function render(){
   let vf=$('vehicleFilter').value.toLowerCase().trim();
   const showHidden=$('showHiddenCompanies').checked;
   const selectedCompany=companies.find(c=>c.id===$('companyFilter').value)||null;
+  const selectedStatus=$('statusFilter').value;
   let list=trips
     .filter(t=>!isReadyQueueTrip(t))
+    .filter(t=>matchesStatusFilter(t,selectedStatus))
     .filter(t=>showHidden||(companyForTrip(t)?.active!==false))
     .filter(t=>!selectedCompany||normCompany(t.customer)===normCompany(selectedCompany.name))
     .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
@@ -824,7 +839,7 @@ $('reconStatusFilter').onchange=renderReconciliation;
 $('reconSearch').oninput=renderReconciliation;
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
-$('q').oninput=render;$('readyQ').oninput=renderReady;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
+$('q').oninput=render;$('readyQ').oninput=renderReady;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;$('statusFilter').onchange=render;
 $('showHiddenCompanies').onchange=()=>{renderCompanyFilter();render()};
 $('addForm').onsubmit=async e=>{
   e.preventDefault();let f=new FormData(e.target);
