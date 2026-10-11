@@ -61,9 +61,13 @@ public class TrialLeadMetaController {
         this.sendingEnabled = sendingEnabled;
     }
 
+    @GetMapping("/status")
+    public Map<String, Boolean> status() {
+        return Map.of("enabled", sendingEnabled);
+    }
+
     @GetMapping
     public List<ConversionState> list() {
-        requireEnabled();
         return jdbc.query("""
                 SELECT lead_id, event_name, occurred_at, status, sent_at
                 FROM trial_lead_meta_conversions
