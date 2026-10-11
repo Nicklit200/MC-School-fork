@@ -10,6 +10,6 @@ CREATE TABLE IF NOT EXISTS trial_lead_meta_conversions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (lead_id, event_name),
     CONSTRAINT chk_trial_lead_meta_event CHECK (event_name IN ('ContractSigned')),
-    CONSTRAINT chk_trial_lead_meta_status CHECK (status IN ('SENDING','SENT','FAILED'))
+    CONSTRAINT chk_trial_lead_meta_status CHECK (status IN ('SENDING','TEST_SENT','SENT','FAILED'))
 );
 CREATE INDEX IF NOT EXISTS idx_trial_meta_status ON trial_lead_meta_conversions(status);
