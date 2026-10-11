@@ -120,7 +120,7 @@ export function TrialLeadsPage() {
         ? 'Эта сделка уже передана в Meta.'
         : result.test ? 'Тестовое событие принято Meta.' : 'Событие договора принято Meta.'}));
       setMetaContracts(current => [...current.filter(item => item.leadId !== lead.id),
-        {leadId:lead.id,eventName:'ContractSigned',occurredAt:date.toISOString(),status:'SENT',sentAt:new Date().toISOString()}]);
+        {leadId:lead.id,eventName:'ContractSigned',occurredAt:date.toISOString(),status:result.test?'TEST_SENT':'SENT',sentAt:new Date().toISOString()}]);
     } catch(err) {
       setMetaMessages(current => ({...current,[lead.id]:err instanceof Error?err.message:'Не удалось передать договор в Meta.'}));
     } finally { setMetaSavingId(''); }
