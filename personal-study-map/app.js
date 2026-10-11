@@ -129,6 +129,112 @@ function openLectureTasks() {
 }
 
 
+
+const STUDY_CARD_PROGRESS_KEY = "personal-study-map:card-progress:v1";
+
+function localStudyProgress() {
+  try { return JSON.parse(localStorage.getItem(STUDY_CARD_PROGRESS_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+function applyProgressRecord(skill, record) {
+  if (!record) return;
+  const baseline = String(skill.lastUpdated || "1900-01-01").slice(0, 10);
+  const savedDate = String(record.updatedAt || "").slice(0, 10);
+  if (savedDate && savedDate < baseline) return;
+  const mastery = Number(record.mastery);
+  if (!Number.isFinite(mastery)) return;
+  skill.mastery = clamp(mastery, 0, 100);
+  skill.review = {
+    repetition: Math.max(0, Number(record.repetition || 0)),
+    dueDate: record.dueDate || null,
+    lastResult: record.lastResult || null
+  };
+  if (savedDate) skill.lastUpdated = savedDate;
+}
+
+async function loadSavedStudyProgress() {
+  let rows = [];
+  try { rows = await api("/api/study-progress"); }
+  catch (error) { console.warn("Не удалось получить прогресс карточек", error); }
+  const local = localStudyProgress();
+  const records = new Map();
+  for (const item of Array.isArray(rows) ? rows : []) {
+    records.set(item.skillId, item);
+  }
+  for (const [key, item] of Object.entries(local)) {
+    const remote = records.get(key);
+    if (!remote || String(item.updatedAt || "") > String(remote.updatedAt || "")) {
+      records.set(key, item);
+    }
+  }
+  for (const semester of state.data?.semesters || []) {
+    for (const exam of semester.exams || []) {
+      for (const skill of exam.skills || []) applyProgressRecord(skill, records.get(skill.id));
+    }
+  }
+}
+
+function addDaysIso(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return localIsoDate(date);
+}
+
+async function saveStudyCardRating(skill, rating) {
+  const current = Number(skill.mastery || 0);
+  const oldReview = skillReview(skill);
+  const intervals = state.data?.reviewSchedule?.intervalDays || [1, 2, 4, 7, 14, 30];
+  const repetition = rating === "easy"
+    ? Math.min(intervals.length, Number(oldReview.repetition || 0) + 1)
+    : rating === "hard" ? Math.max(0, Number(oldReview.repetition || 0)) : 0;
+  const days = rating === "easy"
+    ? Number(intervals[Math.max(0, repetition - 1)] || 1) : 1;
+  // Self-assessment never by itself certifies a skill at 90-100%.
+  const mastery = rating === "easy"
+    ? Math.min(84, current + 10)
+    : rating === "hard" ? Math.min(69, Math.max(15, current + 3))
+    : Math.max(0, current - 8);
+  const payload = {
+    mastery, repetition, dueDate: addDaysIso(days),
+    lastResult: "card-self-assessment:" + rating
+  };
+  const updatedAt = new Date().toISOString();
+  let storedRemotely = false;
+  try {
+    const saved = await api("/api/study-progress/" + encodeURIComponent(skill.id), {
+      method: "PUT", body: JSON.stringify(payload)
+    });
+    storedRemotely = Boolean(saved);
+  } catch (error) {
+    console.warn("Прогресс пока только в браузере", error);
+  }
+  skill.mastery = mastery;
+  skill.review = {
+    repetition: payload.repetition,
+    dueDate: payload.dueDate,
+    lastResult: payload.lastResult
+  };
+  skill.lastUpdated = todayIso();
+  const snapshot = localStudyProgress();
+  snapshot[skill.id] = {skillId: skill.id, ...payload, updatedAt};
+  localStorage.setItem(STUDY_CARD_PROGRESS_KEY, JSON.stringify(snapshot));
+  renderMeta();
+  renderExamCards();
+  renderWorkspace();
+  renderReview();
+  return {storedRemotely, mastery, dueDate:payload.dueDate};
+}
+
+window.studyBoardCards = {
+  context: () => ({
+    exam:currentExam(),
+    topicId:state.topicId,
+    semesterId:state.semesterId
+  }),
+  rate:saveStudyCardRating
+};
+
 function renderSection() {
   const study = state.section === "study";
   document.body.dataset.section = state.section;
@@ -147,7 +253,7 @@ function renderSection() {
   }
 
   if (!study) {
-    for (const id of ["inspector", "review-panel", "history-panel", "study-calendar-panel", "homework-panel"]) {
+    for (const id of ["inspector", "review-panel", "history-panel", "study-calendar-panel", "homework-panel", "flashcard-panel"]) {
       $(id)?.classList.add("closed");
     }
   }
@@ -591,6 +697,7 @@ async function loadData() {
   if (!response.ok) throw new Error("Не удалось загрузить данные");
   state.data = await response.json();
   state.lectureTasks = await loadLectureTasks();
+  await loadSavedStudyProgress();
   const firstSemester = state.data.semesters?.[0];
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
@@ -761,6 +868,7 @@ function renderWorkspace() {
 
   if (state.viewMode === "map") renderMap(skills);
   else renderList(skills);
+  window.dispatchEvent(new Event("study-context-updated"));
 }
 
 function renderMap(skills) {

@@ -1614,3 +1614,75 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
   .life-add-button{flex:1}
   .nutrition-add-panel{top:118px;left:12px;right:12px;width:auto}
 }
+
+
+/* Study cards: dedicated revision panel, independent of the skills map. */
+.flashcard-panel{
+  position:absolute;
+  z-index:55;
+  top:68px;
+  right:16px;
+  bottom:72px;
+  width:min(430px,calc(100vw - 32px));
+  overflow-y:auto;
+  padding:18px;
+  border-radius:18px;
+}
+.flashcard-panel.closed{display:none}
+.flashcard-panel-head{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.flashcard-panel-head h2{font-size:20px;margin:3px 0 10px}
+.flashcard-hint{font-size:12px;color:#6b7b92;line-height:1.5;margin:0 0 13px}
+.flashcard-controls,.flashcard-bottom,.flashcard-editor-actions{display:flex;gap:6px;flex-wrap:wrap}
+.flashcard-controls button,.flashcard-bottom button,.flashcard-editor-actions button{
+  border:1px solid #dde5f0;background:#fff;color:#52647f;border-radius:10px;
+  font-size:12px;font-weight:750;padding:9px 11px;cursor:pointer;
+}
+.flashcard-controls button.active{color:#1d5ba9;background:#eaf3ff;border-color:#c9dff9}
+.flashcard-progress{font-size:11px;color:#718099;font-weight:750;margin:18px 0 8px}
+.flashcard-card-area{
+  background:linear-gradient(155deg,#f9fbff,#edf4ff);
+  border:1px solid #cfe0f6;
+  border-radius:16px;min-height:210px;padding:20px;
+  display:flex;flex-direction:column;justify-content:center;gap:14px;
+  overflow-wrap:anywhere;
+}
+.flashcard-card-topic{font-size:10px;font-weight:850;color:#4871a8;letter-spacing:.04em}
+.flashcard-question{font-size:19px;line-height:1.4;font-weight:800;color:#1e2f4c}
+.flashcard-answer{
+  border-top:1px solid #cbdcee;padding-top:15px;
+  color:#30435e;font-size:14px;line-height:1.5;white-space:pre-line;
+}
+.flashcard-answer[hidden],.flashcard-ratings[hidden],.flashcard-reveal[hidden],
+.flashcard-editor[hidden],.flashcard-bottom button[hidden]{display:none!important}
+.flashcard-reveal{border:0;border-radius:10px;background:#246ab8;color:#fff;
+  font-size:13px;font-weight:800;padding:12px;width:100%;margin-top:12px;cursor:pointer}
+.flashcard-ratings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:12px}
+.flashcard-ratings button{border:1px solid #dbe3ed;border-radius:10px;
+  padding:11px 4px;background:#fff;color:#42546f;font-size:12px;font-weight:750;cursor:pointer}
+.flashcard-ratings button[data-rating="again"]{color:#b83232;background:#fff6f6}
+.flashcard-ratings button[data-rating="hard"]{color:#9b6a07;background:#fff9eb}
+.flashcard-ratings button[data-rating="easy"]{color:#126849;background:#effcf4}
+.flashcard-ratings button:disabled{opacity:.5;cursor:wait}
+.flashcard-bottom{justify-content:flex-start;margin-top:14px}
+.flashcard-message{font-size:11px;line-height:1.5;color:#65768d;min-height:16px;margin-top:8px}
+.flashcard-editor{
+  display:grid;gap:10px;border:1px solid #dfebfa;border-radius:14px;
+  padding:12px;background:#f8fbff;margin-top:12px;
+}
+.flashcard-editor label{display:grid;gap:5px}
+.flashcard-editor label span{font-size:10px;color:#71849a;font-weight:850}
+.flashcard-editor textarea,.flashcard-editor select{
+  width:100%;box-sizing:border-box;border:1px solid #ccd9ea;border-radius:9px;
+  font:inherit;font-size:13px;padding:8px;color:#24344b;background:#fff
+}
+.flashcard-editor p{margin:0;font-size:11px;color:#697c93}
+.flashcard-editor-actions button:first-child{background:#246ab8;color:#fff;border:0}
+.floating-toolbar{max-width:calc(100vw - 12px);overflow-x:auto;scrollbar-width:thin}
+.floating-toolbar button{flex-shrink:0;white-space:nowrap}
+@media(max-width:820px){
+  .flashcard-panel{top:122px;right:10px;bottom:72px;width:min(92vw,430px)}
+}
+@media(max-width:560px){
+  .flashcard-panel{left:8px;right:8px;top:124px;bottom:74px;width:auto;padding:13px}
+  .flashcard-question{font-size:17px}
+}
