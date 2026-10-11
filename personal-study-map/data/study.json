@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Николай",
-  "updatedAt": "2026-10-07",
+  "updatedAt": "2026-10-11",
   "semesters": [
     {
       "id": "ws-2026-27",
@@ -35,6 +35,18 @@
               "type": "Altklausur / Rekonstruktion",
               "coverage": "WS 2024/25, Aufgaben 1-9",
               "note": "Neuere Rekonstruktion; bestätigt wiederkehrende Kernblöcke und ergänzt UML-Pakete sowie Komponenten."
+            },
+            {
+              "title": "GE_SWT1_Skript_201819_01_Wasserfall und andere - Aufnahme.pdf",
+              "type": "Vorlesung 2 / Folien",
+              "coverage": "Wasserfallmodell, Risiken, iterative/inkrementelle Entwicklung, RUP (S. 2–13)",
+              "note": "Grundlage für die Themen; Material der Wintersemester 2018/19."
+            },
+            {
+              "title": "GE_SWT1_Skript_201819_02_SCRUM - Aufnahme.pdf",
+              "type": "Vorlesung 2 / Folien",
+              "coverage": "Scrum-Rollen, Product Backlog, User Stories, Sprint (S. 4–19)",
+              "note": "В занятии разобраны роли и Product Backlog; другие подтемы пока только вводные."
             }
           ],
           "topics": [
@@ -65,6 +77,22 @@
             {
               "id": "se-uml-structure",
               "title": "UML Pakete & Komponenten"
+            },
+            {
+              "id": "se-vorgehen-waterfall",
+              "title": "Wasserfallmodell"
+            },
+            {
+              "id": "se-vorgehen-iterativ",
+              "title": "Iterative & inkrementelle Entwicklung"
+            },
+            {
+              "id": "se-vorgehen-rup",
+              "title": "Rational Unified Process (RUP)"
+            },
+            {
+              "id": "se-vorgehen-scrum",
+              "title": "Scrum"
             }
           ],
           "skills": [
@@ -1101,6 +1129,440 @@
                 "total": 3
               },
               "examSource": "Altklausuren WS22/23, WS23/24, WS24/25"
+            },
+            {
+              "id": "se-20261011-wasserfall-basis",
+              "topicId": "se-vorgehen-waterfall",
+              "title": "Wasserfallmodell erklären",
+              "subtitle": "Sequentielles Vorgehensmodell",
+              "description": "Уметь объяснить, что Wasserfallmodell — последовательная модель разработки, где этапы проходят по порядку, с возможностью возврата к предыдущим.",
+              "mastery": 35,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1180,
+              "y": 0,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Тема обсуждена, но этапы самостоятельно не перечислялись."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-wasserfall-basis-card1",
+                  "question": "Was ist das Wasserfallmodell?",
+                  "answer": "Ein sequentielles Vorgehensmodell der Softwareentwicklung: Die Arbeit läuft überwiegend in aufeinanderfolgenden Phasen."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-wasserfall-phasen",
+              "topicId": "se-vorgehen-waterfall",
+              "title": "Phasen des Wasserfallmodells",
+              "subtitle": "Anforderungen → Entwurf → Implementierung → Tests → Betrieb",
+              "description": "Назвать основные стадии из диаграммы лекции: Anforderungsdefinition; System- und Softwareentwurf; Implementierung und Komponententest; Integration und Systemtests; Betrieb und Wartung.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1460,
+              "y": 0,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Объяснено преподавателем, самостоятельной проверки пока не было."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-wasserfall-phasen-card1",
+                  "question": "Welche Hauptphasen zeigt das Wasserfallmodell?",
+                  "answer": "Anforderungsdefinition → System- und Softwareentwurf → Implementierung und Komponententest → Integration und Systemtests → Betrieb und Wartung."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-wasserfall-vorteile",
+              "topicId": "se-vorgehen-waterfall",
+              "title": "Vorteile und Eignung",
+              "subtitle": "Kleine Projekte, stabile Anforderungen",
+              "description": "Перечислить преимущества из презентации: leicht verständlich; leicht umzusetzen; geeignet für kleine Projekte; geeignet bei geringem Änderungsbedarf.",
+              "mastery": 60,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1740,
+              "y": 0,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Самостоятельно назвал заранее утверждённые неизменные требования; с подсказкой правильно определил небольшие проекты."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-wasserfall-vorteile-card1",
+                  "question": "Wann eignet sich das Wasserfallmodell besonders?",
+                  "answer": "Für kleine Projekte und Projekte mit stabilen Anforderungen ohne wesentlichen Änderungsbedarf. Es ist leicht zu verstehen und umzusetzen."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-wasserfall-nachteile",
+              "topicId": "se-vorgehen-waterfall",
+              "title": "Nachteile des Wasserfallmodells",
+              "subtitle": "Spätes Feedback, teure Änderungen",
+              "description": "Понимать позднюю обратную связь, выявление рисков ближе к концу и стоимость переделок при частых изменениях требований.",
+              "mastery": 65,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1180,
+              "y": 240,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Самостоятельно объяснил: если заказчик постоянно меняет требования, дорого всё переделывать, модель не подходит."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-wasserfall-nachteile-card1",
+                  "question": "Warum ist Wasserfall bei häufigen Änderungen problematisch?",
+                  "answer": "Änderungen erfordern aufwendige Nacharbeit; Kundenfeedback und viele Risiken werden erst spät sichtbar."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-wasserfall-risiken",
+              "topicId": "se-vorgehen-waterfall",
+              "title": "Risikoentwicklung vergleichen",
+              "subtitle": "Wasserfall vs. iterativ",
+              "description": "Объяснить по графику на стр. 5: итеративный процесс уменьшает риски раньше через регулярные проверки и обратную связь; в каскадной модели риски часто сохраняются дольше.",
+              "mastery": 45,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1460,
+              "y": 240,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Правильно выбрал команду с двухнедельными проверками как менее рискованную; объяснение пока общее."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-wasserfall-risiken-card1",
+                  "question": "Bei welchem Vorgehen sinken Projektrisiken früher – Wasserfall oder iterativ?",
+                  "answer": "Beim iterativen Vorgehen, weil funktionierende Teile früh bewertet und Probleme früher erkannt werden."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-iterativ-inkrementell",
+              "topicId": "se-vorgehen-iterativ",
+              "title": "Iterative, inkrementelle Entwicklung",
+              "subtitle": "Schritt für Schritt",
+              "description": "Описать пошаговую разработку системы: после каждой итерации появляется новое работающее расширение, которым заказчик может пользоваться и по которому может дать отзывы.",
+              "mastery": 55,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1180,
+              "y": 850,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Самостоятельно назвал раннее обнаружение проблем и более дешёвые исправления."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-iterativ-inkrementell-card1",
+                  "question": "Was ist iterative, inkrementelle Entwicklung?",
+                  "answer": "Die Software wird Schritt für Schritt entwickelt. Nach Iterationen entstehen neue funktionsfähige Inkremente, die der Kunde prüfen kann."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-iteration-vs-inkrement",
+              "topicId": "se-vorgehen-iterativ",
+              "title": "Iteration und Inkrement unterscheiden",
+              "subtitle": "Iteration = Zyklus, Inkrement = Ergebnis",
+              "description": "Различать итерацию как повторяющийся цикл разработки и инкремент как новую работающую часть продукта. Не путать с выпуском всех функций целиком.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1460,
+              "y": 850,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "При проверке перепутал итерацию с разработанной функцией, инкремент — с выпуском всей программы; после дополнительного объяснения правильный ответ ещё не проверен."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-iteration-vs-inkrement-card1",
+                  "question": "Was ist der Unterschied zwischen Iteration und Inkrement?",
+                  "answer": "Iteration ist ein Entwicklungszyklus; Inkrement ist das funktionsfähige Ergebnis bzw. die Erweiterung nach dem Zyklus."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-rup-eigenschaften",
+              "topicId": "se-vorgehen-rup",
+              "title": "RUP: Grundprinzipien",
+              "subtitle": "Use-Case-getrieben, architekturzentriert, iterativ",
+              "description": "Знать указанные в презентации характеристики RUP: ориентированность на Use Cases, внимание к архитектуре и итеративно-инкрементальная разработка.",
+              "mastery": 20,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1180,
+              "y": 1390,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Свойства обсуждены; полного самостоятельного объяснения всех трёх ещё не было."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-rup-eigenschaften-card1",
+                  "question": "Welche drei zentralen Eigenschaften hat der RUP?",
+                  "answer": "Use-Case-getrieben, architekturzentriert sowie iterativ und inkrementell."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-rup-architektur",
+              "topicId": "se-vorgehen-rup",
+              "title": "Warum ist RUP architekturzentriert?",
+              "subtitle": "Stabiler Software-Fundament",
+              "description": "Понимать, почему продуманная архитектура служит устойчивой основой для развития системы и интеграции новых функций, без требования идеальности с первого дня.",
+              "mastery": 65,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1460,
+              "y": 1390,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Самостоятельно объяснил архитектуру как качественно продуманный фундамент, на котором строятся остальные функции."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-rup-architektur-card1",
+                  "question": "Warum steht die Architektur im RUP im Mittelpunkt?",
+                  "answer": "Weil eine tragfähige Architektur als Grundlage für weitere Iterationen und neue Funktionen dient."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-rup-usecases",
+              "topicId": "se-vorgehen-rup",
+              "title": "Use-Case-getrieben entwickeln",
+              "subtitle": "Anwendungsfälle der Benutzer",
+              "description": "Объяснить, что сценарии использования описывают цели и действия пользователей, а не внутренние технические работы программистов.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1740,
+              "y": 1390,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "При сравнении двух подходов сначала выбрал техническую реализацию до сценариев пользователя; получил объяснение, но верный ответ пока не подтвердил."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-rup-usecases-card1",
+                  "question": "Was bedeutet Use-Case-getrieben?",
+                  "answer": "Die Entwicklung orientiert sich an Anwendungsfällen und Zielen der Benutzer, z. B. Kunde überweist Geld, nicht Datenbank einrichten."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-rup-phasen",
+              "topicId": "se-vorgehen-rup",
+              "title": "Vier Phasen des RUP",
+              "subtitle": "Inception → Elaboration → Construction → Transition",
+              "description": "Уметь назвать и различать четыре фазы RUP по диаграмме на стр. 11: постановка цели, архитектурная проработка, построение и передача пользователю.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1180,
+              "y": 1630,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Фазы объяснены, контрольный вопрос не был отвечен."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-rup-phasen-card1",
+                  "question": "Wie heißen die vier Phasen des RUP und was passiert?",
+                  "answer": "Inception (Ziele/Anforderungen), Elaboration (Architektur/Risiken), Construction (Implementierung/Test), Transition (Übergabe/Einführung)."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-scrum-rollen",
+              "topicId": "se-vorgehen-scrum",
+              "title": "Die drei Scrum-Rollen",
+              "subtitle": "Product Owner, Scrum Master, Entwicklungsteam",
+              "description": "Различать ответственность Product Owner (приоритеты и ценность), Scrum Master (правила Scrum и препятствия) и Entwicklungsteam (реализация).",
+              "mastery": 40,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1180,
+              "y": 2220,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Сначала ошибочно приписал Scrum Master приоритизацию; позже правильно определил Scrum Master как помощника при устранении препятствий."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-scrum-rollen-card1",
+                  "question": "Wer priorisiert, wer beseitigt Hindernisse, wer entwickelt?",
+                  "answer": "Product Owner priorisiert Anforderungen; Scrum Master hilft bei Hindernissen; Entwicklungsteam setzt die Software um."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-scrum-backlog",
+              "topicId": "se-vorgehen-scrum",
+              "title": "Product Backlog verstehen",
+              "subtitle": "Priorisierte User Stories",
+              "description": "Понимать, что Product Backlog — упорядоченный изменяемый список требований/User Stories, который Product Owner приоритизирует, а трудоёмкость оценивается примерно Story Points.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1460,
+              "y": 2220,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Материал объяснён в конце занятия, контрольный вопрос не был отвечен."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-scrum-backlog-card1",
+                  "question": "Was enthält das Product Backlog und wer priorisiert es?",
+                  "answer": "Es enthält geordnete, laufend aktualisierte Anforderungen/User Stories. Der Product Owner priorisiert sie."
+                }
+              ]
+            },
+            {
+              "id": "se-20261011-scrum-ablauf",
+              "topicId": "se-vorgehen-scrum",
+              "title": "Sprint als iterativer Zyklus",
+              "subtitle": "Sprint → Increment → Review & Retrospective",
+              "description": "Понимать общий цикл Scrum из обзорной диаграммы презентации: Sprint Planning, Daily Scrum, рабочий Increment, Sprint Review, Retrospective.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": "2026-10-11",
+              "x": 1740,
+              "y": 2220,
+              "evidence": [
+                {
+                  "date": "2026-10-11",
+                  "source": "Диалог учебного занятия 11.10.2026",
+                  "note": "Обзор был показан, но не проверен; подробные события Scrum отложены на следующее занятие."
+                }
+              ],
+              "review": {
+                "repetition": 0,
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_review_pending"
+              },
+              "flashcards": [
+                {
+                  "id": "se-20261011-scrum-ablauf-card1",
+                  "question": "Welche Elemente gehören zu einem Scrum-Sprint?",
+                  "answer": "Sprint Planning, Entwicklung mit Daily Scrum, ein nutzbares Increment, Sprint Review und Sprint Retrospective."
+                }
+              ]
             }
           ],
           "relations": [
@@ -1217,7 +1679,66 @@
       ]
     }
   ],
-  "sessions": [],
+  "sessions": [
+    {
+      "id": "session-2026-10-11-sweg-vorgehen",
+      "semesterId": "ws-2026-27",
+      "examId": "exam-software-engineering",
+      "date": "2026-10-11",
+      "title": "SWEG: Wasserfallmodell, iterative Entwicklung, RUP, Scrum",
+      "summary": "Диалог по материалам лекции. Хорошо разобраны плюсы и минусы Wasserfall, раннее снижение рисков и смысл архитектуры RUP; правильно определена роль Scrum Master. Iteration/Inkrement, Use Case, фазы RUP и Product Backlog требуют повторения. Занятие остановлено по просьбе учащегося.",
+      "changes": [
+        {
+          "skillId": "se-20261011-wasserfall-basis",
+          "skillTitle": "Wasserfallmodell erklären",
+          "from": 0,
+          "to": 35
+        },
+        {
+          "skillId": "se-20261011-wasserfall-vorteile",
+          "skillTitle": "Vorteile und Eignung",
+          "from": 0,
+          "to": 60
+        },
+        {
+          "skillId": "se-20261011-wasserfall-nachteile",
+          "skillTitle": "Nachteile des Wasserfallmodells",
+          "from": 0,
+          "to": 65
+        },
+        {
+          "skillId": "se-20261011-wasserfall-risiken",
+          "skillTitle": "Risikoentwicklung vergleichen",
+          "from": 0,
+          "to": 45
+        },
+        {
+          "skillId": "se-20261011-iterativ-inkrementell",
+          "skillTitle": "Iterative, inkrementelle Entwicklung",
+          "from": 0,
+          "to": 55
+        },
+        {
+          "skillId": "se-20261011-rup-eigenschaften",
+          "skillTitle": "RUP: Grundprinzipien",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-20261011-rup-architektur",
+          "skillTitle": "Warum ist RUP architekturzentriert?",
+          "from": 0,
+          "to": 65
+        },
+        {
+          "skillId": "se-20261011-scrum-rollen",
+          "skillTitle": "Die drei Scrum-Rollen",
+          "from": 0,
+          "to": 40
+        }
+      ]
+    }
+  ],
   "reviewSchedule": {
     "intervalDays": [
       1,
