@@ -18,6 +18,16 @@ export type TrialLeadStatus =
   | 'NO_RESPONSE'
   | 'DECLINED';
 
+export type MetaContractConversion = {
+  leadId: string;
+  eventName: 'ContractSigned';
+  occurredAt: string;
+  status: 'SENDING' | 'TEST_SENT' | 'SENT' | 'FAILED';
+  sentAt?: string | null;
+};
+
+export type MetaCapiAvailability = { enabled: boolean };
+
 export type TrialLead = {
   id: string;
   trackingToken: string;
@@ -184,4 +194,15 @@ export const trialLeadsApi = {
       headers: headers(),
     }));
   },
+  metaStatus: async (): Promise<MetaCapiAvailability> =>
+    parse<MetaCapiAvailability>(await fetch(`${BASE_URL}/admin/trial-lead-meta/status`, { headers: headers() })),
+  listMetaContracts: async (): Promise<MetaContractConversion[]> =>
+    parse<MetaContractConversion[]>(await fetch(`${BASE_URL}/admin/trial-lead-meta`, { headers: headers() })),
+  reportSignedContract: async (id: string, occurredAt: string, permissionConfirmed: boolean):
+      Promise<{ sent: boolean; test?: boolean; alreadySent?: boolean }> =>
+    parse(await fetch(`${BASE_URL}/admin/trial-lead-meta/${id}/signed`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ occurredAt, permissionConfirmed }),
+    })),
 };
