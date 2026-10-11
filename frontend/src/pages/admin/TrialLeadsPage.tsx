@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { trialLeadsApi, type TrialLead, type TrialLeadStatus } from '../../api/trialLeads';
+import { trialLeadsApi, type TrialLead, type TrialLeadStatus, type MetaContractConversion } from '../../api/trialLeads';
 import '../../trial-leads.css';
 
 const STATUS_LABELS: Record<TrialLeadStatus, string> = {
@@ -29,6 +29,12 @@ export function TrialLeadsPage() {
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [metaContracts, setMetaContracts] = useState<MetaContractConversion[]>([]);
+  const [metaEnabled, setMetaEnabled] = useState(false);
+  const [metaSavingId, setMetaSavingId] = useState('');
+  const [contractDates, setContractDates] = useState<Record<string,string>>({});
+  const [confirmedBases, setConfirmedBases] = useState<Record<string,boolean>>({});
+  const [metaMessages, setMetaMessages] = useState<Record<string,string>>({});
 
   async function load({ silent = false }: { silent?: boolean } = {}) {
     if (silent) setRefreshing(true);
@@ -36,6 +42,12 @@ export function TrialLeadsPage() {
     setError('');
     try {
       setLeads(await trialLeadsApi.list());
+      try {
+        setMetaContracts(await trialLeadsApi.listMetaContracts());
+        setMetaEnabled(true);
+      } catch {
+        setMetaEnabled(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить заявки');
     } finally {
@@ -88,6 +100,32 @@ export function TrialLeadsPage() {
     }
   }
 
+  async function reportContract(lead: TrialLead) {
+    const localDate = contractDates[lead.id];
+    if (!localDate || !confirmedBases[lead.id]) {
+      setMetaMessages(current => ({...current,[lead.id]:'Укажите фактическую дату и подтвердите правовое основание.'}));
+      return;
+    }
+    const date = new Date(localDate);
+    if (Number.isNaN(date.getTime())) {
+      setMetaMessages(current => ({...current,[lead.id]:'Неверная дата договора.'}));
+      return;
+    }
+    if (!window.confirm('Подтверждаете, что договор действительно подписан, и разрешена передача события в Meta?')) return;
+    setMetaSavingId(lead.id);
+    setMetaMessages(current => ({...current,[lead.id]:'Проверяем событие...'}));
+    try {
+      const result = await trialLeadsApi.reportSignedContract(lead.id,date.toISOString(),true);
+      setMetaMessages(current => ({...current,[lead.id]:result.alreadySent
+        ? 'Эта сделка уже передана в Meta.'
+        : result.test ? 'Тестовое событие принято Meta.' : 'Событие договора принято Meta.'}));
+      setMetaContracts(current => [...current.filter(item => item.leadId !== lead.id),
+        {leadId:lead.id,eventName:'ContractSigned',occurredAt:date.toISOString(),status:'SENT',sentAt:new Date().toISOString()}]);
+    } catch(err) {
+      setMetaMessages(current => ({...current,[lead.id]:err instanceof Error?err.message:'Не удалось передать договор в Meta.'}));
+    } finally { setMetaSavingId(''); }
+  }
+
   async function deleteLead(lead: TrialLead) {
     const confirmed = window.confirm(`Удалить заявку ${lead.phone}?\n\nЭто действие нельзя отменить.`);
     if (!confirmed) return;
@@ -133,7 +171,8 @@ export function TrialLeadsPage() {
       {!loading && leads.length > 0 && <div className="trial-leads-list">
         {leads.map((lead) => {
           const whatsapp = `https://wa.me/${lead.phone.replace(/\D/g, '')}`;
-          const busy = savingId === lead.id || deletingId === lead.id;
+          const busy = savingId === lead.id || deletingId === lead.id || metaSavingId === lead.id;
+          const sentToMeta = metaContracts.some(x => x.leadId === lead.id && x.eventName === 'ContractSigned' && x.status === 'SENT');
           return <article className="trial-lead-card" key={lead.id}>
             <div className="trial-lead-card__top">
               <div>
@@ -172,6 +211,28 @@ export function TrialLeadsPage() {
                 {deletingId === lead.id ? 'Удаляем…' : 'Удалить'}
               </button>
             </div>
+            {lead.status === 'CONTRACT' && <div className="trial-meta-contract">
+              <h3>Договор подписан — обратная связь для Meta</h3>
+              {sentToMeta ? <p className="trial-meta-success">Договор уже передан в Meta. Повторно отправлять не нужно.</p> : <>
+                <label>Фактическая дата и время подписания
+                  <input type="datetime-local" value={contractDates[lead.id] || ''}
+                    onChange={event=>setContractDates(current=>({...current,[lead.id]:event.target.value}))} />
+                </label>
+                <label className="trial-meta-consent">
+                  <input type="checkbox" checked={confirmedBases[lead.id] || false}
+                    onChange={event=>setConfirmedBases(current=>({...current,[lead.id]:event.target.checked}))} />
+                  Подтверждаю документированное законное основание для передачи данных контакта родителя в Meta.
+                </label>
+                <button type="button" className="btn btn--primary"
+                  disabled={busy || !metaEnabled || !contractDates[lead.id] || !confirmedBases[lead.id]}
+                  onClick={()=>void reportContract(lead)}>
+                    {metaSavingId===lead.id?'Отправляем…':'Передать подписанный договор в Meta'}
+                </button>
+                {!metaEnabled && <p className="trial-meta-note">Настройка Meta ещё не включена на сервере школы.</p>}
+              </>}
+              {metaMessages[lead.id] && <p className="trial-meta-note" role="status">{metaMessages[lead.id]}</p>}
+              <p className="trial-meta-note">Указывайте реальную дату, не дату сегодняшней отправки. Meta принимает недавние события; уже состоявшиеся старые сделки не следует датировать заново.</p>
+            </div>}
           </article>;
         })}
       </div>}
