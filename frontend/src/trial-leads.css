@@ -50,3 +50,13 @@
   .funnel-source{grid-template-columns:1fr 1fr}
 }
 .site-visit-card__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.site-visit-card__actions .trial-lead-delete{margin-left:0!important;padding:7px 10px;font-size:12px}@media(max-width:760px){.site-visit-card__actions{align-items:flex-end;flex-direction:column}}
+
+/* Explicit, admin-confirmed feedback of a signed contract to Meta. */
+.trial-meta-contract{margin-top:15px;padding:16px;border:1px solid #cbd9ee;border-radius:12px;background:#f7faff}
+.trial-meta-contract h3{margin:0 0 10px;font-size:16px;color:#1e3556}
+.trial-meta-contract label{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0;font-size:13px;color:#253a58;font-weight:600}
+.trial-meta-contract input[type=datetime-local]{max-width:100%;border:1px solid #c6d3e6;border-radius:8px;padding:10px;font:inherit;background:#fff}
+.trial-meta-contract input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:#315caa}
+.trial-meta-contract .btn{max-width:100%;white-space:normal;text-align:center}
+.trial-meta-note{font-size:12px;color:#60728f;line-height:1.5;margin:10px 0 0}
+.trial-meta-success{font-weight:650;color:#167442;font-size:13px;line-height:1.5}
