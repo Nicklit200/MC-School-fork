@@ -108,6 +108,7 @@ public class TrialLeadMetaController {
                     "Не удалось подготовить телефон родителя для сопоставления с Meta");
         }
         String eventId = "mindcrafti-contract-" + leadId;
+        boolean isTest = testEventCode != null && !testEventCode.isBlank();
 
         int inserted = jdbc.update("""
                 INSERT INTO trial_lead_meta_conversions
@@ -130,14 +131,15 @@ public class TrialLeadMetaController {
             if (existing.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Отправка уже создана");
             ConversionState prior = existing.get(0);
             if ("SENT".equals(prior.status())) return ResponseEntity.ok(Map.of("sent", true, "alreadySent", true));
+            if ("TEST_SENT".equals(prior.status()) && isTest) return ResponseEntity.ok(Map.of("sent", true, "alreadySent", true, "test", true));
             // Never replace the real conversion date when retrying an event.
-            if (!prior.occurredAt().equals(occurred) || !("FAILED".equals(prior.status()))) {
+            if (!prior.occurredAt().equals(occurred) || !("FAILED".equals(prior.status()) || ("TEST_SENT".equals(prior.status()) && !isTest))) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Событие уже обрабатывается или ранее использовало другую дату");
             }
             int claimed = jdbc.update("""
                     UPDATE trial_lead_meta_conversions SET status='SENDING', last_error=NULL
-                    WHERE lead_id=? AND event_name=? AND status='FAILED'
+                    WHERE lead_id=? AND event_name=? AND status IN ('FAILED','TEST_SENT')
                     """, leadId, CONTRACT_EVENT);
             if (claimed == 0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Отправка уже идёт");
         }
@@ -170,12 +172,12 @@ public class TrialLeadMetaController {
             }
             jdbc.update("""
                     UPDATE trial_lead_meta_conversions
-                    SET status='SENT', sent_at=CURRENT_TIMESTAMP, last_error=NULL
+                    SET status=?, sent_at=CURRENT_TIMESTAMP, last_error=NULL
                     WHERE lead_id=? AND event_name=?
-                    """,leadId,CONTRACT_EVENT);
+                    """,isTest ? "TEST_SENT" : "SENT",leadId,CONTRACT_EVENT);
             return ResponseEntity.ok(Map.of(
                     "sent",true, "eventName",CONTRACT_EVENT,
-                    "test", testEventCode != null && !testEventCode.isBlank()));
+                    "test", isTest));
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
