@@ -21,7 +21,7 @@ export type MetaContractConversion = {
   leadId: string;
   eventName: 'ContractSigned';
   occurredAt: string;
-  status: 'SENDING' | 'SENT' | 'FAILED';
+  status: 'SENDING' | 'TEST_SENT' | 'SENT' | 'FAILED';
   sentAt?: string | null;
 };
 
