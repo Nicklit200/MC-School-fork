@@ -106,6 +106,11 @@ public class StoryTemplateMasterService {
     }
 
     @Transactional(readOnly = true)
+    byte[] downloadForValidatedLink() {
+        return readBytes();
+    }
+
+    @Transactional(readOnly = true)
     public byte[] download(AuthenticatedUser user) {
         requireAdmin(user);
         return readBytes();
