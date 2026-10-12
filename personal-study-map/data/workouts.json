@@ -1,7 +1,38 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-09",
+  "updatedAt": "2026-10-12",
   "entries": [
+    {
+      "id": "chat-2026-10-12-outdoor-run-2358",
+      "date": "2026-10-12",
+      "title": "Бег",
+      "type": "run",
+      "activityTypes": [
+        "run"
+      ],
+      "durationMinutes": 23,
+      "durationSeconds": 58,
+      "distanceKm": 2.59,
+      "activeKcal": 190,
+      "totalKcal": 233,
+      "averagePace": "9:15 мин/км",
+      "cadenceStepsPerMinute": 134,
+      "elevationGainMeters": 9,
+      "averageHeartRate": 154,
+      "exercises": [
+        "Дистанция: 2,59 км",
+        "Продолжительность: 23 мин 58 сек",
+        "Активные калории: 190 ккал",
+        "Всего калорий: 233 ккал",
+        "Средний темп: 9:15 мин/км",
+        "Каденс: 134 шага/мин",
+        "Набор высоты: 9 м",
+        "Средний пульс: 154 уд/мин"
+      ],
+      "notes": "Apple Fitness, 12.10.2026. 190 активных ккал входят в 233 ккал общих; их нельзя складывать.",
+      "source": "chatgpt",
+      "estimated": false
+    },
     {
       "id": "chat-2026-10-09-outdoor-run-1017",
       "date": "2026-10-09",
