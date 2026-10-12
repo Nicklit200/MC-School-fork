@@ -324,6 +324,11 @@
     const session=ui.session,card=currentCard();
     if (!session || !card) return;
     stopTimer();
+    // Keep the exact choices shown before timeout; the engine clears currentQuestion on answer.
+    if (timedOut) {
+      ui.lastCard=card;
+      ui.lastQuestionOptions=[...(session.currentQuestion?.options||[])];
+    }
     const feedback=engine.recordAnswer(session,card,value,timedOut);
     ui.feedback=feedback;
     saveSession();
