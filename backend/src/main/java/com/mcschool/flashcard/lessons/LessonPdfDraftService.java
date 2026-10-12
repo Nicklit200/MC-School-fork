@@ -98,15 +98,21 @@ public class LessonPdfDraftService {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?)
                 """, draftId, teacher.id(), eventId, workbookName, answersName,
                 workbook, answers, plan, difficulties, tasks.size(), Instant.now());
-        return Map.of(
-                "draftId", draftId.toString(), "status", "DRAFT",
-                "teacherId", teacher.id().toString(), "eventId", eventId,
-                "workbookFilename", workbookName, "answersFilename", answersName,
-                "workbookPages", workbookPages, "answersPages", answersPages,
-                "taskCount", tasks.size(), "homeworkCount", 0,
-                "brandGuideLogo", "extracted from current official Brand Guide PDF",
-                "qaPassed", true,
-                "next", "Use download_lesson_draft_pdf for workbook and answers to review. Publish only when the user explicitly says to upload.");
+        Map<String,Object> result = new LinkedHashMap<>();
+        result.put("draftId", draftId.toString());
+        result.put("status", "DRAFT");
+        result.put("teacherId", teacher.id().toString());
+        result.put("eventId", eventId);
+        result.put("workbookFilename", workbookName);
+        result.put("answersFilename", answersName);
+        result.put("workbookPages", workbookPages);
+        result.put("answersPages", answersPages);
+        result.put("taskCount", tasks.size());
+        result.put("homeworkCount", 0);
+        result.put("brandGuideLogo", "extracted from current official Brand Guide PDF");
+        result.put("qaPassed", true);
+        result.put("next", "Download both PDF previews, then request explicit user approval before publishing.");
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -249,7 +255,7 @@ public class LessonPdfDraftService {
             }
             for (int i = 0; i < tasks.size(); i++) {
                 Task task = tasks.get(i);
-                writer.task(i+1, teacherAnswers ? task.answer() : task.question(),
+                writer.task(i+1, teacherAnswers ? task.question() + "\nLoesung: " + task.answer() : task.question(),
                         teacherAnswers ? 0 : task.lines(), teacherAnswers);
             }
             writer.finish();
