@@ -298,7 +298,7 @@
       startCountdown();
     } else {
       stopAdvance();
-      ui.advanceTimer=setTimeout(() => advance(),feedback.correct?1000:1500);
+      ui.advanceTimer=setTimeout(() => advance(),feedback.correct?1000:4000);
     }
   }
 
@@ -364,7 +364,7 @@
       (!feedback.correct?' Правильный ответ: '+esc(feedback.correctAnswer)+
       '. Вопрос появится ещё раз в этом занятии.':"")+
       '</div><button class="quiz-next" data-action="next" type="button">Дальше</button>';
-    ui.advanceTimer=setTimeout(()=>advance(),feedback.correct?1000:1500);
+    ui.advanceTimer=setTimeout(()=>advance(),feedback.correct?1000:4000);
   }
 
   function advance() {
