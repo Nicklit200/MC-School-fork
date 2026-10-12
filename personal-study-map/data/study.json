@@ -47,6 +47,12 @@
               "type": "Vorlesung 2 / Folien",
               "coverage": "Scrum-Rollen, Product Backlog, User Stories, Sprint (S. 4–19)",
               "note": "В занятии разобраны роли и Product Backlog; другие подтемы пока только вводные."
+            },
+            {
+              "title": "UML.pdf",
+              "type": "Vorlesung / UML-Notation",
+              "coverage": "Folien 1–163; Prof. Dr. G. Hagel, Wintersemester 2026/27. Alle UML-Hauptdiagrammtypen und zugehörige Notation.",
+              "note": "Als Lernplan importiert, nicht gelernt. Hypertext-/Zugriffs-/Präsentationsmodell und Subsystemdiagramm nur auf der Inhaltsübersicht (S. 2), ohne eigenes Lehrmaterial."
             }
           ],
           "topics": [
@@ -93,6 +99,50 @@
             {
               "id": "se-vorgehen-scrum",
               "title": "Scrum"
+            },
+            {
+              "id": "se-uml-actors",
+              "title": "UML: Akteure"
+            },
+            {
+              "id": "se-uml-usecases",
+              "title": "UML: Anwendungsfälle"
+            },
+            {
+              "id": "se-uml-stereotypes",
+              "title": "UML: Stereotypen"
+            },
+            {
+              "id": "se-uml-collaboration",
+              "title": "UML: Kollaborationsdiagramme"
+            },
+            {
+              "id": "se-uml-class-basics",
+              "title": "UML: Klassen & Objekte"
+            },
+            {
+              "id": "se-uml-inheritance",
+              "title": "UML: Vererbung & Interfaces"
+            },
+            {
+              "id": "se-uml-relations",
+              "title": "UML: Assoziationen & Beziehungen"
+            },
+            {
+              "id": "se-uml-sequence",
+              "title": "UML: Sequenzdiagramme"
+            },
+            {
+              "id": "se-uml-activity",
+              "title": "UML: Aktivitätsdiagramme"
+            },
+            {
+              "id": "se-uml-deployment",
+              "title": "UML: Deploymentdiagramme"
+            },
+            {
+              "id": "se-uml-additional",
+              "title": "UML: Zusatzthemen (Unterlagen fehlen)"
             }
           ],
           "skills": [
@@ -1853,6 +1903,1156 @@
                   "explanation": "Daily Scrum — короткая ежедневная встреча разработчиков, чтобы проверить прогресс к Sprint Goal и при необходимости скорректировать план работы. Это не годовая сдача проекта и не подробный отчёт руководителю."
                 }
               ]
+            },
+            {
+              "id": "se-uml26-actors-definition",
+              "topicId": "se-uml-actors",
+              "title": "Akteure als Rollen definieren",
+              "subtitle": "Слайды 4–5",
+              "description": "Объяснять акторов как роли, взаимодействующие с системой, а не конкретных пользователей; учитывать внешнее ПО и оборудование.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 4–5.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                4,
+                5
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-actors-discovery",
+              "topicId": "se-uml-actors",
+              "title": "Akteure identifizieren und beschreiben",
+              "subtitle": "Слайды 6–11",
+              "description": "Находить акторов с помощью чек-листов и описывать их назначение, ответственность, интересы и связи.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 6–11.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                6,
+                11
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-actors-notation",
+              "topicId": "se-uml-actors",
+              "title": "Akteure in UML darstellen",
+              "subtitle": "Слайды 12–13",
+              "description": "Узнавать человечков и обозначения <<actor>>, символы внешней системы и временного события.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 12–13.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                12,
+                13
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-usecase-definition",
+              "topicId": "se-uml-usecases",
+              "title": "Anwendungsfall und Akteur unterscheiden",
+              "subtitle": "Слайды 15–16",
+              "description": "Объяснять Use Cases как сценарии действий системы с наблюдаемым актором результатом; находить сценарии по требованиям.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 15–16.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 248,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                15,
+                16
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-usecase-description",
+              "topicId": "se-uml-usecases",
+              "title": "Anwendungsfälle vollständig beschreiben",
+              "subtitle": "Слайды 17–20",
+              "description": "Описывать сценарии: роль, триггер, результат, входные данные, предусловия, шаги, исключения и постусловия.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 17–20.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 248,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                17,
+                20
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-usecase-diagram",
+              "topicId": "se-uml-usecases",
+              "title": "Anwendungsfalldiagramm zeichnen",
+              "subtitle": "Слайды 21–22",
+              "description": "Строить диаграммы использования: эллипсы, акторы, ассоциации, направления связей и границы системы.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 21–22.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 248,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                21,
+                22
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-usecase-relations",
+              "topicId": "se-uml-usecases",
+              "title": "Generalisierung und <<include>>",
+              "subtitle": "Слайды 23–27",
+              "description": "Различать обобщение акторов и сценариев, а также связь включения <<include>>; читать общий пример диаграммы.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 23–27.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 248,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                23,
+                27
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-stereotypes",
+              "topicId": "se-uml-stereotypes",
+              "title": "UML-Stereotypen lesen und anwenden",
+              "subtitle": "Слайды 29–30",
+              "description": "Понимать расширения UML и их запись <<...>>; распознавать interface, boundary, control, entity.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 29–30.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 496,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                29,
+                30
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-collaboration",
+              "topicId": "se-uml-collaboration",
+              "title": "Kollaborationen im Klassendiagramm markieren",
+              "subtitle": "Слайды 32–35",
+              "description": "Объяснять сотрудничество классов и отмечать его пунктирным овалом и связями, как на примере Beobachter.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 32–35.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 744,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                32,
+                35
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-class-notation",
+              "topicId": "se-uml-class-basics",
+              "title": "Klassendiagramm: Klassen darstellen",
+              "subtitle": "Слайды 37–40",
+              "description": "Различать класс, его атрибуты, методы и ответственности; строить секции UML-прямоугольника.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 37–40.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 992,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                37,
+                40
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-class-crc",
+              "topicId": "se-uml-class-basics",
+              "title": "Attribute und Methoden aus CRC ableiten",
+              "subtitle": "Слайды 41–42",
+              "description": "Различать сведения, которые класс хранит, и выполняемые операции; читать нотацию заметок UML.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 41–42.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 992,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                41,
+                42
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-class-attribute-visibility",
+              "topicId": "se-uml-class-basics",
+              "title": "Attributtypen und Sichtbarkeit",
+              "subtitle": "Слайды 43–46",
+              "description": "Читать типы данных и обозначения public (+), protected (#), private (-), package (~).\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 43–46.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 992,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                43,
+                46
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-class-attribute-cardinality",
+              "topicId": "se-uml-class-basics",
+              "title": "Kardinalität und Eigenschaften von Attributen",
+              "subtitle": "Слайды 47–48",
+              "description": "Читать [0..1], [1], [0..*], интервалы, а также свойства readOnly/unrestricted/composite.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 47–48.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 992,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                47,
+                48
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-class-derived-static",
+              "topicId": "se-uml-class-basics",
+              "title": "Abgeleitete Attribute und Klassenattribute",
+              "subtitle": "Слайды 49–55",
+              "description": "Различать вычисляемые атрибуты (/) и атрибуты класса (подчёркивание); читать общую грамматику UML-атрибутов.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 49–55.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3320,
+              "y": 992,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                49,
+                55
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-object-diagram",
+              "topicId": "se-uml-class-basics",
+              "title": "Objektdiagramm mit Instanzen zeichnen",
+              "subtitle": "Слайды 56–59",
+              "description": "Отличать объект от класса, подписывать Instanzname:Klassenname, значения атрибутов и связи в момент времени.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 56–59.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 1220,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                56,
+                59
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-class-methods",
+              "topicId": "se-uml-class-basics",
+              "title": "Methoden im Klassendiagramm notieren",
+              "subtitle": "Слайды 60–64",
+              "description": "Записывать сигнатуры операций, параметры in/out/inout, тип возврата, предусловия, постусловия и свойства abstract/deprecated.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 60–64.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 1220,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                60,
+                64
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-inheritance-properties",
+              "topicId": "se-uml-inheritance",
+              "title": "Vererbung: Hierarchien und Liskov",
+              "subtitle": "Слайды 65–68",
+              "description": "Знать смысл обобщения и специализации, {complete}/{incomplete}, is-a и правила подстановки Лисков.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 65–68.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 1468,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                65,
+                68
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-abstract-classes",
+              "topicId": "se-uml-inheritance",
+              "title": "Abstrakte Klassen in UML",
+              "subtitle": "Слайды 69–70",
+              "description": "Различать абстрактные классы и их нотации: курсив, {abstract}, обведённая A.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 69–70.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 1468,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                69,
+                70
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-templates",
+              "topicId": "se-uml-inheritance",
+              "title": "Parametrisierte Klassen und Templates",
+              "subtitle": "Слайды 71–73",
+              "description": "Читать шаблонные классы с параметрами и обозначением <<bind>>.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 71–73.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 1468,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                71,
+                73
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-interfaces",
+              "topicId": "se-uml-inheritance",
+              "title": "Schnittstellenklassen und Realisierung",
+              "subtitle": "Слайды 74–80",
+              "description": "Различать интерфейс, его реализацию, наследование интерфейсов и предоставляемые/необходимые интерфейсы.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 74–80.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 1468,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                74,
+                80
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-ocl",
+              "topicId": "se-uml-inheritance",
+              "title": "Zusicherungen in OCL lesen",
+              "subtitle": "Слайды 78",
+              "description": "Узнавать в Object Constraint Language инварианты inv, предусловия pre, постусловия post, исключения throws.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 78.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3320,
+              "y": 1468,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                78,
+                78
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-associations",
+              "topicId": "se-uml-relations",
+              "title": "Assoziationen und Multiplizitäten",
+              "subtitle": "Слайды 81–88",
+              "description": "Рисовать отношения между классами и читать кратности, имена ассоциаций и роли её концов.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 81–88.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 1716,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                81,
+                88
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-navigation",
+              "topicId": "se-uml-relations",
+              "title": "Gerichtete und bidirektionale Assoziation",
+              "subtitle": "Слайды 89–93",
+              "description": "Различать однонаправленную и двунаправленную навигацию по связям и их UML-стрелки.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 89–93.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 1716,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                89,
+                93
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-aggregation",
+              "topicId": "se-uml-relations",
+              "title": "Aggregation und ihre Notation",
+              "subtitle": "Слайды 94–96",
+              "description": "Определять слабую связь целое-часть с независимыми частями, изображать пустой ромб.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 94–96.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 1716,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                94,
+                96
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-composition",
+              "topicId": "se-uml-relations",
+              "title": "Komposition und ihre Notation",
+              "subtitle": "Слайды 97–100",
+              "description": "Определять сильную связь целое-часть с зависимым жизненным циклом, изображать закрашенный ромб.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 97–100.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 1716,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                97,
+                100
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-aggregation-cpp",
+              "topicId": "se-uml-relations",
+              "title": "Aggregation vs. Komposition in C++",
+              "subtitle": "Слайды 101",
+              "description": "Соотносить реализацию отношений целое-часть в C++ с UML-примерами презентации.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 101.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3320,
+              "y": 1716,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                101,
+                101
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-association-class",
+              "topicId": "se-uml-relations",
+              "title": "Assoziationsklasse darstellen",
+              "subtitle": "Слайды 102–103",
+              "description": "Изображать связь с собственными атрибутами и методами как класс ассоциации.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 102–103.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 1944,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                102,
+                103
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-sequence-lifelines",
+              "topicId": "se-uml-sequence",
+              "title": "Sequenzdiagramm: Objekte und Lebenslinien",
+              "subtitle": "Слайды 105–107",
+              "description": "Читать сообщения объектов во времени, жизненные линии и управляющий фокус (Steuerungsfokus).\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 105–107.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 2192,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                105,
+                107
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-sequence-messages",
+              "topicId": "se-uml-sequence",
+              "title": "Nachrichten und synchrone Aufrufe",
+              "subtitle": "Слайды 108–111",
+              "description": "Показывать вызовы методов, ответы, вложенные вызовы и порядок обмена сообщениями.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 108–111.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 2192,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                108,
+                111
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-sequence-create",
+              "topicId": "se-uml-sequence",
+              "title": "Objekterzeugung in Sequenzdiagrammen",
+              "subtitle": "Слайды 112–113",
+              "description": "Изображать создание объекта на временной оси последовательностной диаграммы.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 112–113.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 2192,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                112,
+                113
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-sequence-fragments",
+              "topicId": "se-uml-sequence",
+              "title": "Sequenzdiagramm: alt, loop, break",
+              "subtitle": "Слайды 114–117",
+              "description": "Читать и рисовать ветвления, циклы и прерывания комбинированными фрагментами.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 114–117.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 2192,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                114,
+                117
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-state-notation",
+              "topicId": "se-state-machines",
+              "title": "Zustände, Start- und Endzustand",
+              "subtitle": "Слайды 119–121",
+              "description": "Понимать состояния объектов и строить начальные, промежуточные и конечные состояния UML.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 119–121.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 2440,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                119,
+                121
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-state-actions",
+              "topicId": "se-state-machines",
+              "title": "Zustandsaktionen entry, exit und do",
+              "subtitle": "Слайды 122–123",
+              "description": "Различать действия при входе, выходе и во время нахождения в состоянии.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 122–123.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 2440,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                122,
+                123
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-state-transitions",
+              "topicId": "se-state-machines",
+              "title": "Transitionen: Ereignisse und Bedingungen",
+              "subtitle": "Слайды 124–126",
+              "description": "Подписывать переходы событиями, условиями и операциями; различать сигналы, вызовы, изменения и время.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 124–126.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 2440,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                124,
+                126
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-state-substates",
+              "topicId": "se-state-machines",
+              "title": "Pseudozustände und Unterzustände",
+              "subtitle": "Слайды 127–129",
+              "description": "Рисовать выбор, объединение, разделение, синхронизацию и вложенные (в том числе параллельные) состояния.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 127–129.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 2440,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                127,
+                129
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-activity-basics",
+              "topicId": "se-uml-activity",
+              "title": "Aktivitätsdiagramm und Kontrollfluss",
+              "subtitle": "Слайды 131",
+              "description": "Читать действия, узлы начала/завершения и стрелки потока управления.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 131.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 2688,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                131,
+                131
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-activity-control",
+              "topicId": "se-uml-activity",
+              "title": "Kontrollknoten: Entscheidung, Fork, Join",
+              "subtitle": "Слайды 132",
+              "description": "Различать ветвления, слияния, разделение и синхронизацию параллельных потоков.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 132.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 2688,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                132,
+                132
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-activity-swimlanes",
+              "topicId": "se-uml-activity",
+              "title": "Verschachtelte Aktivitäten und Partitionen",
+              "subtitle": "Слайды 133–135",
+              "description": "Изображать вложенные действия и swimlanes для распределения ответственности.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 133–135.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 2688,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                133,
+                135
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-activity-objectflow",
+              "topicId": "se-uml-activity",
+              "title": "Objektfluss und Mengenverarbeitungsbereiche",
+              "subtitle": "Слайды 136–139",
+              "description": "Читать объектные потоки и pins, параллельную и последовательную обработку коллекций.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 136–139.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 2688,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                136,
+                139
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-package-dependencies",
+              "topicId": "se-uml-structure",
+              "title": "Paketdiagramm: Abhängigkeiten und Generalisierung",
+              "subtitle": "Слайды 141–145",
+              "description": "Различать зависимости и обобщения UML-пакетов, изображать стрелки в сторону независимого пакета.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 141–145.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 2936,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                141,
+                145
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-package-namespaces",
+              "topicId": "se-uml-structure",
+              "title": "Paket-Namensraum und <<import>>",
+              "subtitle": "Слайды 146–147",
+              "description": "Объяснять пространство имён пакета и квалифицированные имена Paket::Klasse, знать обозначение импорта.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 146–147.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 2936,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                146,
+                147
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-component-interfaces",
+              "topicId": "se-uml-structure",
+              "title": "Komponenten: Schnittstellen und Ports",
+              "subtitle": "Слайды 151–155",
+              "description": "Читать предоставляемые/требуемые интерфейсы, порты и делегирование внутренним компонентам.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 151–155.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2760,
+              "y": 2936,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                151,
+                155
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-component-artifacts",
+              "topicId": "se-uml-structure",
+              "title": "Artefakte und <<manifest>>",
+              "subtitle": "Слайды 156–157",
+              "description": "Связывать файл (artifact) и UML-компонент обозначением <<manifest>>.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 156–157.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 3040,
+              "y": 2936,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                156,
+                157
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-deployment-basics",
+              "topicId": "se-uml-deployment",
+              "title": "Deploymentdiagramm: Knoten und Software",
+              "subtitle": "Слайды 159–160",
+              "description": "Показывать аппаратные узлы, распределённые между ними программные компоненты и связи узлов.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 159–160.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 3184,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                159,
+                160
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-deployment-artifacts",
+              "topicId": "se-uml-deployment",
+              "title": "Deployment: Kommunikation und <<deploy>>",
+              "subtitle": "Слайды 161–163",
+              "description": "Подписывать канал связи (TCP/IP и др.) и размещать артефакты на узлах с <<deploy>>.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 161–163.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2480,
+              "y": 3184,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                161,
+                163
+              ],
+              "learningStatus": "not_started"
+            },
+            {
+              "id": "se-uml26-additional-index-only",
+              "topicId": "se-uml-additional",
+              "title": "Hypertext-, Zugriffs-, Präsentations- und Subsystemmodell",
+              "subtitle": "Слайды 2",
+              "description": "Все четыре темы перечислены лишь в содержании UML.pdf (с. 2): поясняющих слайдов в файле нет. Дополнительный учебный материал потребуется отдельно.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 2.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 2200,
+              "y": 3432,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "flashcards": [],
+              "sourceDocument": "UML.pdf",
+              "sourcePages": [
+                2,
+                2
+              ],
+              "learningStatus": "needs_source"
             }
           ],
           "relations": [
