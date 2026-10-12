@@ -1157,7 +1157,11 @@
                 {
                   "id": "se-20261011-wasserfall-basis-card1",
                   "question": "Was ist das Wasserfallmodell?",
-                  "answer": "Ein sequentielles Vorgehensmodell der Softwareentwicklung: Die Arbeit läuft überwiegend in aufeinanderfolgenden Phasen."
+                  "answer": "Ein sequentielles Vorgehensmodell der Softwareentwicklung: Die Arbeit läuft überwiegend in aufeinanderfolgenden Phasen.",
+                  "wrongAnswer1": "Ein Verfahren, bei dem alle Funktionen ohne feste Phasen gleichzeitig entwickelt werden.",
+                  "wrongAnswer2": "Eine Methode, die auf Architektur und Tests vollständig verzichtet.",
+                  "wrongAnswer3": "Ein Ansatz, bei dem nur der fertige Code beschrieben, aber nichts geplant wird.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1188,7 +1192,11 @@
                 {
                   "id": "se-20261011-wasserfall-phasen-card1",
                   "question": "Welche Hauptphasen zeigt das Wasserfallmodell?",
-                  "answer": "Anforderungsdefinition → System- und Softwareentwurf → Implementierung und Komponententest → Integration und Systemtests → Betrieb und Wartung."
+                  "answer": "Anforderungsdefinition → System- und Softwareentwurf → Implementierung und Komponententest → Integration und Systemtests → Betrieb und Wartung.",
+                  "wrongAnswer1": "Programmierung → Betrieb → Anforderungsdefinition → Entwurf → Tests.",
+                  "wrongAnswer2": "Tests → Wartung → Entwurf → Anforderungsdefinition → Implementierung.",
+                  "wrongAnswer3": "Nur Scrum Planning → Daily Scrum → Review → Retrospective.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1219,7 +1227,11 @@
                 {
                   "id": "se-20261011-wasserfall-vorteile-card1",
                   "question": "Wann eignet sich das Wasserfallmodell besonders?",
-                  "answer": "Für kleine Projekte und Projekte mit stabilen Anforderungen ohne wesentlichen Änderungsbedarf. Es ist leicht zu verstehen und umzusetzen."
+                  "answer": "Für kleine Projekte und Projekte mit stabilen Anforderungen ohne wesentlichen Änderungsbedarf. Es ist leicht zu verstehen und umzusetzen.",
+                  "wrongAnswer1": "Vor allem für sehr große Projekte mit ständig wechselnden Anforderungen.",
+                  "wrongAnswer2": "Besonders, wenn Anforderungen bewusst erst ganz am Ende festgelegt werden.",
+                  "wrongAnswer3": "Vor allem bei Projekten, die ohne Planung täglich neue Ziele verfolgen.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1250,7 +1262,11 @@
                 {
                   "id": "se-20261011-wasserfall-nachteile-card1",
                   "question": "Warum ist Wasserfall bei häufigen Änderungen problematisch?",
-                  "answer": "Änderungen erfordern aufwendige Nacharbeit; Kundenfeedback und viele Risiken werden erst spät sichtbar."
+                  "answer": "Änderungen erfordern aufwendige Nacharbeit; Kundenfeedback und viele Risiken werden erst spät sichtbar.",
+                  "wrongAnswer1": "Weil jede Anforderungsänderung automatisch ohne zusätzlichen Aufwand umgesetzt wird.",
+                  "wrongAnswer2": "Weil der Kunde das fertige System bereits vor der Planung vollständig testen kann.",
+                  "wrongAnswer3": "Weil beim Wasserfallmodell alle Risiken schon durch die erste Codezeile verschwinden.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1281,7 +1297,11 @@
                 {
                   "id": "se-20261011-wasserfall-risiken-card1",
                   "question": "Bei welchem Vorgehen sinken Projektrisiken früher – Wasserfall oder iterativ?",
-                  "answer": "Beim iterativen Vorgehen, weil funktionierende Teile früh bewertet und Probleme früher erkannt werden."
+                  "answer": "Beim iterativen Vorgehen, weil funktionierende Teile früh bewertet und Probleme früher erkannt werden.",
+                  "wrongAnswer1": "Beim Wasserfallmodell, weil Systemtests erst am Ende besonders günstig sind.",
+                  "wrongAnswer2": "In beiden genau gleich, unabhängig davon, wann Teile getestet werden.",
+                  "wrongAnswer3": "Beim Vorgehen ohne frühe Tests, weil dann grundsätzlich keine Fehler auftreten.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1312,7 +1332,11 @@
                 {
                   "id": "se-20261011-iterativ-inkrementell-card1",
                   "question": "Was ist iterative, inkrementelle Entwicklung?",
-                  "answer": "Die Software wird Schritt für Schritt entwickelt. Nach Iterationen entstehen neue funktionsfähige Inkremente, die der Kunde prüfen kann."
+                  "answer": "Die Software wird Schritt für Schritt entwickelt. Nach Iterationen entstehen neue funktionsfähige Inkremente, die der Kunde prüfen kann.",
+                  "wrongAnswer1": "Das gesamte Produkt wird erst am Projektende in einem Schritt fertiggestellt.",
+                  "wrongAnswer2": "Jede Iteration besteht ausschließlich aus Planung, ohne lauffähige Erweiterungen.",
+                  "wrongAnswer3": "Iterative Entwicklung verbietet Feedback von Kunden bis zum Projektende.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1343,7 +1367,11 @@
                 {
                   "id": "se-20261011-iteration-vs-inkrement-card1",
                   "question": "Was ist der Unterschied zwischen Iteration und Inkrement?",
-                  "answer": "Iteration ist ein Entwicklungszyklus; Inkrement ist das funktionsfähige Ergebnis bzw. die Erweiterung nach dem Zyklus."
+                  "answer": "Iteration ist ein Entwicklungszyklus; Inkrement ist das funktionsfähige Ergebnis bzw. die Erweiterung nach dem Zyklus.",
+                  "wrongAnswer1": "Iteration ist der fertige Programmteil; Inkrement ist die Arbeitsphase.",
+                  "wrongAnswer2": "Beide Wörter bedeuten ausschließlich die vollständige Auslieferung am Projektende.",
+                  "wrongAnswer3": "Iteration bezeichnet einen Fehler; Inkrement beschreibt seine Korrektur.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1374,7 +1402,11 @@
                 {
                   "id": "se-20261011-rup-eigenschaften-card1",
                   "question": "Welche drei zentralen Eigenschaften hat der RUP?",
-                  "answer": "Use-Case-getrieben, architekturzentriert sowie iterativ und inkrementell."
+                  "answer": "Use-Case-getrieben, architekturzentriert sowie iterativ und inkrementell.",
+                  "wrongAnswer1": "Ausschließlich wasserfallartig, ohne Use Cases und ohne Architekturarbeit.",
+                  "wrongAnswer2": "Nur auf Programmierung und Dokumentation ausgerichtet, ohne Iterationen.",
+                  "wrongAnswer3": "Zufällige Anforderungen, keine Architektur und ein einziger Projektabschluss.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1405,7 +1437,11 @@
                 {
                   "id": "se-20261011-rup-architektur-card1",
                   "question": "Warum steht die Architektur im RUP im Mittelpunkt?",
-                  "answer": "Weil eine tragfähige Architektur als Grundlage für weitere Iterationen und neue Funktionen dient."
+                  "answer": "Weil eine tragfähige Architektur als Grundlage für weitere Iterationen und neue Funktionen dient.",
+                  "wrongAnswer1": "Weil beim RUP keine neuen Anforderungen während des Projekts erlaubt sind.",
+                  "wrongAnswer2": "Weil alle Programmierschritte ausschließlich von einem Designer durchgeführt werden.",
+                  "wrongAnswer3": "Weil eine Architektur sämtliche Tests im Projekt vollständig ersetzt.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1436,7 +1472,11 @@
                 {
                   "id": "se-20261011-rup-usecases-card1",
                   "question": "Was bedeutet Use-Case-getrieben?",
-                  "answer": "Die Entwicklung orientiert sich an Anwendungsfällen und Zielen der Benutzer, z. B. Kunde überweist Geld, nicht Datenbank einrichten."
+                  "answer": "Die Entwicklung orientiert sich an Anwendungsfällen und Zielen der Benutzer, z. B. Kunde überweist Geld, nicht Datenbank einrichten.",
+                  "wrongAnswer1": "Die Entwicklung beginnt immer mit dem Datenbankserver, ohne die Nutzer zu betrachten.",
+                  "wrongAnswer2": "Ein Use Case beschreibt ausschließlich die interne Struktur des Quellcodes.",
+                  "wrongAnswer3": "Es bedeutet, dass Anforderungen ausschließlich durch Zufall ausgewählt werden.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1467,7 +1507,11 @@
                 {
                   "id": "se-20261011-rup-phasen-card1",
                   "question": "Wie heißen die vier Phasen des RUP und was passiert?",
-                  "answer": "Inception (Ziele/Anforderungen), Elaboration (Architektur/Risiken), Construction (Implementierung/Test), Transition (Übergabe/Einführung)."
+                  "answer": "Inception (Ziele/Anforderungen), Elaboration (Architektur/Risiken), Construction (Implementierung/Test), Transition (Übergabe/Einführung).",
+                  "wrongAnswer1": "Construction → Transition → Inception → Elaboration.",
+                  "wrongAnswer2": "Analyse → Design → Programmierung → Test sind die vier RUP-Phasen.",
+                  "wrongAnswer3": "Planning → Daily → Review → Retrospective sind die vier RUP-Phasen.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1498,7 +1542,11 @@
                 {
                   "id": "se-20261011-scrum-rollen-card1",
                   "question": "Wer priorisiert, wer beseitigt Hindernisse, wer entwickelt?",
-                  "answer": "Product Owner priorisiert Anforderungen; Scrum Master hilft bei Hindernissen; Entwicklungsteam setzt die Software um."
+                  "answer": "Product Owner priorisiert Anforderungen; Scrum Master hilft bei Hindernissen; Entwicklungsteam setzt die Software um.",
+                  "wrongAnswer1": "Scrum Master priorisiert; Product Owner programmiert; Team prüft nur die Regeln.",
+                  "wrongAnswer2": "Entwicklungsteam legt alle Prioritäten fest; Product Owner löst nur technische Probleme.",
+                  "wrongAnswer3": "Product Owner führt tägliche Stand-ups; Scrum Master entwickelt alle Funktionen allein.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1529,7 +1577,11 @@
                 {
                   "id": "se-20261011-scrum-backlog-card1",
                   "question": "Was enthält das Product Backlog und wer priorisiert es?",
-                  "answer": "Es enthält geordnete, laufend aktualisierte Anforderungen/User Stories. Der Product Owner priorisiert sie."
+                  "answer": "Es enthält geordnete, laufend aktualisierte Anforderungen/User Stories. Der Product Owner priorisiert sie.",
+                  "wrongAnswer1": "Es ist ein unveränderliches Verzeichnis des bereits veröffentlichten Quellcodes.",
+                  "wrongAnswer2": "Es enthält nur abgeschlossene Aufgaben und wird ausschließlich vom Scrum Master priorisiert.",
+                  "wrongAnswer3": "Es ist eine Liste ausschließlich technischer Serverfehler ohne Nutzeranforderungen.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1560,7 +1612,11 @@
                 {
                   "id": "se-20261011-scrum-ablauf-card1",
                   "question": "Welche Elemente gehören zu einem Scrum-Sprint?",
-                  "answer": "Sprint Planning, Entwicklung mit Daily Scrum, ein nutzbares Increment, Sprint Review und Sprint Retrospective."
+                  "answer": "Sprint Planning, Entwicklung mit Daily Scrum, ein nutzbares Increment, Sprint Review und Sprint Retrospective.",
+                  "wrongAnswer1": "Ein einmaliges Gesamtdesign, gefolgt von einer Veröffentlichung ohne Feedback.",
+                  "wrongAnswer2": "Nur tägliche Besprechungen, ohne Sprintziel oder nutzbares Ergebnis.",
+                  "wrongAnswer3": "Analyse und Umsetzung ohne Reviews, Retrospektiven oder Fortschrittsprüfung.",
+                  "timeLimitSeconds": null
                 }
               ]
             }

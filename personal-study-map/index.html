@@ -210,45 +210,12 @@
       <div id="review-upcoming" class="review-upcoming"></div>
     </aside>
 
-    <aside id="flashcard-panel" class="floating-panel flashcard-panel closed" aria-label="Учебные карточки">
+    <aside id="flashcard-panel" class="floating-panel flashcard-panel closed" aria-label="Карточки и повторение">
       <div class="flashcard-panel-head">
-        <div><div class="panel-label">УЧЁБА · САМОПРОВЕРКА</div><h2>Карточки</h2></div>
+        <div><div class="panel-label">МОИ НАВЫКИ · УЧЁБА</div><h2>Карточки</h2></div>
         <button id="close-flashcards" class="close-inline" type="button" aria-label="Закрыть">×</button>
       </div>
-      <p class="flashcard-hint">Вопрос → покажи ответ → оцени, насколько хорошо вспомнил. Это самооценка, а не оценка экзамена.</p>
-      <div class="flashcard-controls">
-        <button id="flashcard-all" class="active" type="button">Все карточки</button>
-        <button id="flashcard-due" type="button">К повторению</button>
-        <button id="flashcard-create-toggle" type="button">+ Создать</button>
-      </div>
-      <form id="flashcard-editor" class="flashcard-editor" hidden>
-        <label><span>НАВЫК</span><select id="flashcard-skill" required></select></label>
-        <label><span>ВОПРОС</span><textarea id="flashcard-new-question" rows="3" maxlength="600" required placeholder="Например: Was ist ein Inkrement?"></textarea></label>
-        <label><span>ОТВЕТ</span><textarea id="flashcard-new-answer" rows="5" maxlength="1600" required placeholder="Краткий ответ с объяснением"></textarea></label>
-        <div class="flashcard-editor-actions">
-          <button id="flashcard-save" type="submit">Сохранить карточку</button>
-          <button id="flashcard-cancel" type="button">Отмена</button>
-        </div>
-        <p>Созданные вручную карточки пока хранятся только в этом браузере.</p>
-      </form>
-      <div id="flashcard-progress" class="flashcard-progress"></div>
-      <div id="flashcard-card" class="flashcard-card-area">
-        <div id="flashcard-topic" class="flashcard-card-topic"></div>
-        <div id="flashcard-question" class="flashcard-question"></div>
-        <div id="flashcard-answer" class="flashcard-answer" hidden></div>
-      </div>
-      <button id="flashcard-reveal" class="flashcard-reveal" type="button">Показать ответ</button>
-      <div id="flashcard-ratings" class="flashcard-ratings" hidden>
-        <button data-rating="again" type="button">Не знаю</button>
-        <button data-rating="hard" type="button">Трудно</button>
-        <button data-rating="easy" type="button">Знаю</button>
-      </div>
-      <div class="flashcard-bottom">
-        <button id="flashcard-restart" type="button">Начать заново</button>
-        <button id="flashcard-edit-current" type="button" hidden>Изменить</button>
-        <button id="flashcard-delete-current" type="button" hidden>Удалить</button>
-      </div>
-      <div id="flashcard-message" class="flashcard-message" role="status"></div>
+      <div id="flashcard-app" aria-live="off"></div>
     </aside>
 
     <aside id="history-panel" class="floating-panel history-panel closed">
@@ -306,6 +273,7 @@
     <div class="board-help">Перемещение — тянуть фон · Масштаб — колесо</div>
   </div>
 
+  <script src="./flashcard-engine.js"></script>
   <script type="module" src="./app.js"></script>
   <script type="module" src="./flashcards.js"></script>
 </body>
