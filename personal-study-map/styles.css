@@ -1470,6 +1470,98 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
 }
 
 
+
+/* Daily calorie comparison - calories burned on the left, eaten on the right. */
+.life-balance {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 11px;
+  margin: -3px 0 18px;
+}
+.life-balance-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e0e7f0;
+  border-radius: 14px;
+}
+.life-balance-card.burned {
+  --life-balance-color: #bd4923;
+  background: #fff7f0;
+  border-color: #f6d7be;
+}
+.life-balance-card.eaten {
+  --life-balance-color: #187344;
+  background: #f0fcf4;
+  border-color: #bce8c9;
+}
+.life-balance-symbol {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: rgba(255,255,255,.75);
+  color: var(--life-balance-color);
+  font-size: 25px;
+  font-weight: 850;
+}
+.life-balance-card > div {min-width:0}
+.life-balance-label {
+  color: #58677a;
+  font-size: 11px;
+  font-weight: 850;
+}
+.life-balance-value {
+  display: block;
+  margin-top: 2px;
+  color: var(--life-balance-color);
+  font-size: clamp(18px,2.2vw,24px);
+  font-weight: 900;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.life-balance-note {
+  margin-top: 4px;
+  color: #7a8899;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.calendar-day.workout-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 1px;
+}
+.workout-day-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 21px;
+  margin-top: 4px;
+  color: #217546;
+}
+.workout-activity-icon {width:20px;height:20px;flex-shrink:0}
+.workout-day-icons .workout-activity-icon {width:19px;height:19px}
+.workout-card-title {display:flex;align-items:center;gap:8px}
+.workout-card-icons {display:inline-flex;align-items:center;gap:4px;color:#c2681f}
+@media (max-width: 560px) {
+  .life-balance {gap:7px}
+  .life-balance-card {gap:7px;padding:10px 8px}
+  .life-balance-symbol {width:29px;height:29px;flex-basis:29px;border-radius:9px;font-size:18px}
+  .life-balance-label {font-size:10px}
+  .life-balance-value {font-size:17px}
+  .life-balance-note {font-size:9px}
+  .workout-day-icons {gap:0;margin-top:2px;height:17px}
+  .workout-day-icons .workout-activity-icon {width:16px;height:16px}
+}
+
 /* Monthly activity calendars */
 .month-calendar{
   border:1px solid var(--line);
