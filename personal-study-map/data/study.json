@@ -52,7 +52,7 @@
               "title": "UML.pdf",
               "type": "Vorlesung / UML-Notation",
               "coverage": "Folien 1–163; Prof. Dr. G. Hagel, Wintersemester 2026/27. Alle UML-Hauptdiagrammtypen und zugehörige Notation.",
-              "note": "Als Lernplan importiert, nicht gelernt. Hypertext-/Zugriffs-/Präsentationsmodell und Subsystemdiagramm nur auf der Inhaltsübersicht (S. 2), ohne eigenes Lehrmaterial."
+              "note": "Als Lernplan importiert, nicht gelernt. Hypertext-/Zugriffs-/Präsentationsmodell und Subsystemdiagramm nur auf der Inhaltsübersicht (S. 2), ohne eigenes Lehrmaterial. Продолжение изучения ведётся по загруженной пользователем копии UML(1).pdf; остановка записана на стр. 50."
             }
           ],
           "topics": [
@@ -2135,24 +2135,131 @@
               "title": "Klassendiagramm: Klassen darstellen",
               "subtitle": "Слайды 37–40",
               "description": "Различать класс, его атрибуты, методы и ответственности; строить секции UML-прямоугольника.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 37–40.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 2200,
               "y": 992,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "source": "Совместный разбор презентации UML(1).pdf в чате",
+                  "note": "Разобрали слайды 37–40 (Klassen und Klassendiagramm). Самостоятельные ответы на предложенные контрольные вопросы не зафиксированы; оценка освоения предварительная, нужна проверка через карточки.",
+                  "sourcePages": [
+                    37,
+                    40
+                  ]
+                }
+              ],
               "review": {
                 "repetition": 0,
-                "dueDate": null,
-                "lastResult": null
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_explained_not_yet_tested"
               },
-              "flashcards": [],
+              "flashcards": [
+                {
+                  "id": "se-uml-20261012-37-class-definition",
+                  "question": "Was ist laut Vorlesung eine Klasse (class)?",
+                  "answer": "Eine eindeutig definierte Einheit, die eine Menge gleichartiger Objekte beschreibt.",
+                  "wrongAnswer1": "Ein einzelnes, konkret identifizierbares Objekt mit bestimmten Werten.",
+                  "wrongAnswer2": "Eine Darstellung zeitlicher Nachrichten zwischen Objekten.",
+                  "wrongAnswer3": "Eine einmalige Ausführung eines bestimmten Algorithmus.",
+                  "explanation": "Класс — общая модель множества однотипных объектов. Конкретный экземпляр этой модели — объект. Источник: UML(1).pdf, слайд 37.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 37,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-37-static-relations",
+                  "question": "Was zeigen Klassendiagramme hauptsächlich?",
+                  "answer": "Statische Beziehungen zwischen Klassen.",
+                  "wrongAnswer1": "Die zeitliche Reihenfolge der Nachrichten zwischen Objekten.",
+                  "wrongAnswer2": "Die Arbeitsaufteilung während eines Scrum-Sprints.",
+                  "wrongAnswer3": "Den Ablauf von Zustandswechseln eines einzelnen Objekts.",
+                  "explanation": "Диаграмма классов описывает статическую структуру отношений между классами. Источник: UML(1).pdf, слайд 37.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 37,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-38-class-rectangle",
+                  "question": "Wie wird eine Klasse in UML dargestellt?",
+                  "answer": "Als Rechteck.",
+                  "wrongAnswer1": "Als Raute mit vier Ausgängen.",
+                  "wrongAnswer2": "Als Uhrensymbol.",
+                  "wrongAnswer3": "Als gepunkteter Kreis ohne Beschriftung.",
+                  "explanation": "Профессор показывает прямоугольник: от одного названия до нескольких разделов. Источник: UML(1).pdf, слайд 38.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 38,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-38-compartments",
+                  "question": "Welche Bereiche können durch Linien im Klassenrechteck getrennt sein?",
+                  "answer": "Klassenname, Attribute und Methoden.",
+                  "wrongAnswer1": "Akteur, Use Case und Systemgrenze.",
+                  "wrongAnswer2": "Sprints, User Stories und Story Points.",
+                  "wrongAnswer3": "Startzustand, Übergang und Endzustand.",
+                  "explanation": "Основные части UML-класса: название, атрибуты, методы. Обязанности могут добавляться четвёртой частью. Источник: UML(1).pdf, слайд 38.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 38,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-39-attribute-example",
+                  "question": "Was bedeutet '-maxTeilnehmer:int' in der Klasse Seminar?",
+                  "answer": "Ein privates Attribut vom Datentyp int.",
+                  "wrongAnswer1": "Eine öffentliche Methode ohne Parameter.",
+                  "wrongAnswer2": "Eine geschützte Methode mit Rückgabetyp int.",
+                  "wrongAnswer3": "Eine Assoziation zu einer anderen Klasse.",
+                  "explanation": "maxTeilnehmer хранит числовое свойство. Минус означает private; int — тип. Источник: UML(1).pdf, слайд 39.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 39,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-39-method-example",
+                  "question": "Was ist '+pruefeZulassung()' in einem Klassendiagramm?",
+                  "answer": "Eine öffentliche Methode.",
+                  "wrongAnswer1": "Ein privates Attribut vom Typ String.",
+                  "wrongAnswer2": "Ein Objekt einer Klasse.",
+                  "wrongAnswer3": "Eine optionale Anzahl von Attributwerten.",
+                  "explanation": "Круглые скобки обозначают операцию, + — public. Источник: UML(1).pdf, слайд 39.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 39,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-40-responsibilities",
+                  "question": "Was beschreiben Verantwortlichkeiten einer Klasse?",
+                  "answer": "Wofür die Klasse im System zuständig ist.",
+                  "wrongAnswer1": "Ausschließlich die Namen aller Klassenobjekte.",
+                  "wrongAnswer2": "Nur den Datentyp eines einzelnen Attributs.",
+                  "wrongAnswer3": "Nur das Speicherformat der Datenbank.",
+                  "explanation": "Verantwortlichkeit шире одной операции: она обозначает ответственность класса в системе. Источник: UML(1).pdf, слайд 40.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 40,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-40-fourth-compartment",
+                  "question": "Was darf in einem optionalen vierten Bereich eines UML-Klassenrechtecks stehen?",
+                  "answer": "Die Verantwortlichkeiten der Klasse aus der CRC-Karte.",
+                  "wrongAnswer1": "Die Telefonnummer des Softwareentwicklers.",
+                  "wrongAnswer2": "Nur die Namen verbundener Server.",
+                  "wrongAnswer3": "Nur die Reihenfolge der Scrum-Ereignisse.",
+                  "explanation": "Слайд 40 показывает четвёртую часть с обязанностями, например проверять допуск на семинар. Источник: UML(1).pdf, слайд 40.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 40,
+                  "timeLimitSeconds": null
+                }
+              ],
               "sourceDocument": "UML.pdf",
               "sourcePages": [
                 37,
                 40
               ],
-              "learningStatus": "not_started"
+              "learningStatus": "explained_needs_quiz"
             },
             {
               "id": "se-uml26-class-crc",
@@ -2160,24 +2267,95 @@
               "title": "Attribute und Methoden aus CRC ableiten",
               "subtitle": "Слайды 41–42",
               "description": "Различать сведения, которые класс хранит, и выполняемые операции; читать нотацию заметок UML.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 41–42.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 2480,
               "y": 992,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "source": "Совместный разбор презентации UML(1).pdf в чате",
+                  "note": "Разобрали слайды 41–42 (Notizen, CRC, Attribute/Methoden). Самостоятельные ответы на предложенные контрольные вопросы не зафиксированы; оценка освоения предварительная, нужна проверка через карточки.",
+                  "sourcePages": [
+                    41,
+                    42
+                  ]
+                }
+              ],
               "review": {
                 "repetition": 0,
-                "dueDate": null,
-                "lastResult": null
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_explained_not_yet_tested"
               },
-              "flashcards": [],
+              "flashcards": [
+                {
+                  "id": "se-uml-20261012-41-note-semantics",
+                  "question": "Welche semantische Wirkung haben Notizen im UML-Diagramm?",
+                  "answer": "Keine; sie sind erläuternde Anmerkungen.",
+                  "wrongAnswer1": "Sie erzeugen automatisch neue Methoden.",
+                  "wrongAnswer2": "Sie ändern die Sichtbarkeit der Attribute.",
+                  "wrongAnswer3": "Sie ersetzen die Vererbungsbeziehung zwischen Klassen.",
+                  "explanation": "Notizen sind ohne semantische Wirkung — примечание лишь поясняет и не меняет смысл модели. Источник: UML(1).pdf, слайд 41.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 41,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-41-note-symbol",
+                  "question": "Wie stellt man eine UML-Notiz dar?",
+                  "answer": "Als Rechteck mit eingeschlagener Ecke.",
+                  "wrongAnswer1": "Als ausgefüllte Raute am Ende einer Linie.",
+                  "wrongAnswer2": "Als Rechteck mit drei Methodenbereichen.",
+                  "wrongAnswer3": "Als offenen Dreieckspfeil zur Oberklasse.",
+                  "explanation": "Обозначение — прямоугольник с загнутым уголком. Примечание можно связать пунктирной линией с классом. Источник: UML(1).pdf, слайд 41.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 41,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-42-attribute-versus-method",
+                  "question": "Wie unterscheidet man Attribute und Methoden laut CRC-Beispiel?",
+                  "answer": "Attribute sind Dinge, die eine Klasse weiß; Methoden sind Dinge, die sie tut.",
+                  "wrongAnswer1": "Attribute sind Handlungen; Methoden sind gespeicherte Werte.",
+                  "wrongAnswer2": "Attribute zeigen Vererbung; Methoden zeigen nur Akteure.",
+                  "wrongAnswer3": "Attribute sind immer public; Methoden sind immer private.",
+                  "explanation": "Правило профессора: Attribute = die Klasse weiß; Methoden = die Klasse tut. Источник: UML(1).pdf, слайд 42.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 42,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-42-student-name",
+                  "question": "Der Klasse Student ist der Name des Studenten bekannt. Was ist 'Name'?",
+                  "answer": "Ein Attribut der Klasse Student.",
+                  "wrongAnswer1": "Eine Methode zur Einschreibung.",
+                  "wrongAnswer2": "Eine Unterklasse von Student.",
+                  "wrongAnswer3": "Eine Abhängigkeit zwischen zwei Paketen.",
+                  "explanation": "Имя — информация, которую объект знает и хранит. Источник: UML(1).pdf, слайд 42.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 42,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-42-enrollment",
+                  "question": "Die Klasse Student schreibt jemanden in ein Seminar ein. Was ist 'inSeminarEinschreiben()'?",
+                  "answer": "Eine Methode der Klasse Student.",
+                  "wrongAnswer1": "Ein Attribut vom Typ int.",
+                  "wrongAnswer2": "Ein Klassenname ohne Methoden.",
+                  "wrongAnswer3": "Eine Kardinalität für viele Studenten.",
+                  "explanation": "Запись в семинар — действие, то есть Methode. Источник: UML(1).pdf, слайд 42.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 42,
+                  "timeLimitSeconds": null
+                }
+              ],
               "sourceDocument": "UML.pdf",
               "sourcePages": [
                 41,
                 42
               ],
-              "learningStatus": "not_started"
+              "learningStatus": "explained_needs_quiz"
             },
             {
               "id": "se-uml26-class-attribute-visibility",
@@ -2185,24 +2363,191 @@
               "title": "Attributtypen und Sichtbarkeit",
               "subtitle": "Слайды 43–46",
               "description": "Читать типы данных и обозначения public (+), protected (#), private (-), package (~).\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 43–46.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 2760,
               "y": 992,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "source": "Совместный разбор презентации UML(1).pdf в чате",
+                  "note": "Разобрали слайды 43–46 (Attributtypen und Sichtbarkeit). Самостоятельные ответы на предложенные контрольные вопросы не зафиксированы; оценка освоения предварительная, нужна проверка через карточки.",
+                  "sourcePages": [
+                    43,
+                    46
+                  ]
+                }
+              ],
               "review": {
                 "repetition": 0,
-                "dueDate": null,
-                "lastResult": null
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_explained_not_yet_tested"
               },
-              "flashcards": [],
+              "flashcards": [
+                {
+                  "id": "se-uml-20261012-43-attribute-purpose",
+                  "question": "Welche Aufgabe haben Attribute laut Folie 43?",
+                  "answer": "Sie speichern Eigenschaften von Objekten.",
+                  "wrongAnswer1": "Sie beschreiben ausschließlich Kommunikationswege zwischen Servern.",
+                  "wrongAnswer2": "Sie ersetzen die Methoden einer Klasse vollständig.",
+                  "wrongAnswer3": "Sie bestimmen immer den Zeitpunkt eines Objektereignisses.",
+                  "explanation": "На слайде прямо сказано: Attribute „speichern“ Eigenschaften von Objekten. Источник: UML(1).pdf, слайд 43.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 43,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-43-attribute-types",
+                  "question": "Welche Typarten werden auf Folie 43 für Attribute genannt?",
+                  "answer": "Primitive Datentypen, Aufzählungstypen, Verbundtypen und Klassen.",
+                  "wrongAnswer1": "Nur Assoziationen, Aggregationen und Kompositionen.",
+                  "wrongAnswer2": "Ausschließlich Zeichenketten ohne weitere Typen.",
+                  "wrongAnswer3": "Nur Akteure, Use Cases und Komponenten.",
+                  "explanation": "Примеры из материала: int, String; Wochentag; Verbundtypen; Klassen. Источник: UML(1).pdf, слайд 43.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 43,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-43-enumeration",
+                  "question": "Zu welcher Datentyp-Kategorie gehört 'Wochentag' in der Vorlesung?",
+                  "answer": "Aufzählungstyp (Enumeration).",
+                  "wrongAnswer1": "Primitive Ganzzahl (int).",
+                  "wrongAnswer2": "Sichtbarkeit (protected).",
+                  "wrongAnswer3": "Beziehungstyp (Aggregation).",
+                  "explanation": "Wochentag — пример перечисления с ограниченным множеством значений. Источник: UML(1).pdf, слайд 43.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 43,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-43-object-reference",
+                  "question": "Wie werden laut Folie 43 Referenzen zwischen Objekten in UML modelliert?",
+                  "answer": "Durch Assoziationen statt als Attribute.",
+                  "wrongAnswer1": "Ausschließlich als primitive int-Attribute.",
+                  "wrongAnswer2": "Immer als UML-Notizen.",
+                  "wrongAnswer3": "Nur durch Story Points.",
+                  "explanation": "Профессор отдельно подчёркивает: атрибуты не являются указателями на другие объекты; для связей используются Assoziationen. Источник: UML(1).pdf, слайд 43.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 43,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-44-public",
+                  "question": "Für wen ist ein public-Attribut sichtbar?",
+                  "answer": "Für alle Klassen.",
+                  "wrongAnswer1": "Nur für die Klasse selbst.",
+                  "wrongAnswer2": "Nur für Unterklassen.",
+                  "wrongAnswer3": "Nur für Klassen im gleichen Paket.",
+                  "explanation": "public означает, что доступ открыт всем классам. Источник: UML(1).pdf, слайд 44.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 44,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-44-protected",
+                  "question": "Welche Zugriffe erlaubt 'protected' laut Folie 44?",
+                  "answer": "Die Klasse selbst, ihre Unterklassen und als friend deklarierte Klassen.",
+                  "wrongAnswer1": "Nur alle Klassen im gleichen Paket.",
+                  "wrongAnswer2": "Ausschließlich fremde Systemkomponenten.",
+                  "wrongAnswer3": "Nur die Klasse selbst, niemals ihre Unterklassen.",
+                  "explanation": "На слайде 44 вместе с самим классом и подклассами отдельно упоминаются friend-классы (особенность C++). Источник: UML(1).pdf, слайд 44.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 44,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-44-private",
+                  "question": "Welche Klassen dürfen laut Folie 44 auf private-Attribute zugreifen?",
+                  "answer": "Die eigene Klasse und ausdrücklich als friend deklarierte Klassen.",
+                  "wrongAnswer1": "Alle Klassen ohne Ausnahme.",
+                  "wrongAnswer2": "Alle Klassen im selben Paket automatisch.",
+                  "wrongAnswer3": "Nur Unterklassen, niemals die Klasse selbst.",
+                  "explanation": "На слайде professor Hagel указывает private: selbst и friend-Klassen. Это с учётом особенностей C++. Источник: UML(1).pdf, слайд 44.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 44,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-44-package",
+                  "question": "Für wen ist die Sichtbarkeit 'package' gedacht?",
+                  "answer": "Für alle Klassen im gleichen Paket.",
+                  "wrongAnswer1": "Für sämtliche Klassen in allen Paketen.",
+                  "wrongAnswer2": "Nur für eine einzige Unterklasse.",
+                  "wrongAnswer3": "Nur für als friend deklarierte Klassen.",
+                  "explanation": "package ограничивает доступ классами одного пакета. Источник: UML(1).pdf, слайд 44.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 44,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-45-visibility-symbols",
+                  "question": "Welche Zuordnung der UML-Sichtbarkeitszeichen ist korrekt?",
+                  "answer": "+ public, # protected, - private, ~ package.",
+                  "wrongAnswer1": "+ private, # public, - protected, ~ package.",
+                  "wrongAnswer2": "+ package, # private, - public, ~ protected.",
+                  "wrongAnswer3": "+ protected, # package, - private, ~ public.",
+                  "explanation": "На слайде 45 четыре знака: + public, # protected, - private, ~ package. Источник: UML(1).pdf, слайд 45.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 45,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-45-private-example",
+                  "question": "Was bedeutet die Schreibweise '-alter:int'?",
+                  "answer": "Ein privates Attribut namens alter mit Typ int.",
+                  "wrongAnswer1": "Eine öffentliche Methode mit Parameter int.",
+                  "wrongAnswer2": "Eine geschützte Assoziation zwischen zwei Klassen.",
+                  "wrongAnswer3": "Ein Paket mit dem Namen alter.",
+                  "explanation": "Знак - указывает private; после двоеточия можно записать тип данных. Источник: UML(1).pdf, слайд 45.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 45,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-45-type-optional",
+                  "question": "Muss der Datentyp in der UML-Attributnotation immer angegeben werden?",
+                  "answer": "Nein, die Angabe des Typs ist optional.",
+                  "wrongAnswer1": "Ja, der Typ muss immer angegeben werden.",
+                  "wrongAnswer2": "Nur bei public-Attributen ist ein Typ zwingend.",
+                  "wrongAnswer3": "UML erlaubt grundsätzlich keine Typangaben.",
+                  "explanation": "Профессор на слайде 45 уточняет: die Angabe des Typs ist optional. Источник: UML(1).pdf, слайд 45.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 45,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-46-access-through-methods",
+                  "question": "Wie sollen andere Klassen laut Hinweis auf Folie 46 auf Attribute zugreifen?",
+                  "answer": "Über Operationen der Klasse statt direkt auf die Attribute.",
+                  "wrongAnswer1": "Immer durch unmittelbares Schreiben des Attributs.",
+                  "wrongAnswer2": "Ausschließlich durch Löschung des Attributes.",
+                  "wrongAnswer3": "Durch eine Änderung der Klassenbezeichnung.",
+                  "explanation": "Это рекомендация профессора: обращаться к данным через операции, даже для Ober-, Unter- und friend-Klassen. Источник: UML(1).pdf, слайд 46.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 46,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-46-encapsulation-recommendation",
+                  "question": "Ein anderer Klassentyp möchte den Wert eines Attributs ändern. Was passt zur Empfehlung von Folie 46?",
+                  "answer": "Eine dafür vorgesehene Operation der definierenden Klasse aufrufen.",
+                  "wrongAnswer1": "Das Attribut in der Diagrammnotation einfach ignorieren.",
+                  "wrongAnswer2": "Den Attributtyp auf einen Zeitstempel ändern.",
+                  "wrongAnswer3": "Die Klasse durch ein UML-Notizfeld ersetzen.",
+                  "explanation": "По правилу слайда операции собственного класса служат точкой обращения к его атрибутам. Источник: UML(1).pdf, слайд 46.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 46,
+                  "timeLimitSeconds": null
+                }
+              ],
               "sourceDocument": "UML.pdf",
               "sourcePages": [
                 43,
                 46
               ],
-              "learningStatus": "not_started"
+              "learningStatus": "explained_needs_quiz"
             },
             {
               "id": "se-uml26-class-attribute-cardinality",
@@ -2210,24 +2555,107 @@
               "title": "Kardinalität und Eigenschaften von Attributen",
               "subtitle": "Слайды 47–48",
               "description": "Читать [0..1], [1], [0..*], интервалы, а также свойства readOnly/unrestricted/composite.\nИсточник: UML.pdf, Prof. Dr. G. Hagel, WS 2026/27, слайды 47–48.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 3040,
               "y": 992,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "source": "Совместный разбор презентации UML(1).pdf в чате",
+                  "note": "Разобрали слайды 47–48 (Kardinalität und Notation). Самостоятельные ответы на предложенные контрольные вопросы не зафиксированы; оценка освоения предварительная, нужна проверка через карточки.",
+                  "sourcePages": [
+                    47,
+                    48
+                  ]
+                }
+              ],
               "review": {
                 "repetition": 0,
-                "dueDate": null,
-                "lastResult": null
+                "dueDate": "2026-10-12",
+                "lastResult": "lesson_explained_not_yet_tested"
               },
-              "flashcards": [],
+              "flashcards": [
+                {
+                  "id": "se-uml-20261012-47-optional",
+                  "question": "Was bedeutet die Kardinalität [0..1] bei einem Attribut?",
+                  "answer": "Das Attribut kann fehlen oder genau einen Wert haben.",
+                  "wrongAnswer1": "Das Attribut muss genau zwei Werte haben.",
+                  "wrongAnswer2": "Das Attribut muss mindestens einen Wert haben.",
+                  "wrongAnswer3": "Das Attribut kann beliebig viele Werte haben.",
+                  "explanation": "Необязательный атрибут: 0 или 1 значение; на слайде 47 также встречается запись [0,1]. Источник: UML(1).pdf, слайд 47.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 47,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-47-required",
+                  "question": "Welche Kardinalität kennzeichnet ein Pflichtattribut (Standard)?",
+                  "answer": "[1]",
+                  "wrongAnswer1": "[0..*]",
+                  "wrongAnswer2": "[0..1]",
+                  "wrongAnswer3": "[2..5]",
+                  "explanation": "Обязательный атрибут в презентации обозначается [1]. Источник: UML(1).pdf, слайд 47.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 47,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-47-zero-many",
+                  "question": "Was bedeutet [0..*] für ein Attribut?",
+                  "answer": "Beliebig viele Werte, auch eine leere Menge.",
+                  "wrongAnswer1": "Genau ein Wert.",
+                  "wrongAnswer2": "Mindestens fünf Werte.",
+                  "wrongAnswer3": "Höchstens ein Wert.",
+                  "explanation": "Символ * означает отсутствие фиксированного верхнего ограничения; 0 допускает пустое множество. Источник: UML(1).pdf, слайд 47.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 47,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-47-range",
+                  "question": "Was bedeutet die Kardinalität [2..5]?",
+                  "answer": "Mindestens zwei und höchstens fünf Werte.",
+                  "wrongAnswer1": "Genau zwei oder genau fünf, aber nie drei.",
+                  "wrongAnswer2": "Beliebig viele Werte ohne Begrenzung.",
+                  "wrongAnswer3": "Höchstens zwei Werte.",
+                  "explanation": "В формате [m..n] m — нижняя граница, n — верхняя. Интервал включает обе границы. Источник: UML(1).pdf, слайд 47.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 47,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-48-syntax",
+                  "question": "Welche Notation für ein Attribut mit Kardinalität ist laut Folie 48 richtig?",
+                  "answer": "name[untereGrenze..obereGrenze]",
+                  "wrongAnswer1": "name(untereGrenze:obereGrenze)",
+                  "wrongAnswer2": "name{untereGrenze,obereGrenze}",
+                  "wrongAnswer3": "name<untereGrenze+obereGrenze>",
+                  "explanation": "У профессора: name[untere Grenze..obere Grenze]. Источник: UML(1).pdf, слайд 48.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 48,
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-uml-20261012-48-type-optional",
+                  "question": "Was sagt Folie 48 zur Typangabe bei der Kardinalitätsnotation?",
+                  "answer": "Der Typ kann weggelassen oder optional angegeben werden.",
+                  "wrongAnswer1": "Der Typ muss immer an erster Stelle stehen.",
+                  "wrongAnswer2": "Ein Datentyp ist in UML-Klassendiagrammen verboten.",
+                  "wrongAnswer3": "Ein Typ darf nur bei Methoden vorkommen.",
+                  "explanation": "Слайд 48 опускает тип ради кратности, но прямо разрешает добавить его по желанию. Источник: UML(1).pdf, слайд 48.",
+                  "sourceDocument": "UML(1).pdf",
+                  "sourcePage": 48,
+                  "timeLimitSeconds": null
+                }
+              ],
               "sourceDocument": "UML.pdf",
               "sourcePages": [
                 47,
                 48
               ],
-              "learningStatus": "not_started"
+              "learningStatus": "explained_needs_quiz"
             },
             {
               "id": "se-uml26-class-derived-static",
@@ -3462,7 +3890,21 @@
               "to": "se-uml26-class-notation",
               "type": "related"
             }
-          ]
+          ],
+          "learningCheckpoint": {
+            "document": "UML(1).pdf",
+            "course": "Software Engineering / Softwaretechnik 1",
+            "topic": "Klassendiagramm — Abgeleitete Attribute",
+            "page": 50,
+            "totalPages": 163,
+            "lastExplainedPage": 48,
+            "pagesToRevisit": [
+              49,
+              50
+            ],
+            "note": "В диалоге разобрали слайды 37–48. Страницы 49–50 ещё не объясняли; при продолжении начни с понятия abgeleitete Attribute на слайде 49, затем перейди к обозначению / на слайде 50.",
+            "date": "2026-10-12"
+          }
         }
       ]
     }
@@ -3523,6 +3965,54 @@
           "skillTitle": "Die drei Scrum-Rollen",
           "from": 0,
           "to": 40
+        }
+      ]
+    },
+    {
+      "id": "session-2026-10-12-uml-klassen-37-48",
+      "semesterId": "ws-2026-27",
+      "examId": "exam-software-engineering",
+      "date": "2026-10-12",
+      "title": "UML: Klassendiagramme — слайды 37–48",
+      "summary": "Разобрали UML-классы и их нотацию, атрибуты, методы и обязанности, UML-Notizen, CRC-карты, Datentypen, Sichtbarkeit (+, #, -, ~), рекомендацию доступа через Operationen, Kardinalität [0..1], [1], [0..*] и [m..n]. Карточки созданы; ответы по ним ещё не проверены. Остановились в UML(1).pdf на странице 50, Abgeleitete Attribute.",
+      "checkpoint": {
+        "document": "UML(1).pdf",
+        "course": "Software Engineering / Softwaretechnik 1",
+        "topic": "Klassendiagramm — Abgeleitete Attribute",
+        "page": 50,
+        "totalPages": 163,
+        "lastExplainedPage": 48,
+        "pagesToRevisit": [
+          49,
+          50
+        ],
+        "note": "В диалоге разобрали слайды 37–48. Страницы 49–50 ещё не объясняли; при продолжении начни с понятия abgeleitete Attribute на слайде 49, затем перейди к обозначению / на слайде 50.",
+        "date": "2026-10-12"
+      },
+      "changes": [
+        {
+          "skillId": "se-uml26-class-notation",
+          "skillTitle": "Klassendiagramm: Klassen darstellen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-uml26-class-crc",
+          "skillTitle": "Attribute und Methoden aus CRC ableiten",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-uml26-class-attribute-visibility",
+          "skillTitle": "Attributtypen und Sichtbarkeit",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-uml26-class-attribute-cardinality",
+          "skillTitle": "Kardinalität und Eigenschaften von Attributen",
+          "from": 0,
+          "to": 20
         }
       ]
     }

@@ -1271,6 +1271,18 @@ function renderHistory() {
       <div class="session-summary">${escapeHtml(session.summary || "")}</div>
       <div class="session-changes"></div>
     `;
+    // Keep exact learning position visible in history, not only in JSON.
+    const cp=session.checkpoint;
+    if (cp?.document && Number.isInteger(Number(cp.page))) {
+      const marker=document.createElement("div");
+      marker.className="session-checkpoint";
+      const heading=document.createElement("strong");
+      heading.textContent=`Где остановились: ${cp.document}, стр. ${cp.page} из ${cp.totalPages || "?"} — ${cp.topic || ""}`;
+      const note=document.createElement("span");
+      note.textContent=`Последний подробно разобранный слайд: ${cp.lastExplainedPage || "?"}. ${cp.note || ""}`;
+      marker.append(heading,note);
+      item.querySelector(".session-summary").after(marker);
+    }
     const changes = item.querySelector(".session-changes");
     for (const change of session.changes || []) {
       const chip = document.createElement("span");
