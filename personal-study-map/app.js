@@ -888,13 +888,34 @@ function renderMap(skills) {
     if (!from || !to) continue;
 
     const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const x1 = Number(from.x || 0) + 220;
-    const y1 = Number(from.y || 0) + 58;
-    const x2 = Number(to.x || 0);
-    const y2 = Number(to.y || 0) + 58;
-    const mid = Math.max(50, Math.abs(x2 - x1) * 0.45);
-    line.setAttribute("d", `M ${x1 + 5000} ${y1 + 5000} C ${x1 + mid + 5000} ${y1 + 5000}, ${x2 - mid + 5000} ${y2 + 5000}, ${x2 + 5000} ${y2 + 5000}`);
-    line.setAttribute("class", "edge");
+    const x1 = Number(from.x || 0), y1 = Number(from.y || 0);
+    const x2 = Number(to.x || 0), y2 = Number(to.y || 0);
+    const dx = x2 - x1, dy = y2 - y1;
+    let startX, startY, endX, endY, c1x, c1y, c2x, c2y;
+    // Cards are 220px wide and at least 116px tall. For predominantly
+    // vertical links use bottom/top instead of looping from right to left.
+    if (Math.abs(dx) >= Math.abs(dy) * 0.85 && Math.abs(dx) > 100) {
+      const forward = dx > 0;
+      startX = x1 + (forward ? 220 : 0);
+      startY = y1 + 58;
+      endX = x2 + (forward ? 0 : 220);
+      endY = y2 + 58;
+      const curve = Math.max(32, Math.abs(endX - startX) * 0.43);
+      c1x = startX + (forward ? curve : -curve); c1y = startY;
+      c2x = endX - (forward ? curve : -curve); c2y = endY;
+    } else {
+      const down = dy >= 0;
+      startX = x1 + 110;
+      startY = y1 + (down ? 116 : 0);
+      endX = x2 + 110;
+      endY = y2 + (down ? 0 : 116);
+      const curve = Math.max(30, Math.abs(endY - startY) * 0.43);
+      c1x = startX; c1y = startY + (down ? curve : -curve);
+      c2x = endX; c2y = endY - (down ? curve : -curve);
+    }
+    const p = n => Math.round(n + 5000);
+    line.setAttribute("d", `M ${p(startX)} ${p(startY)} C ${p(c1x)} ${p(c1y)}, ${p(c2x)} ${p(c2y)}, ${p(endX)} ${p(endY)}`);
+    line.setAttribute("class", relation.type === "related" ? "edge edge-related" : "edge");
     edges.append(line);
   }
 

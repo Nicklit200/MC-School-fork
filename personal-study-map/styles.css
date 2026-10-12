@@ -74,9 +74,14 @@ button{cursor:pointer}
 }
 
 .edge{
-  stroke:#c5cedb;
-  stroke-width:2;
+  stroke:#a9bcd3;
+  stroke-width:2.2;
   fill:none;
+}
+.edge.edge-related {
+  stroke:#b8c5d6;
+  stroke-width:1.75;
+  stroke-dasharray:6 6;
 }
 
 #nodes{position:absolute;left:0;top:0}

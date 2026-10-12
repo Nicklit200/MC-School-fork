@@ -3163,6 +3163,304 @@
             {
               "from": "se-skill-software-process",
               "to": "se-exam-structured-testing"
+            },
+            {
+              "from": "se-uml26-actors-definition",
+              "to": "se-uml26-actors-discovery"
+            },
+            {
+              "from": "se-uml26-actors-discovery",
+              "to": "se-uml26-actors-notation"
+            },
+            {
+              "from": "se-uml26-usecase-definition",
+              "to": "se-uml26-usecase-description"
+            },
+            {
+              "from": "se-uml26-usecase-description",
+              "to": "se-uml26-usecase-diagram"
+            },
+            {
+              "from": "se-uml26-usecase-diagram",
+              "to": "se-uml26-usecase-relations"
+            },
+            {
+              "from": "se-uml26-class-notation",
+              "to": "se-uml26-class-crc"
+            },
+            {
+              "from": "se-uml26-class-crc",
+              "to": "se-uml26-class-attribute-visibility"
+            },
+            {
+              "from": "se-uml26-class-attribute-visibility",
+              "to": "se-uml26-class-attribute-cardinality"
+            },
+            {
+              "from": "se-uml26-class-attribute-cardinality",
+              "to": "se-uml26-class-derived-static"
+            },
+            {
+              "from": "se-uml26-object-diagram",
+              "to": "se-uml26-class-methods"
+            },
+            {
+              "from": "se-uml26-inheritance-properties",
+              "to": "se-uml26-abstract-classes"
+            },
+            {
+              "from": "se-uml26-abstract-classes",
+              "to": "se-uml26-templates"
+            },
+            {
+              "from": "se-uml26-templates",
+              "to": "se-uml26-interfaces"
+            },
+            {
+              "from": "se-uml26-interfaces",
+              "to": "se-uml26-ocl"
+            },
+            {
+              "from": "se-uml26-associations",
+              "to": "se-uml26-navigation"
+            },
+            {
+              "from": "se-uml26-navigation",
+              "to": "se-uml26-aggregation"
+            },
+            {
+              "from": "se-uml26-aggregation",
+              "to": "se-uml26-composition"
+            },
+            {
+              "from": "se-uml26-composition",
+              "to": "se-uml26-aggregation-cpp"
+            },
+            {
+              "from": "se-uml26-sequence-lifelines",
+              "to": "se-uml26-sequence-messages"
+            },
+            {
+              "from": "se-uml26-sequence-messages",
+              "to": "se-uml26-sequence-create"
+            },
+            {
+              "from": "se-uml26-sequence-create",
+              "to": "se-uml26-sequence-fragments"
+            },
+            {
+              "from": "se-uml26-state-notation",
+              "to": "se-uml26-state-actions"
+            },
+            {
+              "from": "se-uml26-state-actions",
+              "to": "se-uml26-state-transitions"
+            },
+            {
+              "from": "se-uml26-state-transitions",
+              "to": "se-uml26-state-substates"
+            },
+            {
+              "from": "se-uml26-activity-basics",
+              "to": "se-uml26-activity-control"
+            },
+            {
+              "from": "se-uml26-activity-control",
+              "to": "se-uml26-activity-swimlanes"
+            },
+            {
+              "from": "se-uml26-activity-swimlanes",
+              "to": "se-uml26-activity-objectflow"
+            },
+            {
+              "from": "se-uml26-package-dependencies",
+              "to": "se-uml26-package-namespaces"
+            },
+            {
+              "from": "se-uml26-package-namespaces",
+              "to": "se-uml26-component-interfaces"
+            },
+            {
+              "from": "se-uml26-component-interfaces",
+              "to": "se-uml26-component-artifacts"
+            },
+            {
+              "from": "se-uml26-deployment-basics",
+              "to": "se-uml26-deployment-artifacts"
+            },
+            {
+              "from": "se-uml26-actors-definition",
+              "to": "se-uml26-usecase-definition"
+            },
+            {
+              "from": "se-uml26-actors-discovery",
+              "to": "se-uml26-usecase-description"
+            },
+            {
+              "from": "se-uml26-actors-notation",
+              "to": "se-uml26-usecase-diagram"
+            },
+            {
+              "from": "se-uml26-usecase-definition",
+              "to": "se-uml26-stereotypes"
+            },
+            {
+              "from": "se-uml26-stereotypes",
+              "to": "se-uml26-collaboration"
+            },
+            {
+              "from": "se-uml26-collaboration",
+              "to": "se-uml26-class-notation"
+            },
+            {
+              "from": "se-uml26-class-notation",
+              "to": "se-uml26-object-diagram"
+            },
+            {
+              "from": "se-uml26-class-crc",
+              "to": "se-uml26-class-methods"
+            },
+            {
+              "from": "se-uml26-object-diagram",
+              "to": "se-uml26-inheritance-properties"
+            },
+            {
+              "from": "se-uml26-class-methods",
+              "to": "se-uml26-abstract-classes"
+            },
+            {
+              "from": "se-uml26-inheritance-properties",
+              "to": "se-uml26-associations"
+            },
+            {
+              "from": "se-uml26-associations",
+              "to": "se-uml26-association-class"
+            },
+            {
+              "from": "se-uml26-association-class",
+              "to": "se-uml26-sequence-lifelines"
+            },
+            {
+              "from": "se-uml26-sequence-lifelines",
+              "to": "se-uml26-state-notation"
+            },
+            {
+              "from": "se-uml26-state-notation",
+              "to": "se-uml26-activity-basics"
+            },
+            {
+              "from": "se-uml26-activity-basics",
+              "to": "se-uml26-package-dependencies"
+            },
+            {
+              "from": "se-uml26-package-dependencies",
+              "to": "se-uml26-deployment-basics"
+            },
+            {
+              "from": "se-uml26-component-artifacts",
+              "to": "se-uml26-deployment-artifacts"
+            },
+            {
+              "from": "se-uml26-usecase-diagram",
+              "to": "se-uml26-stereotypes",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-class-notation",
+              "to": "se-uml26-collaboration",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-interfaces",
+              "to": "se-uml26-component-interfaces",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-object-diagram",
+              "to": "se-uml26-sequence-lifelines",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-class-attribute-cardinality",
+              "to": "se-uml26-associations",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-state-transitions",
+              "to": "se-uml26-activity-control",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-component-interfaces",
+              "to": "se-uml26-deployment-basics",
+              "type": "related"
+            },
+            {
+              "from": "se-uml26-package-dependencies",
+              "to": "se-uml26-additional-index-only",
+              "type": "related"
+            },
+            {
+              "from": "se-20261011-wasserfall-basis",
+              "to": "se-20261011-wasserfall-phasen"
+            },
+            {
+              "from": "se-20261011-wasserfall-phasen",
+              "to": "se-20261011-wasserfall-vorteile"
+            },
+            {
+              "from": "se-20261011-wasserfall-phasen",
+              "to": "se-20261011-wasserfall-nachteile"
+            },
+            {
+              "from": "se-20261011-wasserfall-nachteile",
+              "to": "se-20261011-wasserfall-risiken"
+            },
+            {
+              "from": "se-20261011-wasserfall-nachteile",
+              "to": "se-20261011-iterativ-inkrementell"
+            },
+            {
+              "from": "se-20261011-iterativ-inkrementell",
+              "to": "se-20261011-iteration-vs-inkrement"
+            },
+            {
+              "from": "se-20261011-iteration-vs-inkrement",
+              "to": "se-20261011-rup-eigenschaften"
+            },
+            {
+              "from": "se-20261011-rup-eigenschaften",
+              "to": "se-20261011-rup-architektur"
+            },
+            {
+              "from": "se-20261011-rup-eigenschaften",
+              "to": "se-20261011-rup-usecases"
+            },
+            {
+              "from": "se-20261011-rup-architektur",
+              "to": "se-20261011-rup-phasen"
+            },
+            {
+              "from": "se-20261011-rup-phasen",
+              "to": "se-20261011-scrum-rollen"
+            },
+            {
+              "from": "se-20261011-scrum-rollen",
+              "to": "se-20261011-scrum-backlog"
+            },
+            {
+              "from": "se-20261011-scrum-backlog",
+              "to": "se-20261011-scrum-ablauf"
+            },
+            {
+              "from": "se-20261011-rup-usecases",
+              "to": "se-uml26-usecase-definition",
+              "type": "related"
+            },
+            {
+              "from": "se-20261011-rup-architektur",
+              "to": "se-uml26-class-notation",
+              "type": "related"
             }
           ]
         }
