@@ -903,6 +903,7 @@ function renderExamSelect() {
     renderWorkspace();
     renderExamCards();
     renderReview();
+    renderHistory();
     fitMap();
   };
 }
@@ -1346,7 +1347,7 @@ function renderHistory() {
   const host = $("session-history");
   host.replaceChildren();
   const sessions = (state.data?.sessions || [])
-    .filter((s) => !state.semesterId || s.semesterId === state.semesterId)
+    .filter((s) => (!state.semesterId || s.semesterId === state.semesterId) && (!state.examId || s.examId === state.examId))
     .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
@@ -1479,6 +1480,7 @@ $("close-review").onclick = () => reviewPanel.classList.add("closed");
 
 const historyPanel = $("history-panel");
 $("history-toggle").onclick = () => {
+  renderHistory();
   const willOpen = historyPanel.classList.contains("closed");
   historyPanel.classList.toggle("closed", !willOpen);
   if (willOpen) {
