@@ -312,6 +312,39 @@ function workoutActivityDates() {
   return new Set((state.workoutCalendarEntries || []).map((item) => String(item.date || "").slice(0, 10)).filter(Boolean));
 }
 
+function workoutActivityTypes(item) {
+  const declared = Array.isArray(item?.activityTypes) ? item.activityTypes : [];
+  const types = [item?.type, ...declared].map((value) => String(value || "").toLowerCase());
+  const details = [item?.title, ...(Array.isArray(item?.exercises) ? item.exercises : [])]
+    .join(" ").toLowerCase();
+  const activity = new Set();
+  if (types.some((type) => /run|jog|cardio|бег/.test(type))
+      || /бег|пробеж|running|jogging|run/.test(details)) activity.add("run");
+  if (types.some((type) => /strength|weight|силов|kettlebell/.test(type))
+      || /отжим|гир|гантел|силов|присед|жим|штанг|планк|подтяг|разводк|трицеп|бицеп|strength|weightlift|squat|push.?up|kettlebell/.test(details))
+    activity.add("strength");
+  if (!activity.size) activity.add("other");
+  return [...activity];
+}
+
+function workoutIcon(type) {
+  if (type === "run") return '<svg class="workout-activity-icon run" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="15.5" cy="4.7" r="2"/><path d="m13.5 9-3.5 3.5 4.5 3.5-2.5 5M13.5 9l3 3 4.5.5M10 12.5l-5.5 3M14.5 16l5 4"/></svg>';
+  if (type === "strength") return '<svg class="workout-activity-icon strength" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9V7a3 3 0 0 1 6 0v2"/><path d="M9 9h6c3 0 4.5 2.5 4.5 5.5S17.5 21 14 21h-4c-3.5 0-5.5-3-5.5-6.5S6 9 9 9Z"/></svg>';
+  return '<svg class="workout-activity-icon other" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>';
+}
+
+function workoutTypesByDate() {
+  const byDate = new Map();
+  for (const item of state.workoutCalendarEntries || []) {
+    const date = String(item?.date || "").slice(0, 10);
+    if (!date) continue;
+    const types = byDate.get(date) || new Set();
+    for (const type of workoutActivityTypes(item)) types.add(type);
+    byDate.set(date, types);
+  }
+  return byDate;
+}
+
 function nutritionDayStatus() {
   const byDate = new Map();
   for (const item of state.nutritionCalendarEntries || []) {
@@ -336,6 +369,38 @@ function nutritionDayStatus() {
   }
 
   return { statuses, byDate, maxKcal: Number.isFinite(maxKcal) && maxKcal > 0 ? maxKcal : null };
+}
+
+
+function renderLifeBalances() {
+  const locations = [
+    ["nutrition-date", "nutrition-day-balance"],
+    ["workout-date", "workout-day-balance"],
+  ];
+  for (const [dateInput, containerId] of locations) {
+    const host = $(containerId);
+    if (!host) continue;
+    const selectedDate = $(dateInput)?.value || todayIso();
+    const eaten = (state.nutritionCalendarEntries || [])
+      .filter((item) => String(item.date || "").slice(0, 10) === selectedDate)
+      .reduce((sum, item) => sum + (Number(item.kcal) || 0), 0);
+    const burned = (state.workoutCalendarEntries || [])
+      .filter((item) => String(item.date || "").slice(0, 10) === selectedDate)
+      .reduce((sum, item) => sum + (Number(item.activeKcal ?? item.activeCalories) || 0), 0);
+    host.innerHTML =
+      '<div class="life-balance-card burned">' +
+        '<span class="life-balance-symbol" aria-hidden="true">♨</span>' +
+        '<div><div class="life-balance-label">Сожжено</div>' +
+        '<strong class="life-balance-value">' + Math.round(burned) + ' ккал</strong>' +
+        '<div class="life-balance-note">Активные калории тренировок</div></div>' +
+      '</div>' +
+      '<div class="life-balance-card eaten">' +
+        '<span class="life-balance-symbol" aria-hidden="true">♢</span>' +
+        '<div><div class="life-balance-label">Съедено</div>' +
+        '<strong class="life-balance-value">' + Math.round(eaten) + ' ккал</strong>' +
+        '<div class="life-balance-note">Из дневника питания</div></div>' +
+      '</div>';
+  }
 }
 
 function calendarStatus(section, dateIso) {
@@ -364,6 +429,7 @@ function renderCalendar(section) {
   const mondayOffset = (firstDay + 6) % 7;
   const today = todayIso();
   const nutritionInfo = section === "nutrition" ? nutritionDayStatus() : null;
+  const workoutIconsForDay = section === "workouts" ? workoutTypesByDate() : null;
 
   host.innerHTML = `
     <div class="calendar-head">
@@ -371,7 +437,7 @@ function renderCalendar(section) {
       <div>
         <div class="calendar-title">${escapeHtml(monthTitle(month))}</div>
         <div class="calendar-subtitle">${
-          section === "workouts" ? "Зелёный - была тренировка" :
+          section === "workouts" ? "Бег — бегущий значок · силовая тренировка — гиря" :
           section === "study" ? "Зелёный - была учебная активность" :
           nutritionInfo?.maxKcal
             ? `До ${Math.round(nutritionInfo.maxKcal)} ккал - зелёный · выше лимита - красный`
@@ -407,6 +473,15 @@ function renderCalendar(section) {
         ${kcal > 0 ? `<span class="calendar-day-kcal">${Math.round(kcal)} ккал</span>` : ""}
       `;
       button.title = kcal > 0 ? `${dateIso} · ${Math.round(kcal)} ккал` : dateIso;
+    } else if (section === "workouts") {
+      const types = workoutIconsForDay.get(dateIso) || new Set();
+      button.classList.add("workout-day");
+      button.innerHTML = '<span class="calendar-day-number">' + day + '</span>' +
+        (types.size ? '<span class="workout-day-icons">' +
+          [...types].map(workoutIcon).join("") + '</span>' : "");
+      button.title = types.size ? dateIso + " · " +
+        [...types].map((type) => type === "run" ? "Бег" : type === "strength" ? "Силовая" : "Тренировка").join(", ")
+        : dateIso;
     } else {
       button.textContent = String(day);
       button.title = dateIso;
@@ -499,6 +574,14 @@ async function loadNutrition() {
 
   state.nutritionEntries = mergeNutritionEntries(assistantDayEntries, dayEntries);
   state.nutritionCalendarEntries = mergeNutritionEntries(assistantEntries, calendarEntries);
+  if (!state.workoutCalendarEntries.length) {
+    const workoutChat = await loadAssistantWorkouts();
+    let workoutApi = [];
+    try { workoutApi = await api("/api/workouts"); }
+    catch (error) { console.warn("Тренировки для баланса пока недоступны", error); }
+    state.workoutCalendarEntries = mergeWorkoutEntries(workoutChat, workoutApi);
+  }
+  renderLifeBalances();
   renderNutrition();
   renderCalendar("nutrition");
 }
@@ -595,6 +678,14 @@ async function loadWorkouts() {
   );
   state.workoutEntries = mergeWorkoutEntries(assistantDayEntries, dayEntries);
   state.workoutCalendarEntries = mergeWorkoutEntries(assistantEntries, calendarEntries);
+  if (!state.nutritionCalendarEntries.length) {
+    const foodChat = await loadAssistantNutrition();
+    let foodApi = [];
+    try { foodApi = await api("/api/nutrition"); }
+    catch (error) { console.warn("Питание для баланса пока недоступно", error); }
+    state.nutritionCalendarEntries = mergeNutritionEntries(foodChat, foodApi);
+  }
+  renderLifeBalances();
   renderWorkouts();
   renderCalendar("workouts");
 }
@@ -614,7 +705,7 @@ function renderWorkouts() {
     card.innerHTML = `
       <div class="life-card-main">
         <div class="life-card-kicker">${item.durationSeconds != null ? (Number(item.durationMinutes) + " мин " + Number(item.durationSeconds) + " сек") : (item.durationMinutes ? Number(item.durationMinutes) + " мин" : "Тренировка")}</div>
-        <div class="life-card-title">${escapeHtml(item.title)}</div>
+        <div class="life-card-title workout-card-title"><span class="workout-card-icons" aria-hidden="true">${workoutActivityTypes(item).map(workoutIcon).join("")}</span>${escapeHtml(item.title)}</div>
         <div class="exercise-lines">${exercises.map((x) => `<div>${escapeHtml(x)}</div>`).join("")}</div>
         ${item.notes ? `<div class="life-card-meta">${escapeHtml(item.notes)}</div>` : ""}
       </div>
