@@ -1931,3 +1931,25 @@ body:not([data-section="study"]) .study-card-top-button {display:none!important}
   min-height:48px;
   box-shadow:0 0 0 6px rgba(255,255,255,.94), 0 4px 16px rgba(25,68,117,.20);
 }
+
+
+/* Personalized PWA review notifications, inside the flashcards dashboard. */
+.study-reminder-settings{margin-top:16px;border:1px solid #d9e6f7;border-radius:14px;padding:14px;background:#f8fbff;color:#273f5e}
+.study-reminder-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.study-reminder-heading h3{font-size:15px;line-height:1.3;color:#243e5d;margin:0}
+.study-reminder-heading span{font-size:10px;padding:5px 8px;border-radius:50px;font-weight:850}
+.study-reminder-heading .active{background:#e2f7ed;color:#156c44}
+.study-reminder-heading .inactive{background:#e9eff7;color:#56718f}
+.study-reminder-lead{font-size:12px;line-height:1.5;margin:0 0 4px}
+.study-reminder-lead strong{color:#1e63b3}
+.study-reminder-next{font-size:11px;color:#5d7590;margin:0 0 12px}
+.study-reminder-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:13px 0;font-size:12px;color:#627791}
+.study-reminder-row label{font-weight:750;color:#385676}
+.study-reminder-row select{padding:8px;border:1px solid #ccdff5;border-radius:9px;background:#fff;color:#285079;font-size:12px}
+.study-reminder-actions{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0}
+.study-reminder-actions button{padding:10px 12px;border:1px solid #cbddef;border-radius:10px;background:#fff;font-size:12px;font-weight:800;color:#315375;cursor:pointer}
+.study-reminder-actions button.primary{background:#236cc0;color:white;border-color:#236cc0}
+.study-reminder-actions button:disabled{opacity:.55;cursor:wait}
+.study-reminder-warning{border-left:3px solid #d6a43d;background:#fff8e8;color:#735522;line-height:1.55;font-size:12px;border-radius:8px;padding:11px;margin:12px 0}
+.study-reminder-footnote{font-size:11px;color:#697f99;line-height:1.55;margin:13px 0 0}
+.study-reminder-notice{font-size:12px;line-height:1.5;background:#e7f1ff;color:#285f9c;border-radius:9px;padding:9px;margin:12px 0 0}

@@ -54,6 +54,7 @@
 
   function persistCustomCards(cards) {
     writeJson(KEY_CUSTOM, cards);
+    window.dispatchEvent(new Event("study-reviews-updated"));
   }
 
   function getOverrides() {
@@ -230,7 +231,9 @@
       (lesson?'<div class="quiz-last"><strong>Последний результат</strong><span>'+labelDate(lesson.date)+
         ' · '+lesson.correctFirstTry+' из '+lesson.totalCards+' с первой попытки</span></div>':"")+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
-      '<p class="quiz-storage-note">Созданные здесь карточки, интервалы и история сохраняются в этом браузере. Синхронизация между устройствами пока не подключена.</p>';
+      '<p class="quiz-storage-note">Карточки и история тренировки сохраняются в этом браузере. При включении уведомлений даты повторений также передаются серверу для расчёта напоминаний.</p>'+
+      '<div id="study-reminder-settings" class="study-reminder-settings"></div>';
+    window.dispatchEvent(new Event("study-home-rendered"));
   }
 
   function startSession(mode) {
@@ -406,7 +409,10 @@
     const session=ui.session;
     if (!session) return;
     const completed=engine.finishSession(session,session.cards,getProgress());
-    if (session.mode==="SCHEDULED") writeJson(KEY_PROGRESS,completed.states);
+    if (session.mode==="SCHEDULED") {
+      writeJson(KEY_PROGRESS,completed.states);
+      window.dispatchEvent(new Event("study-reviews-updated"));
+    }
     const history=latestHistory();
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
@@ -548,6 +554,7 @@
     }
     ui.editing=null;ui.notice="Карточка сохранена.";ui.view="manage";
     updateBadge();renderManage();
+    window.dispatchEvent(new Event("study-reviews-updated"));
   }
 
   function renderImport() {
@@ -597,6 +604,7 @@
       writeJson(KEY_OVERRIDES,ov);
     }
     renderManage();updateBadge();
+    window.dispatchEvent(new Event("study-reviews-updated"));
   }
 
   function handleClick(event) {

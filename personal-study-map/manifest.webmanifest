@@ -1,0 +1,20 @@
+{
+  "name": "Мои навыки — карта знаний",
+  "short_name": "Мои навыки",
+  "description": "Учёба, карточки и интервальное повторение",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f8ff",
+  "theme_color": "#246ec0",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/study-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
