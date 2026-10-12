@@ -203,6 +203,7 @@ export function Layout({ children }: { children: ReactNode }) {
             { to: '/admin/trial-lessons', label: language === 'DE' ? 'Probestunden' : 'Пробные уроки' },
             { to: '/admin/leads', label: language === 'DE' ? 'Anfragen' : 'Заявки' },
             { to: '/admin/site-visits', label: language === 'DE' ? 'Besuche' : 'Попытки посетителей' },
+            { to: '/admin/stories', label: 'Шаблоны Stories' },
             { to: '/admin/prompts', label: language === 'DE' ? 'Prompts' : 'Промты школы' },
             { to: '/skills', label: language === 'DE' ? 'Kompetenzen' : 'Навыки' },
           ]
