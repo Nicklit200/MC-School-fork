@@ -234,6 +234,7 @@ window.studyBoardCards = {
     semesterId:state.semesterId
   }),
   allExams: () => (state.data?.semesters||[]).flatMap(sem=>sem.exams||[]),
+  learningSessions: () => state.data?.sessions || [],
   rate:saveStudyCardRating
 };
 
