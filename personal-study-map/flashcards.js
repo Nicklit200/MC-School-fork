@@ -287,8 +287,10 @@
       Math.round((answered/total)*100)+'%"></div></div>'+
       '<div class="quiz-question">'+esc(card.question)+'</div>'+
       '<div class="quiz-options">'+controls+'</div>'+
+      (!feedback?'<button data-action="skip" class="quiz-skip" type="button">'+
+        '<span>Не знаю</span><small>Показать правильный ответ</small></button>':'')+
       (feedback?'<div class="quiz-feedback '+(feedback.correct?'ok':'fail')+'">'+
-        (feedback.correct?'Правильно.':(feedback.timedOut?'Время вышло.':'Неправильно.'))+
+        (feedback.correct?'Правильно.':(feedback.skipped?'Не знаю.':feedback.timedOut?'Время вышло.':'Неправильно.'))+
         (feedback.correct?'':' Правильный ответ: '+esc(feedback.correctAnswer)+
         '. Карточка повторится в этом занятии.')+
         '</div><button class="quiz-next" data-action="next" type="button">Дальше</button>':
@@ -321,7 +323,7 @@
     if (!ui.feedback) ui.timer=setInterval(draw,250);
   }
 
-  function answerQuestion(value,timedOut=false) {
+  function answerQuestion(value,timedOut=false,skipped=false) {
     if (ui.view!=="study" || ui.feedback) return;
     const session=ui.session,card=currentCard();
     if (!session || !card) return;
@@ -332,6 +334,7 @@
       ui.lastQuestionOptions=[...(session.currentQuestion?.options||[])];
     }
     const feedback=engine.recordAnswer(session,card,value,timedOut);
+    feedback.skipped=skipped;
     ui.feedback=feedback;
     saveSession();
     renderStudyFeedback(card,feedback);
@@ -360,7 +363,7 @@
         '" disabled type="button"><span class="quiz-option-letter">'+String.fromCharCode(65+i)+
         '</span><span>'+esc(option)+'</span></button>').join("")+
       '</div><div class="quiz-feedback '+(feedback.correct?'ok':'fail')+'">'+
-      (feedback.correct?'Правильно.':feedback.timedOut?'Время вышло.':'Неправильно.')+
+      (feedback.correct?'Правильно.':feedback.skipped?'Не знаю.':feedback.timedOut?'Время вышло.':'Неправильно.')+
       (!feedback.correct?' Правильный ответ: '+esc(feedback.correctAnswer)+
       '. Вопрос появится ещё раз в этом занятии.':"")+
       '</div><button class="quiz-next" data-action="next" type="button">Дальше</button>';
@@ -590,6 +593,13 @@
       if (!q || !Number.isInteger(index)||index<0||index>=q.options.length) return;
       ui.lastCard=currentCard();ui.lastQuestionOptions=[...q.options];
       answerQuestion(q.options[index]);
+    } else if (action==="skip") {
+      const q=ui.session?.currentQuestion;
+      if (!q || ui.feedback) return;
+      ui.lastCard=currentCard();
+      ui.lastQuestionOptions=[...q.options];
+      // An explicit "Не знаю" is a wrong first attempt; the card returns later.
+      answerQuestion("",false,true);
     } else if (action==="next") advance();
     else if (action==="manage") {cleanupTimers();ui.view="manage";ui.notice="";renderManage();}
     else if (action==="create") {ui.editing=null;ui.view="editor";renderEditor();}
