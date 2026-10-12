@@ -314,7 +314,8 @@
         (feedback.correct?'':' Правильный ответ: '+esc(feedback.correctAnswer)+
         '. Карточка повторится в этом занятии.')+
         '</div>'+explanationMarkup(card)+
-        '<button class="quiz-next" data-action="next" type="button">Дальше</button>':
+        '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
+        '<button class="quiz-next" data-action="next" type="button">Дальше →</button>':
         '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>')+
       '<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
     if (!feedback) startCountdown();
@@ -384,12 +385,15 @@
       (!feedback.correct?' Правильный ответ: '+esc(feedback.correctAnswer)+
       '. Вопрос появится ещё раз в этом занятии.':"")+
       '</div>'+explanationMarkup(last)+
-      '<button class="quiz-next" data-action="next" type="button">Дальше</button>';
+      '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
+      '<button class="quiz-next" data-action="next" type="button">Дальше →</button>';
     // No automatic transition: even a correct answer deserves time to read the rationale.
     host.querySelector?.(".quiz-explanation")?.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
 
-  function advance() {
+  function advance(source) {
+    // Never leave feedback automatically. A real user click is mandatory.
+    if (source !== "button") return;
     stopAdvance();
     if (ui.view!=="study" || !ui.feedback) return;
     ui.feedback=null;ui.lastQuestionOptions=null;ui.lastCard=null;
@@ -626,7 +630,7 @@
       ui.lastQuestionOptions=[...q.options];
       // An explicit "Не знаю" is a wrong first attempt; the card returns later.
       answerQuestion("",false,true);
-    } else if (action==="next") advance();
+    } else if (action==="next") advance("button");
     else if (action==="manage") {cleanupTimers();ui.view="manage";ui.notice="";renderManage();}
     else if (action==="create") {ui.editing=null;ui.view="editor";renderEditor();}
     else if (action==="edit") {
