@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Николай",
-  "updatedAt": "2026-10-11",
+  "updatedAt": "2026-10-12",
   "semesters": [
     {
       "id": "ws-2026-27",
@@ -1197,6 +1197,42 @@
                   "wrongAnswer2": "Tests → Wartung → Entwurf → Anforderungsdefinition → Implementierung.",
                   "wrongAnswer3": "Nur Scrum Planning → Daily Scrum → Review → Retrospective.",
                   "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-wf-01",
+                  "question": "Mit welcher Phase beginnt das Wasserfallmodell?",
+                  "answer": "Anforderungsdefinition.",
+                  "wrongAnswer1": "Implementierung und Komponententest.",
+                  "wrongAnswer2": "Integration und Systemtests.",
+                  "wrongAnswer3": "Betrieb und Wartung.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-wf-02",
+                  "question": "Was steht im System- und Softwareentwurf im Vordergrund?",
+                  "answer": "Die geplante Struktur und Gestaltung des Softwaresystems.",
+                  "wrongAnswer1": "Der Betrieb des fertigen Systems beim Kunden.",
+                  "wrongAnswer2": "Die ausschließliche Durchführung von Systemtests.",
+                  "wrongAnswer3": "Die Behebung von Fehlern nach dem Produktivstart.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-wf-03",
+                  "question": "In welcher Wasserfallphase werden einzelne Komponenten implementiert und getestet?",
+                  "answer": "Implementierung und Komponententest.",
+                  "wrongAnswer1": "Anforderungsdefinition.",
+                  "wrongAnswer2": "Integration und Systemtests.",
+                  "wrongAnswer3": "Betrieb und Wartung.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-wf-04",
+                  "question": "Was wird in der Phase 'Integration und Systemtests' hauptsächlich gemacht?",
+                  "answer": "Komponenten werden zusammengefügt und das Gesamtsystem geprüft.",
+                  "wrongAnswer1": "Es werden ausschließlich neue Kundenanforderungen gesammelt.",
+                  "wrongAnswer2": "Es wird zunächst die grundlegende Architektur entworfen.",
+                  "wrongAnswer3": "Es werden einzelne Komponenten ohne Zusammenspiel getestet.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1337,6 +1373,33 @@
                   "wrongAnswer2": "Jede Iteration besteht ausschließlich aus Planung, ohne lauffähige Erweiterungen.",
                   "wrongAnswer3": "Iterative Entwicklung verbietet Feedback von Kunden bis zum Projektende.",
                   "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-it-03",
+                  "question": "Was ist ein wichtiger Vorteil früher nutzbarer Inkremente für den Kunden?",
+                  "answer": "Er kann neue Funktionen ausprobieren und früh Feedback geben.",
+                  "wrongAnswer1": "Er muss bis zum Projektende auf jeden Test verzichten.",
+                  "wrongAnswer2": "Er kann Anforderungen danach grundsätzlich nicht mehr ändern.",
+                  "wrongAnswer3": "Er sieht immer nur Entwürfe ohne lauffähige Funktionen.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-it-04",
+                  "question": "Warum helfen häufige Integration und Tests in iterativen Prozessen?",
+                  "answer": "Probleme werden früh sichtbar und können in späteren Iterationen behoben werden.",
+                  "wrongAnswer1": "Dadurch wird das Testen des Systems vollständig überflüssig.",
+                  "wrongAnswer2": "Dadurch sind Rückmeldungen von Benutzern nicht mehr erforderlich.",
+                  "wrongAnswer3": "Dadurch wird jede Änderung automatisch kostenlos.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-it-05",
+                  "question": "Was ist am Ende einer erfolgreichen Iteration idealerweise vorzeigbar?",
+                  "answer": "Ein überprüfbares, funktionsfähiges Inkrement.",
+                  "wrongAnswer1": "Nur eine unverbindliche Liste künftiger Ideen.",
+                  "wrongAnswer2": "Ausschließlich ein finaler Gesamtabschlussbericht.",
+                  "wrongAnswer3": "Gar kein Ergebnis, bis das gesamte Projekt fertig ist.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1372,6 +1435,24 @@
                   "wrongAnswer2": "Beide Wörter bedeuten ausschließlich die vollständige Auslieferung am Projektende.",
                   "wrongAnswer3": "Iteration bezeichnet einen Fehler; Inkrement beschreibt seine Korrektur.",
                   "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-it-01",
+                  "question": "Ein Team entwickelt zwei Wochen lang die automatische Hausaufgabenkontrolle. Was ist die Iteration?",
+                  "answer": "Der zweiwöchige Entwicklungszyklus.",
+                  "wrongAnswer1": "Die fertig funktionierende Hausaufgabenkontrolle.",
+                  "wrongAnswer2": "Die komplette Plattform nach Abschluss aller Projekte.",
+                  "wrongAnswer3": "Nur die Freigabe des Produkts beim Kunden.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-it-02",
+                  "question": "Nach zwei Wochen funktioniert die neue Hausaufgabenkontrolle. Was ist das Inkrement?",
+                  "answer": "Die neue funktionsfähige Erweiterung der Plattform.",
+                  "wrongAnswer1": "Die zweiwöchige Arbeitsphase selbst.",
+                  "wrongAnswer2": "Die Liste aller noch offenen Anforderungen.",
+                  "wrongAnswer3": "Ein Entwurf, der noch nicht funktioniert.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1406,6 +1487,15 @@
                   "wrongAnswer1": "Ausschließlich wasserfallartig, ohne Use Cases und ohne Architekturarbeit.",
                   "wrongAnswer2": "Nur auf Programmierung und Dokumentation ausgerichtet, ohne Iterationen.",
                   "wrongAnswer3": "Zufällige Anforderungen, keine Architektur und ein einziger Projektabschluss.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-rup-06",
+                  "question": "Wer wird in der Vorlesung als die 'Three Amigos' des RUP genannt?",
+                  "answer": "Grady Booch, James Rumbaugh und Ivar Jacobson.",
+                  "wrongAnswer1": "Ken Schwaber, Jeff Sutherland und Grady Booch.",
+                  "wrongAnswer2": "Kent Beck, Martin Fowler und Robert C. Martin.",
+                  "wrongAnswer3": "Alan Turing, Edsger Dijkstra und Donald Knuth.",
                   "timeLimitSeconds": null
                 }
               ]
@@ -1477,6 +1567,15 @@
                   "wrongAnswer2": "Ein Use Case beschreibt ausschließlich die interne Struktur des Quellcodes.",
                   "wrongAnswer3": "Es bedeutet, dass Anforderungen ausschließlich durch Zufall ausgewählt werden.",
                   "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-rup-05",
+                  "question": "Welches Beispiel ist ein Use Case aus Sicht eines Bankkunden?",
+                  "answer": "Der Kunde überweist Geld an eine andere Person.",
+                  "wrongAnswer1": "Der Entwickler richtet den Datenbankserver ein.",
+                  "wrongAnswer2": "Der Administrator installiert eine neue Laufzeitumgebung.",
+                  "wrongAnswer3": "Der Programmierer führt einen Komponententest aus.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1511,6 +1610,42 @@
                   "wrongAnswer1": "Construction → Transition → Inception → Elaboration.",
                   "wrongAnswer2": "Analyse → Design → Programmierung → Test sind die vier RUP-Phasen.",
                   "wrongAnswer3": "Planning → Daily → Review → Retrospective sind die vier RUP-Phasen.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-rup-01",
+                  "question": "Was ist ein zentrales Ziel der RUP-Phase Inception?",
+                  "answer": "Ziele, Umfang und grundlegende Anforderungen des Projekts klären.",
+                  "wrongAnswer1": "Das vollständig fertige System an alle Nutzer übergeben.",
+                  "wrongAnswer2": "Alle Funktionen bis zur letzten Detailzeile programmieren.",
+                  "wrongAnswer3": "Ausschließlich die Software im laufenden Betrieb warten.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-rup-02",
+                  "question": "Was steht in der RUP-Phase Elaboration im Mittelpunkt?",
+                  "answer": "Architektur ausarbeiten und wesentliche Projektrisiken klären.",
+                  "wrongAnswer1": "Den fertigen Betrieb dauerhaft übernehmen.",
+                  "wrongAnswer2": "Ohne Planung sämtliche Funktionen sofort ausliefern.",
+                  "wrongAnswer3": "Nur die Marketingkampagne nach dem Projektstart auswerten.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-rup-03",
+                  "question": "Welche RUP-Phase konzentriert sich auf die Entwicklung der wesentlichen Funktionen?",
+                  "answer": "Construction.",
+                  "wrongAnswer1": "Inception.",
+                  "wrongAnswer2": "Elaboration.",
+                  "wrongAnswer3": "Transition.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-rup-04",
+                  "question": "Was geschieht vor allem in der RUP-Phase Transition?",
+                  "answer": "Das entwickelte System wird für die Nutzung bereitgestellt und eingeführt.",
+                  "wrongAnswer1": "Erstmals werden ausschließlich die Projektziele grob definiert.",
+                  "wrongAnswer2": "Erst jetzt wird die grundlegende Architektur erstellt.",
+                  "wrongAnswer3": "Alle Use Cases werden ohne Umsetzung nur gesammelt.",
                   "timeLimitSeconds": null
                 }
               ]
@@ -1547,6 +1682,33 @@
                   "wrongAnswer2": "Entwicklungsteam legt alle Prioritäten fest; Product Owner löst nur technische Probleme.",
                   "wrongAnswer3": "Product Owner führt tägliche Stand-ups; Scrum Master entwickelt alle Funktionen allein.",
                   "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-01",
+                  "question": "Wer priorisiert im Scrum die Anforderungen im Product Backlog?",
+                  "answer": "Product Owner.",
+                  "wrongAnswer1": "Scrum Master.",
+                  "wrongAnswer2": "Entwicklungsteam.",
+                  "wrongAnswer3": "Systemadministrator.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-02",
+                  "question": "Die Entwickler kommen wegen eines organisatorischen Hindernisses nicht weiter. Wer hilft?",
+                  "answer": "Scrum Master.",
+                  "wrongAnswer1": "Product Owner als alleiniger Programmierer.",
+                  "wrongAnswer2": "Der Kunde statt aller Scrum-Rollen.",
+                  "wrongAnswer3": "Nur die Abteilung für Systembetrieb.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-03",
+                  "question": "Wer ist im Scrum hauptsächlich für das Erstellen der Software verantwortlich?",
+                  "answer": "Entwicklungsteam.",
+                  "wrongAnswer1": "Product Owner allein.",
+                  "wrongAnswer2": "Scrum Master allein.",
+                  "wrongAnswer3": "Ausschließlich externe Auftraggeber.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1582,6 +1744,15 @@
                   "wrongAnswer2": "Es enthält nur abgeschlossene Aufgaben und wird ausschließlich vom Scrum Master priorisiert.",
                   "wrongAnswer3": "Es ist eine Liste ausschließlich technischer Serverfehler ohne Nutzeranforderungen.",
                   "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-04",
+                  "question": "Ein Elternteil wünscht eine neue Funktion. Was kann mit dem Product Backlog passieren?",
+                  "answer": "Die neue Anforderung kann aufgenommen und neu priorisiert werden.",
+                  "wrongAnswer1": "Es bleibt grundsätzlich während des gesamten Projekts unverändert.",
+                  "wrongAnswer2": "Die Anforderung muss bis zum Ende aller Sprints ignoriert werden.",
+                  "wrongAnswer3": "Alle bisherigen Anforderungen werden automatisch gelöscht.",
+                  "timeLimitSeconds": null
                 }
               ]
             },
@@ -1616,6 +1787,33 @@
                   "wrongAnswer1": "Ein einmaliges Gesamtdesign, gefolgt von einer Veröffentlichung ohne Feedback.",
                   "wrongAnswer2": "Nur tägliche Besprechungen, ohne Sprintziel oder nutzbares Ergebnis.",
                   "wrongAnswer3": "Analyse und Umsetzung ohne Reviews, Retrospektiven oder Fortschrittsprüfung.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-05",
+                  "question": "Was ist ein Sprint im Scrum?",
+                  "answer": "Ein zeitlich begrenzter Entwicklungszyklus mit dem Ziel eines nutzbaren Inkrements.",
+                  "wrongAnswer1": "Eine einmalige Gesamtplanung ohne anschließende Umsetzung.",
+                  "wrongAnswer2": "Eine Wartungsphase, die erst nach Projektabschluss beginnt.",
+                  "wrongAnswer3": "Ein Dokument mit unveränderlichen Anforderungen für mehrere Jahre.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-06",
+                  "question": "Was unterscheidet Scrum grundsätzlich vom klassischen Wasserfallmodell?",
+                  "answer": "Scrum arbeitet iterativ in Sprints, Wasserfall überwiegend phasenweise nacheinander.",
+                  "wrongAnswer1": "Scrum verbietet Kundenfeedback, Wasserfall verlangt Feedback nach jedem Sprint.",
+                  "wrongAnswer2": "Scrum besteht nur aus Tests, Wasserfall nur aus Programmierung.",
+                  "wrongAnswer3": "Beide Modelle schreiben exakt dieselbe starre Phasenfolge vor.",
+                  "timeLimitSeconds": null
+                },
+                {
+                  "id": "se-study-20261012-sc-07",
+                  "question": "Was bedeutet 'Daily Scrum' im beschriebenen Scrum-Ablauf?",
+                  "answer": "Eine kurze tägliche Abstimmung des Entwicklungsteams.",
+                  "wrongAnswer1": "Die jährliche Abnahme des fertiggestellten Projekts.",
+                  "wrongAnswer2": "Eine verpflichtende vollständige Neuentwicklung jeden Tag.",
+                  "wrongAnswer3": "Eine Besprechung ausschließlich nach dem letzten Sprint.",
                   "timeLimitSeconds": null
                 }
               ]
