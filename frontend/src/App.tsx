@@ -1,3 +1,4 @@
+import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
@@ -60,6 +61,7 @@ export function App() {
       <Route path="/admin/leads" element={<ProtectedRoute role="ADMIN"><Layout><TrialLeadsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/site-visits" element={<ProtectedRoute role="ADMIN"><Layout><SiteVisitsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute role="ADMIN"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/stories" element={<ProtectedRoute role="ADMIN"><Layout><AdminStoryTemplatesPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/prompts" element={<ProtectedRoute role="ADMIN"><Layout><AdminPromptSettingsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
 
