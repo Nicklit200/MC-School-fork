@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Моя карта знаний</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=20261012-ipad2" />
 </head>
 <body>
   <div class="board-app">
@@ -117,6 +117,7 @@
           <button class="section-tab active" data-section="study" type="button">Учёба</button>
           <button class="section-tab" data-section="nutrition" type="button">Питание</button>
           <button class="section-tab" data-section="workouts" type="button">Спорт</button>
+          <button id="flashcard-top-toggle" class="study-card-top-button" type="button" title="Открыть учебные карточки">Карточки <span id="flashcard-top-count">0</span></button>
         </nav>
       </div>
 
@@ -148,6 +149,14 @@
       </div>
 
       <div id="exam-cards" class="exam-cards"></div>
+
+      <div class="panel-section study-card-sidebar-section">
+        <button id="flashcard-sidebar-toggle" class="study-card-sidebar-button" type="button" title="Начать повторение карточек">
+          <span class="study-card-sidebar-symbol">▤</span>
+          <span class="study-card-sidebar-label">Учить карточки<small>Вопросы и повторение</small></span>
+          <span id="flashcard-sidebar-count" class="study-card-sidebar-count">0</span>
+        </button>
+      </div>
 
       <div class="panel-divider"></div>
 
@@ -275,6 +284,6 @@
 
   <script src="./flashcard-engine.js"></script>
   <script type="module" src="./app.js"></script>
-  <script type="module" src="./flashcards.js"></script>
+  <script type="module" src="./flashcards.js?v=20261012-ipad2"></script>
 </body>
 </html>

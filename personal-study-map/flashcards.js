@@ -119,11 +119,13 @@
   }
 
   function updateBadge() {
-    const counter = document.getElementById("flashcard-count");
-    if (!counter) return;
     const count = allCards({disregardTopic:true}).length;
-    counter.textContent = String(count);
-    counter.classList.toggle("zero", count === 0);
+    for (const id of ["flashcard-count","flashcard-top-count","flashcard-sidebar-count"]) {
+      const counter = document.getElementById(id);
+      if (!counter) continue;
+      counter.textContent = String(count);
+      counter.classList.toggle("zero", count === 0);
+    }
   }
 
   function labelDate(date) {
@@ -657,5 +659,17 @@
       ui.view="home";renderHome();
     }
   });
+  const openCardsWithExistingControl = () =>
+    document.getElementById("flashcard-toggle")?.click();
+  document.getElementById("flashcard-top-toggle")?.addEventListener("click",openCardsWithExistingControl);
+  document.getElementById("flashcard-sidebar-toggle")?.addEventListener("click",openCardsWithExistingControl);
+
+  // Open the cards directly from /#cards, including after a normal Safari reload.
+  const openCardsFromLink = () => {
+    if (!["#cards","#flashcards"].includes(window.location.hash)) return;
+    if (panel.classList.contains("closed")) openCardsWithExistingControl();
+  };
+  window.addEventListener("hashchange",openCardsFromLink);
   updateBadge();
+  openCardsFromLink();
 })();
