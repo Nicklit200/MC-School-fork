@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Мой немецкий словарь",
+  "version": "1.0.0",
+  "description": "Добавляй выделенные немецкие слова в свой словарь на сайте «Моя система».",
+  "permissions": [
+    "contextMenus",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://personal-life-api-production.up.railway.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
