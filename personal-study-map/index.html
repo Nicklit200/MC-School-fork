@@ -11,7 +11,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/study-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=20261012-life-balance-icons" />
+  <link rel="stylesheet" href="./styles.css?v=20261012-german-v1" />
 </head>
 <body>
   <div class="board-app">
@@ -112,6 +112,12 @@
           <div id="workout-list" class="life-list"></div>
         </div>
       </section>
+      <section id="german-view" class="life-view german-view" hidden>
+        <div class="life-view-head"><div><div class="eyebrow">DEUTSCH</div><h2>Мой немецкий словарь</h2><p>Выделяй слова в браузере и добавляй через правый клик.</p></div></div>
+        <form id="german-form" class="german-form"><input id="german-word" placeholder="Немецкое слово" required maxlength="160" /><input id="german-translation" placeholder="Перевод (можно добавить позже)" maxlength="500" /><button type="submit">Добавить</button></form>
+        <div class="german-actions"><input id="german-search" type="search" placeholder="Найти слово или перевод…" /><button id="german-review" type="button">Повторить слова</button><span id="german-count"></span></div>
+        <p id="german-status" role="status"></p><div id="german-list" class="german-list"></div>
+      </section>
     </main>
 
     <header class="floating-topbar">
@@ -124,6 +130,7 @@
 
         <nav class="section-nav" aria-label="Разделы">
           <button class="section-tab active" data-section="study" type="button">Учёба</button>
+          <button class="section-tab" data-section="german" type="button">Немецкий</button>
           <button class="section-tab" data-section="nutrition" type="button">Питание</button>
           <button class="section-tab" data-section="workouts" type="button">Спорт</button>
           <button id="flashcard-top-toggle" class="study-card-top-button" type="button" title="Открыть учебные карточки">Карточки <span id="flashcard-top-count">0</span></button>
@@ -292,7 +299,7 @@
   </div>
 
   <script src="./flashcard-engine.js"></script>
-  <script type="module" src="./app.js?v=20261012-life-balance-icons"></script>
+  <script type="module" src="./app.js?v=20261012-german-v1"></script>
   <script type="module" src="./flashcards.js?v=20261012-pwa-reminders1"></script>
   <script type="module" src="./reminders.js?v=20261012-pwa-reminders1"></script>
 </body>
