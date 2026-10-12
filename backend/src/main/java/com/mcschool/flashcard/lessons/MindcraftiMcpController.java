@@ -13,6 +13,7 @@ import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
 import com.mcschool.flashcard.monthlyplans.dto.MonthlyPlanResponse;
 import com.mcschool.flashcard.settings.SchoolBrandGuideService;
 import com.mcschool.flashcard.settings.StoryTemplateMasterService;
+import com.mcschool.flashcard.settings.StoryTemplateDownloadLinkService;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsResponse;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
 import com.mcschool.flashcard.trialleads.FunnelAnalyticsService;
@@ -69,6 +70,7 @@ public class MindcraftiMcpController {
     private final SchoolPromptSettingsService schoolPromptSettingsService;
     private final SchoolBrandGuideService schoolBrandGuideService;
     private final StoryTemplateMasterService storyTemplateMasterService;
+    private final StoryTemplateDownloadLinkService storyTemplateDownloadLinkService;
     private final FunnelAnalyticsService funnelAnalyticsService;
 
     public MindcraftiMcpController(
@@ -89,6 +91,7 @@ public class MindcraftiMcpController {
             SchoolPromptSettingsService schoolPromptSettingsService,
             SchoolBrandGuideService schoolBrandGuideService,
             StoryTemplateMasterService storyTemplateMasterService,
+            StoryTemplateDownloadLinkService storyTemplateDownloadLinkService,
             FunnelAnalyticsService funnelAnalyticsService) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.objectMapper = objectMapper;
@@ -107,6 +110,7 @@ public class MindcraftiMcpController {
         this.schoolPromptSettingsService = schoolPromptSettingsService;
         this.schoolBrandGuideService = schoolBrandGuideService;
         this.storyTemplateMasterService = storyTemplateMasterService;
+        this.storyTemplateDownloadLinkService = storyTemplateDownloadLinkService;
         this.funnelAnalyticsService = funnelAnalyticsService;
     }
 
@@ -197,6 +201,7 @@ public class MindcraftiMcpController {
         tools.add(tool("get_brand_guide", "Get the current administrator-managed Mindcrafti Brand Guide, including its searchable rules and the uploaded source PDF as base64 when available. ALWAYS use this before creating or redesigning any Mindcrafti-branded PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document or other visual material. Fetch it fresh instead of relying on a Brand Guide remembered from chat history.", schema(Map.of(), List.of()), readOnlyAnnotations()));
 
         tools.add(tool("get_story_template_info", "Get the current APPROVED Mindcrafti Instagram Stories master PPTX metadata. Always call before producing 3 Mindcrafti Stories. The master has 3 slides and its photo, decoration, logo, graphic positions and typography must stay unchanged. Use the current version and SHA256, never prior chat copies.", schema(Map.of(), List.of()), readOnlyAnnotations()));
+        tools.add(tool("get_story_template_download_link", "Get a short-lived, signed HTTPS link to the exact approved PPTX. First call get_story_template_info. Download the file using the returned URL within 5 minutes and verify SHA256 before editing. Prefer this tool to base64 chunks when a downloader is available.", schema(Map.of(), List.of()), readOnlyAnnotations()));
         tools.add(tool("get_story_template_chunk", "Download an exact binary chunk of the CURRENT approved three-slide PPTX. First call get_story_template_info; get each chunk using the returned version; concatenate decoded base64 chunks in order and validate the SHA256. Do not regenerate the design from screenshots.", schema(Map.of("version", property("integer", "Current master revision from get_story_template_info."), "chunkIndex", property("integer", "Zero-based index, start at 0; repeat until chunkCount is reached.")), List.of("version", "chunkIndex")), readOnlyAnnotations()));
         tools.add(tool("update_story_template_master", "ADMIN ONLY: Replace the approved three-slide Mindcrafti Stories PPTX. Requires explicit user approval and the expected version from get_story_template_info. The source file must have exactly three slides. The replaced file becomes the only master for all subsequent Stories.", schema(Map.of("filename", property("string", "New PPTX filename."), "pptxBase64", property("string", "Full PPTX binary encoded as base64, up to 15 MB."), "expectedVersion", property("integer", "Latest template version.")), List.of("filename", "pptxBase64", "expectedVersion")), writeAnnotations()));
         tools.add(tool("find_lessons", "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.", schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()), readOnlyAnnotations()));
@@ -357,6 +362,7 @@ public class MindcraftiMcpController {
             case "get_school_prompt" -> toolResult(getSchoolPrompt(arguments));
             case "get_brand_guide" -> toolResult(schoolBrandGuideService.readForMcp());
             case "get_story_template_info" -> toolResult(storyTemplateMasterService.infoForMcp(auth.user(), auth.apiKey()));
+            case "get_story_template_download_link" -> toolResult(storyTemplateDownloadLinkService.create(auth.user(), auth.apiKey()));
             case "get_story_template_chunk" -> toolResult(storyTemplateMasterService.chunkForMcp(auth.user(), auth.apiKey(), Long.parseLong(required(arguments, "version")), integer(arguments.get("chunkIndex"), "chunkIndex")));
             case "update_story_template_master" -> toolResult(storyTemplateMasterService.uploadFromMcp(auth.user(), auth.apiKey(), required(arguments, "filename"), required(arguments, "pptxBase64"), Long.parseLong(required(arguments, "expectedVersion"))));
             case "find_lessons" -> toolResult(findLessons(string(arguments.get("query")), auth));
