@@ -3905,6 +3905,1111 @@
             "note": "В диалоге разобрали слайды 37–48. Страницы 49–50 ещё не объясняли; при продолжении начни с понятия abgeleitete Attribute на слайде 49, затем перейди к обозначению / на слайде 50.",
             "date": "2026-10-12"
           }
+        },
+        {
+          "id": "exam-computergrafik",
+          "title": "Computergrafik",
+          "weight": 1,
+          "sourceDocuments": [
+            {
+              "title": "1Pipeline.pdf",
+              "type": "Vorlesung 1 / Folien",
+              "coverage": "Folien 1–107: Einführung, Grafikpipeline, Transformationen, Quaternionen, Projektionen, ECS und SORS",
+              "note": "Prof. Dr. Bernd Dreier. Полная первая презентация структурирована в навыки; пока ничего не изучено и не проверено."
+            }
+          ],
+          "topics": [
+            {
+              "id": "cg-intro",
+              "title": "Einführung & Geschichte"
+            },
+            {
+              "id": "cg-pipeline",
+              "title": "OpenGL-Pipeline & Shader"
+            },
+            {
+              "id": "cg-linear",
+              "title": "Mathematische Grundlagen"
+            },
+            {
+              "id": "cg-transform",
+              "title": "3D-Transformationen"
+            },
+            {
+              "id": "cg-scene",
+              "title": "Hierarchien & Szenengraphen"
+            },
+            {
+              "id": "cg-rotation",
+              "title": "Orientierung & Rotationsprobleme"
+            },
+            {
+              "id": "cg-quaternion",
+              "title": "Quaternionen & Slerp"
+            },
+            {
+              "id": "cg-camera",
+              "title": "Kamera & Projektionen"
+            },
+            {
+              "id": "cg-ecs",
+              "title": "Entity Component System & SORS"
+            }
+          ],
+          "skills": [
+            {
+              "id": "cg-intro-01",
+              "topicId": "cg-intro",
+              "title": "Computergrafik von Bildverarbeitung unterscheiden",
+              "subtitle": "Bildsynthese · Bildverarbeitung · Bilderkennung · Folie 11–12",
+              "description": "Различать синтез изображения, обработку изображений, распознавание образов и Computer Vision; приводить примеры задач каждой области.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-intro-02",
+              "topicId": "cg-intro",
+              "title": "Historische Meilensteine der Computergrafik",
+              "subtitle": "Plotter · Spacewar · Sketchpad · CAD · Folie 13–15",
+              "description": "Объяснять роль Spacewar (1961), Sketchpad Айвана Сазерленда (1963), CAD/CAM, графических интерфейсов и растровых дисплеев.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-intro-03",
+              "topicId": "cg-intro",
+              "title": "OpenGL, OpenGL ES und Vulkan einordnen",
+              "subtitle": "Grafik-APIs · CPU/GPU · Folie 16–17",
+              "description": "Понимать место OpenGL/OpenGL ES и Vulkan в экосистеме и основную идею Vulkan: больше прямого управления GPU, больше ответственности приложения.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-pipeline-01",
+              "topicId": "cg-pipeline",
+              "title": "Aufbau einer OpenGL-Anwendung erklären",
+              "subtitle": "Anwendung · Qt/SDL · OpenGL · Treiber · GPU · Folie 19",
+              "description": "Нарисовать и объяснить путь от приложения через оконный фреймворк и OpenGL к драйверу, framebuffer и устройствам ввода-вывода.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-pipeline-02",
+              "topicId": "cg-pipeline",
+              "title": "Phasen der Grafikpipeline erklären",
+              "subtitle": "Modellierung · Geometrie · Rasterisierung · Fragmente · Folie 20",
+              "description": "Воспроизводить упрощённую последовательность этапов: моделирование, геометрия, растеризация, обработка фрагментов, framebuffer.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-pipeline-03",
+              "topicId": "cg-pipeline",
+              "title": "Vertex Shader einordnen",
+              "subtitle": "Vertex · Geometrie · gl_Position · Folie 20–22",
+              "description": "Объяснять задачу Vertex Shader, преобразование координат вершины и значение gl_Position.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-pipeline-04",
+              "topicId": "cg-pipeline",
+              "title": "Fragment Shader einordnen",
+              "subtitle": "Fragment · Farbe · fragColor · Folie 20–22",
+              "description": "Объяснять, что фрагмент — потенциальный пиксель и как Fragment Shader задаёт цвет фрагмента.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-pipeline-05",
+              "topicId": "cg-pipeline",
+              "title": "Fixed Function und Programmable Pipeline unterscheiden",
+              "subtitle": "OpenGL 2.x vs. 3.x · GLSL · Folie 21–22",
+              "description": "Понимать отличие фиксированного конвейера от программируемого и роль GLSL-программ на GPU.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-pipeline-06",
+              "topicId": "cg-pipeline",
+              "title": "Einfachen GLSL-Shader lesen",
+              "subtitle": "uniform · in · out · mat4 · Folie 22",
+              "description": "Объяснять входы и выходы двух демонстрационных шейдеров, uniform-переменные и преобразование projectionMatrix * modelViewMatrix * vertexPosition.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-linear-01",
+              "topicId": "cg-linear",
+              "title": "Punkte und Vektoren unterscheiden",
+              "subtitle": "Affine Räume · Translation · Folie 28–31",
+              "description": "Объяснять отличие положения точки от направления вектора и почему вектор инвариантен относительно переноса начала координат.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-linear-02",
+              "topicId": "cg-linear",
+              "title": "Vektoren und Norm berechnen",
+              "subtitle": "n-Tupel · Betrag · Normierung · Folie 32",
+              "description": "Представлять вектор координатами, вычислять его длину и нормировать.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-linear-03",
+              "topicId": "cg-linear",
+              "title": "Skalarprodukt berechnen und interpretieren",
+              "subtitle": "Dot Product · Winkel · Orthogonalität · Folie 33",
+              "description": "Считать скалярное произведение, находить угол через cos и распознавать перпендикулярные векторы.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-linear-04",
+              "topicId": "cg-linear",
+              "title": "Kreuzprodukt berechnen und interpretieren",
+              "subtitle": "Cross Product · Rechtssystem · Folie 34–35",
+              "description": "Вычислять векторное произведение трёхмерных векторов и объяснять перпендикулярность, длину и ориентацию правой тройки.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-linear-05",
+              "topicId": "cg-linear",
+              "title": "Orthonormale Basen erkennen",
+              "subtitle": "Basis · Orthogonalität · Länge 1 · Folie 35",
+              "description": "Проверять, что базисные векторы попарно ортогональны и имеют единичную длину.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-linear-06",
+              "topicId": "cg-linear",
+              "title": "Matrizen und Vektoren multiplizieren",
+              "subtitle": "Matrix-Vektor-Produkt · Dimensionen · Folie 36",
+              "description": "Выполнять умножение матрицы на вектор и объяснять его применение для геометрических преобразований.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-01",
+              "topicId": "cg-transform",
+              "title": "Transformationstypen unterscheiden",
+              "subtitle": "Translation · Rotation · Skalierung · Scherung · Projektion · Folie 37",
+              "description": "Объяснять действие переноса, поворота, масштабирования, сдвига (shear) и проекции на трёхмерную геометрию.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-02",
+              "topicId": "cg-transform",
+              "title": "Homogene Koordinaten erklären",
+              "subtitle": "Punkt w=1 · Richtung w=0 · 4D · Folie 38–40",
+              "description": "Объяснять дополнительную координату w, отличие точек и векторов и необходимость однородных координат в 3D-графике.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-03",
+              "topicId": "cg-transform",
+              "title": "Translationsmatrix 4×4 anwenden",
+              "subtitle": "T(tx,ty,tz) · Folie 41–42",
+              "description": "Составлять матрицу переноса и применять её к точке; объяснять, почему вектор направления не сдвигается.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-04",
+              "topicId": "cg-transform",
+              "title": "Skalierungsmatrix 4×4 anwenden",
+              "subtitle": "uniform · non-uniform · Folie 43–44",
+              "description": "Составлять матрицу масштабирования и различать равномерное и неравномерное масштабирование.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-05",
+              "topicId": "cg-transform",
+              "title": "Rotationsmatrizen Rx, Ry und Rz anwenden",
+              "subtitle": "Drehwinkel · Hauptachsen · Folie 45–47",
+              "description": "Читать и применять матрицы поворота вокруг осей x, y и z; объяснять ортогональность матрицы.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-06",
+              "topicId": "cg-transform",
+              "title": "Transformationsreihenfolge beachten",
+              "subtitle": "Konkatenation · Nichtkommutativität · Folie 48",
+              "description": "Вычислять последовательные преобразования в правильном порядке и показывать, почему умножение матриц некоммутативно.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-transform-07",
+              "topicId": "cg-transform",
+              "title": "Starrkörpertransformationen erkennen",
+              "subtitle": "Rigid Body · Rotation + Translation · Folie 59",
+              "description": "Отличать преобразования, сохраняющие форму и расстояния, от масштабирования и сдвига.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 470,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-scene-01",
+              "topicId": "cg-scene",
+              "title": "Hierarchische Transformationen erklären",
+              "subtitle": "Eltern · Kinder · Vererbung von Matrizen · Folie 49–50",
+              "description": "Объяснять, как дочерние объекты наследуют преобразования родителей на примере велосипеда и робота.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-scene-02",
+              "topicId": "cg-scene",
+              "title": "Sonnensystem als Hierarchie modellieren",
+              "subtitle": "Sonne · Erde · Mond · Folie 51–56",
+              "description": "Планировать отношения объектов для обращения планеты вокруг Солнца и Луны вокруг планеты с собственным вращением.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-scene-03",
+              "topicId": "cg-scene",
+              "title": "Gesamtmatrix im Szenengraph berechnen",
+              "subtitle": "G_neu = G * T · Folie 53",
+              "description": "Применять обновление общей матрицы G при обходе и учитывать, что последняя записанная трансформация действует на объект первой.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-scene-04",
+              "topicId": "cg-scene",
+              "title": "GPU-Parallelität konzeptionell erklären",
+              "subtitle": "SIMD · viele Fragmente · Folie 52",
+              "description": "Понимать, зачем GPU выполняет сходные операции над большим числом пикселей параллельно.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-rotation-01",
+              "topicId": "cg-rotation",
+              "title": "Numerische Probleme verketteter Rotationen erklären",
+              "subtitle": "Rundungsfehler · Drift · Scherung · Folie 57–64",
+              "description": "Сравнивать три варианта многократного вращения и объяснять накопление погрешностей и пересчёт матрицы из угла.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-rotation-02",
+              "topicId": "cg-rotation",
+              "title": "Rotationsmatrizen für Interpolation bewerten",
+              "subtitle": "Matrixinterpolation · Singularität · Folie 65–66",
+              "description": "Объяснять на примере +90° и -90°, почему поэлементная интерполяция матриц ориентации не подходит.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-rotation-03",
+              "topicId": "cg-rotation",
+              "title": "Fixed-Angle-Rotationen zusammensetzen",
+              "subtitle": "Rx · Ry · Rz · Reihenfolge · Folie 67",
+              "description": "Уметь описывать ориентацию последовательностью поворотов вокруг фиксированных главных осей.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-rotation-04",
+              "topicId": "cg-rotation",
+              "title": "Gimbal Lock erklären",
+              "subtitle": "Verlust eines Freiheitsgrads · Folie 68–70",
+              "description": "Объяснять совпадение двух осей при особых углах и потерю одной степени свободы.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-rotation-05",
+              "topicId": "cg-rotation",
+              "title": "Achse-Winkel-Darstellung verstehen",
+              "subtitle": "Euler · Rotationsachse · Winkel · Folie 71–73",
+              "description": "Представлять поворот как ось и угол, объяснять преимущества и ограничения такой формы записи.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-quaternion-01",
+              "topicId": "cg-quaternion",
+              "title": "Quaternion als Skalar und Vektor beschreiben",
+              "subtitle": "q=[s,v] · vier Komponenten · Folie 74–75",
+              "description": "Объяснять структуру кватерниона и связь с представлением поворота через ось и угол.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-quaternion-02",
+              "topicId": "cg-quaternion",
+              "title": "Quaternionen multiplizieren und invertieren",
+              "subtitle": "Nichtkommutativität · Inverse · Folie 76",
+              "description": "Выполнять основные операции с кватернионами и понимать порядок композиции поворотов.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-quaternion-03",
+              "topicId": "cg-quaternion",
+              "title": "Vektor mit Quaternion rotieren",
+              "subtitle": "q·v·q⁻¹ · Folie 77",
+              "description": "Применять правило представления вектора чисто мнимым кватернионом и формулу вращения.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-quaternion-04",
+              "topicId": "cg-quaternion",
+              "title": "Achse-Winkel in Quaternion umwandeln",
+              "subtitle": "Rotation → Quaternion · Folie 78–79",
+              "description": "Записывать единичный кватернион для заданных оси и угла; понимать, что q и -q задают одинаковое вращение.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-quaternion-05",
+              "topicId": "cg-quaternion",
+              "title": "Einheitsquaternionen und Interpolation verstehen",
+              "subtitle": "4D-Einheitssphäre · Folie 80–83",
+              "description": "Объяснять нормализацию кватернионов и почему прямая линейная интерполяция компонентов не даёт нужного равномерного движения.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-quaternion-06",
+              "topicId": "cg-quaternion",
+              "title": "Slerp anwenden und interpretieren",
+              "subtitle": "Spherical Linear Interpolation · Folie 84",
+              "description": "Понимать смысл и параметры Slerp, интерполяцию по кратчайшей дуге на единичной сфере и применение в анимации.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-camera-01",
+              "topicId": "cg-camera",
+              "title": "Virtuelles Kameramodell erklären",
+              "subtitle": "Position · Orientierung · 6 DOF · Folie 85–86",
+              "description": "Определять положение, направление, ориентацию камеры и параметры области изображения.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-camera-02",
+              "topicId": "cg-camera",
+              "title": "Parallelprojektion erklären",
+              "subtitle": "Orthografisch · Sichtvolumen · Folie 87–88",
+              "description": "Понимать принцип параллельной проекции и границы её видимого объёма.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-camera-03",
+              "topicId": "cg-camera",
+              "title": "Perspektivprojektion erklären",
+              "subtitle": "Frustum · near/far · FOV · aspect · Folie 89–90",
+              "description": "Объяснять перспективное уменьшение, усечённую пирамиду видимости и параметры near, far, угол обзора и aspect ratio.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-camera-04",
+              "topicId": "cg-camera",
+              "title": "Model-, View- und Projection-Matrizen verketten",
+              "subtitle": "MVP · gl_Position · Folie 91–93",
+              "description": "Объяснять переход объектных координат к экранному представлению и порядок умножения матриц в Vertex Shader.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-camera-05",
+              "topicId": "cg-camera",
+              "title": "Kamerakoordinatensystem und lookAt anwenden",
+              "subtitle": "eye · center · up · Folie 92–95",
+              "description": "Понимать направление -z в показанной модели камеры и параметры функции QMatrix4x4::lookAt.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-camera-06",
+              "topicId": "cg-camera",
+              "title": "Clipping, Culling und Viewport unterscheiden",
+              "subtitle": "Window · Viewport · glViewport · Folie 96–98",
+              "description": "Различать отбрасывание объектов, отсечение частей примитивов и преобразование Window→Viewport.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-ecs-01",
+              "topicId": "cg-ecs",
+              "title": "Motivation für ECS gegenüber OOP erklären",
+              "subtitle": "Cache · Komposition statt Vererbung · Folie 99–104",
+              "description": "Объяснять проблемы глубоких иерархий и косвенных обращений при рендеринге и выгоды data-oriented хранения.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-ecs-02",
+              "topicId": "cg-ecs",
+              "title": "Entity, Component und System unterscheiden",
+              "subtitle": "ID · Daten · Verarbeitung · Folie 102",
+              "description": "Давать определения трёх элементов ECS и разбирать примеры Position, Velocity, Material, Shader.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-ecs-03",
+              "topicId": "cg-ecs",
+              "title": "EnTT-Registry und Views lesen",
+              "subtitle": "entt::registry · create · emplace · view · Folie 103",
+              "description": "Читать приведённый пример создания entities, добавления компонентов и обхода наборов компонентов.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 0,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-ecs-04",
+              "topicId": "cg-ecs",
+              "title": "SORS: Manager, Geometry, Shader, Renderable",
+              "subtitle": "Simple OpenGL Renderer · Folie 105",
+              "description": "Объяснять архитектуру учебного SORS, роль Manager и организацию компонентов и Renderable.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-ecs-05",
+              "topicId": "cg-ecs",
+              "title": "Renderloop und Systeme in SORS verstehen",
+              "subtitle": "preRender · render · postRender · Folie 106",
+              "description": "Читать схему рендер-цикла, обновление матриц и работу Transformation-, Shader- и GeometrySystems.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            },
+            {
+              "id": "cg-ecs-06",
+              "topicId": "cg-ecs",
+              "title": "Relationship-Hierarchien in ECS abbilden",
+              "subtitle": "addChild · traverseChilds · visitHierarchy · Folie 107",
+              "description": "Понимать, зачем плоскому ECS нужен отдельный механизм отношений родителей и детей для иерархических трансформаций.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 235,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              }
+            }
+          ],
+          "relations": [
+            {
+              "from": "cg-intro-01",
+              "to": "cg-intro-02"
+            },
+            {
+              "from": "cg-intro-02",
+              "to": "cg-intro-03"
+            },
+            {
+              "from": "cg-pipeline-01",
+              "to": "cg-pipeline-02"
+            },
+            {
+              "from": "cg-pipeline-02",
+              "to": "cg-pipeline-03"
+            },
+            {
+              "from": "cg-pipeline-03",
+              "to": "cg-pipeline-04"
+            },
+            {
+              "from": "cg-pipeline-04",
+              "to": "cg-pipeline-05"
+            },
+            {
+              "from": "cg-pipeline-05",
+              "to": "cg-pipeline-06"
+            },
+            {
+              "from": "cg-linear-01",
+              "to": "cg-linear-02"
+            },
+            {
+              "from": "cg-linear-02",
+              "to": "cg-linear-03"
+            },
+            {
+              "from": "cg-linear-03",
+              "to": "cg-linear-04"
+            },
+            {
+              "from": "cg-linear-04",
+              "to": "cg-linear-05"
+            },
+            {
+              "from": "cg-linear-05",
+              "to": "cg-linear-06"
+            },
+            {
+              "from": "cg-transform-01",
+              "to": "cg-transform-02"
+            },
+            {
+              "from": "cg-transform-02",
+              "to": "cg-transform-03"
+            },
+            {
+              "from": "cg-transform-03",
+              "to": "cg-transform-04"
+            },
+            {
+              "from": "cg-transform-04",
+              "to": "cg-transform-05"
+            },
+            {
+              "from": "cg-transform-05",
+              "to": "cg-transform-06"
+            },
+            {
+              "from": "cg-transform-06",
+              "to": "cg-transform-07"
+            },
+            {
+              "from": "cg-scene-01",
+              "to": "cg-scene-02"
+            },
+            {
+              "from": "cg-scene-02",
+              "to": "cg-scene-03"
+            },
+            {
+              "from": "cg-scene-03",
+              "to": "cg-scene-04"
+            },
+            {
+              "from": "cg-rotation-01",
+              "to": "cg-rotation-02"
+            },
+            {
+              "from": "cg-rotation-02",
+              "to": "cg-rotation-03"
+            },
+            {
+              "from": "cg-rotation-03",
+              "to": "cg-rotation-04"
+            },
+            {
+              "from": "cg-rotation-04",
+              "to": "cg-rotation-05"
+            },
+            {
+              "from": "cg-quaternion-01",
+              "to": "cg-quaternion-02"
+            },
+            {
+              "from": "cg-quaternion-02",
+              "to": "cg-quaternion-03"
+            },
+            {
+              "from": "cg-quaternion-03",
+              "to": "cg-quaternion-04"
+            },
+            {
+              "from": "cg-quaternion-04",
+              "to": "cg-quaternion-05"
+            },
+            {
+              "from": "cg-quaternion-05",
+              "to": "cg-quaternion-06"
+            },
+            {
+              "from": "cg-camera-01",
+              "to": "cg-camera-02"
+            },
+            {
+              "from": "cg-camera-02",
+              "to": "cg-camera-03"
+            },
+            {
+              "from": "cg-camera-03",
+              "to": "cg-camera-04"
+            },
+            {
+              "from": "cg-camera-04",
+              "to": "cg-camera-05"
+            },
+            {
+              "from": "cg-camera-05",
+              "to": "cg-camera-06"
+            },
+            {
+              "from": "cg-ecs-01",
+              "to": "cg-ecs-02"
+            },
+            {
+              "from": "cg-ecs-02",
+              "to": "cg-ecs-03"
+            },
+            {
+              "from": "cg-ecs-03",
+              "to": "cg-ecs-04"
+            },
+            {
+              "from": "cg-ecs-04",
+              "to": "cg-ecs-05"
+            },
+            {
+              "from": "cg-ecs-05",
+              "to": "cg-ecs-06"
+            }
+          ],
+          "learningCheckpoint": {
+            "document": "1Pipeline.pdf",
+            "page": 1,
+            "totalPages": 107,
+            "lastExplainedPage": 0,
+            "note": "Первая лекция импортирована как учебный план. Начать разбор с содержательных слайдов 11–12 (введение), организационная информация — слайды 5–10.",
+            "date": "2026-10-12"
+          }
         }
       ]
     }
