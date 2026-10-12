@@ -161,7 +161,7 @@
   }
 
   function titleBar(title, subtitle="") {
-    return '<div class="quiz-head"><div><div class="panel-label">SWEG · КАРТОЧКИ</div>'+
+    return '<div class="quiz-head"><div><div class="panel-label">'+esc(getContext().exam?.title||"УЧЁБА")+' · КАРТОЧКИ</div>'+
       '<h2>'+esc(title)+'</h2>'+ (subtitle?'<p>'+esc(subtitle)+'</p>':"") +
       '</div><button data-action="home" type="button">На главную</button></div>';
   }
