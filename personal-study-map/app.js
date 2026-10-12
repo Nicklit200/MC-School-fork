@@ -389,13 +389,13 @@ function renderLifeBalances() {
       .reduce((sum, item) => sum + (Number(item.activeKcal ?? item.activeCalories) || 0), 0);
     host.innerHTML =
       '<div class="life-balance-card burned">' +
-        '<span class="life-balance-symbol" aria-hidden="true">♨</span>' +
+        '<span class="life-balance-symbol" aria-hidden="true">🔥</span>' +
         '<div><div class="life-balance-label">Сожжено</div>' +
         '<strong class="life-balance-value">' + Math.round(burned) + ' ккал</strong>' +
         '<div class="life-balance-note">Активные калории тренировок</div></div>' +
       '</div>' +
       '<div class="life-balance-card eaten">' +
-        '<span class="life-balance-symbol" aria-hidden="true">♢</span>' +
+        '<span class="life-balance-symbol" aria-hidden="true">🍴</span>' +
         '<div><div class="life-balance-label">Съедено</div>' +
         '<strong class="life-balance-value">' + Math.round(eaten) + ' ккал</strong>' +
         '<div class="life-balance-note">Из дневника питания</div></div>' +
