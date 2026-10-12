@@ -1,7 +1,22 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-09",
+  "updatedAt": "2026-10-12",
   "entries": [
+    {
+      "id": "chat-2026-10-12-two-lattes-260kcal",
+      "date": "2026-10-12",
+      "meal": "Напиток",
+      "name": "Домашний латте - 2 чашки",
+      "quantity": 2,
+      "unit": "чашки по ~250 мл",
+      "kcal": 260,
+      "protein": 13.6,
+      "carbs": 19.2,
+      "fat": 14,
+      "estimated": true,
+      "source": "chatgpt",
+      "notes": "Две чашки латте по 130 ккал каждая. КБЖУ приблизительны; исходный латте оценён как около 250 мл с молоком без сахара."
+    },
     {
       "id": "chat-2026-10-09-breakfast-salmon-cream-cheese-toast",
       "date": "2026-10-09",
