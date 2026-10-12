@@ -19,6 +19,9 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      - name: Compile backend
+      - name: Compile and verify branded PDFs
+        working-directory: backend
+        run: mvn -B -Dtest=LessonPdfDraftServiceTest test
+      - name: Build backend
         working-directory: backend
         run: mvn -B -DskipTests package
