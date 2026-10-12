@@ -3915,7 +3915,7 @@
               "title": "1Pipeline.pdf",
               "type": "Vorlesung 1 / Folien",
               "coverage": "Folien 1–107: Einführung, Grafikpipeline, Transformationen, Quaternionen, Projektionen, ECS und SORS",
-              "note": "Prof. Dr. Bernd Dreier. Полная первая презентация структурирована в навыки; пока ничего не изучено и не проверено."
+              "note": "Prof. Dr. Bernd Dreier. План импортирован на 107 слайдов. 12.10.2026 объяснён вводный блок до Shader / Programmable Pipeline; остальные темы не изучены."
             }
           ],
           "topics": [
@@ -3963,17 +3963,52 @@
               "title": "Computergrafik von Bildverarbeitung unterscheiden",
               "subtitle": "Bildsynthese · Bildverarbeitung · Bilderkennung · Folie 11–12",
               "description": "Различать синтез изображения, обработку изображений, распознавание образов и Computer Vision; приводить примеры задач каждой области.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 0,
               "y": 0,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-intro-01-01",
+                  "question": "Worin besteht der Unterschied zwischen Computergrafik und Bildverarbeitung?",
+                  "answer": "Computergrafik erzeugt Bilder aus einer Szenenbeschreibung; Bildverarbeitung verändert vorhandene Bilder.",
+                  "wrongAnswer1": "Beide erkennen nur Objekte im Bild.",
+                  "wrongAnswer2": "Bildverarbeitung erstellt ausschließlich 3D-Modelle.",
+                  "wrongAnswer3": "Computergrafik ist nur das Drucken von Fotos.",
+                  "explanation": "Bildsynthese = erzeugen; Bildverarbeitung = verändern; Bilderkennung = analysieren."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-01-02",
+                  "question": "Welche Aufgabe gehört zur Bild-/Mustererkennung?",
+                  "answer": "Aus einem Kamerabild erkennen, wo die Straße verläuft.",
+                  "wrongAnswer1": "Eine 3D-Kugel modellieren.",
+                  "wrongAnswer2": "Die Bildhelligkeit erhöhen.",
+                  "wrongAnswer3": "Ein Dreieck aus Eckpunkten rendern.",
+                  "explanation": "Mustererkennung interpretiert Inhalte bereits vorhandener Bilder."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-01-03",
+                  "question": "Was braucht die Bildsynthese zur Erzeugung einer 3D-Szene?",
+                  "answer": "Geometrie, Materialien, Beleuchtung und Kamera.",
+                  "wrongAnswer1": "Nur einen fertigen Screenshot.",
+                  "wrongAnswer2": "Ausschließlich eine Tastatur.",
+                  "wrongAnswer3": "Nur die Auflösung des Bildschirms.",
+                  "explanation": "Die Szene wird beschrieben und durch Rendering als Bild ausgegeben."
+                }
+              ]
             },
             {
               "id": "cg-intro-02",
@@ -3981,17 +4016,52 @@
               "title": "Historische Meilensteine der Computergrafik",
               "subtitle": "Plotter · Spacewar · Sketchpad · CAD · Folie 13–15",
               "description": "Объяснять роль Spacewar (1961), Sketchpad Айвана Сазерленда (1963), CAD/CAM, графических интерфейсов и растровых дисплеев.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 310,
               "y": 0,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-intro-02-01",
+                  "question": "Was war Sketchpad (1963)?",
+                  "answer": "Ein frühes interaktives grafisches System von Ivan Sutherland.",
+                  "wrongAnswer1": "Ein modernes Shader-Programm.",
+                  "wrongAnswer2": "Ein Betriebssystem für Smartphones.",
+                  "wrongAnswer3": "Eine Grafikkarte von NVIDIA.",
+                  "explanation": "Sketchpad nutzte geometrische Elemente, Strukturen und Eingabetechniken wie den Lichtgriffel."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-02-02",
+                  "question": "Wofür stehen CAD und CAM?",
+                  "answer": "Computer-Aided Design und Computer-Aided Manufacturing.",
+                  "wrongAnswer1": "Computer Animation Display und Color Adjustment Mode.",
+                  "wrongAnswer2": "Central Application Driver und Core Access Memory.",
+                  "wrongAnswer3": "Camera And Depth und Computer Audio Mixing.",
+                  "explanation": "CAD unterstützt die Konstruktion; CAM die rechnergestützte Fertigung."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-02-03",
+                  "question": "Warum ist Spacewar! für die Computergrafik historisch wichtig?",
+                  "answer": "Es ist ein frühes Beispiel für interaktive Echtzeitgrafik.",
+                  "wrongAnswer1": "Es führte Vulkan ein.",
+                  "wrongAnswer2": "Es erfand die Computertomografie.",
+                  "wrongAnswer3": "Es war das erste CAD-Werkzeug von GM.",
+                  "explanation": "Entwicklung begann 1961, das Spiel wird meist auf 1962 datiert."
+                }
+              ]
             },
             {
               "id": "cg-intro-03",
@@ -3999,17 +4069,79 @@
               "title": "OpenGL, OpenGL ES und Vulkan einordnen",
               "subtitle": "Grafik-APIs · CPU/GPU · Folie 16–17",
               "description": "Понимать место OpenGL/OpenGL ES и Vulkan в экосистеме и основную идею Vulkan: больше прямого управления GPU, больше ответственности приложения.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 620,
               "y": 0,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-intro-03-01",
+                  "question": "Was ist OpenGL?",
+                  "answer": "Eine Programmierschnittstelle (API) für die Grafikdarstellung.",
+                  "wrongAnswer1": "Ein 3D-Modellierungsprogramm.",
+                  "wrongAnswer2": "Ein Grafikprozessor.",
+                  "wrongAnswer3": "Ein Dateiformat für Bilder.",
+                  "explanation": "OpenGL definiert Grafikbefehle, die über Implementierung und Treiber ausgeführt werden."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-03-02",
+                  "question": "Wofür wurde OpenGL ES entwickelt?",
+                  "answer": "Für eingebettete und mobile Geräte.",
+                  "wrongAnswer1": "Nur für Supercomputer ohne Bildschirm.",
+                  "wrongAnswer2": "Für das Drucken auf Plottern.",
+                  "wrongAnswer3": "Als Ersatz für alle Betriebssysteme.",
+                  "explanation": "OpenGL ES ist auf Embedded Systems ausgerichtet."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-03-03",
+                  "question": "Worin unterscheiden sich OpenGL und OpenCL?",
+                  "answer": "OpenGL dient vor allem der Grafik, OpenCL parallelen Berechnungen.",
+                  "wrongAnswer1": "Beide sind ausschließlich Texteditoren.",
+                  "wrongAnswer2": "OpenCL erstellt nur Fenster.",
+                  "wrongAnswer3": "OpenGL ist ein Betriebssystem.",
+                  "explanation": "OpenCL ist ein separater Standard, nicht eine Version von OpenGL."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-03-04",
+                  "question": "Was ist GPGPU?",
+                  "answer": "Allgemeine Berechnungen auf dem Grafikprozessor.",
+                  "wrongAnswer1": "Nur die Ausgabe eines Bildes auf einem Plotter.",
+                  "wrongAnswer2": "Eine spezielle Form der Maus.",
+                  "wrongAnswer3": "Das Speichern von Grafikdateien.",
+                  "explanation": "General-Purpose Computing on Graphics Processing Units."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-03-05",
+                  "question": "Was unterscheidet Vulkan von OpenGL?",
+                  "answer": "Vulkan gibt der Anwendung explizitere Kontrolle über Speicher und Befehle.",
+                  "wrongAnswer1": "Vulkan verzichtet vollständig auf die GPU.",
+                  "wrongAnswer2": "OpenGL erlaubt keine 3D-Grafik.",
+                  "wrongAnswer3": "Vulkan ist lediglich eine Bilddatei.",
+                  "explanation": "In OpenGL übernimmt der Treiber viele Verwaltungsaufgaben; Vulkan verlagert Verantwortung zur Anwendung."
+                },
+                {
+                  "id": "cg-20261012-cg-intro-03-06",
+                  "question": "Was ist ein Command Buffer in Vulkan?",
+                  "answer": "Eine aufgezeichnete Folge von GPU-Befehlen.",
+                  "wrongAnswer1": "Ein Speicher nur für Tastatureingaben.",
+                  "wrongAnswer2": "Ein Dateiformat für Fotos.",
+                  "wrongAnswer3": "Eine 3D-Kamera.",
+                  "explanation": "Die Anwendung zeichnet Befehle auf, die später an die GPU übergeben werden."
+                }
+              ]
             },
             {
               "id": "cg-pipeline-01",
@@ -4017,17 +4149,52 @@
               "title": "Aufbau einer OpenGL-Anwendung erklären",
               "subtitle": "Anwendung · Qt/SDL · OpenGL · Treiber · GPU · Folie 19",
               "description": "Нарисовать и объяснить путь от приложения через оконный фреймворк и OpenGL к драйверу, framebuffer и устройствам ввода-вывода.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 0,
               "y": 355,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-pipeline-01-01",
+                  "question": "Wofür wird in einer OpenGL-Anwendung ein Framework wie SDL, Qt oder GLFW eingesetzt?",
+                  "answer": "Für Fensterverwaltung und Eingabeverarbeitung.",
+                  "wrongAnswer1": "Ausschließlich für die Farbe jedes Fragments.",
+                  "wrongAnswer2": "Zum Ersetzen der Grafikhardware.",
+                  "wrongAnswer3": "Nur zum Speichern von Textdateien.",
+                  "explanation": "OpenGL stellt selbst keine vollständige Fenster- und Eingabeverwaltung bereit."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-01-02",
+                  "question": "Welche Aufgabe hat der Framebuffer?",
+                  "answer": "Er speichert Daten des gerenderten Bildes.",
+                  "wrongAnswer1": "Er liest nur die Mausbewegung.",
+                  "wrongAnswer2": "Er modelliert alle 3D-Objekte.",
+                  "wrongAnswer3": "Er ersetzt den Vertex Shader.",
+                  "explanation": "Framebuffer können Farb-, Tiefen- und weitere Bilddaten enthalten."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-01-03",
+                  "question": "Welche Komponente verarbeitet typischerweise Maus- und Tastatureingaben?",
+                  "answer": "Betriebssystem und Framework.",
+                  "wrongAnswer1": "Ausschließlich der Fragment Shader.",
+                  "wrongAnswer2": "Der Farbkanal des Framebuffers.",
+                  "wrongAnswer3": "Nur der Vertex Shader.",
+                  "explanation": "Das Framework leitet Eingabeereignisse an die Anwendung weiter."
+                }
+              ]
             },
             {
               "id": "cg-pipeline-02",
@@ -4035,17 +4202,52 @@
               "title": "Phasen der Grafikpipeline erklären",
               "subtitle": "Modellierung · Geometrie · Rasterisierung · Fragmente · Folie 20",
               "description": "Воспроизводить упрощённую последовательность этапов: моделирование, геометрия, растеризация, обработка фрагментов, framebuffer.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 310,
               "y": 355,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-pipeline-02-01",
+                  "question": "Wie lautet die vereinfachte Reihenfolge der Grafikpipeline?",
+                  "answer": "Modellierung → Geometrie → Rasterisierung → Fragmentbehandlung → Framebuffer.",
+                  "wrongAnswer1": "Framebuffer → Modellierung → Rasterisierung → Geometrie.",
+                  "wrongAnswer2": "Fragmentbehandlung → Modellierung → Framebuffer → Geometrie.",
+                  "wrongAnswer3": "Richtig ist nur Rasterisierung → Modellierung.",
+                  "explanation": "Die Grafikpipeline verarbeitet zuerst Geometrie und liefert schließlich Bilddaten."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-02-02",
+                  "question": "Was macht die Rasterisierung?",
+                  "answer": "Sie wandelt geometrische Primitive in Fragmente um.",
+                  "wrongAnswer1": "Sie öffnet Anwendungsfenster.",
+                  "wrongAnswer2": "Sie erfindet 3D-Modelle aus Text.",
+                  "wrongAnswer3": "Sie steuert die Maus direkt.",
+                  "explanation": "Rasterisierung ordnet Dreiecken und anderen Primitiven Fragmente auf der Bildfläche zu."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-02-03",
+                  "question": "Was bedeutet Clipping?",
+                  "answer": "Geometrie außerhalb des Sichtvolumens abschneiden.",
+                  "wrongAnswer1": "Die GPU dauerhaft ausschalten.",
+                  "wrongAnswer2": "Eine Textur auf die Festplatte speichern.",
+                  "wrongAnswer3": "Die Tastaturbelegung ändern.",
+                  "explanation": "Clipping begrenzt Grafikprimitive auf das sichtbare Volumen."
+                }
+              ]
             },
             {
               "id": "cg-pipeline-03",
@@ -4053,17 +4255,43 @@
               "title": "Vertex Shader einordnen",
               "subtitle": "Vertex · Geometrie · gl_Position · Folie 20–22",
               "description": "Объяснять задачу Vertex Shader, преобразование координат вершины и значение gl_Position.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 620,
               "y": 355,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-pipeline-03-01",
+                  "question": "Welche Aufgabe hat ein Vertex Shader?",
+                  "answer": "Er verarbeitet Vertices und berechnet typischerweise deren Position.",
+                  "wrongAnswer1": "Er erzeugt Betriebssystemfenster.",
+                  "wrongAnswer2": "Er liest ausschließlich Audiodaten.",
+                  "wrongAnswer3": "Er speichert alle Bildschirmpixel.",
+                  "explanation": "Ein Vertex Shader transformiert einzelne Eingabevertexdaten."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-03-02",
+                  "question": "Welche geometrische Operation beschreibt eine Rotation?",
+                  "answer": "Das Drehen eines Objekts.",
+                  "wrongAnswer1": "Das Vergrößern eines Objekts.",
+                  "wrongAnswer2": "Das Verschieben ohne Drehung.",
+                  "wrongAnswer3": "Das Verändern der Bildauflösung.",
+                  "explanation": "Rotation = Drehung; Skalierung = Größenänderung; Translation = Verschiebung."
+                }
+              ]
             },
             {
               "id": "cg-pipeline-04",
@@ -4071,17 +4299,43 @@
               "title": "Fragment Shader einordnen",
               "subtitle": "Fragment · Farbe · fragColor · Folie 20–22",
               "description": "Объяснять, что фрагмент — потенциальный пиксель и как Fragment Shader задаёт цвет фрагмента.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 0,
               "y": 610,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-pipeline-04-01",
+                  "question": "Was berechnet ein Fragment Shader typischerweise?",
+                  "answer": "Den Ausgabefarbwert eines Fragments.",
+                  "wrongAnswer1": "Die Position der Maus.",
+                  "wrongAnswer2": "Die Fenstergröße des Betriebssystems.",
+                  "wrongAnswer3": "Die Anzahl der Tastaturen.",
+                  "explanation": "Der Fragment Shader kann z. B. Farbe aus Material, Textur und Beleuchtung berechnen."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-04-02",
+                  "question": "Warum heißt ein Fragment ein potenzielles Pixel?",
+                  "answer": "Es kann noch verworfen werden oder nur zum endgültigen Pixel beitragen.",
+                  "wrongAnswer1": "Jedes Fragment ist automatisch sichtbar.",
+                  "wrongAnswer2": "Ein Fragment enthält nie Tiefeninformationen.",
+                  "wrongAnswer3": "Ein Fragment ist nur eine 3D-Ecke.",
+                  "explanation": "Tiefentests, Verwerfen und Blending beeinflussen das endgültige Ergebnis."
+                }
+              ]
             },
             {
               "id": "cg-pipeline-05",
@@ -4089,17 +4343,61 @@
               "title": "Fixed Function und Programmable Pipeline unterscheiden",
               "subtitle": "OpenGL 2.x vs. 3.x · GLSL · Folie 21–22",
               "description": "Понимать отличие фиксированного конвейера от программируемого и роль GLSL-программ на GPU.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-12",
               "x": 310,
               "y": 610,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-12",
+                  "type": "lesson",
+                  "note": "Разбор слайдов в диалоге 12.10.2026: объяснения пройдены, самостоятельная проверка ещё не проведена."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261012-cg-pipeline-05-01",
+                  "question": "Was kennzeichnet die Fixed-Function-Pipeline?",
+                  "answer": "Viele Verarbeitungsschritte sind fest vorgegeben und nur parametrisch einstellbar.",
+                  "wrongAnswer1": "Jede Phase lässt sich frei in GLSL programmieren.",
+                  "wrongAnswer2": "Sie funktioniert ganz ohne Hardware.",
+                  "wrongAnswer3": "Sie besteht ausschließlich aus Fragment Shadern.",
+                  "explanation": "Die programmierbare Pipeline ermöglicht eigene Shaderprogramme für bestimmte Stufen."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-05-02",
+                  "question": "Was ist ein Shader?",
+                  "answer": "Ein auf der GPU ausgeführtes Programm für eine Verarbeitungsstufe.",
+                  "wrongAnswer1": "Ein physischer Computermonitor.",
+                  "wrongAnswer2": "Ein Gerät zum Zeichnen auf Papier.",
+                  "wrongAnswer3": "Eine Betriebssystemversion.",
+                  "explanation": "Typische Grafikshader sind Vertex Shader und Fragment Shader."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-05-03",
+                  "question": "Was bedeutet GLSL?",
+                  "answer": "OpenGL Shading Language.",
+                  "wrongAnswer1": "Graphic Screen Layout.",
+                  "wrongAnswer2": "General Software Link Library.",
+                  "wrongAnswer3": "Graphics Storage Loader.",
+                  "explanation": "GLSL wird verwendet, um Shader für OpenGL zu schreiben."
+                },
+                {
+                  "id": "cg-20261012-cg-pipeline-05-04",
+                  "question": "Welche Aussage über HLSL trifft heute zu?",
+                  "answer": "HLSL wird weiterhin eingesetzt, insbesondere mit Direct3D.",
+                  "wrongAnswer1": "HLSL ist seit 2002 vollständig ausgestorben.",
+                  "wrongAnswer2": "HLSL ist eine Maus-Technologie.",
+                  "wrongAnswer3": "HLSL ist ein Bildformat.",
+                  "explanation": "Der scherzhafte Hinweis auf der alten Folie, HLSL sei ausgestorben, ist nicht aktuell."
+                }
+              ]
             },
             {
               "id": "cg-pipeline-06",
@@ -5004,11 +5302,15 @@
           ],
           "learningCheckpoint": {
             "document": "1Pipeline.pdf",
-            "page": 1,
+            "page": 22,
             "totalPages": 107,
-            "lastExplainedPage": 0,
-            "note": "Первая лекция импортирована как учебный план. Начать разбор с содержательных слайдов 11–12 (введение), организационная информация — слайды 5–10.",
-            "date": "2026-10-12"
+            "lastExplainedPage": 21,
+            "pagesToRevisit": [
+              22
+            ],
+            "topic": "Shader / Programmable Pipeline",
+            "date": "2026-10-12",
+            "note": "В диалоге разобраны слайды: Bereiche der grafischen Datenverarbeitung, Bildsynthese, Geschichte (Sketchpad), OpenGL/ES/OpenCL, Vulkan vs. OpenGL, Aufbau einer OpenGL-Anwendung, Grafikpipeline, Vertex/Fragment Shader, Fixed Function vs. Programmable Pipeline и GLSL. Последняя разобранная тема — Halt! Hat er eben Shader gesagt? Следующий шаг: GLSL-Beispiel / следующий слайд после Shader; проверить точный номер слайда по PDF. Навыки оценены как знакомство (20%), тест карточек ещё не пройден."
           }
         }
       ]
@@ -5116,6 +5418,76 @@
         {
           "skillId": "se-uml26-class-attribute-cardinality",
           "skillTitle": "Kardinalität und Eigenschaften von Attributen",
+          "from": 0,
+          "to": 20
+        }
+      ]
+    },
+    {
+      "id": "session-2026-10-12-cg-einfuehrung-pipeline-shader",
+      "semesterId": "ws-2026-27",
+      "examId": "exam-computergrafik",
+      "date": "2026-10-12",
+      "title": "Computergrafik: Einführung, OpenGL, Vulkan, Pipeline und Shader",
+      "summary": "Последовательно разобрали Bildsynthese/Bildverarbeitung/Bilderkennung, создание 3D-сцены, историю (Spacewar, Sketchpad, CAD/CAM), экосистему OpenGL/ES/OpenCL и GPGPU, Vulkan vs. OpenGL, компоненты приложения, Framebuffer, этапы Grafikpipeline, Vertex/Fragment Shader, Fixed Function/Programmable Pipeline, GLSL/Cg/HLSL. Это объяснение без проверенных самостоятельных ответов; 26 карточек для повторения.",
+      "checkpoint": {
+        "document": "1Pipeline.pdf",
+        "page": 22,
+        "totalPages": 107,
+        "lastExplainedPage": 21,
+        "pagesToRevisit": [
+          22
+        ],
+        "topic": "Shader / Programmable Pipeline",
+        "date": "2026-10-12",
+        "note": "В диалоге разобраны слайды: Bereiche der grafischen Datenverarbeitung, Bildsynthese, Geschichte (Sketchpad), OpenGL/ES/OpenCL, Vulkan vs. OpenGL, Aufbau einer OpenGL-Anwendung, Grafikpipeline, Vertex/Fragment Shader, Fixed Function vs. Programmable Pipeline и GLSL. Последняя разобранная тема — Halt! Hat er eben Shader gesagt? Следующий шаг: GLSL-Beispiel / следующий слайд после Shader; проверить точный номер слайда по PDF. Навыки оценены как знакомство (20%), тест карточек ещё не пройден."
+      },
+      "changes": [
+        {
+          "skillId": "cg-intro-01",
+          "skillTitle": "Computergrafik von Bildverarbeitung unterscheiden",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-intro-02",
+          "skillTitle": "Historische Meilensteine der Computergrafik",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-intro-03",
+          "skillTitle": "OpenGL, OpenGL ES und Vulkan einordnen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-pipeline-01",
+          "skillTitle": "Aufbau einer OpenGL-Anwendung erklären",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-pipeline-02",
+          "skillTitle": "Phasen der Grafikpipeline erklären",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-pipeline-03",
+          "skillTitle": "Vertex Shader einordnen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-pipeline-04",
+          "skillTitle": "Fragment Shader einordnen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "cg-pipeline-05",
+          "skillTitle": "Fixed Function und Programmable Pipeline unterscheiden",
           "from": 0,
           "to": 20
         }
