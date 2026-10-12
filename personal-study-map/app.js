@@ -3,6 +3,7 @@ const API_BASE = "https://personal-life-api-production.up.railway.app";
 const state = {
   data: null,
   section: "study",
+  germanWords: [],
   nutritionEntries: [],
   nutritionAssistantEntries: [],
   workoutEntries: [],
@@ -243,6 +244,7 @@ function renderSection() {
   $("map").hidden = !study || state.viewMode !== "map";
   $("list").hidden = !study || state.viewMode !== "list";
   $("nutrition-view").hidden = state.section !== "nutrition";
+  $("german-view").hidden = state.section !== "german";
   $("workouts-view").hidden = state.section !== "workouts";
 
   for (const id of ["left-panel-toggle", "left-panel"]) {
@@ -275,6 +277,8 @@ function switchSection(section) {
     renderWorkspace();
     renderCalendar("study");
     setTimeout(fitMap, 0);
+  } else if (section === "german") {
+    loadGermanWords();
   } else if (section === "nutrition") {
     loadNutrition();
   } else if (section === "workouts") {
@@ -1643,3 +1647,37 @@ loadData().then(() => setTimeout(fitMap, 0)).catch((error) => {
   $("empty-state").hidden = false;
   $("empty-state").innerHTML = "<strong>Не удалось открыть карту</strong><p>Проверь файл data/study.json.</p>";
 });
+
+
+// German vocabulary UI; saved on the same PostgreSQL API as the other personal sections.
+async function loadGermanWords() {
+  try {
+    state.germanWords = await api("/api/german-words");
+    $("german-status").textContent = "";
+    renderGermanWords();
+  } catch (err) { $("german-status").textContent = "Не удалось загрузить словарь. Попробуй обновить страницу."; }
+}
+function renderGermanWords() {
+  const query = $("german-search").value.trim().toLocaleLowerCase();
+  const items = state.germanWords.filter(w => (w.word+" "+w.translation).toLocaleLowerCase().includes(query));
+  $("german-count").textContent = state.germanWords.length+" слов";
+  const host = $("german-list"); host.replaceChildren();
+  if (!items.length) {host.textContent = "Слов пока нет. Добавь первое слово."; return;}
+  for (const word of items) {
+    const card=document.createElement("article");card.className="german-card";
+    const heading=document.createElement("strong");heading.textContent=word.word;card.append(heading);
+    const translation=document.createElement("input");translation.value=word.translation||"";translation.placeholder="Добавить перевод";translation.setAttribute("aria-label","Перевод "+word.word);card.append(translation);
+    const context=document.createElement("small");context.textContent=word.context||"";card.append(context);
+    const buttons=document.createElement("div");buttons.className="german-card-actions";
+    const save=document.createElement("button");save.type="button";save.textContent="Сохранить перевод";
+    save.onclick=async()=>{await api("/api/german-words/"+encodeURIComponent(word.id),{method:"PATCH",body:JSON.stringify({translation:translation.value})});word.translation=translation.value;$("german-status").textContent="Перевод сохранён";};
+    const known=document.createElement("button");known.type="button";known.textContent="Знаю ✓";
+    known.onclick=async()=>{const rep=(word.repetition||0)+1;const due=new Date(Date.now()+[1,2,4,7,14,30][Math.min(rep-1,5)]*86400000).toISOString().slice(0,10);await api("/api/german-words/"+encodeURIComponent(word.id),{method:"PATCH",body:JSON.stringify({repetition:rep,dueDate:due})});await loadGermanWords();};
+    const del=document.createElement("button");del.type="button";del.textContent="Удалить";
+    del.onclick=async()=>{if(!confirm("Удалить слово «"+word.word+"»?"))return;await api("/api/german-words/"+encodeURIComponent(word.id),{method:"DELETE"});await loadGermanWords();};
+    buttons.append(save,known,del);card.append(buttons);host.append(card);
+  }
+}
+$("german-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/german-words",{method:"POST",body:JSON.stringify({word:$("german-word").value,translation:$("german-translation").value})});e.target.reset();await loadGermanWords();}catch{$("german-status").textContent="Не удалось сохранить слово.";}};
+$("german-search").oninput=renderGermanWords;
+$("german-review").onclick=()=>{const today=todayIso();const due=state.germanWords.filter(w=>!w.dueDate||w.dueDate<=today);if(!due.length){alert("Все слова повторены на сегодня");return;}const w=due[Math.floor(Math.random()*due.length)];const answer=prompt("Переведи: "+w.word+"\n\n"+(w.context||""));if(answer===null)return;alert("Перевод: "+(w.translation||"ещё не указан")+"\nТвой ответ: "+answer+"\nНажми «Знаю ✓» на карточке, если вспомнил правильно.");};
