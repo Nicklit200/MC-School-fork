@@ -50,7 +50,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.20.0";
+    private static final String SERVER_VERSION = "1.21.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -69,6 +69,7 @@ public class MindcraftiMcpController {
     private final MonthlyPlanService monthlyPlanService;
     private final SchoolPromptSettingsService schoolPromptSettingsService;
     private final SchoolBrandGuideService schoolBrandGuideService;
+    private final LessonPdfDraftService lessonPdfDraftService;
     private final StoryTemplateMasterService storyTemplateMasterService;
     private final StoryTemplateDownloadLinkService storyTemplateDownloadLinkService;
     private final FunnelAnalyticsService funnelAnalyticsService;
@@ -90,6 +91,7 @@ public class MindcraftiMcpController {
             MonthlyPlanService monthlyPlanService,
             SchoolPromptSettingsService schoolPromptSettingsService,
             SchoolBrandGuideService schoolBrandGuideService,
+            LessonPdfDraftService lessonPdfDraftService,
             StoryTemplateMasterService storyTemplateMasterService,
             StoryTemplateDownloadLinkService storyTemplateDownloadLinkService,
             FunnelAnalyticsService funnelAnalyticsService) {
@@ -109,6 +111,7 @@ public class MindcraftiMcpController {
         this.monthlyPlanService = monthlyPlanService;
         this.schoolPromptSettingsService = schoolPromptSettingsService;
         this.schoolBrandGuideService = schoolBrandGuideService;
+        this.lessonPdfDraftService = lessonPdfDraftService;
         this.storyTemplateMasterService = storyTemplateMasterService;
         this.storyTemplateDownloadLinkService = storyTemplateDownloadLinkService;
         this.funnelAnalyticsService = funnelAnalyticsService;
@@ -204,6 +207,19 @@ public class MindcraftiMcpController {
         tools.add(tool("get_story_template_download_link", "Get a short-lived, signed HTTPS link to the exact approved PPTX. First call get_story_template_info. Download the file using the returned URL within 5 minutes and verify SHA256 before editing. Prefer this tool to base64 chunks when a downloader is available.", schema(Map.of(), List.of()), readOnlyAnnotations()));
         tools.add(tool("get_story_template_chunk", "Download an exact binary chunk of the CURRENT approved three-slide PPTX. First call get_story_template_info; get each chunk using the returned version; concatenate decoded base64 chunks in order and validate the SHA256. Do not regenerate the design from screenshots.", schema(Map.of("version", property("integer", "Current master revision from get_story_template_info."), "chunkIndex", property("integer", "Zero-based index, start at 0; repeat until chunkCount is reached.")), List.of("version", "chunkIndex")), readOnlyAnnotations()));
         tools.add(tool("update_story_template_master", "ADMIN ONLY: Replace the approved three-slide Mindcrafti Stories PPTX. Requires explicit user approval and the expected version from get_story_template_info. The source file must have exactly three slides. The replaced file becomes the only master for all subsequent Stories.", schema(Map.of("filename", property("string", "New PPTX filename."), "pptxBase64", property("string", "Full PPTX binary encoded as base64, up to 15 MB."), "expectedVersion", property("integer", "Latest template version.")), List.of("filename", "pptxBase64", "expectedVersion")), writeAnnotations()));
+        Map<String,Object> cdp = new LinkedHashMap<>();
+        cdp.put("teacherId",property("string","Teacher UUID from find_lessons"));
+        cdp.put("eventId",property("string","Exact calendar event ID"));
+        cdp.put("lessonJson",property("string","JSON lesson content: title, optional lessonPlan and difficulties, tasks (2-24 objects with question, answer, optional lines 2-12). No homework."));
+        tools.add(tool("create_lesson_draft","Generate and QA two branded PDF documents, save as unpublished draft; read school prompt, Brand Guide, monthly plan, recent work first.",schema(cdp,List.of("teacherId","eventId","lessonJson")),writeAnnotations()));
+        Map<String,Object> dp = Map.of("teacherId",property("string","Teacher UUID"),"draftId",property("string","Draft UUID"));
+        tools.add(tool("get_lesson_draft","Get unpublished draft metadata.",schema(dp,List.of("teacherId","draftId")),readOnlyAnnotations()));
+        Map<String,Object> dd = new LinkedHashMap<>(dp);
+        dd.put("kind",property("string","workbook or answers"));
+        tools.add(tool("download_lesson_draft_pdf","Download student or teacher PDF for review.",schema(dd,List.of("teacherId","draftId","kind")),readOnlyAnnotations()));
+        Map<String,Object> pd = new LinkedHashMap<>(dp);
+        pd.put("confirm",property("boolean","True only on explicit user instruction to publish approved documents"));
+        tools.add(tool("publish_lesson_draft","Attach two approved PDFs to the exact lesson, without homework.",schema(pd,List.of("teacherId","draftId","confirm")),writeAnnotations()));
         tools.add(tool("find_lessons", "Find upcoming Mindcrafti lessons. Admins can search all connected teacher calendars; teachers can search only their own calendar.", schema(Map.of("query", property("string", "Optional student, group, or event title filter.")), List.of()), readOnlyAnnotations()));
         tools.add(tool("find_trial_lessons", "Find trial/diagnostic lessons. Admins can search trial lessons across the whole school; teachers see only their own. Returns the concrete teacherId/eventId and whether an original transcript PDF is stored, so download_lesson_transcript can be used next.", schema(Map.of("query", property("string", "Optional teacher name, lesson title, phone number or date text filter.")), List.of()), readOnlyAnnotations()));
         tools.add(tool("get_lesson_preparation", "Read lesson metadata, homework notes, difficulties, lesson plan, and which PDF documents are attached. Transcript text is not returned when a transcript PDF exists; use download_lesson_transcript when the actual document is needed.", schema(Map.of("teacherId", property("string", "Teacher UUID returned by find_lessons."), "eventId", property("string", "Google Calendar event ID returned by find_lessons.")), List.of("teacherId", "eventId")), readOnlyAnnotations()));
@@ -361,6 +377,10 @@ public class MindcraftiMcpController {
         return switch (name) {
             case "get_school_prompt" -> toolResult(getSchoolPrompt(arguments));
             case "get_brand_guide" -> toolResult(schoolBrandGuideService.readForMcp());
+            case "create_lesson_draft" -> toolResult(createLessonDraft(arguments,auth));
+            case "get_lesson_draft" -> toolResult(lessonPdfDraftService.info(requireTeacher(arguments,auth),uuid(required(arguments,"draftId"),"draftId")));
+            case "download_lesson_draft_pdf" -> toolResult(lessonPdfDraftService.download(requireTeacher(arguments,auth),uuid(required(arguments,"draftId"),"draftId"),required(arguments,"kind")));
+            case "publish_lesson_draft" -> toolResult(publishLessonDraft(arguments,auth));
             case "get_story_template_info" -> toolResult(storyTemplateMasterService.infoForMcp(auth.user(), auth.apiKey()));
             case "get_story_template_download_link" -> toolResult(storyTemplateDownloadLinkService.create(auth.user(), auth.apiKey()));
             case "get_story_template_chunk" -> toolResult(storyTemplateMasterService.chunkForMcp(auth.user(), auth.apiKey(), Long.parseLong(required(arguments, "version")), integer(arguments.get("chunkIndex"), "chunkIndex")));
@@ -695,6 +715,21 @@ public class MindcraftiMcpController {
                 required(arguments, "planJson"));
     }
 
+    private Map<String,Object> createLessonDraft(Map<String,Object> args,AuthContext auth) throws Exception {
+        AuthenticatedUser teacher=requireTeacher(args,auth);
+        String eventId=required(args,"eventId");
+        GroupLessonResponse lesson=calendarLessonService.listGroupLessons(teacher).stream().filter(l->eventId.equals(l.eventId())).findFirst().orElseThrow(()->new IllegalArgumentException("Lesson not found"));
+        String name=lesson.groupName()!=null?lesson.groupName():lesson.studentName()!=null?lesson.studentName():lesson.title();
+        return lessonPdfDraftService.create(teacher,eventId,name,required(args,"lessonJson"));
+    }
+    private Map<String,Object> publishLessonDraft(Map<String,Object> args,AuthContext auth) throws Exception {
+        AuthenticatedUser teacher=requireTeacher(args,auth);
+        UUID id=uuid(required(args,"draftId"),"draftId");
+        if(!booleanValue(args.get("confirm"),"confirm"))throw new IllegalArgumentException("Explicit confirmation required");
+        Map<String,Object> d=lessonPdfDraftService.info(teacher,id);
+        requireLesson(teacher,String.valueOf(d.get("eventId")));
+        return lessonPdfDraftService.publish(teacher,id,true);
+    }
     private Map<String, Object> findHomeworkTargets(Map<String, Object> arguments, AuthContext auth) {
         String query = string(arguments.get("query"));
         if (auth.user() != null && auth.user().getRole() == Role.TEACHER) return homeworkTargetsForTeacher(auth.user(), query);
