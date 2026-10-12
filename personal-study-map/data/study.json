@@ -1161,7 +1161,8 @@
                   "wrongAnswer1": "Ein Verfahren, bei dem alle Funktionen ohne feste Phasen gleichzeitig entwickelt werden.",
                   "wrongAnswer2": "Eine Methode, die auf Architektur und Tests vollständig verzichtet.",
                   "wrongAnswer3": "Ein Ansatz, bei dem nur der fertige Code beschrieben, aber nichts geplant wird.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Wasserfallmodell называют последовательной моделью (sequentiell): сначала уточняют требования, затем проектируют, реализуют, тестируют и сопровождают программу. Главная особенность — переход по этапам, а не постоянная работа короткими циклами."
                 }
               ]
             },
@@ -1196,7 +1197,8 @@
                   "wrongAnswer1": "Programmierung → Betrieb → Anforderungsdefinition → Entwurf → Tests.",
                   "wrongAnswer2": "Tests → Wartung → Entwurf → Anforderungsdefinition → Implementierung.",
                   "wrongAnswer3": "Nur Scrum Planning → Daily Scrum → Review → Retrospective.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Этапы идут от вопроса «Что нужно создать?» (Anforderungsdefinition) к проектированию (Entwurf), написанию и проверке частей программы, затем проверке системы в целом. Последний этап — Betrieb und Wartung: использование и сопровождение уже созданного продукта."
                 },
                 {
                   "id": "se-study-20261012-wf-01",
@@ -1205,7 +1207,8 @@
                   "wrongAnswer1": "Implementierung und Komponententest.",
                   "wrongAnswer2": "Integration und Systemtests.",
                   "wrongAnswer3": "Betrieb und Wartung.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Без Anforderungsdefinition команда не знает, какую задачу решает система и чего ожидает заказчик. Поэтому в классическом Wasserfall сначала фиксируют требования, а уже затем выбирают архитектуру и начинают программировать."
                 },
                 {
                   "id": "se-study-20261012-wf-02",
@@ -1214,7 +1217,8 @@
                   "wrongAnswer1": "Der Betrieb des fertigen Systems beim Kunden.",
                   "wrongAnswer2": "Die ausschließliche Durchführung von Systemtests.",
                   "wrongAnswer3": "Die Behebung von Fehlern nach dem Produktivstart.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "System- und Softwareentwurf — это проектирование решения на основе требований. Здесь определяют структуру системы и взаимодействие её частей; разработка кода и тестирование целого продукта относятся к следующим этапам."
                 },
                 {
                   "id": "se-study-20261012-wf-03",
@@ -1223,7 +1227,8 @@
                   "wrongAnswer1": "Anforderungsdefinition.",
                   "wrongAnswer2": "Integration und Systemtests.",
                   "wrongAnswer3": "Betrieb und Wartung.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "В Implementierung und Komponententest пишут код отдельных компонентов и проверяют, выполняют ли они свои функции. Проверка того, как эти компоненты работают вместе, относится уже к Integration und Systemtests."
                 },
                 {
                   "id": "se-study-20261012-wf-04",
@@ -1232,7 +1237,8 @@
                   "wrongAnswer1": "Es werden ausschließlich neue Kundenanforderungen gesammelt.",
                   "wrongAnswer2": "Es wird zunächst die grundlegende Architektur entworfen.",
                   "wrongAnswer3": "Es werden einzelne Komponenten ohne Zusammenspiel getestet.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Даже если каждый компонент по отдельности работает, между ними могут возникнуть ошибки. На этапе Integration und Systemtests компоненты объединяют и проверяют работу всей системы и их взаимодействие."
                 }
               ]
             },
@@ -1267,7 +1273,8 @@
                   "wrongAnswer1": "Vor allem für sehr große Projekte mit ständig wechselnden Anforderungen.",
                   "wrongAnswer2": "Besonders, wenn Anforderungen bewusst erst ganz am Ende festgelegt werden.",
                   "wrongAnswer3": "Vor allem bei Projekten, die ohne Planung täglich neue Ziele verfolgen.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Когда требования стабильны, можно заранее спланировать этапы и выполнять их последовательно, не переделывая большие части проекта. Для небольших и понятных задач простота Wasserfallmodell может быть преимуществом."
                 }
               ]
             },
@@ -1302,7 +1309,8 @@
                   "wrongAnswer1": "Weil jede Anforderungsänderung automatisch ohne zusätzlichen Aufwand umgesetzt wird.",
                   "wrongAnswer2": "Weil der Kunde das fertige System bereits vor der Planung vollständig testen kann.",
                   "wrongAnswer3": "Weil beim Wasserfallmodell alle Risiken schon durch die erste Codezeile verschwinden.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Если заказчик меняет требования после проектирования или реализации, часто приходится менять уже готовые решения и повторять тесты. При Wasserfallmodell обратная связь по работающему продукту приходит сравнительно поздно, поэтому исправления могут дорого стоить."
                 }
               ]
             },
@@ -1337,7 +1345,8 @@
                   "wrongAnswer1": "Beim Wasserfallmodell, weil Systemtests erst am Ende besonders günstig sind.",
                   "wrongAnswer2": "In beiden genau gleich, unabhängig davon, wann Teile getestet werden.",
                   "wrongAnswer3": "Beim Vorgehen ohne frühe Tests, weil dann grundsätzlich keine Fehler auftreten.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "При iterativer Entwicklung работающие части показывают и проверяют раньше. Это помогает заметить ошибочные предположения и технические проблемы до того, как на них построят остальную систему, поэтому неопределённость уменьшается раньше."
                 }
               ]
             },
@@ -1372,7 +1381,8 @@
                   "wrongAnswer1": "Das gesamte Produkt wird erst am Projektende in einem Schritt fertiggestellt.",
                   "wrongAnswer2": "Jede Iteration besteht ausschließlich aus Planung, ohne lauffähige Erweiterungen.",
                   "wrongAnswer3": "Iterative Entwicklung verbietet Feedback von Kunden bis zum Projektende.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Iterativ означает разработку повторяющимися циклами, а inkrementell — постепенное расширение работающей системы. После цикла можно показать новое Inkrement и получить отзывы, не ожидая завершения всех функций."
                 },
                 {
                   "id": "se-study-20261012-it-03",
@@ -1381,7 +1391,8 @@
                   "wrongAnswer1": "Er muss bis zum Projektende auf jeden Test verzichten.",
                   "wrongAnswer2": "Er kann Anforderungen danach grundsätzlich nicht mehr ändern.",
                   "wrongAnswer3": "Er sieht immer nur Entwürfe ohne lauffähige Funktionen.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Функционирующее Inkrement позволяет пользователю проверить реальное поведение программы. Раннее Kundenfeedback показывает, что полезно, что неудобно и какие требования стоит изменить, пока исправления ещё относительно недороги."
                 },
                 {
                   "id": "se-study-20261012-it-04",
@@ -1390,7 +1401,8 @@
                   "wrongAnswer1": "Dadurch wird das Testen des Systems vollständig überflüssig.",
                   "wrongAnswer2": "Dadurch sind Rückmeldungen von Benutzern nicht mehr erforderlich.",
                   "wrongAnswer3": "Dadurch wird jede Änderung automatisch kostenlos.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Регулярная интеграция и тестирование выявляют несовместимости и ошибки вскоре после их появления. Команда может исправить их в следующей Iteration, вместо того чтобы обнаружить сразу много проблем только в конце проекта."
                 },
                 {
                   "id": "se-study-20261012-it-05",
@@ -1399,7 +1411,8 @@
                   "wrongAnswer1": "Nur eine unverbindliche Liste künftiger Ideen.",
                   "wrongAnswer2": "Ausschließlich ein finaler Gesamtabschlussbericht.",
                   "wrongAnswer3": "Gar kein Ergebnis, bis das gesamte Projekt fertig ist.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Смысл инкрементальной разработки — получать проверяемый результат шаг за шагом. Поэтому идеальный итог Iteration — не просто план или отчёт, а работающее Inkrement, по которому можно оценить прогресс."
                 }
               ]
             },
@@ -1434,7 +1447,8 @@
                   "wrongAnswer1": "Iteration ist der fertige Programmteil; Inkrement ist die Arbeitsphase.",
                   "wrongAnswer2": "Beide Wörter bedeuten ausschließlich die vollständige Auslieferung am Projektende.",
                   "wrongAnswer3": "Iteration bezeichnet einen Fehler; Inkrement beschreibt seine Korrektur.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Iteration — это сам цикл работы: планирование, разработка и проверка в течение определённого периода. Inkrement — результат этого цикла, то есть новое работающее расширение продукта. Процесс и результат — не одно и то же."
                 },
                 {
                   "id": "se-study-20261012-it-01",
@@ -1443,7 +1457,8 @@
                   "wrongAnswer1": "Die fertig funktionierende Hausaufgabenkontrolle.",
                   "wrongAnswer2": "Die komplette Plattform nach Abschluss aller Projekte.",
                   "wrongAnswer3": "Nur die Freigabe des Produkts beim Kunden.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Две недели здесь обозначают период, в течение которого команда разрабатывает и тестирует функцию. Это Iteration (цикл разработки). Готовая проверка домашних заданий в конце периода — уже Inkrement."
                 },
                 {
                   "id": "se-study-20261012-it-02",
@@ -1452,7 +1467,8 @@
                   "wrongAnswer1": "Die zweiwöchige Arbeitsphase selbst.",
                   "wrongAnswer2": "Die Liste aller noch offenen Anforderungen.",
                   "wrongAnswer3": "Ein Entwurf, der noch nicht funktioniert.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Inkrement — это новая работающая часть существующей программы. Если в Mindcrafti стала доступна автоматическая проверка домашки, именно эта функция является инкрементом; прошедшие две недели были итерацией."
                 }
               ]
             },
@@ -1487,7 +1503,8 @@
                   "wrongAnswer1": "Ausschließlich wasserfallartig, ohne Use Cases und ohne Architekturarbeit.",
                   "wrongAnswer2": "Nur auf Programmierung und Dokumentation ausgerichtet, ohne Iterationen.",
                   "wrongAnswer3": "Zufällige Anforderungen, keine Architektur und ein einziger Projektabschluss.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "В RUP сценарии пользователей (Use Cases) направляют разработку, архитектура служит основой технических решений, а реализация развивается через Iterationen и Inkremente. Эти три принципа дополняют друг друга."
                 },
                 {
                   "id": "se-study-20261012-rup-06",
@@ -1496,7 +1513,8 @@
                   "wrongAnswer1": "Ken Schwaber, Jeff Sutherland und Grady Booch.",
                   "wrongAnswer2": "Kent Beck, Martin Fowler und Robert C. Martin.",
                   "wrongAnswer3": "Alan Turing, Edsger Dijkstra und Donald Knuth.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "В материалах лекции создателями RUP названы Grady Booch, James Rumbaugh и Ivar Jacobson — «Three Amigos». Эта тройка связана с формированием Rational Unified Process и развитием UML."
                 }
               ]
             },
@@ -1531,7 +1549,8 @@
                   "wrongAnswer1": "Weil beim RUP keine neuen Anforderungen während des Projekts erlaubt sind.",
                   "wrongAnswer2": "Weil alle Programmierschritte ausschließlich von einem Designer durchgeführt werden.",
                   "wrongAnswer3": "Weil eine Architektur sämtliche Tests im Projekt vollständig ersetzt.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Архитектура задаёт, как устроены основные компоненты и как они взаимодействуют. Если основа продумана, к программе легче добавлять новые функции во время следующих Iterationen, не разрушая уже работающие части."
                 }
               ]
             },
@@ -1566,7 +1585,8 @@
                   "wrongAnswer1": "Die Entwicklung beginnt immer mit dem Datenbankserver, ohne die Nutzer zu betrachten.",
                   "wrongAnswer2": "Ein Use Case beschreibt ausschließlich die interne Struktur des Quellcodes.",
                   "wrongAnswer3": "Es bedeutet, dass Anforderungen ausschließlich durch Zufall ausgewählt werden.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Use Case описывает цель пользователя и его взаимодействие с системой: например, «клиент переводит деньги». Это помогает проектировать именно нужные функции. «Настроить базу данных» — внутренняя техническая задача, а не цель банковского клиента."
                 },
                 {
                   "id": "se-study-20261012-rup-05",
@@ -1575,7 +1595,8 @@
                   "wrongAnswer1": "Der Entwickler richtet den Datenbankserver ein.",
                   "wrongAnswer2": "Der Administrator installiert eine neue Laufzeitumgebung.",
                   "wrongAnswer3": "Der Programmierer führt einen Komponententest aus.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "«Клиент переводит деньги» описывает действие, которое пользователь хочет выполнить с помощью приложения. Значит, это Anwendungsfall (Use Case). Установка сервера и запуск тестов — технические действия команды, а не сценарии клиента."
                 }
               ]
             },
@@ -1610,7 +1631,8 @@
                   "wrongAnswer1": "Construction → Transition → Inception → Elaboration.",
                   "wrongAnswer2": "Analyse → Design → Programmierung → Test sind die vier RUP-Phasen.",
                   "wrongAnswer3": "Planning → Daily → Review → Retrospective sind die vier RUP-Phasen.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "RUP проходит четыре фазы с разными главными целями: Inception — понять проект; Elaboration — уточнить архитектуру и риски; Construction — построить функции; Transition — передать систему пользователям. Внутри фаз работа может повторяться итерациями."
                 },
                 {
                   "id": "se-study-20261012-rup-01",
@@ -1619,7 +1641,8 @@
                   "wrongAnswer1": "Das vollständig fertige System an alle Nutzer übergeben.",
                   "wrongAnswer2": "Alle Funktionen bis zur letzten Detailzeile programmieren.",
                   "wrongAnswer3": "Ausschließlich die Software im laufenden Betrieb warten.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "В Inception сначала выясняют, зачем нужен продукт, для кого его создают и каковы границы проекта. Без этого нельзя осмысленно выбрать решения и оценить, стоит ли начинать дальнейшую разработку."
                 },
                 {
                   "id": "se-study-20261012-rup-02",
@@ -1628,7 +1651,8 @@
                   "wrongAnswer1": "Den fertigen Betrieb dauerhaft übernehmen.",
                   "wrongAnswer2": "Ohne Planung sämtliche Funktionen sofort ausliefern.",
                   "wrongAnswer3": "Nur die Marketingkampagne nach dem Projektstart auswerten.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Elaboration нужна, чтобы проработать устойчивую Softwarearchitektur и проверить самые опасные технические предположения. Так команда снижает риски до того, как вложит основные усилия в Construction."
                 },
                 {
                   "id": "se-study-20261012-rup-03",
@@ -1637,7 +1661,8 @@
                   "wrongAnswer1": "Inception.",
                   "wrongAnswer2": "Elaboration.",
                   "wrongAnswer3": "Transition.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Construction буквально означает «построение»: в этой фазе реализуют и тестируют значительную часть необходимой функциональности. Inception и Elaboration прежде всего уточняют замысел и архитектуру, а Transition готовит передачу пользователям."
                 },
                 {
                   "id": "se-study-20261012-rup-04",
@@ -1646,7 +1671,8 @@
                   "wrongAnswer1": "Erstmals werden ausschließlich die Projektziele grob definiert.",
                   "wrongAnswer2": "Erst jetzt wird die grundlegende Architektur erstellt.",
                   "wrongAnswer3": "Alle Use Cases werden ohne Umsetzung nur gesammelt.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Transition — переход от разрабатываемой системы к её реальному использованию. Здесь важны развёртывание, подготовка пользователей и устранение проблем внедрения; это не этап первоначального определения целей."
                 }
               ]
             },
@@ -1681,7 +1707,8 @@
                   "wrongAnswer1": "Scrum Master priorisiert; Product Owner programmiert; Team prüft nur die Regeln.",
                   "wrongAnswer2": "Entwicklungsteam legt alle Prioritäten fest; Product Owner löst nur technische Probleme.",
                   "wrongAnswer3": "Product Owner führt tägliche Stand-ups; Scrum Master entwickelt alle Funktionen allein.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "У ролей разные обязанности: Product Owner определяет ценность и порядок требований, Scrum Master помогает процессу и устраняет препятствия, а Entwicklungsteam создаёт работающий продукт. Путать приоритеты с организационной поддержкой нельзя."
                 },
                 {
                   "id": "se-study-20261012-sc-01",
@@ -1690,7 +1717,8 @@
                   "wrongAnswer1": "Scrum Master.",
                   "wrongAnswer2": "Entwicklungsteam.",
                   "wrongAnswer3": "Systemadministrator.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Product Owner отвечает за упорядочивание Product Backlog так, чтобы команда сначала создавала наиболее ценные функции. Scrum Master помогает соблюдать Scrum и устранять препятствия, но не выбирает за владельца продукта приоритеты."
                 },
                 {
                   "id": "se-study-20261012-sc-02",
@@ -1699,7 +1727,8 @@
                   "wrongAnswer1": "Product Owner als alleiniger Programmierer.",
                   "wrongAnswer2": "Der Kunde statt aller Scrum-Rollen.",
                   "wrongAnswer3": "Nur die Abteilung für Systembetrieb.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Scrum Master помогает команде преодолевать Impediments — препятствия, мешающие работе. Например, если разработчики не получили доступ или нужные данные, он помогает организовать решение проблемы."
                 },
                 {
                   "id": "se-study-20261012-sc-03",
@@ -1708,7 +1737,8 @@
                   "wrongAnswer1": "Product Owner allein.",
                   "wrongAnswer2": "Scrum Master allein.",
                   "wrongAnswer3": "Ausschließlich externe Auftraggeber.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Entwicklungsteam непосредственно создаёт и проверяет программный продукт. Product Owner определяет нужные результаты и приоритеты, а Scrum Master поддерживает работу по Scrum; они не заменяют команду разработки."
                 }
               ]
             },
@@ -1743,7 +1773,8 @@
                   "wrongAnswer1": "Es ist ein unveränderliches Verzeichnis des bereits veröffentlichten Quellcodes.",
                   "wrongAnswer2": "Es enthält nur abgeschlossene Aufgaben und wird ausschließlich vom Scrum Master priorisiert.",
                   "wrongAnswer3": "Es ist eine Liste ausschließlich technischer Serverfehler ohne Nutzeranforderungen.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Product Backlog — живой, упорядоченный список работы над продуктом. Product Owner расставляет приоритеты, а требования (например, User Stories) могут уточняться, добавляться или меняться по мере появления новой информации."
                 },
                 {
                   "id": "se-study-20261012-sc-04",
@@ -1752,7 +1783,8 @@
                   "wrongAnswer1": "Es bleibt grundsätzlich während des gesamten Projekts unverändert.",
                   "wrongAnswer2": "Die Anforderung muss bis zum Ende aller Sprints ignoriert werden.",
                   "wrongAnswer3": "Alle bisherigen Anforderungen werden automatisch gelöscht.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Product Backlog не фиксируется навсегда: новые пожелания пользователей можно добавить и оценить по важности. Product Owner решает, насколько высоко поставить эту функцию относительно остальных задач."
                 }
               ]
             },
@@ -1787,7 +1819,8 @@
                   "wrongAnswer1": "Ein einmaliges Gesamtdesign, gefolgt von einer Veröffentlichung ohne Feedback.",
                   "wrongAnswer2": "Nur tägliche Besprechungen, ohne Sprintziel oder nutzbares Ergebnis.",
                   "wrongAnswer3": "Analyse und Umsetzung ohne Reviews, Retrospektiven oder Fortschrittsprüfung.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Sprint Planning помогает выбрать работу, Daily Scrum — координировать её в процессе, а результатом должен стать пригодный к использованию Increment. На Sprint Review обсуждают результат, на Retrospective — как улучшить совместную работу."
                 },
                 {
                   "id": "se-study-20261012-sc-05",
@@ -1796,7 +1829,8 @@
                   "wrongAnswer1": "Eine einmalige Gesamtplanung ohne anschließende Umsetzung.",
                   "wrongAnswer2": "Eine Wartungsphase, die erst nach Projektabschluss beginnt.",
                   "wrongAnswer3": "Ein Dokument mit unveränderlichen Anforderungen für mehrere Jahre.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Sprint — ограниченный по времени цикл, в течение которого команда продвигается к Sprint Goal и создаёт полезное Inkrement. Работа повторяется в следующих спринтах, а не выполняется единственным длинным этапом."
                 },
                 {
                   "id": "se-study-20261012-sc-06",
@@ -1805,7 +1839,8 @@
                   "wrongAnswer1": "Scrum verbietet Kundenfeedback, Wasserfall verlangt Feedback nach jedem Sprint.",
                   "wrongAnswer2": "Scrum besteht nur aus Tests, Wasserfall nur aus Programmierung.",
                   "wrongAnswer3": "Beide Modelle schreiben exakt dieselbe starre Phasenfolge vor.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "В Scrum разработка идёт повторяющимися Sprints с регулярной проверкой результата и адаптацией планов. В классическом Wasserfallmodell этапы в основном следуют один за другим, поэтому работающий результат обычно оценивают позже."
                 },
                 {
                   "id": "se-study-20261012-sc-07",
@@ -1814,7 +1849,8 @@
                   "wrongAnswer1": "Die jährliche Abnahme des fertiggestellten Projekts.",
                   "wrongAnswer2": "Eine verpflichtende vollständige Neuentwicklung jeden Tag.",
                   "wrongAnswer3": "Eine Besprechung ausschließlich nach dem letzten Sprint.",
-                  "timeLimitSeconds": null
+                  "timeLimitSeconds": null,
+                  "explanation": "Daily Scrum — короткая ежедневная встреча разработчиков, чтобы проверить прогресс к Sprint Goal и при необходимости скорректировать план работы. Это не годовая сдача проекта и не подробный отчёт руководителю."
                 }
               ]
             }

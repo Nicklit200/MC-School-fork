@@ -1882,3 +1882,36 @@ body:not([data-section="study"]) .study-card-top-button {display:none!important}
   background:#edf4ff;
   color:#285b9b;
 }
+
+
+/* Explanation is available after every answer (correct, incorrect, skipped or timed out). */
+.quiz-explanation{
+  background:#f3f8ff;
+  border:1px solid #cfe1f8;
+  border-left:4px solid #3b78c4;
+  border-radius:12px;
+  padding:14px 15px;
+  margin-top:13px;
+  color:#263b55;
+  overflow-wrap:anywhere;
+}
+.quiz-explanation-title{
+  color:#235b9b;
+  font-weight:850;
+  font-size:13px;
+  line-height:1.35;
+}
+.quiz-explanation p{
+  margin:9px 0 0;
+  line-height:1.58;
+  font-size:13px;
+  white-space:pre-line;
+}
+.quiz-result-explanation{border-top:1px solid #e3ebf5;padding-top:8px;margin-top:4px}
+.quiz-result-explanation summary{font-weight:780;color:#2668b5;cursor:pointer;line-height:1.45}
+.quiz-result-explanation p{font-size:12px;line-height:1.58;color:#486079;margin:8px 0 0;white-space:pre-line}
+.quiz-next{min-height:46px;font-size:14px}
+@media(max-width:560px){
+  .quiz-explanation{padding:12px 13px;margin-top:12px}
+  .quiz-explanation p{font-size:12px;line-height:1.62}
+}

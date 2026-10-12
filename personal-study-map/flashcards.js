@@ -108,6 +108,25 @@
     return out.filter(card => card.question && card.answer);
   }
 
+  function explanationForCard(card) {
+    if (typeof card?.explanation === "string" && card.explanation.trim()) {
+      return card.explanation.trim();
+    }
+    // Existing in-progress sessions were created before explanations were added.
+    // Resolve them by stable card ID without discarding the user's session.
+    return String(allCards({includeHidden:true,disregardTopic:true})
+      .find(item => item.id === card?.id)?.explanation || "").trim();
+  }
+
+  function explanationMarkup(card) {
+    const explanation=explanationForCard(card);
+    return explanation
+      ? '<section class="quiz-explanation" aria-label="Почему правильный ответ верен">'+
+        '<div class="quiz-explanation-title">Почему это правильный ответ</div>'+
+        '<p>'+esc(explanation)+'</p></section>'
+      : "";
+  }
+
   function visibleCards() {
     return allCards();
   }
@@ -224,6 +243,7 @@
     });
     session.cards = cards.map(card => ({
       id:card.id,skillId:card.skillId,question:card.question,answer:card.answer,
+      explanation:card.explanation||"",
       wrongAnswer1:card.wrongAnswer1||null,
       wrongAnswer2:card.wrongAnswer2||null,
       wrongAnswer3:card.wrongAnswer3||null,
@@ -293,15 +313,12 @@
         (feedback.correct?'Правильно.':(feedback.skipped?'Не знаю.':feedback.timedOut?'Время вышло.':'Неправильно.'))+
         (feedback.correct?'':' Правильный ответ: '+esc(feedback.correctAnswer)+
         '. Карточка повторится в этом занятии.')+
-        '</div><button class="quiz-next" data-action="next" type="button">Дальше</button>':
+        '</div>'+explanationMarkup(card)+
+        '<button class="quiz-next" data-action="next" type="button">Дальше</button>':
         '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>')+
       '<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
-    if (!feedback) {
-      startCountdown();
-    } else {
-      stopAdvance();
-      ui.advanceTimer=setTimeout(() => advance(),feedback.correct?1000:4000);
-    }
+    if (!feedback) startCountdown();
+    else stopAdvance(); // Explanation stays visible until the user is ready.
   }
 
   function startCountdown() {
@@ -366,8 +383,10 @@
       (feedback.correct?'Правильно.':feedback.skipped?'Не знаю.':feedback.timedOut?'Время вышло.':'Неправильно.')+
       (!feedback.correct?' Правильный ответ: '+esc(feedback.correctAnswer)+
       '. Вопрос появится ещё раз в этом занятии.':"")+
-      '</div><button class="quiz-next" data-action="next" type="button">Дальше</button>';
-    ui.advanceTimer=setTimeout(()=>advance(),feedback.correct?1000:4000);
+      '</div>'+explanationMarkup(last)+
+      '<button class="quiz-next" data-action="next" type="button">Дальше</button>';
+    // No automatic transition: even a correct answer deserves time to read the rationale.
+    host.querySelector?.(".quiz-explanation")?.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
 
   function advance() {
@@ -410,6 +429,9 @@
         (item.correct?'Верно':'Ошибка')+'</span></div>'+
         '<div>Первый ответ: '+esc(item.selectedAnswer||"не ответил")+'</div>'+
         (!item.correct?'<div>Правильный: '+esc(item.correctAnswer)+'</div>':"")+
+        (explanationForCard({id:item.cardId})?
+          '<details class="quiz-result-explanation"><summary>Почему этот ответ правильный</summary><p>'+
+          esc(explanationForCard({id:item.cardId}))+'</p></details>':"")+
         '<small>Попыток: '+Number(item.attempts||1)+'</small></div>').join("")+
       '</div><div class="quiz-actions"><button data-action="home" class="primary" type="button">Готово</button>'+
       '<button data-action="practice" type="button">Потренироваться ещё</button></div>';
@@ -466,6 +488,9 @@
       esc(c?.question||"")+'</textarea></label>'+
       '<label><span>Правильный ответ</span><textarea name="answer" maxlength="500" rows="3" required>'+
       esc(c?.answer||"")+'</textarea></label>'+
+      '<label><span>Почему это правильный ответ (необязательно)</span>'+
+      '<textarea name="explanation" maxlength="1600" rows="4" placeholder="Объясни идею своими словами">'+
+      esc(c?.explanation||"")+'</textarea></label>'+
       '<div class="quiz-form-note">Три неправильных ответа можно заполнить вручную. Если оставить все три поля пустыми, варианты будут браться из других карточек текущего занятия, как в школе.</div>'+
       [1,2,3].map(i=>'<label><span>Неправильный ответ '+i+'</span>'+
         '<textarea name="wrongAnswer'+i+'" maxlength="500" rows="2">'+
@@ -482,6 +507,7 @@
     const skillId=String(data.get("skillId")||"");
     const question=String(data.get("question")||"").trim();
     const answer=String(data.get("answer")||"").trim();
+    const explanation=String(data.get("explanation")||"").trim();
     const wrong=[1,2,3].map(i=>String(data.get("wrongAnswer"+i)||"").trim());
     const seconds=String(data.get("timeLimitSeconds")||"").trim();
     const err=document.getElementById("quiz-form-error");
@@ -499,7 +525,7 @@
     if (limit!==null && (!Number.isInteger(limit)||limit<1||limit>3600)) {
       err.textContent="Таймер должен быть от 1 до 3600 секунд.";return;
     }
-    const values={skillId,question,answer,wrongAnswer1:wrong[0]||null,
+    const values={skillId,question,answer,explanation,wrongAnswer1:wrong[0]||null,
       wrongAnswer2:wrong[1]||null,wrongAnswer3:wrong[2]||null,timeLimitSeconds:limit};
     if (ui.editing?.custom) {
       const cards=getCustomCards();
