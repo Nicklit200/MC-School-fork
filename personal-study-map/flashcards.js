@@ -210,7 +210,7 @@
     const unrelated = globalSession && !sessionForCurrentContext();
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
-      countBox("Нужно повторить",due.length)+countBox("Занятий",past.length)+'</div>'+
+      countBox("Нужно повторить",due.length)+countBox("Тренировок",past.length)+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
       '<div class="quiz-actions">'+
       (globalSession?'<button data-action="resume" type="button" class="primary">Продолжить занятие</button>'+
@@ -450,12 +450,30 @@
   function renderHistory() {
     const ctx=getContext();
     const rows=latestHistory().filter(item=>item.examId===ctx.exam?.id);
-    host.innerHTML=titleBar("История занятий")+
-      (rows.length?'<div class="quiz-history">'+rows.map(item=>
+    const lessons=(window.studyBoardCards?.learningSessions?.()||[])
+      .filter(item=>item.examId===ctx.exam?.id)
+      .slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+    const lessonHtml=lessons.length?
+      '<div class="quiz-history">'+lessons.map(item=>{
+        const cp=item.checkpoint;
+        const checkpoint=cp?.document&&cp?.page?
+          '<small>Остановились: '+esc(cp.document)+', стр. '+esc(cp.page)+
+          (cp.totalPages?' из '+esc(cp.totalPages):'')+
+          (cp.topic?' · '+esc(cp.topic):'')+'</small>':'';
+        return '<article class="quiz-result-row"><strong>'+esc(labelDate(item.date))+
+          ' · '+esc(item.title||"Учебное занятие")+'</strong>'+
+          '<p>'+esc(item.summary||"")+'</p>'+checkpoint+'</article>';
+      }).join("")+'</div>':
+      '<div class="quiz-empty">Пока нет сохранённых учебных занятий по этому предмету.</div>';
+    const trainingHtml=rows.length?
+      '<div class="quiz-history">'+rows.map(item=>
         '<button class="quiz-history-item" data-action="history-item" data-id="'+esc(item.id)+'" type="button">'+
         '<strong>'+esc(labelDate(item.date))+' · '+esc(item.type==="PRACTICE"?"Тренировка":"Повторение")+'</strong>'+
         '<span>С первой попытки: '+item.correctFirstTry+'/'+item.totalCards+'</span></button>').join("")+'</div>':
-        '<div class="quiz-empty">История пока пустая. После первой тренировки здесь появится результат.</div>');
+      '<div class="quiz-empty">Пока нет завершённых тренировок. Результат появится после первого теста с карточками.</div>';
+    host.innerHTML=titleBar("История занятий",ctx.exam?.title||"")+
+      '<h3>Изученные темы ('+lessons.length+')</h3>'+lessonHtml+
+      '<h3>Тренировки с карточками ('+rows.length+')</h3>'+trainingHtml;
   }
 
   function renderManage() {
