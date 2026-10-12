@@ -128,7 +128,7 @@ public class StoryTemplateMasterService {
         result.put("sha256", master.getSha256());
         result.put("chunkIndex", index);
         result.put("chunkCount", chunkCount);
-        result.put("base64", Base64.getEncoder().encodeToString(bytes, start, start + length));
+        result.put("base64", Base64.getEncoder().encodeToString(java.util.Arrays.copyOfRange(bytes, start, start + length)));
         return result;
     }
 
