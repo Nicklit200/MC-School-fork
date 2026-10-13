@@ -1,0 +1,949 @@
+/*
+ * Online classes. Uses the existing palette from index.css so the feature does
+ * not introduce a second visual language.
+ */
+
+/*
+ * Available to screen readers, invisible on screen. The clip technique is used
+ * rather than display:none or visibility:hidden, both of which remove the
+ * element from the accessibility tree — which would defeat the purpose of the
+ * label entirely.
+ */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * Keyboard focus must be visible everywhere in the class UI. The room is dense
+ * and largely icon-driven, so a lost focus ring makes it unusable without a
+ * mouse. focus-visible keeps the ring off for pointer users.
+ */
+.online-class-room :focus-visible,
+.online-class-page :focus-visible,
+.whiteboard :focus-visible,
+.board-toolbar :focus-visible,
+.chat :focus-visible,
+.participants :focus-visible,
+.waiting-room :focus-visible,
+.prejoin :focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --- Room layout --------------------------------------------------------- */
+
+/*
+ * The lesson fills the browser window: the board is the main surface, cameras
+ * sit in a permanent column on the right, and everything else is compact chrome
+ * at the edges. Fixed positioning takes the room out of the app shell's header
+ * so the board gets almost the whole screen.
+ *
+ * <LiveKitRoom> also puts `.lk-room-container` (position: relative; height: 100%)
+ * on this same element, and its stylesheet loads later. The doubled selector
+ * outranks it so the room stays fixed and full-window.
+ */
+.online-class-room,
+.online-class-room.lk-room-container {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  --camera-column-width: 200px;
+}
+
+.online-class-room__topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 0 8px;
+}
+
+.online-class-room__stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--camera-column-width);
+}
+
+.online-class-room__main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.online-class-room__board,
+.online-class-room__screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.online-class-room__board[hidden] {
+  display: none;
+}
+
+/* Chat, roster and waiting room float over the board's right edge. */
+.online-class-room__drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  width: min(340px, 92%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(15, 23, 32, 0.18);
+}
+
+.online-class-room__drawer[hidden] {
+  display: none;
+}
+
+.online-class-room__badge {
+  font-weight: 700;
+}
+
+.online-class-room__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.online-class-room__leave {
+  background: var(--danger);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.online-class-room__end {
+  background: transparent;
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- Status --------------------------------------------------------------- */
+
+.online-class-room__status {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/*
+ * Recording is signalled by a dot plus text, never colour alone — a red dot on
+ * its own is invisible to a colour-blind participant, and this is a consent
+ * signal that everyone must be able to perceive.
+ */
+.recording__active {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.recording__notice {
+  border: 2px solid #b91c1c;
+  background: #fff5f5;
+  color: #7f1d1d;
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 8px 0;
+}
+
+/* --- Chat ----------------------------------------------------------------- */
+
+.chat__messages {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px;
+  overflow-y: auto;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat__message--system {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.chat__message--pending {
+  opacity: 0.6;
+}
+
+.chat__body {
+  /* Long unbroken input must not force the panel to scroll sideways. */
+  overflow-wrap: anywhere;
+}
+
+.chat__composer {
+  display: flex;
+  gap: 8px;
+}
+
+.chat__composer input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat__error {
+  color: var(--danger);
+}
+
+/* --- Captions ------------------------------------------------------------- */
+
+.captions__lines {
+  background: rgba(15, 23, 32, 0.85);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  max-height: 22vh;
+  overflow-y: auto;
+  /* Captions are read quickly; keep them comfortably large. */
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+/* --- Whiteboard ----------------------------------------------------------- */
+
+.whiteboard {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.whiteboard__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.whiteboard__notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.whiteboard__notice:empty {
+  display: none;
+}
+
+/* Page switcher: bottom-left, compact, never in the way of writing. */
+.whiteboard__pages {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+}
+
+.whiteboard__zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(15, 23, 32, 0.15);
+}
+
+.whiteboard__zoom button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.whiteboard__zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (pointer: coarse) {
+  .whiteboard__zoom button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.whiteboard__surface {
+  width: 100%;
+  height: 100%;
+  background: var(--surface);
+  /* Stops the browser panning the page while drawing with a finger. */
+  touch-action: none;
+  position: relative;
+  overflow: hidden;
+  /* Selecting text on the page while drawing would fight the pointer. */
+  user-select: none;
+}
+
+.whiteboard__text-input {
+  position: absolute;
+  min-width: 160px;
+  padding: 2px 4px;
+  font-size: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+}
+
+/* --- Participants and waiting room --------------------------------------- */
+
+.participants ul,
+.waiting-room ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.participants li,
+.waiting-room li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.participants__offline {
+  color: var(--muted);
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+/* Smaller screens keep the camera column (it is permanent) but narrower. */
+@media (max-width: 1024px) {
+  .online-class-room {
+    --camera-column-width: 160px;
+  }
+}
+
+/*
+ * Landscape tablet and phone: vertical space is scarce, so the board keeps the
+ * height and the control bar stays compact.
+ */
+@media (max-height: 560px) and (orientation: landscape) {
+  .online-class-room {
+    --camera-column-width: 140px;
+  }
+
+  .captions__lines {
+    max-height: 18vh;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .online-class-room {
+    --camera-column-width: 104px;
+  }
+
+  .online-class-room__controls button {
+    min-height: 44px;
+  }
+}
+
+/*
+ * Respect a reduced-motion preference: transitions and any spinner animation
+ * are dropped rather than merely shortened.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .online-class-room *,
+  .whiteboard *,
+  .chat * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Board toolbar (stage 4) ---------------------------------------------- */
+
+.board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  /* The bar never collapses or scrolls away during a lesson. */
+  position: relative;
+  z-index: 5;
+}
+
+.board-toolbar__tools,
+.board-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-toolbar__slot {
+  position: relative;
+}
+
+.board-toolbar button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.board-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The selected tool must be unmistakable: filled, with a lifted outline. */
+.board-toolbar .board-toolbar__tool.is-active,
+.board-toolbar .board-toolbar__group button.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-dark);
+  box-shadow: 0 2px 0 var(--accent-dark);
+}
+
+.board-toolbar__tool span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.board-toolbar__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 190px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(15, 23, 32, 0.18);
+}
+
+.board-toolbar__swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.board-toolbar .board-toolbar__swatches button {
+  min-width: 30px;
+  min-height: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+
+.board-toolbar .board-toolbar__swatches button.is-active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+}
+
+.board-toolbar__size {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.board-toolbar [role='radiogroup'] button.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Tablet and stylus: fingertip-sized targets. */
+@media (pointer: coarse) {
+  .board-toolbar button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .board-toolbar .board-toolbar__swatches button {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* --- Page navigator ------------------------------------------------------- */
+
+.page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(15, 23, 32, 0.15);
+}
+
+.page-nav button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.page-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.page-nav .page-nav__add {
+  background: var(--accent);
+  color: #fff;
+}
+
+.page-nav__label {
+  min-width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@media (pointer: coarse) {
+  .page-nav button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* --- Answers panel (teacher only) ----------------------------------------- */
+
+/*
+ * Pinned to the left edge of the board area and floating over it. It is
+ * absolutely positioned, so the board underneath keeps its size; the camera
+ * column is a sibling of the board area and is never covered.
+ */
+.answers-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* Fixed share of the screen; not user-resizable. */
+  width: clamp(320px, 33vw, 560px);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: 4px 0 24px rgba(15, 23, 32, 0.18);
+}
+
+.answers-panel__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #eef0f3;
+}
+
+.answers-panel__page {
+  display: block;
+  height: auto;
+  background: #fff;
+}
+
+.answers-panel__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.answers-panel__zoom {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.answers-panel__zoom button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.answers-panel__zoom button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The × sits on the panel's right border, half outside it. */
+.answers-panel__close {
+  position: absolute;
+  top: 12px;
+  right: -16px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 32, 0.2);
+}
+
+.answers-button.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.answers-panel :focus-visible,
+.page-nav :focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .answers-panel__close {
+    width: 44px;
+    height: 44px;
+    right: -22px;
+  }
+
+  .answers-panel__zoom button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* --- Camera column (stage 4) ---------------------------------------------- */
+
+/*
+ * Five equal slots that always exist as a layout, so a card never changes size
+ * as people come and go. Overflowing cards are clipped, not scrolled: this
+ * stage is sized for about five cameras.
+ */
+.camera-column {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #0f1720;
+}
+
+.camera-card {
+  position: relative;
+  flex: 0 0 calc((100% - 4 * 8px) / 5);
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1f2933;
+  color: #fff;
+  /* Google-Meet-style highlight is drawn inside so it never changes the size. */
+  box-shadow: inset 0 0 0 3px transparent;
+  transition: box-shadow 120ms ease;
+}
+
+.camera-card[data-speaking='true'] {
+  box-shadow: inset 0 0 0 3px #34d399;
+}
+
+.camera-card__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-card__avatar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(22px, 3vw, 40px);
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, #334155, #475569);
+}
+
+.camera-card__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  text-align: center;
+  font-weight: 600;
+  background: rgba(15, 23, 32, 0.72);
+}
+
+.camera-card__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+}
+
+.camera-card__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-card__indicators {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.camera-card__indicator[data-off='true'] {
+  opacity: 0.85;
+}
+
+/*
+ * While the answers panel covers the board's left edge, the board's own page
+ * switcher moves to the panel's right edge so the teacher can still flip board
+ * pages without closing the answers.
+ */
+.whiteboard__stage:has(.answers-panel) .whiteboard__pages {
+  left: calc(clamp(320px, 33vw, 560px) + 12px);
+}
+
+.board-toolbar__group {
+  flex-wrap: wrap;
+}
+
+/* --- Board switcher ------------------------------------------------------- */
+
+.board-switcher {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.board-switcher button,
+.board-switcher select {
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.board-switcher button.is-active {
+  background: var(--accent);
+  border-color: var(--accent-dark);
+  color: #fff;
+}
+
+@media (pointer: coarse) {
+  .board-switcher button,
+  .board-switcher select {
+    min-height: 44px;
+  }
+}
+
+/*
+ * LiveKit's dark theme sets `color: var(--lk-fg)` (white) on the room element,
+ * and our panels and buttons sit on a light surface. Without an explicit colour
+ * they inherit white and vanish in browsers whose buttons default to a white
+ * background (Safari). The doubled selector outranks `[data-lk-theme]`.
+ */
+.online-class-room,
+.online-class-room.lk-room-container {
+  color: var(--text);
+  /* LiveKit's dark theme also sets `color-scheme: dark`, which turns every
+     native input and select black. Our panels are light. */
+  color-scheme: light;
+}
+
+/*
+ * Our own controls only. LiveKit's control-bar buttons (`.lk-button`) keep
+ * their own look and their own pressed state; restyling them here made the
+ * camera button dark-on-dark once it was switched on.
+ */
+.online-class-room__controls button:not([class*='lk-']),
+.online-class-room__drawer button,
+.whiteboard button,
+.board-switcher button {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.online-class-room__controls button:not([class*='lk-']):hover,
+.online-class-room__drawer button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.online-class-room__controls button[aria-pressed='true']:not([class*='lk-']) {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent-dark);
+}
+
+.screen-share-toggle button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent-dark);
+}
+
+.screen-share-toggle button {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.screen-share-toggle__error {
+  margin-left: 8px;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.online-class-room__controls button.online-class-room__leave {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Chat: a light, readable composer instead of the browser's dark default. */
+.chat__composer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chat__composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.chat__composer input::placeholder {
+  color: #7b8794;
+}
+
+.chat__composer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.whiteboard__error,
+.recording__unavailable,
+.transcription__unavailable {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/*
+ * A shared screen is the only thing in the main area, so it fills it. LiveKit's
+ * focus layout is a 1fr/5fr grid meant to pair a carousel with a focused tile;
+ * with no carousel the lone tile would be squeezed into the narrow column.
+ */
+.online-class-room__screen .lk-focus-layout {
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.online-class-room__screen .lk-focused-participant,
+.online-class-room__screen .lk-participant-tile {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.online-class-room__screen .lk-participant-media-video[data-lk-source='screen_share'] {
+  object-fit: contain;
+}
