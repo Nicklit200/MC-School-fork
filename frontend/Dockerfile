@@ -8,6 +8,11 @@ COPY . .
 # so the browser talks to the same origin and no CORS is needed.
 ARG VITE_API_BASE_URL=/api/v1
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# Vite replaces import.meta.env during npm run build, not at nginx runtime.
+# Explicitly declare the Railway build arg so the owner-only pilot button
+# can be included in the static bundle when enabled.
+ARG VITE_MINDCRAFTI_ONLINE_ENABLED=false
+ENV VITE_MINDCRAFTI_ONLINE_ENABLED=$VITE_MINDCRAFTI_ONLINE_ENABLED
 RUN npm run build
 
 # --- Runtime stage: serve the bundle with nginx ---
