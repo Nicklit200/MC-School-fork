@@ -61,6 +61,10 @@ export function Layout({ children }: { children: ReactNode }) {
       { to: '/parents', label: 'Родители' },
       { to: '/groups', label: 'Мои группы' },
       { to: '/teacher/lessons', label: 'Уроки' },
+      ...(user.id === '14e3c7c1-1fc8-41bd-858a-6c20efdd957a'
+        && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true'
+        ? [{ to: '/teacher/online-classes', label: 'Онлайн-уроки' }]
+        : []),
       { to: '/skills', label: 'Навыки' },
       { to: '/teacher/settings', label: 'Настройки' },
       { to: '/students', label: 'Домашние задания', disabled: true },
