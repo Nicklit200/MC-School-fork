@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { onlineClassesApi, type OnlineClass } from '../../api/onlineClasses';
 import { api } from '../../api/client';
 import type { StudentLesson } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -15,6 +17,7 @@ type ViewMode = 'week' | 'month';
 export function StudentLessonsCalendarPage() {
   const { language, t } = useI18n();
   const [lessons, setLessons] = useState<StudentLesson[]>([]);
+  const [liveOnlineClasses, setLiveOnlineClasses] = useState<OnlineClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +40,27 @@ export function StudentLessonsCalendarPage() {
     return () => { cancelled = true; };
   }, [t]);
 
-  const scheduleDays = useMemo<ScheduleDay[]>(() => {
+  // Classes are created from Google Calendar by the teacher. The student's
+  // existing calendar card shows a second join action only after a room opens.
+  useEffect(() => {
+    if (import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED !== 'true') return;
+    let cancelled = false;
+    onlineClassesApi.listUpcoming()
+      .then(classes => {
+        if (!cancelled) setLiveOnlineClasses(classes.filter(item =>
+          item.status === 'LIVE' || item.status === 'LOBBY_OPEN'));
+      })
+      .catch(() => {
+        if (!cancelled) setLiveOnlineClasses([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  function liveRoomFor(eventId: string): OnlineClass | undefined {
+    return liveOnlineClasses.find(item => item.eventId === eventId);
+  }
+
+    const scheduleDays = useMemo<ScheduleDay[]>(() => {
     const start = startOfLocalDay(new Date());
     const endExclusive = addDays(start, 7);
     const visible = lessons
@@ -166,6 +189,13 @@ export function StudentLessonsCalendarPage() {
                 : (language === 'DE' ? 'Unterricht noch nicht bereit' : 'Урок ещё не готов')}
           </button>
 
+          {liveRoomFor(lesson.eventId) && (
+            <Link className="btn btn--secondary"
+              to={`/online-classes/${liveRoomFor(lesson.eventId)!.id}`}
+              style={{ width: '100%', textAlign: 'center' }}>
+              Mindcrafti Online - войти
+            </Link>
+          )}
           {lesson.meetUrl ? (
             <a
               className="btn btn--secondary"
@@ -231,6 +261,13 @@ export function StudentLessonsCalendarPage() {
                 : (language === 'DE' ? 'Dokument noch nicht bereit' : 'Документ ещё не готов')}
           </button>
 
+          {liveRoomFor(lesson.eventId) && (
+            <Link className="btn btn--secondary"
+              to={`/online-classes/${liveRoomFor(lesson.eventId)!.id}`}
+              style={{ width: '100%', textAlign: 'center' }}>
+              Mindcrafti Online - войти
+            </Link>
+          )}
           {lesson.meetUrl ? (
             <a
               className="btn"

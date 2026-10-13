@@ -8,6 +8,7 @@ import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
+import { LessonClassArtifacts } from '../../features/online-classes/LessonClassArtifacts';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type HomeworkSummary = {
@@ -319,7 +320,7 @@ export function LessonDetailPage() {
           {/* Mindcrafti Online will be enabled only after the live-classes API,
               migrations and LiveKit provider have passed staging acceptance tests.
               Keep the Google Meet action functional independently. */}
-          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && (
+          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED !== 'true' && (
             <Link className="btn btn--secondary" to={`/lesson-board/${encodeURIComponent(eventId)}`}>
               Mindcrafti доска (тест)
             </Link>
@@ -330,7 +331,10 @@ export function LessonDetailPage() {
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
 
-      {isNickAiPilot && (
+      {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' && (
+        <LessonClassArtifacts eventId={lesson.eventId} />
+      )}
+            {isNickAiPilot && (
         <section className="panel" style={{ padding: 18, margin: '0 0 18px', border: '1px solid #f0c7ad', background: '#fffaf7' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
