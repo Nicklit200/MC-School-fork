@@ -947,3 +947,256 @@
 .online-class-room__screen .lk-participant-media-video[data-lk-source='screen_share'] {
   object-fit: contain;
 }
+
+
+/* --- Prejoin screen: match the Mindcrafti teacher workspace --------------- */
+/* This route intentionally opens outside the staff sidebar to give the room
+   the whole viewport. It therefore needs its own page/card layout. */
+.online-class-page {
+  --accent: var(--orange);
+  --accent-dark: var(--orange-dark);
+  width: min(100% - 32px, 1120px);
+  min-height: calc(100vh - 64px);
+  margin: 32px auto;
+  padding: 16px 0 32px;
+  color: #172033;
+}
+
+.online-class-page > h1 {
+  margin: 0 0 22px;
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.15;
+  color: #172033;
+}
+
+.online-class-page > [role='status'] {
+  margin-bottom: 12px;
+  color: #46536a;
+}
+
+.prejoin {
+  border: 1px solid #ffe1d0;
+  border-radius: 24px;
+  background: #fff;
+  padding: clamp(18px, 3vw, 32px);
+  box-shadow: 0 12px 44px rgba(22, 34, 57, 0.07);
+}
+
+.prejoin__eyebrow {
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--orange-dark);
+}
+
+.prejoin__heading h2 {
+  margin: 0 0 8px;
+  font-size: clamp(20px, 2.5vw, 27px);
+  line-height: 1.2;
+  color: #172033;
+}
+
+.prejoin__heading p {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #68758a;
+}
+
+.prejoin__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(295px, 0.9fr);
+  align-items: start;
+  gap: 28px;
+}
+
+.prejoin__preview {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #172033;
+  aspect-ratio: 16 / 10;
+  min-height: 240px;
+}
+
+.prejoin__preview video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.prejoin__placeholder {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  color: #d7dee9;
+  font-size: 15px;
+  text-align: center;
+}
+
+.prejoin__camera-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 52px;
+  border: 2px solid #68758a;
+  border-radius: 12px;
+  color: #a4afc1;
+  font-size: 34px;
+  font-weight: 700;
+}
+
+.prejoin__preview-label {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  border-radius: 9px;
+  padding: 6px 11px;
+  background: rgba(17, 24, 39, 0.76);
+  color: #f8fafc;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.prejoin__settings {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 17px;
+}
+
+.prejoin__error {
+  padding: 13px 15px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fff6f4;
+  color: #a62b23;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.prejoin__error strong { display: block; font-weight: 700; }
+.prejoin__error p { margin: 8px 0 0; }
+
+.prejoin__devices {
+  display: grid;
+  gap: 12px;
+}
+
+.prejoin__select {
+  display: grid;
+  gap: 6px;
+  color: #46536a;
+  font-size: 13px;
+  font-weight: 700;
+}
+.prejoin__select select {
+  width: 100%;
+  height: 43px;
+  padding: 0 12px;
+  color: #24314b;
+  font: inherit;
+  font-weight: 500;
+  border: 1px solid #dce3ed;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.prejoin__toggle {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 8px 12px;
+  background: #f8fafd;
+  border: 1px solid #edf0f5;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #39465c;
+}
+
+.prejoin__toggle input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--orange);
+}
+
+.prejoin__retry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.prejoin__retry,
+.prejoin__join {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 17px;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.prejoin__retry {
+  background: #fff6f1;
+  border: 1px solid #ffdcc7;
+  color: #d14b05;
+}
+.prejoin__retry:hover { background: #ffe9db; }
+
+.prejoin__join-actions {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #edf0f5;
+}
+.prejoin__join {
+  width: 100%;
+  background: #ff5b00;
+  border: 1px solid #ff5b00;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(255, 91, 0, 0.17);
+}
+.prejoin__join:hover:not(:disabled) {
+  background: #e84f00;
+  border-color: #e84f00;
+}
+.prejoin__join:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.prejoin__note {
+  margin: 9px 0 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #75819a;
+}
+
+@media (max-width: 780px) {
+  .online-class-page {
+    margin: 14px auto;
+    min-height: calc(100vh - 28px);
+  }
+  .online-class-page > h1 { margin: 0 0 14px; }
+  .prejoin__layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .prejoin__preview { min-height: 220px; aspect-ratio: 16 / 9; }
+  .prejoin__heading p { margin-bottom: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prejoin__retry, .prejoin__join { transition: none; }
+}
