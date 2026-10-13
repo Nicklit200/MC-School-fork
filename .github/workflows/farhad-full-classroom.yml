@@ -42,6 +42,11 @@ jobs:
   backend-live-class-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Shared Testcontainers PostgreSQL serves many Spring test contexts.
+    # Use small pools so parallel contexts do not exhaust server connections.
+    env:
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: '2'
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
