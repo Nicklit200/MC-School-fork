@@ -5,6 +5,10 @@ import { lessonBoardApi, type BoardAction, type BoardOperation, type BoardPoint 
 
 const BOARD_WIDTH = 1400;
 const BOARD_HEIGHT = 900;
+// The backend accepts brush/eraser widths from 1 through 48 pixels.
+const MAX_BOARD_TOOL_WIDTH = 48;
+// Short normalized coordinates keep even 500-point strokes below the API payload limit.
+const coordinate = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 10000) / 10000;
 const PILOT_TEACHER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
 
 type Tool = 'pen' | 'eraser' | 'text';
@@ -79,8 +83,8 @@ function renderBoard(canvas: HTMLCanvasElement | null,
 function position(event: ReactPointerEvent<HTMLCanvasElement>): BoardPoint {
   const rect = event.currentTarget.getBoundingClientRect();
   return {
-    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
-    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+    x: coordinate((event.clientX - rect.left) / rect.width),
+    y: coordinate((event.clientY - rect.top) / rect.height),
   };
 }
 
@@ -199,7 +203,7 @@ export function LessonBoardPage() {
       kind: tool === 'eraser' ? 'ERASE' : 'STROKE',
       points: [point],
       color: tool === 'eraser' ? '#FFFFFF' : color,
-      width: tool === 'eraser' ? Math.max(22, strokeWidth * 5) : strokeWidth,
+      width: tool === 'eraser' ? Math.min(MAX_BOARD_TOOL_WIDTH, Math.max(22, strokeWidth * 5)) : strokeWidth,
     };
     redraw();
   }
