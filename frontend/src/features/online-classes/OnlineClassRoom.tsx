@@ -300,6 +300,7 @@ export function OnlineClassRoom({
   recordingAvailable = false,
   transcriptionAvailable = false,
   onLeave,
+  onConnectionLost,
   onEndForAll,
   onStateChanged,
 }: {
@@ -317,6 +318,8 @@ export function OnlineClassRoom({
   recordingAvailable?: boolean;
   transcriptionAvailable?: boolean;
   onLeave: () => void;
+  /** An involuntary LiveKit disconnect is not the user's Leave action. */
+  onConnectionLost: (reason?: string) => void;
   onEndForAll?: () => void;
   onStateChanged?: () => void;
 }) {
@@ -334,7 +337,12 @@ export function OnlineClassRoom({
       // Adaptive streaming and dynacast keep classroom video stable on weak
       // school networks instead of chasing maximum resolution.
       options={{ adaptiveStream: true, dynacast: true }}
-      onDisconnected={onLeave}
+      onDisconnected={(reason) => {
+        // The browser may lose LiveKit/WebRTC temporarily. Do not trigger the
+        // explicit Leave handler, which navigates away and ends the session.
+        console.warn('Mindcrafti Online: unexpected media disconnect', reason);
+        onConnectionLost(reason == null ? undefined : String(reason));
+      }}
       data-lk-theme="default"
       className="online-class-room"
     >
