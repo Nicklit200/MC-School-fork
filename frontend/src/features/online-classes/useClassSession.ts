@@ -11,6 +11,7 @@ export type SessionPhase =
   | 'ready'
   | 'requesting'
   | 'connected'
+  | 'disconnected'
   | 'waiting'
   | 'unavailable'
   | 'notOpen'
@@ -23,6 +24,8 @@ export interface ClassSession {
   connection: OnlineClassConnection | null;
   errorMessage: string | null;
   requestConnection: () => Promise<void>;
+  /** Keep the lesson on screen when LiveKit loses transport unexpectedly. */
+  transportDisconnected: () => void;
   release: () => void;
   reload: () => Promise<void>;
 }
@@ -154,6 +157,17 @@ export function useClassSession(classId: string | undefined): ClassSession {
     }
   }, [attempt, classId, stopWaiting]);
 
+  // LiveKit may exhaust its own automatic retries during a brief outage.
+  // That is not an intentional "Leave" click: keep the calendar class alive,
+  // discard the stale token and offer a fresh connection on the same page.
+  // Do not call the server's /leave endpoint for a transport failure.
+  const transportDisconnected = useCallback(() => {
+    stopWaiting();
+    setConnection(null);
+    setPhase('disconnected');
+    setErrorMessage(null);
+  }, [stopWaiting]);
+
   const release = useCallback(() => {
     stopWaiting();
     setConnection(null);
@@ -165,5 +179,5 @@ export function useClassSession(classId: string | undefined): ClassSession {
     }
   }, [classId, stopWaiting]);
 
-  return { phase, onlineClass, connection, errorMessage, requestConnection, release, reload };
+  return { phase, onlineClass, connection, errorMessage, requestConnection, transportDisconnected, release, reload };
 }
