@@ -6,6 +6,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.mcschool.flashcard.AbstractIntegrationTest;
 import com.mcschool.flashcard.auth.JwtService;
+import com.mcschool.flashcard.auth.OnlineClassPilotAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import com.mcschool.flashcard.lessons.LessonPreparation;
 import com.mcschool.flashcard.lessons.LessonPreparationRepository;
 import com.mcschool.flashcard.users.User;
@@ -33,6 +38,17 @@ class OnlineClassAnswersAccessIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+    // The production owner-only pilot is tested separately. Here we isolate the
+    // per-class permissions for the bound student from the pilot owner's UUID.
+    @MockitoBean
+    private OnlineClassPilotAuthorizationManager pilotAuthorization;
+
+    @BeforeEach
+    void allowPilotOnlyForTheseMembershipTests() {
+        when(pilotAuthorization.authorize(any(), any()))
+                .thenReturn(new AuthorizationDecision(true));
+    }
+
 
     @Autowired
     private JwtService jwtService;
