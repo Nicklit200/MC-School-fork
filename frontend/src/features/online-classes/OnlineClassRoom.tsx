@@ -247,7 +247,9 @@ function RoomBody({
       <ConnectionStateToast />
 
       <div className="online-class-room__controls">
-        <ControlBar variation="verbose" />
+        {/* Leave is handled by our own button. LiveKit's built-in Leave
+            would look like an unexpected network disconnect here. */}
+        <ControlBar variation="verbose" controls={{ leave: false }} />
         <button
           type="button"
           aria-pressed={panelsOpen}
