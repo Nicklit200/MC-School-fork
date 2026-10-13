@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -35,6 +36,7 @@ import tools.jackson.databind.ObjectMapper;
 @RestController
 @RequestMapping("/api/v1/lesson-board")
 @PreAuthorize("hasAnyRole('TEACHER', 'STUDENT')")
+@Transactional(readOnly = true)
 public class LessonBoardController {
 
     private final LessonBoardOperationRepository operations;
@@ -94,6 +96,7 @@ public class LessonBoardController {
 
     /** Called only when the pilot teacher opens the board from a lesson card. */
     @PostMapping("/{eventId}/start")
+    @Transactional
     @PreAuthorize("hasRole('TEACHER')")
     public BoardSnapshot start(@AuthenticationPrincipal AuthenticatedUser caller,
                                @PathVariable String eventId) {
@@ -106,6 +109,7 @@ public class LessonBoardController {
     }
 
     @PostMapping("/{eventId}/actions")
+    @Transactional
     public BoardOperationView append(@AuthenticationPrincipal AuthenticatedUser caller,
                                      @PathVariable String eventId,
                                      @RequestBody BoardActionRequest request) {
