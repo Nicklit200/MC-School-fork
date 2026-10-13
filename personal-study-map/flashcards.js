@@ -41,6 +41,70 @@
     localStorage.setItem(key, JSON.stringify(value));
   }
 
+
+  const SYNC_URL="https://personal-life-api-production.up.railway.app/api/quiz-sync";
+  const OWNER_KEY="personal-study-map:owner-token:v1",PENDING_KEY="personal-study-map:pending-sync:v1";
+  let busy=false,timer=null;
+  function owner(){
+    let value=localStorage.getItem(OWNER_KEY);
+    if(!/^[a-f0-9]{64}$/.test(value||"")){
+      value=Array.from(crypto.getRandomValues(new Uint8Array(32))).map(x=>x.toString(16).padStart(2,"0")).join("");
+      localStorage.setItem(OWNER_KEY,value);
+    }
+    return value;
+  }
+  async function remote(method,body){
+    const res=await fetch(SYNC_URL,{method,headers:{"Content-Type":"application/json",Authorization:"Bearer "+owner()},body:body?JSON.stringify(body):undefined});
+    if(!res.ok)throw Error("Sync "+res.status);
+    return res.json();
+  }
+  function queueSync(){
+    localStorage.setItem(PENDING_KEY,"1");
+    clearTimeout(timer);
+    timer=setTimeout(sendSync,1200);
+  }
+  async function sendSync(){
+    if(busy||!navigator.onLine)return;
+    busy=true;
+    try{
+      const data={progress:getProgress(),invalid:getInvalidCards(),deleted:getDeletedCards(),
+        overrides:getOverrides(),custom:getCustomCards(),sessions:storedHistory().slice(0,100)};
+      const result=await remote("POST",data);
+      if(result.ok)localStorage.removeItem(PENDING_KEY);
+    }catch(e){console.warn("Sync retry on next visit",e);}
+    finally{busy=false;}
+  }
+  async function pullSync(){
+    try{
+      const response=await remote("GET");
+      const payload=response.snapshot||{};
+      for(const [key,name] of [[KEY_PROGRESS,"progress"],[KEY_INVALID,"invalid"],[KEY_DELETED,"deleted"],[KEY_OVERRIDES,"overrides"]]){
+        const remoteData=payload[name];
+        if(!remoteData||typeof remoteData!=="object"||Array.isArray(remoteData))continue;
+        const current=readJson(key,{});
+        const merged={...remoteData,...current};
+        if(name==="progress")for(const [id,record] of Object.entries(remoteData)){
+          if(!current[id]||String(record?.updatedAt||"")>String(current[id]?.updatedAt||""))merged[id]=record;
+        }
+        writeJson(key,merged);
+      }
+      if(Array.isArray(payload.custom)){
+        const cards=new Map(payload.custom.map(x=>[x.id,x]));
+        for(const x of getCustomCards())cards.set(x.id,x);
+        writeJson(KEY_CUSTOM,[...cards.values()]);
+      }
+      const rows=new Map((Array.isArray(response.sessions)?response.sessions:[]).map(x=>[x.id,x]));
+      for(const x of storedHistory())rows.set(x.id,x);
+      writeJson(KEY_HISTORY,[...rows.values()].sort((a,b)=>String(b.completedAt||b.date).localeCompare(String(a.completedAt||a.date))).slice(0,100));
+      window.dispatchEvent(new Event("study-reviews-updated"));
+      updateBadge();
+      if(ui.view==="home")renderHome();
+    }catch(e){console.warn("Quiz stays in local storage",e);}
+  }
+  window.addEventListener("study-reviews-updated",queueSync);
+  window.addEventListener("online",()=>void pullSync());
+  window.addEventListener("visibilitychange",()=>{if(!document.hidden&&localStorage.getItem(PENDING_KEY))void sendSync();});
+
   function getContext() {
     return window.studyBoardCards?.context() || {exam:null,semesterId:"",topicId:"all"};
   }
@@ -456,6 +520,7 @@
     const history=storedHistory();
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
+    queueSync();
     window.dispatchEvent(new Event("study-reviews-updated"));
     localStorage.removeItem(KEY_SESSION);
     ui.session=null;ui.feedback=null;ui.result=completed.result;ui.view="result";
@@ -884,5 +949,6 @@
   };
   window.addEventListener("hashchange",openCardsFromLink);
   updateBadge();
+  void pullSync();
   openCardsFromLink();
 })();
