@@ -97,7 +97,6 @@ function RoomBody({
   currentUserId,
   eventId,
   connection,
-  initialMedia,
   recordingState,
   transcriptionState,
   studentScreenShareEnabled,
@@ -111,7 +110,6 @@ function RoomBody({
   currentUserId: string;
   eventId?: string;
   connection: OnlineClassConnection;
-  initialMedia?: import('./PrejoinPanel').PrejoinChoice;
   recordingState: ClassFeatureState;
   transcriptionState: ClassFeatureState;
   studentScreenShareEnabled: boolean;
@@ -295,6 +293,7 @@ export function OnlineClassRoom({
   currentUserId,
   eventId,
   connection,
+  initialMedia,
   recordingState,
   transcriptionState,
   studentScreenShareEnabled = false,
@@ -309,6 +308,7 @@ export function OnlineClassRoom({
   /** Calendar event of the lesson; used to find the teacher's bound answers file. */
   eventId?: string;
   connection: OnlineClassConnection;
+  initialMedia?: import('./PrejoinPanel').PrejoinChoice;
   recordingState: ClassFeatureState;
   transcriptionState: ClassFeatureState;
   /** Whether students may currently share their screen (teacher-controlled). */
