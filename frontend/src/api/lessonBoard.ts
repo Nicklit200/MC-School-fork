@@ -50,6 +50,9 @@ async function request<T>(method: string, eventId: string, suffix = '', data?: u
   if (!response.ok) {
     if (response.status === 403) throw new Error('Доступ к тестовой доске пока закрыт.');
     if (response.status === 404) throw new Error('Доска недоступна: урок не найден или ещё не открыт преподавателем.');
+    if (response.status === 400 && suffix === '/actions') {
+      throw new Error('Действие не сохранилось: проверь толщину инструмента или попробуй провести более короткую линию.');
+    }
     throw new Error(`Не удалось связаться с доской (HTTP ${response.status}).`);
   }
   return response.json() as Promise<T>;
