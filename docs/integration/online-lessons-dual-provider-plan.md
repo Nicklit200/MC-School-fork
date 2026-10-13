@@ -1,41 +1,30 @@
-# Dual-provider online lessons integration (work in progress)
-
-## Goal
-Keep the existing Google Meet path fully functional and add a separate Mindcrafti Online classroom option per scheduled lesson, for both teacher and student.
-
-## Source and safety
-- Production source: `integration/railway-and-ux` (frontend and backend).
-- Existing staging source: `test/online-classes-staging` (frontend and backend).
-- Online classroom implementation: `feature/online-classes`, and newer upstream `Farhad054/MC-School:main` (13 Oct 2026).
-- Never replace production branch with staging wholesale; branches diverged.
-- Never run Flyway migrations against production until reviewed, backed up, and tested separately.
-- Production Railway source remains unchanged until successful staging acceptance test.
+# Mindcrafti whiteboard pilot - isolated add-on to the production school
 
 ## Scope
-1. Port the liveclasses backend module, DTOs, providers, configuration, tests and DB migrations, reconciling migrations against production HEAD.
-2. Port online classroom UI, API client, routes, menu and required dependencies without reverting newer production features.
-3. In scheduled lesson detail show two independent actions: `Join via Google Meet` (existing) and `Join via Mindcrafti Online` (new). Keep Meet URL unchanged.
-4. Restrict access to assigned teacher and enrolled students. Validate admissions, multi-user permissions and tenant separation.
-5. Default new media feature OFF until LiveKit URL/API key/API secret and other storage dependencies are configured. Do not expose secrets to frontend.
-6. Test two-account and 2-4 student flows, whiteboard concurrent edits, text, PDF export, disconnect/reconnect, mobile Safari, existing Google Meet workflow.
-7. Deploy to staging from a reviewed commit, capture results, then open production PR for manual approval.
+- All lessons continue to originate from Google Calendar. No new scheduling system is introduced.
+- The teacher's existing lesson detail keeps Google Meet and adds `Mindcrafti доска (тест)`.
+- This is a **standalone shared board pilot**, not the complete Farhad LiveKit classroom or its stage-4 advanced whiteboard.
+- Existing routes, teacher/student dashboards, school prompts, homework, Google Meet and Soniox flows remain unchanged.
+- Browser drawing tools: pen, eraser, text, undo, teacher-only clear, PNG export, Print/Save as PDF.
+- Strokes are appended to PostgreSQL and fetched approximately once per second.
+- The board URL is `/lesson-board/:eventId`. Students assigned to the lesson can access the board via direct link once the pilot teacher opens it. The student calendar UI is intentionally unchanged for the owner-only pilot.
 
-## Current checkpoint 2026-10-13
-- Separate branch created from the existing production code.
-- Existing staging deployment SUCCESS on 2026-10-12, not confirmed to include upstream merge from 2026-10-13.
-- Full feature is NOT merged, built, deployed, or validated yet.
+## Security
+- `/api/v1/lesson-board/**` is protected by JWT and `OnlineClassPilotAuthorizationManager`.
+- `ONLINE_CLASSES_ENABLED=false` and blank `ONLINE_CLASSES_PILOT_OWNER_ID` fail closed.
+- Teacher host must match the UUID supplied by server configuration, validated from the authenticated principal.
+- Student access is allowed only if active, non-archived, directly assigned to the pilot teacher, and a member of the exact event's student/group roster.
+- Students cannot clear the board or undo other users' operations; teachers may undo any.
+- `VITE_MINDCRAFTI_ONLINE_ENABLED` controls the teacher's link visibility only, never authorization.
 
-## Owner-only pilot (implemented on this integration branch)
-- Access-control manager: `auth/OnlineClassPilotAuthorizationManager.java`.
-- All browser-facing `/api/v1/online-classes/**` endpoints are protected in `SecurityConfig` using the server-verified JWT principal.
-- Enabled only when `ONLINE_CLASSES_ENABLED=true` **and** `ONLINE_CLASSES_PILOT_OWNER_ID` is set to the owner's teacher-account UUID; defaults deny all.
-- Only that teacher may host. Active, non-archived students assigned to that teacher may request access, but room membership MUST still be verified by `OnlineClassAccessService`; students must not see a launch button until rollout.
-- Backend unit tests `OnlineClassPilotAuthorizationManagerTest`; CI workflow `online-class-pilot.yml` successfully executed tests on Oct 13.
-- Existing Google Meet flow remains independent.
-- IMPORTANT: this gate is only a prerequisite. The online-classes backend/controllers, room UI and provider setup are not yet merged into the production-derived branch. Do NOT switch the Railway source or set the feature flag yet.
+## Migration and rollout
+- Only migration `V76__create_lesson_board_operations.sql` is added; it creates one new append-only table and indexes without changing existing records.
+- Run `LessonBoardMigrationIntegrationTest` against isolated PostgreSQL and unit tests before merge.
+- Verify production's migration history still ends at V75 before deploying.
+- Set both backend variables (`ONLINE_CLASSES_ENABLED=true`, `ONLINE_CLASSES_PILOT_OWNER_ID=<teacher UUID>`) and frontend `VITE_MINDCRAFTI_ONLINE_ENABLED=true` with skip-deploy, so the staged values take effect together at the checked merge deployment.
+- LiveKit credentials are not required: video continues through Google Meet.
+- Pilot acceptance: open the owner lesson card, start the board, open the same board URL as an assigned student, check stroke sync, text, undo, clear, PNG and PDF; confirm other teachers/parents receive 403 and existing Meet still works.
+- To disable pilot access instantly, set `ONLINE_CLASSES_ENABLED=false`; to remove the UI button, set frontend flag to false and redeploy.
 
-## Database migration conflict (confirmed)
-- Production branch already includes V44..V75.
-- Online classroom staging migration set uses V48, V49, V50, V51, V52 and V54, colliding with production's existing version numbers.
-- Before first staging deployment, reconcile against production schema and rebase *online-specific* migrations to V76..V81 in the correct dependency order; do not simply copy the entire staging migration directory.
-- Also check new upstream Farhad Oct 13 changes before finalizing the import.
+## Not included yet
+- Farhad's LiveKit video rooms, camera sharing, advanced PDF annotation and whiteboard stage-4 tools. These need separate integration and end-to-end security review.
