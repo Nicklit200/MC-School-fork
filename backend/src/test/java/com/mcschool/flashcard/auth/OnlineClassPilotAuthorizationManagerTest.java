@@ -55,25 +55,17 @@ class OnlineClassPilotAuthorizationManagerTest {
     @Test
     void studentCanOnlyAccessPilotClassEndpointsWhenAssignedToPilotTeacher() {
         var guard = enabledGate();
-        User student = mock(User.class);
-        User owner = mock(User.class);
-        when(student.isArchived()).thenReturn(false);
-        when(student.getStatus()).thenReturn(UserStatus.ACTIVE);
-        when(student.getTeacher()).thenReturn(owner);
-        when(owner.getId()).thenReturn(OWNER_ID);
-        when(users.findById(STUDENT_ID)).thenReturn(Optional.of(student));
+        when(users.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(
+                STUDENT_ID, OWNER_ID, Role.STUDENT, UserStatus.ACTIVE)).thenReturn(true);
 
         assertTrue(guard.isAllowed(auth(STUDENT_ID, Role.STUDENT)));
-        when(owner.getId()).thenReturn(OTHER_TEACHER_ID);
-        assertFalse(guard.isAllowed(auth(STUDENT_ID, Role.STUDENT)));
+        assertFalse(guard.isAllowed(auth(OTHER_TEACHER_ID, Role.STUDENT)));
     }
 
     @Test
     void archivedStudentCannotBypassAccess() {
         var guard = enabledGate();
-        User student = mock(User.class);
-        when(student.isArchived()).thenReturn(true);
-        when(users.findById(STUDENT_ID)).thenReturn(Optional.of(student));
+        // Repository filters out archived students; default false must deny them.
         assertFalse(guard.isAllowed(auth(STUDENT_ID, Role.STUDENT)));
     }
 
