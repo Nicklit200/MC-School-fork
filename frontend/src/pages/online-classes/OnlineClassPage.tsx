@@ -18,6 +18,8 @@ export function OnlineClassPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const session = useClassSession(classId);
+  const [hasDisconnected, setHasDisconnected] = useState(false);
+  const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
   const [initialMedia, setInitialMedia] = useState<PrejoinChoice>({
     videoDeviceId: null,
     audioDeviceId: null,
@@ -52,6 +54,11 @@ export function OnlineClassPage() {
         recordingAvailable={session.onlineClass?.recordingAvailable ?? false}
         transcriptionAvailable={session.onlineClass?.transcriptionAvailable ?? false}
         onStateChanged={() => void session.reload()}
+        onConnectionLost={(reason) => {
+          setDisconnectReason(reason ?? null);
+          setHasDisconnected(true);
+          session.transportDisconnected();
+        }}
         onLeave={() => {
           session.release();
           navigate(-1);
@@ -67,6 +74,59 @@ export function OnlineClassPage() {
             : undefined
         }
       />
+    );
+  }
+
+  // Unexpected LiveKit transport loss is NOT a click on the Leave button.
+  // Keep the same lesson URL and allow requesting a fresh signed room token.
+  // A failed retry stays on this screen instead of navigating back.
+  if (hasDisconnected || session.phase === 'disconnected') {
+    const retry = (withoutDevices: boolean) => {
+      if (withoutDevices) {
+        setInitialMedia({
+          videoDeviceId: null,
+          audioDeviceId: null,
+          cameraEnabled: false,
+          microphoneEnabled: false,
+        });
+      }
+      void session.requestConnection();
+    };
+    return (
+      <div className="online-class-page">
+        <h1>{session.onlineClass?.title ?? t('onlineClass.title')}</h1>
+        <section className="prejoin online-class-reconnect" aria-labelledby="reconnect-title">
+          <div className="prejoin__eyebrow">Mindcrafti Online</div>
+          <h2 id="reconnect-title">{t('onlineClass.disconnect.title')}</h2>
+          <p>{t('onlineClass.disconnect.hint')}</p>
+          {disconnectReason && (
+            <p className="online-class-reconnect__code">{t('onlineClass.disconnect.code')}: {disconnectReason}</p>
+          )}
+          {session.phase === 'failed' && (
+            <p role="alert" className="prejoin__error">
+              {session.errorMessage ?? t('onlineClass.status.failed')}
+            </p>
+          )}
+          <div className="online-class-reconnect__actions">
+            <button className="prejoin__join" type="button"
+              disabled={session.phase === 'requesting'}
+              onClick={() => retry(false)}>
+              {t('onlineClass.disconnect.retry')}
+            </button>
+            <button className="prejoin__retry" type="button"
+              disabled={session.phase === 'requesting'}
+              onClick={() => retry(true)}>
+              {t('onlineClass.disconnect.retryWithoutMedia')}
+            </button>
+            <button className="prejoin__retry" type="button" onClick={() => {
+              session.release();
+              navigate(-1);
+            }}>
+              {t('onlineClass.disconnect.back')}
+            </button>
+          </div>
+        </section>
+      </div>
     );
   }
 
