@@ -1734,6 +1734,28 @@ window.addEventListener("study-reviews-updated", () => {
 
 window.addEventListener("resize", applyTransform);
 
+
+async function handleOAuthApproval(){
+ const match=window.location.hash.match(/^#oauth-approve=([a-f0-9]{64})$/);
+ if(!match)return;
+ history.replaceState(null,"",location.pathname+location.search);
+ const requestId=match[1];
+ if(!confirm("Разрешить ChatGPT читать историю твоих учебных карточек? Доступ только для чтения."))return;
+ const token=localStorage.getItem("personal-study-map:owner-token:v1");
+ if(!/^[a-f0-9]{64}$/.test(token||"")){alert("Сначала открой раздел карточек и дождись синхронизации, затем повтори подключение.");return;}
+ try{
+  const response=await fetch("https://my-skills-mcp-production.up.railway.app/oauth/approve",{
+   method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},
+   body:JSON.stringify({id:requestId})
+  });
+  const result=await response.json();
+  if(!response.ok||!result.redirect)throw Error(result.error||"Access failed");
+  location.assign(result.redirect);
+ }catch(e){alert("Не удалось подтвердить доступ: "+e.message);}
+}
+window.addEventListener("hashchange",()=>void handleOAuthApproval());
+void handleOAuthApproval();
+
 loadData().then(() => setTimeout(fitMap, 0)).catch((error) => {
   console.error(error);
   $("empty-state").hidden = false;
