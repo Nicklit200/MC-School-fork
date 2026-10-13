@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { Navigate, Route, Routes } from 'react-router-dom';
@@ -44,6 +45,8 @@ import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSu
 import { SettingsPage } from './pages/student/SettingsPage';
 import { ParentPage } from './pages/parent/ParentPage';
 
+const LessonBoardPage = lazy(() => import('./pages/lesson-board/LessonBoardPage').then((m) => ({ default: m.LessonBoardPage })));
+
 export function App() {
   const { user, initializing } = useAuth();
   if (initializing) return null;
@@ -84,6 +87,7 @@ export function App() {
       <Route path="/groups/:groupId/cards/:startDate" element={<ProtectedRoute role="TEACHER"><Layout><GroupCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons" element={<ProtectedRoute role="TEACHER"><Layout><GroupLessonsWithDetailLinks /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons/:eventId" element={<ProtectedRoute role="TEACHER"><Layout><LessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
+      <Route path="/lesson-board/:eventId" element={<ProtectedRoute><Layout><Suspense fallback={<p>Открываем доску…</p>}><LessonBoardPage /></Suspense></Layout></ProtectedRoute>} />
       <Route path="/teacher/settings" element={<ProtectedRoute role="TEACHER"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 
       <Route path="/today" element={<ProtectedRoute role="STUDENT"><Layout><TodayPage /></Layout></ProtectedRoute>} />
