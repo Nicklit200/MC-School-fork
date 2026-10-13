@@ -45,6 +45,8 @@ import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSu
 import { SettingsPage } from './pages/student/SettingsPage';
 import { ParentPage } from './pages/parent/ParentPage';
 
+const UpcomingOnlineClassesPage = lazy(() => import('./pages/online-classes/UpcomingOnlineClassesPage').then(m => ({ default: m.UpcomingOnlineClassesPage })));
+const OnlineClassPage = lazy(() => import('./pages/online-classes/OnlineClassPage').then(m => ({ default: m.OnlineClassPage })));
 const LessonBoardPage = lazy(() => import('./pages/lesson-board/LessonBoardPage').then((m) => ({ default: m.LessonBoardPage })));
 
 export function App() {
@@ -87,6 +89,8 @@ export function App() {
       <Route path="/groups/:groupId/cards/:startDate" element={<ProtectedRoute role="TEACHER"><Layout><GroupCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons" element={<ProtectedRoute role="TEACHER"><Layout><GroupLessonsWithDetailLinks /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons/:eventId" element={<ProtectedRoute role="TEACHER"><Layout><LessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
+      <Route path="/online-classes/:classId" element={<ProtectedRoute><Layout><Suspense fallback={<p>Подключаем онлайн-урок…</p>}><OnlineClassPage /></Suspense></Layout></ProtectedRoute>} />
+      <Route path="/teacher/online-classes" element={<ProtectedRoute role="TEACHER"><Layout><Suspense fallback={<p>Загрузка уроков…</p>}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
       <Route path="/lesson-board/:eventId" element={<ProtectedRoute><Layout><Suspense fallback={<p>Открываем доску…</p>}><LessonBoardPage /></Suspense></Layout></ProtectedRoute>} />
       <Route path="/teacher/settings" element={<ProtectedRoute role="TEACHER"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
 

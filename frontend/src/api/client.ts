@@ -79,7 +79,7 @@ export function getPersistentAccessToken(): string | null { return localStorage.
 export function hasSessionAccessToken(): boolean { return Boolean(sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)); }
 function authHeaders(): Record<string, string> { return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}; }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = authHeaders();
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(`${BASE_URL}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -94,7 +94,7 @@ async function uploadFile(path: string, file: File): Promise<void> { const form 
 async function uploadFiles(path: string, files: File[]): Promise<void> { const form = new FormData(); files.forEach((file) => form.append('files', file)); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
 async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> { const form = new FormData(); form.append('startDate', startDate); form.append('file', file); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); return payload as T; }
 async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> { return uploadDatedFile<Homework>(`/students/${studentId}/homeworks/pdf`, startDate, file); }
-async function requestBlob(path: string): Promise<Blob> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return response.blob(); }
+export async function requestBlob(path: string): Promise<Blob> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return response.blob(); }
 async function requestText(path: string): Promise<string> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); const text = await response.text(); if (!response.ok) { let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return text; }
 
 export const api = {

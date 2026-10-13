@@ -7,6 +7,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
+import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 
 type HomeworkSummary = {
@@ -312,6 +313,9 @@ export function LessonDetailPage() {
           )}
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
           {lesson?.meetUrl && <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">Google Meet</a>}
+          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' && (
+            <StartOnlineClassButton eventId={lesson.eventId} />
+          )}
           {/* Mindcrafti Online will be enabled only after the live-classes API,
               migrations and LiveKit provider have passed staging acceptance tests.
               Keep the Google Meet action functional independently. */}
