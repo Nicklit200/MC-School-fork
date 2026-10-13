@@ -7,8 +7,14 @@ import { PrejoinPanel } from './PrejoinPanel';
 /** Tracks whether every acquired track was stopped, i.e. the camera light is off. */
 function fakeStream() {
   const stop = vi.fn();
+  const videoTrack = { stop, kind: 'video', enabled: true };
+  const audioTrack = { stop, kind: 'audio', enabled: true };
   return {
-    stream: { getTracks: () => [{ stop, kind: 'video' }] } as unknown as MediaStream,
+    stream: {
+      getTracks: () => [videoTrack, audioTrack],
+      getVideoTracks: () => [videoTrack],
+      getAudioTracks: () => [audioTrack],
+    } as unknown as MediaStream,
     stop,
   };
 }
@@ -95,6 +101,56 @@ describe('PrejoinPanel', () => {
 
     const status = await screen.findByRole('status');
     expect(status).toHaveTextContent(/unterstützt|не поддерживает/i);
+  });
+
+
+  it('lets a user join the whiteboard without media when browser permission is denied', async () => {
+    setMediaDevices({
+      getUserMedia: vi.fn().mockRejectedValue(
+        Object.assign(new Error('denied'), { name: 'NotAllowedError' }),
+      ),
+      enumerateDevices: vi.fn().mockResolvedValue([]),
+    });
+    const onJoin = renderPanel();
+    await screen.findByText(/Доступ к камере или микрофону запрещён|Zugriff auf Kamera/);
+    await userEvent.click(screen.getByRole('button', {
+      name: /Войти без камеры и микрофона|Ohne Kamera und Mikrofon beitreten/,
+    }));
+    expect(onJoin).toHaveBeenCalledWith({
+      videoDeviceId: null,
+      audioDeviceId: null,
+      cameraEnabled: false,
+      microphoneEnabled: false,
+    });
+  });
+
+  it('can request microphone only after camera access fails', async () => {
+    const { stream } = fakeStream();
+    const audioTrack = stream.getAudioTracks()[0];
+    const audioStream = {
+      getTracks: () => [audioTrack],
+      getVideoTracks: () => [],
+      getAudioTracks: () => [audioTrack],
+    } as unknown as MediaStream;
+    const getUserMedia = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('camera blocked'), { name: 'NotAllowedError' }))
+      .mockResolvedValueOnce(audioStream);
+    setMediaDevices({
+      getUserMedia,
+      enumerateDevices: vi.fn().mockResolvedValue(devices),
+    });
+    const onJoin = renderPanel();
+    await screen.findByRole('button', { name: /Только микрофон|Nur Mikrofon/ });
+    await userEvent.click(screen.getByRole('button', { name: /Только микрофон|Nur Mikrofon/ }));
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ video: false, audio: true }));
+    await screen.findByRole('option', { name: 'Built-in mic' });
+    await userEvent.click(screen.getByRole('button', { name: /Beitreten|Присоединиться/i }));
+    expect(onJoin).toHaveBeenCalledWith({
+      videoDeviceId: null,
+      audioDeviceId: 'mic-1',
+      cameraEnabled: false,
+      microphoneEnabled: true,
+    });
   });
 
   it('stops local tracks on unmount so the camera is released', async () => {
