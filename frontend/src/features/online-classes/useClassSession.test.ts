@@ -83,6 +83,29 @@ describe('useClassSession', () => {
     expect(result.current.connection?.token).toBe('issued-token');
   });
 
+  it('keeps the calendar lesson available after LiveKit drops the connection', async () => {
+    const { result } = renderHook(() => useClassSession('class-1'));
+    await waitFor(() => expect(result.current.phase).toBe('ready'));
+    await act(async () => {
+      await result.current.requestConnection();
+    });
+    expect(result.current.connection).not.toBeNull();
+
+    act(() => result.current.transportDisconnected());
+
+    expect(result.current.phase).toBe('disconnected');
+    expect(result.current.connection).toBeNull();
+    // An involuntary network drop is not a deliberate leave.
+    expect(api.leave).not.toHaveBeenCalled();
+    expect(result.current.onlineClass?.id).toBe('class-1');
+
+    await act(async () => {
+      await result.current.requestConnection();
+    });
+    expect(result.current.phase).toBe('connected');
+    expect(api.connect).toHaveBeenCalledTimes(2);
+  });
+
   it('does not fire a duplicate connection request', async () => {
     const { result } = renderHook(() => useClassSession('class-1'));
     await waitFor(() => expect(result.current.phase).toBe('ready'));
