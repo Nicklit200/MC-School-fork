@@ -8,7 +8,17 @@ import { I18nProvider } from '../../i18n/I18nContext';
 let screenShares: unknown[] = [];
 
 vi.mock('@livekit/components-react', () => ({
-  LiveKitRoom: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LiveKitRoom: ({ children, onDisconnected }: {
+    children: React.ReactNode;
+    onDisconnected?: (reason?: number) => void;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onDisconnected?.(1)}>
+        Simulate LiveKit disconnect
+      </button>
+      {children}
+    </div>
+  ),
   ControlBar: () => null,
   RoomAudioRenderer: () => null,
   ConnectionStateToast: () => null,
@@ -71,6 +81,7 @@ function mount(host: boolean, extra: Partial<React.ComponentProps<typeof OnlineC
         recordingState="INACTIVE"
         transcriptionState="INACTIVE"
         onLeave={vi.fn()}
+        onConnectionLost={vi.fn()}
         {...extra}
       />
     </I18nProvider>,
@@ -87,6 +98,16 @@ describe('OnlineClassRoom', () => {
       { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
     ]);
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: true, answersFilename: 'a.pdf' } as never);
+  });
+
+  it('handles an unexpected LiveKit disconnect without clicking Leave', async () => {
+    const onLeave = vi.fn();
+    const onConnectionLost = vi.fn();
+    mount(true, { onLeave, onConnectionLost });
+    await screen.findByTestId('board-board-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Simulate LiveKit disconnect' }));
+    expect(onConnectionLost).toHaveBeenCalledWith('1');
+    expect(onLeave).not.toHaveBeenCalled();
   });
 
   it('shows a student no answers button and never asks for the answers', async () => {
