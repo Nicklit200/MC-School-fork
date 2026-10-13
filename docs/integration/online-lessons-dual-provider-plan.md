@@ -24,3 +24,18 @@ Keep the existing Google Meet path fully functional and add a separate Mindcraft
 - Separate branch created from the existing production code.
 - Existing staging deployment SUCCESS on 2026-10-12, not confirmed to include upstream merge from 2026-10-13.
 - Full feature is NOT merged, built, deployed, or validated yet.
+
+## Owner-only pilot (implemented on this integration branch)
+- Access-control manager: `auth/OnlineClassPilotAuthorizationManager.java`.
+- All browser-facing `/api/v1/online-classes/**` endpoints are protected in `SecurityConfig` using the server-verified JWT principal.
+- Enabled only when `ONLINE_CLASSES_ENABLED=true` **and** `ONLINE_CLASSES_PILOT_OWNER_ID` is set to the owner's teacher-account UUID; defaults deny all.
+- Only that teacher may host. Active, non-archived students assigned to that teacher may request access, but room membership MUST still be verified by `OnlineClassAccessService`; students must not see a launch button until rollout.
+- Backend unit tests `OnlineClassPilotAuthorizationManagerTest`; CI workflow `online-class-pilot.yml` successfully executed tests on Oct 13.
+- Existing Google Meet flow remains independent.
+- IMPORTANT: this gate is only a prerequisite. The online-classes backend/controllers, room UI and provider setup are not yet merged into the production-derived branch. Do NOT switch the Railway source or set the feature flag yet.
+
+## Database migration conflict (confirmed)
+- Production branch already includes V44..V75.
+- Online classroom staging migration set uses V48, V49, V50, V51, V52 and V54, colliding with production's existing version numbers.
+- Before first staging deployment, reconcile against production schema and rebase *online-specific* migrations to V76..V81 in the correct dependency order; do not simply copy the entire staging migration directory.
+- Also check new upstream Farhad Oct 13 changes before finalizing the import.
