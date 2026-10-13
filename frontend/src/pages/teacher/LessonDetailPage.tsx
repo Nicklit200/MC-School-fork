@@ -315,10 +315,10 @@ export function LessonDetailPage() {
           {/* Mindcrafti Online will be enabled only after the live-classes API,
               migrations and LiveKit provider have passed staging acceptance tests.
               Keep the Google Meet action functional independently. */}
-          {isNickAiPilot && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && (
-            <span className="muted" title="The classroom integration is still under validation">
-              Mindcrafti Online - подключение готовится
-            </span>
+          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && (
+            <Link className="btn btn--secondary" to={`/lesson-board/${encodeURIComponent(eventId)}`}>
+              Mindcrafti доска (тест)
+            </Link>
           )}
         </div>
       </div>
