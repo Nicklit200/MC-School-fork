@@ -21,6 +21,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByRole(Role role);
 
+    // Database-level pilot access check avoids dereferencing a detached lazy teacher proxy.
+    boolean existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(
+            UUID id, UUID teacherId, Role role, UserStatus status);
+
     List<User> findAllByRoleOrderByFullNameAsc(Role role);
 
     List<User> findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(Role role, UserStatus status);
