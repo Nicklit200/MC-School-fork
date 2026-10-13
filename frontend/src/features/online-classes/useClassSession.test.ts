@@ -38,6 +38,8 @@ const sampleClass: OnlineClass = {
   actualStartAt: null,
   actualEndAt: null,
   viewerIsHost: false,
+  recordingAvailable: false,
+  transcriptionAvailable: false,
   joinWindowOpen: true,
 };
 

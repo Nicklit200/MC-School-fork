@@ -38,6 +38,8 @@ const CLASS: OnlineClass = {
   actualStartAt: '2026-09-18T10:01:00Z',
   actualEndAt: '2026-09-18T10:55:00Z',
   viewerIsHost: true,
+  recordingAvailable: false,
+  transcriptionAvailable: false,
   joinWindowOpen: false,
 };
 

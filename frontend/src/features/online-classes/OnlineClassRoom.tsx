@@ -15,7 +15,7 @@ import type { ClassFeatureState, OnlineClassConnection } from '../../api/onlineC
 import { ChatPanel } from './ChatPanel';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BoardSwitcher } from './BoardSwitcher';
-import { SHARED_BOARD_ID, isPersonalBoard } from './boards';
+import { SHARED_BOARD_ID } from './boards';
 import { useStudentRoster } from './useStudentRoster';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';

@@ -95,6 +95,12 @@ export const lessonPreparationApi = {
   answersUrl(eventId: string) {
     return pdfUrl(eventId, 'answers');
   },
+  /** Teacher-only PDF bytes for the answer panel inside Mindcrafti Online. */
+  async answersBytes(eventId: string): Promise<ArrayBuffer> {
+    const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/answers`, { headers: authHeaders() });
+    if (!response.ok) throw new ApiRequestError(response.status, 'ANSWERS', response.statusText);
+    return response.arrayBuffer();
+  },
   transcriptUrl(eventId: string) {
     return pdfUrl(eventId, 'transcript');
   },

@@ -81,6 +81,10 @@ public class SecurityConfig {
                         // No classroom API is reachable without server-side pilot authorization.
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/online-classes/webhooks/livekit").permitAll()
+                        // Internal transcription workers authenticate with a dedicated
+                        // shared secret verified by the controller, not end-user JWTs.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/internal/online-classes/*/transcript-segments").permitAll()
                         .requestMatchers("/api/v1/online-classes/**")
                                 .access(onlineClassPilotAuthorizationManager)
                         .requestMatchers("/api/v1/lesson-board/**")

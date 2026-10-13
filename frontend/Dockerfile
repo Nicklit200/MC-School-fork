@@ -13,6 +13,10 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 # can be included in the static bundle when enabled.
 ARG VITE_MINDCRAFTI_ONLINE_ENABLED=false
 ENV VITE_MINDCRAFTI_ONLINE_ENABLED=$VITE_MINDCRAFTI_ONLINE_ENABLED
+# Full Farhad classroom is separately gated; this remains OFF on the live site
+# until verified with a dedicated staging LiveKit configuration.
+ARG VITE_MINDCRAFTI_LIVEKIT_ENABLED=false
+ENV VITE_MINDCRAFTI_LIVEKIT_ENABLED=$VITE_MINDCRAFTI_LIVEKIT_ENABLED
 RUN npm run build
 
 # --- Runtime stage: serve the bundle with nginx ---

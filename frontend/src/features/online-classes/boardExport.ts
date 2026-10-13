@@ -1,4 +1,5 @@
 import type KonvaType from 'konva';
+import type { Node as KonvaNode } from 'konva/lib/Node';
 import { onlineClassesApi, type AnnotationTargetType } from '../../api/onlineClasses';
 import {
   type Operation,
@@ -66,7 +67,7 @@ function renderPage(
 }
 
 /** Mirrors how the live canvas draws each kind, so the PDF matches the screen. */
-function shapeNode(shape: Shape, viewport: { width: number; height: number }, aspect: number): Konva.Node | null {
+function shapeNode(shape: Shape, viewport: { width: number; height: number }, aspect: number): KonvaNode | null {
   const stroke = shape.color ?? '#111111';
   const width = Math.max(1, (shape.width ?? 0.004) * viewport.width);
   const opacity = shape.kind === 'highlighter' ? 0.35 : 1;
