@@ -83,6 +83,8 @@ public class SecurityConfig {
                                 "/api/v1/online-classes/webhooks/livekit").permitAll()
                         .requestMatchers("/api/v1/online-classes/**")
                                 .access(onlineClassPilotAuthorizationManager)
+                        .requestMatchers("/api/v1/lesson-board/**")
+                                .access(onlineClassPilotAuthorizationManager)
                         .requestMatchers("/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
