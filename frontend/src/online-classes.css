@@ -1200,3 +1200,36 @@
 @media (prefers-reduced-motion: reduce) {
   .prejoin__retry, .prejoin__join { transition: none; }
 }
+
+/* Reconnect stays on the same lesson route instead of navigating away when
+   LiveKit reports a transport failure. Only explicit "Leave" exits the page. */
+.online-class-reconnect {
+  max-width: 680px;
+}
+.online-class-reconnect h2 {
+  margin: 0 0 12px;
+  color: #172033;
+  font-size: clamp(20px, 2.5vw, 28px);
+}
+.online-class-reconnect p {
+  margin: 0 0 16px;
+  color: #536179;
+  line-height: 1.6;
+}
+.online-class-reconnect__code {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #68758a;
+}
+.online-class-reconnect__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.online-class-reconnect__actions .prejoin__join {
+  width: auto;
+  flex: 1 1 210px;
+}
+.online-class-reconnect__actions .prejoin__retry {
+  flex: 1 1 210px;
+}
