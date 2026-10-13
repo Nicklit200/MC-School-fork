@@ -63,11 +63,8 @@ public class OnlineClassPilotAuthorizationManager
         // Students must be able to join their teacher's test classroom by link.
         // In addition, the room's own access service enforces class enrollment.
         if (caller.role() == Role.STUDENT) {
-            return userRepository.findById(caller.id())
-                    .filter(user -> !user.isArchived() && user.getStatus() == UserStatus.ACTIVE)
-                    .map(user -> user.getTeacher() != null
-                            && pilotOwnerId.equals(user.getTeacher().getId()))
-                    .orElse(false);
+            return userRepository.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(
+                    caller.id(), pilotOwnerId, Role.STUDENT, UserStatus.ACTIVE);
         }
 
         // Do not open classroom APIs to administrators or parents by role alone.
