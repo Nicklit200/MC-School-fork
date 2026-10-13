@@ -97,6 +97,7 @@ function RoomBody({
   currentUserId,
   eventId,
   connection,
+  initialMedia,
   recordingState,
   transcriptionState,
   studentScreenShareEnabled,
@@ -110,6 +111,7 @@ function RoomBody({
   currentUserId: string;
   eventId?: string;
   connection: OnlineClassConnection;
+  initialMedia?: import('./PrejoinPanel').PrejoinChoice;
   recordingState: ClassFeatureState;
   transcriptionState: ClassFeatureState;
   studentScreenShareEnabled: boolean;
@@ -323,8 +325,12 @@ export function OnlineClassRoom({
       serverUrl={connection.serverUrl}
       token={connection.token}
       connect
-      video={false}
-      audio={false}
+      video={initialMedia?.cameraEnabled
+        ? { deviceId: initialMedia.videoDeviceId ?? undefined }
+        : false}
+      audio={initialMedia?.microphoneEnabled
+        ? { deviceId: initialMedia.audioDeviceId ?? undefined }
+        : false}
       // Adaptive streaming and dynacast keep classroom video stable on weak
       // school networks instead of chasing maximum resolution.
       options={{ adaptiveStream: true, dynacast: true }}
