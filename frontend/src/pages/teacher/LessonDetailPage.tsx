@@ -312,6 +312,14 @@ export function LessonDetailPage() {
           )}
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
           {lesson?.meetUrl && <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">Google Meet</a>}
+          {/* Mindcrafti Online will be enabled only after the live-classes API,
+              migrations and LiveKit provider have passed staging acceptance tests.
+              Keep the Google Meet action functional independently. */}
+          {import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && (
+            <span className="muted" title="The classroom integration is still under validation">
+              Mindcrafti Online - подключение готовится
+            </span>
+          )}
         </div>
       </div>
 
