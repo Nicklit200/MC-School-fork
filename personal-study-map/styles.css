@@ -2101,3 +2101,9 @@ body[data-section="german"] .brand-mark{background:#e9f0ff;color:#294cb4}
   .quiz-question-actions .quiz-skip,.quiz-invalid{padding:8px 5px}
   .quiz-question-actions .quiz-skip span,.quiz-invalid{font-size:11px}
 }
+
+/* Completed quiz cards shown against the owning skill on this browser. */
+.quiz-today-note{font-size:10px;line-height:1.4;color:var(--blue);font-weight:700;margin-top:4px}
+.quiz-today-items{display:grid;gap:7px;margin-top:10px}
+.quiz-today-item{border:1px solid var(--line);border-radius:10px;background:var(--panel-solid);padding:8px 10px;font-size:12px;line-height:1.4}
+.quiz-today-item small{display:block;color:var(--muted);margin-top:3px}

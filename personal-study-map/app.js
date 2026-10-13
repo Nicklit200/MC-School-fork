@@ -23,6 +23,7 @@ const state = {
   viewport: { x: 80, y: 70, z: 1 },
   drag: null,
   lectureTasks: [],
+  quizTodayBySkill: new Map(),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -136,6 +137,74 @@ const STUDY_CARD_PROGRESS_KEY = "personal-study-map:card-progress:v1";
 function localStudyProgress() {
   try { return JSON.parse(localStorage.getItem(STUDY_CARD_PROGRESS_KEY) || "{}"); }
   catch { return {}; }
+}
+
+
+const QUIZ_HISTORY_KEY_FOR_MAP = "personal-study-map:quiz-session-history:v1";
+const QUIZ_INVALID_KEY_FOR_MAP = "personal-study-map:quiz-invalid-cards:v1";
+const QUIZ_DELETED_KEY_FOR_MAP = "personal-study-map:quiz-deleted-cards:v1";
+const QUIZ_OVERRIDES_KEY_FOR_MAP = "personal-study-map:card-overrides:v1";
+
+function todayQuizResults() {
+  // Quiz answers stay on this device. Only completed sessions count.
+  const read = (key, fallback) => {
+    try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; }
+    catch { return fallback; }
+  };
+  const history = read(QUIZ_HISTORY_KEY_FOR_MAP, []);
+  const invalid = read(QUIZ_INVALID_KEY_FOR_MAP, {});
+  const deleted = read(QUIZ_DELETED_KEY_FOR_MAP, {});
+  const overrides = read(QUIZ_OVERRIDES_KEY_FOR_MAP, {});
+  const outcomes = new Map();
+  const today = todayIso();
+  const excluded = (flags, id) => flags && typeof flags === "object" &&
+    Object.prototype.hasOwnProperty.call(flags, id);
+  for (const session of Array.isArray(history) ? history : []) {
+    if (session?.date !== today || !Array.isArray(session.review)) continue;
+    for (const item of session.review) {
+      const id = String(item?.cardId || "");
+      const skillId = String(item?.skillId || "");
+      if (!id || !skillId || excluded(invalid, id) || excluded(deleted, id) ||
+          overrides?.[id]?.deleted) continue;
+      const timestamp = String(session.completedAt || session.startedAt || "");
+      const old = outcomes.get(id);
+      if (old && old.timestamp > timestamp) continue;
+      outcomes.set(id, {
+        skillId, question:String(item.question || "Карточка"),
+        correct:item.correct === true, timestamp
+      });
+    }
+  }
+  const perSkill = new Map();
+  for (const item of outcomes.values()) {
+    const row = perSkill.get(item.skillId) || {total:0, firstTry:0, cards:[]};
+    row.total += 1;
+    if (item.correct) row.firstTry += 1;
+    row.cards.push(item);
+    perSkill.set(item.skillId, row);
+  }
+  return perSkill;
+}
+
+function quizTodayBadgeMarkup(skill) {
+  const result = state.quizTodayBySkill.get(skill.id);
+  if (!result) return "";
+  return '<div class="quiz-today-note">Сегодня пройдено: ' + result.total +
+    ' · сразу: ' + result.firstTry + '</div>';
+}
+
+function quizTodayInspectorMarkup(skill) {
+  const result = state.quizTodayBySkill.get(skill.id);
+  if (!result) return "";
+  return '<div class="inspector-section">' +
+    '<div class="inspector-label">КАРТОЧКИ ЗА СЕГОДНЯ</div>' +
+    '<div>Пройдено: <strong>' + result.total + '</strong>. ' +
+    'С первой попытки: <strong>' + result.firstTry + '</strong>.</div>' +
+    '<div class="quiz-today-items">' + result.cards.map(item =>
+      '<div class="quiz-today-item"><div>' + escapeHtml(item.question) + '</div>' +
+      '<small>' + (item.correct ? 'Верно с первой попытки' : 'Исправлено после ошибки') +
+      '</small></div>'
+    ).join("") + '</div></div>';
 }
 
 function applyProgressRecord(skill, record) {
@@ -795,6 +864,7 @@ async function loadData() {
   state.data = await response.json();
   state.lectureTasks = await loadLectureTasks();
   await loadSavedStudyProgress();
+  state.quizTodayBySkill = todayQuizResults();
   const firstSemester = state.data.semesters?.[0];
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
@@ -816,8 +886,10 @@ function renderAll() {
 }
 
 function renderMeta() {
-  $("updated-at").textContent = state.data?.updatedAt
-    ? "Обновлено " + fmtDate(state.data.updatedAt)
+  const todayCards = [...state.quizTodayBySkill.values()].reduce((sum, row) => sum + row.total, 0);
+  $("updated-at").textContent = todayCards
+    ? "Сегодня пройдено " + todayCards + " карточек"
+    : state.data?.updatedAt ? "Обновлено " + fmtDate(state.data.updatedAt)
     : "Данные пока не обновлялись";
   $("overall-readiness").textContent = overallReadiness(currentSemester()) + "%";
 }
@@ -1032,6 +1104,7 @@ function renderMap(skills) {
       </div>
       <div class="skill-title">${escapeHtml(skill.title)}</div>
       <div class="skill-subtitle">${escapeHtml(skill.subtitle || "")}</div>
+      ${quizTodayBadgeMarkup(skill)}
       <div class="skill-bottom">
         <span class="skill-percent">${Number(skill.mastery || 0)}%</span>
         <span class="badge ${klass}">${masteryLabel(Number(skill.mastery || 0))}</span>
@@ -1075,6 +1148,7 @@ function renderList(skills) {
         <div>
           <div class="list-row-title">${escapeHtml(skill.title)} ${skill.examRequired ? `<span class="exam-required-inline">EXAM ×${Number(skill.examFrequency?.count || 1)}</span>` : ""}</div>
           <div class="list-row-sub">${escapeHtml(skill.subtitle || "")}</div>
+          ${quizTodayBadgeMarkup(skill)}
         </div>
         <div class="list-row-percent">${Number(skill.mastery || 0)}%</div>
         <span class="badge ${readinessClass(Number(skill.mastery || 0))}">${masteryLabel(Number(skill.mastery || 0))}</span>
@@ -1129,6 +1203,8 @@ function showInspector(skill) {
       <div class="inspector-label">ПОВТОРЕНИЕ</div>
       <div>${reviewStatusText(skill)}</div>
     </div>
+
+    ${quizTodayInspectorMarkup(skill)}
 
     <div class="inspector-section">
       <div class="inspector-label">ДОКАЗАТЕЛЬСТВА</div>
@@ -1641,6 +1717,19 @@ window.addEventListener("keydown", (event) => {
   $("review-panel").classList.add("closed");
   $("homework-panel").classList.add("closed");
   $("study-calendar-panel").classList.add("closed");
+});
+
+window.addEventListener("study-reviews-updated", () => {
+  if (!state.data) return;
+  state.quizTodayBySkill = todayQuizResults();
+  renderMeta();
+  const skills = filteredSkills();
+  if (state.viewMode === "map") renderMap(skills);
+  else renderList(skills);
+  if (state.selectedSkillId && !$("inspector").classList.contains("closed")) {
+    const skill = examSkills(currentExam()).find(item => item.id === state.selectedSkillId);
+    if (skill) showInspector(skill);
+  }
 });
 
 window.addEventListener("resize", applyTransform);

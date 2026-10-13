@@ -452,11 +452,11 @@
     const completed=engine.finishSession(session,session.cards,getProgress());
     if (session.mode==="SCHEDULED") {
       writeJson(KEY_PROGRESS,completed.states);
-      window.dispatchEvent(new Event("study-reviews-updated"));
     }
     const history=storedHistory();
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
+    window.dispatchEvent(new Event("study-reviews-updated"));
     localStorage.removeItem(KEY_SESSION);
     ui.session=null;ui.feedback=null;ui.result=completed.result;ui.view="result";
     updateBadge();renderResult();
