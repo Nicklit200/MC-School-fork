@@ -275,11 +275,22 @@ export function LessonBoardPage() {
             Тестовая совместная доска · сохраняется автоматически · синхронизация около 1 сек.
           </div>
         </div>
-        {meetUrl && (
-          <a href={meetUrl} target="_blank" rel="noreferrer" className="btn btn--secondary">
-            Открыть Google Meet
-          </a>
-        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isTeacher && (
+            <button type="button" className="btn btn--secondary" onClick={() => {
+              void navigator.clipboard.writeText(window.location.href)
+                .then(() => window.alert('Ссылка на доску скопирована. Отправь её ученику.'))
+                .catch(() => setError('Не удалось скопировать ссылку. Скопируй адрес из браузера.'));
+            }}>
+              Скопировать ссылку ученику
+            </button>
+          )}
+          {meetUrl && (
+            <a href={meetUrl} target="_blank" rel="noreferrer" className="btn btn--secondary">
+              Открыть Google Meet
+            </a>
+          )}
+        </div>
       </div>
 
       {error && <div role="alert" className="banner banner--error" style={{ marginBottom: 12 }}>{error}</div>}
