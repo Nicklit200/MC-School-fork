@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { lessonBoardApi, type BoardAction, type BoardOperation, type BoardPoint } from '../../api/lessonBoard';
@@ -10,7 +10,7 @@ const PILOT_TEACHER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
 type Tool = 'pen' | 'eraser' | 'text';
 
 function visibleOperations(operations: BoardOperation[]): BoardOperation[] {
-  const clearIndex = operations.findLastIndex((operation) => operation.kind === 'CLEAR');
+  const clearIndex = operations.map((operation) => operation.kind).lastIndexOf('CLEAR');
   const relevant = operations.slice(clearIndex + 1);
   const undone = new Set(
     relevant.filter((operation) => operation.kind === 'UNDO').map((operation) => {
@@ -76,7 +76,7 @@ function renderBoard(canvas: HTMLCanvasElement | null,
   ctx.restore();
 }
 
-function position(event: React.PointerEvent<HTMLCanvasElement>): BoardPoint {
+function position(event: ReactPointerEvent<HTMLCanvasElement>): BoardPoint {
   const rect = event.currentTarget.getBoundingClientRect();
   return {
     x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
@@ -183,7 +183,7 @@ export function LessonBoardPage() {
     }
   }
 
-  function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+  function pointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (!ready || working) return;
     const point = position(event);
     if (tool === 'text') {
@@ -204,7 +204,7 @@ export function LessonBoardPage() {
     redraw();
   }
 
-  function pointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+  function pointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
     const draft = draftRef.current;
     if (!draft || !draft.points) return;
     const p = position(event);
