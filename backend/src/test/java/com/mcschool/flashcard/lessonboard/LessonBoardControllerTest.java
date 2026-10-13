@@ -136,6 +136,57 @@ class LessonBoardControllerTest {
     }
 
     @Test
+    void acceptsMaximumEraserWidthUsedByTheClient() {
+        when(operations.existsByTeacherIdAndEventIdAndKind(TEACHER_ID, EVENT, "OPEN"))
+                .thenReturn(true);
+        LessonBoardOperation saved = mock(LessonBoardOperation.class);
+        when(saved.getId()).thenReturn(123L);
+        when(saved.getKind()).thenReturn("ERASE");
+        when(saved.getPayload()).thenReturn("{}");
+        when(saved.getActorId()).thenReturn(TEACHER_ID);
+        when(operations.save(any(LessonBoardOperation.class))).thenReturn(saved);
+
+        var request = new LessonBoardController.BoardActionRequest(
+                "ERASE", List.of(new LessonBoardController.BoardPoint(0.1234, 0.5678)),
+                null, null, null, "#FFFFFF", 48, null);
+        var operation = controller.append(teacher(), EVENT, request);
+        assertEquals(123L, operation.id());
+        assertEquals("ERASE", operation.kind());
+        verify(operations).save(any(LessonBoardOperation.class));
+    }
+
+    @Test
+    void rejectsOversizedEraserWidthWithBadRequest() {
+        when(operations.existsByTeacherIdAndEventIdAndKind(TEACHER_ID, EVENT, "OPEN"))
+                .thenReturn(true);
+        var request = new LessonBoardController.BoardActionRequest(
+                "ERASE", List.of(new LessonBoardController.BoardPoint(0.1234, 0.5678)),
+                null, null, null, "#FFFFFF", 60, null);
+        var error = assertThrows(ResponseStatusException.class,
+                () -> controller.append(teacher(), EVENT, request));
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+    }
+
+    @Test
+    void acceptsMaximumLengthStrokeWithCompactNormalizedCoordinates() {
+        when(operations.existsByTeacherIdAndEventIdAndKind(TEACHER_ID, EVENT, "OPEN"))
+                .thenReturn(true);
+        LessonBoardOperation saved = mock(LessonBoardOperation.class);
+        when(saved.getId()).thenReturn(124L);
+        when(saved.getKind()).thenReturn("STROKE");
+        when(saved.getPayload()).thenReturn("{}");
+        when(saved.getActorId()).thenReturn(TEACHER_ID);
+        when(operations.save(any(LessonBoardOperation.class))).thenReturn(saved);
+
+        var points = java.util.Collections.nCopies(500,
+                new LessonBoardController.BoardPoint(0.1234, 0.5678));
+        var request = new LessonBoardController.BoardActionRequest(
+                "STROKE", points, null, null, null, "#123456", 12, null);
+        var operation = controller.append(teacher(), EVENT, request);
+        assertEquals(124L, operation.id());
+    }
+
+    @Test
     void teacherCannotUndoAnOperationFromAnotherCalendarLesson() {
         when(operations.existsByTeacherIdAndEventIdAndKind(TEACHER_ID, EVENT, "OPEN"))
                 .thenReturn(true);
