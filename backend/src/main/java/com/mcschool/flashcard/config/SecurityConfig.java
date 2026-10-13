@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.config;
 
 import com.mcschool.flashcard.auth.JwtAuthenticationFilter;
+import com.mcschool.flashcard.auth.OnlineClassPilotAuthorizationManager;
 import com.mcschool.flashcard.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
@@ -32,10 +33,13 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
+    private final OnlineClassPilotAuthorizationManager onlineClassPilotAuthorizationManager;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper,
+                          OnlineClassPilotAuthorizationManager onlineClassPilotAuthorizationManager) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
+        this.onlineClassPilotAuthorizationManager = onlineClassPilotAuthorizationManager;
     }
 
     @Bean
@@ -73,6 +77,12 @@ public class SecurityConfig {
                                 "/api/v1/mcp/.well-known/openid-configuration").permitAll()
                         .requestMatchers("/api/v1/integrations/**").permitAll()
                         .requestMatchers("/api/v1/mcp/**").permitAll()
+                        // Webhook bodies are checked against LiveKit's signed JWT by the controller.
+                        // No classroom API is reachable without server-side pilot authorization.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/online-classes/webhooks/livekit").permitAll()
+                        .requestMatchers("/api/v1/online-classes/**")
+                                .access(onlineClassPilotAuthorizationManager)
                         .requestMatchers("/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
