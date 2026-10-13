@@ -1,10 +1,11 @@
 import '../../online-classes.css';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { OnlineClassRoom } from '../../features/online-classes/OnlineClassRoom';
-import { PrejoinPanel } from '../../features/online-classes/PrejoinPanel';
+import { PrejoinPanel, type PrejoinChoice } from '../../features/online-classes/PrejoinPanel';
 import { useClassSession } from '../../features/online-classes/useClassSession';
 
 /**
@@ -17,6 +18,12 @@ export function OnlineClassPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const session = useClassSession(classId);
+  const [initialMedia, setInitialMedia] = useState<PrejoinChoice>({
+    videoDeviceId: null,
+    audioDeviceId: null,
+    cameraEnabled: false,
+    microphoneEnabled: false,
+  });
 
   if (session.phase === 'loading') {
     return <p>{t('common.loading')}</p>;
@@ -38,6 +45,7 @@ export function OnlineClassPage() {
         currentUserId={user?.id ?? ''}
         eventId={session.onlineClass?.eventId}
         connection={session.connection}
+        initialMedia={initialMedia}
         recordingState={session.onlineClass?.recordingState ?? 'INACTIVE'}
         transcriptionState={session.onlineClass?.transcriptionState ?? 'INACTIVE'}
         studentScreenShareEnabled={session.onlineClass?.studentScreenShareEnabled ?? false}
@@ -74,7 +82,8 @@ export function OnlineClassPage() {
 
       <PrejoinPanel
         joinDisabled={session.phase === 'requesting'}
-        onJoin={() => {
+        onJoin={(choice) => {
+          setInitialMedia(choice);
           void session.requestConnection();
         }}
       />
