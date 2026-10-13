@@ -13,6 +13,8 @@
   const KEY_CUSTOM = "personal-study-map:custom-flashcards:v2";
   const KEY_OLD_CUSTOM = "personal-study-map:custom-flashcards:v1";
   const KEY_OVERRIDES = "personal-study-map:card-overrides:v1";
+  const KEY_INVALID = "personal-study-map:quiz-invalid-cards:v1";
+  const KEY_DELETED = "personal-study-map:quiz-deleted-cards:v1";
   const KEY_PROGRESS = "personal-study-map:quiz-card-progress:v1";
   const KEY_SESSION = "personal-study-map:quiz-active-session:v1";
   const KEY_HISTORY = "personal-study-map:quiz-session-history:v1";
@@ -62,6 +64,20 @@
     return saved && typeof saved === "object" ? saved : {};
   }
 
+  function getInvalidCards() {
+    const saved=readJson(KEY_INVALID,{});
+    return saved && typeof saved==="object" && !Array.isArray(saved)?saved:{};
+  }
+  function getDeletedCards() {
+    const saved=readJson(KEY_DELETED,{});
+    return saved && typeof saved==="object" && !Array.isArray(saved)?saved:{};
+  }
+  function isDeletedCard(id,flags=getDeletedCards()) {
+    return Object.prototype.hasOwnProperty.call(flags,id);
+  }
+  function isInvalidCard(id,flags=getInvalidCards()) {
+    return Object.prototype.hasOwnProperty.call(flags,id);
+  }
   function getProgress() {
     const saved = readJson(KEY_PROGRESS, {});
     return saved && typeof saved === "object" ? saved : {};
@@ -75,11 +91,13 @@
     };
   }
 
-  function allCards({includeHidden=false, disregardTopic=false}={}) {
+  function allCards({includeHidden=false, includeInvalid=false, disregardTopic=false}={}) {
     const context = getContext();
     const exam = context.exam;
     if (!exam) return [];
     const overrides = getOverrides();
+    const invalid = getInvalidCards();
+    const deleted = getDeletedCards();
     const out = [];
     const skills = (exam.skills || []).filter(skill =>
       disregardTopic || context.topicId === "all" || skill.topicId === context.topicId
@@ -88,22 +106,24 @@
     for (const skill of skills) {
       for (const original of skill.flashcards || []) {
         const ov = overrides[original.id] || {};
-        const hidden = Boolean(ov.hidden);
-        if (hidden && !includeHidden) continue;
+        const hidden=Boolean(ov.hidden);
+        const invalidCard=isInvalidCard(original.id,invalid);
+        if (ov.deleted || isDeletedCard(original.id,deleted) || (hidden && !includeHidden) || (invalidCard && !includeInvalid)) continue;
         out.push({
           ...original,...ov,id:original.id,skillId:skill.id,
           answer:ov.answer ?? original.answer ?? original.correctAnswer,
-          hidden,custom:false,skillTitle:skill.title
+          hidden,invalid:invalidCard,custom:false,skillTitle:skill.title
         });
       }
     }
     for (const own of getCustomCards()) {
       const skill = skillById.get(own.skillId);
       if (!skill) continue;
-      const hidden = Boolean(own.hidden);
-      if (hidden && !includeHidden) continue;
+      const hidden=Boolean(own.hidden);
+      const invalidCard=isInvalidCard(own.id,invalid);
+      if (isDeletedCard(own.id,deleted) || (hidden && !includeHidden) || (invalidCard && !includeInvalid)) continue;
       out.push({
-        ...own, custom:true, hidden, skillTitle:skill.title
+        ...own, custom:true, hidden, invalid:invalidCard, skillTitle:skill.title
       });
     }
     return out.filter(card => card.question && card.answer);
@@ -195,9 +215,24 @@
     if (ui.session) writeJson(KEY_SESSION,ui.session);
   }
 
+  function storedHistory() {
+    const rows=readJson(KEY_HISTORY,[]);
+    return Array.isArray(rows)?rows:[];
+  }
+  function sanitizedResult(result) {
+    if (!result || !Array.isArray(result.review)) return result;
+    const flags=getInvalidCards();
+    const deleted=getDeletedCards(),overrides=getOverrides();
+    const review=result.review.filter(item=>
+      !isInvalidCard(item.cardId,flags) && !isDeletedCard(item.cardId,deleted) && !overrides[item.cardId]?.deleted
+    );
+    if (!review.length) return null;
+    return {...result,review,totalCards:review.length,
+      correctFirstTry:review.filter(item=>item.correct).length,
+      nextReviewDate:review.length===result.review.length?result.nextReviewDate:null};
+  }
   function latestHistory() {
-    const rows = readJson(KEY_HISTORY, []);
-    return Array.isArray(rows) ? rows : [];
+    return storedHistory().map(sanitizedResult).filter(Boolean);
   }
 
   function renderHome() {
@@ -304,14 +339,18 @@
       '<div><span class="panel-label">'+(session.mode==="PRACTICE"?"СВОБОДНАЯ ТРЕНИРОВКА":"ПОВТОРЕНИЕ ПО РАСПИСАНИЮ")+
       '</span><h2>'+esc(card.skillTitle||"Карточка")+'</h2></div>'+
       '<button data-action="home" type="button">Пауза</button></div>'+
+      (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
       '<div class="quiz-progress-row"><span>Завершено '+answered+' из '+total+'</span>'+
       (question.expiresAt!=null?'<strong id="quiz-timer" class="quiz-timer"></strong>':"")+
       '</div><div class="quiz-progress-track"><div style="width:'+
       Math.round((answered/total)*100)+'%"></div></div>'+
       '<div class="quiz-question">'+esc(card.question)+'</div>'+
       '<div class="quiz-options">'+controls+'</div>'+
-      (!feedback?'<button data-action="skip" class="quiz-skip" type="button">'+
-        '<span>Не знаю</span><small>Показать правильный ответ</small></button>':'')+
+      (!feedback?'<div class="quiz-question-actions">'+
+        '<button data-action="skip" class="quiz-skip" type="button">'+
+        '<span>Не знаю</span><small>Показать правильный ответ</small></button>'+
+        '<button data-action="invalid" class="quiz-invalid" type="button" title="Исключить вопрос из статистики и повторений">'+
+        '<span>Некорректный вопрос</span><small>Не учитывать</small></button></div>':'')+
       (feedback?'<div class="quiz-feedback '+(feedback.correct?'ok':'fail')+'">'+
         (feedback.correct?'Правильно.':(feedback.skipped?'Не знаю.':feedback.timedOut?'Время вышло.':'Неправильно.'))+
         (feedback.correct?'':' Правильный ответ: '+esc(feedback.correctAnswer)+
@@ -346,6 +385,7 @@
 
   function answerQuestion(value,timedOut=false,skipped=false) {
     if (ui.view!=="study" || ui.feedback) return;
+    ui.notice="";
     const session=ui.session,card=currentCard();
     if (!session || !card) return;
     stopTimer();
@@ -389,7 +429,8 @@
       '. Вопрос появится ещё раз в этом занятии.':"")+
       '</div>'+explanationMarkup(last)+
       '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
-      '<button class="quiz-next" data-action="next" type="button">Дальше →</button>';
+      '<button class="quiz-next" data-action="next" type="button">Дальше →</button>'+
+      '<button class="quiz-invalid-after" data-action="invalid" type="button">Некорректный вопрос · не учитывать</button>';
     // No automatic transition: even a correct answer deserves time to read the rationale.
     host.querySelector?.(".quiz-explanation")?.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
@@ -413,7 +454,7 @@
       writeJson(KEY_PROGRESS,completed.states);
       window.dispatchEvent(new Event("study-reviews-updated"));
     }
-    const history=latestHistory();
+    const history=storedHistory();
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
     localStorage.removeItem(KEY_SESSION);
@@ -422,7 +463,7 @@
   }
 
   function renderResult() {
-    const result=ui.result;
+    const result=sanitizedResult(ui.result);
     if (!result) {ui.view="home";renderHome();return;}
     host.innerHTML=titleBar("Результат занятия",result.type==="PRACTICE"?
       "Свободная тренировка — интервалы не изменились":
@@ -477,26 +518,37 @@
   }
 
   function renderManage() {
-    const cards=allCards({includeHidden:true});
+    const all=allCards({includeHidden:true,includeInvalid:true});
+    const invalidCount=all.filter(card=>card.invalid).length;
+    const cards=ui.managerFilter==="invalid"?all.filter(card=>card.invalid):all;
     const states=getProgress();
     host.innerHTML=titleBar("Управление карточками")+
       '<div class="quiz-actions"><button data-action="create" class="primary" type="button">+ Новая</button>'+
       '<button data-action="import" type="button">Импортировать</button></div>'+
+      '<div class="quiz-manager-filters" role="group" aria-label="Фильтр карточек">'+
+      '<button data-action="manager-filter" data-filter="all" type="button"'+
+      (ui.managerFilter==="all"?' class="active"':'')+'>Все ('+all.length+')</button>'+
+      '<button data-action="manager-filter" data-filter="invalid" type="button"'+
+      (ui.managerFilter==="invalid"?' class="active"':'')+'>Некорректные ('+invalidCount+')</button></div>'+
+      (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
       '<div class="quiz-manage-list">'+
       (cards.length?cards.map(card=>{
         const progress=cardState(card,states);
-        return '<div class="quiz-manage-row'+(card.hidden?' hidden-card':'')+'">'+
+        return '<div class="quiz-manage-row'+(card.hidden?' hidden-card':'')+
+          (card.invalid?' invalid-card':'')+'">'+
           '<strong>'+esc(card.question)+'</strong>'+
           '<span>'+esc(card.skillTitle)+'</span>'+
-          '<small>Этап '+progress.repetitionNumber+'/6 · '+esc(labelDate(progress.dueDate))+
-          (card.hidden?' · Скрыта':'')+'</small>'+
+          (card.invalid?'<small>Некорректная · не учитывается в тренировках и статистике</small>':
+            '<small>Этап '+progress.repetitionNumber+'/6 · '+esc(labelDate(progress.dueDate))+
+            (card.hidden?' · Скрыта':'')+'</small>')+
           '<div><button data-action="edit" data-id="'+esc(card.id)+'" type="button">Редактировать</button>'+
-          '<button data-action="toggle-hidden" data-id="'+esc(card.id)+'" type="button">'+
-          (card.hidden?'Восстановить':'Скрыть')+'</button>'+
-          (card.custom?'<button data-action="delete" data-id="'+esc(card.id)+'" type="button">Удалить</button>':"")+
+          (card.invalid?'<button data-action="restore-invalid" data-id="'+esc(card.id)+'" type="button">Восстановить</button>':
+            '<button data-action="toggle-hidden" data-id="'+esc(card.id)+'" type="button">'+
+            (card.hidden?'Показать':'Скрыть')+'</button>')+
+          (card.custom||card.invalid?'<button data-action="delete" data-id="'+esc(card.id)+'" type="button">Удалить</button>':"")+
           '</div></div>';
-      }).join(""):'<div class="quiz-empty">Карточек пока нет.</div>')+
-      '</div><p class="quiz-storage-note">Изменения исходных карточек сохраняются только у тебя в этом браузере. Оригиналы на сервере не удаляются.</p>';
+      }).join(""):'<div class="quiz-empty">В этом списке пока нет карточек.</div>')+
+      '</div><p class="quiz-storage-note">Пометки и удаления сохраняются в этом браузере. Исходные карточки на сервере не изменяются.</p>';
   }
 
   function selectSkillOptions(selected="") {
@@ -610,7 +662,7 @@
   }
 
   function toggleHidden(id) {
-    const card=allCards({includeHidden:true}).find(c=>c.id===id);
+    const card=allCards({includeHidden:true,includeInvalid:true}).find(c=>c.id===id);
     if (!card) return;
     if (card.custom) {
       const custom=getCustomCards();
@@ -621,6 +673,101 @@
       ov[id]={...(ov[id]||{}),hidden:!card.hidden};
       writeJson(KEY_OVERRIDES,ov);
     }
+    renderManage();updateBadge();
+    window.dispatchEvent(new Event("study-reviews-updated"));
+  }
+
+  function dropCardFromSession(session,id) {
+    if (!session) return;
+    session.cardIds=(session.cardIds||[]).filter(value=>value!==id);
+    session.queue=(session.queue||[]).filter(value=>value!==id);
+    session.cards=(session.cards||[]).filter(card=>card.id!==id);
+    if (session.items) delete session.items[id];
+    if (session.currentQuestion?.cardId===id) session.currentQuestion=null;
+  }
+  function readActiveSession() {
+    const session=readJson(KEY_SESSION,null);
+    if (!session || !Array.isArray(session.cardIds) || !Array.isArray(session.queue) ||
+        !Array.isArray(session.cards)) return null;
+    const excluded=getInvalidCards(),deleted=getDeletedCards(),overrides=getOverrides();
+    const remove=session.cardIds.filter(id=>
+      isInvalidCard(id,excluded) || isDeletedCard(id,deleted) || overrides[id]?.deleted
+    );
+    for (const id of remove) dropCardFromSession(session,id);
+    if (!session.cardIds.length) {
+      localStorage.removeItem(KEY_SESSION);
+      return null;
+    }
+    if (remove.length) writeJson(KEY_SESSION,session);
+    return session;
+  }
+  function reportInvalid() {
+    if (ui.view!=="study" || !ui.session) return;
+    const card=ui.feedback && ui.lastCard?ui.lastCard:currentCard();
+    if (!card) return;
+    stopTimer();stopAdvance();
+    const invalid=getInvalidCards();
+    invalid[card.id]={markedAt:new Date().toISOString(),question:card.question};
+    writeJson(KEY_INVALID,invalid);
+    const progress=getProgress();
+    if (Object.prototype.hasOwnProperty.call(progress,card.id)) {
+      delete progress[card.id];
+      writeJson(KEY_PROGRESS,progress);
+    }
+    dropCardFromSession(ui.session,card.id);
+    ui.feedback=null;ui.lastCard=null;ui.lastQuestionOptions=null;
+    ui.notice="Вопрос исключён. Его можно восстановить в разделе «Все карточки».";
+    updateBadge();
+    window.dispatchEvent(new Event("study-reviews-updated"));
+    if (!ui.session.cardIds.length) {
+      ui.session=null;ui.view="home";
+      localStorage.removeItem(KEY_SESSION);
+      renderHome();
+    } else {
+      saveSession();
+      if (!ui.session.queue.length) finishSession();
+      else renderStudy();
+    }
+  }
+  function restoreInvalid(id) {
+    const invalid=getInvalidCards();
+    if (!isInvalidCard(id,invalid)) return;
+    delete invalid[id];
+    writeJson(KEY_INVALID,invalid);
+    ui.notice="Вопрос восстановлен. Он снова доступен для повторения.";
+    renderManage();updateBadge();
+    window.dispatchEvent(new Event("study-reviews-updated"));
+  }
+  function removeCard(id) {
+    const c=allCards({includeHidden:true,includeInvalid:true}).find(card=>card.id===id);
+    if (!c || (!c.custom && !c.invalid)) return;
+    if (!window.confirm("Удалить карточку из своей карты? Для исходных вопросов удаление действует только в этом браузере.")) return;
+    if (c.custom) {
+      persistCustomCards(getCustomCards().filter(card=>card.id!==id));
+    } else {
+      const ov=getOverrides();
+      ov[id]={...(ov[id]||{}),deleted:true};
+      writeJson(KEY_OVERRIDES,ov);
+    }
+    const deleted=getDeletedCards();
+    deleted[id]={deletedAt:new Date().toISOString(),question:c.question};
+    writeJson(KEY_DELETED,deleted);
+    const flags=getInvalidCards();
+    if (isInvalidCard(id,flags)) {
+      delete flags[id];
+      writeJson(KEY_INVALID,flags);
+    }
+    const states=getProgress();
+    if (Object.prototype.hasOwnProperty.call(states,id)) {
+      delete states[id];
+      writeJson(KEY_PROGRESS,states);
+    }
+    if (ui.session && ui.session.cardIds.includes(id)) {
+      dropCardFromSession(ui.session,id);
+      if (ui.session.cardIds.length)saveSession();
+      else {ui.session=null;localStorage.removeItem(KEY_SESSION);}
+    }
+    ui.notice="Карточка удалена из этой карты.";
     renderManage();updateBadge();
     window.dispatchEvent(new Event("study-reviews-updated"));
   }
@@ -644,7 +791,12 @@
       cleanupTimers();ui.session=null;ui.feedback=null;
       localStorage.removeItem(KEY_SESSION);
       ui.notice="Незавершённое занятие отменено.";renderHome();
-    } else if (action==="answer") {
+    } else if (action==="invalid") reportInvalid();
+    else if (action==="manager-filter") {
+      ui.managerFilter=button.dataset.filter==="invalid"?"invalid":"all";
+      ui.notice="";renderManage();
+    } else if (action==="restore-invalid") restoreInvalid(id);
+    else if (action==="answer") {
       const q=ui.session?.currentQuestion, index=Number(button.dataset.index);
       if (!q || !Number.isInteger(index)||index<0||index>=q.options.length) return;
       ui.lastCard=currentCard();ui.lastQuestionOptions=[...q.options];
@@ -660,15 +812,10 @@
     else if (action==="manage") {cleanupTimers();ui.view="manage";ui.notice="";renderManage();}
     else if (action==="create") {ui.editing=null;ui.view="editor";renderEditor();}
     else if (action==="edit") {
-      const card=allCards({includeHidden:true}).find(c=>c.id===id);
+      const card=allCards({includeHidden:true,includeInvalid:true}).find(c=>c.id===id);
       if(card){ui.editing=card;ui.view="editor";renderEditor();}
     } else if (action==="toggle-hidden") toggleHidden(id);
-    else if (action==="delete") {
-      const c=allCards({includeHidden:true}).find(card=>card.id===id);
-      if (!c?.custom) return;
-      if (!window.confirm("Удалить эту созданную тобой карточку?")) return;
-      persistCustomCards(getCustomCards().filter(card=>card.id!==id));
-      renderManage();updateBadge();
+    else if (action==="delete") {removeCard(id);
     } else if (action==="import") {ui.view="import";ui.importPreview=null;renderImport();}
     else if (action==="preview-import") {
       ui.importText=document.getElementById("quiz-import-text")?.value||"";
@@ -707,7 +854,7 @@
       cleanupTimers();panel.classList.add("closed");return;
     }
     hideOtherPanels();panel.classList.remove("closed");
-    ui.session=readJson(KEY_SESSION,null);
+    ui.session=readActiveSession();
     ui.view=ui.session?"study":"home";ui.feedback=null;ui.notice="";
     render();
   };

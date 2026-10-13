@@ -12,6 +12,8 @@
   const KEY_CUSTOM="personal-study-map:custom-flashcards:v2";
   const KEY_OLD_CUSTOM="personal-study-map:custom-flashcards:v1";
   const KEY_OVERRIDES="personal-study-map:card-overrides:v1";
+  const KEY_INVALID="personal-study-map:quiz-invalid-cards:v1";
+  const KEY_DELETED="personal-study-map:quiz-deleted-cards:v1";
   const hourChoices=[7,8,9,10,11];
   let busy=false;
   let localNotice="";
@@ -59,22 +61,28 @@
     const rawProgress=read(KEY_PROGRESS,{});
     const rawOverrides=read(KEY_OVERRIDES,{});
     const rawCustom=read(KEY_CUSTOM,read(KEY_OLD_CUSTOM,[]));
+    const rawInvalid=read(KEY_INVALID,{});
+    const rawDeleted=read(KEY_DELETED,{});
     const progress=rawProgress && typeof rawProgress==="object"?rawProgress:{};
     const overrides=rawOverrides&&typeof rawOverrides==="object"?rawOverrides:{};
+    const invalid=rawInvalid&&typeof rawInvalid==="object"?rawInvalid:{};
+    const deleted=rawDeleted&&typeof rawDeleted==="object"?rawDeleted:{};
+    const excluded=id=>Object.prototype.hasOwnProperty.call(invalid,id)||
+      Object.prototype.hasOwnProperty.call(deleted,id);
     const custom=Array.isArray(rawCustom)?rawCustom:[];
     const all=[],knownSkills=new Map();
     for(const exam of getAllExams()) {
       for(const skill of exam.skills||[]){
         knownSkills.set(skill.id,exam.title||"Учёба");
         for(const card of skill.flashcards||[]){
-          if(overrides[card.id]?.hidden)continue;
+          if(overrides[card.id]?.hidden||overrides[card.id]?.deleted||excluded(card.id))continue;
           const item=progress[card.id];
           all.push({id:card.id,dueDate:item?.dueDate||today(),subject:exam.title||"Учёба"});
         }
       }
     }
     for(const card of custom) {
-      if(card.hidden || !knownSkills.has(card.skillId))continue;
+      if(card.hidden || excluded(card.id) || !knownSkills.has(card.skillId))continue;
       const item=progress[card.id];
       all.push({id:card.id,dueDate:item?.dueDate||today(),subject:knownSkills.get(card.skillId)});
     }

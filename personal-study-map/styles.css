@@ -2075,3 +2075,29 @@ body[data-section="german"] .brand-mark{background:#e9f0ff;color:#294cb4}
 .german-card strong{font-size:19px}.german-card small{color:#76869c}.german-card-actions{display:flex;gap:6px;flex-wrap:wrap}
 #german-status{color:#5c7294}
 @media(max-width:700px){.german-view{padding:145px 14px 25px}}
+
+/* Skip is a wrong attempt; reporting a bad question never counts as an answer. */
+.quiz-question-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;margin-top:12px}
+.quiz-question-actions .quiz-skip{margin-top:0;min-width:0;min-height:58px;flex-direction:column;gap:2px;padding:10px 7px}
+.quiz-question-actions .quiz-skip span{font-size:12px}
+.quiz-question-actions .quiz-skip small{font-size:10px;line-height:1.3;text-align:center}
+.quiz-invalid{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;
+  min-width:0;min-height:58px;padding:10px 7px;border-radius:11px;
+  border:1px dashed #daa9a4;background:#fff9f8;color:#a24340;
+  font-size:12px;font-weight:800;line-height:1.35;cursor:pointer}
+.quiz-invalid small{font-size:10px;font-weight:650;color:#ad6c66}
+.quiz-invalid:hover,.quiz-invalid:focus-visible{background:#fff0ee;border-color:#c57d75}
+.quiz-invalid-after{display:block;width:100%;text-align:center;margin:1px 0 15px;
+  background:transparent;border:0;color:#9e4d47;font-size:11px;font-weight:750;cursor:pointer}
+.quiz-invalid-after:hover,.quiz-invalid-after:focus-visible{text-decoration:underline}
+.quiz-manager-filters{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.quiz-manager-filters button{border:1px solid #d4dfef;border-radius:9px;background:#f8fafc;
+  color:#52708f;padding:8px 11px;font-size:11px;font-weight:800;cursor:pointer}
+.quiz-manager-filters button.active{background:#e8f2ff;color:#2764ae;border-color:#9fc3f5}
+.quiz-manage-row.invalid-card{border-color:#e6c6bf;background:#fffbfa}
+.quiz-manage-row.invalid-card small{color:#aa6359}
+@media(max-width:400px){
+  .quiz-question-actions{gap:7px}
+  .quiz-question-actions .quiz-skip,.quiz-invalid{padding:8px 5px}
+  .quiz-question-actions .quiz-skip span,.quiz-invalid{font-size:11px}
+}
