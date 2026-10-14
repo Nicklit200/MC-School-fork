@@ -1,0 +1,57 @@
+name: Farhad infrastructure parity
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/Dockerfile'
+      - 'frontend/nginx.conf.template'
+      - 'services/transcription-agent/**'
+      - '.github/workflows/farhad-infrastructure-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nginx-livekit-headers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the actual production Nginx container
+        run: docker build --file frontend/Dockerfile --tag mindcrafti-nginx-parity ./frontend
+      - name: Validate runtime CSP, browser permissions, and SPA fallback
+        run: |
+          docker run --detach --name mindcrafti-nginx-parity \
+            --publish 127.0.0.1:8086:80 \
+            --env 'LIVEKIT_CSP_ORIGINS=wss://example.livekit.cloud https://example.livekit.cloud' \
+            mindcrafti-nginx-parity
+          for i in $(seq 1 30); do
+            if curl -fsSI http://127.0.0.1:8086/ > /tmp/headers; then break; fi
+            sleep 1
+          done
+          cat /tmp/headers
+          grep -Fq 'camera=(self), microphone=(self), display-capture=(self)' /tmp/headers
+          grep -Fq "connect-src 'self' wss://example.livekit.cloud https://example.livekit.cloud" /tmp/headers
+          grep -Fq "media-src 'self' blob:" /tmp/headers
+          curl -fsS http://127.0.0.1:8086/online-classes/example > /tmp/room
+          grep -qi '<html' /tmp/room
+          docker exec mindcrafti-nginx-parity nginx -t
+
+  transcription-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/transcription-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/transcription-agent/requirements-dev.txt
+      - name: Install upstream pinned dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run upstream transcription-agent tests
+        run: pytest -q
