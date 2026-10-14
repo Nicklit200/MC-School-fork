@@ -295,7 +295,7 @@ export function LessonDetailPage() {
 
   return (
     <div style={{ maxWidth: 1320, margin: '0 auto' }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
+      <div className="lesson-detail-header">
         <div>
           <Link to="/teacher/lessons" className="muted">← Назад к расписанию</Link>
           <h1 style={{ margin: '10px 0 4px' }}>{lesson?.title ?? 'Урок'}</h1>
@@ -306,7 +306,7 @@ export function LessonDetailPage() {
             </div>
           )}
         </div>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <div className="lesson-detail-actions">
           {(preparation?.hasWorkbook || preparation?.hasAnswers) && (
             <button className="btn btn--ghost" type="button" onClick={() => void archiveToDrive()} disabled={archivingDrive}>
               {archivingDrive ? 'Сохраняем в Drive…' : 'Сохранить в Google Drive'}
