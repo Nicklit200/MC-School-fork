@@ -5,6 +5,12 @@ on:
     paths:
       - 'frontend/Dockerfile'
       - 'frontend/nginx.conf.template'
+      - 'frontend/src/auth/ProtectedRoute.tsx'
+      - 'frontend/src/auth/ProtectedRoute.test.tsx'
+      - 'frontend/src/components/Layout.test.tsx'
+      - 'frontend/src/features/online-classes/StartOnlineClassButton*'
+      - 'frontend/src/i18n/translations.ts'
+      - 'frontend/src/App.tsx'
       - 'services/transcription-agent/**'
       - '.github/workflows/farhad-infrastructure-parity.yml'
   workflow_dispatch:
@@ -37,6 +43,23 @@ jobs:
           curl -fsS http://127.0.0.1:8086/online-classes/example > /tmp/room
           grep -qi '<html' /tmp/room
           docker exec mindcrafti-nginx-parity nginx -t
+
+  frontend-integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Run integrated frontend tests
+        working-directory: frontend
+        run: npm test
 
   transcription-agent:
     runs-on: ubuntu-latest
