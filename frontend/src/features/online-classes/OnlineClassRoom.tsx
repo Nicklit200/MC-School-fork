@@ -128,7 +128,8 @@ function RoomBody({
   const wasSharing = useRef(false);
   const hostUserId = useHostUserId(classId);
   const answers = useAnswersPanel(eventId, connection.host);
-  const boardDocument = useBoardDocument(classId);
+  const [workbookRevision, setWorkbookRevision] = useState(0);
+  const boardDocument = useBoardDocument(classId, workbookRevision);
   const students = useStudentRoster(classId, connection.host);
   const [activeBoard, setActiveBoard] = useState(SHARED_BOARD_ID);
   // Only the shared board and the one in view are mounted: the shared board
@@ -177,6 +178,13 @@ function RoomBody({
         />
       </div>
 
+      {connection.host && (
+        <div className="online-class-room__workbook-actions">
+          <button type="button" onClick={() => setWorkbookRevision((value) => value + 1)}>
+            Обновить рабочую тетрадь PDF
+          </button>
+        </div>
+      )}
       <div className="online-class-room__stage">
         <div className="online-class-room__main">
           {/* The board stays mounted while a screen is shown, so switching back
