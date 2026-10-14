@@ -14,6 +14,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import type { ClassFeatureState, OnlineClassConnection } from '../../api/onlineClasses';
 import { ChatPanel } from './ChatPanel';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { categorizeLiveKitError, type LiveKitErrorCategory } from './livekitDiagnostics';
 import { BoardSwitcher } from './BoardSwitcher';
 import { SHARED_BOARD_ID } from './boards';
 import { useStudentRoster } from './useStudentRoster';
@@ -303,6 +304,7 @@ export function OnlineClassRoom({
   transcriptionAvailable = false,
   onLeave,
   onConnectionLost,
+  onMediaError,
   onEndForAll,
   onStateChanged,
 }: {
@@ -321,10 +323,12 @@ export function OnlineClassRoom({
   transcriptionAvailable?: boolean;
   onLeave: () => void;
   /** An involuntary LiveKit disconnect is not the user's Leave action. */
-  onConnectionLost: (reason?: string) => void;
+  onConnectionLost: (reason?: string, everConnected?: boolean) => void;
+  onMediaError?: (category: LiveKitErrorCategory) => void;
   onEndForAll?: () => void;
   onStateChanged?: () => void;
 }) {
+  const connectedSinceMount = useRef(false);
   return (
     <LiveKitRoom
       serverUrl={connection.serverUrl}
@@ -339,11 +343,18 @@ export function OnlineClassRoom({
       // Adaptive streaming and dynacast keep classroom video stable on weak
       // school networks instead of chasing maximum resolution.
       options={{ adaptiveStream: true, dynacast: true }}
+      onConnected={() => {
+        connectedSinceMount.current = true;
+      }}
+      onError={(error) => {
+        // Send a category only, never the provider's raw potentially sensitive
+        // error message, token or room URL to the page.
+        onMediaError?.(categorizeLiveKitError(error));
+      }}
       onDisconnected={(reason) => {
-        // The browser may lose LiveKit/WebRTC temporarily. Do not trigger the
-        // explicit Leave handler, which navigates away and ends the session.
-        console.warn('Mindcrafti Online: unexpected media disconnect', reason);
-        onConnectionLost(reason == null ? undefined : String(reason));
+        // Code 0 means UNKNOWN, not a confirmed network or permission error.
+        // Track whether LiveKit ever reached connected state for diagnosis.
+        onConnectionLost(reason == null ? undefined : String(reason), connectedSinceMount.current);
       }}
       data-lk-theme="default"
       className="online-class-room"
