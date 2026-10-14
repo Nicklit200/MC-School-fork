@@ -11,6 +11,7 @@ vi.mock('../../api/onlineClasses', () => ({
   onlineClassesApi: {
     materializeFromCalendar: vi.fn(),
     start: vi.fn(),
+    mediaDiagnostics: vi.fn(),
   },
 }));
 
@@ -21,6 +22,7 @@ describe('StartOnlineClassButton error handling', () => {
     vi.clearAllMocks();
     api.materializeFromCalendar.mockResolvedValue({ id: 'class-1' } as
       Awaited<ReturnType<typeof onlineClassesApi.materializeFromCalendar>>);
+    api.mediaDiagnostics.mockResolvedValue({ mediaApiReachable: false, diagnosticStatus: 'AUTH_REJECTED' });
   });
 
   it('shows a retryable LiveKit failure instead of incorrectly claiming the feature is disabled', async () => {
@@ -40,6 +42,8 @@ describe('StartOnlineClassButton error handling', () => {
     await waitFor(() => expect(api.start).toHaveBeenCalledWith('class-1'));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('LiveKit');
+    expect(alert.textContent).toMatch(/401|403/);
+    expect(api.mediaDiagnostics).toHaveBeenCalledWith('class-1');
     expect(screen.getByRole('button', {
       name: /Начать онлайн-урок|Online-Unterricht starten/,
     })).toBeEnabled();
