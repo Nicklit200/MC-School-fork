@@ -15,7 +15,7 @@ import type { LiveKitErrorCategory } from '../../features/online-classes/livekit
  */
 
 /** A server-side API probe is not a browser WebSocket/ICE connection test. */
-type MediaApiStatus = 'idle' | 'checking' | 'reachable' | 'unreachable' | 'requestFailed';
+type MediaApiStatus = 'idle' | 'checking' | 'reachable' | 'authRejected' | 'unreachable' | 'requestFailed';
 
 export function OnlineClassPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -75,8 +75,11 @@ export function OnlineClassPage() {
             // Only the teacher may run the server-side probe. No credentials,
             // room URL or access token are returned in this response.
             void onlineClassesApi.mediaDiagnostics(classId)
-              .then(({ mediaApiReachable }) =>
-                setMediaApiStatus(mediaApiReachable ? 'reachable' : 'unreachable'))
+              .then(({ mediaApiReachable, diagnosticStatus }) =>
+                setMediaApiStatus(
+                  mediaApiReachable ? 'reachable'
+                    : diagnosticStatus === 'AUTH_REJECTED' ? 'authRejected'
+                      : 'unreachable'))
               .catch(() => setMediaApiStatus('requestFailed'));
           }
         }}
@@ -149,6 +152,7 @@ export function OnlineClassPage() {
                 t(`onlineClass.disconnect.api.${mediaApiStatus}` as
                   | 'onlineClass.disconnect.api.checking'
                   | 'onlineClass.disconnect.api.reachable'
+                  | 'onlineClass.disconnect.api.authRejected'
                   | 'onlineClass.disconnect.api.unreachable'
                   | 'onlineClass.disconnect.api.requestFailed')
               }</p>
