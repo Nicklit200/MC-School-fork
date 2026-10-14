@@ -396,6 +396,20 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
                 .when(mediaProvider).ensureRoom(onlineClass.getRoomName());
 
         assertThat(service.checkMediaApi(teacherPrincipal, onlineClass.getId())).isFalse();
+        assertThat(service.diagnoseMediaApi(teacherPrincipal, onlineClass.getId()).status())
+                .isEqualTo("AUTH_REJECTED");
+    }
+
+    @Test
+    void mediaApiProbeDistinguishesServerOutageFromCredentialRejection() {
+        OnlineClass onlineClass = materialize();
+        service.start(teacherPrincipal, onlineClass.getId());
+        doThrow(new MediaProviderException("LiveKit request failed"))
+                .when(mediaProvider).ensureRoom(onlineClass.getRoomName());
+
+        var diagnosis = service.diagnoseMediaApi(teacherPrincipal, onlineClass.getId());
+        assertThat(diagnosis.reachable()).isFalse();
+        assertThat(diagnosis.status()).isEqualTo("UNREACHABLE");
     }
 
     // --- Discovery -----------------------------------------------------------
