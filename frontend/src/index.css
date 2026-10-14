@@ -326,3 +326,76 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 .session-guard--blurred .stack { filter: blur(18px); }
 .screen-shield { position: fixed; inset: 0; z-index: 60; background: var(--bg); }
 .watermark { position: absolute; inset: -20%; z-index: 1; display: flex; flex-wrap: wrap; gap: 26px 40px; align-content: center; justify-content: center; transform: rotate(-24deg); opacity: 0.07; pointer-events: none; overflow: hidden; font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+
+/* Lesson detail actions: unlike the generic .row, calendar/Meet and the
+   online launch control must not become three equal-width columns on tablets. */
+.lesson-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.lesson-detail-header > :first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.lesson-detail-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(100%, 720px);
+}
+.lesson-detail-actions > .btn {
+  flex: 0 0 auto;
+  min-height: 42px;
+  white-space: normal;
+  text-align: center;
+}
+.online-class-start {
+  display: flex;
+  flex: 0 1 360px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 100%;
+}
+.online-class-start > .btn {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 42px;
+}
+.online-class-start .online-class-error {
+  margin: 0;
+  padding: 11px 13px;
+  width: 100%;
+  max-width: 360px;
+  color: #9f2c20;
+  background: #fff6f4;
+  border: 1px solid #f6c6bd;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .lesson-detail-header > :first-child { flex-basis: 100%; }
+  .lesson-detail-actions {
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 520px) {
+  .lesson-detail-actions > .btn { flex: 1 1 auto; }
+  .online-class-start { flex: 1 1 100%; min-width: 0; }
+  .online-class-start > .btn { width: 100%; }
+  .online-class-start .online-class-error { max-width: none; }
+}
