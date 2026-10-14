@@ -7,11 +7,16 @@ import { onlineClassesApi } from '../../api/onlineClasses';
 import { OnlineClassRoom } from '../../features/online-classes/OnlineClassRoom';
 import { PrejoinPanel, type PrejoinChoice } from '../../features/online-classes/PrejoinPanel';
 import { useClassSession } from '../../features/online-classes/useClassSession';
+import type { LiveKitErrorCategory } from '../../features/online-classes/livekitDiagnostics';
 
 /**
  * Prejoin, then the room. Server-side authorization still governs everything;
  * this only decides what to show.
  */
+
+/** A server-side API probe is not a browser WebSocket/ICE connection test. */
+type MediaApiStatus = 'idle' | 'checking' | 'reachable' | 'unreachable' | 'requestFailed';
+
 export function OnlineClassPage() {
   const { classId } = useParams<{ classId: string }>();
   const { t } = useI18n();
@@ -20,6 +25,9 @@ export function OnlineClassPage() {
   const session = useClassSession(classId);
   const [hasDisconnected, setHasDisconnected] = useState(false);
   const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
+  const [mediaApiStatus, setMediaApiStatus] = useState<MediaApiStatus>('idle');
+  const [liveKitErrorCategory, setLiveKitErrorCategory] = useState<LiveKitErrorCategory | null>(null);
+  const [connectedBeforeDrop, setConnectedBeforeDrop] = useState<boolean | null>(null);
   const [initialMedia, setInitialMedia] = useState<PrejoinChoice>({
     videoDeviceId: null,
     audioDeviceId: null,
@@ -54,10 +62,23 @@ export function OnlineClassPage() {
         recordingAvailable={session.onlineClass?.recordingAvailable ?? false}
         transcriptionAvailable={session.onlineClass?.transcriptionAvailable ?? false}
         onStateChanged={() => void session.reload()}
-        onConnectionLost={(reason) => {
+        onMediaError={(category) => {
+          setLiveKitErrorCategory(category);
+        }}
+        onConnectionLost={(reason, everConnected) => {
           setDisconnectReason(reason ?? null);
+          setConnectedBeforeDrop(everConnected ?? null);
           setHasDisconnected(true);
           session.transportDisconnected();
+          if (session.onlineClass?.viewerIsHost && classId) {
+            setMediaApiStatus('checking');
+            // Only the teacher may run the server-side probe. No credentials,
+            // room URL or access token are returned in this response.
+            void onlineClassesApi.mediaDiagnostics(classId)
+              .then(({ mediaApiReachable }) =>
+                setMediaApiStatus(mediaApiReachable ? 'reachable' : 'unreachable'))
+              .catch(() => setMediaApiStatus('requestFailed'));
+          }
         }}
         onLeave={() => {
           session.release();
@@ -102,6 +123,37 @@ export function OnlineClassPage() {
           {disconnectReason && (
             <p className="online-class-reconnect__code">{t('onlineClass.disconnect.code')}: {disconnectReason}</p>
           )}
+          <div className="online-class-reconnect__diagnostics" role="status" aria-live="polite">
+            {disconnectReason === '0' && (
+              <p>{t('onlineClass.disconnect.unknownReason')}</p>
+            )}
+            {connectedBeforeDrop !== null && (
+              <p>{t('onlineClass.disconnect.initialConnection')}: {
+                connectedBeforeDrop
+                  ? t('onlineClass.disconnect.initialConnectionYes')
+                  : t('onlineClass.disconnect.initialConnectionNo')
+              }</p>
+            )}
+            {liveKitErrorCategory && (
+              <p>{t('onlineClass.disconnect.browserError')}: {
+                t(`onlineClass.disconnect.error.${liveKitErrorCategory}` as
+                  | 'onlineClass.disconnect.error.authorization'
+                  | 'onlineClass.disconnect.error.signaling'
+                  | 'onlineClass.disconnect.error.network'
+                  | 'onlineClass.disconnect.error.devices'
+                  | 'onlineClass.disconnect.error.unknown')
+              }</p>
+            )}
+            {session.onlineClass?.viewerIsHost && mediaApiStatus !== 'idle' && (
+              <p>{t('onlineClass.disconnect.apiStatus')}: {
+                t(`onlineClass.disconnect.api.${mediaApiStatus}` as
+                  | 'onlineClass.disconnect.api.checking'
+                  | 'onlineClass.disconnect.api.reachable'
+                  | 'onlineClass.disconnect.api.unreachable'
+                  | 'onlineClass.disconnect.api.requestFailed')
+              }</p>
+            )}
+          </div>
           {session.phase === 'failed' && (
             <p role="alert" className="prejoin__error">
               {session.errorMessage ?? t('onlineClass.status.failed')}
