@@ -107,9 +107,18 @@ public class LiveKitMediaProvider implements LiveClassMediaProvider {
         try {
             execute(roomServiceClient.createRoom(roomName));
         } catch (MediaProviderException e) {
-            // Creating an existing room is not an error for our purposes; the
-            // room is ensured either way.
-            log.debug("ensureRoom: room {} already present or create rejected", safe(roomName));
+            // Only an explicit "already exists" response is safe to ignore.
+            // Auth failures, DNS/TLS errors and unreachable LiveKit servers
+            // must fail the class start rather than leaving students with a
+            // signed token for a room that was never provisioned.
+            if ("LiveKit request failed with HTTP 409".equals(e.getMessage())) {
+                log.debug("ensureRoom: room {} already exists", safe(roomName));
+                return;
+            }
+            // Only the HTTP code or generic failure is logged: never a token,
+            // key, secret or upstream response body.
+            log.warn("LiveKit room check failed: {}", e.getMessage());
+            throw e;
         }
     }
 
