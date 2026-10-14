@@ -8,13 +8,24 @@ import { I18nProvider } from '../../i18n/I18nContext';
 let screenShares: unknown[] = [];
 
 vi.mock('@livekit/components-react', () => ({
-  LiveKitRoom: ({ children, onDisconnected }: {
+  LiveKitRoom: ({ children, onDisconnected, onConnected, onError }: {
     children: React.ReactNode;
     onDisconnected?: (reason?: number) => void;
+    onConnected?: () => void;
+    onError?: (error: Error) => void;
   }) => (
     <div>
       <button type="button" onClick={() => onDisconnected?.(1)}>
         Simulate LiveKit disconnect
+      </button>
+      <button type="button" onClick={() => onDisconnected?.(0)}>
+        Simulate unknown disconnect
+      </button>
+      <button type="button" onClick={() => onConnected?.()}>
+        Simulate media connected
+      </button>
+      <button type="button" onClick={() => onError?.(new Error('WebSocket handshake rejected'))}>
+        Simulate signaling error
       </button>
       {children}
     </div>
@@ -106,8 +117,27 @@ describe('OnlineClassRoom', () => {
     mount(true, { onLeave, onConnectionLost });
     await screen.findByTestId('board-board-1');
     await userEvent.click(screen.getByRole('button', { name: 'Simulate LiveKit disconnect' }));
-    expect(onConnectionLost).toHaveBeenCalledWith('1');
+    expect(onConnectionLost).toHaveBeenCalledWith('1', false);
     expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes initial LiveKit handshake failure from a drop after connection', async () => {
+    const onConnectionLost = vi.fn();
+    const onMediaError = vi.fn();
+    const room = mount(true, { onConnectionLost, onMediaError });
+    await screen.findByTestId('board-board-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Simulate signaling error' }));
+    expect(onMediaError).toHaveBeenCalledWith('signaling');
+    await userEvent.click(screen.getByRole('button', { name: 'Simulate unknown disconnect' }));
+    expect(onConnectionLost).toHaveBeenLastCalledWith('0', false);
+    room.unmount();
+
+    const onConnectedThenLost = vi.fn();
+    mount(true, { onConnectionLost: onConnectedThenLost });
+    await screen.findByTestId('board-board-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Simulate media connected' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Simulate unknown disconnect' }));
+    expect(onConnectedThenLost).toHaveBeenLastCalledWith('0', true);
   });
 
   it('shows a student no answers button and never asks for the answers', async () => {
