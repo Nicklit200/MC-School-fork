@@ -296,21 +296,37 @@ public class OnlineClassService {
      * from a browser/WebRTC transport failure. This does not issue an access
      * token and never returns the LiveKit URL or credentials.
      */
+    /** Only a host can run this probe. It returns fixed status names, not
+     * LiveKit response bodies, tokens, URLs or credential fragments.
+     * AUTH_REJECTED covers 401/403 returned by the LiveKit server API.
+     */
+    public record MediaApiDiagnosis(boolean reachable, String status) {}
+
     @Transactional(readOnly = true)
-    public boolean checkMediaApi(AuthenticatedUser caller, UUID classId) {
+    public MediaApiDiagnosis diagnoseMediaApi(AuthenticatedUser caller, UUID classId) {
         OnlineClass onlineClass = requireHostForMutation(caller, classId);
         if (!mediaProvider.isConfigured()) {
-            return false;
+            return new MediaApiDiagnosis(false, "NOT_CONFIGURED");
         }
         try {
             mediaProvider.ensureRoom(onlineClass.getRoomName());
-            return true;
+            return new MediaApiDiagnosis(true, "OK");
         } catch (MediaProviderException e) {
             metrics.providerFailure("diagnostics");
-            log.warn("LiveKit API unavailable during host-only probe for classId={}: {}",
-                    classId, e.getMessage());
-            return false;
+            // Never pass the raw upstream error to callers. The public response
+            // identifies only whether an operator should check credentials.
+            String providerMessage = e.getMessage();
+            String status = "LiveKit request failed with HTTP 401".equals(providerMessage)
+                    || "LiveKit request failed with HTTP 403".equals(providerMessage)
+                    ? "AUTH_REJECTED" : "UNREACHABLE";
+            log.warn("LiveKit API diagnostic status={} for classId={}", status, classId);
+            return new MediaApiDiagnosis(false, status);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean checkMediaApi(AuthenticatedUser caller, UUID classId) {
+        return diagnoseMediaApi(caller, classId).reachable();
     }
 
     // --- Connection ----------------------------------------------------------
