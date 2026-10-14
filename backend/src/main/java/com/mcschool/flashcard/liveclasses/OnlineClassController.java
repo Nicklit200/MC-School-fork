@@ -153,6 +153,19 @@ public class OnlineClassController {
         return onlineClassService.connect(caller, classId, deviceId);
     }
 
+    /** Owner-only diagnostic: answers only whether the backend can contact the
+     * LiveKit room API; browser/WebRTC connectivity is tested separately.
+     * No URL, access token or secret is returned. */
+    public record MediaDiagnosticResponse(boolean mediaApiReachable) {}
+
+    @PostMapping("/{classId}/media-diagnostics")
+    @PreAuthorize("hasRole('TEACHER')")
+    public MediaDiagnosticResponse mediaDiagnostics(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @PathVariable UUID classId) {
+        return new MediaDiagnosticResponse(onlineClassService.checkMediaApi(caller, classId));
+    }
+
     @PostMapping("/{classId}/leave")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void leave(@AuthenticationPrincipal AuthenticatedUser caller,
