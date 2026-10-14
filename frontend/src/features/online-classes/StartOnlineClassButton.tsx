@@ -70,19 +70,19 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
   };
 
   return (
-    <>
+    <div className="online-class-start">
       <button type="button" className="btn btn--primary" onClick={() => void start()} disabled={busy}>
         {t('onlineClass.start')}
       </button>
       {failed && (
-        <span role="alert" className="online-class-error">
+        <p role="alert" className="online-class-error">
           {failureKind === 'credentials'
             ? t('onlineClass.startFailedCredentials')
             : failureKind === 'unreachable'
               ? t('onlineClass.startFailedNetwork')
               : t('onlineClass.startFailed')}
-        </span>
+        </p>
       )}
-    </>
+    </div>
   );
 }
