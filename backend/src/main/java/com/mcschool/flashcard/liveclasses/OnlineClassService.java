@@ -291,6 +291,28 @@ public class OnlineClassService {
                 });
     }
 
+    /**
+     * Owner-only, non-secret probe to distinguish media-provider API failure
+     * from a browser/WebRTC transport failure. This does not issue an access
+     * token and never returns the LiveKit URL or credentials.
+     */
+    @Transactional(readOnly = true)
+    public boolean checkMediaApi(AuthenticatedUser caller, UUID classId) {
+        OnlineClass onlineClass = requireHostForMutation(caller, classId);
+        if (!mediaProvider.isConfigured()) {
+            return false;
+        }
+        try {
+            mediaProvider.ensureRoom(onlineClass.getRoomName());
+            return true;
+        } catch (MediaProviderException e) {
+            metrics.providerFailure("diagnostics");
+            log.warn("LiveKit API unavailable during host-only probe for classId={}: {}",
+                    classId, e.getMessage());
+            return false;
+        }
+    }
+
     // --- Connection ----------------------------------------------------------
 
     /**
