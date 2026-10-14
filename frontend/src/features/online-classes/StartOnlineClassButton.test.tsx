@@ -41,6 +41,11 @@ describe('StartOnlineClassButton error handling', () => {
 
     await waitFor(() => expect(api.start).toHaveBeenCalledWith('class-1'));
     const alert = await screen.findByRole('alert');
+    // The button and long credential warning form one self-contained action;
+    // generic .row children must not stretch them across the tablet page.
+    const launch = screen.getByRole('button', { name: /Начать онлайн-урок|Online-Unterricht starten/ });
+    expect(launch.closest('.online-class-start')).not.toBeNull();
+    expect(alert.closest('.online-class-start')).toBe(launch.closest('.online-class-start'));
     expect(alert.textContent).toContain('LiveKit');
     expect(alert.textContent).toMatch(/401|403/);
     expect(api.mediaDiagnostics).toHaveBeenCalledWith('class-1');
