@@ -1233,3 +1233,21 @@
 .online-class-reconnect__actions .prejoin__retry {
   flex: 1 1 210px;
 }
+
+/* In-call troubleshooting only; never shows raw provider errors or credentials. */
+.online-class-reconnect__diagnostics {
+  border-left: 3px solid #c4cedc;
+  background: #f7f9fc;
+  padding: 12px 15px;
+  margin: 15px 0;
+  border-radius: 0 11px 11px 0;
+}
+.online-class-reconnect__diagnostics p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #485770;
+}
+.online-class-reconnect__diagnostics p:last-child {
+  margin-bottom: 0;
+}
