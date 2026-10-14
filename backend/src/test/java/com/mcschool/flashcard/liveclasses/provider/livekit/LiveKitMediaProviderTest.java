@@ -1,11 +1,19 @@
 package com.mcschool.flashcard.liveclasses.provider.livekit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mcschool.flashcard.liveclasses.OnlineClassProperties;
 import com.mcschool.flashcard.liveclasses.provider.MediaGrant;
+import com.mcschool.flashcard.liveclasses.provider.MediaProviderException;
+import io.livekit.server.RoomServiceClient;
+import livekit.LivekitModels;
+import retrofit2.Call;
+import java.io.IOException;
 import com.mcschool.flashcard.liveclasses.provider.ParticipantConnection;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -36,6 +44,23 @@ class LiveKitMediaProviderTest {
         String payload = jwt.split("\\.")[1];
         byte[] decoded = Base64.getUrlDecoder().decode(payload);
         return MAPPER.readTree(new String(decoded, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void networkFailureWhenCreatingRoomMustNeverBeMistakenForExistingRoom() throws Exception {
+        RoomServiceClient client = mock(RoomServiceClient.class);
+        Call<LivekitModels.Room> operation = mock(Call.class);
+        when(client.createRoom(ROOM)).thenReturn(operation);
+        when(operation.execute()).thenThrow(new IOException("simulated connection failure"));
+        OnlineClassProperties properties = new OnlineClassProperties(
+                true, "wss://example.livekit.cloud", API_KEY, API_SECRET,
+                false, false, null, null, Duration.ofMinutes(10), null, null, false);
+        LiveKitMediaProvider provider = new LiveKitMediaProvider(properties, client);
+
+        assertThatThrownBy(() -> provider.ensureRoom(ROOM))
+                .isInstanceOf(MediaProviderException.class)
+                .hasMessageContaining("LiveKit request failed");
     }
 
     @Test
