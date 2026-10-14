@@ -130,13 +130,6 @@ function RoomBody({
   const answers = useAnswersPanel(eventId, connection.host);
   const [workbookRevision, setWorkbookRevision] = useState(0);
   const boardDocument = useBoardDocument(classId, workbookRevision);
-  // A workbook uploaded after the room opened should appear without rejoining.
-  // Stop polling once a PDF is available; teachers can manually reload replacements.
-  useEffect(() => {
-    if (boardDocument) return;
-    const timer = window.setInterval(() => setWorkbookRevision((value) => value + 1), 15000);
-    return () => window.clearInterval(timer);
-  }, [boardDocument]);
   const students = useStudentRoster(classId, connection.host);
   const [activeBoard, setActiveBoard] = useState(SHARED_BOARD_ID);
   // Only the shared board and the one in view are mounted: the shared board
