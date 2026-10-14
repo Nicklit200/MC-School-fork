@@ -194,7 +194,7 @@ export const onlineClassesApi = {
 
   /** Host-only probe. It checks LiveKit's server API, not the user's WebRTC path. */
   mediaDiagnostics: (classId: string) =>
-    request<{ mediaApiReachable: boolean }>('POST', `/online-classes/${classId}/media-diagnostics`),
+    request<{ mediaApiReachable: boolean; diagnosticStatus: 'OK' | 'NOT_CONFIGURED' | 'AUTH_REJECTED' | 'UNREACHABLE' }>('POST', `/online-classes/${classId}/media-diagnostics`),
 
   leave: (classId: string) => request<void>('POST', `/online-classes/${classId}/leave`),
 
