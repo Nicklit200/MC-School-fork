@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import com.mcschool.flashcard.AbstractIntegrationTest;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
@@ -15,6 +16,7 @@ import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassConnectionResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassResponse;
 import com.mcschool.flashcard.liveclasses.provider.LiveClassMediaProvider;
+import com.mcschool.flashcard.liveclasses.provider.MediaProviderException;
 import com.mcschool.flashcard.liveclasses.provider.ParticipantConnection;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -369,6 +371,31 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(connection.host()).isTrue();
         assertThat(connection.token()).isNotBlank();
+    }
+
+    @Test
+    void teacherCanProbeWhetherLiveKitRoomApiRespondsWithoutGettingCredentials() {
+        OnlineClass onlineClass = materialize();
+        service.start(teacherPrincipal, onlineClass.getId());
+
+        // A successful, owner-only room API check is reported as a boolean.
+        assertThat(service.checkMediaApi(teacherPrincipal, onlineClass.getId())).isTrue();
+
+        // Even a valid teacher account cannot inspect someone else's room.
+        AuthenticatedUser intruder = new AuthenticatedUser(
+                otherTeacher.getId(), otherTeacher.getEmail(), otherTeacher.getRole());
+        assertThatThrownBy(() -> service.checkMediaApi(intruder, onlineClass.getId()))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void liveKitApiFailureIsReportedAsUnavailableWithoutLeakingErrorToCaller() {
+        OnlineClass onlineClass = materialize();
+        service.start(teacherPrincipal, onlineClass.getId());
+        doThrow(new MediaProviderException("LiveKit request failed with HTTP 401"))
+                .when(mediaProvider).ensureRoom(onlineClass.getRoomName());
+
+        assertThat(service.checkMediaApi(teacherPrincipal, onlineClass.getId())).isFalse();
     }
 
     // --- Discovery -----------------------------------------------------------
