@@ -47,11 +47,17 @@ public class LiveKitMediaProvider implements LiveClassMediaProvider {
     private final RoomServiceClient roomServiceClient;
 
     public LiveKitMediaProvider(OnlineClassProperties properties) {
-        this.properties = properties;
-        this.roomServiceClient = RoomServiceClient.createClient(
+        this(properties, RoomServiceClient.createClient(
                 toHttpUrl(properties.livekitUrl()),
                 properties.livekitApiKey(),
-                properties.livekitApiSecret());
+                properties.livekitApiSecret()));
+    }
+
+    // Package-visible injection for deterministic adapter tests. The public
+    // constructor always uses the configured endpoint and server-only secrets.
+    LiveKitMediaProvider(OnlineClassProperties properties, RoomServiceClient roomServiceClient) {
+        this.properties = properties;
+        this.roomServiceClient = roomServiceClient;
     }
 
     @Override
