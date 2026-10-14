@@ -1,87 +1,76 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiRequestError } from '../api/client';
-import { onlineClassesApi } from '../api/onlineClasses';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext';
-import { resetOnlineClassesAvailability } from '../features/online-classes/useOnlineClassesAvailable';
 import { Layout } from './Layout';
 
+const PILOT_OWNER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
 let role: 'TEACHER' | 'STUDENT' | 'PARENT' | 'ADMIN' = 'TEACHER';
+let userId: string = PILOT_OWNER_ID;
+
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: `user-${role}`, role, fullName: 'Test', status: 'ACTIVE' },
+    user: { id: userId, role, fullName: 'Test', status: 'ACTIVE' },
     logout: vi.fn(),
     setUser: vi.fn(),
   }),
 }));
-vi.mock('../api/onlineClasses', async () => {
-  const actual = await vi.importActual<typeof import('../api/onlineClasses')>('../api/onlineClasses');
-  return { ...actual, onlineClassesApi: { listUpcoming: vi.fn() } };
-});
-
-const api = vi.mocked(onlineClassesApi);
-
-// The teacher sidebar starts collapsed; open it the way a teacher would.
-function openTeacherMenu() {
-  fireEvent.click(screen.getByRole('button', { name: 'Показать меню' }));
-}
 
 function mount() {
   return render(
     <I18nProvider>
       <MemoryRouter>
-        <Layout>
-          <p>page</p>
-        </Layout>
+        <Layout><p>page</p></Layout>
       </MemoryRouter>
     </I18nProvider>,
   );
 }
 
-describe('Layout: the online classes menu entry', () => {
+function showTeacherSidebar() {
+  fireEvent.click(screen.getByRole('button', { name: 'Показать меню' }));
+}
+
+describe('Layout: owner-only online classroom pilot navigation', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    resetOnlineClassesAvailability();
     role = 'TEACHER';
+    userId = PILOT_OWNER_ID;
+    vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'true');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
   });
 
-  it('gives a teacher a link to their online classes when the feature is on', async () => {
-    api.listUpcoming.mockResolvedValue([]);
+  it('shows the original online classroom entry for the designated pilot teacher', () => {
     mount();
-    openTeacherMenu();
-    const link = await screen.findByRole('link', { name: 'Онлайн-уроки' });
-    expect(link).toHaveAttribute('href', '/online-classes');
+    showTeacherSidebar();
+    expect(screen.getByRole('link', { name: 'Онлайн-уроки' }))
+      .toHaveAttribute('href', '/teacher/online-classes');
   });
 
-  it('gives a student the same link', async () => {
-    role = 'STUDENT';
-    api.listUpcoming.mockResolvedValue([]);
+  it('does not expose the pilot to unrelated teachers', () => {
+    userId = 'not-the-pilot';
     mount();
-    expect(await screen.findByRole('link', { name: 'Онлайн-уроки' })).toHaveAttribute('href', '/online-classes');
-  });
-
-  it('shows no link where the feature is switched off, rather than a page that errors', async () => {
-    api.listUpcoming.mockRejectedValue(new ApiRequestError(404, 'NOT_FOUND', 'Online classes are not enabled'));
-    mount();
-    await screen.findByText('page');
-    await vi.waitFor(() => expect(api.listUpcoming).toHaveBeenCalled());
+    showTeacherSidebar();
     expect(screen.queryByRole('link', { name: 'Онлайн-уроки' })).not.toBeInTheDocument();
   });
 
-  it('never asks for a parent or an admin, who cannot join classes', async () => {
+  it('does not show the navigation entry when the pilot flag is disabled', () => {
+    vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'false');
+    mount();
+    showTeacherSidebar();
+    expect(screen.queryByRole('link', { name: 'Онлайн-уроки' })).not.toBeInTheDocument();
+  });
+
+  it('does not give a parent a teacher-only menu', () => {
     role = 'PARENT';
     mount();
-    await screen.findByText('page');
-    expect(api.listUpcoming).not.toHaveBeenCalled();
     expect(screen.queryByRole('link', { name: 'Онлайн-уроки' })).not.toBeInTheDocument();
   });
 
-  it('keeps the greyed-out placeholders as they were', async () => {
-    api.listUpcoming.mockResolvedValue([]);
+  it('keeps the future-only homework shortcut disabled', () => {
     mount();
-    openTeacherMenu();
-    await screen.findByRole('link', { name: 'Онлайн-уроки' });
+    showTeacherSidebar();
     expect(screen.getByText('Домашние задания').closest('a')).toBeNull();
   });
 });
