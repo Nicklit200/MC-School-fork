@@ -40,7 +40,7 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
     } catch (error) {
       // A disabled or misconfigured feature is reported precisely rather than
       // as a generic failure, and never exposes which setting is missing.
-      if (error instanceof ApiRequestError && (error.status === 404 || error.status === 409)) {
+      if (error instanceof ApiRequestError && error.status === 404) {
         setUnavailable(true);
       } else {
         setFailed(true);
@@ -57,7 +57,7 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
       </button>
       {failed && (
         <span role="alert" className="online-class-error">
-          {t('error.generic')}
+          {t('onlineClass.startFailed')}
         </span>
       )}
     </>
