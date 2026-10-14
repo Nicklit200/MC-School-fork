@@ -20,6 +20,7 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
   const [busy, setBusy] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [failureKind, setFailureKind] = useState<'generic' | 'credentials' | 'unreachable'>('generic');
 
   if (unavailable) {
     return (
@@ -33,8 +34,11 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
     if (busy) return;
     setBusy(true);
     setFailed(false);
+    setFailureKind('generic');
+    let classId: string | null = null;
     try {
       const onlineClass = await onlineClassesApi.materializeFromCalendar(eventId);
+      classId = onlineClass.id;
       await onlineClassesApi.start(onlineClass.id);
       navigate(`/online-classes/${onlineClass.id}`);
     } catch (error) {
@@ -43,6 +47,21 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
       if (error instanceof ApiRequestError && error.status === 404) {
         setUnavailable(true);
       } else {
+        // Room-start conflicts often wrap a rejected LiveKit RoomService API
+        // request. Query a host-only endpoint for an operator-safe diagnosis
+        // rather than displaying the provider response or any secret.
+        if (error instanceof ApiRequestError && error.status === 409 && classId) {
+          try {
+            const diagnosis = await onlineClassesApi.mediaDiagnostics(classId);
+            if (diagnosis.diagnosticStatus === 'AUTH_REJECTED') {
+              setFailureKind('credentials');
+            } else if (diagnosis.diagnosticStatus === 'UNREACHABLE') {
+              setFailureKind('unreachable');
+            }
+          } catch {
+            // Older backend or temporary API failure: keep a generic message.
+          }
+        }
         setFailed(true);
       }
     } finally {
@@ -57,7 +76,11 @@ export function StartOnlineClassButton({ eventId }: { eventId: string }) {
       </button>
       {failed && (
         <span role="alert" className="online-class-error">
-          {t('onlineClass.startFailed')}
+          {failureKind === 'credentials'
+            ? t('onlineClass.startFailedCredentials')
+            : failureKind === 'unreachable'
+              ? t('onlineClass.startFailedNetwork')
+              : t('onlineClass.startFailed')}
         </span>
       )}
     </>
