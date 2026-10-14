@@ -348,9 +348,9 @@ public class OnlineClassService {
         if (!onlineClass.isConnectable()) {
             throw new ConflictException("This class is not open");
         }
-        if (!host && !isWithinJoinWindow(onlineClass)) {
-            throw new ConflictException("This class is not open for joining yet");
-        }
+        // A host explicitly opening the lobby or starting the room overrides the
+        // calendar join window. requireParticipant and admission checks below
+        // still prevent unauthorized students from entering the room.
 
         User user = accessService.requireActiveUser(caller.id());
         OnlineClassParticipant participant = participantRepository
@@ -441,7 +441,7 @@ public class OnlineClassService {
     private OnlineClassResponse toResponse(OnlineClass onlineClass, AuthenticatedUser caller) {
         return OnlineClassResponse.from(onlineClass,
                 accessService.isHost(caller, onlineClass),
-                isWithinJoinWindow(onlineClass),
+                onlineClass.isConnectable() || isWithinJoinWindow(onlineClass),
                 recordingProvider.isConfigured(),
                 transcriptionProvider.isConfigured());
     }
