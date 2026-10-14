@@ -8,8 +8,8 @@ import { usePdf } from './usePdf';
  * A lesson without a workbook (or a failed download) simply yields no document
  * and the board stays blank — the lesson never waits on it.
  */
-export function useBoardDocument(classId: string): PdfDoc | null {
-  const state = usePdf(classId, async () => {
+export function useBoardDocument(classId: string, revision = 0): PdfDoc | null {
+  const state = usePdf(`${classId}:${revision}`, async () => {
     const bytes = await onlineClassesApi.documentBytes(classId);
     if (!bytes) throw new Error('no document');
     return bytes;
