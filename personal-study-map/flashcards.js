@@ -307,22 +307,28 @@
       const lecture=(exam.lectures||[]).find(x=>x.id===skill?.lectureId);
       const topic=(exam.topics||[]).find(x=>x.id===skill?.topicId);
       const key=lecture?"lecture:"+lecture.id:"topic:"+(skill?.topicId||"other");
-      if(!groups.has(key))groups.set(key,{key,title:lecture?.title||topic?.title||"Другие карточки",cards:[],skills:new Set(),slides:new Set()});
-      const p=groups.get(key);p.cards.push(card);p.skills.add(card.skillId);
-      for(const n of skill?.slideNumbers||[])p.slides.add(n);
+      if(!groups.has(key))groups.set(key,{
+        key,title:lecture?.title||topic?.title||"Другие темы",
+        date:lecture?.addedAt||(lecture?.id==="se-analysis-usecases-lecture"?"2026-10-15":null),
+        cards:[],slides:new Set()
+      });
+      const pack=groups.get(key);pack.cards.push(card);
+      for(const number of skill?.slideNumbers||[])pack.slides.add(number);
     }
-    return [...groups.values()].sort((a,b)=>a.title.localeCompare(b.title,"ru"));
+    return [...groups.values()].sort((a,b)=>(b.date||"").localeCompare(a.date||"")||a.title.localeCompare(b.title,"de"));
   }
   function packagesMarkup(){
-    const progress=getProgress(),today=engine.isoDay();
-    return '<section class="quiz-packages"><strong>Пакеты карточек по лекциям</strong><p>Выбери изученную лекцию и учи только её карточки.</p>'+
-      cardPackages().map((p,i)=>{
-        const known=p.cards.filter(c=>cardState(c,progress).repetitionNumber>=1).length;
-        const due=p.cards.filter(c=>cardState(c,progress).dueDate<=today).length;
-        const pct=Math.round(100*known/p.cards.length);
-        return '<article class="quiz-package"><strong>'+esc(p.title)+'</strong><small>'+p.cards.length+' карточек · '+p.skills.size+' навыков'+(p.slides.size?' · слайды '+[...p.slides].sort((a,b)=>a-b).join(", "):"")+'</small>'+
-        '<div class="quiz-package-progress"><span style="width:'+pct+'%"></span></div><small>Знаю '+known+'/'+p.cards.length+' ('+pct+'%) · повторить '+due+'</small>'+
-        '<div class="quiz-package-actions"><button type="button" data-action="package-practice" data-package="'+i+'">Учить пакет</button><button type="button" data-action="package-scheduled" data-package="'+i+'" '+(!due?'disabled':'')+'>Повторить ('+due+')</button></div></article>';
+    const packages=cardPackages();
+    return '<section class="quiz-packages"><strong>История добавленных карточек</strong>'+
+      '<p>Когда и по какой теме добавлены карточки. Это оглавление, а не отдельные очереди повторения: все карточки повторяются вместе.</p>'+
+      packages.map(pack=>{
+        const date=pack.date?labelDate(pack.date):"Дата добавления не сохранена";
+        const slides=pack.slides.size?' · слайды '+[...pack.slides].sort((a,b)=>a-b).join(", "):"";
+        return '<details class="quiz-package"><summary><span class="quiz-package-date">'+esc(date)+'</span>'+
+          '<strong>'+esc(pack.title)+'</strong><small>'+pack.cards.length+' карточек'+esc(slides)+'</small></summary>'+
+          '<div class="quiz-package-questions">'+pack.cards.map((card,i)=>
+            '<div class="quiz-package-question"><span>'+String(i+1)+'. '+esc(card.question)+'</span></div>'
+          ).join("")+'</div></details>';
       }).join("")+'</section>';
   }
   function renderHome() {
@@ -369,11 +375,10 @@
     window.dispatchEvent(new Event("study-home-rendered"));
   }
 
-  function startSession(mode, packageKey=null) {
+  function startSession(mode) {
     const context = getContext();
     if (!context.exam || ui.session) return;
-    const selected=packageKey?cardPackages().find(x=>x.key===packageKey):null;
-    const source=selected?selected.cards:visibleCards();
+    const source=visibleCards();
     const today=engine.isoDay(),states=getProgress();
     const cards=mode==="SCHEDULED"?source.filter(card=>cardState(card,states).dueDate<=today):source;
     if (!cards.length) {ui.notice="В выбранном разделе нет подходящих карточек.";renderHome();return;}
@@ -882,9 +887,6 @@
     if (action==="home") {
       cleanupTimers();ui.view="home";ui.feedback=null;ui.notice="";
       renderHome();
-    } else if (action==="package-practice" || action==="package-scheduled") {
-      const pack=cardPackages()[Number(button.dataset.package)];
-      if(pack&&!ui.session)startSession(action==="package-scheduled"?"SCHEDULED":"PRACTICE",pack.key);
     } else if (action==="scheduled") startSession("SCHEDULED");
     else if (action==="practice") {
       if (ui.session) return;
