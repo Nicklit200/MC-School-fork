@@ -3502,9 +3502,9 @@
               "title": "Analyse: Aktivitäten",
               "subtitle": "Analyse · Architektur · Programmierung · Qualitätssicherung",
               "description": "Понимать этапы разработки и почему обеспечение качества занимает существенную часть работы.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 0,
               "y": 3800,
               "evidence": [],
@@ -3514,7 +3514,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 2",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-01-card-1",
@@ -3548,9 +3548,9 @@
               "title": "Funktionale Anforderungen",
               "subtitle": "Aktionen · Interaktionen · Einschränkungen",
               "description": "Объяснять функциональные требования и приводить примеры банка и игры.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 300,
               "y": 3800,
               "evidence": [],
@@ -3560,7 +3560,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 3, 4",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-02-card-1",
@@ -3595,9 +3595,9 @@
               "title": "Nichtfunktionale Anforderungen",
               "subtitle": "Technik · Qualität · UI · Recht",
               "description": "Различать FA и NFA; знать категории требований со слайда.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 600,
               "y": 3800,
               "evidence": [],
@@ -3607,7 +3607,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 5",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-03-card-1",
@@ -3641,9 +3641,9 @@
               "title": "Glossar: Zweck",
               "subtitle": "Fachbegriffe · gemeinsames Verständnis",
               "description": "Давать определение Glossar и объяснять, зачем он нужен заказчику и разработчику.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 900,
               "y": 3800,
               "evidence": [],
@@ -3653,7 +3653,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 6",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-04-card-1",
@@ -3687,9 +3687,9 @@
               "title": "Glossar: Aufbau",
               "subtitle": "Begriff · Definition · Synonyme · Querverweise",
               "description": "Знать структуру глоссария, сортировку и список сокращений.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 0,
               "y": 4040,
               "evidence": [],
@@ -3699,7 +3699,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 7",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-05-card-1",
@@ -3733,9 +3733,9 @@
               "title": "Anwendungsfall und Akteur",
               "subtitle": "Use Case · Akteur · wahrnehmbares Ergebnis",
               "description": "Определять Use Case, акторов, наблюдаемый результат и этап анализа.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 300,
               "y": 4040,
               "evidence": [],
@@ -3745,7 +3745,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 8",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-06-card-1",
@@ -3779,9 +3779,9 @@
               "title": "Use Cases finden",
               "subtitle": "Stakeholder · Aufgaben · Informationen",
               "description": "Применять вопросы чек-листа для выявления сценариев использования.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 600,
               "y": 4040,
               "evidence": [],
@@ -3791,7 +3791,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 9",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-07-card-1",
@@ -3825,9 +3825,9 @@
               "title": "Use Case: Beschreibung",
               "subtitle": "Name · Auslöser · Ergebnis · Eingabedaten",
               "description": "Знать поля описания Use Case, включая акторов, триггер и результат.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 900,
               "y": 4040,
               "evidence": [],
@@ -3837,7 +3837,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 10",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-08-card-1",
@@ -3871,9 +3871,9 @@
               "title": "Use Case: Ablauf und Bedingungen",
               "subtitle": "Vorbedingungen · Nachbedingungen · Schritte · Fehler",
               "description": "Различать условия до и после, основные шаги, исключения и открытые вопросы.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 0,
               "y": 4280,
               "evidence": [],
@@ -3883,7 +3883,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 11, 12",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-09-card-1",
@@ -3928,9 +3928,9 @@
               "title": "Use Case: Checkliste und Generalisierung",
               "subtitle": "Substantiv + Verb · UML · Vererbung",
               "description": "Проверять описание Use Case и понимать стрелку обобщения акторов и сценариев.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 300,
               "y": 4280,
               "evidence": [],
@@ -3940,7 +3940,7 @@
                 "lastResult": null
               },
               "sourceDocument": "Analyse und Anwendungsfälle — Folien 13, 14",
-              "learningStatus": "studied",
+              "learningStatus": "introduced",
               "flashcards": [
                 {
                   "id": "se-lecture-analysis-20261015-10-card-1",
@@ -3985,9 +3985,9 @@
               "title": "Zustand und Zustandsdiagramm",
               "subtitle": "Klasse · Attributwerte · Objektlebenszyklus",
               "description": "Объяснять состояние как абстракцию значений атрибутов объекта одного класса; диаграмму как последовательность состояний и переходов под воздействием стимулов.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 0,
               "y": 4520,
               "evidence": [],
@@ -3997,7 +3997,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 3
@@ -4031,9 +4031,9 @@
               "title": "Endlicher Automat: Bestandteile",
               "subtitle": "Zustände · Ereignisse · Transitionen",
               "description": "Называть составляющие конечного автомата: непустые конечные множества состояний и событий, переходы, начальное и конечные состояния.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 300,
               "y": 4520,
               "evidence": [],
@@ -4043,7 +4043,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 4
@@ -4077,9 +4077,9 @@
               "title": "Unterzustände erkennen",
               "subtitle": "Vorlesung · lesend · aufmerksam · schlafend",
               "description": "Разбирать пример вложенных состояний лекции, переходы по условиям и завершение.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 600,
               "y": 4520,
               "evidence": [],
@@ -4089,7 +4089,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 5
@@ -4123,9 +4123,9 @@
               "title": "Zustandsdiagramm erstellen",
               "subtitle": "Zustände · Operationen · Lebenszyklus",
               "description": "Уметь перечислить этапы построения: выделить осмысленные состояния, сопоставить операции, определить допустимые последовательности, события и действия переходов.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 900,
               "y": 4520,
               "evidence": [],
@@ -4135,7 +4135,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 6
@@ -4169,9 +4169,9 @@
               "title": "Regeln für Zustandsdiagramme",
               "subtitle": "5–7 Zustände · OR/AND · Bedingungen",
               "description": "Понимать правила: избегать больших диапазонов значений в состояниях, ограничивать поддиаграммы 5–7 состояниями, не смешивать свойства и учитывать переходы без событий.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 0,
               "y": 4760,
               "evidence": [],
@@ -4181,7 +4181,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 7
@@ -4215,9 +4215,9 @@
               "title": "Aktivitätsdiagramm: Definition",
               "subtitle": "Start · Aktionen · Kontroll-/Objektfluss",
               "description": "Объяснять, что диаграмма активности описывает варианты выполнения системы действиями; знать начальный узел, узлы действий/контроля/объектов, конечные узлы и потоки.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 300,
               "y": 4760,
               "evidence": [],
@@ -4227,7 +4227,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 9
@@ -4261,9 +4261,9 @@
               "title": "Aktivitätsdiagramm lesen",
               "subtitle": "Würfeln · Guards · Verzweigung",
               "description": "Читать пример Würfeln: условия [Pasch], [kein Pasch], [3 mal Pasch], действия и возврат к броску.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 600,
               "y": 4760,
               "evidence": [],
@@ -4273,7 +4273,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 10
@@ -4307,9 +4307,9 @@
               "title": "Splitting und Synchronisation",
               "subtitle": "Parallele Aktionen · UND-Zusammenführung",
               "description": "Отличать разделение параллельных действий (Splitting) от их синхронизации (UND) в примере игры.",
-              "mastery": 20,
+              "mastery": 0,
               "weight": 1,
-              "lastUpdated": "2026-10-15",
+              "lastUpdated": null,
               "x": 900,
               "y": 4760,
               "evidence": [],
@@ -4319,7 +4319,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "introduced",
+              "learningStatus": "not_started",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 10
@@ -6280,68 +6280,80 @@
   ],
   "sessions": [
     {
-      "id": "session-2026-10-15-zustands-aktivitaetsdiagramme",
+      "id": "session-2026-10-15-analyse-anwendungsfaelle",
       "semesterId": "ws-2026-27",
       "examId": "exam-software-engineering",
       "date": "2026-10-15",
-      "title": "Zustands- und Aktivitätsdiagramme — слайды 1–11",
-      "summary": "Разобрали назначение Zustandsdiagramm и состояния объекта, состав конечного автомата, Unterzustände, построение и правила диаграмм состояний, Aktivitätsdiagramm, условные ветвления, Splitting и Synchronisation. Добавлены 8 навыков и 16 тренировочных карточек. Ознакомительное изучение оценено в 20%; самостоятельные ответы по новым карточкам пока не подтверждены.",
+      "title": "Analyse und Anwendungsfälle — слайды 2–15",
+      "summary": "Разобрали распределение работ (Analyse, Architektur/Design, Programmierung, Qualitätssicherung), funktionale и nichtfunktionale Anforderungen, Glossar и его структуру, Anwendungsfall и Akteur, поиск Use Cases, поля описания и контрольный список, Generalisierung актёров и вариантов использования. Ознакомительный уровень 20%; самостоятельные ответы по этим карточкам пока не подтверждены.",
       "changes": [
         {
-          "skillId": "se-lecture-state-activity-20261015-01",
-          "skillTitle": "Zustand und Zustandsdiagramm",
+          "skillId": "se-lecture-analysis-20261015-01",
+          "skillTitle": "Analyse: Aktivitäten",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-02",
-          "skillTitle": "Endlicher Automat: Bestandteile",
+          "skillId": "se-lecture-analysis-20261015-02",
+          "skillTitle": "Funktionale Anforderungen",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-03",
-          "skillTitle": "Unterzustände erkennen",
+          "skillId": "se-lecture-analysis-20261015-03",
+          "skillTitle": "Nichtfunktionale Anforderungen",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-04",
-          "skillTitle": "Zustandsdiagramm erstellen",
+          "skillId": "se-lecture-analysis-20261015-04",
+          "skillTitle": "Glossar: Zweck",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-05",
-          "skillTitle": "Regeln für Zustandsdiagramme",
+          "skillId": "se-lecture-analysis-20261015-05",
+          "skillTitle": "Glossar: Aufbau",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-06",
-          "skillTitle": "Aktivitätsdiagramm: Definition",
+          "skillId": "se-lecture-analysis-20261015-06",
+          "skillTitle": "Anwendungsfall und Akteur",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-07",
-          "skillTitle": "Aktivitätsdiagramm lesen",
+          "skillId": "se-lecture-analysis-20261015-07",
+          "skillTitle": "Use Cases finden",
           "from": 0,
           "to": 20
         },
         {
-          "skillId": "se-lecture-state-activity-20261015-08",
-          "skillTitle": "Splitting und Synchronisation",
+          "skillId": "se-lecture-analysis-20261015-08",
+          "skillTitle": "Use Case: Beschreibung",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-analysis-20261015-09",
+          "skillTitle": "Use Case: Ablauf und Bedingungen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-analysis-20261015-10",
+          "skillTitle": "Use Case: Checkliste und Generalisierung",
           "from": 0,
           "to": 20
         }
       ],
       "checkpoint": {
-        "document": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+        "document": "Analyse und Anwendungsfälle · Vorlesung",
         "course": "Software Engineering",
-        "pagesCovered": "1–11",
+        "slidesCovered": "2–15",
         "date": "2026-10-15",
-        "note": "Лекция разобрана; проверить понимание карточками. Проценты 20% означают ознакомление, а не подтверждённое знание."
+        "note": "Материал пройден по присланным скриншотам. Отдельная презентация Zustands- und Aktivitätsdiagramme не засчитывается как изученная сегодня."
       }
     },
     {
