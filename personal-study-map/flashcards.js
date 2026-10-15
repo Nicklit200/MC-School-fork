@@ -303,13 +303,20 @@
     const context = getContext();
     const cards = visibleCards();
     const due = dueCards();
+    // A card counts as known after a successful scheduled review (stage >= 1).
+    // Free practice does not affect this metric, consistent with scheduling.
+    const progress = getProgress();
+    const known = cards.filter(card => cardState(card,progress).repetitionNumber >= 1).length;
+    const knownPercent = cards.length ? Math.round(known * 100 / cards.length) : 0;
     const past = latestHistory().filter(item => item.examId === context.exam?.id);
     const lesson = past[0];
     const globalSession = ui.session;
     const unrelated = globalSession && !sessionForCurrentContext();
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
-      countBox("Нужно повторить",due.length)+countBox("Тренировок",past.length)+'</div>'+
+      countBox("Нужно повторить",due.length)+countBox("Тренировок",past.length)+
+      countBox("Знаю карточек",knownPercent+"%")+
+      '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
       '<div class="quiz-actions">'+
       (globalSession?'<button data-action="resume" type="button" class="primary">Продолжить занятие</button>'+
