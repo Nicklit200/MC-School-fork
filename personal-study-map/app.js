@@ -64,7 +64,7 @@ function localIsoDate(date) {
 
 function lectureWeekdays() {
   const days = state.data?.planner?.lectureWeekdays;
-  return Array.isArray(days) && days.length ? days.map(Number) : [2, 3];
+  return Array.isArray(days) && days.length ? days.map(Number) : [3];
 }
 
 function weekdayRu(day) {
@@ -1362,7 +1362,7 @@ function renderHomework() {
   summary.innerHTML = nextDate
     ? `<div class="next-lecture-label">Следующая лекция</div>
        <strong>${weekdayRu(nextDate.getDay())}, ${fmtDate(next)}</strong>
-       <span>Расписание: вторник и среда</span>`
+       <span>Расписание: среда</span>`
     : `<strong>Расписание лекций не задано</strong>`;
 
   host.replaceChildren();
