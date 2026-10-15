@@ -2111,3 +2111,15 @@ body[data-section="german"] .brand-mark{background:#e9f0ff;color:#294cb4}
 /* Optional exact due date overrides the next lecture weekday. */
 .homework-exact-date{grid-column:1 / -1}
 #homework-date{width:100%;color-scheme:light}
+
+/* Flashcard study calendar: activity, missed days and daily breakdown */
+.calendar-day.missed-cards{background:#fff0f0;border-color:#f0a3a3;color:#b42318}
+.calendar-day.selected{outline:2px solid #2563eb;outline-offset:1px}
+.calendar-day .study-card-mark{position:absolute;bottom:2px;right:5px;font-size:10px;font-weight:900;line-height:1}
+.study-day-details{margin-top:13px;padding:12px;border:1px solid #dce5f1;border-radius:12px;background:#f8fafc;color:#253c5d;font-size:12px}
+.study-day-details>strong{display:block;font-size:13px;margin-bottom:7px}
+.study-day-details p{margin:4px 0;color:#71839a;line-height:1.5}
+.study-day-event-list{display:grid;gap:7px}
+.study-day-event{display:grid;gap:3px;padding:9px;background:#fff;border:1px solid #e4e9f0;border-radius:9px}
+.study-day-event b{font-size:12px}
+.study-day-event span{font-size:11px;color:#64748b;line-height:1.4}
