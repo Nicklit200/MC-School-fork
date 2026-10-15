@@ -18,6 +18,7 @@ const state = {
   semesterId: "",
   examId: "",
   topicId: "all",
+  slideFilter: null,
   viewMode: "map",
   selectedSkillId: "",
   viewport: { x: 80, y: 70, z: 1 },
@@ -969,6 +970,7 @@ function renderAll() {
   renderExamCards();
   renderExamSelect();
   renderTopics();
+  renderSlidesCatalog();
   renderWorkspace();
   renderHistory();
   renderReview();
@@ -1003,6 +1005,7 @@ function renderSemesterSelect() {
     state.semesterId = select.value;
     state.examId = currentSemester()?.exams?.[0]?.id || "";
     state.topicId = "all";
+    state.slideFilter = null;
     state.selectedSkillId = "";
     renderAll();
     fitMap();
@@ -1063,12 +1066,53 @@ function renderExamSelect() {
     state.topicId = "all";
     state.selectedSkillId = "";
     renderTopics();
+    renderSlidesCatalog();
     renderWorkspace();
     renderExamCards();
     renderReview();
     renderHistory();
     fitMap();
   };
+}
+
+function renderSlidesCatalog() {
+  const host = $("slides-catalog");
+  if (!host) return;
+  host.replaceChildren();
+  const lectures = currentExam()?.lectures || [];
+  if (!lectures.length) {
+    host.textContent = "Для этого предмета оглавление пока не загружено.";
+    return;
+  }
+  for (const lecture of lectures) {
+    const title = document.createElement("div");
+    title.className = "slides-lecture-title";
+    title.textContent = lecture.title + " · " + lecture.slides.filter(x=>x.uploaded).length + "/" + lecture.slides.length;
+    host.append(title);
+    for (const slide of lecture.slides) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "slides-catalog-row" + (state.slideFilter?.lectureId === lecture.id && state.slideFilter?.number === slide.number ? " active" : "");
+      row.innerHTML = '<span class="slides-status ' + (slide.uploaded ? "uploaded" : "missing") + '">' + (slide.uploaded ? "✓" : "—") + '</span><span>№ ' + slide.number + ' · ' + escapeHtml(slide.title) + '</span>';
+      row.onclick = () => {
+        state.slideFilter = state.slideFilter?.lectureId === lecture.id && state.slideFilter?.number === slide.number ? null : {lectureId:lecture.id,number:slide.number};
+        state.topicId = "all";
+        renderTopics();
+        renderSlidesCatalog();
+        renderWorkspace();
+        fitMap();
+      };
+      host.append(row);
+    }
+  }
+  if (state.slideFilter) {
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "slides-reset";
+    reset.textContent = "Показать все слайды";
+    reset.onclick = () => {state.slideFilter=null;renderSlidesCatalog();renderWorkspace();fitMap();};
+    host.prepend(reset);
+  }
 }
 
 function renderTopics() {
@@ -1102,8 +1146,11 @@ function filteredSkills() {
   const query = $("search").value.trim().toLowerCase();
   return examSkills(exam).filter((skill) => {
     if (state.topicId !== "all" && skill.topicId !== state.topicId) return false;
+    if (state.slideFilter && (skill.lectureId !== state.slideFilter.lectureId || !(skill.slideNumbers || []).includes(state.slideFilter.number))) return false;
     if (!query) return true;
-    const haystack = [skill.title, skill.subtitle, skill.description].filter(Boolean).join(" ").toLowerCase();
+    const lecture = (exam.lectures || []).find(l => l.id === skill.lectureId);
+    const slideTitles = (lecture?.slides || []).filter(sl => (skill.slideNumbers || []).includes(sl.number)).map(sl => "Слайд " + sl.number + " " + sl.title);
+    const haystack = [skill.title, skill.subtitle, skill.description, lecture?.title, ...slideTitles].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(query);
   });
 }
@@ -1194,6 +1241,7 @@ function renderMap(skills) {
         <div class="skill-card-badges">${examBadge}${dueBadge}</div>
       </div>
       <div class="skill-title">${escapeHtml(skill.title)}</div>
+      ${skill.slideNumbers?.length ? `<div class="skill-slide-source">Слайд ${skill.slideNumbers.join(", ")}</div>` : ""}
       <div class="skill-subtitle">${escapeHtml(skill.subtitle || "")}</div>
       ${quizTodayBadgeMarkup(skill)}
       <div class="skill-bottom">
@@ -1239,6 +1287,7 @@ function renderList(skills) {
         <div>
           <div class="list-row-title">${escapeHtml(skill.title)} ${skill.examRequired ? `<span class="exam-required-inline">EXAM ×${Number(skill.examFrequency?.count || 1)}</span>` : ""}</div>
           <div class="list-row-sub">${escapeHtml(skill.subtitle || "")}</div>
+          ${skill.slideNumbers?.length ? `<div class="skill-slide-source">Слайд ${skill.slideNumbers.join(", ")}</div>` : ""}
           ${quizTodayBadgeMarkup(skill)}
         </div>
         <div class="list-row-percent">${Number(skill.mastery || 0)}%</div>
@@ -1872,3 +1921,10 @@ function renderGermanWords() {
 $("german-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/german-words",{method:"POST",body:JSON.stringify({word:$("german-word").value,translation:$("german-translation").value})});e.target.reset();await loadGermanWords();}catch{$("german-status").textContent="Не удалось сохранить слово.";}};
 $("german-search").oninput=renderGermanWords;
 $("german-review").onclick=()=>{const today=todayIso();const due=state.germanWords.filter(w=>!w.dueDate||w.dueDate<=today);if(!due.length){alert("Все слова повторены на сегодня");return;}const w=due[Math.floor(Math.random()*due.length)];const answer=prompt("Переведи: "+w.word+"\n\n"+(w.context||""));if(answer===null)return;alert("Перевод: "+(w.translation||"ещё не указан")+"\nТвой ответ: "+answer+"\nНажми «Знаю ✓» на карточке, если вспомнил правильно.");};
+
+$("slides-toggle")?.addEventListener("click", () => {
+  const catalog = $("slides-catalog");
+  catalog.hidden = !catalog.hidden;
+  $("slides-toggle").setAttribute("aria-expanded", String(!catalog.hidden));
+  if (!catalog.hidden) renderSlidesCatalog();
+});
