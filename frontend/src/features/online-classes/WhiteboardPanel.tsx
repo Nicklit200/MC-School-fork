@@ -133,6 +133,12 @@ export function WhiteboardPanel({
             />
           </label>
 
+          <div role="group" aria-label="Быстрый выбор цвета" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {COLORS.map((value) => (
+              <button key={value} type="button" onClick={() => setColor(value)} aria-label={`Цвет ${value}`} aria-pressed={color === value} title={value}
+                style={{ width: 28, height: 28, borderRadius: '50%', background: value, border: color === value ? '3px solid #60a5fa' : '2px solid #d1d5db', padding: 0, minWidth: 28 }} />
+            ))}
+          </div>
           <button type="button" onClick={() => void board.undo()} disabled={!board.canUndo}>
             {t('onlineClass.whiteboard.undo')}
           </button>
