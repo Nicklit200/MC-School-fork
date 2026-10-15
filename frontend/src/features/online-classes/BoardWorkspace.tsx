@@ -5,6 +5,21 @@ import {
   type OnlineClassBoardStudent,
 } from '../../api/onlineClasses';
 
+function WorkbookThumbnail({ classId, pageIndex }: { classId: string; pageIndex: number }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+    onlineClassesApi.workbookPageUrl(classId, pageIndex, 72).then((value) => {
+      objectUrl = value;
+      if (active) setUrl(value);
+      else URL.revokeObjectURL(value);
+    }).catch(() => { if (active) setUrl(null); });
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [classId, pageIndex]);
+  return url ? <img src={url} alt={`Страница ${pageIndex + 1}`} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span>Страница {pageIndex + 1}</span>;
+}
+
 const WhiteboardPanel = lazy(() =>
   import('./WhiteboardPanel').then((module) => ({ default: module.WhiteboardPanel })),
 );
@@ -203,6 +218,22 @@ export function BoardWorkspace({
             </button>
           </div>
         </div>
+      )}
+
+      {workbook.hasWorkbook && workbook.pageCount > 1 && (
+        <nav aria-label="Страницы рабочей тетради" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '10px 2px' }}>
+          {Array.from({ length: workbook.pageCount }, (_, index) => (
+            <button key={index} type="button" aria-label={`Открыть страницу ${index + 1}`}
+              aria-current={pageIndex === index ? 'page' : undefined}
+              onClick={() => setPageIndex(index)}
+              style={{ flex: '0 0 90px', border: pageIndex === index ? '2px solid #2563eb' : '1px solid #cbd5e1', borderRadius: 8, padding: 5, background: '#fff', color: '#172554', cursor: 'pointer' }}>
+              <div style={{ height: 78, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                <WorkbookThumbnail classId={classId} pageIndex={index} />
+              </div>
+              <small>{index + 1} / {workbook.pageCount}</small>
+            </button>
+          ))}
+        </nav>
       )}
 
       {workbook.hasWorkbook && backgroundLoading ? (
