@@ -3503,7 +3503,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3526,6 +3526,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "Analyse отвечает на вопрос, что система должна делать."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                2
               ]
             },
             {
@@ -3545,7 +3549,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 3, 4",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3568,6 +3572,11 @@
                   "timeLimitSeconds": null,
                   "explanation": "Создание банковского счёта — конкретная функция."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                3,
+                4
               ]
             },
             {
@@ -3587,7 +3596,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 5",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3610,6 +3619,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "Ограничение времени ответа — требование к качеству."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                5
               ]
             },
             {
@@ -3629,7 +3642,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 6",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3652,6 +3665,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "Клиент и разработчик могут по-разному понимать одни слова."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                6
               ]
             },
             {
@@ -3671,7 +3688,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 7",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3694,6 +3711,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "Сокращения оформляют в отдельном списке."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                7
               ]
             },
             {
@@ -3713,7 +3734,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 8",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3736,6 +3757,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "На слайде сказано: Ein Anwendungsfall wird stets durch einen Akteur initiiert."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                8
               ]
             },
             {
@@ -3755,7 +3780,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 9",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3778,6 +3803,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "Вопросы обсуждаются с заинтересованными сторонами."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                9
               ]
             },
             {
@@ -3797,7 +3826,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 10",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3820,6 +3849,10 @@
                   "timeLimitSeconds": null,
                   "explanation": "Входные данные могут включать ввод пользователя."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                10
               ]
             },
             {
@@ -3839,7 +3872,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 11, 12",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3872,6 +3905,11 @@
                   "timeLimitSeconds": null,
                   "explanation": "Основной процесс описывается предметно, без деталей реализации."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                11,
+                12
               ]
             },
             {
@@ -3891,7 +3929,7 @@
                 "dueDate": null,
                 "lastResult": null
               },
-              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 13, 14",
               "learningStatus": "studied",
               "flashcards": [
                 {
@@ -3924,6 +3962,11 @@
                   "timeLimitSeconds": null,
                   "explanation": "Vertriebsmitarbeiter — частный случай Mitarbeiter."
                 }
+              ],
+              "lectureId": "se-analysis-usecases-lecture",
+              "slideNumbers": [
+                13,
+                14
               ]
             }
           ],
@@ -4348,7 +4391,104 @@
             ],
             "note": "В диалоге разобрали слайды 37–48. Страницы 49–50 ещё не объясняли; при продолжении начни с понятия abgeleitete Attribute на слайде 49, затем перейди к обозначению / на слайде 50.",
             "date": "2026-10-12"
-          }
+          },
+          "lectures": [
+            {
+              "id": "se-analysis-usecases-lecture",
+              "title": "Analyse und Anwendungsfälle",
+              "slides": [
+                {
+                  "number": 1,
+                  "title": "Titel / Einführung (nicht vorliegend)",
+                  "uploaded": false
+                },
+                {
+                  "number": 2,
+                  "title": "Aufteilung der Aktivitäten",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 3,
+                  "title": "Funktionale Anforderungen",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 4,
+                  "title": "Funktionale Anforderungen – Beispiele",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 5,
+                  "title": "Nichtfunktionale Anforderungen",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 6,
+                  "title": "Glossar",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 7,
+                  "title": "Glossar – Aufbau",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 8,
+                  "title": "Anwendungsfall",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 9,
+                  "title": "Checkliste „Finden Anwendungsfall“",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 10,
+                  "title": "Anwendungsfall – Beschreibung",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 11,
+                  "title": "Anwendungsfall – Beschreibung (Fortsetzung)",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 12,
+                  "title": "Anwendungsfall – Beschreibung (Fortsetzung)",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 13,
+                  "title": "Checkliste „Beschreibung Anwendungsfall“",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 14,
+                  "title": "Anwendungsfalldiagramm – Generalisierung",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                },
+                {
+                  "number": 15,
+                  "title": "Zusammenfassung",
+                  "uploaded": true,
+                  "source": "Скриншот из чата 15.10.2026"
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "exam-computergrafik",
