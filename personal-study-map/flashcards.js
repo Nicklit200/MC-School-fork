@@ -299,6 +299,32 @@
     return storedHistory().map(sanitizedResult).filter(Boolean);
   }
 
+  function cardPackages(){
+    const exam=getContext().exam,groups=new Map();
+    if(!exam)return [];
+    for(const card of visibleCards()){
+      const skill=(exam.skills||[]).find(x=>x.id===card.skillId);
+      const lecture=(exam.lectures||[]).find(x=>x.id===skill?.lectureId);
+      const topic=(exam.topics||[]).find(x=>x.id===skill?.topicId);
+      const key=lecture?"lecture:"+lecture.id:"topic:"+(skill?.topicId||"other");
+      if(!groups.has(key))groups.set(key,{key,title:lecture?.title||topic?.title||"Другие карточки",cards:[],skills:new Set(),slides:new Set()});
+      const p=groups.get(key);p.cards.push(card);p.skills.add(card.skillId);
+      for(const n of skill?.slideNumbers||[])p.slides.add(n);
+    }
+    return [...groups.values()].sort((a,b)=>a.title.localeCompare(b.title,"ru"));
+  }
+  function packagesMarkup(){
+    const progress=getProgress(),today=engine.isoDay();
+    return '<section class="quiz-packages"><strong>Пакеты карточек по лекциям</strong><p>Выбери изученную лекцию и учи только её карточки.</p>'+
+      cardPackages().map((p,i)=>{
+        const known=p.cards.filter(c=>cardState(c,progress).repetitionNumber>=1).length;
+        const due=p.cards.filter(c=>cardState(c,progress).dueDate<=today).length;
+        const pct=Math.round(100*known/p.cards.length);
+        return '<article class="quiz-package"><strong>'+esc(p.title)+'</strong><small>'+p.cards.length+' карточек · '+p.skills.size+' навыков'+(p.slides.size?' · слайды '+[...p.slides].sort((a,b)=>a-b).join(", "):"")+'</small>'+
+        '<div class="quiz-package-progress"><span style="width:'+pct+'%"></span></div><small>Знаю '+known+'/'+p.cards.length+' ('+pct+'%) · повторить '+due+'</small>'+
+        '<div class="quiz-package-actions"><button type="button" data-action="package-practice" data-package="'+i+'">Учить пакет</button><button type="button" data-action="package-scheduled" data-package="'+i+'" '+(!due?'disabled':'')+'>Повторить ('+due+')</button></div></article>';
+      }).join("")+'</section>';
+  }
   function renderHome() {
     const context = getContext();
     const cards = visibleCards();
@@ -331,6 +357,7 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
+      packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
       '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 4 → 7 → 14 → 30 дней</div>'+
       '<small>Ошибка с первой попытки — сброс до этапа 0 и повтор завтра. Свободная тренировка не меняет расписание.</small></div>'+
@@ -342,10 +369,13 @@
     window.dispatchEvent(new Event("study-home-rendered"));
   }
 
-  function startSession(mode) {
+  function startSession(mode, packageKey=null) {
     const context = getContext();
     if (!context.exam || ui.session) return;
-    const cards = mode==="SCHEDULED"?dueCards():visibleCards();
+    const selected=packageKey?cardPackages().find(x=>x.key===packageKey):null;
+    const source=selected?selected.cards:visibleCards();
+    const today=engine.isoDay(),states=getProgress();
+    const cards=mode==="SCHEDULED"?source.filter(card=>cardState(card,states).dueDate<=today):source;
     if (!cards.length) {ui.notice="В выбранном разделе нет подходящих карточек.";renderHome();return;}
     const session = engine.startSession(mode,cards,{
       semesterId:context.semesterId,examId:context.exam.id,topicId:context.topicId
@@ -852,6 +882,9 @@
     if (action==="home") {
       cleanupTimers();ui.view="home";ui.feedback=null;ui.notice="";
       renderHome();
+    } else if (action==="package-practice" || action==="package-scheduled") {
+      const pack=cardPackages()[Number(button.dataset.package)];
+      if(pack&&!ui.session)startSession(action==="package-scheduled"?"SCHEDULED":"PRACTICE",pack.key);
     } else if (action==="scheduled") startSession("SCHEDULED");
     else if (action==="practice") {
       if (ui.session) return;
