@@ -2107,3 +2107,7 @@ body[data-section="german"] .brand-mark{background:#e9f0ff;color:#294cb4}
 .quiz-today-items{display:grid;gap:7px;margin-top:10px}
 .quiz-today-item{border:1px solid var(--line);border-radius:10px;background:var(--panel-solid);padding:8px 10px;font-size:12px;line-height:1.4}
 .quiz-today-item small{display:block;color:var(--muted);margin-top:3px}
+
+/* Optional exact due date overrides the next lecture weekday. */
+.homework-exact-date{grid-column:1 / -1}
+#homework-date{width:100%;color-scheme:light}

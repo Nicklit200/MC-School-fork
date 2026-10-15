@@ -213,7 +213,7 @@
       <button id="history-toggle" type="button" title="История">История</button>
       <button id="study-calendar-toggle" type="button" title="Календарь учёбы">Календарь</button>
       <button id="homework-toggle" class="review-toggle" type="button" title="Задачи до следующей лекции">
-        До лекции <span id="homework-count" class="review-count">0</span>
+        Домашка <span id="homework-count" class="review-count">0</span>
       </button>
     </div>
 
@@ -268,7 +268,7 @@
     <aside id="homework-panel" class="floating-panel homework-panel closed">
       <div class="history-panel-head">
         <div>
-          <div class="panel-label">ДО СЛЕДУЮЩЕЙ ЛЕКЦИИ</div>
+          <div class="panel-label">ДОМАШНИЕ ЗАДАНИЯ И ДЕДЛАЙНЫ</div>
           <h2>Что нужно сделать</h2>
         </div>
         <button id="close-homework" class="close-inline" type="button" aria-label="Закрыть">×</button>
@@ -289,6 +289,10 @@
             <option value="3">Среда</option>
           </select>
         </label>
+        <label class="homework-exact-date">
+          <span>ИЛИ УКАЗАТЬ ТОЧНУЮ ДАТУ</span>
+          <input id="homework-date" type="date" aria-label="Срок выполнения задания" />
+        </label>
         <button type="submit">Добавить</button>
       </form>
 
@@ -299,8 +303,8 @@
   </div>
 
   <script src="./flashcard-engine.js"></script>
-  <script type="module" src="./app.js?v=20261013-quiz-map"></script>
+  <script type="module" src="./app.js?v=20261015-homework-push"></script>
   <script type="module" src="./flashcards.js?v=20261013-quiz-sync"></script>
-  <script type="module" src="./reminders.js?v=20261013-invalid-v1"></script>
+  <script type="module" src="./reminders.js?v=20261015-homework-push"></script>
 </body>
 </html>

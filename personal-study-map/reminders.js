@@ -18,6 +18,15 @@
   let busy=false;
   let localNotice="";
   let lastSync=0;
+  let homeworkTasks=[];
+  async function loadHomeworkTasks(){
+    try {
+      const response=await fetch(API+"/api/tasks",{cache:"no-store"});
+      if(!response.ok)throw new Error("API "+response.status);
+      const result=await response.json();
+      homeworkTasks=Array.isArray(result)?result:[];
+    } catch(e) { console.warn("Unable to load homework notification status",e); }
+  }
 
   const el=id=>document.getElementById(id);
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
@@ -25,6 +34,15 @@
     const s=localStorage.getItem(key);
     return s===null?otherwise:JSON.parse(s);
   }catch{return otherwise;}};
+  // Migrate the old 09:00 default to 08:00 only once per device.
+  const MIGRATED_HOUR="personal-study-map:push-hour-8-migrated:v1";
+  if(localStorage.getItem(MIGRATED_HOUR)!=="yes"){
+    const previous=Number(read(KEY_HOUR,9));
+    if(previous===9 || !hourChoices.includes(previous)){
+      localStorage.setItem(KEY_HOUR,JSON.stringify(8));
+    }
+    localStorage.setItem(MIGRATED_HOUR,"yes");
+  }
   const today=()=> {
     const d=new Date();
     const part=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Berlin",
@@ -39,8 +57,8 @@
   const isAppleMobile=()=>/iPhone|iPad|iPod/.test(navigator.userAgent) ||
     (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints>1);
   const settingsHour=()=> {
-    const v=Number(read(KEY_HOUR,9));
-    return hourChoices.includes(v)?v:9;
+    const v=Number(read(KEY_HOUR,8));
+    return hourChoices.includes(v)?v:8;
   };
   function deviceToken(){
     let token=localStorage.getItem(KEY_TOKEN);
@@ -89,6 +107,7 @@
     const unique=new Map(all.map(item=>[item.id,item]));
     return [...unique.values()];
   }
+  function homeworkCount(){return homeworkTasks.filter(task=>!task.done).length;}
   function counts(){
     const schedule=gather(),current=today();
     const due=schedule.filter(item=>item.dueDate<=current);
@@ -152,7 +171,7 @@
       '<div class="study-reminder-heading"><h3>Утренние напоминания</h3>'+
       '<span class="'+(enabled?"active":"inactive")+'">'+status+'</span></div>'+
       '<p class="study-reminder-lead">По расписанию повторений: <strong>'+
-      c.due+' из '+c.total+'</strong> карточек к повторению сегодня.</p>'+
+      c.due+' из '+c.total+'</strong> карточек к повторению сегодня. Домашних заданий не выполнено: <strong>'+homeworkCount()+'</strong>.</p>'+
       (c.next?'<p class="study-reminder-next">Следующее повторение: '+fmt(c.next)+'</p>':"")+
       '<div class="study-reminder-row"><label for="study-push-hour">Напоминать утром</label>'+
       '<select id="study-push-hour" aria-label="Час напоминания"'+(busy?' disabled':'')+'>'+options+'</select>'+
@@ -169,7 +188,7 @@
           '>Включить уведомления</button>')+
         '</div>')+
       (permission==="denied"?'<p class="study-reminder-warning">Уведомления запрещены в настройках устройства. Разреши их для «Моих навыков».</p>':"")+
-      '<p class="study-reminder-footnote">Напоминание приходит, если есть карточки к повторению. Интервалы: 1, 2, 4, 7, 14, 30 дней. Изменения синхронизируются при открытии сайта.</p>'+
+      '<p class="study-reminder-footnote">Каждое утро, по выбранному времени, приходит одно уведомление: сколько карточек повторить и какие домашние задания не выполнены. Выполненные задания больше не напоминаются. Данные карточек синхронизируются при открытии сайта.</p>'+
       (localNotice?'<p class="study-reminder-notice" role="status">'+esc(localNotice)+'</p>':"");
   }
   async function runAction(action) {
@@ -227,12 +246,14 @@
     runAction("change-hour");
   });
   window.addEventListener("study-home-rendered",()=>{render();sync();});
+  window.addEventListener("study-tasks-updated",()=>{loadHomeworkTasks().then(render);sync({force:true});});
   window.addEventListener("study-reviews-updated",()=>{render();sync({force:true});});
   window.addEventListener("study-context-updated",()=>{render();sync();});
   document.addEventListener("visibilitychange",()=>{
-    if(document.visibilityState==="visible"){render();sync();}
+    if(document.visibilityState==="visible"){loadHomeworkTasks().then(render);render();sync();}
   });
   render();
+  loadHomeworkTasks().then(render);
   setTimeout(()=>sync(),1200);
   window.studyReminderStatus={counts,sync,render};
 })();

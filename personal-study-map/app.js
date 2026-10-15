@@ -869,6 +869,7 @@ async function loadData() {
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
   renderAll();
+  openHomeworkFromHash();
 }
 
 function renderAll() {
@@ -1364,29 +1365,33 @@ function renderHomework() {
     `;
 
     row.querySelector('input[type="checkbox"]').onchange = async (event) => {
-      task.done = event.target.checked;
-      task.completedAt = task.done ? new Date().toISOString() : null;
+      const checkbox = event.target;
+      checkbox.disabled = true;
       try {
         const saved = await api("/api/tasks/" + encodeURIComponent(task.id), {
           method:"PATCH",
-          body:JSON.stringify({done:task.done})
+          body:JSON.stringify({done:checkbox.checked})
         });
         Object.assign(task, saved);
         localStorage.removeItem(LECTURE_TASKS_KEY);
-      } catch {
-        saveLectureTasks();
+      } catch (error) {
+        alert("Не удалось сохранить выполнение в базе. Проверь подключение и попробуй ещё раз.");
       }
       renderHomework();
       renderCalendar("study");
+      window.dispatchEvent(new Event("study-tasks-updated"));
     };
     row.querySelector(".homework-delete").onclick = async () => {
       try {
         await api("/api/tasks/" + encodeURIComponent(task.id), {method:"DELETE"});
-        localStorage.removeItem(LECTURE_TASKS_KEY);
-      } catch {}
+      } catch {
+        alert("Не удалось удалить задачу с сервера. Попробуй ещё раз.");
+        return;
+      }
       state.lectureTasks = state.lectureTasks.filter((item) => item.id !== task.id);
-      saveLectureTasks();
+      localStorage.removeItem(LECTURE_TASKS_KEY);
       renderHomework();
+      window.dispatchEvent(new Event("study-tasks-updated"));
     };
     host.append(row);
   }
@@ -1395,14 +1400,15 @@ function renderHomework() {
 async function addHomeworkTask(title, targetDay) {
   const clean = String(title || "").trim();
   if (!clean) return;
-  const preferred = targetDay === "auto" ? null : Number(targetDay);
+  const exactDate = $("homework-date").value || "";
+  const preferred = exactDate ? null : (targetDay === "auto" ? null : Number(targetDay));
   const draft = {
     id: "lecture-task-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
     title: clean,
     semesterId: state.semesterId,
     examId: state.examId,
     targetDay: preferred,
-    dueDate: nextLectureDate(preferred),
+    dueDate: exactDate || nextLectureDate(preferred),
     createdAt: new Date().toISOString(),
     done: false,
     completedAt: null
@@ -1412,10 +1418,11 @@ async function addHomeworkTask(title, targetDay) {
     state.lectureTasks.push(saved);
     localStorage.removeItem(LECTURE_TASKS_KEY);
   } catch {
-    state.lectureTasks.push(draft);
-    saveLectureTasks();
+    alert("Не удалось добавить задачу на сервер. Попробуй ещё раз, чтобы она попала в напоминания.");
+    return;
   }
   renderHomework();
+  window.dispatchEvent(new Event("study-tasks-updated"));
 }
 
 
@@ -1596,12 +1603,25 @@ $("homework-toggle").onclick = () => {
 };
 $("close-homework").onclick = () => homeworkPanel.classList.add("closed");
 
+function openHomeworkFromHash() {
+  if (location.hash !== "#homework" || !state.data) return;
+  if (state.section !== "study") switchSection("study");
+  renderHomework();
+  homeworkPanel.classList.remove("closed");
+  for (const id of ["inspector", "review-panel", "history-panel", "study-calendar-panel"]) {
+    $(id)?.classList.add("closed");
+  }
+}
+window.addEventListener("hashchange", openHomeworkFromHash);
+
+$("homework-date").min = todayIso();
 $("homework-form").onsubmit = async (event) => {
   event.preventDefault();
   const input = $("homework-input");
   const day = $("homework-day");
   await addHomeworkTask(input.value, day.value);
   input.value = "";
+  $("homework-date").value = "";
   input.focus();
 };
 
