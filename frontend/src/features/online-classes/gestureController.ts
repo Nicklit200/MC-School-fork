@@ -20,8 +20,8 @@ import {
  */
 
 export type Intent =
-  | { type: 'stroke-start'; point: Point; pointerKind: PointerKind }
-  | { type: 'stroke-move'; point: Point }
+  | { type: 'stroke-start'; point: Point; pointerKind: PointerKind; pressure?: number }
+  | { type: 'stroke-move'; point: Point; pressure?: number }
   | { type: 'stroke-end' }
   | { type: 'stroke-cancel' }
   | { type: 'view'; view: PageView };
@@ -51,7 +51,7 @@ export class GestureController {
    * @param navigate forces a pan with this pointer (mouse: middle button or
    *   space held), so a mouse user can move a zoomed page without a touch screen
    */
-  down(id: number, kind: PointerKind, position: Point, palm = false, navigate = false): Intent[] {
+  down(id: number, kind: PointerKind, position: Point, palm = false, navigate = false, pressure?: number): Intent[] {
     if (navigate && this.state === 'idle') {
       this.touches.set(id, position);
       this.beginNavigation();
@@ -86,7 +86,7 @@ export class GestureController {
       if (this.state === 'idle') {
         this.state = 'draw';
         this.drawPointer = id;
-        intents.push({ type: 'stroke-start', point: position, pointerKind: kind });
+        intents.push({ type: 'stroke-start', point: position, pointerKind: kind, pressure });
       }
       return intents;
     }
@@ -97,11 +97,11 @@ export class GestureController {
     return intents;
   }
 
-  move(id: number, position: Point): Intent[] {
+  move(id: number, position: Point, pressure?: number): Intent[] {
     if (this.touches.has(id)) this.touches.set(id, position);
 
     if (this.state === 'draw' && id === this.drawPointer) {
-      return [{ type: 'stroke-move', point: position }];
+      return [{ type: 'stroke-move', point: position, pressure }];
     }
     if (this.deps.locked()) return [];
 
