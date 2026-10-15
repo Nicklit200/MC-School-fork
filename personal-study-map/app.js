@@ -186,6 +186,41 @@ function todayQuizResults() {
   return perSkill;
 }
 
+// Derive map mastery from actual scheduled flashcard results on this device.
+// Practice sessions are visible in history, but do not change mastery.
+function applyFlashcardQuizMastery() {
+  let progress = {};
+  let history = [];
+  try { progress = JSON.parse(localStorage.getItem("personal-study-map:quiz-card-progress:v1") || "{}") || {}; } catch {}
+  try { history = JSON.parse(localStorage.getItem(QUIZ_HISTORY_KEY_FOR_MAP) || "[]") || []; } catch {}
+  const practiced = new Set();
+  for (const session of Array.isArray(history) ? history : []) {
+    if (session.type !== "SCHEDULED") continue;
+    for (const item of session.review || []) if (item.skillId) practiced.add(item.skillId);
+  }
+  for (const semester of state.data?.semesters || []) for (const exam of semester.exams || []) {
+    for (const skill of exam.skills || []) {
+      const cards = Array.isArray(skill.flashcards) ? skill.flashcards : [];
+      if (!cards.length) continue;
+      const hasRecord = cards.some(card => progress[card.id]) || practiced.has(skill.id);
+      if (!hasRecord) continue;
+      const known = cards.filter(card => Number(progress[card.id]?.repetitionNumber || 0) >= 1).length;
+      const mastery = Math.round(known / cards.length * 100);
+      // A scheduled review is evidence, but do not silently lower manually certified mastery.
+      if (mastery > Number(skill.mastery || 0)) skill.mastery = mastery;
+      const dates = cards.map(card => progress[card.id]?.updatedAt).filter(Boolean).sort();
+      if (dates.length) skill.lastUpdated = dates[dates.length-1].slice(0,10);
+    }
+  }
+}
+
+function quizHistoryForMap() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(QUIZ_HISTORY_KEY_FOR_MAP) || "[]");
+    return Array.isArray(rows) ? rows.filter(row => row && Array.isArray(row.review)) : [];
+  } catch { return []; }
+}
+
 function quizTodayBadgeMarkup(skill) {
   const result = state.quizTodayBySkill.get(skill.id);
   if (!result) return "";
@@ -865,6 +900,7 @@ async function loadData() {
   state.lectureTasks = await loadLectureTasks();
   await loadSavedStudyProgress();
   state.quizTodayBySkill = todayQuizResults();
+  applyFlashcardQuizMastery();
   const firstSemester = state.data.semesters?.[0];
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
@@ -1429,7 +1465,17 @@ async function addHomeworkTask(title, targetDay) {
 function renderHistory() {
   const host = $("session-history");
   host.replaceChildren();
-  const sessions = (state.data?.sessions || [])
+  const quizSessions = quizHistoryForMap()
+    .filter(s => (!state.examId || s.examId === state.examId))
+    .map(s => ({
+      id:s.id, examId:s.examId, semesterId:state.semesterId,
+      date:s.completedAt || s.date,
+      title:s.type === "PRACTICE" ? "Свободная тренировка карточек" : "Повторение карточек по расписанию",
+      summary:"С первой попытки: "+Number(s.correctFirstTry || 0)+" из "+Number(s.totalCards || 0)+
+        ". "+(s.type === "PRACTICE" ? "Прогресс навыков не изменяется." : "Результат учтён в карте навыков."),
+      changes:[]
+    }));
+  const sessions = [...(state.data?.sessions || []), ...quizSessions]
     .filter((s) => (!state.semesterId || s.semesterId === state.semesterId) && (!state.examId || s.examId === state.examId))
     .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -1742,7 +1788,10 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("study-reviews-updated", () => {
   if (!state.data) return;
   state.quizTodayBySkill = todayQuizResults();
+  applyFlashcardQuizMastery();
   renderMeta();
+  renderExamCards();
+  renderHistory();
   const skills = filteredSkills();
   if (state.viewMode === "map") renderMap(skills);
   else renderList(skills);
