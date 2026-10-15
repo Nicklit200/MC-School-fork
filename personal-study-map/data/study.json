@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Николай",
-  "updatedAt": "2026-10-12",
+  "updatedAt": "2026-10-15",
   "semesters": [
     {
       "id": "ws-2026-27",
@@ -143,6 +143,10 @@
             {
               "id": "se-uml-additional",
               "title": "UML: Zusatzthemen (Unterlagen fehlen)"
+            },
+            {
+              "id": "se-analysis-usecases-lecture",
+              "title": "Analyse und Anwendungsfälle · Vorlesung"
             }
           ],
           "skills": [
@@ -3481,6 +3485,446 @@
                 2
               ],
               "learningStatus": "needs_source"
+            },
+            {
+              "id": "se-lecture-analysis-20261015-01",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Analyse: Aktivitäten",
+              "subtitle": "Analyse · Architektur · Programmierung · Qualitätssicherung",
+              "description": "Понимать этапы разработки и почему обеспечение качества занимает существенную часть работы.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 1400,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-01-card-1",
+                  "question": "Welche vier Aktivitäten zeigt die Folie?",
+                  "answer": "Analyse, Architektur und Design, Programmierung, Qualitätssicherung.",
+                  "wrongAnswer1": "Nur Programmierung und Wartung.",
+                  "wrongAnswer2": "Marketing, Verkauf, Support, Abrechnung.",
+                  "wrongAnswer3": "Nur Test und Auslieferung.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Разработка включает анализ, проектирование, код и обеспечение качества."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-01-card-2",
+                  "question": "Was ist das Ziel der Analyse?",
+                  "answer": "Anforderungen an das System ermitteln und klären.",
+                  "wrongAnswer1": "Den Quellcode optimieren.",
+                  "wrongAnswer2": "Die Benutzeroberfläche farbig gestalten.",
+                  "wrongAnswer3": "Nur Fehler nach dem Release beheben.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Analyse отвечает на вопрос, что система должна делать."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-02",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Funktionale Anforderungen",
+              "subtitle": "Aktionen · Interaktionen · Einschränkungen",
+              "description": "Объяснять функциональные требования и приводить примеры банка и игры.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 1400,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-02-card-1",
+                  "question": "Was beschreiben funktionale Anforderungen?",
+                  "answer": "Was das System tun soll.",
+                  "wrongAnswer1": "Wie schnell ein Server arbeitet.",
+                  "wrongAnswer2": "Welche Farbe das Logo hat.",
+                  "wrongAnswer3": "Wie viel ein Projekt kostet.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Функциональные требования определяют поведение системы."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-02-card-2",
+                  "question": "Was ist ein Beispiel für eine funktionale Anforderung?",
+                  "answer": "Ein Bankkonto anlegen.",
+                  "wrongAnswer1": "Die Antwortzeit beträgt höchstens 2 Sekunden.",
+                  "wrongAnswer2": "Die App muss auf Linux laufen.",
+                  "wrongAnswer3": "Die Dokumentation wird als PDF geliefert.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Создание банковского счёта — конкретная функция."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-03",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Nichtfunktionale Anforderungen",
+              "subtitle": "Technik · Qualität · UI · Recht",
+              "description": "Различать FA и NFA; знать категории требований со слайда.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 560,
+              "y": 1400,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-03-card-1",
+                  "question": "Was ist laut Folie nicht-funktional?",
+                  "answer": "Jede Anforderung, die nicht funktional ist.",
+                  "wrongAnswer1": "Jede Benutzeraktion.",
+                  "wrongAnswer2": "Nur ein Datenbankzugriff.",
+                  "wrongAnswer3": "Jeder Anwendungsfall.",
+                  "timeLimitSeconds": null,
+                  "explanation": "В классификации лекции все остальные требования относятся к NFA."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-03-card-2",
+                  "question": "Welche Anforderung ist nicht-funktional?",
+                  "answer": "Die App muss innerhalb von 2 Sekunden antworten.",
+                  "wrongAnswer1": "Ein Nutzer kann sich anmelden.",
+                  "wrongAnswer2": "Ein Lehrer erstellt Aufgaben.",
+                  "wrongAnswer3": "Ein Kunde überweist Geld.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Ограничение времени ответа — требование к качеству."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-04",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Glossar: Zweck",
+              "subtitle": "Fachbegriffe · gemeinsames Verständnis",
+              "description": "Давать определение Glossar и объяснять, зачем он нужен заказчику и разработчику.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 840,
+              "y": 1400,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-04-card-1",
+                  "question": "Was ist ein Glossar?",
+                  "answer": "Eine Sammlung von Fachbegriffen und ihren Bedeutungen.",
+                  "wrongAnswer1": "Eine Liste von Programmfehlern.",
+                  "wrongAnswer2": "Ein Testbericht.",
+                  "wrongAnswer3": "Ein Datenbankschema.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Глоссарий фиксирует значение терминов в контексте проекта."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-04-card-2",
+                  "question": "Warum erstellt man ein Glossar?",
+                  "answer": "Um Missverständnisse zwischen Kunde und Entwickler zu vermeiden.",
+                  "wrongAnswer1": "Um Quellcode automatisch zu erzeugen.",
+                  "wrongAnswer2": "Um die CPU zu beschleunigen.",
+                  "wrongAnswer3": "Um alle Fehler zu beheben.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Клиент и разработчик могут по-разному понимать одни слова."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-05",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Glossar: Aufbau",
+              "subtitle": "Begriff · Definition · Synonyme · Querverweise",
+              "description": "Знать структуру глоссария, сортировку и список сокращений.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 1600,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-05-card-1",
+                  "question": "Wie soll ein Glossar aufgebaut sein?",
+                  "answer": "Begriff, Definition und eigene Spalte für Synonyme.",
+                  "wrongAnswer1": "Nur Bilder ohne Text.",
+                  "wrongAnswer2": "Nur Abkürzungen ohne Definition.",
+                  "wrongAnswer3": "Nur Quellcode.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Также рекомендуется алфавитная сортировка и перекрёстные ссылки."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-05-card-2",
+                  "question": "Wo stehen Abkürzungen laut Folie?",
+                  "answer": "In einem Abkürzungsverzeichnis.",
+                  "wrongAnswer1": "Nur im Programmcode.",
+                  "wrongAnswer2": "Im Testprotokoll.",
+                  "wrongAnswer3": "In einem Klassendiagramm.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Сокращения оформляют в отдельном списке."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-06",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Anwendungsfall und Akteur",
+              "subtitle": "Use Case · Akteur · wahrnehmbares Ergebnis",
+              "description": "Определять Use Case, акторов, наблюдаемый результат и этап анализа.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 1600,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-06-card-1",
+                  "question": "Was beschreibt ein Anwendungsfall?",
+                  "answer": "Systemaktivitäten aus Sicht eines Akteurs mit wahrnehmbarem Ergebnis.",
+                  "wrongAnswer1": "Nur den Programmcode.",
+                  "wrongAnswer2": "Nur eine Datenbanktabelle.",
+                  "wrongAnswer3": "Nur die Farben der Oberfläche.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Use Case описывает сценарий достижения цели актора."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-06-card-2",
+                  "question": "Wer initiiert einen Anwendungsfall?",
+                  "answer": "Ein Akteur.",
+                  "wrongAnswer1": "Immer die Datenbank.",
+                  "wrongAnswer2": "Immer der Compiler.",
+                  "wrongAnswer3": "Immer ein Administrator.",
+                  "timeLimitSeconds": null,
+                  "explanation": "На слайде сказано: Ein Anwendungsfall wird stets durch einen Akteur initiiert."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-07",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Use Cases finden",
+              "subtitle": "Stakeholder · Aufgaben · Informationen",
+              "description": "Применять вопросы чек-листа для выявления сценариев использования.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 560,
+              "y": 1600,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-07-card-1",
+                  "question": "Welche Frage hilft beim Finden von Use Cases?",
+                  "answer": "Was sind die Hauptaufgaben eines Nutzers in dieser Rolle?",
+                  "wrongAnswer1": "Welche Schriftart nutzt die IDE?",
+                  "wrongAnswer2": "Wie viele Codezeilen gibt es?",
+                  "wrongAnswer3": "Welche CPU hat der Entwickler?",
+                  "timeLimitSeconds": null,
+                  "explanation": "Нужно исследовать цели, задачи и информационные потребности роли."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-07-card-2",
+                  "question": "Mit wem beantwortet man die Checkliste?",
+                  "answer": "Mit den Stakeholdern aus Sicht der Akteure.",
+                  "wrongAnswer1": "Nur mit dem Compiler.",
+                  "wrongAnswer2": "Nur mit dem Webserver.",
+                  "wrongAnswer3": "Nur mit dem Testframework.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Вопросы обсуждаются с заинтересованными сторонами."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-08",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Use Case: Beschreibung",
+              "subtitle": "Name · Auslöser · Ergebnis · Eingabedaten",
+              "description": "Знать поля описания Use Case, включая акторов, триггер и результат.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 840,
+              "y": 1600,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-08-card-1",
+                  "question": "Was ist ein Auslöser im Use Case?",
+                  "answer": "Ein äußeres Ereignis, das den Use Case startet.",
+                  "wrongAnswer1": "Das Ergebnis nach dem Abschluss.",
+                  "wrongAnswer2": "Ein technischer Datenbankindex.",
+                  "wrongAnswer3": "Die Versionsnummer.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Auslöser — событие запуска сценария."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-08-card-2",
+                  "question": "Was sind eingehende Daten?",
+                  "answer": "Daten, die das System im Ablauf entgegennimmt.",
+                  "wrongAnswer1": "Nur ausgegebene Ergebnisse.",
+                  "wrongAnswer2": "Nur Fehlerprotokolle.",
+                  "wrongAnswer3": "Nur die Änderungshistorie.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Входные данные могут включать ввод пользователя."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-09",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Use Case: Ablauf und Bedingungen",
+              "subtitle": "Vorbedingungen · Nachbedingungen · Schritte · Fehler",
+              "description": "Различать условия до и после, основные шаги, исключения и открытые вопросы.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 1800,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-09-card-1",
+                  "question": "Was sind Vorbedingungen?",
+                  "answer": "Der notwendige Systemzustand vor Beginn des Use Cases.",
+                  "wrongAnswer1": "Das Ergebnis nach erfolgreichem Abschluss.",
+                  "wrongAnswer2": "Eine Liste aller Entwickler.",
+                  "wrongAnswer3": "Nur die technischen Fehler.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Предусловия описывают состояние до начала сценария."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-09-card-2",
+                  "question": "Was sind Nachbedingungen?",
+                  "answer": "Der Systemzustand nach erfolgreichem Abschluss.",
+                  "wrongAnswer1": "Der Zustand vor der Anmeldung.",
+                  "wrongAnswer2": "Der Auslöser des Szenarios.",
+                  "wrongAnswer3": "Die Eingabedaten.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Постусловия относятся к успешному завершению Use Case."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-09-card-3",
+                  "question": "Wie sollen essenzielle Schritte beschrieben sein?",
+                  "answer": "Fachlich, nicht technisch und nicht sprachabhängig.",
+                  "wrongAnswer1": "Nur als SQL-Code.",
+                  "wrongAnswer2": "Nur als JavaScript.",
+                  "wrongAnswer3": "Nur mit Klassennamen.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Основной процесс описывается предметно, без деталей реализации."
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-analysis-20261015-10",
+              "topicId": "se-analysis-usecases-lecture",
+              "title": "Use Case: Checkliste und Generalisierung",
+              "subtitle": "Substantiv + Verb · UML · Vererbung",
+              "description": "Проверять описание Use Case и понимать стрелку обобщения акторов и сценариев.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 280,
+              "y": 1800,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "Analyse und Anwendungsfälle — Folien 2–14 (vom Nutzer bereitgestellte Screenshots)",
+              "learningStatus": "studied",
+              "flashcards": [
+                {
+                  "id": "se-lecture-analysis-20261015-10-card-1",
+                  "question": "Wie wird ein Use Case sinnvoll benannt?",
+                  "answer": "Mit Substantiv und Verb aus Sicht des Akteurs.",
+                  "wrongAnswer1": "Nur mit einer technischen ID.",
+                  "wrongAnswer2": "Nur mit dem Namen der Datenbank.",
+                  "wrongAnswer3": "Nur mit einer Zahl.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Например: Angebot erstellen или Hausaufgabe abgeben."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-10-card-2",
+                  "question": "Wohin zeigt der Generalisierungspfeil?",
+                  "answer": "Zum allgemeineren Element.",
+                  "wrongAnswer1": "Zum spezielleren Element.",
+                  "wrongAnswer2": "Immer nach rechts.",
+                  "wrongAnswer3": "Zum nächsten Ablaufschritt.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Пустой треугольник направлен к общему актору или Use Case."
+                },
+                {
+                  "id": "se-lecture-analysis-20261015-10-card-3",
+                  "question": "Was bedeutet Generalisierung bei Akteuren?",
+                  "answer": "Ein spezieller Akteur übernimmt Beziehungen des allgemeinen Akteurs.",
+                  "wrongAnswer1": "Zwei Aktionen laufen nacheinander.",
+                  "wrongAnswer2": "Ein Akteur wird gelöscht.",
+                  "wrongAnswer3": "Die Daten werden verschlüsselt.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Vertriebsmitarbeiter — частный случай Mitarbeiter."
+                }
+              ]
             }
           ],
           "relations": [
