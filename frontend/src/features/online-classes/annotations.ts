@@ -36,6 +36,8 @@ export interface Shape {
   color?: string;
   width?: number;
   points?: [number, number][];
+  /** Stylus pressure samples, stored apart from [x,y] for server compatibility. */
+  pressures?: number[];
   x?: number;
   y?: number;
   w?: number;
@@ -126,19 +128,38 @@ export function toPixels(
  * keeps a stroke under the server's point cap and keeps payloads small without
  * visibly changing the line.
  */
+/** Keep pen pressure aligned when dropping redundant position samples. */
+export function thinStroke(
+  points: [number, number][],
+  pressures?: number[],
+  minDistance = 0.004,
+): { points: [number, number][]; pressures?: number[] } {
+  const validPressure =
+    pressures?.length === points.length &&
+    pressures.every((value) => Number.isFinite(value) && value >= 0 && value <= 1);
+  if (points.length <= 2) {
+    return { points, pressures: validPressure ? pressures : undefined };
+  }
+  const kept: [number, number][] = [points[0]];
+  const samples = validPressure ? [pressures![0]] : undefined;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const [lastX, lastY] = kept[kept.length - 1];
+    const [x, y] = points[index];
+    if (Math.hypot(x - lastX, y - lastY) >= minDistance) {
+      kept.push(points[index]);
+      samples?.push(pressures![index]);
+    }
+  }
+  kept.push(points[points.length - 1]);
+  samples?.push(pressures![points.length - 1]);
+  return { points: kept, pressures: samples };
+}
+
 export function thinPoints(
   points: [number, number][],
   minDistance = 0.004,
 ): [number, number][] {
-  if (points.length <= 2) return points;
-  const kept: [number, number][] = [points[0]];
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const [lastX, lastY] = kept[kept.length - 1];
-    const [x, y] = points[index];
-    if (Math.hypot(x - lastX, y - lastY) >= minDistance) kept.push([x, y]);
-  }
-  kept.push(points[points.length - 1]);
-  return kept;
+  return thinStroke(points, undefined, minDistance).points;
 }
 
 function parseShape(payload: string): Shape | null {
