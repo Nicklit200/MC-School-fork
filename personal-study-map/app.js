@@ -1278,74 +1278,28 @@ function reviewStatusText(skill) {
   return `Следующее повторение: ${fmtDate(review.dueDate)} · этап ${Number(review.repetition || 0)}/6`;
 }
 
+// The review queue contains flashcards only. Skills are tracked in the map,
+// but are not independently scheduled for repetition.
 function renderReview() {
-  const exam = currentExam();
   const count = $("review-count");
   const summary = $("review-summary");
   const list = $("review-list");
   const upcomingHost = $("review-upcoming");
   if (!count || !summary || !list || !upcomingHost) return;
-
-  const { due, upcoming } = reviewQueues(exam);
-  count.textContent = String(due.length);
-  count.classList.toggle("zero", due.length === 0);
-
-  const intervals = state.data?.reviewSchedule?.intervalDays || [1, 2, 4, 7, 14, 30];
-  summary.innerHTML = due.length
-    ? `<strong>${due.length}</strong><span>навыков нужно повторить сегодня · интервалы ${intervals.join(" → ")} дней</span>`
-    : `<strong>0</strong><span>сегодня обязательных повторений нет · интервалы ${intervals.join(" → ")} дней</span>`;
-
+  count.textContent = "0";
+  count.classList.add("zero");
+  summary.innerHTML = '<strong>Карточки</strong><span>Повторения по расписанию доступны в разделе «Карточки». Навыки отдельно не повторяются.</span>';
   list.replaceChildren();
   upcomingHost.replaceChildren();
-
-  const dueTitle = document.createElement("div");
-  dueTitle.className = "review-section-title";
-  dueTitle.textContent = "СЕГОДНЯ";
-  list.append(dueTitle);
-
-  if (!due.length) {
-    const empty = document.createElement("div");
-    empty.className = "review-empty";
-    const hasStudied = examSkills(exam).some((skill) => Number(skill.mastery || 0) > 0);
-    empty.textContent = hasStudied
-      ? "На сегодня всё закреплено. Следующее повторение ниже."
-      : "Пока нечего повторять. После первого занятия я поставлю изученные навыки в интервальное повторение.";
-    list.append(empty);
-  } else {
-    for (const skill of due) list.append(reviewCard(skill, true));
-  }
-
-  if (upcoming.length) {
-    const title = document.createElement("div");
-    title.className = "review-section-title";
-    title.textContent = "ДАЛЬШЕ";
-    upcomingHost.append(title);
-    for (const skill of upcoming.slice(0, 8)) upcomingHost.append(reviewCard(skill, false));
-  }
-}
-
-function reviewCard(skill, due) {
-  const review = skillReview(skill);
-  const card = document.createElement("div");
-  card.className = "review-card";
-  const overdue = review.dueDate && review.dueDate < todayIso();
-  card.innerHTML = `
-    <div class="review-card-top">
-      <div class="review-card-title">${escapeHtml(skill.title)}</div>
-      <div class="review-card-date">${due ? (overdue ? "просрочено" : "сегодня") : fmtDate(review.dueDate)}</div>
-    </div>
-    <div class="review-card-meta">
-      <span class="review-chip ${overdue ? "urgent" : due ? "due" : ""}">${Number(skill.mastery || 0)}% знания</span>
-      <span class="review-chip">этап ${Number(review.repetition || 0)}/6</span>
-    </div>
-  `;
-  card.onclick = () => {
-    state.selectedSkillId = skill.id;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary";
+  button.textContent = "Открыть карточки";
+  button.onclick = () => {
     $("review-panel").classList.add("closed");
-    showInspector(skill);
-    if (state.viewMode === "map") renderMap(filteredSkills());
+    $("flashcard-toggle")?.click();
   };
-  return card;
+  list.append(button);
 }
 
 
