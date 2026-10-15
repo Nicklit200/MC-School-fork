@@ -96,6 +96,7 @@ export interface LiveShape {
   color: string;
   width: number;
   points?: [number, number][];
+  pressures?: number[];
   x?: number;
   y?: number;
   w?: number;
@@ -240,6 +241,11 @@ function parseLiveShape(value: unknown): value is LiveShape {
       if (!Array.isArray(point) || point.length !== 2) return false;
       if (!isFiniteIn(point[0], -2, 2) || !isFiniteIn(point[1], -2, 2)) return false;
     }
+  }
+  if (value.pressures !== undefined) {
+    if (!Array.isArray(value.points) || !Array.isArray(value.pressures)) return false;
+    if (value.pressures.length !== value.points.length) return false;
+    if (!value.pressures.every((p: unknown) => isFiniteIn(p, 0, 1))) return false;
   }
   return true;
 }
