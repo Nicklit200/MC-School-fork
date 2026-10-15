@@ -22,7 +22,8 @@
     "konva": "10.5.0",
     "livekit-client": "2.22.3",
     "pdfjs-dist": "4.10.38",
-    "react-konva": "18.2.16"
+    "react-konva": "18.2.16",
+    "perfect-freehand": "1.2.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.11",
