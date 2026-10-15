@@ -1,3 +1,4 @@
+import { lessonPreparationApi } from '../../api/lessonPreparation';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import {
   onlineClassesApi,
@@ -48,8 +49,52 @@ export function BoardWorkspace({
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [backgroundError, setBackgroundError] = useState(false);
   const [renderZoom, setRenderZoom] = useState(1);
+  const [liveWorkbook, setLiveWorkbook] = useState(context.workbook);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [workbookRevision, setWorkbookRevision] = useState(0);
 
-  const workbook = context.workbook;
+  useEffect(() => { setLiveWorkbook(context.workbook); }, [context.workbook]);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const next = await onlineClassesApi.boardContext(classId);
+        if (!active) return;
+        setLiveWorkbook((previous) => {
+          if (previous.hasWorkbook !== next.workbook.hasWorkbook ||
+              previous.filename !== next.workbook.filename ||
+              previous.pageCount !== next.workbook.pageCount) {
+            setPageIndex(0);
+            setWorkbookRevision((revision) => revision + 1);
+          }
+          return next.workbook;
+        });
+      } catch { /* Retain the board during connection interruptions. */ }
+    };
+    const timer = window.setInterval(() => void refresh(), 3000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [classId]);
+
+  const uploadPdf = async (file: File) => {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const lesson = await onlineClassesApi.get(classId);
+      await lessonPreparationApi.uploadWorkbook(lesson.eventId, file);
+      const next = await onlineClassesApi.boardContext(classId);
+      setLiveWorkbook(next.workbook);
+      setPageIndex(0);
+      setWorkbookRevision((revision) => revision + 1);
+    } catch {
+      setUploadError('Не удалось загрузить PDF. Проверьте доступ преподавателя и повторите.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const workbook = liveWorkbook;
   const sourceAspect =
     workbook.hasWorkbook && workbook.pageWidth > 0 && workbook.pageHeight > 0
       ? workbook.pageWidth / workbook.pageHeight
@@ -105,7 +150,7 @@ export function BoardWorkspace({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [classId, pageIndex, renderDpi, workbook.hasWorkbook]);
+  }, [classId, pageIndex, renderDpi, workbook.hasWorkbook, workbookRevision]);
 
   const ownStudent = useMemo(
     () => context.students.find((student) => student.id === currentUserId) ?? context.students[0],
@@ -189,6 +234,19 @@ export function BoardWorkspace({
             )}
       </div>
 
+      {isHost && (
+        <div style={{ padding: '8px 0' }}>
+          <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <span style={{ background: '#1d4ed8', color: '#fff', borderRadius: 8, padding: '9px 14px' }}>
+              {uploading ? 'Загружаем…' : '＋ Добавить PDF'}
+            </span>
+            <input type="file" accept="application/pdf,.pdf" disabled={uploading}
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
+              onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadPdf(file); event.target.value = ''; }} />
+          </label>
+          {uploadError && <p role="alert" style={{ color: '#b91c1c' }}>{uploadError}</p>}
+        </div>
+      )}
       {workbook.hasWorkbook && (
         <div className="board-workspace__document-bar">
           <div className="board-workspace__document-name">
