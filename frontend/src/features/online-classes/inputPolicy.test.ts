@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionFor, looksLikePalm, normalizePointerKind, shouldCancelStroke } from './inputPolicy';
+import { actionFor, isPalmContact, looksLikePalm, normalizePointerKind, shouldCancelStroke } from './inputPolicy';
 
 describe('actionFor', () => {
   it('stylus mode: pen draws, a finger pans, a palm never draws', () => {
@@ -35,6 +35,13 @@ describe('helpers', () => {
     expect(looksLikePalm(80, 70)).toBe(true);
     expect(looksLikePalm(12, 14)).toBe(false);
     expect(looksLikePalm(undefined, undefined)).toBe(false);
+  });
+
+  it('rejects palms regardless of input mode, but never rejects an Apple Pencil', () => {
+    expect(isPalmContact('touch', 80, 70)).toBe(true);
+    expect(isPalmContact('touch', 12, 14)).toBe(false);
+    expect(isPalmContact('pen', 80, 70)).toBe(false);
+    expect(isPalmContact('mouse', 80, 70)).toBe(false);
   });
 
   it('maps unknown pointer types to a mouse', () => {

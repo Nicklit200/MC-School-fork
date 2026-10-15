@@ -6,12 +6,13 @@ import type { InputMode } from './inputPolicy';
 const board = { width: 800, height: 600 };
 
 function setup(mode: InputMode = 'stylus', locked = false) {
-  const state = { mode, locked, view: { zoom: 1, panX: 0, panY: 0 } as PageView };
+  const state = { mode, locked, clock: 1000, view: { zoom: 1, panX: 0, panY: 0 } as PageView };
   const controller = new GestureController({
     mode: () => state.mode,
     view: () => state.view,
     board: () => board,
     locked: () => state.locked,
+    now: () => state.clock,
   });
   return { controller, state };
 }
@@ -28,6 +29,31 @@ describe('stylus mode', () => {
     expect(types(ctx.controller.down(1, 'pen', { x: 10, y: 10 }))).toEqual(['stroke-start']);
     expect(types(ctx.controller.move(1, { x: 20, y: 20 }))).toEqual(['stroke-move']);
     expect(types(ctx.controller.up(1))).toEqual(['stroke-end']);
+  });
+
+  it('ignores accidental hand contacts just after the pencil lifts', () => {
+    ctx.controller.down(1, 'pen', { x: 10, y: 10 });
+    ctx.controller.up(1);
+    expect(ctx.controller.down(2, 'touch', { x: 300, y: 300 })).toEqual([]);
+    expect(ctx.controller.down(3, 'touch', { x: 325, y: 300 })).toEqual([]);
+    expect(ctx.controller.move(2, { x: 400, y: 300 })).toEqual([]);
+    expect(ctx.controller.move(3, { x: 340, y: 300 })).toEqual([]);
+    // A deliberate gesture after the short palm-rejection interval still works.
+    ctx.state.clock += 400;
+    expect(ctx.controller.down(4, 'touch', { x: 300, y: 300 })).toEqual([]);
+    expect(types(ctx.controller.move(4, { x: 320, y: 310 }))).toEqual(['view']);
+  });
+
+  it('discards stale fingers before a stylus stroke so they cannot later trigger a pinch', () => {
+    ctx.controller.down(1, 'touch', { x: 100, y: 100 });
+    ctx.controller.down(2, 'touch', { x: 300, y: 100 });
+    ctx.controller.down(3, 'pen', { x: 120, y: 130 });
+    ctx.controller.up(3);
+    ctx.state.clock += 400;
+    ctx.controller.down(4, 'touch', { x: 200, y: 200 });
+    const movement = ctx.controller.move(4, { x: 230, y: 220 });
+    expect(types(movement)).toEqual(['view']);
+    expect((movement[0] as { type: 'view'; view: PageView }).view.zoom).toBe(1);
   });
 
   it('never draws with a finger — it pans the canvas instead', () => {

@@ -34,6 +34,8 @@ export interface GestureDeps {
   board: () => { width: number; height: number };
   /** True when the viewer may not move the canvas (student under follow mode). */
   locked: () => boolean;
+  /** Clock, injected to make post-pencil palm rejection deterministic in tests. */
+  now?: () => number;
 }
 
 export class GestureController {
@@ -41,6 +43,9 @@ export class GestureController {
   private readonly touches = new Map<number, Point>();
   private drawPointer: number | null = null;
   private penDown: number | null = null;
+  /** A resting hand may still fire touch events immediately after pen-up. */
+  private lastPenRelease = Number.NEGATIVE_INFINITY;
+  private static readonly PALM_GRACE_MS = 350;
   private startView: PageView = { zoom: 1, panX: 0, panY: 0 };
   private anchors: [Point, Point] | null = null;
   private panStart: Point | null = null;
@@ -57,14 +62,26 @@ export class GestureController {
       this.beginNavigation();
       return [];
     }
-    // A palm resting while a pen writes (or a large contact area) never counts.
-    if (kind === 'touch' && (palm || this.penDown !== null)) return [];
+    // Do not let a resting palm pinch the page during or just after writing.
+    // iPadOS may report a palm as one or two regular touch pointers.
+    if (kind === 'touch' && (
+      palm ||
+      this.penDown !== null ||
+      (this.deps.mode() === 'stylus' && this.now() - this.lastPenRelease < GestureController.PALM_GRACE_MS)
+    )) return [];
 
     const intents: Intent[] = [];
     if (kind === 'pen') {
       this.penDown = id;
-      // The pen always wins over a finger that was moving the canvas: an idle
-      // pen that waits for fingers to lift looks like a dead stylus.
+      // Stale touches from under the resting hand must not turn into a pinch
+      // after pen-up. Deliberate navigation can start with fresh fingers.
+      this.touches.clear();
+      if (this.state === 'draw' && this.drawPointer !== id) {
+        intents.push({ type: 'stroke-cancel' });
+        this.drawPointer = null;
+        this.state = 'idle';
+      }
+      // A pen always pre-empts any pan/pinch made by fingers.
       if (this.state === 'pan' || this.state === 'pinch') {
         this.state = 'idle';
         this.anchors = null;
@@ -103,7 +120,8 @@ export class GestureController {
     if (this.state === 'draw' && id === this.drawPointer) {
       return [{ type: 'stroke-move', point: position, pressure }];
     }
-    if (this.deps.locked()) return [];
+    // Ignored palms never become navigation pointers by moving later.
+    if (!this.touches.has(id) || this.deps.locked()) return [];
 
     if (this.state === 'pinch' && this.anchors && this.touches.size >= 2) {
       const [a, b] = this.firstTwoTouches();
@@ -132,7 +150,10 @@ export class GestureController {
 
   up(id: number, cancelled = false): Intent[] {
     const intents: Intent[] = [];
-    if (this.penDown === id) this.penDown = null;
+    if (this.penDown === id) {
+      this.penDown = null;
+      this.lastPenRelease = this.now();
+    }
     this.touches.delete(id);
 
     if (this.state === 'draw' && id === this.drawPointer) {
@@ -161,8 +182,13 @@ export class GestureController {
     this.touches.clear();
     this.drawPointer = null;
     this.penDown = null;
+    this.lastPenRelease = Number.NEGATIVE_INFINITY;
     this.anchors = null;
     this.panStart = null;
+  }
+
+  private now(): number {
+    return this.deps.now?.() ?? Date.now();
   }
 
   get isDrawing(): boolean {

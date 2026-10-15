@@ -27,7 +27,7 @@ import {
 } from './boardView';
 import { GestureController, type Intent } from './gestureController';
 import { shapeAt } from './hitTest';
-import { type InputMode, looksLikePalm, normalizePointerKind } from './inputPolicy';
+import { type InputMode, isPalmContact, normalizePointerKind } from './inputPolicy';
 import { shapeBounds, translateShape } from './shapeTransform';
 import { penOutline, tracePenOutline } from './freehand';
 
@@ -360,10 +360,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (textEdit) return;
     const kind = normalizePointerKind(event.pointerType);
-    const palm =
-      kind === 'touch' &&
-      inputModeRef.current === 'finger' &&
-      looksLikePalm(event.width, event.height);
+    // A resting hand must not change the zoom in stylus mode either.
+    const palm = isPalmContact(kind, event.width, event.height);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
@@ -394,7 +392,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
 
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (navigationLocked || !onViewChange) return;
+    if (navigationLocked || !onViewChange || controller.isDrawing) return;
     const local = localPoint(event);
     // Ctrl/⌘ + wheel (and trackpad pinch, which arrives the same way) zooms;
     // a plain wheel scrolls the zoomed page.

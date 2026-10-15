@@ -47,3 +47,8 @@ export function looksLikePalm(width: number | undefined, height: number | undefi
   const size = Math.max(width ?? 0, height ?? 0);
   return size > 40;
 }
+
+/** Apply palm rejection in both finger and stylus modes, never to a real pen. */
+export function isPalmContact(kind: PointerKind, width: number | undefined, height: number | undefined): boolean {
+  return kind === 'touch' && looksLikePalm(width, height);
+}
