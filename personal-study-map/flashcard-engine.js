@@ -3,11 +3,12 @@
  * Adapted from Mindcrafti School's DistractorGenerator, StudySessionItem,
  * StudyService and Sm2Scheduler (branch integration/railway-and-ux).
  * Same four-choice flow, first-attempt scoring, end-of-queue retries
- * and scheduled intervals 1,2,4,7,14,30 days.
+ * and scheduled intervals: first correct answer in 3 days; after a mistake restart 1,2,3,4,7,14,30 days.
  * Pure client-side engine; UI/persistence lives in flashcards.js.
  */
 window.CardQuizEngine = (() => {
-  const INTERVAL_DAYS = Object.freeze([1, 2, 4, 7, 14, 30]);
+  const INTERVAL_DAYS = Object.freeze([1, 2, 3, 4, 7, 14, 30]);
+  const FIRST_CORRECT_DELAY_DAYS = 3;
 
   function isoDay(date = new Date()) {
     const d = date instanceof Date ? date : new Date(date);
@@ -28,10 +29,19 @@ window.CardQuizEngine = (() => {
 
   function afterReview(previousState, firstTryCorrect, today = isoDay()) {
     if (!firstTryCorrect) {
-      return { repetitionNumber: 0, dueDate: plusDays(today, 1), status: "ACTIVE" };
+      return { repetitionNumber: 0, dueDate: plusDays(today, 1), status: "RESET" };
     }
-    const repetitionNumber = Math.min(clampStage(previousState?.repetitionNumber) + 1, INTERVAL_DAYS.length);
-    return { repetitionNumber, dueDate: plusDays(today, INTERVAL_DAYS[repetitionNumber - 1]), status: "ACTIVE" };
+    // A brand-new card answered correctly on its first attempt is held for
+    // three days. Previously missed cards restart at the one-day interval.
+    const newCard = !previousState || (!previousState.updatedAt &&
+      !previousState.status && !Number(previousState.repetitionNumber));
+    if (newCard) {
+      return { repetitionNumber: 1, dueDate: plusDays(today, FIRST_CORRECT_DELAY_DAYS), status: "ACTIVE" };
+    }
+    const stage = clampStage(previousState?.repetitionNumber);
+    const nextStage = Math.min(stage + 1, INTERVAL_DAYS.length);
+    const interval = stage === 0 ? INTERVAL_DAYS[0] : INTERVAL_DAYS[nextStage - 1];
+    return { repetitionNumber: nextStage, dueDate: plusDays(today, interval), status: "ACTIVE" };
   }
 
   function shuffle(items, random = Math.random) {
