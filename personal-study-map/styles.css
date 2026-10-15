@@ -2123,3 +2123,12 @@ body[data-section="german"] .brand-mark{background:#e9f0ff;color:#294cb4}
 .study-day-event{display:grid;gap:3px;padding:9px;background:#fff;border:1px solid #e4e9f0;border-radius:9px}
 .study-day-event b{font-size:12px}
 .study-day-event span{font-size:11px;color:#64748b;line-height:1.4}
+
+/* Lecture slide catalog and slide provenance */
+.slides-catalog{display:grid;gap:5px;max-height:330px;overflow:auto;padding:8px 0}
+.slides-lecture-title{font-size:11px;font-weight:900;color:#304866;padding:6px 3px}
+.slides-catalog-row{display:flex;align-items:flex-start;text-align:left;gap:7px;width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#314766;font-size:11px;line-height:1.4;cursor:pointer}
+.slides-catalog-row.active{background:#eaf2ff;border-color:#4a84dc}
+.slides-status{font-weight:900;flex:0 0 14px}.slides-status.uploaded{color:#16804a}.slides-status.missing{color:#b86a1a}
+.slides-reset{padding:8px;border-radius:8px;background:#eaf2ff;color:#245bb0;font-size:11px;font-weight:800;border:0;cursor:pointer}
+.skill-slide-source{font-size:10px;font-weight:800;color:#3269a9;margin-top:4px}
