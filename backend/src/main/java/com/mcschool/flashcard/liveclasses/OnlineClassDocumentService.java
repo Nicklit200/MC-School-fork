@@ -42,4 +42,16 @@ public class OnlineClassDocumentService {
                 .filter(LessonPreparation::hasWorkbook)
                 .map(LessonPreparation::getWorkbookPdf);
     }
+
+    /** Assignment-only details: no private lesson plan, transcript or answer key. */
+    public record HomeworkSummary(String notes, boolean hasDocument) {}
+
+    @Transactional(readOnly = true)
+    public HomeworkSummary homework(AuthenticatedUser caller, UUID classId) {
+        OnlineClass lesson = accessService.requireAdmitted(caller, classId);
+        return preparations
+                .findByTeacherIdAndEventId(lesson.getTeacher().getId(), lesson.getEventId())
+                .map(p -> new HomeworkSummary(p.getHomeworkNotes(), p.hasWorkbook()))
+                .orElseGet(() -> new HomeworkSummary(null, false));
+    }
 }

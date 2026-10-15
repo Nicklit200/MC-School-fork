@@ -95,10 +95,34 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void homeworkNotesAreSharedWithoutPrivateSolutionsOrPlanning() {
+        LessonPreparation prep = LessonPreparation.create(teacher, "event-doc");
+        prep.updateNotes("Solve 1–5", "private difficulties", "private lesson plan", "private transcript");
+        prep.attachWorkbook("tasks.pdf", WORKBOOK);
+        prep.attachAnswers("private-answers.pdf", ANSWERS);
+        preparations.save(prep);
+
+        var shared = documentService.homework(studentPrincipal, onlineClass.getId());
+        assertThat(shared).isEqualTo(documentService.homework(teacherPrincipal, onlineClass.getId()));
+        assertThat(shared.notes()).isEqualTo("Solve 1–5");
+        assertThat(shared.hasDocument()).isTrue();
+        assertThat(shared.toString()).doesNotContain("private", "answers");
+    }
+
+    @Test
+    void homeworkWithoutPreparationIsEmpty() {
+        var shared = documentService.homework(studentPrincipal, onlineClass.getId());
+        assertThat(shared.notes()).isNull();
+        assertThat(shared.hasDocument()).isFalse();
+    }
+
+    @Test
     void anOutsiderCannotTellThisClassExists() {
         preparation(true, false);
 
         assertThatThrownBy(() -> documentService.workbook(outsiderPrincipal, onlineClass.getId()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> documentService.homework(outsiderPrincipal, onlineClass.getId()))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

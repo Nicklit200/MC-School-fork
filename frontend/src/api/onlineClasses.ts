@@ -171,6 +171,11 @@ export function deviceId(): string {
   }
 }
 
+export interface OnlineClassHomework {
+  notes: string | null;
+  hasDocument: boolean;
+}
+
 export const onlineClassesApi = {
   materializeFromCalendar: (eventId: string) =>
     request<OnlineClass>('POST', `/online-classes/calendar/${encodeURIComponent(eventId)}`),
@@ -178,6 +183,9 @@ export const onlineClassesApi = {
   listUpcoming: () => request<OnlineClass[]>('GET', '/online-classes/upcoming'),
 
   get: (classId: string) => request<OnlineClass>('GET', `/online-classes/${classId}`),
+
+  homework: (classId: string) =>
+    request<OnlineClassHomework>('GET', `/online-classes/${classId}/homework`),
 
   openLobby: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/open-lobby`),
 
