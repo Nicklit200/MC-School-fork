@@ -3496,7 +3496,7 @@
               "weight": 1,
               "lastUpdated": null,
               "x": 0,
-              "y": 1400,
+              "y": 3800,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3537,8 +3537,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 280,
-              "y": 1400,
+              "x": 300,
+              "y": 3800,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3579,8 +3579,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 560,
-              "y": 1400,
+              "x": 600,
+              "y": 3800,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3621,8 +3621,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 840,
-              "y": 1400,
+              "x": 900,
+              "y": 3800,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3664,7 +3664,7 @@
               "weight": 1,
               "lastUpdated": null,
               "x": 0,
-              "y": 1600,
+              "y": 4040,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3705,8 +3705,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 280,
-              "y": 1600,
+              "x": 300,
+              "y": 4040,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3747,8 +3747,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 560,
-              "y": 1600,
+              "x": 600,
+              "y": 4040,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3789,8 +3789,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 840,
-              "y": 1600,
+              "x": 900,
+              "y": 4040,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3832,7 +3832,7 @@
               "weight": 1,
               "lastUpdated": null,
               "x": 0,
-              "y": 1800,
+              "y": 4280,
               "evidence": [],
               "review": {
                 "repetition": 0,
@@ -3883,8 +3883,8 @@
               "mastery": 0,
               "weight": 1,
               "lastUpdated": null,
-              "x": 280,
-              "y": 1800,
+              "x": 300,
+              "y": 4280,
               "evidence": [],
               "review": {
                 "repetition": 0,
