@@ -8,12 +8,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Arrow, Circle, Ellipse, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { Arrow, Circle, Ellipse, Image as KonvaImage, Layer, Line, Rect, Shape as KonvaShape, Stage, Text } from 'react-konva';
 import {
   type RenderableShape,
   type Shape,
   letterbox,
-  thinPoints,
+  thinStroke,
   toNormalized,
   toPixels,
 } from './annotations';
@@ -29,6 +29,7 @@ import { GestureController, type Intent } from './gestureController';
 import { shapeAt } from './hitTest';
 import { type InputMode, looksLikePalm, normalizePointerKind } from './inputPolicy';
 import { shapeBounds, translateShape } from './shapeTransform';
+import { penOutline, tracePenOutline } from './freehand';
 
 export type Tool =
   | 'pen'
@@ -187,7 +188,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
   useEffect(() => () => window.clearTimeout(ownLaserTimer.current), []);
 
-  const startStroke = (local: Point) => {
+  const startStroke = (local: Point, pressure?: number) => {
     const { tool: active, color: ink, strokeWidth: width, eraserMode: eraser } = live.current;
     const point = toPage(local);
 
@@ -217,7 +218,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
 
     const next: Shape =
       active === 'pen' || active === 'highlighter' || active === 'erase'
-        ? { kind: active, color: ink, width, points: [[point.x, point.y]] }
+        ? { kind: active, color: ink, width, points: [[point.x, point.y]],
+            ...(active === 'pen' && pressure !== undefined && Number.isFinite(pressure)
+              ? { pressures: [Math.max(0, Math.min(1, pressure))] } : {}) }
         : active === 'line' || active === 'arrow'
           ? { kind: active, color: ink, width, x1: point.x, y1: point.y, x2: point.x, y2: point.y }
           : { kind: active, color: ink, width, x: point.x, y: point.y, w: 0, h: 0 };
@@ -235,7 +238,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     onEraseShape?.(hit.operationId);
   };
 
-  const moveStroke = (local: Point) => {
+  const moveStroke = (local: Point, pressure?: number) => {
     const { tool: active, eraserMode: eraser } = live.current;
     const now = performance.now();
     if (now - lastSample.current < SAMPLE_INTERVAL_MS) return;
@@ -261,7 +264,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     if (!current) return;
     let next: Shape;
     if (current.points) {
-      next = { ...current, points: [...current.points, [point.x, point.y]] };
+      next = { ...current, points: [...current.points, [point.x, point.y]],
+        ...(current.pressures ? { pressures: [...current.pressures,
+          pressure !== undefined && Number.isFinite(pressure) ? Math.max(0, Math.min(1, pressure)) : current.pressures[current.pressures.length - 1]] } : {}) };
     } else if (current.x1 !== undefined) {
       next = { ...current, x2: point.x, y2: point.y };
     } else {
@@ -292,7 +297,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     if (!finished) return;
     // Thinning keeps the stroke under the server's point cap without visibly
     // changing the line.
-    onCommit(finished.points ? { ...finished, points: thinPoints(finished.points) } : finished);
+    if (finished.points) {
+      const sample = thinStroke(finished.points, finished.pressures);
+      onCommit({ ...finished, points: sample.points, ...(sample.pressures ? { pressures: sample.pressures } : {}) });
+    } else onCommit(finished);
   };
 
   const cancelStroke = () => {
@@ -308,10 +316,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     for (const intent of intents) {
       switch (intent.type) {
         case 'stroke-start':
-          if (!live.current.readOnly || live.current.tool === 'laser') startStroke(intent.point);
+          if (!live.current.readOnly || live.current.tool === 'laser') startStroke(intent.point, intent.pointerKind === 'pen' ? intent.pressure : undefined);
           break;
         case 'stroke-move':
-          if (!live.current.readOnly || live.current.tool === 'laser') moveStroke(intent.point);
+          if (!live.current.readOnly || live.current.tool === 'laser') moveStroke(intent.point, intent.pressure);
           break;
         case 'stroke-end':
           endStroke();
@@ -364,7 +372,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // Middle button, or space held, moves the page instead of drawing.
     const navigate = kind === 'mouse' && (event.button === 1 || spaceHeld.current);
     if (navigate) event.preventDefault();
-    applyIntents(controller.down(event.pointerId, kind, localPoint(event), palm, navigate));
+    applyIntents(controller.down(event.pointerId, kind, localPoint(event), palm, navigate, kind === 'pen' ? event.pressure : undefined));
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     // A laser follows the pointer even with no button down, like a real one.
@@ -376,7 +384,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       }
       return;
     }
-    applyIntents(controller.move(event.pointerId, localPoint(event)));
+    applyIntents(controller.move(event.pointerId, localPoint(event), event.pointerType === 'pen' ? event.pressure : undefined));
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     applyIntents(controller.up(event.pointerId));
@@ -454,7 +462,11 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     const opacity = (shape.kind === 'highlighter' ? 0.35 : 1) * (dim ? 0.7 : 1);
 
     switch (shape.kind) {
-      case 'pen':
+      case 'pen': {
+        const outline = penOutline(shape, viewport, sourceAspect);
+        return <KonvaShape key={key} fill={stroke} opacity={opacity}
+          sceneFunc={(context, node) => { if (tracePenOutline(context, outline)) context.fillStrokeShape(node); }} />;
+      }
       case 'highlighter':
       case 'erase':
         return (

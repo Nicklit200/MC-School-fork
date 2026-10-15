@@ -4,6 +4,7 @@ import {
   foldOperations,
   letterbox,
   thinPoints,
+  thinStroke,
   toNormalized,
   toPixels,
   undoableOperations,
@@ -104,6 +105,21 @@ describe('point thinning', () => {
     ];
 
     expect(thinPoints(short)).toEqual(short);
+  });
+});
+
+describe('pressure-preserving point thinning', () => {
+  it('keeps pressure aligned with surviving points', () => {
+    const points: [number, number][] = [[0, 0], [0.0001, 0], [0.2, 0], [0.201, 0], [0.5, 0]];
+    const result = thinStroke(points, [0.1, 0.2, 0.4, 0.6, 0.9]);
+    expect(result.points).toEqual([[0, 0], [0.2, 0], [0.5, 0]]);
+    expect(result.pressures).toEqual([0.1, 0.4, 0.9]);
+  });
+
+  it('keeps a stroke with mismatched pressures but discards those pressures', () => {
+    const result = thinStroke([[0, 0], [1, 1]], [0.5]);
+    expect(result.points).toHaveLength(2);
+    expect(result.pressures).toBeUndefined();
   });
 });
 

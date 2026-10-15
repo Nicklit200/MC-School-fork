@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { thinPoints } from './annotations';
+import { thinPoints, thinStroke } from './annotations';
 import {
   MAX_LIVE_POINTS,
   STROKE_KINDS,
@@ -54,6 +54,7 @@ export function toLiveShape(shape: {
   color?: string;
   width?: number;
   points?: [number, number][];
+  pressures?: number[];
   x?: number;
   y?: number;
   w?: number;
@@ -70,7 +71,20 @@ export function toLiveShape(shape: {
     color: shape.color,
     width: shape.width ?? 0.004,
   };
-  if (shape.points) live.points = capPoints(shape.points);
+  if (shape.points) {
+    const thinned = thinStroke(shape.points, shape.kind === 'pen' ? shape.pressures : undefined);
+    if (thinned.points.length <= MAX_LIVE_POINTS) {
+      live.points = thinned.points;
+      if (thinned.pressures) live.pressures = thinned.pressures;
+    } else {
+      const stride = Math.ceil(thinned.points.length / MAX_LIVE_POINTS);
+      const indexes = thinned.points.map((_, i) => i).filter((i) => i % stride === 0);
+      if (indexes[indexes.length - 1] !== thinned.points.length - 1) indexes.push(thinned.points.length - 1);
+      const capped = indexes.slice(-MAX_LIVE_POINTS);
+      live.points = capped.map((i) => thinned.points[i]);
+      if (thinned.pressures) live.pressures = capped.map((i) => thinned.pressures![i]);
+    }
+  }
   for (const key of ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2'] as const) {
     if (shape[key] !== undefined) live[key] = shape[key];
   }
