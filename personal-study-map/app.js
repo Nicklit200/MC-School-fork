@@ -526,6 +526,8 @@ function studyCalendarEvents() {
   for (const task of state.lectureTasks || [])
     if (task.done && task.completedAt)
       add(task.completedAt, "task", task.title || "Домашняя работа", "Задание выполнено");
+  for (const [date, record] of Object.entries(state.data?.studyCardDays || {}))
+    if (record.status === "reviewed") add(date, "cards", "Повторение карточек", record.note || "Подтверждено пользователем");
   for (const session of quizHistoryForMap())
     add(session.completedAt || session.date, "cards",
       session.type === "PRACTICE" ? "Свободная тренировка карточек" : "Повторение карточек",
@@ -542,6 +544,7 @@ function showStudyCalendarDay(dateIso, events) {
   const detail = host.querySelector(".study-day-details");
   if (!detail) return;
   const entries = events.get(dateIso) || [];
+  const missedNote = state.data?.studyCardDays?.[dateIso]?.status === "missed" ? (state.data.studyCardDays[dateIso].note || "Карточки не повторялись.") : "";
   const cards = entries.filter(item => item.type === "cards");
   const others = entries.filter(item => item.type !== "cards");
   const dateLabel = new Date(dateIso + "T12:00:00").toLocaleDateString("ru-RU",{day:"numeric",month:"long",year:"numeric"});
@@ -549,7 +552,7 @@ function showStudyCalendarDay(dateIso, events) {
     (entries.length ? '<div class="study-day-event-list">' + [...cards,...others].map(item =>
       '<div class="study-day-event"><b>' + escapeHtml(item.title) + '</b>' +
       (item.detail ? '<span>' + escapeHtml(item.detail) + '</span>' : '') + '</div>'
-    ).join("") + '</div>' : '<p>За этот день нет сохранённых занятий или тренировок карточек.</p>');
+    ).join("") + '</div>' : '<p>' + escapeHtml(missedNote || 'За этот день нет сохранённых занятий или тренировок карточек.') + '</p>');
 }
 function calendarStatus(section, dateIso) {
   if (section === "study") return studyActivityDates().has(dateIso) ? "good" : "";
@@ -580,6 +583,7 @@ function renderCalendar(section) {
   const workoutIconsForDay = section === "workouts" ? workoutTypesByDate() : null;
   const studyEvents = section === "study" ? studyCalendarEvents() : null;
   const firstCardDate = section === "study" ? [...studyEvents.entries()].filter(([,rows])=>rows.some(x=>x.type==="cards")).map(([d])=>d).sort()[0] : null;
+  const confirmedDays = section === "study" ? (state.data?.studyCardDays || {}) : {};
 
   host.innerHTML = `
     <div class="calendar-head">
@@ -615,7 +619,7 @@ function renderCalendar(section) {
     let status = calendarStatus(section, dateIso);
     if (section === "study") {
       const hasCards = (studyEvents.get(dateIso) || []).some(x => x.type === "cards");
-      status = hasCards ? "good" : (firstCardDate && dateIso >= firstCardDate && dateIso < today ? "missed-cards" : status);
+      status = hasCards ? "good" : (confirmedDays[dateIso]?.status === "missed" || (firstCardDate && dateIso >= firstCardDate && dateIso < today) ? "missed-cards" : status);
     }
     const button = document.createElement("button");
     button.type = "button";
