@@ -20,6 +20,7 @@ import { SHARED_BOARD_ID } from './boards';
 import { useStudentRoster } from './useStudentRoster';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
+import { HomeworkDrawer } from './HomeworkDrawer';
 import { CameraColumn } from './CameraColumn';
 import { CaptionsPanel } from './CaptionsPanel';
 import { RecordingControls } from './RecordingControls';
@@ -122,6 +123,7 @@ function RoomBody({
 }) {
   const { t } = useI18n();
   const [panelsOpen, setPanelsOpen] = useState(false);
+  const [homeworkOpen, setHomeworkOpen] = useState(false);
   const [waiting, setWaiting] = useState(0);
   const [mainView, setMainView] = useState<'board' | 'screen'>('board');
   const sharing = useScreenShareActive();
@@ -147,9 +149,32 @@ function RoomBody({
 
   const showScreen = sharing && mainView === 'screen';
 
+  // Homework and teacher-only solutions are both on the left, never stacked.
+  useEffect(() => {
+    if (answers.open) setHomeworkOpen(false);
+  }, [answers.open]);
+
   return (
     <>
       <div className="online-class-room__topbar">
+        <button type="button" className="classroom-homework-toggle"
+          onClick={() => {
+            if (!homeworkOpen) answers.close();
+            setHomeworkOpen((open) => !open);
+          }}
+          aria-label={t('onlineClass.room.homework')}
+          title={t('onlineClass.room.homework')}
+          aria-expanded={homeworkOpen}
+          aria-controls="classroom-homework-panel"
+          aria-pressed={homeworkOpen}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none"
+            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8"/>
+            <path d="m9 15 2.5 2.5L21 8"/>
+            <path d="M8 7h6M8 11h4"/>
+          </svg>
+        </button>
         <ConnectionStatus />
         <RecordingControls
           classId={classId}
@@ -222,6 +247,10 @@ function RoomBody({
             <div className="online-class-room__screen">
               <ScreenShareView />
             </div>
+          )}
+
+          {homeworkOpen && (
+            <HomeworkDrawer classId={classId} onClose={() => setHomeworkOpen(false)} />
           )}
 
           {/* Kept mounted (just hidden) so chat history, the roster and the

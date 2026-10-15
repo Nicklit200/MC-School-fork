@@ -41,6 +41,14 @@ vi.mock('@livekit/components-react', () => ({
 vi.mock('./CameraColumn', () => ({ CameraColumn: () => <ul aria-label="cameras" /> }));
 vi.mock('./ChatPanel', () => ({ ChatPanel: () => null }));
 vi.mock('./CaptionsPanel', () => ({ CaptionsPanel: () => null }));
+vi.mock('./HomeworkDrawer', () => ({
+  HomeworkDrawer: ({ onClose }: { onClose: () => void }) => (
+    <aside id="classroom-homework-panel" aria-label="Домашнее задание">
+      <span>Текст или PDF домашки</span>
+      <button type="button" onClick={onClose}>Закрыть домашнее задание</button>
+    </aside>
+  ),
+}));
 const recordingProps: Record<string, any>[] = [];
 vi.mock('./RecordingControls', () => ({
   RecordingControls: (props: Record<string, any>) => {
@@ -152,6 +160,18 @@ describe('OnlineClassRoom', () => {
     mount(true);
     const board = await screen.findByTestId('board-board-1');
     expect(await within(board).findByRole('button', { name: 'Ответы' })).toBeEnabled();
+  });
+
+  it('opens an assignment drawer from a single top-row icon and closes it', async () => {
+    mount(false);
+    const toggle = screen.getByRole('button', { name: 'Домашнее задание' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('complementary', { name: 'Домашнее задание' })).not.toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Текст или PDF домашки')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Закрыть домашнее задание' }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('shows the camera column next to the board', async () => {

@@ -1251,3 +1251,95 @@
 .online-class-reconnect__diagnostics p:last-child {
   margin-bottom: 0;
 }
+
+/* Goodnotes-style single assignment shortcut and left document drawer. */
+.online-class-room__topbar .classroom-homework-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.online-class-room__topbar .classroom-homework-toggle[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+.classroom-homework {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9;
+  width: min(360px, 82%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  color: var(--text);
+  border-right: 1px solid var(--border);
+  box-shadow: 4px 0 24px rgba(15, 23, 32, 0.18);
+}
+.classroom-homework__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.classroom-homework__close {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 24px;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 36px;
+  min-height: 36px;
+}
+.classroom-homework__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+.classroom-homework__notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+.classroom-homework__document h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.classroom-homework__page-area { width: 100%; min-height: 48px; overflow-x: auto; }
+.classroom-homework__page { display: block; width: 100%; height: auto; background: #fff; }
+.classroom-homework__pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 6px;
+  border-top: 1px solid var(--border);
+}
+.classroom-homework__pagination button {
+  min-width: 38px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 7px;
+}
+.classroom-homework__pagination button:disabled { opacity: .4; }
+@media (pointer: coarse) {
+  .online-class-room__topbar .classroom-homework-toggle { min-width: 44px; min-height: 44px; }
+  .classroom-homework__close, .classroom-homework__pagination button { min-width: 44px; min-height: 44px; }
+}
