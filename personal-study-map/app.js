@@ -1548,7 +1548,7 @@ leftPanelToggle.onclick = () => {
 };
 
 const reviewPanel = $("review-panel");
-$("review-toggle").onclick = () => {
+if ($("review-toggle")) $("review-toggle").onclick = () => {
   renderReview();
   const willOpen = reviewPanel.classList.contains("closed");
   reviewPanel.classList.toggle("closed", !willOpen);
@@ -1559,7 +1559,7 @@ $("review-toggle").onclick = () => {
     $("study-calendar-panel").classList.add("closed");
   }
 };
-$("close-review").onclick = () => reviewPanel.classList.add("closed");
+if ($("close-review")) $("close-review").onclick = () => reviewPanel.classList.add("closed");
 
 const historyPanel = $("history-panel");
 $("history-toggle").onclick = () => {
