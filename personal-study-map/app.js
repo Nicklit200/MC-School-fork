@@ -516,7 +516,7 @@ function studyCalendarEvents() {
   const events = new Map();
   const add = (date, type, title, detail) => {
     const key = String(date || "").slice(0, 10);
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(key)) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
     if (!events.has(key)) events.set(key, []);
     events.get(key).push({type, title, detail});
   };
@@ -599,6 +599,7 @@ function renderCalendar(section) {
       <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
     </div>
     <div class="calendar-grid"></div>
+    ${section === "study" ? '<div class="study-day-details" aria-live="polite">Нажми на дату, чтобы посмотреть активность.</div>' : ""}
   `;
 
   const grid = host.querySelector(".calendar-grid");
@@ -635,11 +636,20 @@ function renderCalendar(section) {
       button.title = types.size ? dateIso + " · " +
         [...types].map((type) => type === "run" ? "Бег" : type === "strength" ? "Силовая" : "Тренировка").join(", ")
         : dateIso;
+    } else if (section === "study") {
+      const rows = studyEvents.get(dateIso) || [];
+      const cardCount = rows.filter(x => x.type === "cards").length;
+      button.dataset.date = dateIso;
+      button.innerHTML = '<span class="calendar-day-number">' + day + '</span>' +
+        (cardCount ? '<span class="study-card-mark">●</span>' : status === "missed-cards" ? '<span class="study-card-mark">×</span>' : "");
+      button.title = dateIso + (cardCount ? " · карточки: " + cardCount : status === "missed-cards" ? " · без карточек" : "");
     } else {
       button.textContent = String(day);
       button.title = dateIso;
     }
-    if (section === "workouts") {
+    if (section === "study") {
+      button.onclick = () => showStudyCalendarDay(dateIso, studyEvents);
+    } else if (section === "workouts") {
       button.onclick = () => {
         $("workout-date").value = dateIso;
         loadWorkouts();
