@@ -11,6 +11,7 @@ import {
 } from './annotations';
 import { buildPdf, dataUrlToBytes, type JpegPage } from './pdfWriter';
 import type { PdfDoc } from './pdfDocument';
+import { penOutline, tracePenOutline } from './freehand';
 
 /**
  * Konva is loaded when the first export runs, not with the board: most lessons
@@ -74,7 +75,12 @@ function shapeNode(shape: Shape, viewport: { width: number; height: number }, as
   const box = letterbox(viewport, aspect);
 
   switch (shape.kind) {
-    case 'pen':
+    case 'pen': {
+      const outline = penOutline(shape, viewport, aspect);
+      return new Konva.Shape({ fill: stroke,
+        sceneFunc: (context, node) => { if (tracePenOutline(context, outline)) context.fillStrokeShape(node); },
+      });
+    }
     case 'highlighter':
     case 'erase': {
       const points = (shape.points ?? []).flatMap(([x, y]) => {
