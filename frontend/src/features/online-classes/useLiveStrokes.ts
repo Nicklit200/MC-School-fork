@@ -73,13 +73,6 @@ export function toLiveShape(shape: {
   };
   if (shape.points) {
     const thinned = thinStroke(shape.points, shape.kind === 'pen' ? shape.pressures : undefined);
-    const originalIndices: number[] = [];
-    let from = 0;
-    for (const point of thinned.points) {
-      const index = shape.points.findIndex((candidate, j) => j >= from && candidate === point);
-      originalIndices.push(Math.max(from, index));
-      from = Math.max(from, index) + 1;
-    }
     if (thinned.points.length <= MAX_LIVE_POINTS) {
       live.points = thinned.points;
       if (thinned.pressures) live.pressures = thinned.pressures;
