@@ -45,6 +45,7 @@
   const SYNC_URL="https://personal-life-api-production.up.railway.app/api/quiz-sync";
   const OWNER_KEY="personal-study-map:owner-token:v1",PENDING_KEY="personal-study-map:pending-sync:v1";
   let busy=false,timer=null;
+  let lastSyncAt=null, lastSyncError=false;
   function owner(){
     let value=localStorage.getItem(OWNER_KEY);
     if(!/^[a-f0-9]{64}$/.test(value||"")){
@@ -70,13 +71,14 @@
       const data={progress:getProgress(),invalid:getInvalidCards(),deleted:getDeletedCards(),
         overrides:getOverrides(),custom:getCustomCards(),sessions:storedHistory().slice(0,100)};
       const result=await remote("POST",data);
-      if(result.ok)localStorage.removeItem(PENDING_KEY);
-    }catch(e){console.warn("Sync retry on next visit",e);}
+      if(result.ok){localStorage.removeItem(PENDING_KEY);lastSyncAt=new Date().toISOString();lastSyncError=false;}
+    }catch(e){lastSyncError=true;console.warn("Sync retry on next visit",e);}
     finally{busy=false;}
   }
   async function pullSync(){
     try{
       const response=await remote("GET");
+      lastSyncAt=new Date().toISOString();lastSyncError=false;
       const payload=response.snapshot||{};
       for(const [key,name] of [[KEY_PROGRESS,"progress"],[KEY_INVALID,"invalid"],[KEY_DELETED,"deleted"],[KEY_OVERRIDES,"overrides"]]){
         const remoteData=payload[name];
@@ -99,7 +101,7 @@
       window.dispatchEvent(new Event("study-reviews-updated"));
       updateBadge();
       if(ui.view==="home")renderHome();
-    }catch(e){console.warn("Quiz stays in local storage",e);}
+    }catch(e){lastSyncError=true;console.warn("Quiz stays in local storage",e);}
   }
   window.addEventListener("study-reviews-updated",queueSync);
   window.addEventListener("online",()=>void pullSync());
@@ -363,6 +365,7 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
+      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(lastSyncError?"Нет связи с сервером. Результаты пока только на устройстве.":lastSyncAt?"Связь с сервером есть. Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение…")+(localStorage.getItem(PENDING_KEY)?" · Есть данные для отправки":"")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На телефоне результаты передаются серверу после завершения тренировки. Для доступа из ChatGPT потребуется отдельно подключить коннектор «Мои навыки».</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
       '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 4 → 7 → 14 → 30 дней</div>'+
@@ -563,6 +566,7 @@
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
     queueSync();
+    void sendSync();
     window.dispatchEvent(new Event("study-reviews-updated"));
     localStorage.removeItem(KEY_SESSION);
     ui.session=null;ui.feedback=null;ui.result=completed.result;ui.view="result";
@@ -887,6 +891,8 @@
     if (action==="home") {
       cleanupTimers();ui.view="home";ui.feedback=null;ui.notice="";
       renderHome();
+    } else if (action==="sync-now") {
+      await sendSync();await pullSync();ui.notice=lastSyncError?"Синхронизация не удалась. Попробуй снова при наличии интернета.":"Данные проверены и отправлены на сервер.";renderHome();
     } else if (action==="scheduled") startSession("SCHEDULED");
     else if (action==="practice") {
       if (ui.session) return;
