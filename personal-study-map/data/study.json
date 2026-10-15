@@ -53,6 +53,12 @@
               "type": "Vorlesung / UML-Notation",
               "coverage": "Folien 1–163; Prof. Dr. G. Hagel, Wintersemester 2026/27. Alle UML-Hauptdiagrammtypen und zugehörige Notation.",
               "note": "Als Lernplan importiert, nicht gelernt. Hypertext-/Zugriffs-/Präsentationsmodell und Subsystemdiagramm nur auf der Inhaltsübersicht (S. 2), ohne eigenes Lehrmaterial. Продолжение изучения ведётся по загруженной пользователем копии UML(1).pdf; остановка записана на стр. 50."
+            },
+            {
+              "title": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "type": "Vorlesungsfolien",
+              "coverage": "11 Folien: Zustands- und Aktivitätsdiagramm",
+              "note": "Импортировано 15.10.2026; навыки и карточки подготовлены, прохождение не отмечено."
             }
           ],
           "topics": [
@@ -147,6 +153,10 @@
             {
               "id": "se-analysis-usecases-lecture",
               "title": "Analyse und Anwendungsfälle · Vorlesung"
+            },
+            {
+              "id": "se-lecture-state-activity-201819",
+              "title": "Zustands- und Aktivitätsdiagramm · Folien 1–11"
             }
           ],
           "skills": [
@@ -3967,6 +3977,374 @@
               "slideNumbers": [
                 13,
                 14
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-01",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Zustand und Zustandsdiagramm",
+              "subtitle": "Klasse · Attributwerte · Objektlebenszyklus",
+              "description": "Объяснять состояние как абстракцию значений атрибутов объекта одного класса; диаграмму как последовательность состояний и переходов под воздействием стимулов.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 4520,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                3
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-01-card-1",
+                  "question": "Was beschreibt ein Zustand?",
+                  "answer": "Eine Zusammenfassung möglicher Attributwerte von Objekten genau einer Klasse.",
+                  "wrongAnswer1": "Alle Klassen des Systems.",
+                  "wrongAnswer2": "Den Quellcode einer Methode.",
+                  "wrongAnswer3": "Eine Liste von Benutzern.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 3"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-01-card-2",
+                  "question": "Was zeigt ein Zustandsdiagramm?",
+                  "answer": "Zustände eines Objekts im Lebenslauf und Stimuli für Transitionen.",
+                  "wrongAnswer1": "Nur die Benutzeroberfläche.",
+                  "wrongAnswer2": "Nur Datenbanktabellen.",
+                  "wrongAnswer3": "Nur parallele Prozesse.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 3"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-02",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Endlicher Automat: Bestandteile",
+              "subtitle": "Zustände · Ereignisse · Transitionen",
+              "description": "Называть составляющие конечного автомата: непустые конечные множества состояний и событий, переходы, начальное и конечные состояния.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 4520,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                4
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-02-card-1",
+                  "question": "Welche Bestandteile hat der endliche Automat laut Folie?",
+                  "answer": "Zustände, Ereignisse, Transitionen, Anfangszustand und Endzustände.",
+                  "wrongAnswer1": "Nur Klassen und Methoden.",
+                  "wrongAnswer2": "Nur Aktionen und Swimlanes.",
+                  "wrongAnswer3": "Nur Eingaben und Ausgaben.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 4"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-02-card-2",
+                  "question": "Wie groß ist die Menge der Zustände?",
+                  "answer": "Endlich und nicht leer.",
+                  "wrongAnswer1": "Unendlich.",
+                  "wrongAnswer2": "Immer genau zwei.",
+                  "wrongAnswer3": "Sie darf leer sein.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 4"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-03",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Unterzustände erkennen",
+              "subtitle": "Vorlesung · lesend · aufmerksam · schlafend",
+              "description": "Разбирать пример вложенных состояний лекции, переходы по условиям и завершение.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 4520,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                5
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-03-card-1",
+                  "question": "Was veranschaulicht die Vorlesung auf Folie 5?",
+                  "answer": "Unterzustände und bedingte Übergänge innerhalb eines übergeordneten Zustands.",
+                  "wrongAnswer1": "Ein Klassendiagramm.",
+                  "wrongAnswer2": "Eine Datenbanknormalisierung.",
+                  "wrongAnswer3": "Eine Softwaremetrik.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 5"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-03-card-2",
+                  "question": "Welche Bedingung führt im Beispiel zu 'schlafend'?",
+                  "answer": "[Vorl. langweilig]",
+                  "wrongAnswer1": "[Vorl. interessant]",
+                  "wrongAnswer2": "[Endezeit – 5 Min.]",
+                  "wrongAnswer3": "[Pasch]",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 5"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-04",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Zustandsdiagramm erstellen",
+              "subtitle": "Zustände · Operationen · Lebenszyklus",
+              "description": "Уметь перечислить этапы построения: выделить осмысленные состояния, сопоставить операции, определить допустимые последовательности, события и действия переходов.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 900,
+              "y": 4520,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                6
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-04-card-1",
+                  "question": "Was ist der erste Schritt beim Zustandsdiagramm?",
+                  "answer": "Semantisch sinnvolle Objektzustände identifizieren.",
+                  "wrongAnswer1": "Sofort den Code schreiben.",
+                  "wrongAnswer2": "Nur die UI gestalten.",
+                  "wrongAnswer3": "Alle Attribute als Zustände anlegen.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 6"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-04-card-2",
+                  "question": "Führt jede Attributänderung zu einem neuen Zustand?",
+                  "answer": "Nein, nicht jede Attributänderung führt zu einem anderen Zustand.",
+                  "wrongAnswer1": "Ja, immer.",
+                  "wrongAnswer2": "Nur bei Zahlen.",
+                  "wrongAnswer3": "Nur bei Text.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 6"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-05",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Regeln für Zustandsdiagramme",
+              "subtitle": "5–7 Zustände · OR/AND · Bedingungen",
+              "description": "Понимать правила: избегать больших диапазонов значений в состояниях, ограничивать поддиаграммы 5–7 состояниями, не смешивать свойства и учитывать переходы без событий.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 0,
+              "y": 4760,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                7
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-05-card-1",
+                  "question": "Wie viele Zustände sollte ein Teildiagramm möglichst nicht überschreiten?",
+                  "answer": "5 bis 7.",
+                  "wrongAnswer1": "20 bis 30.",
+                  "wrongAnswer2": "Genau 1.",
+                  "wrongAnswer3": "100.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 7"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-05-card-2",
+                  "question": "Was ist eine ereignislose Transition?",
+                  "answer": "Ein Übergang, der bei erfüllter Bedingung schaltet.",
+                  "wrongAnswer1": "Ein Übergang ohne Ziel.",
+                  "wrongAnswer2": "Ein Fehler im Diagramm.",
+                  "wrongAnswer3": "Ein Wechsel nur nach Mausklick.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 7"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-06",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Aktivitätsdiagramm: Definition",
+              "subtitle": "Start · Aktionen · Kontroll-/Objektfluss",
+              "description": "Объяснять, что диаграмма активности описывает варианты выполнения системы действиями; знать начальный узел, узлы действий/контроля/объектов, конечные узлы и потоки.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 300,
+              "y": 4760,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                9
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-06-card-1",
+                  "question": "Was beschreibt ein Aktivitätsdiagramm?",
+                  "answer": "Ablaufmöglichkeiten eines Systems mithilfe von Aktionen.",
+                  "wrongAnswer1": "Nur Objektattribute.",
+                  "wrongAnswer2": "Nur Klassenhierarchien.",
+                  "wrongAnswer3": "Nur Hardware.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 9"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-06-card-2",
+                  "question": "Welche Flüsse gibt es laut Folie?",
+                  "answer": "Objektflüsse oder Kontrollflüsse.",
+                  "wrongAnswer1": "Nur Datenbankflüsse.",
+                  "wrongAnswer2": "Nur Netzwerkpakete.",
+                  "wrongAnswer3": "Nur Zustandsattribute.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 9"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-07",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Aktivitätsdiagramm lesen",
+              "subtitle": "Würfeln · Guards · Verzweigung",
+              "description": "Читать пример Würfeln: условия [Pasch], [kein Pasch], [3 mal Pasch], действия и возврат к броску.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 600,
+              "y": 4760,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                10
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-07-card-1",
+                  "question": "Was bedeutet [kein Pasch] im Beispiel?",
+                  "answer": "Eine Bedingung für den gewählten Ablaufzweig.",
+                  "wrongAnswer1": "Ein neuer Klassenname.",
+                  "wrongAnswer2": "Ein Endzustand ohne Bedingung.",
+                  "wrongAnswer3": "Ein Datenbankfeld.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 10"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-07-card-2",
+                  "question": "Was passiert bei [3 mal Pasch] im Beispiel?",
+                  "answer": "Der Ablauf verzweigt zu parallelen Aktionen nach dem Splitting.",
+                  "wrongAnswer1": "Das Spiel endet sofort ohne Aktionen.",
+                  "wrongAnswer2": "Ein neuer Benutzer meldet sich an.",
+                  "wrongAnswer3": "Die Klasse wird gelöscht.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 10"
+                }
+              ]
+            },
+            {
+              "id": "se-lecture-state-activity-20261015-08",
+              "topicId": "se-lecture-state-activity-201819",
+              "title": "Splitting und Synchronisation",
+              "subtitle": "Parallele Aktionen · UND-Zusammenführung",
+              "description": "Отличать разделение параллельных действий (Splitting) от их синхронизации (UND) в примере игры.",
+              "mastery": 0,
+              "weight": 1,
+              "lastUpdated": null,
+              "x": 900,
+              "y": 4760,
+              "evidence": [],
+              "review": {
+                "repetition": 0,
+                "dueDate": null,
+                "lastResult": null
+              },
+              "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+              "learningStatus": "not_started",
+              "lectureId": "se-lecture-state-activity-201819",
+              "slideNumbers": [
+                10
+              ],
+              "flashcards": [
+                {
+                  "id": "se-lecture-state-activity-20261015-08-card-1",
+                  "question": "Was bedeutet Splitting im Aktivitätsdiagramm?",
+                  "answer": "Aufteilen des Ablaufs in parallele Zweige.",
+                  "wrongAnswer1": "Zusammenfassen aller Klassen.",
+                  "wrongAnswer2": "Beenden des Programms.",
+                  "wrongAnswer3": "Auslösen einer Ausnahme.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 10"
+                },
+                {
+                  "id": "se-lecture-state-activity-20261015-08-card-2",
+                  "question": "Was zeigt Synchronisation (UND)?",
+                  "answer": "Parallele Zweige werden synchronisiert, bevor der Ablauf weitergeht.",
+                  "wrongAnswer1": "Eine beliebige Alternative genügt.",
+                  "wrongAnswer2": "Ein neues Objekt wird erzeugt.",
+                  "wrongAnswer3": "Ein Ereignis wird gelöscht.",
+                  "timeLimitSeconds": null,
+                  "explanation": "Источник: слайд 10"
+                }
               ]
             }
           ],
