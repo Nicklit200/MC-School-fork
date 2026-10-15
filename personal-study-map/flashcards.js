@@ -365,8 +365,8 @@
       '</div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
-      '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 4 → 7 → 14 → 30 дней</div>'+
-      '<small>Ошибка с первой попытки — сброс до этапа 0 и повтор завтра. Свободная тренировка не меняет расписание.</small></div>'+
+      '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 4 → 7 → 14 → 30 дней</div>'+
+      '<small>Первый правильный ответ — через 3 дня. После ошибки — повтор завтра и новый цикл 1 → 2 → 3 → 4 → 7 → 14 → 30. Свободная тренировка не меняет расписание.</small></div>'+
       (lesson?'<div class="quiz-last"><strong>Последний результат</strong><span>'+labelDate(lesson.date)+
         ' · '+lesson.correctFirstTry+' из '+lesson.totalCards+' с первой попытки</span></div>':"")+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
@@ -646,7 +646,7 @@
           '<strong>'+esc(card.question)+'</strong>'+
           '<span>'+esc(card.skillTitle)+'</span>'+
           (card.invalid?'<small>Некорректная · не учитывается в тренировках и статистике</small>':
-            '<small>Этап '+progress.repetitionNumber+'/6 · '+esc(labelDate(progress.dueDate))+
+            '<small>Этап '+progress.repetitionNumber+'/7 · '+esc(labelDate(progress.dueDate))+
             (card.hidden?' · Скрыта':'')+'</small>')+
           '<div><button data-action="edit" data-id="'+esc(card.id)+'" type="button">Редактировать</button>'+
           (card.invalid?'<button data-action="restore-invalid" data-id="'+esc(card.id)+'" type="button">Восстановить</button>':
