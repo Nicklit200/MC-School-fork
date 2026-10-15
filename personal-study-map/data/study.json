@@ -3985,9 +3985,9 @@
               "title": "Zustand und Zustandsdiagramm",
               "subtitle": "Klasse · Attributwerte · Objektlebenszyklus",
               "description": "Объяснять состояние как абстракцию значений атрибутов объекта одного класса; диаграмму как последовательность состояний и переходов под воздействием стимулов.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 0,
               "y": 4520,
               "evidence": [],
@@ -3997,7 +3997,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 3
@@ -4031,9 +4031,9 @@
               "title": "Endlicher Automat: Bestandteile",
               "subtitle": "Zustände · Ereignisse · Transitionen",
               "description": "Называть составляющие конечного автомата: непустые конечные множества состояний и событий, переходы, начальное и конечные состояния.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 300,
               "y": 4520,
               "evidence": [],
@@ -4043,7 +4043,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 4
@@ -4077,9 +4077,9 @@
               "title": "Unterzustände erkennen",
               "subtitle": "Vorlesung · lesend · aufmerksam · schlafend",
               "description": "Разбирать пример вложенных состояний лекции, переходы по условиям и завершение.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 600,
               "y": 4520,
               "evidence": [],
@@ -4089,7 +4089,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 5
@@ -4123,9 +4123,9 @@
               "title": "Zustandsdiagramm erstellen",
               "subtitle": "Zustände · Operationen · Lebenszyklus",
               "description": "Уметь перечислить этапы построения: выделить осмысленные состояния, сопоставить операции, определить допустимые последовательности, события и действия переходов.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 900,
               "y": 4520,
               "evidence": [],
@@ -4135,7 +4135,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 6
@@ -4169,9 +4169,9 @@
               "title": "Regeln für Zustandsdiagramme",
               "subtitle": "5–7 Zustände · OR/AND · Bedingungen",
               "description": "Понимать правила: избегать больших диапазонов значений в состояниях, ограничивать поддиаграммы 5–7 состояниями, не смешивать свойства и учитывать переходы без событий.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 0,
               "y": 4760,
               "evidence": [],
@@ -4181,7 +4181,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 7
@@ -4215,9 +4215,9 @@
               "title": "Aktivitätsdiagramm: Definition",
               "subtitle": "Start · Aktionen · Kontroll-/Objektfluss",
               "description": "Объяснять, что диаграмма активности описывает варианты выполнения системы действиями; знать начальный узел, узлы действий/контроля/объектов, конечные узлы и потоки.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 300,
               "y": 4760,
               "evidence": [],
@@ -4227,7 +4227,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 9
@@ -4261,9 +4261,9 @@
               "title": "Aktivitätsdiagramm lesen",
               "subtitle": "Würfeln · Guards · Verzweigung",
               "description": "Читать пример Würfeln: условия [Pasch], [kein Pasch], [3 mal Pasch], действия и возврат к броску.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 600,
               "y": 4760,
               "evidence": [],
@@ -4273,7 +4273,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 10
@@ -4307,9 +4307,9 @@
               "title": "Splitting und Synchronisation",
               "subtitle": "Parallele Aktionen · UND-Zusammenführung",
               "description": "Отличать разделение параллельных действий (Splitting) от их синхронизации (UND) в примере игры.",
-              "mastery": 0,
+              "mastery": 20,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-15",
               "x": 900,
               "y": 4760,
               "evidence": [],
@@ -4319,7 +4319,7 @@
                 "lastResult": null
               },
               "sourceDocument": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
-              "learningStatus": "not_started",
+              "learningStatus": "introduced",
               "lectureId": "se-lecture-state-activity-201819",
               "slideNumbers": [
                 10
@@ -6279,6 +6279,71 @@
     }
   ],
   "sessions": [
+    {
+      "id": "session-2026-10-15-zustands-aktivitaetsdiagramme",
+      "semesterId": "ws-2026-27",
+      "examId": "exam-software-engineering",
+      "date": "2026-10-15",
+      "title": "Zustands- und Aktivitätsdiagramme — слайды 1–11",
+      "summary": "Разобрали назначение Zustandsdiagramm и состояния объекта, состав конечного автомата, Unterzustände, построение и правила диаграмм состояний, Aktivitätsdiagramm, условные ветвления, Splitting и Synchronisation. Добавлены 8 навыков и 16 тренировочных карточек. Ознакомительное изучение оценено в 20%; самостоятельные ответы по новым карточкам пока не подтверждены.",
+      "changes": [
+        {
+          "skillId": "se-lecture-state-activity-20261015-01",
+          "skillTitle": "Zustand und Zustandsdiagramm",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-02",
+          "skillTitle": "Endlicher Automat: Bestandteile",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-03",
+          "skillTitle": "Unterzustände erkennen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-04",
+          "skillTitle": "Zustandsdiagramm erstellen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-05",
+          "skillTitle": "Regeln für Zustandsdiagramme",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-06",
+          "skillTitle": "Aktivitätsdiagramm: Definition",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-07",
+          "skillTitle": "Aktivitätsdiagramm lesen",
+          "from": 0,
+          "to": 20
+        },
+        {
+          "skillId": "se-lecture-state-activity-20261015-08",
+          "skillTitle": "Splitting und Synchronisation",
+          "from": 0,
+          "to": 20
+        }
+      ],
+      "checkpoint": {
+        "document": "GE_SWT1_Skript_201819_04_Zustands- und Anwendungsfalldiagramme - Aufnahme (1).pdf",
+        "course": "Software Engineering",
+        "pagesCovered": "1–11",
+        "date": "2026-10-15",
+        "note": "Лекция разобрана; проверить понимание карточками. Проценты 20% означают ознакомление, а не подтверждённое знание."
+      }
+    },
     {
       "id": "session-2026-10-11-sweg-vorgehen",
       "semesterId": "ws-2026-27",
