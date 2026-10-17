@@ -1,0 +1,37 @@
+* { box-sizing: border-box; }
+html, body, #pen-lab-root { min-height: 100%; margin: 0; }
+body { background: #eef2f8; color: #162033; font-family: Inter, system-ui, -apple-system, sans-serif; }
+button, input { font: inherit; }
+button { border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #162033; padding: 9px 12px; cursor: pointer; touch-action: manipulation; }
+button.selected { background: #1d4ed8; color: white; border-color: #1d4ed8; }
+button:disabled { cursor: not-allowed; opacity: .4; }
+.penlab { padding: 16px; max-width: 1500px; margin: auto; }
+.penlab-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; padding-bottom: 14px; }
+h1 { margin: 0; font-size: clamp(25px, 4vw, 38px); letter-spacing: -.04em; }
+.eyebrow { text-transform: uppercase; letter-spacing: .1em; font-size: 11px; color: #64748b; margin: 0 0 6px; }
+.subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
+.live { display: inline-block; background: #d1fae5; color: #047857; border-radius: 6px; font-size: 11px; padding: 5px 7px; vertical-align: middle; letter-spacing: .03em; }
+.diagnostics { background: #fff; border: 1px solid #d9e1ed; border-radius: 12px; padding: 11px 14px; font-size: 12px; display: grid; gap: 3px; min-width: 230px; }
+.diagnostics span { color: #475569; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; align-items: center; background: #fff; border-radius: 14px; margin-bottom: 12px; box-shadow: 0 2px 12px #17203312; }
+.colors, .zoom { display: flex; align-items: center; gap: 6px; }
+.color { width: 33px; height: 33px; padding: 0; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px #cbd5e1; }
+.color.active { box-shadow: 0 0 0 3px #1d4ed8; }
+.penlab-slider, .finger { display: flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.penlab-slider input { width: 95px; }
+.zoom { margin-left: auto; }
+.zoom span { min-width: 42px; text-align: center; font-weight: 650; }
+.canvas-stage { position: relative; overflow: hidden; display: flex; justify-content: center; align-items: flex-start; padding: 18px; min-height: 70vh; background: #d9e2ed; border: 1px solid #c2cfdf; border-radius: 14px; }
+.sheet { position: relative; width: min(100%, 800px); aspect-ratio: 8/11; flex: none; background: white; box-shadow: 0 6px 28px #2634482b; transform-origin: top center; touch-action: none; user-select: none; -webkit-user-select: none; }
+.sheet-lines { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, transparent, transparent 38px, #dbeafe 39px, transparent 40px); pointer-events: none; }
+.ink-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+footer { margin: 12px auto; color: #64748b; text-align: center; font-size: 12px; }
+@media(max-width:650px) {
+  .penlab { padding: 9px; }
+  .toolbar { position: sticky; top: 0; z-index: 10; padding: 8px; gap: 6px; }
+  .toolbar button { padding: 8px; font-size: 12px; }
+  .color { width: 29px; height: 29px; }
+  .zoom { margin-left: 0; }
+  .canvas-stage { padding: 6px; min-height: 64vh; }
+  .diagnostics { width: 100%; }
+}
