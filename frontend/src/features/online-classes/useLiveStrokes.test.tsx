@@ -152,6 +152,38 @@ describe('useLiveStrokes', () => {
     expect(result.current.drafts).toHaveLength(0);
   });
 
+  it('does not rewind handwriting when a delayed network frame arrives', () => {
+    const { result } = mount();
+    const strokeId = '11111111-1111-4111-8111-111111111111';
+    const longer = { ...line, points: [...line.points, [0.3, 0.3]] as [number, number][] };
+    act(() => handler({
+      event: strokeEvent('c1', 'board-1', 0, true, longer, strokeId, 3),
+      senderIdentity: 'student|tablet',
+    }));
+    act(() => handler({
+      event: strokeEvent('c1', 'board-1', 0, true, line, strokeId, 2),
+      senderIdentity: 'student|tablet',
+    }));
+    expect(result.current.drafts).toHaveLength(1);
+    expect(result.current.drafts[0].shape.points).toHaveLength(3);
+  });
+
+  it('never resurrects a finished line from a delayed unreliable frame', () => {
+    const { result } = mount();
+    const strokeId = '11111111-1111-4111-8111-111111111111';
+    act(() => handler({
+      event: strokeEvent('c1', 'board-1', 0, false, line, strokeId, 4),
+      senderIdentity: 'student|tablet',
+    }));
+    act(() => result.current.acknowledgeRendered([strokeId]));
+    expect(result.current.drafts).toHaveLength(0);
+    act(() => handler({
+      event: strokeEvent('c1', 'board-1', 0, true, line, strokeId, 3),
+      senderIdentity: 'student|tablet',
+    }));
+    expect(result.current.drafts).toHaveLength(0);
+  });
+
   it('never overwrites fast consecutive strokes from one student', () => {
     const { result } = mount();
     const a = '11111111-1111-4111-8111-111111111111';
