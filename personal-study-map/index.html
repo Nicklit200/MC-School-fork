@@ -344,6 +344,28 @@
     .lecture-material-note{font-size:13px;color:#6a7b93;margin:4px 0 10px 20px}
     .lecture-material .list-row{margin-left:16px}
     @media(max-width:720px){.lecture-tree{padding:8px}.lecture-tree-title{font-size:15px}.lecture-material>summary{font-size:14px}.lecture-material .list-row{margin-left:4px}}
+
+    /* Unified nested lecture, material, topic and exam cards. */
+    #list .lecture-tree,#list .topic-tree{box-sizing:border-box;width:100%;margin:10px 0 14px;padding:12px 16px;border:1px solid #dfe7f0;border-radius:14px;background:#fff;box-shadow:none}
+    #list .lecture-tree-title,#list .topic-tree-title{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;min-height:32px;font-size:17px;font-weight:750;color:#20334e;list-style:none;cursor:pointer}
+    #list .lecture-tree-title::before,#list .topic-tree-title::before{content:"▸";display:inline-block;flex:none;font-size:13px;color:#71839b;margin-right:0}
+    #list .lecture-tree[open]>.lecture-tree-title::before,#list .topic-tree[open]>.topic-tree-title::before{content:"▾"}
+    #list .lecture-tree-title>span:first-child,#list .topic-tree-title>span:first-child{flex:1}
+    #list .section-mastery{margin-left:auto;padding:0 2px;font-size:15px;font-weight:750;color:#20334e}
+    #list .lecture-material{margin:8px 0 0;padding:0;border:1px solid #e1e8f1;border-radius:11px;background:#fff;overflow:hidden}
+    #list .lecture-material>summary{display:flex;align-items:center;gap:10px;min-height:42px;padding:10px 13px;list-style:none;cursor:pointer;font-size:15px;font-weight:700;color:#20334e}
+    #list .lecture-material>summary::-webkit-details-marker{display:none}
+    #list .lecture-material>summary::before{content:"▸";font-size:12px;color:#71839b;flex:none}
+    #list .lecture-material[open]>summary::before{content:"▾"}
+    #list .lecture-material>summary>span:first-child{flex:1}
+    #list .lecture-material-note{margin:4px 14px 12px 32px;font-size:13px;color:#72849c}
+    #list .lecture-material .list-row,#list .topic-tree .list-row{margin:0 12px 8px;border:1px solid #e5ebf3;border-radius:10px;box-sizing:border-box}
+    #list .lecture-material .list-row{margin-left:12px}
+    #list .topic-tree>.list-row:first-of-type{margin-top:12px}
+    #list .lecture-material .list-row:last-child{margin-bottom:12px}
+    #list .lecture-tree:focus-within,#list .topic-tree:focus-within{border-color:#c8d7e9}
+    #list summary:focus-visible{outline:2px solid #4c83d8;outline-offset:2px;border-radius:5px}
+    @media(max-width:720px){#list .lecture-tree,#list .topic-tree{padding:10px}#list .lecture-tree-title,#list .topic-tree-title{font-size:15px}#list .lecture-material>summary{font-size:14px;padding:9px}#list .lecture-material .list-row,#list .topic-tree .list-row{margin-left:4px;margin-right:4px}}
   </style>
   <script src="./flashcard-engine.js"></script>
   <script src="./study-settings.js?v=20261017-1" defer></script>
