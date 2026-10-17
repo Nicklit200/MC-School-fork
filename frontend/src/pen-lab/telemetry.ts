@@ -57,6 +57,8 @@ class PenLabTelemetry {
 
   constructor() {
     this.record('session_start', {
+      pagePath: window.location.pathname,
+      mode: window.location.pathname.includes('pen-lab-fast') ? 'fast' : 'standard',
       userAgent: navigator.userAgent.slice(0, 300),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
