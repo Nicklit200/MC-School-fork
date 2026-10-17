@@ -249,10 +249,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     onEraseShape?.(hit.operationId);
   };
 
-  const moveStroke = (local: Point, pressure?: number) => {
+  const moveStroke = (local: Point, pressure?: number, force = false) => {
     const { tool: active, eraserMode: eraser } = live.current;
     const now = performance.now();
-    if (now - lastSample.current < SAMPLE_INTERVAL_MS) return;
+    if (!force && now - lastSample.current < SAMPLE_INTERVAL_MS) return;
     lastSample.current = now;
     const point = toPage(local);
 
@@ -273,6 +273,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
 
     const current = draftRef.current;
     if (!current) return;
+    if (current.points) {
+      const end = current.points[current.points.length - 1];
+      if (end && Math.hypot(point.x - end[0], point.y - end[1]) < 0.0001) return;
+    }
     let next: Shape;
     if (current.points) {
       next = { ...current, points: [...current.points, [point.x, point.y]],
@@ -401,6 +405,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
+    // Preserve the final position even when the entire short stroke fits in
+    // one 16ms sample window; do not turn quick crossbars into dots.
+    if (controller.isDrawing) moveStroke(localPoint(event), event.pressure, true);
     applyIntents(controller.up(event.pointerId));
   };
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -430,7 +437,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         applyInkIntentsRef.current(controller.move(meta.inputId,
           local(point.clientX, point.clientY), meta.device === 'pen' ? point.pressure : undefined));
       },
-      onEnd(_point, meta, cancelled) {
+      onEnd(point, meta, cancelled) {
+        if (!cancelled && controller.isDrawing) {
+          moveStroke(local(point.clientX, point.clientY), point.pressure, true);
+        }
         applyInkIntentsRef.current(controller.up(meta.inputId, cancelled));
       },
     }, {
