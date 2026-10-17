@@ -54,6 +54,29 @@ describe('capPoints / toLiveShape', () => {
     expect(capped[capped.length - 1]).toEqual(points[points.length - 1]);
   });
 
+  it('keeps every short pen sample and pressure exactly as seen before saving', () => {
+    const points: [number, number][] = [
+      [0.1111, 0.4444], [0.1112, 0.4444], [0.1113, 0.4445],
+      [0.1114, 0.4446], [0.112, 0.445],
+    ];
+    const pressures = [0.14, 0.25, 0.36, 0.47, 0.58];
+    const live = toLiveShape({ kind: 'pen', color: '#111111', width: 0.004, points, pressures });
+    expect(live?.points).toEqual(points);
+    expect(live?.pressures).toEqual(pressures);
+  });
+
+  it('sends a long stable handwriting preview within the 8 KB packet limit', () => {
+    const points: [number, number][] = Array.from({ length: 480 }, (_, i) =>
+      [Math.round(i / 1000 * 10000) / 10000, Math.round((0.2 + i / 4800) * 10000) / 10000]);
+    const pressures = points.map(() => 0.5);
+    const live = toLiveShape({ kind: 'pen', color: '#111111', width: 0.004, points, pressures });
+    expect(live?.points).toHaveLength(MAX_LIVE_POINTS);
+    expect(live?.points?.[0]).toEqual(points[0]);
+    expect(live?.points?.at(-1)).toEqual(points[points.length - 1]);
+    const wire = encodeEvent(strokeEvent('c1', 'board-1', 0, true, live!));
+    expect(wire.length).toBeLessThanOrEqual(8192);
+  });
+
   it('previews strokes and shapes but never the eraser or text', () => {
     expect(toLiveShape({ kind: 'pen', color: '#d62828', width: 0.004, points: [[0, 0]] })).not.toBeNull();
     expect(toLiveShape({ kind: 'rect', color: '#d62828', width: 0.004, x: 0, y: 0, w: 0.1, h: 0.1 })).not.toBeNull();
