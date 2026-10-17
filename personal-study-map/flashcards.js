@@ -288,7 +288,7 @@
     const item=session.items?.[card.id];
     if(!item||item.attempts!==1)return;
     const states=getProgress();
-    states[card.id]={...engine.afterReview(states[card.id],!item.hadWrongAttempt),updatedAt:new Date().toISOString()};
+    states[card.id]={...engine.afterReview(states[card.id],!item.hadWrongAttempt),lastCorrect:!item.hadWrongAttempt,updatedAt:new Date().toISOString()};
     writeJson(KEY_PROGRESS,states);
     queueSync();
     window.dispatchEvent(new Event("study-reviews-updated"));
@@ -341,7 +341,7 @@
     return {
       due:cards.filter(card=>cardState(card,progress).dueDate<=today).length,
       known:cards.filter(card=>cardState(card,progress).repetitionNumber>=1).length,
-      errors:cards.filter(card=>latest.get(card.id)?.correct===false).length,
+      errors:cards.filter(card=>progress[card.id]?.lastCorrect===false || (progress[card.id]?.lastCorrect===undefined && (progress[card.id]?.status==="RESET" || latest.get(card.id)?.correct===false))).length,
       unseen:cards.filter(card=>!progress[card.id]&&!latest.has(card.id)).length
     };
   }
@@ -835,6 +835,15 @@
     const remove=session.cardIds.filter(id=>
       isInvalidCard(id,excluded) || isDeletedCard(id,deleted) || overrides[id]?.deleted
     );
+    // An old unfinished queue may contain cards which have since been
+    // scheduled into the future on another device or in another session.
+    const progress=getProgress(), today=engine.isoDay();
+    for(const id of session.cardIds){
+      const item=session.items?.[id];
+      const due=progress[id]?.dueDate;
+      if(session.mode==="SCHEDULED" && item?.state==="PENDING" &&
+          !item.hadWrongAttempt && due && due>today && !remove.includes(id)) remove.push(id);
+    }
     for (const id of remove) dropCardFromSession(session,id);
     if (!session.cardIds.length) {
       localStorage.removeItem(KEY_SESSION);
