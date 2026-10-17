@@ -883,7 +883,7 @@
     window.dispatchEvent(new Event("study-reviews-updated"));
   }
 
-  function handleClick(event) {
+  async function handleClick(event) {
     const button=event.target.closest("button[data-action]");
     if (!button || !host.contains(button) || button.disabled) return;
     const action=button.dataset.action;
