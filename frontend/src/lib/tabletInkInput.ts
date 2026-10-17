@@ -129,6 +129,7 @@ export function attachTabletInkInput(
   // Mouse events following native Touch Events are synthetic; never treat them
   // as a real second stroke. Touch cancelation normally prevents synthesis.
   let lastNativeTouchTime = -Infinity;
+  const ownedTouches = new Set<number>();
 
   function listen<K extends keyof HTMLElementEventMap>(
     target: HTMLElement | Document | Window,
@@ -247,6 +248,7 @@ export function attachTabletInkInput(
     lastNativeTouchTime = performance.now();
     for (let i = 0; i < event.changedTouches.length; i += 1) {
       const touch = event.changedTouches[i];
+      ownedTouches.add(touch.identifier);
       const device = touchDevice(touch);
       if (device === 'finger') {
         if (active?.meta.device === 'pen') continue;
@@ -274,11 +276,12 @@ export function attachTabletInkInput(
 
   function touchMove(event: TouchEvent) {
     lastNativeTouchTime = performance.now();
-    // Prevent Safari defaults on every touchmove, including Scribble's attempts
-    // to interpret rapid Pencil writing as text or a page gesture.
+    // Do not block unrelated gestures outside the drawing sheet.
+    if (!Array.from(event.changedTouches).some((touch) => ownedTouches.has(touch.identifier))) return;
     prevent(event);
     for (let i = 0; i < event.changedTouches.length; i += 1) {
       const touch = event.changedTouches[i];
+      if (!ownedTouches.has(touch.identifier)) continue;
       if (contacts.has(touch.identifier)) {
         contacts.set(touch.identifier, {
           id: touch.identifier, clientX: touch.clientX, clientY: touch.clientY,
@@ -291,9 +294,11 @@ export function attachTabletInkInput(
 
   function touchFinish(event: TouchEvent, cancelled: boolean) {
     lastNativeTouchTime = performance.now();
+    if (!Array.from(event.changedTouches).some((touch) => ownedTouches.has(touch.identifier))) return;
     prevent(event);
     for (let i = 0; i < event.changedTouches.length; i += 1) {
       const touch = event.changedTouches[i];
+      if (!ownedTouches.delete(touch.identifier)) continue;
       contacts.delete(touch.identifier);
       finish(touchPoint(touch, event.timeStamp), 'touch', touch.identifier, cancelled);
     }
@@ -352,6 +357,7 @@ export function attachTabletInkInput(
     if (destroyed) return;
     if (active) finish(active.last, active.meta.source, active.meta.inputId, true);
     contacts.clear();
+    ownedTouches.clear();
     emitGesture();
   }
   listen(window, 'blur', clearActive);
