@@ -173,8 +173,12 @@ describe('WhiteboardPanel', () => {
           false,
         ),
       );
-      act(() => canvasProps.onDraftChange(null));
-      expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'stroke', active: false }), true);
+      act(() => canvasProps.onDraftChange(pen, '11111111-1111-4111-8111-111111111111', true));
+      expect(publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'stroke', active: false, shape: expect.objectContaining({ kind: 'pen' }) }),
+        true,
+        undefined,
+      );
     });
 
     it('does not preview the eraser', async () => {
