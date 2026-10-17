@@ -1873,11 +1873,13 @@ window.addEventListener("resize", applyTransform);
 
 
 async function handleOAuthApproval(){
- const match=window.location.hash.match(/^#oauth-approve=([a-f0-9]{64})$/);
+ const match=window.location.hash.match(/^#oauth-approve=([a-f0-9]{64})(?:&mode=(manage|nutrition))?$/);
  if(!match)return;
  history.replaceState(null,"",location.pathname+location.search);
  const requestId=match[1];
- if(!confirm("Разрешить ChatGPT читать историю твоих учебных карточек? Доступ только для чтения."))return;
+ const expanded=Boolean(match[2]);
+ const consent=expanded?"Разрешить ChatGPT читать и изменять личные данные сайта «Мои навыки» (питание, тренировки, учебные задачи, слова)?":"Разрешить ChatGPT читать историю твоих учебных карточек? Доступ только для чтения.";
+ if(!confirm(consent))return;
  const token=localStorage.getItem("personal-study-map:owner-token:v1");
  if(!/^[a-f0-9]{64}$/.test(token||"")){alert("Сначала открой раздел карточек и дождись синхронизации, затем повтори подключение.");return;}
  try{
