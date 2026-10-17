@@ -172,6 +172,62 @@ class OnlineClassAnnotationIntegrationTest extends AbstractIntegrationTest {
                 .containsExactly(1L, 2L);
     }
 
+    @Test
+    void rapidConcurrentPenStrokesAreAllSavedWithUniqueSequenceNumbers() throws Exception {
+        int count = 24;
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        CountDownLatch go = new CountDownLatch(1);
+        try {
+            List<Future<AnnotationOperationResponse>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                AuthenticatedUser who = i % 2 == 0 ? teacherPrincipal : studentPrincipal;
+                results.add(pool.submit(() -> {
+                    go.await();
+                    return draw(who, PEN);
+                }));
+            }
+            go.countDown();
+            java.util.Set<Long> sequences = new java.util.HashSet<>();
+            for (Future<AnnotationOperationResponse> result : results) {
+                sequences.add(result.get(30, java.util.concurrent.TimeUnit.SECONDS).sequence());
+            }
+            assertThat(sequences).hasSize(count);
+            assertThat(annotationService.replay(teacherPrincipal, onlineClass.getId(), board.id(), 0))
+                    .hasSize(count);
+            assertThat(eventRepository.count()).isEqualTo(count);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void simultaneousRetriesForOneStrokeSaveExactlyOneEvent() throws Exception {
+        int count = 8;
+        UUID operationId = UUID.randomUUID();
+        AnnotationOperationRequest request = new AnnotationOperationRequest(
+                operationId, AnnotationOperationType.ADD, PEN);
+        ExecutorService pool = Executors.newFixedThreadPool(count);
+        CountDownLatch go = new CountDownLatch(1);
+        try {
+            List<Future<AnnotationOperationResponse>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                results.add(pool.submit(() -> {
+                    go.await();
+                    return annotationService.append(teacherPrincipal, onlineClass.getId(), board.id(), request);
+                }));
+            }
+            go.countDown();
+            java.util.Set<UUID> ids = new java.util.HashSet<>();
+            for (Future<AnnotationOperationResponse> result : results) {
+                ids.add(result.get(30, java.util.concurrent.TimeUnit.SECONDS).id());
+            }
+            assertThat(ids).hasSize(1);
+            assertThat(eventRepository.count()).isEqualTo(1);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     // --- Layers and permissions ---------------------------------------------
 
     @Test
