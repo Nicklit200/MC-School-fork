@@ -281,6 +281,18 @@
     if (ui.session) writeJson(KEY_SESSION,ui.session);
   }
 
+  // Save each first-attempt review immediately, rather than waiting for a
+  // lengthy session to complete. The active queue remains resumable.
+  function saveCardReview(session,card) {
+    if(session?.mode!=="SCHEDULED")return;
+    const item=session.items?.[card.id];
+    if(!item||item.attempts!==1)return;
+    const states=getProgress();
+    states[card.id]={...engine.afterReview(states[card.id],!item.hadWrongAttempt),updatedAt:new Date().toISOString()};
+    writeJson(KEY_PROGRESS,states);
+    queueSync();
+    window.dispatchEvent(new Event("study-reviews-updated"));
+  }
   function storedHistory() {
     const rows=readJson(KEY_HISTORY,[]);
     return Array.isArray(rows)?rows:[];
@@ -319,15 +331,31 @@
     }
     return [...groups.values()].sort((a,b)=>(b.date||"").localeCompare(a.date||"")||a.title.localeCompare(b.title,"de"));
   }
+  function topicStats(cards) {
+    const progress=getProgress(), history=latestHistory();
+    const latest=new Map();
+    for (const session of history) for (const item of session.review||[]) {
+      if (!latest.has(item.cardId)) latest.set(item.cardId,item);
+    }
+    const today=engine.isoDay();
+    return {
+      due:cards.filter(card=>cardState(card,progress).dueDate<=today).length,
+      known:cards.filter(card=>cardState(card,progress).repetitionNumber>=1).length,
+      errors:cards.filter(card=>latest.get(card.id)?.correct===false).length,
+      unseen:cards.filter(card=>!progress[card.id]&&!latest.has(card.id)).length
+    };
+  }
   function packagesMarkup(){
     const packages=cardPackages();
     return '<section class="quiz-packages"><strong>История добавленных карточек</strong>'+
       '<p>Когда и по какой теме добавлены карточки. Это оглавление, а не отдельные очереди повторения: все карточки повторяются вместе.</p>'+
       packages.map(pack=>{
         const date=pack.date?labelDate(pack.date):"Дата добавления не сохранена";
+        const stats=topicStats(pack.cards);
         const slides=pack.slides.size?' · слайды '+[...pack.slides].sort((a,b)=>a-b).join(", "):"";
         return '<details class="quiz-package"><summary><span class="quiz-package-date">'+esc(date)+'</span>'+
-          '<strong>'+esc(pack.title)+'</strong><small>'+pack.cards.length+' карточек'+esc(slides)+'</small></summary>'+
+          '<strong>'+esc(pack.title)+'</strong><small>'+pack.cards.length+' карточек'+esc(slides)+'</small>'+ 
+          '<small>Ошибки: '+stats.errors+' · К повторению: '+stats.due+' · Освоено: '+stats.known+' · Новые: '+stats.unseen+'</small></summary>'+
           '<div class="quiz-package-questions">'+pack.cards.map((card,i)=>
             '<div class="quiz-package-question"><span>'+String(i+1)+'. '+esc(card.question)+'</span></div>'
           ).join("")+'</div></details>';
@@ -506,6 +534,7 @@
     const feedback=engine.recordAnswer(session,card,value,timedOut);
     feedback.skipped=skipped;
     ui.feedback=feedback;
+    saveCardReview(session,card);
     saveSession();
     renderStudyFeedback(card,feedback);
   }
@@ -559,6 +588,8 @@
     const session=ui.session;
     if (!session) return;
     const completed=engine.finishSession(session,session.cards,getProgress());
+    // Progress was already persisted on first answer: avoid applying it twice.
+    if(session.mode==="SCHEDULED")completed.states=getProgress();
     if (session.mode==="SCHEDULED") {
       writeJson(KEY_PROGRESS,completed.states);
     }
