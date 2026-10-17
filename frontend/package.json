@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "dev:pen-lab": "vite --host 0.0.0.0 --port 5173 --open /pen-lab.html"
+    "dev:pen-lab": "vite --config vite.config.ts --host 0.0.0.0 --port 5173 --open /pen-lab.html"
   },
   "dependencies": {
     "react": "^18.3.1",
