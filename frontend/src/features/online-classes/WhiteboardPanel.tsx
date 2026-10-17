@@ -20,7 +20,7 @@ import {
   type BoardPages,
   type PageView,
 } from './boardView';
-import { isPersonalBoard } from './boards';
+import { isPersonalBoard, personalBoardOwner } from './boards';
 import { ANNOTATION_TOPIC, annotationEvent } from './events';
 import type { InputMode } from './inputPolicy';
 import { navigationLocked } from './followTeacher';
@@ -100,6 +100,7 @@ export function WhiteboardPanel({
   // follows (or is followed by) anyone. The teacher sees a student's marks by
   // polling the server, which is what enforces who may read them.
   const personal = isPersonalBoard(targetId);
+  const ownerId = personalBoardOwner(targetId);
   const [tool, setTool] = useState<Tool>('pen');
   const [toolSettings, setToolSettings] = useState<Record<Tool, ToolSettings>>(DEFAULT_TOOL_SETTINGS);
   const [eraserMode, setEraserMode] = useState<EraserMode>('partial');
@@ -158,7 +159,10 @@ export function WhiteboardPanel({
     classId,
     targetId,
     page: pages.current,
-    enabled: !personal,
+    enabled: true,
+    personalOwnerId: ownerId,
+    hostUserId,
+    currentUserId: actorId,
   });
 
   // A packet only says "something was saved". Any participant can publish on
@@ -168,7 +172,8 @@ export function WhiteboardPanel({
   const { publish: publishAnnotation } = useClassEvents(classId, ANNOTATION_TOPIC, ({ event }) => {
     if (event.type === 'annotation' && !personal) {
       requestRefresh.current();
-      live.settle(event.layerOwnerId);
+      // The preview must persist until the matching REST-replayed shape is rendered.
+      // A saved-event hint alone can arrive well before the actual geometry.
     }
   });
 
@@ -193,6 +198,10 @@ export function WhiteboardPanel({
     },
   });
   boardRef.current = board;
+  const savedOperationIds = board.shapes.map((entry) => entry.operationId).join(',');
+  useEffect(() => {
+    live.acknowledgeRendered(savedOperationIds ? savedOperationIds.split(',') : []);
+  }, [savedOperationIds, live.acknowledgeRendered]);
 
   const { lasers, sendLaser: broadcastLaser } = useLaserPointers(classId, targetId);
   const sendLaser = personal ? undefined : broadcastLaser;
@@ -405,9 +414,9 @@ export function WhiteboardPanel({
           background={renderedPage?.canvas ?? null}
           lasers={lasers}
           remoteDrafts={live.drafts}
-          onDraftChange={(shape) => live.sendDraft(shape ? toLiveShape(shape) : null)}
+          onDraftChange={(shape, strokeId, finished) => live.sendDraft(shape ? toLiveShape(shape) : null, strokeId, finished)}
           actorId={actorId}
-          onCommit={(shape) => void board.addShape(shape)}
+          onCommit={(shape, strokeId) => void board.addShape(shape, strokeId)}
           onEraseShape={(id) => void board.eraseShape(id)}
           onMoveShape={(id, shape) => void board.moveShape(id, shape)}
           onLaserMove={sendLaser}
