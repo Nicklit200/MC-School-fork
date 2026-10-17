@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRoomContext } from '@livekit/components-react';
 import { thinPoints, thinStroke } from './annotations';
 import {
   MAX_LIVE_POINTS,
@@ -107,6 +108,7 @@ export function useLiveStrokes({
   enabled,
   hostUserId,
   personalOwnerId,
+  currentUserId,
 }: {
   classId: string;
   targetId: string;
@@ -115,7 +117,9 @@ export function useLiveStrokes({
   /** Used only for privacy-limited personal-board previews. */
   hostUserId?: string | null;
   personalOwnerId?: string | null;
+  currentUserId?: string | null;
 }) {
+  const room = useRoomContext();
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const lastSent = useRef(0);
   const sentActive = useRef(false);
@@ -127,7 +131,10 @@ export function useLiveStrokes({
     // Personal board previews must only originate from its owner or teacher,
     // and must never be visible to other students.
     const senderUser = senderIdentity.split('|')[0];
-    if (personalOwnerId && senderUser !== personalOwnerId && senderUser !== hostUserId) return;
+    if (personalOwnerId && (
+      (currentUserId !== personalOwnerId && currentUserId !== hostUserId) ||
+      (senderUser !== personalOwnerId && senderUser !== hostUserId)
+    )) return;
     const id = event.strokeId ? senderIdentity + ':' + event.strokeId : senderIdentity;
     if (event.shape) {
       setEntries((current) => {
@@ -208,13 +215,23 @@ export function useLiveStrokes({
   const sendDraft = useCallback(
     (shape: LiveShape | null, strokeId?: string, finished = false) => {
       if (!enabled) return;
+      // Personal boards are private, including interim pencil coordinates.
+      if (personalOwnerId && (currentUserId !== personalOwnerId && currentUserId !== hostUserId)) return;
+      const destinations = personalOwnerId
+        ? [...room.remoteParticipants.values()]
+          .filter((participant) => {
+            const userId = participant.identity.split('|')[0];
+            return userId === personalOwnerId || userId === hostUserId;
+          })
+          .map((participant) => participant.identity)
+        : undefined;
       const id = strokeId ?? activeStrokeId.current;
       if (!shape) {
         if (!sentActive.current) return;
         sentActive.current = false;
         activeStrokeId.current = undefined;
         lastSent.current = 0;
-        void publish(strokeEvent(classId, targetId, page, false, undefined, id), true);
+        void publish(strokeEvent(classId, targetId, page, false, undefined, id), true, destinations);
         return;
       }
       const now = performance.now();
@@ -223,13 +240,13 @@ export function useLiveStrokes({
       lastSent.current = now;
       activeStrokeId.current = id;
       sentActive.current = !finished;
-      void publish(strokeEvent(classId, targetId, page, !finished, shape, id), finished);
+      void publish(strokeEvent(classId, targetId, page, !finished, shape, id), finished, destinations);
       if (finished) {
         activeStrokeId.current = undefined;
         lastSent.current = 0;
       }
     },
-    [classId, enabled, page, publish, targetId],
+    [classId, currentUserId, enabled, hostUserId, page, personalOwnerId, publish, room, targetId],
   );
 
   const drafts: LiveDraft[] = Object.entries(entries)
