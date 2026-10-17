@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { thinPoints, thinStroke } from './annotations';
 import {
   MAX_LIVE_POINTS,
   STROKE_KINDS,
@@ -11,7 +10,7 @@ import {
 import { useClassEvents } from './useClassEvents';
 
 /** Matches the protocol's ≤ 20 Hz cap for lossy traffic. */
-const SEND_INTERVAL_MS = 50;
+const SEND_INTERVAL_MS = 33;
 /** A preview with no update for this long is dropped (the sender vanished). */
 const STALE_AFTER_MS = 15_000;
 /**
@@ -36,16 +35,27 @@ interface Entry {
   removeAt: number | null;
 }
 
-/** Keeps a long freehand stroke inside the packet cap while keeping its shape. */
-export function capPoints(points: [number, number][]): [number, number][] {
-  const thinned = thinPoints(points);
-  if (thinned.length <= MAX_LIVE_POINTS) return thinned;
-  const stride = Math.ceil(thinned.length / MAX_LIVE_POINTS);
-  const kept = thinned.filter((_, index) => index % stride === 0);
-  const last = thinned[thinned.length - 1];
-  if (kept[kept.length - 1] !== last) kept.push(last);
-  return kept.slice(-MAX_LIVE_POINTS);
+/**
+ * Preview geometry uses the same canonical points as the local and saved
+ * stroke. Never simplify short handwriting: dropping intermediate samples at
+ * pen-up was making equations visibly morph on students' screens.
+ *
+ * Only unusually long strokes exceed the transport's 240-point packet cap.
+ * Those are evenly sampled for realtime, while the saved version stays exact.
+ */
+function sampleIndexes(count: number): number[] {
+  if (count <= MAX_LIVE_POINTS) return Array.from({ length: count }, (_, i) => i);
+  return Array.from({ length: MAX_LIVE_POINTS }, (_, i) =>
+    Math.round(i * (count - 1) / (MAX_LIVE_POINTS - 1)));
 }
+
+export function capPoints(points: [number, number][]): [number, number][] {
+  return sampleIndexes(points.length).map((index) => points[index]);
+}
+
+/** Keep wire size bounded without changing the contour at a visible scale. */
+const roundCoordinate = (value: number) => Math.round(value * 10000) / 10000;
+const roundPressure = (value: number) => Math.round(value * 100) / 100;
 
 /** Only these shapes can be previewed live; the eraser and text are not. */
 export function toLiveShape(shape: {
@@ -71,17 +81,16 @@ export function toLiveShape(shape: {
     width: shape.width ?? 0.004,
   };
   if (shape.points) {
-    const thinned = thinStroke(shape.points, shape.kind === 'pen' ? shape.pressures : undefined);
-    if (thinned.points.length <= MAX_LIVE_POINTS) {
-      live.points = thinned.points;
-      if (thinned.pressures) live.pressures = thinned.pressures;
-    } else {
-      const stride = Math.ceil(thinned.points.length / MAX_LIVE_POINTS);
-      const indexes = thinned.points.map((_, i) => i).filter((i) => i % stride === 0);
-      if (indexes[indexes.length - 1] !== thinned.points.length - 1) indexes.push(thinned.points.length - 1);
-      const capped = indexes.slice(-MAX_LIVE_POINTS);
-      live.points = capped.map((i) => thinned.points[i]);
-      if (thinned.pressures) live.pressures = capped.map((i) => thinned.pressures![i]);
+    const indexes = sampleIndexes(shape.points.length);
+    live.points = indexes.map((i) => {
+      const point = shape.points![i];
+      return [roundCoordinate(point[0]), roundCoordinate(point[1])] as [number, number];
+    });
+    // Keep pressure and coordinates aligned; never re-run a simplifier after
+    // the line has already been displayed to students.
+    const pressure = shape.kind === 'pen' ? shape.pressures : undefined;
+    if (pressure && pressure.length === shape.points.length) {
+      live.pressures = indexes.map((i) => roundPressure(pressure[i]));
     }
   }
   for (const key of ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2'] as const) {
