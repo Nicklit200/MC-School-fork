@@ -21,6 +21,8 @@ type RunningTest = {
   maxMoveGap: number;
   penMoves: number;
   marked: number;
+  nativeTouchStarts: number;
+  nativeStylusStarts: number;
 };
 type ActiveStroke = {
   pointerId: number;
@@ -212,6 +214,49 @@ document.addEventListener('pointercancel', handlePointerCancel, { capture: true,
 document.addEventListener('lostpointercapture', handleLostCapture, { capture: true, passive: true });
 document.addEventListener('gotpointercapture', handleGotCapture, { capture: true, passive: true });
 
+// Independent Safari Touch Events observer. Pointer Events and Touch Events are
+// different browser APIs. If Scribble suppresses a contact, we can now find out
+// whether a native touchstart was still dispatched. Passive observation only:
+// never preventDefault or change the drawing engine in this experiment.
+let lastNativeTouchSampleAt = 0;
+const readTouchType = (touch: Touch) =>
+  (touch as Touch & { touchType?: string }).touchType ?? 'unknown';
+function observeNativeTouch(kind: string, event: TouchEvent) {
+  for (let i = 0; i < event.changedTouches.length; i += 1) {
+    const touch = event.changedTouches.item(i);
+    if (!touch) continue;
+    const touchType = readTouchType(touch);
+    const onSheet = touch.target instanceof Element &&
+      touch.target.closest('.sheet') !== null;
+    if (kind === 'native_touchmove') {
+      // At most 5 samples per second, but never drop down/up/cancel.
+      if (touchType !== 'stylus' || performance.now() - lastNativeTouchSampleAt < 200) continue;
+      lastNativeTouchSampleAt = performance.now();
+    }
+    telemetry.record(kind, {
+      touchId: touch.identifier,
+      touchType,
+      onSheet,
+      clientX: Math.round(touch.clientX * 10) / 10,
+      clientY: Math.round(touch.clientY * 10) / 10,
+      force: Math.round(touch.force * 100) / 100,
+      activeTouchCount: event.touches.length,
+    });
+    if (kind === 'native_touchstart' && running && onSheet) {
+      running.nativeTouchStarts += 1;
+      if (touchType === 'stylus') running.nativeStylusStarts += 1;
+    }
+  }
+}
+document.addEventListener('touchstart', (event) => observeNativeTouch('native_touchstart', event),
+  { capture: true, passive: true });
+document.addEventListener('touchend', (event) => observeNativeTouch('native_touchend', event),
+  { capture: true, passive: true });
+document.addEventListener('touchcancel', (event) => observeNativeTouch('native_touchcancel', event),
+  { capture: true, passive: true });
+document.addEventListener('touchmove', (event) => observeNativeTouch('native_touchmove', event),
+  { capture: true, passive: true });
+
 function mountControls() {
   if (document.getElementById('penlab-telemetry-controls')) return;
   const box = document.createElement('section');
@@ -283,6 +328,7 @@ function mountControls() {
       spec, startedAt: performance.now(), down: 0, up: 0, cancel: 0,
       outsideSheet: 0, zeroMove: 0, veryShort: 0, lostWhilePressed: 0,
       touchDuringPen: 0, strokes: 0, maxMoveGap: 0, penMoves: 0, marked: 0,
+      nativeTouchStarts: 0, nativeStylusStarts: 0,
     };
     select.disabled = true;
     telemetry.record('test_start', {
@@ -309,6 +355,8 @@ function mountControls() {
       durationSeconds: duration,
       expectedStrokes: expected,
       penDown: finished.down,
+      nativeTouchStarts: finished.nativeTouchStarts,
+      nativeStylusStarts: finished.nativeStylusStarts,
       penUp: finished.up,
       penCancel: finished.cancel,
       penDownOutsideSheet: finished.outsideSheet,
