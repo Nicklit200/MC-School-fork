@@ -392,6 +392,9 @@ export function WhiteboardPanel({
           tool={tool}
           color={settingsOf.color}
           strokeWidth={settingsOf.width}
+          textFont={toolSettings.text.font ?? 'clean'}
+          textFontSize={toolSettings.text.fontSize ?? 24}
+          textBold={Boolean(toolSettings.text.bold)}
           sourceAspect={pageAspect}
           readOnly={!canAnnotate}
           eraserMode={eraserMode}
