@@ -1345,12 +1345,42 @@ function renderList(skills) {
     if (isSoftwareEngineering && lectureTopicIds.includes(topic.id)) continue;
     const topicSkills = skills.filter((s) => s.topicId === topic.id);
     if (!topicSkills.length) continue;
-    const block = document.createElement("section");
-    block.className = "list-group";
-    const heading = document.createElement("h3");
-    heading.textContent = topic.title;
+    const block = document.createElement("details");
+    block.className = "list-group topic-tree";
+    const heading = document.createElement("summary");
+    heading.className = "topic-tree-title";
+    const requiredCount = topicSkills.filter(skill => skill.examRequired).length;
+    const title = document.createElement("span");
+    title.textContent = topic.title;
+    heading.append(title);
+    if (requiredCount) {
+      const badge = document.createElement("span");
+      badge.className = "topic-exam-count";
+      badge.textContent = "EXAM " + requiredCount;
+      heading.append(badge);
+    }
     block.append(heading);
-    for (const skill of topicSkills) block.append(makeSkillRow(skill));
+    if (requiredCount) {
+      const examGroup = document.createElement("details");
+      examGroup.className = "topic-exam-skills";
+      examGroup.open = true;
+      const examHeading = document.createElement("summary");
+      examHeading.textContent = "Для экзамена (" + requiredCount + ")";
+      examGroup.append(examHeading);
+      for (const skill of topicSkills.filter(skill => skill.examRequired)) examGroup.append(makeSkillRow(skill));
+      block.append(examGroup);
+    }
+    const regular = topicSkills.filter(skill => !skill.examRequired);
+    if (regular.length) {
+      const regularGroup = document.createElement("details");
+      regularGroup.className = "topic-regular-skills";
+      regularGroup.open = !requiredCount;
+      const regularHeading = document.createElement("summary");
+      regularHeading.textContent = requiredCount ? "Остальные навыки (" + regular.length + ")" : "Навыки (" + regular.length + ")";
+      regularGroup.append(regularHeading);
+      for (const skill of regular) regularGroup.append(makeSkillRow(skill));
+      block.append(regularGroup);
+    }
     host.append(block);
   }
 }
