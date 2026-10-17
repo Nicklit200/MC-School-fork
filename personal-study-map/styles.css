@@ -2240,3 +2240,31 @@ body.quiz-learning-active{overflow:hidden}
 .study-settings-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .study-settings-actions button{border:0;border-radius:10px;background:#246bc2;color:#fff;padding:12px 20px;font-weight:700;cursor:pointer}
 @media(max-width:760px){.study-settings-open{bottom:12px;right:12px}.study-settings-card{padding:16px}}
+
+/* Layout fix: card column never moves; chat overlays the unused right-hand space. */
+@media(min-width:761px){
+ .flashcard-panel.quiz-fullscreen{display:block!important;padding:0!important;overflow:hidden!important}
+ .flashcard-panel.quiz-fullscreen .flashcard-panel-head{position:absolute;top:10px;left:12px;right:12px;z-index:3}
+ .flashcard-panel.quiz-fullscreen #flashcard-app{position:absolute!important;top:82px;bottom:0;left:50%!important;transform:translateX(-50%)!important;width:min(860px,calc(100vw - 440px))!important;max-width:860px!important;margin:0!important;overflow-y:auto!important;overflow-x:visible!important;padding:0 8px 32px!important;box-sizing:border-box}
+ .flashcard-panel.quiz-fullscreen .quiz-learning-chat{position:absolute!important;top:82px;right:16px;bottom:16px;width:min(360px,calc((100vw - 900px)/2 - 24px));min-width:250px;max-width:360px;box-sizing:border-box;z-index:5;box-shadow:0 10px 36px #24456720}
+ .flashcard-panel.quiz-fullscreen:not(.quiz-chat-open) .quiz-learning-chat{display:none!important}
+ .flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{top:24px!important;right:58px!important;z-index:8!important;font-size:13px!important;min-width:92px!important;padding:9px 12px!important}
+ .flashcard-panel.quiz-fullscreen.quiz-chat-open .quiz-floating-chat-toggle{display:none!important}
+ .flashcard-panel.quiz-fullscreen .quiz-session-buttons #quiz-chat-toggle{display:none!important}
+ .flashcard-panel.quiz-fullscreen .quiz-quick-grade{top:230px;left:max(12px,calc(50% - 620px));width:155px}
+}
+@media(min-width:761px) and (max-width:1500px){
+ .flashcard-panel.quiz-fullscreen #flashcard-app{width:min(760px,calc(100vw - 390px))!important;left:calc((100vw - 365px)/2)!important}
+ .flashcard-panel.quiz-fullscreen .quiz-learning-chat{width:340px;min-width:0}
+ .flashcard-panel.quiz-fullscreen .quiz-quick-grade{left:10px;width:130px}
+}
+@media(min-width:761px) and (max-width:1120px){
+ .flashcard-panel.quiz-fullscreen #flashcard-app{left:50%!important;width:calc(100vw - 190px)!important}
+ .flashcard-panel.quiz-fullscreen .quiz-learning-chat{right:0;top:70px;bottom:0;width:min(340px,80vw);border-radius:14px 0 0 14px;z-index:10}
+ .flashcard-panel.quiz-fullscreen .quiz-quick-grade{position:static;width:auto}
+}
+@media(max-width:760px){
+ .flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{right:16px!important;bottom:16px!important;top:auto!important}
+ .flashcard-panel.quiz-fullscreen.quiz-chat-open .quiz-floating-chat-toggle{display:none!important}
+ .flashcard-panel.quiz-fullscreen .quiz-session-buttons #quiz-chat-toggle{display:none!important}
+}
