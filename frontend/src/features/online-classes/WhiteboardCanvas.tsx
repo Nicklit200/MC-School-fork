@@ -808,7 +808,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       </Stage>
 
       {pendingOnPage.some((entry) => entry.status === 'failed') && (
-        <div className="whiteboard__ink-save-alert" role="alert"
+        <div className="whiteboard__ink-save-alert" role="alert" data-tablet-no-ink=""
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onPointerMove={(event) => event.stopPropagation()}>
