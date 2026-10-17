@@ -13,7 +13,6 @@ import {
   type RenderableShape,
   type Shape,
   letterbox,
-  thinStroke,
   toNormalized,
   toPixels,
 } from './annotations';
@@ -93,7 +92,10 @@ interface Props {
   remoteDrafts?: { id: string; shape: Shape }[];
   /** Whose marks this viewer may delete or move. */
   actorId?: string;
-  onCommit: (shape: Shape, strokeId?: string) => void;
+  /** False means persistence failed; the local ink remains visible for retry. */
+  onCommit: (shape: Shape, strokeId?: string) => void | boolean | Promise<boolean | void>;
+  /** Board plus page key, so pending ink never leaks to another page. */
+  pageKey?: string;
   onEraseShape?: (operationId: string) => void;
   onMoveShape?: (operationId: string, shape: Shape) => void;
   onLaserMove?: (point: { x: number; y: number }) => void;
@@ -131,6 +133,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     remoteDrafts = [],
     actorId,
     onCommit,
+    pageKey = 'default',
     onEraseShape,
     onMoveShape,
     onLaserMove,
@@ -146,6 +149,11 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const stageRef = useRef<Konva.Stage | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
+  type PendingInk = { id: string; page: string; shape: Shape; status: 'saving' | 'saved' | 'failed' };
+  const [pendingInk, setPendingInk] = useState<PendingInk[]>([]);
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const pendingOnPage = pendingInk.filter((entry) => entry.page === pageKey);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragDelta, setDragDelta] = useState<{ dx: number; dy: number } | null>(null);
   const [textEdit, setTextEdit] = useState<{ px: Point; nx: number; ny: number } | null>(null);
@@ -185,7 +193,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   /** Local pixel → normalized page coordinate, through the current zoom/pan. */
   const toPage = useCallback((local: Point) => {
     const { view: currentView, viewport: size, sourceAspect: aspect } = live.current;
-    return toNormalized(screenToBoard(local, currentView), size, aspect);
+    const point = toNormalized(screenToBoard(local, currentView), size, aspect);
+    // Exactly the same stable positions are used for instant display, LiveKit
+    // updates, persistence and PDF export. Avoid 16-digit float packets.
+    return { x: Math.round(point.x * 10000) / 10000, y: Math.round(point.y * 10000) / 10000 };
   }, []);
 
   const aspectOfBoard = () => {
@@ -236,7 +247,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       active === 'pen' || active === 'highlighter' || active === 'erase'
         ? { kind: active, color: ink, width, points: [[point.x, point.y]],
             ...(active === 'pen' && pressure !== undefined && Number.isFinite(pressure)
-              ? { pressures: [Math.max(0, Math.min(1, pressure))] } : {}) }
+              ? { pressures: [Math.round(Math.max(0, Math.min(1, pressure)) * 100) / 100] } : {}) }
         : active === 'line' || active === 'arrow'
           ? { kind: active, color: ink, width, x1: point.x, y1: point.y, x2: point.x, y2: point.y }
           : { kind: active, color: ink, width, x: point.x, y: point.y, w: 0, h: 0 };
@@ -245,6 +256,47 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     setDraft(next);
     onDraftChange?.(next, inkStrokeIdRef.current);
   };
+
+  const submitInk = (shape: Shape, id: string) => {
+    let outcome: void | boolean | Promise<boolean | void>;
+    try { outcome = onCommitRef.current(shape, id); }
+    catch { outcome = false; }
+    void Promise.resolve(outcome).then(
+      (saved) => setPendingInk((current) =>
+        current.map((entry) => entry.id === id
+          ? { ...entry, status: saved === false ? 'failed' : 'saved' } : entry)),
+      () => setPendingInk((current) =>
+        current.map((entry) => entry.id === id ? { ...entry, status: 'failed' } : entry)),
+    );
+  };
+
+  const commitInk = (shape: Shape, operationId?: string) => {
+    const id = operationId ?? crypto.randomUUID();
+    setPendingInk((current) => [
+      ...current.filter((entry) => entry.id !== id),
+      { id, page: pageKey, shape, status: 'saving' },
+    ]);
+    submitInk(shape, id);
+  };
+
+  const retryInk = (entry: PendingInk) => {
+    setPendingInk((current) => current.map((item) =>
+      item.id === entry.id ? { ...item, status: 'saving' } : item));
+    // The same operation ID makes network retries idempotent on the server.
+    submitInk(entry.shape, entry.id);
+  };
+
+  // Never remove a just-written shape until the acknowledged server copy has
+  // rendered. While it is pending, hide its optimistic twin to avoid a flash.
+  const renderedIds = shapes.map((entry) => entry.operationId).join(',');
+  useEffect(() => {
+    const visible = new Set(renderedIds ? renderedIds.split(',') : []);
+    setPendingInk((current) => {
+      const next = current.filter((entry) =>
+        !(entry.status === 'saved' && entry.page === pageKey && visible.has(entry.id)));
+      return next.length === current.length ? current : next;
+    });
+  }, [pageKey, renderedIds]);
 
   const eraseAt = (point: { x: number; y: number }) => {
     const hit = shapeAt(live.current.shapes, point, HIT_TOLERANCE, aspectOfBoard());
@@ -285,9 +337,20 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     }
     let next: Shape;
     if (current.points) {
-      next = { ...current, points: [...current.points, [point.x, point.y]],
-        ...(current.pressures ? { pressures: [...current.pressures,
-          pressure !== undefined && Number.isFinite(pressure) ? Math.max(0, Math.min(1, pressure)) : current.pressures[current.pressures.length - 1]] } : {}) };
+      // Bounded append-only ink prevents a single very long contact from
+      // exceeding the server's 16 KB payload cap. No pen-up resampling.
+      const atLimit = current.points.length >= 480;
+      const points = atLimit
+        ? [...current.points.slice(0, -1), [point.x, point.y] as [number, number]]
+        : [...current.points, [point.x, point.y] as [number, number]];
+      const pressures = current.pressures
+        ? (atLimit ? current.pressures.slice(0, -1) : current.pressures).concat(
+          pressure !== undefined && Number.isFinite(pressure)
+            ? Math.round(Math.max(0, Math.min(1, pressure)) * 100) / 100
+            : current.pressures[current.pressures.length - 1],
+        )
+        : undefined;
+      next = { ...current, points, ...(pressures ? { pressures } : {}) };
     } else if (current.x1 !== undefined) {
       next = { ...current, x2: point.x, y2: point.y };
     } else {
@@ -320,12 +383,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // appears. Merely sending "null" causes a visible gap on slow networks.
     onDraftChange?.(finished, strokeId, true);
     if (!finished) return;
-    // Thinning keeps the stroke under the server's point cap without visibly
-    // changing the line.
-    if (finished.points) {
-      const sample = thinStroke(finished.points, finished.pressures);
-      onCommit({ ...finished, points: sample.points, ...(sample.pressures ? { pressures: sample.pressures } : {}) }, strokeId);
-    } else onCommit(finished, strokeId);
+    // Keep precisely the geometry already displayed under the Pencil.
+    // Previously thinning at pen-up made the written glyph morph visibly.
+    commitInk(finished, strokeId);
   };
 
   const cancelStroke = () => {
@@ -541,7 +601,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     setTextEdit(null);
     const text = value.trim();
     if (!edit || !text || readOnly) return;
-    onCommit({ kind: 'text', x: edit.nx, y: edit.ny, text: text.slice(0, 500),
+    commitInk({ kind: 'text', x: edit.nx, y: edit.ny, text: text.slice(0, 500),
       size: normalizedTextSize(textFontSize), font: textFont, bold: textBold, color });
   };
 
@@ -654,6 +714,12 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     }
   };
 
+  const pendingIds = new Set(pendingOnPage.map((entry) => entry.id));
+  const visibleRemoteDrafts = remoteDrafts.filter((entry) => {
+    // Avoid double-thick ink while the old preview and saved line overlap.
+    const id = entry.id.slice(entry.id.lastIndexOf(':') + 1);
+    return !shapes.some((saved) => saved.operationId === id);
+  });
   const selectedShape = selectedId ? shapes.find((entry) => entry.operationId === selectedId) : undefined;
   const movedShape =
     selectedShape && dragDelta ? translateShape(selectedShape.shape, dragDelta.dx, dragDelta.dy) : null;
@@ -703,13 +769,14 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
           )}
         </Layer>
         <Layer listening={false}>
-          {shapes.map((entry) =>
+          {shapes.filter((entry) => !pendingIds.has(entry.operationId)).map((entry) =>
             entry.operationId === selectedId && movedShape
               ? renderShape(entry.operationId, movedShape, true)
               : renderShape(entry.operationId, entry.shape),
           )}
+          {pendingOnPage.map((entry) => renderShape(`pending-${entry.id}`, entry.shape))}
           {draft && renderShape('draft', draft)}
-          {remoteDrafts.map((entry) => renderShape(`live-${entry.id}`, entry.shape))}
+          {visibleRemoteDrafts.map((entry) => renderShape(`live-${entry.id}`, entry.shape))}
         </Layer>
         <Layer listening={false}>
           {selectionBounds && (
@@ -738,6 +805,19 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
           })}
         </Layer>
       </Stage>
+
+      {pendingOnPage.some((entry) => entry.status === 'failed') && (
+        <div className="whiteboard__ink-save-alert" role="alert"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}>
+          <span>Не сохранено / Nicht gespeichert</span>
+          <button type="button" onClick={(event) => {
+            event.stopPropagation();
+            for (const entry of pendingOnPage.filter((item) => item.status === 'failed')) retryInk(entry);
+          }}>Повторить / Erneut</button>
+        </div>
+      )}
 
       {textEdit && (
         <textarea
