@@ -33,3 +33,29 @@ The lab's testing canvas and the homework worksheet use the same **Perfect Freeh
 ## Integration
 
 Once verified, open a pull request from `feature/pen-lab-live-preview-20261017` to `integration/railway-and-ux`. Merge only after running `npm run typecheck`, `npm test`, and `npm run build`, plus real iPad and Android writing tests.
+
+
+## Full iPad Pencil diagnostic recording
+
+When you open \`/pen-lab.html\` in **Vite development mode**, diagnostics start automatically without any login. The recorder is **separate from main.tsx**: changes made to the live drawing code in VS Code / Codex do not replace it.
+
+Recorded data (timestamps in milliseconds and wall-clock ISO-8601):
+- Pointer down, move, up, cancel and capture-lost/capture-restored events; stylus pressure, coordinates, buttons and tilt where the browser exposes them
+- Number of coalesced input events, elapsed time between pen events, time spent in the lightweight telemetry observer
+- Safari/iPad frame gaps, event-loop stalls, supported browser long tasks, JavaScript errors, visibility changes
+- An explicit \`FREEZE_MARKED_BY_USER\` event when you press **Отметить сбой** after noticing that the pen stopped drawing
+
+**Automatic local storage on the computer:** each iPad session sends batches over the same local Vite Wi-Fi connection. The Vite server writes append-only JSON lines to:
+
+\`frontend/.pen-lab-logs/penlab-<session-id>.ndjson\`
+
+The whole directory is ignored by Git. It is not uploaded to GitHub, Railway or ChatGPT automatically. Only the local Vite development server can collect those events. Keep your home Wi-Fi private, because a user on the same trusted LAN may be able to access these local diagnostic endpoints.
+
+**Usage:**
+1. Start \`npm.cmd run dev:pen-lab\` in VS Code and open the local Network URL on your iPad.
+2. Write until the Apple Pencil briefly stops responding. Immediately press **Отметить сбой** in the bottom-right diagnostic panel.
+3. Continue writing; the recorder saves data every second automatically.
+4. On the computer open \`frontend/.pen-lab-logs/\` in VS Code. The newest \`.ndjson\` file is the session log. Ask Codex to inspect it; logs are never included in Git commits.
+5. To send a diagnostic report to ChatGPT, press **Скачать лог** on the iPad, then attach the downloaded \`.ndjson\` file in this chat. This is a manual transfer; ChatGPT cannot directly read the files on your computer.
+
+**Updating the lab when Codex already modified main.tsx:** first commit or stash your local work, then run \`git pull\` on \`feature/pen-lab-live-preview-20261017\`. This update adds standalone files and edits \`vite.config.ts\`, \`pen-lab.html\`, and \`.gitignore\`; it intentionally does not overwrite \`src/pen-lab/main.tsx\`. Restart Vite after pulling because the server middleware configuration changed. On Windows use \`npm.cmd run dev:pen-lab\`.
