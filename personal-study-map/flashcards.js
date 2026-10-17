@@ -584,9 +584,11 @@
       (question.expiresAt!=null?'<strong id="quiz-timer" class="quiz-timer"></strong>':"")+
       '</div><div class="quiz-progress-track"><div style="width:'+
       Math.round((answered/total)*100)+'%"></div></div>'+
-      '<div class="quiz-question">'+esc(card.question)+'</div>'+(!feedback?quickGradeButtons():'')+
+      '<div class="quiz-question">'+esc(card.question)+'</div>'+
       '<div class="quiz-options">'+controls+'</div>'+
-      (!feedback?'<div class="quiz-question-actions">'+
+      (!feedback?'<div class="quiz-question-actions quiz-four-actions">'+
+        '<button type="button" data-action="quick-known" class="quiz-quick-known"><span>✓ Знаю</span><small>Через 3 дня</small></button>'+
+        '<button type="button" data-action="quick-unknown" class="quiz-quick-unknown"><span>✕ Не знаю</span><small>Повторить завтра</small></button>'+
         '<button data-action="skip" class="quiz-skip" type="button">'+
         '<span>Не знаю</span><small>Показать правильный ответ</small></button>'+
         '<button data-action="invalid" class="quiz-invalid" type="button" title="Исключить вопрос из статистики и повторений">'+
