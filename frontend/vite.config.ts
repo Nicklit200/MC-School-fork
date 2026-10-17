@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getPenLabSyncStatus, schedulePenLabSync } from './pen-lab-sync';
 
 const LOG_DIR = join(process.cwd(), '.pen-lab-logs');
 const MAX_POST_BYTES = 400_000;
@@ -16,6 +17,12 @@ function localPenLabDiagnostics(): Plugin {
       server.middlewares.use('/__pen-lab-diagnostics', (req, res, next) => {
         const url = new URL(req.url || '/', 'http://localhost');
         const session = url.searchParams.get('session');
+
+        if (req.method === 'GET' && url.searchParams.has('sync-status')) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify(getPenLabSyncStatus()));
+          return;
+        }
 
         if (req.method === 'GET') {
           if (!session || !SESSION_PATTERN.test(session)) {
@@ -137,8 +144,14 @@ function localPenLabDiagnostics(): Plugin {
             }
             writable.end();
             writable.on('finish', () => {
+              const completedTest = json.events!.some((item) =>
+                item && typeof item === 'object' &&
+                (item as { kind?: string }).kind === 'test_end');
+              // Non-blocking Git synchronization; local logging succeeds even
+              // when Windows Git authentication is not available.
+              schedulePenLabSync(LOG_DIR, json.sessionId!, completedTest);
               res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-              res.end('{"ok":true}');
+              res.end('{"ok":true,"savedLocally":true}');
             });
             writable.on('error', () => {
               if (!res.headersSent) res.writeHead(500);
