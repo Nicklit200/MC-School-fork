@@ -356,6 +356,10 @@ function mountControls() {
     try {
       const reply = await fetch('/__pen-lab-diagnostics?sync-status=1', { cache: 'no-store' });
       if (!reply.ok) throw new Error('HTTP ' + reply.status);
+      const contentType = reply.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Vite запущен со старой конфигурацией. Нужен npm.cmd run dev:pen-lab после git pull.');
+      }
       const info = await reply.json() as {
         state: string;
         lastSyncedAt: string | null;
@@ -378,7 +382,10 @@ function mountControls() {
       }
     } catch (error) {
       syncStatus.style.color = '#fca5a5';
-      syncStatus.textContent = 'GitHub: нельзя проверить статус. ' + String(error);
+      syncStatus.textContent = 'Диагностика не подключена. ' +
+        (error instanceof Error && error.message.includes('старой конфигурацией')
+          ? error.message
+          : 'Проверь, что в терминале запущен обновлённый Vite (npm.cmd run dev:pen-lab). Ошибка: ' + String(error));
     }
   };
   void refreshSyncStatus();
