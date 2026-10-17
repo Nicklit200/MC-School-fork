@@ -437,7 +437,7 @@
       skillTitle:card.skillTitle||""
     }));
     ui.session=session;ui.view="study";ui.feedback=null;ui.notice="";
-    panel.classList.add("quiz-chat-open");
+    panel.classList.remove("quiz-chat-open");
     saveSession();
     renderStudy();
   }
@@ -468,12 +468,11 @@
     document.body.classList.toggle("quiz-learning-active",active && !panel.classList.contains("closed"));
     let chat=panel.querySelector("#quiz-learning-chat");
     if(!active){chat?.remove();return;}
-    panel.classList.add("quiz-chat-open");
     if(chat)return;
     chat=document.createElement("aside");chat.id="quiz-learning-chat";chat.className="quiz-learning-chat";
     chat.innerHTML='<div class="quiz-chat-heading"><strong>ИИ-помощник</strong><button id="quiz-chat-hide" type="button">Скрыть</button></div><p>Спроси о текущей карточке.</p><div id="quiz-chat-messages" class="quiz-chat-messages"></div><form id="quiz-chat-form"><textarea id="quiz-chat-input" rows="3" placeholder="Что такое Use Case?"></textarea><button type="submit">Отправить ИИ</button></form>';
     panel.appendChild(chat);
-    chat.querySelector("#quiz-chat-hide").onclick=()=>panel.classList.remove("quiz-chat-open");
+    chat.querySelector("#quiz-chat-hide").onclick=()=>{panel.classList.remove("quiz-chat-open");updateChatToggle();};
     chat.querySelector("#quiz-chat-form").onsubmit=async event=>{
       event.preventDefault();
       const input=chat.querySelector("#quiz-chat-input"),question=input.value.trim();
@@ -495,6 +494,14 @@
       }catch(error){reply.textContent=error.message||"Не удалось получить ответ.";}
       finally{button.disabled=false;messages.scrollTop=messages.scrollHeight;}
     };
+  }
+  function updateChatToggle(){
+    const button=panel.querySelector("#quiz-chat-toggle");
+    if(button){
+      const open=panel.classList.contains("quiz-chat-open");
+      button.textContent=open?"Скрыть ИИ-чат":"Открыть ИИ-чат";
+      button.setAttribute("aria-expanded",String(open));
+    }
   }
   function quickGrade(known) {
     if(ui.view!=="study"||!ui.session)return;
@@ -560,7 +567,7 @@
     host.innerHTML = '<div class="quiz-session-head">'+
       '<div><span class="panel-label">'+(session.mode==="PRACTICE"?"СВОБОДНАЯ ТРЕНИРОВКА":"ПОВТОРЕНИЕ ПО РАСПИСАНИЮ")+
       '</span><h2>'+esc(card.skillTitle||"Карточка")+'</h2></div>'+
-      '<button data-action="home" type="button">Пауза</button></div>'+
+      '<div class="quiz-session-buttons"><button id="quiz-chat-toggle" data-action="toggle-study-chat" type="button">Открыть ИИ-чат</button><button data-action="home" type="button">Пауза</button></div></div>'+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
       '<div class="quiz-progress-row"><span>Завершено '+answered+' из '+total+'</span>'+
       (question.expiresAt!=null?'<strong id="quiz-timer" class="quiz-timer"></strong>':"")+
@@ -582,6 +589,7 @@
         '<button class="quiz-next" data-action="next" type="button">Дальше →</button>':
         '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>')+
       '<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
+    updateChatToggle();
     if (!feedback) startCountdown();
     else stopAdvance(); // Explanation stays visible until the user is ready.
   }
@@ -1023,6 +1031,7 @@
       quickGrade(false);
     } else if (action==="toggle-study-chat") {
       panel.classList.toggle("quiz-chat-open");
+      updateChatToggle();
     } else if (action==="ask-coach") {
       const card=ui.feedback && ui.lastCard?ui.lastCard:currentCard();
       if(!card)return;
@@ -1127,11 +1136,11 @@
     render();
   };
   document.getElementById("close-flashcards").onclick=()=>{
-    cleanupTimers();panel.classList.add("closed");
+    cleanupTimers();panel.classList.add("closed");panel.classList.remove("quiz-fullscreen","quiz-chat-open");document.body.classList.remove("quiz-learning-active");
   };
   window.addEventListener("keydown",event=>{
     if(event.key==="Escape"&&!panel.classList.contains("closed")){
-      cleanupTimers();panel.classList.add("closed");
+      cleanupTimers();panel.classList.add("closed");panel.classList.remove("quiz-fullscreen","quiz-chat-open");document.body.classList.remove("quiz-learning-active");
     }
   });
   window.addEventListener("study-context-updated",()=>{
