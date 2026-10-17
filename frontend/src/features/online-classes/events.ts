@@ -118,6 +118,8 @@ export interface StrokeEvent extends BaseEvent {
   page: number;
   active: boolean;
   shape?: LiveShape;
+  /** Stable operation ID of the stroke: the saved annotation uses this same ID. */
+  strokeId?: string;
 }
 
 /** Server-authored. Clients render these but never send them. */
@@ -215,7 +217,15 @@ export function parseClassEvent(raw: Uint8Array, classId: string): ClassEvent | 
     case 'stroke': {
       if (typeof parsed.targetId !== 'string' || !isInt(parsed.page, 0, 10_000)) return null;
       if (typeof parsed.active !== 'boolean') return null;
-      if (!parsed.active) return parsed as unknown as StrokeEvent;
+      if (parsed.strokeId !== undefined &&
+          (typeof parsed.strokeId !== 'string' ||
+           !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.strokeId))) {
+        return null;
+      }
+      if (!parsed.active) {
+        return parsed.shape === undefined || parseLiveShape(parsed.shape)
+          ? (parsed as unknown as StrokeEvent) : null;
+      }
       return parseLiveShape(parsed.shape) ? (parsed as unknown as StrokeEvent) : null;
     }
     default:
@@ -317,6 +327,7 @@ export function strokeEvent(
   page: number,
   active: boolean,
   shape?: LiveShape,
+  strokeId?: string,
 ): StrokeEvent {
-  return { v: 1, type: 'stroke', classId, id: newId(), at: Date.now(), targetId, page, active, shape };
+  return { v: 1, type: 'stroke', classId, id: newId(), at: Date.now(), targetId, page, active, shape, strokeId };
 }
