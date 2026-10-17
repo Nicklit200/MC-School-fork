@@ -31,6 +31,7 @@ import { type InputMode, isPalmContact, normalizePointerKind } from './inputPoli
 import { shapeBounds, translateShape } from './shapeTransform';
 import { penOutline, tracePenOutline } from './freehand';
 import { attachTabletInkInput, detectTabletInkBackend, getTabletInkPlatform } from '../../lib/tabletInkInput';
+import { normalizedTextSize, shapeTextSizePx, textStyleFor } from './textStyles';
 
 export type Tool =
   | 'pen'
@@ -72,6 +73,9 @@ interface Props {
   tool: Tool;
   color: string;
   strokeWidth: number;
+  textFont?: string;
+  textFontSize?: number;
+  textBold?: boolean;
   sourceAspect: number | null;
   readOnly?: boolean;
   eraserMode?: EraserMode;
@@ -111,6 +115,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     tool,
     color,
     strokeWidth,
+    textFont = 'clean',
+    textFontSize = 24,
+    textBold = false,
     sourceAspect,
     readOnly = false,
     eraserMode = 'partial',
@@ -485,12 +492,13 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     setTextEdit(null);
     const text = value.trim();
     if (!edit || !text || readOnly) return;
-    onCommit({ kind: 'text', x: edit.nx, y: edit.ny, text: text.slice(0, 500), size: 0.03, color });
+    onCommit({ kind: 'text', x: edit.nx, y: edit.ny, text: text.slice(0, 500),
+      size: normalizedTextSize(textFontSize), font: textFont, bold: textBold, color });
   };
 
   // The board takes focus back right after the pointer goes down, which would
   // blur a box focused on mount and close it empty. Focusing a frame later wins.
-  const focusTextInput = useCallback((element: HTMLInputElement | null) => {
+  const focusTextInput = useCallback((element: HTMLTextAreaElement | null) => {
     if (element) window.requestAnimationFrame(() => element.focus());
   }, []);
 
@@ -581,7 +589,12 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
             // Konva draws text as canvas glyphs, never as DOM, so markup in a
             // label cannot become an element.
             text={shape.text ?? ''}
-            fontSize={Math.max(10, (shape.size ?? 0.03) * box.height)}
+            fontSize={shapeTextSizePx(shape.size, box.height)}
+            fontFamily={textStyleFor(shape.font, shape.bold).fontFamily}
+            fontStyle={textStyleFor(shape.font, shape.bold).fontStyle}
+            lineHeight={1.22}
+            wrap="word"
+            width={Math.max(10, box.width - (origin.x - box.left))}
             fill={stroke}
             opacity={opacity}
           />
@@ -678,14 +691,19 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       </Stage>
 
       {textEdit && (
-        <input
+        <textarea
           ref={focusTextInput}
           className="whiteboard__text-input"
-          style={{ left: textEdit.px.x, top: textEdit.px.y, color }}
+          style={{ left: textEdit.px.x, top: textEdit.px.y, color,
+            fontFamily: textStyleFor(textFont, textBold).fontFamily,
+            fontWeight: textBold ? 700 : 400,
+            fontSize: Math.max(12, textFontSize * (backgroundBox.height / 800)) }}
           aria-label="Text"
+          placeholder="Текст / Text..."
+          rows={2}
           maxLength={500}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') commitText(event.currentTarget.value);
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') commitText(event.currentTarget.value);
             if (event.key === 'Escape') setTextEdit(null);
             event.stopPropagation();
           }}
