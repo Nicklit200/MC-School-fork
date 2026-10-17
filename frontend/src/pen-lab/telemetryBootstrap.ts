@@ -349,7 +349,41 @@ function mountControls() {
   row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:2px';
   row.append(select, start, stop, mark, download, report);
 
-  box.append(title, status, row, help, message);
+  const syncStatus = document.createElement('div');
+  syncStatus.style.cssText = 'font-size:12px;white-space:pre-line;line-height:1.6;margin-bottom:6px;color:#bfdbfe';
+  syncStatus.textContent = 'GitHub: ожидаем первую синхронизацию';
+  const refreshSyncStatus = async () => {
+    try {
+      const reply = await fetch('/__pen-lab-diagnostics?sync-status=1', { cache: 'no-store' });
+      if (!reply.ok) throw new Error('HTTP ' + reply.status);
+      const info = await reply.json() as {
+        state: string;
+        lastSyncedAt: string | null;
+        lastSessionId: string | null;
+        lastError: string | null;
+      };
+      if (info.state === 'synced') {
+        syncStatus.style.color = '#86efac';
+        syncStatus.textContent = 'GitHub: синхронизировано ' +
+          (info.lastSyncedAt ? new Date(info.lastSyncedAt).toLocaleTimeString('ru-RU') : '') +
+          ', сессия ' + (info.lastSessionId ?? '');
+      } else if (info.state === 'error') {
+        syncStatus.style.color = '#fca5a5';
+        syncStatus.textContent = 'GitHub: ошибка! Лог только на компьютере. ' + (info.lastError ?? '');
+      } else {
+        syncStatus.style.color = '#bfdbfe';
+        syncStatus.textContent = info.state === 'syncing'
+          ? 'GitHub: отправляем лог в приватное хранилище...'
+          : 'GitHub: ожидание первой отправки';
+      }
+    } catch (error) {
+      syncStatus.style.color = '#fca5a5';
+      syncStatus.textContent = 'GitHub: нельзя проверить статус. ' + String(error);
+    }
+  };
+  void refreshSyncStatus();
+  window.setInterval(() => { void refreshSyncStatus(); }, 4000);
+  box.append(title, status, syncStatus, row, help, message);
   document.body.insertBefore(box, document.getElementById('pen-lab-root'));
 
   window.setInterval(() => {
