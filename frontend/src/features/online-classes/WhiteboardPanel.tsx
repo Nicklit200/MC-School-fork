@@ -398,6 +398,7 @@ export function WhiteboardPanel({
         <WhiteboardCanvas
           ref={canvasRef}
           shapes={board.shapes}
+          pageKey={`${targetId}:${pages.current}`}
           tool={tool}
           color={settingsOf.color}
           strokeWidth={settingsOf.width}
@@ -416,7 +417,7 @@ export function WhiteboardPanel({
           remoteDrafts={live.drafts}
           onDraftChange={(shape, strokeId, finished) => live.sendDraft(shape ? toLiveShape(shape) : null, strokeId, finished)}
           actorId={actorId}
-          onCommit={(shape, strokeId) => void board.addShape(shape, strokeId)}
+          onCommit={(shape, strokeId) => board.addShape(shape, strokeId)}
           onEraseShape={(id) => void board.eraseShape(id)}
           onMoveShape={(id, shape) => void board.moveShape(id, shape)}
           onLaserMove={sendLaser}
