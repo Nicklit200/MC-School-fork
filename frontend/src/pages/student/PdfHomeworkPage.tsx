@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { renderHomeworkInkStroke } from '../../lib/homeworkInk';
 
 type Tool = 'pen' | 'eraser';
 type PenColor = '#111111' | '#2563eb' | '#dc2626' | '#16a34a';
@@ -22,12 +23,13 @@ type StrokeGeometry = {
   canvasWidth: number;
   canvasHeight: number;
 };
-type StrokePoint = { x: number; y: number };
+type StrokePoint = { x: number; y: number; pressure?: number };
 type DrawingStroke = {
   tool: Tool;
   color: PenColor;
   size: number;
   points: StrokePoint[];
+  pressureSensitive?: boolean;
 };
 type PageDrawing = {
   width: number;
@@ -339,45 +341,9 @@ function DesktopZoomControls({ zoom, onChange }: { zoom: number; onChange: (valu
   );
 }
 
-function strokeWidth(stroke: DrawingStroke) {
-  return stroke.tool === 'eraser' ? Math.max(24, stroke.size * 5) : stroke.size;
-}
-
-function prepareStrokeContext(ctx: CanvasRenderingContext2D, stroke: DrawingStroke) {
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = strokeWidth(stroke);
-  ctx.strokeStyle = stroke.color;
-  ctx.fillStyle = stroke.color;
-  ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
-}
-
-function drawStrokeDot(ctx: CanvasRenderingContext2D, point: StrokePoint, stroke: DrawingStroke) {
-  prepareStrokeContext(ctx, stroke);
-  ctx.beginPath();
-  ctx.arc(point.x, point.y, strokeWidth(stroke) / 2, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawStrokeSegment(ctx: CanvasRenderingContext2D, from: StrokePoint, to: StrokePoint, stroke: DrawingStroke) {
-  prepareStrokeContext(ctx, stroke);
-  ctx.beginPath();
-  ctx.moveTo(from.x, from.y);
-  ctx.lineTo(to.x, to.y);
-  ctx.stroke();
-}
-
 function redrawStrokes(ctx: CanvasRenderingContext2D, width: number, height: number, strokes: DrawingStroke[]) {
-  ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0, 0, width, height);
-  for (const stroke of strokes) {
-    if (stroke.points.length === 0) continue;
-    drawStrokeDot(ctx, stroke.points[0], stroke);
-    for (let i = 1; i < stroke.points.length; i += 1) {
-      drawStrokeSegment(ctx, stroke.points[i - 1], stroke.points[i], stroke);
-    }
-  }
-  ctx.globalCompositeOperation = 'source-over';
+  for (const stroke of strokes) renderHomeworkInkStroke(ctx, stroke);
 }
 
 async function pageDrawingToDataUrl(drawing: PageDrawing): Promise<string> {
@@ -426,6 +392,7 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
 }) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingPointerIdRef = useRef<number | null>(null);
   const activeTouchPointersRef = useRef<Set<number>>(new Set());
   const strokeGeometryRef = useRef<StrokeGeometry | null>(null);
@@ -434,7 +401,6 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
     points: stroke.points.map((point) => ({ ...point })),
   })) ?? []);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
-  const lastPointRef = useRef<StrokePoint | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(strokesRef.current.length);
 
@@ -454,6 +420,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
     if (!image || !canvas || !image.naturalWidth || !image.naturalHeight) return;
     canvas.width = image.naturalWidth;
     canvas.height = image.naturalHeight;
+    const preview = previewCanvasRef.current;
+    if (preview) { preview.width = canvas.width; preview.height = canvas.height; }
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     redrawStrokes(ctx, canvas.width, canvas.height, strokesRef.current);
@@ -482,91 +450,121 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
 
   function canDrawWithPointer(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.pointerType !== 'touch') return true;
-    return touchDrawingEnabled && activeTouchPointersRef.current.size <= 1;
+    // A finger/palm must never interfere with an active Apple Pencil stroke.
+    if (drawingPointerIdRef.current !== null) return false;
+    return touchDrawingEnabled && activeTouchPointersRef.current.size === 1;
+  }
+
+  function repaintActiveStroke() {
+    const active = activeStrokeRef.current;
+    const canvas = canvasRef.current;
+    const preview = previewCanvasRef.current;
+    if (!canvas || !active || !preview) return;
+    const previewCtx = preview.getContext('2d');
+    const committedCtx = canvas.getContext('2d');
+    if (!previewCtx || !committedCtx) return;
+    previewCtx.clearRect(0, 0, preview.width, preview.height);
+    if (active.tool === 'eraser') {
+      // destination-out on an independent preview would erase only the
+      // preview; use the underlying canvas for correct eraser feedback.
+      redrawStrokes(committedCtx, canvas.width, canvas.height, strokesRef.current);
+      renderHomeworkInkStroke(committedCtx, active);
+    } else {
+      renderHomeworkInkStroke(previewCtx, active);
+    }
+  }
+
+  function resetActiveStroke(commit: boolean) {
+    const stroke = activeStrokeRef.current;
+    const canvas = canvasRef.current;
+    const preview = previewCanvasRef.current;
+    const previewCtx = preview?.getContext('2d');
+    if (preview && previewCtx) previewCtx.clearRect(0, 0, preview.width, preview.height);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        if (commit && stroke) {
+          // Restore the committed canvas before applying the final outline.
+          if (stroke.tool === 'eraser') redrawStrokes(ctx, canvas.width, canvas.height, strokesRef.current);
+          renderHomeworkInkStroke(ctx, stroke);
+        } else {
+          redrawStrokes(ctx, canvas.width, canvas.height, strokesRef.current);
+        }
+      }
+    }
+    if (commit && stroke) {
+      strokesRef.current = [...strokesRef.current, stroke];
+      setUndoCount(strokesRef.current.length);
+      emitDrawing();
+    }
+    activeStrokeRef.current = null;
+    drawingPointerIdRef.current = null;
+    strokeGeometryRef.current = null;
   }
 
   function start(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.pointerType === 'touch') {
       activeTouchPointersRef.current.add(event.pointerId);
-      // The second finger belongs to browser pinch/pan. If a one-finger stroke
-      // was in progress, cancel it instead of drawing an accidental line.
       if (activeTouchPointersRef.current.size > 1) {
-        if (drawingPointerIdRef.current !== null) {
-          activeStrokeRef.current = null;
-          lastPointRef.current = null;
-          drawingPointerIdRef.current = null;
-          strokeGeometryRef.current = null;
+        // Cancel finger drawing when two-finger navigation begins. Never
+        // cancel an Apple Pencil stroke because a palm touches the screen.
+        if (activeStrokeRef.current && drawingPointerIdRef.current !== null &&
+            activeTouchPointersRef.current.has(drawingPointerIdRef.current)) {
+          resetActiveStroke(false);
         }
         return;
       }
     }
     if (!canDrawWithPointer(event)) return;
-
+    const canvas = canvasRef.current;
+    if (!canvas || !ready || drawingPointerIdRef.current !== null) return;
     event.preventDefault();
     event.stopPropagation();
-    const canvas = canvasRef.current;
-    if (!canvas || drawingPointerIdRef.current !== null) return;
 
     const geometry = currentGeometry(canvas);
-    const startPoint = pointFromPointer(event.nativeEvent, geometry);
+    const first = pointFromPointer(event.nativeEvent, geometry);
     const stroke: DrawingStroke = {
       tool,
       color: penColor,
-      size: penSize,
-      points: [startPoint],
+      // Store the width in PDF coordinates, not viewport pixels.
+      size: penSize * geometry.canvasWidth / geometry.width,
+      points: [{ ...first, pressure: event.pressure > 0 ? event.pressure : 0.5 }],
+      pressureSensitive: event.pointerType === 'pen' && event.pressure > 0,
     };
-
     strokeGeometryRef.current = geometry;
     activeStrokeRef.current = stroke;
-    lastPointRef.current = startPoint;
     drawingPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) drawStrokeDot(ctx, startPoint, stroke);
+    repaintActiveStroke();
   }
 
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (!canDrawWithPointer(event) || drawingPointerIdRef.current !== event.pointerId) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    const ctx = canvasRef.current?.getContext('2d');
+    if (drawingPointerIdRef.current !== event.pointerId) return;
     const geometry = strokeGeometryRef.current;
     const stroke = activeStrokeRef.current;
-    if (!ctx || !geometry || !stroke) return;
+    if (!geometry || !stroke) return;
+    event.preventDefault();
+    event.stopPropagation();
 
     const nativeEvent = event.nativeEvent;
     const samples = typeof nativeEvent.getCoalescedEvents === 'function'
-      ? nativeEvent.getCoalescedEvents()
-      : [nativeEvent];
-
-    for (const sample of samples.length > 0 ? samples : [nativeEvent]) {
-      const nextPoint = pointFromPointer(sample, geometry);
-      const previousPoint = lastPointRef.current;
-      if (previousPoint) drawStrokeSegment(ctx, previousPoint, nextPoint, stroke);
-      stroke.points.push(nextPoint);
-      lastPointRef.current = nextPoint;
+      ? nativeEvent.getCoalescedEvents() : [nativeEvent];
+    const input = samples.length > 0 ? samples : [nativeEvent];
+    for (const sample of input) {
+      const next = pointFromPointer(sample, geometry);
+      const last = stroke.points[stroke.points.length - 1];
+      if (last && last.x === next.x && last.y === next.y) continue;
+      stroke.points.push({ ...next, pressure: sample.pressure > 0 ? sample.pressure : 0.5 });
     }
+    repaintActiveStroke();
   }
 
   function finish(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.pointerType === 'touch') activeTouchPointersRef.current.delete(event.pointerId);
     if (drawingPointerIdRef.current !== event.pointerId) return;
-
     event.preventDefault();
     event.stopPropagation();
-    const stroke = activeStrokeRef.current;
-    if (stroke) {
-      strokesRef.current = [...strokesRef.current, stroke];
-      setUndoCount(strokesRef.current.length);
-      emitDrawing();
-    }
-
-    activeStrokeRef.current = null;
-    lastPointRef.current = null;
-    drawingPointerIdRef.current = null;
-    strokeGeometryRef.current = null;
+    resetActiveStroke(event.type !== 'pointercancel');
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
   }
 
@@ -705,6 +703,10 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
           />
           <canvas
             ref={canvasRef}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+          />
+          <canvas
+            ref={previewCanvasRef}
             onPointerDown={start}
             onPointerMove={move}
             onPointerUp={finish}
