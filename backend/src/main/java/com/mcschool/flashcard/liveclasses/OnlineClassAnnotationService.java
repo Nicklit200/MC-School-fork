@@ -99,7 +99,8 @@ public class OnlineClassAnnotationService {
     public AnnotationOperationResponse append(AuthenticatedUser caller, UUID classId,
                                               UUID documentId, AnnotationOperationRequest request) {
         OnlineClass onlineClass = accessService.requireAdmitted(caller, classId);
-        OnlineClassAnnotationDocument document = requireDocument(classId, documentId);
+        OnlineClassAnnotationDocument document = documentRepository.findForUpdate(documentId, classId)
+                .orElseThrow(() -> new ResourceNotFoundException("Annotation document not found"));
         requireBoardAccess(caller, onlineClass, document.getTargetId());
         User actor = accessService.requireActiveUser(caller.id());
         boolean host = accessService.isHost(caller, onlineClass);
