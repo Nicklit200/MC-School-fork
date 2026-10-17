@@ -43,7 +43,7 @@ function PenLab() {
   const pointerTypeRef = useRef('');
   const touchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const gestureRef = useRef<Pan | null>(null);
-  const frameRef = useRef<number | null>(null);
+  const moveCountRef = useRef(0);
   const scaleRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const toolRef = useRef(tool);
@@ -65,39 +65,13 @@ function PenLab() {
     for (const stroke of strokesRef.current) renderHomeworkInkStroke(ctx, stroke);
   }, []);
 
-  const preview = useCallback(() => {
+  const clearPreview = useCallback(() => {
     const canvas = previewCanvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    const active = strokeRef.current;
-    if (active) {
-      if (active.tool === 'pen') {
-        renderHomeworkInkStroke(ctx, active);
-      } else {
-        // Eraser is previewed by recomposing committed ink on the other canvas.
-        redraw();
-        const inkCtx = inkCanvasRef.current?.getContext('2d');
-        if (inkCtx) renderHomeworkInkStroke(inkCtx, active);
-      }
-    }
-  }, [redraw]);
-
-  const flushPreview = useCallback(() => {
-    if (frameRef.current !== null) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      preview();
-    });
-  }, [preview]);
-
-  const stopPreview = useCallback(() => {
-    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
+    ctx?.clearRect(0, 0, WIDTH, HEIGHT);
   }, []);
 
   const finishStroke = useCallback((commit: boolean) => {
-    stopPreview();
     const stroke = strokeRef.current;
     strokeRef.current = null;
     pointerRef.current = null;
@@ -108,9 +82,8 @@ function PenLab() {
       setRevision(strokesRef.current.length);
     }
     redraw();
-    const previewCtx = previewCanvasRef.current?.getContext('2d');
-    previewCtx?.clearRect(0, 0, WIDTH, HEIGHT);
-  }, [redraw, stopPreview]);
+    clearPreview();
+  }, [clearPreview, redraw]);
 
   useEffect(() => {
     redraw();
@@ -125,9 +98,8 @@ function PenLab() {
     return () => {
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibility);
-      stopPreview();
     };
-  }, [redraw, finishStroke, stopPreview]);
+  }, [redraw, finishStroke]);
 
   const position = (event: PointerEvent): HomeworkInkPoint => {
     const rect = surfaceRef.current!.getBoundingClientRect();
@@ -137,6 +109,26 @@ function PenLab() {
       pressure: event.pressure > 0 ? event.pressure : 0.5,
     };
   };
+
+  function drawLiveSegment(from: HomeworkInkPoint | undefined, to: HomeworkInkPoint, stroke: Stroke) {
+    const canvas = stroke.tool === 'eraser' ? inkCanvasRef.current : previewCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = stroke.color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = stroke.tool === 'eraser'
+      ? Math.max(24, stroke.size * 5)
+      : stroke.size * (stroke.pressureSensitive ? 0.55 + (to.pressure ?? 0.5) : 1);
+    ctx.beginPath();
+    ctx.moveTo(from?.x ?? to.x, from?.y ?? to.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function beginGesture() {
     const touches = Array.from(touchesRef.current.values());
@@ -200,7 +192,7 @@ function PenLab() {
     setCounters((prev) => ({ ...prev, down: prev.down + 1 }));
     setStats({ type: event.pointerType, pressure: event.pressure, event: 'pointerdown' });
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* handled by lost capture */ }
-    preview();
+    drawLiveSegment(undefined, first, strokeRef.current);
   }
 
   function move(event: React.PointerEvent<HTMLDivElement>) {
@@ -216,15 +208,18 @@ function PenLab() {
     event.preventDefault();
     const raw = event.nativeEvent;
     const samples = typeof raw.getCoalescedEvents === 'function' ? raw.getCoalescedEvents() : [raw];
+    const stroke = strokeRef.current;
     for (const sample of samples.length ? samples : [raw]) {
       const next = position(sample);
-      const points = strokeRef.current.points;
+      const points = stroke?.points;
+      if (!points) break;
       const last = points[points.length - 1];
-      if (!last || Math.hypot(next.x - last.x, next.y - last.y) > 0.4) points.push(next);
+      if (!last || Math.hypot(next.x - last.x, next.y - last.y) > 0.4) {
+        points.push(next);
+        drawLiveSegment(last, next, stroke);
+      }
     }
-    setCounters((prev) => ({ ...prev, move: prev.move + 1 }));
-    setStats({ type: event.pointerType, pressure: event.pressure, event: 'pointermove' });
-    flushPreview();
+    moveCountRef.current += 1;
   }
 
   function up(event: React.PointerEvent<HTMLDivElement>) {
@@ -234,6 +229,7 @@ function PenLab() {
     }
     if (pointerRef.current !== event.pointerId) return;
     finishStroke(event.pointerType !== 'touch' || event.type === 'pointerup');
+    setCounters((prev) => ({ ...prev, move: moveCountRef.current }));
     setStats({ type: event.pointerType, pressure: event.pressure, event: event.type });
   }
 
@@ -244,7 +240,12 @@ function PenLab() {
 
   function lost(event: React.PointerEvent<HTMLDivElement>) {
     setCounters((prev) => ({ ...prev, lost: prev.lost + 1 }));
-    if (pointerRef.current === event.pointerId) finishStroke(pointerTypeRef.current !== 'touch');
+    if (pointerRef.current === event.pointerId) {
+      // Losing capture must not discard a pen stroke. The next pointerdown can
+      // safely start a new stroke after this recovery path has committed it.
+      finishStroke(true);
+      setCounters((prev) => ({ ...prev, move: moveCountRef.current }));
+    }
     touchesRef.current.delete(event.pointerId);
     if (touchesRef.current.size < 2) gestureRef.current = null;
   }
