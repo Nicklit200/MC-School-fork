@@ -157,7 +157,7 @@ export function useAnnotationBoard({
 
   const submit = useCallback(
     async (operationType: Operation['operationType'], payload: string, providedOperationId?: string) => {
-      if (!document) return;
+      if (!document) return false;
       const page = pageIndex;
       const operationId = providedOperationId ?? newId();
       const optimistic: Operation = {
@@ -182,6 +182,7 @@ export function useAnnotationBoard({
           merge(page, saved);
           onSavedRef.current?.(saved, document.id);
         }
+        return true;
       } catch {
         // The server rejected it (validation, or the class ended): drop the
         // optimistic shape rather than showing something nobody else has.
@@ -191,6 +192,7 @@ export function useAnnotationBoard({
             operations: state.operations.filter((item) => item.operationId !== operationId),
           }));
         }
+        return false;
       }
     },
     [actorId, classId, document, merge, pageIndex, update],
