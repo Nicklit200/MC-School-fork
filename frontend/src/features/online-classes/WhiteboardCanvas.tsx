@@ -32,6 +32,7 @@ import { shapeBounds, translateShape } from './shapeTransform';
 import { penOutline, tracePenOutline } from './freehand';
 import { attachTabletInkInput, detectTabletInkBackend, getTabletInkPlatform } from '../../lib/tabletInkInput';
 import { normalizedTextSize, shapeTextSizePx, textStyleFor } from './textStyles';
+import { TabletBoardNavigation } from './tabletBoardNavigation';
 
 export type Tool =
   | 'pen'
@@ -139,6 +140,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const nativeAppleInkRef = useRef(false);
+  const tabletNavigation = useMemo(() => new TabletBoardNavigation(), []);
+  const onViewChangeRef = useRef(onViewChange);
+  onViewChangeRef.current = onViewChange;
   const stageRef = useRef<Konva.Stage | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
@@ -383,7 +387,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     // On iPadOS native Touch Events own Pencil strokes; pointer events would
     // otherwise duplicate or drop fast short strokes when Scribble is enabled.
-    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
+    if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
     if (textEdit) return;
     const kind = normalizePointerKind(event.pointerType);
     // A resting hand must not change the zoom in stylus mode either.
@@ -399,7 +403,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     applyIntents(controller.down(event.pointerId, kind, localPoint(event), palm, navigate, kind === 'pen' ? event.pressure : undefined));
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
+    if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
     // A laser follows the pointer even with no button down, like a real one.
     if (live.current.tool === 'laser' && event.buttons === 0) {
       const now = performance.now();
@@ -412,14 +416,14 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     applyIntents(controller.move(event.pointerId, localPoint(event), event.pointerType === 'pen' ? event.pressure : undefined));
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
+    if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
     // Preserve the final position even when the entire short stroke fits in
     // one 16ms sample window; do not turn quick crossbars into dots.
     if (controller.isDrawing) moveStroke(localPoint(event), event.pressure, true);
     applyIntents(controller.up(event.pointerId));
   };
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
+    if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
     applyIntents(controller.up(event.pointerId, true));
   };
 
@@ -437,6 +441,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     const driver = attachTabletInkInput(surface, {
       onStart(point, meta) {
         if (textEdit) return;
+        if (meta.device === 'pen') tabletNavigation.reset();
         applyInkIntentsRef.current(controller.down(meta.inputId, meta.device === 'finger' ? 'touch' : meta.device,
           local(point.clientX, point.clientY), false, false,
           meta.device === 'pen' ? point.pressure : undefined));
@@ -451,17 +456,43 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         }
         applyInkIntentsRef.current(controller.up(meta.inputId, cancelled));
       },
+      onGesture(contacts) {
+        // Track actual native fingers, not the duplicate Safari Pointer Events.
+        // Never navigate while a Pencil stroke is active, nor while the
+        // participant is locked into following the teacher's view.
+        if (controller.isDrawing) {
+          tabletNavigation.reset();
+          return;
+        }
+        const rect = surface.getBoundingClientRect();
+        const next = tabletNavigation.update(
+          contacts,
+          { left: rect.left, top: rect.top },
+          live.current.view,
+          live.current.viewport,
+          {
+            locked: lockedRef.current,
+            // Stylus mode: one finger pans; finger-draw mode: only two fingers
+            // navigate, preventing unintended marks from the pinch.
+            allowOneFingerPan: inputModeRef.current === 'stylus',
+          },
+        );
+        if (next) onViewChangeRef.current?.(next);
+      },
     }, {
-      allowFinger: () => false,
-      nativeFingerNavigation: true,
+      allowFinger: () => inputModeRef.current === 'finger' && !live.current.readOnly,
+      // Do NOT hand fingers to Safari's native pinch zoom. The board itself
+      // interprets touch contacts and transforms only its Konva stage.
+      nativeFingerNavigation: false,
       pointerCapture: false,
     });
     nativeAppleInkRef.current = true;
     return () => {
       nativeAppleInkRef.current = false;
+      tabletNavigation.reset();
       driver.destroy();
     };
-  }, [controller, textEdit]);
+  }, [controller, tabletNavigation, textEdit]);
 
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (navigationLocked || !onViewChange || controller.isDrawing) return;
