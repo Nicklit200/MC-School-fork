@@ -171,6 +171,7 @@ describe('WhiteboardPanel', () => {
         expect(publish).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'stroke', active: true, targetId: 'board-1', page: 0 }),
           false,
+          undefined,
         ),
       );
       act(() => canvasProps.onDraftChange(pen, '11111111-1111-4111-8111-111111111111', true));
