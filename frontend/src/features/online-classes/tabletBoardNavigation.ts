@@ -76,9 +76,10 @@ export class TabletBoardNavigation {
     // different array order, or a third palm contact briefly appears.
     let a: TabletInkContact | undefined;
     let b: TabletInkContact | undefined;
-    if (this.anchor?.kind === 'pinch') {
-      a = contacts.find((contact) => contact.id === this.anchor!.firstId);
-      b = contacts.find((contact) => contact.id === this.anchor!.secondId);
+    const existing = this.anchor;
+    if (existing?.kind === 'pinch') {
+      a = contacts.find((contact) => contact.id === existing.firstId);
+      b = contacts.find((contact) => contact.id === existing.secondId);
     }
     if (!a || !b) {
       [a, b] = contacts;
