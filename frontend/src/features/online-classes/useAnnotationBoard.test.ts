@@ -131,11 +131,14 @@ describe('useAnnotationBoard', () => {
     const { result } = board();
     await waitFor(() => expect(result.current.document).not.toBeNull());
 
+    let saved: boolean | undefined;
     await act(async () => {
-      await result.current.addShape(PEN);
+      saved = await result.current.addShape(PEN);
     });
 
-    // Never show something nobody else has.
+    // Server error must be explicitly reported to the board's persistent
+    // local ink overlay, rather than silently pretending save succeeded.
+    expect(saved).toBe(false);
     expect(result.current.shapes).toHaveLength(0);
   });
 
