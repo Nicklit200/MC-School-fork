@@ -372,6 +372,7 @@
       }).join("")+'</section>';
   }
   function renderHome() {
+    studyLayout();
     const context = getContext();
     const cards = visibleCards();
     const due = dueCards();
@@ -436,6 +437,7 @@
       skillTitle:card.skillTitle||""
     }));
     ui.session=session;ui.view="study";ui.feedback=null;ui.notice="";
+    panel.classList.add("quiz-chat-open");
     saveSession();
     renderStudy();
   }
@@ -460,7 +462,30 @@
     return session.currentQuestion;
   }
 
+  function studyLayout() {
+    const active=ui.view==="study" && !!ui.session;
+    panel.classList.toggle("quiz-fullscreen",active);
+    document.body.classList.toggle("quiz-learning-active",active && !panel.classList.contains("closed"));
+    let chat=panel.querySelector("#quiz-learning-chat");
+    if(!active){chat?.remove();return;}
+    if(chat)return;
+    chat=document.createElement("aside");chat.id="quiz-learning-chat";chat.className="quiz-learning-chat";
+    chat.innerHTML='<div class="quiz-chat-heading"><strong>ИИ-помощник</strong><button id="quiz-chat-hide" type="button">Скрыть</button></div><p>Спроси о текущей карточке.</p><div id="quiz-chat-messages" class="quiz-chat-messages"></div><form id="quiz-chat-form"><textarea id="quiz-chat-input" rows="3" placeholder="Что такое Use Case?"></textarea><button type="submit">Подготовить вопрос</button></form>';
+    panel.appendChild(chat);
+    chat.querySelector("#quiz-chat-hide").onclick=()=>panel.classList.remove("quiz-chat-open");
+    chat.querySelector("#quiz-chat-form").onsubmit=event=>{
+      event.preventDefault();const input=chat.querySelector("#quiz-chat-input"),question=input.value.trim();if(!question)return;
+      const card=ui.feedback&&ui.lastCard?ui.lastCard:currentCard();
+      const prompt="Объясни простыми словами по-русски, с примером и немецким определением. Вопрос карточки: "+(card?.question||"")+". Правильный ответ: "+(card?.answer||"")+". Мой вопрос: "+question;
+      const messages=chat.querySelector("#quiz-chat-messages");
+      const user=document.createElement("p");user.textContent=question;messages.appendChild(user);
+      const note=document.createElement("p");note.textContent="Для ответов здесь нужен серверный ИИ. Пока скопируй вопрос в ChatGPT.";messages.appendChild(note);
+      const copy=document.createElement("button");copy.type="button";copy.textContent="Скопировать вопрос";copy.onclick=()=>navigator.clipboard?.writeText(prompt).then(()=>{copy.textContent="Скопировано";}).catch(()=>{copy.textContent="Копирование недоступно";});messages.appendChild(copy);
+      input.value="";messages.scrollTop=messages.scrollHeight;
+    };
+  }
   function renderStudy() {
+    studyLayout();
     stopTimer();
     const session=ui.session;
     if (!session) {ui.view="home";renderHome();return;}
@@ -803,6 +828,7 @@
   }
 
   function render() {
+    studyLayout();
     updateBadge();
     if (ui.view==="study") return renderStudy();
     if (ui.view==="result") return renderResult();
@@ -939,8 +965,10 @@
     const action=button.dataset.action;
     const id=button.dataset.id;
     if (action==="home") {
-      cleanupTimers();ui.view="home";ui.feedback=null;ui.notice="";
+      cleanupTimers();ui.view="home";panel.classList.remove("quiz-fullscreen");document.body.classList.remove("quiz-learning-active");ui.feedback=null;ui.notice="";
       renderHome();
+    } else if (action==="toggle-study-chat") {
+      panel.classList.toggle("quiz-chat-open");
     } else if (action==="ask-coach") {
       const card=ui.feedback && ui.lastCard?ui.lastCard:currentCard();
       if(!card)return;
