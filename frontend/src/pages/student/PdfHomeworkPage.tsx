@@ -5,6 +5,7 @@ import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { renderHomeworkInkStroke } from '../../lib/homeworkInk';
+import { attachTabletInkInput, type TabletInkPoint } from '../../lib/tabletInkInput';
 
 type Tool = 'pen' | 'eraser';
 type PenColor = '#111111' | '#2563eb' | '#dc2626' | '#16a34a';
@@ -405,6 +406,69 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const [ready, setReady] = useState(false);
   const [undoCount, setUndoCount] = useState(strokesRef.current.length);
+  const universalInputRef = useRef(false);
+  const latestInkSettingsRef = useRef({ tool, penColor, penSize, touchDrawingEnabled, ready });
+  latestInkSettingsRef.current = { tool, penColor, penSize, touchDrawingEnabled, ready };
+
+  // Installed once per PDF page. Settings change via refs, without reattaching
+  // listeners or postponing the next Pencil/Android stylus stroke.
+  useEffect(() => {
+    const surface = previewCanvasRef.current;
+    if (!surface) return;
+    const controller = attachTabletInkInput(surface, {
+      onStart(point, meta) {
+        const canvas = canvasRef.current;
+        const settings = latestInkSettingsRef.current;
+        if (!canvas || !settings.ready) return;
+        if (activeStrokeRef.current) resetActiveStroke(true);
+        const geometry = currentGeometry(canvas);
+        if (geometry.width <= 0 || geometry.height <= 0) return;
+        const first = pointFromClient(point, geometry);
+        strokeGeometryRef.current = geometry;
+        activeStrokeRef.current = {
+          tool: settings.tool,
+          color: settings.penColor,
+          size: settings.penSize * geometry.canvasWidth / geometry.width,
+          points: [{ ...first, pressure: point.pressure }],
+          pressureSensitive: meta.device === 'pen',
+        };
+        if (settings.tool === 'eraser') drawTemporaryEraser(first, first, activeStrokeRef.current);
+        else repaintActiveStroke();
+      },
+      onMove(point) {
+        const geometry = strokeGeometryRef.current;
+        const stroke = activeStrokeRef.current;
+        if (!geometry || !stroke) return;
+        const next = pointFromClient(point, geometry);
+        const last = stroke.points[stroke.points.length - 1];
+        if (last && Math.hypot(last.x - next.x, last.y - next.y) < 0.4) return;
+        stroke.points.push({ ...next, pressure: point.pressure });
+        if (last && stroke.tool === 'eraser') drawTemporaryEraser(last, next, stroke);
+        else schedulePenPreview();
+      },
+      onEnd(point, meta, cancelled) {
+        const geometry = strokeGeometryRef.current;
+        const stroke = activeStrokeRef.current;
+        if (!geometry || !stroke) return;
+        const next = pointFromClient(point, geometry);
+        const last = stroke.points[stroke.points.length - 1];
+        if (!last || Math.hypot(last.x - next.x, last.y - next.y) > 0.4) {
+          stroke.points.push({ ...next, pressure: point.pressure });
+        }
+        resetActiveStroke(!cancelled || meta.device !== 'finger');
+      },
+    }, {
+      allowFinger: () => latestInkSettingsRef.current.touchDrawingEnabled,
+      nativeFingerNavigation: true,
+    });
+    universalInputRef.current = true;
+    return () => {
+      universalInputRef.current = false;
+      controller.destroy();
+    };
+    // The element is keyed by PDF page, while settings update via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // iOS Safari / Android browsers may drop pointer capture when a system
   // gesture, notification, or tab switch interrupts the pen. Release any
@@ -465,11 +529,14 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
     };
   }
 
-  function pointFromPointer(event: PointerEvent, geometry: StrokeGeometry) {
+  function pointFromClient(event: Pick<TabletInkPoint, 'clientX' | 'clientY'>, geometry: StrokeGeometry) {
     return {
       x: (event.clientX - geometry.left) * (geometry.canvasWidth / geometry.width),
       y: (event.clientY - geometry.top) * (geometry.canvasHeight / geometry.height),
     };
+  }
+  function pointFromPointer(event: PointerEvent, geometry: StrokeGeometry) {
+    return pointFromClient(event, geometry);
   }
 
   function cancelPreviewFrame() {
@@ -808,12 +875,12 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
           />
           <canvas
             ref={previewCanvasRef}
-            onPointerDown={start}
-            onPointerMove={move}
-            onPointerUp={finish}
-            onPointerCancel={finish}
-            onLostPointerCapture={lostCapture}
-            onPointerLeave={pointerLeft}
+            onPointerDown={(event) => { if (!universalInputRef.current) start(event); }}
+            onPointerMove={(event) => { if (!universalInputRef.current) move(event); }}
+            onPointerUp={(event) => { if (!universalInputRef.current) finish(event); }}
+            onPointerCancel={(event) => { if (!universalInputRef.current) finish(event); }}
+            onLostPointerCapture={(event) => { if (!universalInputRef.current) lostCapture(event); }}
+            onPointerLeave={(event) => { if (!universalInputRef.current) pointerLeft(event); }}
             style={{
               position: 'absolute',
               inset: 0,
