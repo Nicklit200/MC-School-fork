@@ -2291,3 +2291,23 @@ body.quiz-learning-active{overflow:hidden}
   .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-quick-grade{gap:8px!important}
   .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-quick-grade button{font-size:13px!important;padding:10px 6px!important}
 }
+
+/* Four equal flashcard actions after all answer options. */
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions{
+ display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+ gap:10px!important;align-items:stretch!important;margin-top:14px!important;
+}
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions button{
+ box-sizing:border-box!important;display:flex!important;flex-direction:column!important;
+ align-items:center!important;justify-content:center!important;gap:3px!important;
+ width:100%!important;min-width:0!important;min-height:70px!important;
+ padding:10px 7px!important;border-radius:12px!important;
+ font-size:14px!important;font-weight:800!important;line-height:1.25!important;
+}
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions button small{font-size:11px!important;font-weight:500!important}
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions .quiz-quick-known{background:#15803d!important;border:1px solid #15803d!important;color:#fff!important}
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions .quiz-quick-unknown{background:#fff3f3!important;border:1px solid #ffbfc3!important;color:#ac2934!important}
+@media(max-width:760px){
+ .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+ .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions button{font-size:13px!important;min-height:64px!important}
+}
