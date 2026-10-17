@@ -1281,9 +1281,68 @@ function renderList(skills) {
     host.innerHTML = '<div class="no-data">По этому фильтру ничего не найдено.</div>';
     return;
   }
-
   const groups = state.topicId === "all" ? topics : topics.filter((t) => t.id === state.topicId);
+  const isSoftwareEngineering = exam?.id === "exam-software-engineering";
+  const lectureTopicIds = ["se-analysis-usecases-lecture", "se-lecture-state-activity-201819"];
+  function makeSkillRow(skill) {
+    const row = document.createElement("div");
+    row.className = "list-row" + (skill.examRequired ? " exam-required" : "");
+    row.innerHTML = `
+      <div>
+        <div class="list-row-title">${escapeHtml(skill.title)} ${skill.examRequired ? `<span class="exam-required-inline">EXAM ×${Number(skill.examFrequency?.count || 1)}</span>` : ""}</div>
+        <div class="list-row-sub">${escapeHtml(skill.subtitle || "")}</div>
+        ${skill.slideNumbers?.length ? `<div class="skill-slide-source">Folie ${skill.slideNumbers.join(", ")}</div>` : ""}
+        ${quizTodayBadgeMarkup(skill)}
+      </div>
+      <div class="list-row-percent">${Number(skill.mastery || 0)}%</div>
+      <span class="badge ${readinessClass(Number(skill.mastery || 0))}">${masteryLabel(Number(skill.mastery || 0))}</span>
+    `;
+    row.onclick = () => {
+      state.selectedSkillId = skill.id;
+      showInspector(skill);
+    };
+    return row;
+  }
+  // Vorlesung is a collapsible parent. Existing skills stay attached to their
+  // original topic and keep their mastery, flashcards and answer history.
+  if (isSoftwareEngineering && (state.topicId === "all" || lectureTopicIds.includes(state.topicId))) {
+    const lecture = document.createElement("details");
+    lecture.className = "list-group lecture-tree";
+    lecture.open = true;
+    const heading = document.createElement("summary");
+    heading.className = "lecture-tree-title";
+    heading.textContent = "Vorlesung 3 — Material (1 из 3 PDF)";
+    lecture.append(heading);
+    const materialItems = [
+      { title:"Analyse und Anwendungsfälle", id:"se-analysis-usecases-lecture", done:true, note:"15 Folien — разобраны и повторены 17.10.2026" },
+      { title:"Zustands- und Aktivitätsdiagramm", id:"se-lecture-state-activity-201819", done:false, note:"Изучение не подтверждено" },
+      { title:"Stereotypen", id:null, done:false, note:"Изучение не подтверждено" }
+    ];
+    for (const material of materialItems) {
+      const item = document.createElement("details");
+      item.className = "lecture-material";
+      if (material.done) item.open = true;
+      const summary = document.createElement("summary");
+      summary.textContent = (material.done ? "✓ " : "○ ") + material.title;
+      item.append(summary);
+      const note = document.createElement("p");
+      note.className = "lecture-material-note";
+      note.textContent = material.note;
+      item.append(note);
+      const topicSkills = skills.filter(skill => skill.topicId === material.id);
+      for (const skill of topicSkills) item.append(makeSkillRow(skill));
+      if (!topicSkills.length) {
+        const empty = document.createElement("p");
+        empty.className = "lecture-material-note";
+        empty.textContent = "Пока нет навыков в этом материале.";
+        item.append(empty);
+      }
+      lecture.append(item);
+    }
+    host.append(lecture);
+  }
   for (const topic of groups) {
+    if (isSoftwareEngineering && lectureTopicIds.includes(topic.id)) continue;
     const topicSkills = skills.filter((s) => s.topicId === topic.id);
     if (!topicSkills.length) continue;
     const block = document.createElement("section");
@@ -1291,25 +1350,7 @@ function renderList(skills) {
     const heading = document.createElement("h3");
     heading.textContent = topic.title;
     block.append(heading);
-    for (const skill of topicSkills) {
-      const row = document.createElement("div");
-      row.className = "list-row" + (skill.examRequired ? " exam-required" : "");
-      row.innerHTML = `
-        <div>
-          <div class="list-row-title">${escapeHtml(skill.title)} ${skill.examRequired ? `<span class="exam-required-inline">EXAM ×${Number(skill.examFrequency?.count || 1)}</span>` : ""}</div>
-          <div class="list-row-sub">${escapeHtml(skill.subtitle || "")}</div>
-          ${skill.slideNumbers?.length ? `<div class="skill-slide-source">Слайд ${skill.slideNumbers.join(", ")}</div>` : ""}
-          ${quizTodayBadgeMarkup(skill)}
-        </div>
-        <div class="list-row-percent">${Number(skill.mastery || 0)}%</div>
-        <span class="badge ${readinessClass(Number(skill.mastery || 0))}">${masteryLabel(Number(skill.mastery || 0))}</span>
-      `;
-      row.onclick = () => {
-        state.selectedSkillId = skill.id;
-        showInspector(skill);
-      };
-      block.append(row);
-    }
+    for (const skill of topicSkills) block.append(makeSkillRow(skill));
     host.append(block);
   }
 }
