@@ -19,8 +19,6 @@ const STALE_AFTER_MS = 15_000;
  * to arrive from the server, so the line never blinks out and back in.
  */
 const LINGER_AFTER_END_MS = 20_000;
-/** Once the saved stroke is announced, the preview only needs a moment more. */
-const LINGER_AFTER_SAVE_MS = 0;
 const SWEEP_MS = 300;
 
 export interface LiveDraft {
