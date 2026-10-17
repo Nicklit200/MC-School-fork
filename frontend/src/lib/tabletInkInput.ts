@@ -371,9 +371,11 @@ export function attachTabletInkInput(
     emitGesture();
   }
   listen(window, 'blur', clearActive);
-  listen(document, 'visibilitychange', () => {
+  const handleVisibilityChange = () => {
     if (document.hidden) clearActive();
-  });
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  listeners.push(() => document.removeEventListener('visibilitychange', handleVisibilityChange));
 
   return {
     backend,
