@@ -305,10 +305,23 @@
       <div id="homework-list" class="homework-list"></div>
     </aside>
 
+    <button id="study-settings-open" class="study-settings-open" type="button" aria-label="Настройки промптов">⚙ Настройки</button>
+    <section id="study-settings-dialog" class="study-settings-dialog" hidden aria-label="Настройки промптов">
+      <div class="study-settings-card">
+        <header><h2>Настройки</h2><button id="study-settings-close" type="button" aria-label="Закрыть настройки">×</button></header>
+        <p>Промпты сохраняются на сервере. Выбери промпт, измени текст и нажми «Сохранить».</p>
+        <label for="study-settings-select">Промпт</label>
+        <select id="study-settings-select"></select>
+        <label for="study-settings-content">Текст инструкции</label>
+        <textarea id="study-settings-content" rows="16"></textarea>
+        <div class="study-settings-actions"><span id="study-settings-status" role="status"></span><button id="study-settings-save" type="button">Сохранить промпт</button></div>
+      </div>
+    </section>
     <div class="board-help">Перемещение — тянуть фон · Масштаб — колесо</div>
   </div>
 
   <script src="./flashcard-engine.js"></script>
+  <script src="./study-settings.js?v=20261017-1" defer></script>
   <script type="module" src="./app.js?v=20261017-mobile-2"></script>
   <script type="module" src="./flashcards.js?v=20261017-chat-reopen-1"></script>
   <script type="module" src="./reminders.js?v=20261015-homework-push"></script>
