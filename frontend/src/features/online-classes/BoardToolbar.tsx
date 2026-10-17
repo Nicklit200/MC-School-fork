@@ -10,6 +10,7 @@ import {
 } from './boardTools';
 import type { InputMode } from './inputPolicy';
 import type { EraserMode, Tool } from './WhiteboardCanvas';
+import { TEXT_FONT_PRESETS, clampTextSize, type TextFont } from './textStyles';
 
 interface Props {
   tool: Tool;
@@ -100,7 +101,7 @@ export function BoardToolbar({
           </div>
         ) : (
           <>
-            <div className="board-toolbar__swatches" role="radiogroup" aria-label={t('onlineClass.whiteboard.color')}>
+            {false && <div className="board-toolbar__swatches" role="radiogroup" aria-label={t('onlineClass.whiteboard.color')}>
               {COLORS.map((value) => (
                 <button
                   key={value}
@@ -113,7 +114,7 @@ export function BoardToolbar({
                   onClick={() => onSettingsChange(tool, { color: value })}
                 />
               ))}
-            </div>
+            </div>}
             {definition.settings === 'ink' && (
               <label className="board-toolbar__size">
                 {t('onlineClass.board.size')}
@@ -190,6 +191,39 @@ export function BoardToolbar({
             onChange={(event) => onSettingsChange(tool, { width: Number(event.target.value) / 1000 })}
             style={{ width: 95 }} />
         </label>
+      )}
+
+      {tool === 'text' && (
+        <div className="board-toolbar__text-style" role="group" aria-label={t('onlineClass.whiteboard.text')}>
+          <label className="board-toolbar__text-control">
+            <span>Шрифт / Schrift</span>
+            <select
+              aria-label="Шрифт / Schriftart"
+              value={activeSettings.font ?? 'clean'}
+              onChange={(event) => onSettingsChange('text', { font: event.target.value as TextFont })}
+            >
+              {TEXT_FONT_PRESETS.map((preset) => (
+                <option key={preset.value} value={preset.value} style={{ fontFamily: preset.fontFamily }}>
+                  {preset.labelRu} / {preset.labelDe}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="board-toolbar__text-control board-toolbar__text-size">
+            <span>Размер / Größe</span>
+            <input type="number" aria-label="Размер текста / Schriftgröße"
+              min={10} max={64} step={1}
+              value={activeSettings.fontSize ?? 24}
+              onChange={(event) => onSettingsChange('text', { fontSize: clampTextSize(Number(event.target.value)) })}
+            />
+          </label>
+          <button type="button" className={activeSettings.bold ? 'board-toolbar__text-bold is-active' : 'board-toolbar__text-bold'}
+            aria-label="Полужирный / Fett"
+            aria-pressed={Boolean(activeSettings.bold)}
+            title="Полужирный / Fett"
+            onClick={() => onSettingsChange('text', { bold: !activeSettings.bold })}
+          >B</button>
+        </div>
       )}
 
       <div className="board-toolbar__group" role="group" aria-label={t('onlineClass.board.inputMode')}>
