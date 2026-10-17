@@ -103,18 +103,20 @@ describe('useLiveStrokes', () => {
     act(() => handler({ event: strokeEvent('c1', 'board-1', 0, false), senderIdentity: 'a|1' }));
     expect(result.current.drafts).toHaveLength(1);
     act(() => {
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(21_000);
     });
     expect(result.current.drafts).toHaveLength(0);
   });
 
-  it('drops the preview soon after the saved stroke is announced', () => {
+  it('keeps the preview after a save notification, until its exact saved shape is rendered', () => {
     const { result } = mount();
-    act(() => handler({ event: strokeEvent('c1', 'board-1', 0, true, line), senderIdentity: 'user-a|1' }));
+    const strokeId = '11111111-1111-4111-8111-111111111111';
+    act(() => handler({ event: strokeEvent('c1', 'board-1', 0, false, line, strokeId), senderIdentity: 'user-a|1' }));
     act(() => result.current.settle('user-a'));
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
+    expect(result.current.drafts).toHaveLength(1);
+    act(() => result.current.acknowledgeRendered(['22222222-2222-4222-8222-222222222222']));
+    expect(result.current.drafts).toHaveLength(1);
+    act(() => result.current.acknowledgeRendered([strokeId]));
     expect(result.current.drafts).toHaveLength(0);
   });
 
@@ -122,9 +124,33 @@ describe('useLiveStrokes', () => {
     const { result } = mount();
     act(() => handler({ event: strokeEvent('c1', 'board-1', 0, true, line), senderIdentity: 'a|1' }));
     act(() => {
-      vi.advanceTimersByTime(3500);
+      vi.advanceTimersByTime(16_000);
     });
     expect(result.current.drafts).toHaveLength(0);
+  });
+
+  it('never overwrites fast consecutive strokes from one student', () => {
+    const { result } = mount();
+    const a = '11111111-1111-4111-8111-111111111111';
+    const b = '22222222-2222-4222-8222-222222222222';
+    act(() => handler({ event: strokeEvent('c1', 'board-1', 0, false, line, a), senderIdentity: 'student|ipad' }));
+    act(() => handler({ event: strokeEvent('c1', 'board-1', 0, false, line, b), senderIdentity: 'student|ipad' }));
+    expect(result.current.drafts).toHaveLength(2);
+    act(() => result.current.acknowledgeRendered([a]));
+    expect(result.current.drafts).toHaveLength(1);
+    expect(result.current.drafts[0].id).toBe('student|ipad:' + b);
+  });
+
+  it('sends final geometry reliably using the same ID as the saved operation', () => {
+    const { result } = mount();
+    const strokeId = '11111111-1111-4111-8111-111111111111';
+    act(() => result.current.sendDraft(toLiveShape(line), strokeId));
+    act(() => result.current.sendDraft(toLiveShape(line), strokeId, true));
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(publish.mock.calls[1][0]).toMatchObject({
+      type: 'stroke', strokeId, active: false, shape: { kind: 'pen' },
+    });
+    expect(publish.mock.calls[1][1]).toBe(true);
   });
 
   it('throttles outgoing previews, sends them lossily, and announces pen-up reliably', () => {
