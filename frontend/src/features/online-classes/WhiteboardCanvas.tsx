@@ -92,12 +92,12 @@ interface Props {
   remoteDrafts?: { id: string; shape: Shape }[];
   /** Whose marks this viewer may delete or move. */
   actorId?: string;
-  onCommit: (shape: Shape) => void;
+  onCommit: (shape: Shape, strokeId?: string) => void;
   onEraseShape?: (operationId: string) => void;
   onMoveShape?: (operationId: string, shape: Shape) => void;
   onLaserMove?: (point: { x: number; y: number }) => void;
   /** The stroke being drawn changed; `null` once the pen is up or it was cancelled. */
-  onDraftChange?: (shape: Shape | null) => void;
+  onDraftChange?: (shape: Shape | null, strokeId?: string) => void;
 }
 
 /**
@@ -146,6 +146,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const [dragDelta, setDragDelta] = useState<{ dx: number; dy: number } | null>(null);
   const [textEdit, setTextEdit] = useState<{ px: Point; nx: number; ny: number } | null>(null);
   const draftRef = useRef<Shape | null>(null);
+  const inkStrokeIdRef = useRef<string | null>(null);
   const [ownLaser, setOwnLaser] = useState<{ x: number; y: number } | null>(null);
   const ownLaserTimer = useRef<number | undefined>(undefined);
   const lastSample = useRef(0);
@@ -236,8 +237,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
           ? { kind: active, color: ink, width, x1: point.x, y1: point.y, x2: point.x, y2: point.y }
           : { kind: active, color: ink, width, x: point.x, y: point.y, w: 0, h: 0 };
     draftRef.current = next;
+    inkStrokeIdRef.current = crypto.randomUUID();
     setDraft(next);
-    onDraftChange?.(next);
+    onDraftChange?.(next, inkStrokeIdRef.current);
   };
 
   const eraseAt = (point: { x: number; y: number }) => {
@@ -289,7 +291,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     }
     draftRef.current = next;
     setDraft(next);
-    onDraftChange?.(next);
+    onDraftChange?.(next, inkStrokeIdRef.current ?? undefined);
   };
 
   const endStroke = () => {
@@ -306,19 +308,25 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       return;
     }
     const finished = draftRef.current;
+    const strokeId = inkStrokeIdRef.current ?? undefined;
     draftRef.current = null;
+    inkStrokeIdRef.current = null;
     setDraft(null);
-    onDraftChange?.(null);
+    // Keep final geometry visible remotely until its exact saved operation
+    // appears. Merely sending "null" causes a visible gap on slow networks.
+    onDraftChange?.(finished, strokeId);
     if (!finished) return;
     // Thinning keeps the stroke under the server's point cap without visibly
     // changing the line.
     if (finished.points) {
       const sample = thinStroke(finished.points, finished.pressures);
-      onCommit({ ...finished, points: sample.points, ...(sample.pressures ? { pressures: sample.pressures } : {}) });
-    } else onCommit(finished);
+      onCommit({ ...finished, points: sample.points, ...(sample.pressures ? { pressures: sample.pressures } : {}) }, strokeId);
+    } else onCommit(finished, strokeId);
   };
 
   const cancelStroke = () => {
+    onDraftChange?.(null, inkStrokeIdRef.current ?? undefined);
+    inkStrokeIdRef.current = null;
     draftRef.current = null;
     setDraft(null);
     onDraftChange?.(null);
