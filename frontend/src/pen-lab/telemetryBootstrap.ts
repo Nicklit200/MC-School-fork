@@ -400,7 +400,12 @@ function mountControls() {
   fastLink.textContent = 'Режим без задержек (A/B)';
   fastLink.style.cssText = 'display:inline-block;padding:8px 10px;margin:4px 6px 4px 0;' +
     'border-radius:7px;background:#a7f3d0;color:#111827;text-decoration:none;font-weight:600;';
-  row.append(select, start, stop, mark, download, report, fastLink);
+  const universalLink = document.createElement('a');
+  universalLink.href = '/pen-lab-universal.html';
+  universalLink.textContent = 'Универсальный ввод (iPad + Android)';
+  universalLink.style.cssText = 'display:inline-block;padding:8px 10px;margin:4px 6px 4px 0;' +
+    'border-radius:7px;background:#93c5fd;color:#111827;text-decoration:none;font-weight:600;';
+  row.append(select, start, stop, mark, download, report, fastLink, universalLink);
 
   const syncStatus = document.createElement('div');
   syncStatus.style.cssText = 'font-size:12px;white-space:pre-line;line-height:1.6;margin-bottom:6px;color:#bfdbfe';
