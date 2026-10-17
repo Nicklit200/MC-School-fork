@@ -1391,3 +1391,68 @@
   .whiteboard__topline { flex-wrap: nowrap; padding: 3px 5px; gap: 4px; }
   .whiteboard__topline .board-toolbar { flex-wrap: nowrap; overflow-x: auto; }
 }
+
+/* Tablet-friendly Goodnotes-inspired text controls; no additional toolbar row. */
+.whiteboard__topline .board-toolbar__text-style {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 3px 6px;
+  background: rgba(255,255,255,.13);
+  border: 1px solid rgba(255,255,255,.19);
+  border-radius: 11px;
+}
+.whiteboard__topline .board-toolbar__text-control {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #f1f5f9;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+.whiteboard__topline .board-toolbar__text-control select,
+.whiteboard__topline .board-toolbar__text-control input {
+  box-sizing: border-box;
+  height: 29px;
+  min-height: 29px;
+  background: #ffffff;
+  color: #172554;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  font: 500 12px system-ui, sans-serif;
+  padding: 3px 7px;
+  outline-offset: 2px;
+}
+.whiteboard__topline .board-toolbar__text-control select { width: 144px; }
+.whiteboard__topline .board-toolbar__text-control input { width: 55px; }
+.whiteboard__topline .board-toolbar button.board-toolbar__text-bold {
+  font-size: 15px;
+  font-family: Georgia, serif;
+  font-weight: 700;
+  min-height: 29px;
+  height: 29px;
+  min-width: 32px;
+  border-radius: 7px;
+  margin-bottom: 1px;
+}
+.whiteboard__text-input {
+  width: min(330px, calc(100vw - 120px));
+  min-width: 125px;
+  min-height: 62px;
+  resize: both;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  background: rgba(255,255,255,.98);
+  border: 1.5px solid #3b82f6;
+  border-radius: 9px;
+  box-shadow: 0 4px 20px rgba(15,23,42,.19);
+  line-height: 1.22;
+  caret-color: #2563eb;
+  z-index: 3;
+}
+@media(max-width: 780px) {
+  .whiteboard__topline .board-toolbar__text-control select { width: 118px; }
+  .whiteboard__topline .board-toolbar__text-style { gap: 4px; padding: 3px 4px; }
+}
