@@ -473,15 +473,26 @@
     chat.innerHTML='<div class="quiz-chat-heading"><strong>ИИ-помощник</strong><button id="quiz-chat-hide" type="button">Скрыть</button></div><p>Спроси о текущей карточке.</p><div id="quiz-chat-messages" class="quiz-chat-messages"></div><form id="quiz-chat-form"><textarea id="quiz-chat-input" rows="3" placeholder="Что такое Use Case?"></textarea><button type="submit">Подготовить вопрос</button></form>';
     panel.appendChild(chat);
     chat.querySelector("#quiz-chat-hide").onclick=()=>panel.classList.remove("quiz-chat-open");
-    chat.querySelector("#quiz-chat-form").onsubmit=event=>{
-      event.preventDefault();const input=chat.querySelector("#quiz-chat-input"),question=input.value.trim();if(!question)return;
+    chat.querySelector("#quiz-chat-form").onsubmit=async event=>{
+      event.preventDefault();
+      const input=chat.querySelector("#quiz-chat-input"),question=input.value.trim();
+      if(!question)return;
       const card=ui.feedback&&ui.lastCard?ui.lastCard:currentCard();
-      const prompt="Объясни простыми словами по-русски, с примером и немецким определением. Вопрос карточки: "+(card?.question||"")+". Правильный ответ: "+(card?.answer||"")+". Мой вопрос: "+question;
       const messages=chat.querySelector("#quiz-chat-messages");
-      const user=document.createElement("p");user.textContent=question;messages.appendChild(user);
-      const note=document.createElement("p");note.textContent="Для ответов здесь нужен серверный ИИ. Пока скопируй вопрос в ChatGPT.";messages.appendChild(note);
-      const copy=document.createElement("button");copy.type="button";copy.textContent="Скопировать вопрос";copy.onclick=()=>navigator.clipboard?.writeText(prompt).then(()=>{copy.textContent="Скопировано";}).catch(()=>{copy.textContent="Копирование недоступно";});messages.appendChild(copy);
-      input.value="";messages.scrollTop=messages.scrollHeight;
+      const button=chat.querySelector("#quiz-chat-form button");
+      const user=document.createElement("p");user.textContent=question;user.className="quiz-chat-user";messages.appendChild(user);
+      const reply=document.createElement("p");reply.textContent="ИИ отвечает…";messages.appendChild(reply);
+      input.value="";button.disabled=true;messages.scrollTop=messages.scrollHeight;
+      try{
+        const response=await fetch("https://personal-life-api-production.up.railway.app/api/study-ai-chat",{
+          method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+owner()},
+          body:JSON.stringify({question,cardQuestion:card?.question||"",cardAnswer:card?.answer||""})
+        });
+        const result=await response.json();
+        if(!response.ok)throw Error(result.message||(response.status===429?"Лимит $5 в месяц исчерпан.":"Ошибка подключения к ИИ."));
+        reply.textContent=result.answer||"Ответ не получен.";
+      }catch(error){reply.textContent=error.message||"Не удалось получить ответ.";}
+      finally{button.disabled=false;messages.scrollTop=messages.scrollHeight;}
     };
   }
   function renderStudy() {
