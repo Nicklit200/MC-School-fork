@@ -468,9 +468,10 @@
     document.body.classList.toggle("quiz-learning-active",active && !panel.classList.contains("closed"));
     let chat=panel.querySelector("#quiz-learning-chat");
     if(!active){chat?.remove();return;}
+    panel.classList.add("quiz-chat-open");
     if(chat)return;
     chat=document.createElement("aside");chat.id="quiz-learning-chat";chat.className="quiz-learning-chat";
-    chat.innerHTML='<div class="quiz-chat-heading"><strong>ИИ-помощник</strong><button id="quiz-chat-hide" type="button">Скрыть</button></div><p>Спроси о текущей карточке.</p><div id="quiz-chat-messages" class="quiz-chat-messages"></div><form id="quiz-chat-form"><textarea id="quiz-chat-input" rows="3" placeholder="Что такое Use Case?"></textarea><button type="submit">Подготовить вопрос</button></form>';
+    chat.innerHTML='<div class="quiz-chat-heading"><strong>ИИ-помощник</strong><button id="quiz-chat-hide" type="button">Скрыть</button></div><p>Спроси о текущей карточке.</p><div id="quiz-chat-messages" class="quiz-chat-messages"></div><form id="quiz-chat-form"><textarea id="quiz-chat-input" rows="3" placeholder="Что такое Use Case?"></textarea><button type="submit">Отправить ИИ</button></form>';
     panel.appendChild(chat);
     chat.querySelector("#quiz-chat-hide").onclick=()=>panel.classList.remove("quiz-chat-open");
     chat.querySelector("#quiz-chat-form").onsubmit=async event=>{
@@ -580,7 +581,7 @@
         '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
         '<button class="quiz-next" data-action="next" type="button">Дальше →</button>':
         '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>')+
-      coachMarkup(card)+'<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
+      '<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
     if (!feedback) startCountdown();
     else stopAdvance(); // Explanation stays visible until the user is ready.
   }
@@ -652,7 +653,7 @@
       '</div>'+explanationMarkup(last)+
       '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
       '<button class="quiz-next" data-action="next" type="button">Дальше →</button>'+
-      '<button class="quiz-invalid-after" data-action="invalid" type="button">Некорректный вопрос · не учитывать</button>'+coachMarkup(last);
+      '<button class="quiz-invalid-after" data-action="invalid" type="button">Некорректный вопрос · не учитывать</button>';
     // No automatic transition: even a correct answer deserves time to read the rationale.
     host.querySelector?.(".quiz-explanation")?.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
