@@ -45,11 +45,18 @@ export function useClassEvents(
   }, [room, classId, topic]);
 
   const publish = useCallback(
-    async (event: ClassEvent, reliable = true, destinationIdentities?: string[]) => {
+    async (event: ClassEvent, reliable = true, destinationUserIds?: string[]) => {
       try {
-        if (destinationIdentities && destinationIdentities.length === 0) return;
+        // Private board: resolve currently connected recipient devices here.
+        // Do not accidentally broadcast when nobody eligible is online.
+        const identities = destinationUserIds
+          ? [...room.remoteParticipants.values()]
+              .filter((p) => destinationUserIds.includes(p.identity.split('|')[0]))
+              .map((p) => p.identity)
+          : undefined;
+        if (identities && identities.length === 0) return;
         await room.localParticipant.publishData(encodeEvent(event) as never, {
-          reliable, topic, ...(destinationIdentities ? { destinationIdentities } : {}),
+          reliable, topic, ...(identities ? { destinationIdentities: identities } : {}),
         });
       } catch {
         // Realtime is an accelerator, never the source of truth: the durable
