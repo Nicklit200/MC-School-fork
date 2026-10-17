@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRoomContext } from '@livekit/components-react';
 import { thinPoints, thinStroke } from './annotations';
 import {
   MAX_LIVE_POINTS,
@@ -119,7 +118,6 @@ export function useLiveStrokes({
   personalOwnerId?: string | null;
   currentUserId?: string | null;
 }) {
-  const room = useRoomContext();
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const lastSent = useRef(0);
   const sentActive = useRef(false);
@@ -218,12 +216,7 @@ export function useLiveStrokes({
       // Personal boards are private, including interim pencil coordinates.
       if (personalOwnerId && (currentUserId !== personalOwnerId && currentUserId !== hostUserId)) return;
       const destinations = personalOwnerId
-        ? [...room.remoteParticipants.values()]
-          .filter((participant) => {
-            const userId = participant.identity.split('|')[0];
-            return userId === personalOwnerId || userId === hostUserId;
-          })
-          .map((participant) => participant.identity)
+        ? [personalOwnerId, hostUserId].filter((id): id is string => Boolean(id))
         : undefined;
       const id = strokeId ?? activeStrokeId.current;
       if (!shape) {
@@ -246,7 +239,7 @@ export function useLiveStrokes({
         lastSent.current = 0;
       }
     },
-    [classId, currentUserId, enabled, hostUserId, page, personalOwnerId, publish, room, targetId],
+    [classId, currentUserId, enabled, hostUserId, page, personalOwnerId, publish, targetId],
   );
 
   const drafts: LiveDraft[] = Object.entries(entries)
