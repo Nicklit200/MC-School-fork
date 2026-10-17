@@ -45,9 +45,12 @@ export function useClassEvents(
   }, [room, classId, topic]);
 
   const publish = useCallback(
-    async (event: ClassEvent, reliable = true) => {
+    async (event: ClassEvent, reliable = true, destinationIdentities?: string[]) => {
       try {
-        await room.localParticipant.publishData(encodeEvent(event) as never, { reliable, topic });
+        if (destinationIdentities && destinationIdentities.length === 0) return;
+        await room.localParticipant.publishData(encodeEvent(event) as never, {
+          reliable, topic, ...(destinationIdentities ? { destinationIdentities } : {}),
+        });
       } catch {
         // Realtime is an accelerator, never the source of truth: the durable
         // state still arrives by REST, so a failed publish is not fatal.
