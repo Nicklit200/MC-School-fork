@@ -31,6 +31,7 @@ interface Entry {
   page: number;
   updatedAt: number;
   strokeId?: string;
+  revision?: number;
   /** Set once the pen came up (or the save was announced). */
   removeAt: number | null;
 }
@@ -129,6 +130,10 @@ export function useLiveStrokes({
   const lastSent = useRef(0);
   const sentActive = useRef(false);
   const activeStrokeId = useRef<string | undefined>(undefined);
+  const activeRevision = useRef(0);
+  // A late datagram must not resurrect a stroke once its final reliable packet
+  // or authoritative server copy has already arrived.
+  const finalizedStrokes = useRef(new Map<string, number>());
 
   const { publish } = useClassEvents(classId, STROKE_TOPIC, ({ event, senderIdentity }) => {
     if (!enabled || event.type !== 'stroke' || event.targetId !== targetId || !senderIdentity) return;
@@ -141,10 +146,21 @@ export function useLiveStrokes({
       (senderUser !== personalOwnerId && senderUser !== hostUserId)
     )) return;
     const id = event.strokeId ? senderIdentity + ':' + event.strokeId : senderIdentity;
+    if (event.strokeId && event.active && finalizedStrokes.current.has(id)) return;
+    if (!event.active && event.strokeId) {
+      finalizedStrokes.current.set(id, now);
+      if (finalizedStrokes.current.size > 512) {
+        const oldest = finalizedStrokes.current.keys().next().value;
+        if (oldest) finalizedStrokes.current.delete(oldest);
+      }
+    }
     if (event.shape) {
       setEntries((current) => {
         const previous = current[id];
-        // Ignore stale/reordered datagrams after a final (reliable) packet.
+        // A lossy update can arrive after a newer packet; never make a pupil's
+        // writing jump backwards because of network reordering.
+        if (event.revision !== undefined && previous?.revision !== undefined &&
+            event.revision <= previous.revision) return current;
         if (previous?.removeAt !== null && previous?.removeAt !== undefined && event.active) return current;
         return {
           ...current,
@@ -152,6 +168,7 @@ export function useLiveStrokes({
             shape: event.shape!,
             page: event.page,
             strokeId: event.strokeId,
+            revision: event.revision,
             updatedAt: now,
             removeAt: event.active ? null : now + LINGER_AFTER_END_MS,
           },
@@ -161,7 +178,10 @@ export function useLiveStrokes({
       setEntries((current) => {
         const previous = current[id];
         if (!previous) return current;
-        return { ...current, [id]: { ...previous, removeAt: now + LINGER_AFTER_END_MS } };
+        if (event.revision !== undefined && previous.revision !== undefined &&
+            event.revision <= previous.revision) return current;
+        return { ...current, [id]: { ...previous, revision: event.revision,
+          removeAt: now + LINGER_AFTER_END_MS } };
       });
     }
   });
@@ -200,6 +220,7 @@ export function useLiveStrokes({
       const next: Record<string, Entry> = {};
       for (const [key, entry] of Object.entries(current)) {
         if (entry.strokeId && visible.has(entry.strokeId)) {
+          finalizedStrokes.current.set(key, Date.now());
           changed = true;
         } else {
           next[key] = entry;
@@ -231,16 +252,21 @@ export function useLiveStrokes({
         sentActive.current = false;
         activeStrokeId.current = undefined;
         lastSent.current = 0;
-        void publish(strokeEvent(classId, targetId, page, false, undefined, id), true, destinations);
+        activeRevision.current += 1;
+        void publish(strokeEvent(classId, targetId, page, false, undefined, id,
+          activeRevision.current), true, destinations);
         return;
       }
       const now = performance.now();
       const isNew = id !== activeStrokeId.current;
       if (!finished && !isNew && now - lastSent.current < SEND_INTERVAL_MS) return;
+      if (isNew) activeRevision.current = 0;
+      activeRevision.current += 1;
       lastSent.current = now;
       activeStrokeId.current = id;
       sentActive.current = !finished;
-      void publish(strokeEvent(classId, targetId, page, !finished, shape, id), finished, destinations);
+      void publish(strokeEvent(classId, targetId, page, !finished, shape, id,
+        activeRevision.current), finished, destinations);
       if (finished) {
         activeStrokeId.current = undefined;
         lastSent.current = 0;
