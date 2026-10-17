@@ -257,7 +257,7 @@ class PenLabTelemetry {
     }
   }
 
-  async flush(): Promise<void> {
+  async flush(_immediate = false): Promise<void> {
     if (this.flushing || this.pending.length === 0) return;
     this.flushing = true;
     try {
@@ -314,6 +314,48 @@ class PenLabTelemetry {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
+  /** Readable local report, generated from the same authoritative .ndjson. */
+  async downloadReadableReport() {
+    await this.flush(true);
+    try {
+      const result = await fetch(
+        PATH + '?session=' + encodeURIComponent(this.sessionId) + '&format=report',
+        { cache: 'no-store' },
+      );
+      if (!result.ok) throw new Error('No saved report');
+      const blob = await result.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = this.sessionId + '.report.md';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch {
+      const tests = this.events.filter((item) => item.kind === 'test_end');
+      const lines = [
+        '# Mindcrafti Pen Lab — Apple Pencil report',
+        'Session: ' + this.sessionId,
+        'Captured events in browser: ' + this.sequence,
+        ...tests.map((item) => '\n## ' + item.details.testId + '\n' +
+          Object.entries(item.details).map(([key, value]) => '- ' + key + ': ' + String(value)).join('\n')),
+        '\nManual freeze marks: ' + this.markCount,
+        'Max move gap: ' + this.maxPointerGapMs.toFixed(1) + ' ms',
+        'Max frame gap: ' + this.maxFrameGapMs.toFixed(1) + ' ms',
+      ];
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = this.sessionId + '.report.md';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
+  }
+
 }
 
 export const penLabTelemetry = new PenLabTelemetry();
