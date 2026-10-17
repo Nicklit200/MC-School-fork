@@ -182,6 +182,8 @@ export function attachTabletInkInput(
   }
 
   function pointerDown(event: PointerEvent) {
+    // iPadOS uses Touch Events for pen/fingers, never count their PointerEvents twice.
+    if (backend === 'ios-touch' && event.pointerType !== 'mouse') return;
     const isTouch = event.pointerType === 'touch';
     if (isTouch) {
       if (active?.meta.device === 'pen') return; // reject palm while drawing
@@ -215,6 +217,7 @@ export function attachTabletInkInput(
   }
 
   function pointerMove(event: PointerEvent) {
+    if (backend === 'ios-touch' && event.pointerType !== 'mouse') return;
     if (event.pointerType === 'touch' && contacts.has(event.pointerId)) {
       contacts.set(event.pointerId, {
         id: event.pointerId, clientX: event.clientX, clientY: event.clientY,
@@ -234,6 +237,7 @@ export function attachTabletInkInput(
   }
 
   function pointerFinish(event: PointerEvent, cancelled: boolean) {
+    if (backend === 'ios-touch' && event.pointerType !== 'mouse') return;
     if (event.pointerType === 'touch' && contacts.has(event.pointerId)) {
       contacts.delete(event.pointerId);
       emitGesture();
