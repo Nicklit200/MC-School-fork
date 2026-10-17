@@ -2188,3 +2188,11 @@ body.quiz-learning-active{overflow:hidden}
  .quiz-fullscreen .quiz-learning-chat{flex:0 0 auto;min-height:320px;max-height:none;overflow:visible;width:100%;box-sizing:border-box;margin-bottom:16px}
  .quiz-chat-messages{min-height:110px;max-height:320px}
 }
+
+/* One-tap grading during scheduled review */
+#flashcard-app .quiz-quick-grade{display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;margin:14px 0}
+#flashcard-app .quiz-quick-grade button{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:155px;min-height:60px;flex:1;border-radius:13px;padding:10px 16px;font-size:18px;font-weight:800;cursor:pointer;border:1px solid transparent}
+#flashcard-app .quiz-quick-grade button small{font-size:12px;font-weight:500;margin-top:4px}
+#flashcard-app .quiz-quick-grade .quiz-quick-known{background:#15803d;color:#fff}
+#flashcard-app .quiz-quick-grade .quiz-quick-unknown{background:#fff4f4;color:#a52d36;border-color:#f4c3c7}
+@media(max-width:760px){#flashcard-app .quiz-quick-grade{gap:8px}#flashcard-app .quiz-quick-grade button{min-width:120px;padding:10px 8px;font-size:16px}}
