@@ -12,6 +12,7 @@ import {
 import { buildPdf, dataUrlToBytes, type JpegPage } from './pdfWriter';
 import type { PdfDoc } from './pdfDocument';
 import { penOutline, tracePenOutline } from './freehand';
+import { shapeTextSizePx, textStyleFor } from './textStyles';
 
 /**
  * Konva is loaded when the first export runs, not with the board: most lessons
@@ -135,7 +136,12 @@ function shapeNode(shape: Shape, viewport: { width: number; height: number }, as
         x: origin.x,
         y: origin.y,
         text: shape.text ?? '',
-        fontSize: Math.max(10, (shape.size ?? 0.03) * box.height),
+        fontSize: shapeTextSizePx(shape.size, box.height),
+        fontFamily: textStyleFor(shape.font, shape.bold).fontFamily,
+        fontStyle: textStyleFor(shape.font, shape.bold).fontStyle,
+        lineHeight: 1.22,
+        width: Math.max(10, box.width - (origin.x - box.left)),
+        wrap: 'word',
         fill: stroke,
       });
     }
