@@ -289,6 +289,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   // Never remove a just-written shape until the acknowledged server copy has
   // rendered. While it is pending, hide its optimistic twin to avoid a flash.
   const renderedIds = shapes.map((entry) => entry.operationId).join(',');
+  const confirmedIds = pendingInk.filter((entry) => entry.status === 'saved').map((entry) => entry.id).join(',');
   useEffect(() => {
     const visible = new Set(renderedIds ? renderedIds.split(',') : []);
     setPendingInk((current) => {
@@ -296,7 +297,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         !(entry.status === 'saved' && entry.page === pageKey && visible.has(entry.id)));
       return next.length === current.length ? current : next;
     });
-  }, [pageKey, renderedIds]);
+  }, [pageKey, renderedIds, confirmedIds]);
 
   const eraseAt = (point: { x: number; y: number }) => {
     const hit = shapeAt(live.current.shapes, point, HIT_TOLERANCE, aspectOfBoard());
