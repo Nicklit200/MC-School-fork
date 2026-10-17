@@ -214,6 +214,16 @@
       : "";
   }
 
+  function coachMarkup(card) {
+    const explanation=explanationForCard(card);
+    return '<details class="quiz-coach"><summary>Не понимаю термин — спросить ИИ</summary>'+
+      '<p>Скопируй вопрос с контекстом и задай его в ChatGPT. Текущая карточка останется на месте.</p>'+
+      (explanation?'<div class="quiz-coach-tip"><strong>Объяснение:</strong> '+esc(explanation)+'</div>':'')+
+      '<label for="quiz-coach-question">Что непонятно?</label>'+
+      '<textarea id="quiz-coach-question" rows="2" placeholder="Например: что такое Use Case?"></textarea>'+
+      '<button data-action="ask-coach" type="button">Скопировать вопрос и открыть ChatGPT ↗</button>'+
+      '<div class="quiz-coach-status" id="quiz-coach-status" role="status"></div></details>';
+  }
   function visibleCards() {
     return allCards();
   }
@@ -496,7 +506,7 @@
         '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
         '<button class="quiz-next" data-action="next" type="button">Дальше →</button>':
         '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>')+
-      '<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
+      coachMarkup(card)+'<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
     if (!feedback) startCountdown();
     else stopAdvance(); // Explanation stays visible until the user is ready.
   }
@@ -568,7 +578,7 @@
       '</div>'+explanationMarkup(last)+
       '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
       '<button class="quiz-next" data-action="next" type="button">Дальше →</button>'+
-      '<button class="quiz-invalid-after" data-action="invalid" type="button">Некорректный вопрос · не учитывать</button>';
+      '<button class="quiz-invalid-after" data-action="invalid" type="button">Некорректный вопрос · не учитывать</button>'+coachMarkup(last);
     // No automatic transition: even a correct answer deserves time to read the rationale.
     host.querySelector?.(".quiz-explanation")?.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
@@ -931,6 +941,29 @@
     if (action==="home") {
       cleanupTimers();ui.view="home";ui.feedback=null;ui.notice="";
       renderHome();
+    } else if (action==="ask-coach") {
+      const card=ui.feedback && ui.lastCard?ui.lastCard:currentCard();
+      if(!card)return;
+      const typed=document.getElementById("quiz-coach-question")?.value?.trim()||"Объясни понятие из вопроса.";
+      const prompt="Я изучаю "+(getContext().exam?.title||"Software Engineering")+
+        ". Объясни по-русски простыми словами, с примером и коротким немецким определением. "+
+        "Карточка: "+card.question+". Правильный ответ: "+card.answer+
+        (explanationForCard(card)?". Объяснение: "+explanationForCard(card):"")+
+        ". Мой вопрос: "+typed;
+      const status=document.getElementById("quiz-coach-status");
+      if(status)status.textContent="Открываем ChatGPT. Вставь туда вопрос из буфера обмена.";
+      if(navigator.clipboard?.writeText){
+        navigator.clipboard.writeText(prompt).catch(()=>{
+          const input=document.getElementById("quiz-coach-question");
+          if(input){input.value=prompt;input.select();}
+          if(status)status.textContent="Скопируй выделенный текст вручную.";
+        });
+      } else {
+        const input=document.getElementById("quiz-coach-question");
+        if(input){input.value=prompt;input.select();}
+        if(status)status.textContent="Скопируй выделенный текст вручную.";
+      }
+      window.open("https://chatgpt.com/","_blank","noopener,noreferrer");
     } else if (action==="sync-now") {
       await sendSync();await pullSync();ui.notice=lastSyncError?"Синхронизация не удалась. Попробуй снова при наличии интернета.":"Данные проверены и отправлены на сервер.";renderHome();
     } else if (action==="scheduled") startSession("SCHEDULED");
