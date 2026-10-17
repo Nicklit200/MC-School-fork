@@ -97,7 +97,7 @@ interface Props {
   onMoveShape?: (operationId: string, shape: Shape) => void;
   onLaserMove?: (point: { x: number; y: number }) => void;
   /** The stroke being drawn changed; `null` once the pen is up or it was cancelled. */
-  onDraftChange?: (shape: Shape | null, strokeId?: string) => void;
+  onDraftChange?: (shape: Shape | null, strokeId?: string, finished?: boolean) => void;
 }
 
 /**
@@ -314,7 +314,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     setDraft(null);
     // Keep final geometry visible remotely until its exact saved operation
     // appears. Merely sending "null" causes a visible gap on slow networks.
-    onDraftChange?.(finished, strokeId);
+    onDraftChange?.(finished, strokeId, true);
     if (!finished) return;
     // Thinning keeps the stroke under the server's point cap without visibly
     // changing the line.
