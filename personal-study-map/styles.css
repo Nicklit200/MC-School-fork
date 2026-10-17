@@ -2136,3 +2136,22 @@ body[data-section="german"] .brand-mark{background:#e9f0ff;color:#294cb4}
 .quiz-packages{margin:16px 0;display:grid;gap:10px}.quiz-packages>strong{font-size:15px;color:#223c60}.quiz-packages>p{font-size:12px;color:#70839d;margin:0}.quiz-package{border:1px solid #d9e5f3;background:#f9fbff;border-radius:13px;padding:13px;display:grid;gap:8px}.quiz-package>strong{font-size:13px;color:#243d5e}.quiz-package>small{font-size:11px;color:#667f9f;line-height:1.5}.quiz-package-progress{height:7px;border-radius:8px;background:#e4ebf5;overflow:hidden}.quiz-package-progress>span{display:block;height:100%;background:#2c70ca;border-radius:8px}.quiz-package-actions{display:flex;gap:8px;flex-wrap:wrap}.quiz-package-actions button{flex:1;min-width:105px;border:1px solid #bed2ed;background:#fff;color:#285a9e;border-radius:9px;padding:10px 7px;font-weight:800;font-size:11px;cursor:pointer}.quiz-package-actions button:first-child{background:#276ac4;color:#fff;border-color:#276ac4}.quiz-package-actions button:disabled{opacity:.45;cursor:default}
 
 .quiz-package summary{display:grid;gap:5px;cursor:pointer;list-style:none}.quiz-package summary::-webkit-details-marker{display:none}.quiz-package summary:after{content:"Показать вопросы ▾";font-size:11px;color:#2867ba;font-weight:800}.quiz-package[open] summary:after{content:"Скрыть вопросы ▴"}.quiz-package-date{font-size:11px;color:#5379a9;font-weight:800}.quiz-package-questions{display:grid;gap:6px;padding-top:10px;margin-top:5px;border-top:1px solid #e2e9f3}.quiz-package-question{font-size:12px;line-height:1.45;color:#29405e;padding:7px 5px}
+
+
+/* Phone-first study experience: readable list, scrollable controls and full-screen cards. */
+@media (max-width:720px){
+  .floating-topbar{top:max(8px,env(safe-area-inset-top,0px));left:8px;right:8px;display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:nowrap}
+  .brand-block{padding:5px;flex:0 0 auto;max-width:42px;overflow:hidden}
+  .section-nav{order:0;grid-column:auto;flex:1 1 auto;min-width:0;margin:0;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+  .section-nav::-webkit-scrollbar{display:none}
+  .section-tab{flex:0 0 auto;min-height:42px;padding:0 11px}
+  .top-status{display:none}
+  .top-search{top:calc(max(8px,env(safe-area-inset-top,0px)) + 56px);left:8px;right:8px;height:44px}
+  .left-panel{top:calc(max(8px,env(safe-area-inset-top,0px)) + 108px);bottom:calc(76px + env(safe-area-inset-bottom,0px));max-width:calc(100vw - 24px)}
+  .left-toggle,.left-toggle.collapsed{top:calc(max(8px,env(safe-area-inset-top,0px)) + 110px);left:10px}
+  .list-view-panel{top:calc(max(8px,env(safe-area-inset-top,0px)) + 108px);left:8px;right:8px;bottom:calc(74px + env(safe-area-inset-bottom,0px));width:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .floating-toolbar{left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom,0px));width:auto;max-width:none;transform:none;justify-content:flex-start;overflow-x:auto;scrollbar-width:thin}
+  .floating-toolbar button{min-height:44px;padding:0 12px}
+  .flashcard-panel{position:fixed;left:0;right:0;top:0;bottom:0;width:100%;height:100dvh;max-height:none;border-radius:0;padding:calc(14px + env(safe-area-inset-top,0px)) 16px calc(18px + env(safe-area-inset-bottom,0px));z-index:1000;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .flashcard-panel-head button{min-width:44px;min-height:44px}
+}
