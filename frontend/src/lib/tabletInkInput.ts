@@ -89,7 +89,7 @@ function touchDevice(touch: Touch): TabletInkDevice {
     ? 'pen' : 'finger';
 }
 
-function disableNativeInkGestures(target: HTMLElement): () => void {
+function disableNativeInkGestures(target: HTMLElement, preserveFingerPinch = false): () => void {
   const previous = {
     touchAction: target.style.touchAction,
     userSelect: target.style.userSelect,
@@ -98,7 +98,7 @@ function disableNativeInkGestures(target: HTMLElement): () => void {
     tapHighlight: target.style.getPropertyValue('-webkit-tap-highlight-color'),
     overscrollBehavior: target.style.overscrollBehavior,
   };
-  target.style.touchAction = 'none';
+  target.style.touchAction = preserveFingerPinch ? (previous.touchAction || 'pinch-zoom') : 'none';
   target.style.userSelect = 'none';
   target.style.setProperty('-webkit-user-select', 'none');
   target.style.setProperty('-webkit-touch-callout', 'none');
@@ -125,7 +125,7 @@ export function attachTabletInkInput(
   const fingerDrawingEnabled = () => config.allowFinger?.() === true;
   const contacts = new Map<number, TabletInkContact>();
   const listeners: Array<() => void> = [];
-  const restoreStyles = disableNativeInkGestures(sheet);
+  const restoreStyles = disableNativeInkGestures(sheet, config.nativeFingerNavigation);
   let active: { meta: TabletInkStrokeMeta; last: TabletInkPoint } | null = null;
   let destroyed = false;
   // Mouse events following native Touch Events are synthetic; never treat them
@@ -208,7 +208,7 @@ export function attachTabletInkInput(
     // On WebKit the Pencil takes the Touch Events route. Preserve trackpad mouse
     // input, but never process duplicate pen/touch pointer events on iOS.
     if (backend === 'ios-touch' && event.pointerType !== 'mouse') return;
-    prevent(event);
+    if (!isTouch || !config.nativeFingerNavigation) prevent(event);
     const device: TabletInkDevice =
       event.pointerType === 'pen' ? 'pen' : isTouch ? 'finger' : 'mouse';
     start(pointerPoint(event), {
@@ -232,7 +232,7 @@ export function attachTabletInkInput(
       }
     }
     if (active?.meta.source !== 'pointer' || active.meta.inputId !== event.pointerId) return;
-    prevent(event);
+    if (event.pointerType !== 'touch' || !config.nativeFingerNavigation) prevent(event);
     const samples = event.getCoalescedEvents?.() ?? [];
     // Safari/Chrome can return an empty list. Always include the current sample.
     for (const sample of samples) moved(pointerPoint(sample), 'pointer', event.pointerId);
