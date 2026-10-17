@@ -22,6 +22,30 @@ let moves = 0;
 let lastFinishedAt = 0;
 let shortestGap = Infinity;
 let fingerContacts: TabletInkContact[] = [];
+let panX = 0;
+let panY = 0;
+let scale = 1;
+let gestureAnchor: { centerX: number; centerY: number; distance: number } | null = null;
+function renderTransform() {
+  sheet.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
+}
+function handlePanZoom(touches: TabletInkContact[]) {
+  if (!touches.length) { gestureAnchor = null; return; }
+  const centerX = touches.reduce((s, t) => s + t.clientX, 0) / touches.length;
+  const centerY = touches.reduce((s, t) => s + t.clientY, 0) / touches.length;
+  const distance = touches.length >= 2
+    ? Math.max(1, Math.hypot(touches[1].clientX - touches[0].clientX,
+      touches[1].clientY - touches[0].clientY)) : 1;
+  if (gestureAnchor && (gestureAnchor.distance === 1) === (distance === 1)) {
+    panX += centerX - gestureAnchor.centerX;
+    panY += centerY - gestureAnchor.centerY;
+    if (distance > 1) {
+      scale = Math.min(4, Math.max(0.65, scale * distance / gestureAnchor.distance));
+    }
+    renderTransform();
+  }
+  gestureAnchor = { centerX, centerY, distance };
+}
 
 function toCanvas(point: TabletInkPoint) {
   const bounds = sheet.getBoundingClientRect();
@@ -67,6 +91,7 @@ const controller = attachTabletInkInput(sheet, {
   },
   onGesture(touches) {
     fingerContacts = touches;
+    handlePanZoom(touches);
   },
 }, {
   allowFinger: () => allowFinger.checked,
