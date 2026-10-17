@@ -30,6 +30,7 @@ import { shapeAt } from './hitTest';
 import { type InputMode, isPalmContact, normalizePointerKind } from './inputPolicy';
 import { shapeBounds, translateShape } from './shapeTransform';
 import { penOutline, tracePenOutline } from './freehand';
+import { attachTabletInkInput, detectTabletInkBackend, getTabletInkPlatform } from '../../lib/tabletInkInput';
 
 export type Tool =
   | 'pen'
@@ -130,6 +131,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const nativeAppleInkRef = useRef(false);
   const stageRef = useRef<Konva.Stage | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
@@ -360,6 +362,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // On iPadOS native Touch Events own Pencil strokes; pointer events would
+    // otherwise duplicate or drop fast short strokes when Scribble is enabled.
+    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
     if (textEdit) return;
     const kind = normalizePointerKind(event.pointerType);
     // A resting hand must not change the zoom in stylus mode either.
@@ -375,6 +380,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     applyIntents(controller.down(event.pointerId, kind, localPoint(event), palm, navigate, kind === 'pen' ? event.pressure : undefined));
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
     // A laser follows the pointer even with no button down, like a real one.
     if (live.current.tool === 'laser' && event.buttons === 0) {
       const now = performance.now();
@@ -387,11 +393,50 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     applyIntents(controller.move(event.pointerId, localPoint(event), event.pointerType === 'pen' ? event.pressure : undefined));
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
     applyIntents(controller.up(event.pointerId));
   };
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (nativeAppleInkRef.current && event.pointerType !== 'touch') return;
     applyIntents(controller.up(event.pointerId, true));
   };
+
+  // Keep callbacks current across React renders without ever detaching the
+  // Pencil input listeners during a stroke.
+  const applyInkIntentsRef = useRef(applyIntents);
+  applyInkIntentsRef.current = applyIntents;
+  useEffect(() => {
+    const surface = containerRef.current;
+    if (!surface || detectTabletInkBackend(getTabletInkPlatform()) !== 'ios-touch') return;
+    const local = (x: number, y: number): Point => {
+      const rect = surface.getBoundingClientRect();
+      return { x: x - rect.left, y: y - rect.top };
+    };
+    const driver = attachTabletInkInput(surface, {
+      onStart(point, meta) {
+        if (textEdit) return;
+        applyInkIntentsRef.current(controller.down(meta.inputId, meta.device,
+          local(point.clientX, point.clientY), false, false,
+          meta.device === 'pen' ? point.pressure : undefined));
+      },
+      onMove(point, meta) {
+        applyInkIntentsRef.current(controller.move(meta.inputId,
+          local(point.clientX, point.clientY), meta.device === 'pen' ? point.pressure : undefined));
+      },
+      onEnd(_point, meta, cancelled) {
+        applyInkIntentsRef.current(controller.up(meta.inputId, cancelled));
+      },
+    }, {
+      allowFinger: () => false,
+      nativeFingerNavigation: true,
+      pointerCapture: false,
+    });
+    nativeAppleInkRef.current = true;
+    return () => {
+      nativeAppleInkRef.current = false;
+      driver.destroy();
+    };
+  }, [controller, textEdit]);
 
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (navigationLocked || !onViewChange || controller.isDrawing) return;
