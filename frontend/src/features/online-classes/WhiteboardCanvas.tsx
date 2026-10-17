@@ -415,7 +415,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     const driver = attachTabletInkInput(surface, {
       onStart(point, meta) {
         if (textEdit) return;
-        applyInkIntentsRef.current(controller.down(meta.inputId, meta.device,
+        applyInkIntentsRef.current(controller.down(meta.inputId, meta.device === 'finger' ? 'touch' : meta.device,
           local(point.clientX, point.clientY), false, false,
           meta.device === 'pen' ? point.pressure : undefined));
       },
