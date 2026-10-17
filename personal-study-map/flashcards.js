@@ -514,7 +514,11 @@
     session.currentQuestion=null;
     if(session.mode==="SCHEDULED"){
       const states=getProgress();
-      states[card.id]={...engine.afterReview(states[card.id],known),lastCorrect:known,updatedAt:new Date().toISOString()};
+      const prior=states[card.id];
+      // Quick "know" deliberately starts a fresh 3-day interval, even when
+      // a legacy state has an inconsistent stage.
+      const scheduled=known?{repetitionNumber:1,dueDate:engine.plusDays(engine.isoDay(),3),status:"ACTIVE"}:engine.afterReview(prior,false);
+      states[card.id]={...scheduled,lastCorrect:known,updatedAt:new Date().toISOString()};
       writeJson(KEY_PROGRESS,states);
       queueSync();
       window.dispatchEvent(new Event("study-reviews-updated"));
