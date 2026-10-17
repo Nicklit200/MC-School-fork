@@ -1284,6 +1284,22 @@ function renderList(skills) {
   const groups = state.topicId === "all" ? topics : topics.filter((t) => t.id === state.topicId);
   const isSoftwareEngineering = exam?.id === "exam-software-engineering";
   const lectureTopicIds = ["se-analysis-usecases-lecture", "se-lecture-state-activity-201819"];
+  const completeSkills = examSkills(exam);
+  function averageMastery(items) {
+    if (!items.length) return null;
+    return Math.round(items.reduce((sum, skill) => sum + Math.max(0, Math.min(100, Number(skill.mastery) || 0)), 0) / items.length);
+  }
+  function percentLabel(value) {
+    return value === null ? "—" : value + "%";
+  }
+  function appendPercent(summary, value) {
+    const badge = document.createElement("span");
+    badge.className = "section-mastery";
+    badge.textContent = percentLabel(value);
+    badge.title = value === null ? "Навыки пока не добавлены" : "Среднее освоение навыков";
+    summary.append(badge);
+  }
+
   function makeSkillRow(skill) {
     const row = document.createElement("div");
     row.className = "list-row" + (skill.examRequired ? " exam-required" : "");
@@ -1311,7 +1327,11 @@ function renderList(skills) {
     lecture.open = true;
     const heading = document.createElement("summary");
     heading.className = "lecture-tree-title";
-    heading.textContent = "Vorlesung 3 — Material (1 из 3 PDF)";
+    const lectureTitle = document.createElement("span");
+    lectureTitle.textContent = "Vorlesung 3 — Material (1 из 3 PDF)";
+    heading.append(lectureTitle);
+    const lectureSkills = completeSkills.filter(skill => lectureTopicIds.includes(skill.topicId));
+    appendPercent(heading, averageMastery(lectureSkills));
     lecture.append(heading);
     const materialItems = [
       { title:"Analyse und Anwendungsfälle", id:"se-analysis-usecases-lecture", done:true, note:"15 Folien — разобраны и повторены 17.10.2026" },
@@ -1323,7 +1343,11 @@ function renderList(skills) {
       item.className = "lecture-material";
       if (material.done) item.open = true;
       const summary = document.createElement("summary");
-      summary.textContent = (material.done ? "✓ " : "○ ") + material.title;
+      const materialTitle = document.createElement("span");
+      materialTitle.textContent = (material.done ? "✓ " : "○ ") + material.title;
+      summary.append(materialTitle);
+      const allMaterialSkills = completeSkills.filter(skill => skill.topicId === material.id);
+      appendPercent(summary, averageMastery(allMaterialSkills));
       item.append(summary);
       const note = document.createElement("p");
       note.className = "lecture-material-note";
@@ -1349,7 +1373,10 @@ function renderList(skills) {
       examSection.className = "list-group topic-tree exam-tree";
       const examHeading = document.createElement("summary");
       examHeading.className = "topic-tree-title";
-      examHeading.textContent = "Для экзамена (" + requiredSkills.length + ")";
+      const examTitle = document.createElement("span");
+      examTitle.textContent = "Для экзамена (" + requiredSkills.length + ")";
+      examHeading.append(examTitle);
+      appendPercent(examHeading, averageMastery(completeSkills.filter(skill => skill.examRequired)));
       examSection.append(examHeading);
       for (const skill of requiredSkills) examSection.append(makeSkillRow(skill));
       host.append(examSection);
@@ -1367,6 +1394,7 @@ function renderList(skills) {
     const title = document.createElement("span");
     title.textContent = topic.title;
     heading.append(title);
+    appendPercent(heading, averageMastery(completeSkills.filter(skill => skill.topicId === topic.id)));
     block.append(heading);
     for (const skill of topicSkills) block.append(makeSkillRow(skill));
     host.append(block);
