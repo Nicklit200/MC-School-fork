@@ -25,6 +25,61 @@ function localPenLabDiagnostics(): Plugin {
           if (!existsSync(filename)) {
             res.writeHead(404); res.end('No recorded events yet'); return;
           }
+
+          if (url.searchParams.get('format') === 'report') {
+            const events = readFileSync(filename, 'utf8').split('\n').filter(Boolean).flatMap((line) => {
+              try { return [JSON.parse(line) as { kind: string; wallTime: string; details: Record<string, unknown> }]; }
+              catch { return []; }
+            });
+            const tests = events.filter((event) => event.kind === 'test_end');
+            const markers = events.filter((event) => event.kind === 'FREEZE_MARKED_BY_USER');
+            const anomalies = events.filter((event) =>
+              ['pointercancel', 'pointer_gap', 'frame_gap', 'event_loop_pause', 'javascript_error',
+               'lostpointercapture', 'pen_down_outside_sheet', 'pen_finished_without_start'].includes(event.kind));
+            const lines = [
+              '# Mindcrafti Pen Lab - Apple Pencil diagnostic report',
+              '',
+              'Session: ' + session,
+              'Events: ' + events.length,
+              'Recorded tests: ' + tests.length,
+              'Manual missed-line markers: ' + markers.length,
+              '',
+              '## Tests',
+              ...(tests.length ? tests.flatMap((event) => [
+                '### ' + String(event.details.testId ?? '?') + ' - ' + String(event.details.title ?? ''),
+                ...Object.entries(event.details).map(([key, value]) => '- ' + key + ': ' + String(value)),
+                '',
+              ]) : ['No test_end events yet', '']),
+              '## Marked problems with nearby events (+/- 1500 ms)',
+              ...markers.flatMap((marker) => {
+                const target = Date.parse(marker.wallTime);
+                const around = events.filter((event) => Math.abs(Date.parse(event.wallTime) - target) <= 1500);
+                return [
+                  '### ' + marker.wallTime,
+                  ...around.map((event) => '- ' + event.wallTime + ' ' + event.kind + ' ' + JSON.stringify(event.details)),
+                  '',
+                ];
+              }),
+              '## Recent anomalies (up to 200)',
+              ...anomalies.slice(-200).map((event) =>
+                '- ' + event.wallTime + ' ' + event.kind + ' ' + JSON.stringify(event.details)),
+              '',
+              '## Caveats',
+              '- Missing pointerdown relative to expected strokes is evidence of a discrepancy, not definitive proof Safari dropped an event.',
+              '- Lost pointer capture after pointerup is normal.',
+              '- Drawing pixels themselves are not measured by this input event collector.',
+              '- Browser input may not report attempted strokes which never produced any event.',
+            ];
+            const output = lines.join('\n');
+            res.writeHead(200, {
+              'Content-Type': 'text/markdown; charset=utf-8',
+              'Content-Disposition': 'attachment; filename="' + session + '.report.md"',
+              'Cache-Control': 'no-store',
+            });
+            res.end(output);
+            return;
+          }
+
           res.writeHead(200, {
             'Content-Type': 'application/x-ndjson; charset=utf-8',
             'Content-Disposition': 'attachment; filename="' + session + '.ndjson"',
