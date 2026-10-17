@@ -467,7 +467,16 @@
     panel.classList.toggle("quiz-fullscreen",active);
     document.body.classList.toggle("quiz-learning-active",active && !panel.classList.contains("closed"));
     let chat=panel.querySelector("#quiz-learning-chat");
-    if(!active){chat?.remove();return;}
+    let floating=panel.querySelector("#quiz-floating-chat-toggle");
+    if(!active){chat?.remove();floating?.remove();return;}
+    if(!floating){
+      floating=document.createElement("button");
+      floating.type="button";floating.id="quiz-floating-chat-toggle";
+      floating.className="quiz-floating-chat-toggle";
+      floating.onclick=()=>{panel.classList.toggle("quiz-chat-open");updateChatToggle();};
+      panel.appendChild(floating);
+    }
+    updateChatToggle();
     if(chat)return;
     chat=document.createElement("aside");chat.id="quiz-learning-chat";chat.className="quiz-learning-chat";
     chat.innerHTML='<div class="quiz-chat-heading"><strong>ИИ-помощник</strong><button id="quiz-chat-hide" type="button">Скрыть</button></div><p>Спроси о текущей карточке.</p><div id="quiz-chat-messages" class="quiz-chat-messages"></div><form id="quiz-chat-form"><textarea id="quiz-chat-input" rows="3" placeholder="Что такое Use Case?"></textarea><button type="submit">Отправить ИИ</button></form>';
@@ -496,6 +505,8 @@
     };
   }
   function updateChatToggle(){
+    const floating=panel.querySelector("#quiz-floating-chat-toggle");
+    if(floating){const open=panel.classList.contains("quiz-chat-open");floating.textContent=open?"Скрыть чат":"ИИ-чат";floating.setAttribute("aria-expanded",String(open));}
     const button=panel.querySelector("#quiz-chat-toggle");
     if(button){
       const open=panel.classList.contains("quiz-chat-open");
