@@ -38,6 +38,8 @@ export type TabletInkConfig = {
   allowFinger?: () => boolean;
   /** On browsers using pointer input, capture active pen for reliable pointerup. */
   pointerCapture?: boolean;
+  /** Let the browser handle non-drawing finger pan and pinch on a PDF sheet. */
+  nativeFingerNavigation?: boolean;
 };
 export type TabletInkPlatform = {
   userAgent: string;
@@ -195,7 +197,7 @@ export function attachTabletInkInput(
         finish(pointerPoint(event), 'pointer', active.meta.inputId, true);
       }
       if (contacts.size > 1 || !fingerDrawingEnabled()) {
-        prevent(event);
+        if (!config.nativeFingerNavigation) prevent(event);
         emitGesture();
         return;
       }
@@ -224,7 +226,7 @@ export function attachTabletInkInput(
         id: event.pointerId, clientX: event.clientX, clientY: event.clientY,
       });
       if (contacts.size > 1 || !fingerDrawingEnabled()) {
-        prevent(event);
+        if (!config.nativeFingerNavigation) prevent(event);
         emitGesture();
         return;
       }
@@ -251,10 +253,13 @@ export function attachTabletInkInput(
 
   function touchStart(event: TouchEvent) {
     lastNativeTouchTime = performance.now();
+    let shouldPrevent = false;
     for (let i = 0; i < event.changedTouches.length; i += 1) {
       const touch = event.changedTouches[i];
-      ownedTouches.add(touch.identifier);
       const device = touchDevice(touch);
+      if (config.nativeFingerNavigation && device === 'finger' && !fingerDrawingEnabled()) continue;
+      ownedTouches.add(touch.identifier);
+      shouldPrevent = true;
       if (device === 'finger') {
         if (active?.meta.device === 'pen') continue;
         contacts.set(touch.identifier, {
@@ -275,7 +280,7 @@ export function attachTabletInkInput(
         });
       }
     }
-    prevent(event); // Required for iPadOS Scribble/scroll interference.
+    if (shouldPrevent && (!config.nativeFingerNavigation || active?.meta.device === 'pen' || fingerDrawingEnabled())) prevent(event);
     emitGesture();
   }
 
