@@ -48,6 +48,9 @@ export interface Shape {
   y2?: number;
   text?: string;
   size?: number;
+  /** Stable font preset, supported by older clients as an optional field. */
+  font?: string;
+  bold?: boolean;
 }
 
 export interface Operation {
