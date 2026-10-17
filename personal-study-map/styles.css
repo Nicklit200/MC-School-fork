@@ -2268,3 +2268,26 @@ body.quiz-learning-active{overflow:hidden}
  .flashcard-panel.quiz-fullscreen.quiz-chat-open .quiz-floating-chat-toggle{display:none!important}
  .flashcard-panel.quiz-fullscreen .quiz-session-buttons #quiz-chat-toggle{display:none!important}
 }
+
+/* Quick grading always follows the answer choices, never floats over them. */
+.flashcard-panel.quiz-fullscreen .quiz-quick-grade,
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-quick-grade{
+  position:static!important;
+  top:auto!important;left:auto!important;right:auto!important;
+  width:100%!important;
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:10px!important;
+  margin:14px 0!important;
+  z-index:auto!important;
+}
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-quick-grade button{
+  width:100%!important;
+  min-width:0!important;
+  padding:12px 10px!important;
+}
+@media(max-width:540px){
+  .flashcard-panel.quiz-fullscreen .quiz-quick-grade,
+  .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-quick-grade{gap:8px!important}
+  .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-quick-grade button{font-size:13px!important;padding:10px 6px!important}
+}
