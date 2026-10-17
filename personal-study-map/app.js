@@ -19,7 +19,7 @@ const state = {
   examId: "",
   topicId: "all",
   slideFilter: null,
-  viewMode: "map",
+  viewMode: window.matchMedia("(max-width: 720px)").matches ? "list" : "map",
   selectedSkillId: "",
   viewport: { x: 80, y: 70, z: 1 },
   drag: null,
@@ -964,6 +964,13 @@ async function loadData() {
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
   renderAll();
+  if (state.viewMode === "list") {
+    $("list-view").classList.add("active");
+    $("map-view").classList.remove("active");
+    $("left-panel").classList.add("collapsed");
+    $("left-panel-toggle").classList.add("collapsed");
+    $("left-panel-toggle").textContent = "☰";
+  }
   openHomeworkFromHash();
 }
 
