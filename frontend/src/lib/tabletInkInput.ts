@@ -184,6 +184,9 @@ export function attachTabletInkInput(
   }
 
   function pointerDown(event: PointerEvent) {
+    // Buttons/text controls inside a board must not start accidental strokes.
+    if (event.target instanceof Element &&
+        event.target.closest('[data-tablet-no-ink]')) return;
     // iPadOS uses Touch Events for pen/fingers, never count their PointerEvents twice.
     if (backend === 'ios-touch' && event.pointerType !== 'mouse') return;
     const isTouch = event.pointerType === 'touch';
@@ -252,6 +255,8 @@ export function attachTabletInkInput(
   }
 
   function touchStart(event: TouchEvent) {
+    if (event.target instanceof Element &&
+        event.target.closest('[data-tablet-no-ink]')) return;
     lastNativeTouchTime = performance.now();
     let shouldPrevent = false;
     for (let i = 0; i < event.changedTouches.length; i += 1) {
