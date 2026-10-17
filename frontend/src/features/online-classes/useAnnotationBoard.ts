@@ -156,10 +156,10 @@ export function useAnnotationBoard({
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
 
   const submit = useCallback(
-    async (operationType: Operation['operationType'], payload: string) => {
+    async (operationType: Operation['operationType'], payload: string, providedOperationId?: string) => {
       if (!document) return;
       const page = pageIndex;
-      const operationId = newId();
+      const operationId = providedOperationId ?? newId();
       const optimistic: Operation = {
         operationId,
         sequence: optimisticSequence.current--,
@@ -196,7 +196,7 @@ export function useAnnotationBoard({
     [actorId, classId, document, merge, pageIndex, update],
   );
 
-  const addShape = useCallback((shape: Shape) => submit('ADD', JSON.stringify(shape)), [submit]);
+  const addShape = useCallback((shape: Shape, operationId?: string) => submit('ADD', JSON.stringify(shape), operationId), [submit]);
 
   const undo = useCallback(() => {
     const last = undoable[undoable.length - 1];
