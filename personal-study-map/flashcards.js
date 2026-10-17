@@ -495,6 +495,40 @@
       finally{button.disabled=false;messages.scrollTop=messages.scrollHeight;}
     };
   }
+  function quickGrade(known) {
+    if(ui.view!=="study"||!ui.session)return;
+    // Grading from the visible feedback must not silently grade the next card.
+    if(ui.feedback)return;
+    const session=ui.session,card=currentCard();
+    if(!card)return;
+    stopTimer();stopAdvance();
+    const item=session.items?.[card.id];
+    if(!item||item.state!=="PENDING")return;
+    // Mark the card finished immediately; do not add wrong answers back to
+    // the end of this fast sorting session.
+    session.queue=session.queue.filter(id=>id!==card.id);
+    item.state="ANSWERED_CORRECT";
+    item.attempts=Math.max(1,item.attempts||0);
+    item.firstSelectedAnswer=known?card.answer:"";
+    item.hadWrongAttempt=!known;
+    session.currentQuestion=null;
+    if(session.mode==="SCHEDULED"){
+      const states=getProgress();
+      states[card.id]={...engine.afterReview(states[card.id],known),lastCorrect:known,updatedAt:new Date().toISOString()};
+      writeJson(KEY_PROGRESS,states);
+      queueSync();
+      window.dispatchEvent(new Event("study-reviews-updated"));
+    }
+    ui.notice=known?"Отмечено: знаю. Карточка убрана из сегодняшней очереди.":"Отмечено: не знаю. Карточка вернётся завтра.";
+    saveSession();updateBadge();
+    if(!session.queue.length)finishSession();
+    else renderStudy();
+  }
+  function quickGradeButtons(){
+    return '<div class="quiz-quick-grade" aria-label="Быстрая оценка знания">'+
+      '<button type="button" data-action="quick-known" class="quiz-quick-known">✓ Знаю <small>Следующее через 3 дня</small></button>'+
+      '<button type="button" data-action="quick-unknown" class="quiz-quick-unknown">✕ Не знаю <small>Повторить завтра</small></button></div>';
+  }
   function renderStudy() {
     studyLayout();
     stopTimer();
@@ -527,7 +561,7 @@
       (question.expiresAt!=null?'<strong id="quiz-timer" class="quiz-timer"></strong>':"")+
       '</div><div class="quiz-progress-track"><div style="width:'+
       Math.round((answered/total)*100)+'%"></div></div>'+
-      '<div class="quiz-question">'+esc(card.question)+'</div>'+
+      '<div class="quiz-question">'+esc(card.question)+'</div>'+(!feedback?quickGradeButtons():'')+
       '<div class="quiz-options">'+controls+'</div>'+
       (!feedback?'<div class="quiz-question-actions">'+
         '<button data-action="skip" class="quiz-skip" type="button">'+
@@ -978,6 +1012,10 @@
     if (action==="home") {
       cleanupTimers();ui.view="home";panel.classList.remove("quiz-fullscreen");document.body.classList.remove("quiz-learning-active");ui.feedback=null;ui.notice="";
       renderHome();
+    } else if (action==="quick-known") {
+      quickGrade(true);
+    } else if (action==="quick-unknown") {
+      quickGrade(false);
     } else if (action==="toggle-study-chat") {
       panel.classList.toggle("quiz-chat-open");
     } else if (action==="ask-coach") {
