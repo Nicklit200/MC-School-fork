@@ -2225,3 +2225,18 @@ body.quiz-learning-active{overflow:hidden}
 /* Always-visible reopen control for the study AI drawer */
 .flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{position:fixed!important;right:22px!important;top:84px!important;z-index:2100!important;display:block!important;min-width:104px!important;padding:12px 17px!important;border-radius:12px!important;border:1px solid #a9c9f5!important;background:#256ac0!important;color:#fff!important;font-size:14px!important;font-weight:800!important;box-shadow:0 5px 18px #1a488133!important;cursor:pointer!important}
 @media(max-width:760px){.flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{top:auto!important;bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;right:16px!important}}
+
+/* Unified personal study prompt settings */
+.study-settings-open{position:fixed;bottom:20px;right:20px;z-index:700;border:1px solid #b8cee8;border-radius:12px;background:#fff;color:#24527c;padding:11px 16px;font:600 14px inherit;cursor:pointer;box-shadow:0 4px 18px #16385a22}
+.study-settings-dialog[hidden]{display:none!important}
+.study-settings-dialog{position:fixed;inset:0;z-index:3000;background:#15243a88;display:flex;align-items:center;justify-content:center;padding:16px}
+.study-settings-card{box-sizing:border-box;width:min(760px,100%);max-height:92dvh;overflow:auto;background:#fff;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:12px;color:#1e3552}
+.study-settings-card header{display:flex;align-items:center;justify-content:space-between}
+.study-settings-card header h2{margin:0}
+.study-settings-card header button{border:1px solid #cbd8e9;background:#f6f9fe;border-radius:9px;font-size:24px;cursor:pointer}
+.study-settings-card label{font-weight:700}
+.study-settings-card select,.study-settings-card textarea{width:100%;box-sizing:border-box;border:1px solid #cbd8e9;border-radius:10px;padding:12px;font:inherit;color:#233a56}
+.study-settings-card textarea{min-height:250px;resize:vertical;line-height:1.5}
+.study-settings-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.study-settings-actions button{border:0;border-radius:10px;background:#246bc2;color:#fff;padding:12px 20px;font-weight:700;cursor:pointer}
+@media(max-width:760px){.study-settings-open{bottom:12px;right:12px}.study-settings-card{padding:16px}}
