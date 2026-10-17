@@ -1145,7 +1145,7 @@
     }
     hideOtherPanels();panel.classList.remove("closed");
     ui.session=readActiveSession();
-    ui.view=ui.session?"study":"home";ui.feedback=null;ui.notice="";
+    ui.view="home";ui.feedback=null;ui.notice="";
     render();
   };
   document.getElementById("close-flashcards").onclick=()=>{
@@ -1158,8 +1158,8 @@
   });
   window.addEventListener("study-context-updated",()=>{
     updateBadge();
-    if(!panel.classList.contains("closed")&&!ui.session){
-      ui.view="home";renderHome();
+    if(!panel.classList.contains("closed") && ui.view==="home"){
+      renderHome();
     }
   });
   const openCardsWithExistingControl = () =>
