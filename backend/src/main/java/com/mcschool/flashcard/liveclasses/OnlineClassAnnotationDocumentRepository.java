@@ -3,6 +3,8 @@ package com.mcschool.flashcard.liveclasses;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +19,23 @@ public interface OnlineClassAnnotationDocumentRepository
     List<OnlineClassAnnotationDocument> findAllByOnlineClassIdOrderByPageIndexAsc(UUID classId);
 
     Optional<OnlineClassAnnotationDocument> findByIdAndOnlineClassId(UUID id, UUID classId);
+
+    /**
+     * All writers to one page MUST acquire this database row lock before
+     * reading/incrementing revision or checking an operation ID. A Java lock
+     * does not protect a Railway deployment with multiple instances.
+     *
+     * PostgreSQL SELECT FOR UPDATE serializes concurrent Pencil strokes and
+     * retry requests, keeping both (document_id, sequence) and
+     * (document_id, operation_id) unique without dropping annotations.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT d FROM OnlineClassAnnotationDocument d
+            WHERE d.id = :id AND d.onlineClass.id = :classId
+            """)
+    Optional<OnlineClassAnnotationDocument> findForUpdate(
+            @Param("id") UUID id, @Param("classId") UUID classId);
 
     /**
      * Creates the document unless one already exists for this surface and page.
