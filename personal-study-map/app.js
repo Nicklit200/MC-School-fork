@@ -1341,6 +1341,20 @@ function renderList(skills) {
     }
     host.append(lecture);
   }
+  // Exam preparation is an independent top-level section, not part of Einführung.
+  if (state.topicId === "all") {
+    const requiredSkills = skills.filter(skill => skill.examRequired);
+    if (requiredSkills.length) {
+      const examSection = document.createElement("details");
+      examSection.className = "list-group topic-tree exam-tree";
+      const examHeading = document.createElement("summary");
+      examHeading.className = "topic-tree-title";
+      examHeading.textContent = "Для экзамена (" + requiredSkills.length + ")";
+      examSection.append(examHeading);
+      for (const skill of requiredSkills) examSection.append(makeSkillRow(skill));
+      host.append(examSection);
+    }
+  }
   for (const topic of groups) {
     if (isSoftwareEngineering && lectureTopicIds.includes(topic.id)) continue;
     const topicSkills = skills.filter((s) => s.topicId === topic.id);
@@ -1353,34 +1367,8 @@ function renderList(skills) {
     const title = document.createElement("span");
     title.textContent = topic.title;
     heading.append(title);
-    if (requiredCount) {
-      const badge = document.createElement("span");
-      badge.className = "topic-exam-count";
-      badge.textContent = "EXAM " + requiredCount;
-      heading.append(badge);
-    }
     block.append(heading);
-    if (requiredCount) {
-      const examGroup = document.createElement("details");
-      examGroup.className = "topic-exam-skills";
-      examGroup.open = true;
-      const examHeading = document.createElement("summary");
-      examHeading.textContent = "Для экзамена (" + requiredCount + ")";
-      examGroup.append(examHeading);
-      for (const skill of topicSkills.filter(skill => skill.examRequired)) examGroup.append(makeSkillRow(skill));
-      block.append(examGroup);
-    }
-    const regular = topicSkills.filter(skill => !skill.examRequired);
-    if (regular.length) {
-      const regularGroup = document.createElement("details");
-      regularGroup.className = "topic-regular-skills";
-      regularGroup.open = !requiredCount;
-      const regularHeading = document.createElement("summary");
-      regularHeading.textContent = requiredCount ? "Остальные навыки (" + regular.length + ")" : "Навыки (" + regular.length + ")";
-      regularGroup.append(regularHeading);
-      for (const skill of regular) regularGroup.append(makeSkillRow(skill));
-      block.append(regularGroup);
-    }
+    for (const skill of topicSkills) block.append(makeSkillRow(skill));
     host.append(block);
   }
 }
