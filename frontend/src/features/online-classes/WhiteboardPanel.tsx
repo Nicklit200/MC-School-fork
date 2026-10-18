@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import '../../styles/floating-islands.css';
 import { ApiRequestError } from '../../api/client';
 import { onlineClassesApi, type AnnotationTargetType } from '../../api/onlineClasses';
 import { useI18n } from '../../i18n/I18nContext';
@@ -348,14 +349,8 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className="whiteboard" aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
+    <section className="whiteboard school-islands-board" aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
       <div className="whiteboard__topline">
-      <div className="whiteboard__topline-pages">
-        <PageNavigator current={pages.current} count={pages.count} disabled={locked}
-          onPrevious={() => setPages(previousPage)}
-          onNext={() => setPages(nextPage)}
-          onAdd={(isHost || personal) && canAnnotate ? () => setPages(addPage) : undefined} />
-      </div>
       {canAnnotate && (
         <BoardToolbar
           tool={tool}
@@ -395,6 +390,13 @@ export function WhiteboardPanel({
       </div>
 
       <div ref={stageRef} className="whiteboard__stage">
+      <div className="whiteboard__topline-pages">
+        <PageNavigator current={pages.current} count={pages.count} disabled={locked}
+          onPrevious={() => setPages(previousPage)}
+          onNext={() => setPages(nextPage)}
+          onAdd={(isHost || personal) && canAnnotate ? () => setPages(addPage) : undefined} />
+      </div>
+
         <WhiteboardCanvas
           ref={canvasRef}
           shapes={board.shapes}
