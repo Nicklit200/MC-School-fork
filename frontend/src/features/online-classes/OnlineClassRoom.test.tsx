@@ -60,6 +60,8 @@ vi.mock('./TranscriptionControls', () => ({ TranscriptionControls: () => null })
 vi.mock('./ParticipantListPanel', () => ({ ParticipantListPanel: () => null }));
 vi.mock('./WaitingRoomPanel', () => ({ WaitingRoomPanel: () => null }));
 vi.mock('./useBoardDocument', () => ({ useBoardDocument: () => null }));
+vi.mock('./useClassEvents', () => ({ useClassEvents: () => ({ publish: vi.fn() }) }));
+vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
 vi.mock('./usePdf', () => ({ usePdf: () => ({ status: 'idle' }), usePdfPage: () => null }));
 
 const boardProps: Record<string, any>[] = [];
@@ -75,11 +77,11 @@ vi.mock('./WhiteboardPanel', () => ({
 }));
 
 vi.mock('../../api/lessonPreparation', () => ({
-  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadWorkbook: vi.fn() },
+  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), appendWorkbook: vi.fn() },
 }));
 vi.mock('../../api/onlineClasses', async () => {
   const actual = await vi.importActual<typeof import('../../api/onlineClasses')>('../../api/onlineClasses');
-  return { ...actual, onlineClassesApi: { listParticipants: vi.fn(), documentBytes: vi.fn() } };
+  return { ...actual, onlineClassesApi: { listParticipants: vi.fn(), documentBytes: vi.fn(), documentVersion: vi.fn() } };
 });
 
 import { OnlineClassRoom } from './OnlineClassRoom';
@@ -112,10 +114,11 @@ describe('PDF upload contract', () => {
     vi.clearAllMocks();
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([]);
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+    vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 2 });
   });
 
   it('uploads a PDF and verifies that the classroom can read it', async () => {
-    vi.mocked(lessonPreparationApi.uploadWorkbook).mockResolvedValue({ hasWorkbook: true } as never);
+    vi.mocked(lessonPreparationApi.appendWorkbook).mockResolvedValue({ hasWorkbook: true } as never);
     vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(new ArrayBuffer(16));
     const refresh = vi.fn();
     window.addEventListener('mc-workbook-updated', refresh);
@@ -123,14 +126,28 @@ describe('PDF upload contract', () => {
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(['%PDF-1.4 sample'], 'lesson.pdf', { type: 'application/pdf' });
     await userEvent.upload(input, file);
-    await waitFor(() => expect(lessonPreparationApi.uploadWorkbook).toHaveBeenCalledWith('e1', file));
+    await waitFor(() => expect(lessonPreparationApi.appendWorkbook).toHaveBeenCalledWith('e1', file));
     await waitFor(() => expect(onlineClassesApi.documentBytes).toHaveBeenCalledWith('c1'));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     window.removeEventListener('mc-workbook-updated', refresh);
   });
 
+  it('appends multiple PDFs in the selected order and keeps existing pages', async () => {
+    vi.mocked(lessonPreparationApi.appendWorkbook).mockResolvedValue({ hasWorkbook: true } as never);
+    vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(new ArrayBuffer(32));
+    const view = mount(true);
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+    const a = new File(['%PDF-1.4 first'], 'first.pdf', { type: 'application/pdf' });
+    const b = new File(['%PDF-1.4 second'], 'second.pdf', { type: 'application/pdf' });
+    await userEvent.upload(input, [a, b]);
+    await waitFor(() => expect(lessonPreparationApi.appendWorkbook).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(lessonPreparationApi.appendWorkbook).mock.calls).toEqual([['e1', a], ['e1', b]]);
+    expect(onlineClassesApi.documentVersion).toHaveBeenCalledTimes(2);
+  });
+
   it('reports when the saved PDF cannot be opened from the classroom', async () => {
-    vi.mocked(lessonPreparationApi.uploadWorkbook).mockResolvedValue({ hasWorkbook: true } as never);
+    vi.mocked(lessonPreparationApi.appendWorkbook).mockResolvedValue({ hasWorkbook: true } as never);
     vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(null);
     const view = mount(true);
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -140,7 +157,7 @@ describe('PDF upload contract', () => {
   });
 
   it('does not report success if iPad upload was stored in the wrong slot', async () => {
-    vi.mocked(lessonPreparationApi.uploadWorkbook).mockResolvedValue({ hasWorkbook: false } as never);
+    vi.mocked(lessonPreparationApi.appendWorkbook).mockResolvedValue({ hasWorkbook: false } as never);
     const view = mount(true);
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(['%PDF-1.4 sample'], 'math_answers.pdf', { type: 'application/pdf' }));
@@ -153,16 +170,16 @@ describe('PDF upload contract', () => {
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File([], 'empty.pdf', { type: 'application/pdf' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Выбранный файл пустой');
-    expect(lessonPreparationApi.uploadWorkbook).not.toHaveBeenCalled();
+    expect(lessonPreparationApi.appendWorkbook).not.toHaveBeenCalled();
   });
 
   it('reports a rejected upload instead of spinning forever', async () => {
-    vi.mocked(lessonPreparationApi.uploadWorkbook).mockRejectedValue(new Error('HTTP 413'));
+    vi.mocked(lessonPreparationApi.appendWorkbook).mockRejectedValue(new Error('HTTP 413'));
     const view = mount(true);
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(['pdf'], 'large.pdf', { type: 'application/pdf' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 413');
-    await waitFor(() => expect(screen.getByText('＋ PDF / Фото')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('＋ Добавить PDF / Фото')).toBeInTheDocument());
   });
 });
 
