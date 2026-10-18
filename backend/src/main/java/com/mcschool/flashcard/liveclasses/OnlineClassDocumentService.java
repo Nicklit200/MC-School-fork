@@ -43,6 +43,17 @@ public class OnlineClassDocumentService {
                 .map(LessonPreparation::getWorkbookPdf);
     }
 
+    /** Cheap revision probe: no PDF bytes are sent during polling. */
+    @Transactional(readOnly = true)
+    public long workbookVersion(AuthenticatedUser caller, UUID classId) {
+        OnlineClass onlineClass = accessService.requireAdmitted(caller, classId);
+        return preparations.findByTeacherIdAndEventId(
+                        onlineClass.getTeacher().getId(), onlineClass.getEventId())
+                .filter(LessonPreparation::hasWorkbook)
+                .map(p -> p.getUpdatedAt() == null ? 1L : p.getUpdatedAt().toEpochMilli())
+                .orElse(0L);
+    }
+
     /** Assignment-only details: no private lesson plan, transcript or answer key. */
     public record HomeworkSummary(String notes, boolean hasDocument) {}
 
