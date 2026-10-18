@@ -6,7 +6,6 @@ import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
@@ -14,6 +13,7 @@ import java.util.Locale;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.io.IOUtils;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -113,8 +113,8 @@ public class LessonPreparationService {
                     if (existing.getNumberOfPages() == 0) throw new IOException("Existing PDF has no pages");
                 }
                 PDFMergerUtility merger = new PDFMergerUtility();
-                merger.addSource(new ByteArrayInputStream(old));
-                merger.addSource(new ByteArrayInputStream(pdf));
+                merger.addSource(new RandomAccessReadBuffer(old));
+                merger.addSource(new RandomAccessReadBuffer(pdf));
                 try (var output = new ByteArrayOutputStream()) {
                     merger.setDestinationStream(output);
                     merger.mergeDocuments(IOUtils.createMemoryOnlyStreamCache());
