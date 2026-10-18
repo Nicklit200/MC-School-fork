@@ -146,8 +146,35 @@
   }
   function getProgress() {
     const saved = readJson(KEY_PROGRESS, {});
-    return saved && typeof saved === "object" ? saved : {};
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
   }
+
+  // Upgrade prior saved review dates without losing answer history or scores.
+  // Never fabricate a review for a card with no recorded timestamp.
+  function migrateLegacyIntervals() {
+    const progress = getProgress();
+    let next = null;
+    for (const [id,record] of Object.entries(progress)) {
+      if (!record || typeof record !== "object" ||
+          Number(record.scheduleVersion) >= engine.SCHEDULE_VERSION ||
+          !record.updatedAt || !record.dueDate) continue;
+      const reviewedAt = new Date(record.updatedAt);
+      if (!Number.isFinite(reviewedAt.getTime())) continue;
+      const lastReviewDay = engine.isoDay(reviewedAt);
+      const incorrect = record.lastCorrect === false || record.status === "RESET";
+      const stage = incorrect ? 0 : Math.max(1,engine.clampStage(record.repetitionNumber));
+      const delay = incorrect ? 1 : engine.reviewDelayDays(stage);
+      if (!next) next = {...progress};
+      next[id] = {...record,repetitionNumber:stage,status:incorrect?"RESET":"ACTIVE",
+        dueDate:engine.plusDays(lastReviewDay,delay),scheduleVersion:engine.SCHEDULE_VERSION};
+    }
+    if (next) {
+      writeJson(KEY_PROGRESS,next);
+      queueSync();
+      window.dispatchEvent(new Event("study-reviews-updated"));
+    }
+  }
+  migrateLegacyIntervals();
 
   function cardState(card, states = getProgress()) {
     const saved = states[card.id];
@@ -231,7 +258,9 @@
   function dueCards() {
     const today = engine.isoDay();
     const states = getProgress();
-    return visibleCards().filter(card => cardState(card,states).dueDate <= today);
+    // Newly imported and never-studied cards must not enter reviews.
+    return visibleCards().filter(card =>
+      Boolean(states[card.id]) && cardState(card,states).dueDate <= today);
   }
 
   function updateBadge() {
@@ -349,7 +378,7 @@
     }
     const today=engine.isoDay();
     return {
-      due:cards.filter(card=>cardState(card,progress).dueDate<=today).length,
+      due:cards.filter(card=>Boolean(progress[card.id]) && cardState(card,progress).dueDate<=today).length,
       known:cards.filter(card=>cardState(card,progress).repetitionNumber>=1).length,
       errors:cards.filter(card=>progress[card.id]?.lastCorrect===false || (progress[card.id]?.lastCorrect===undefined && (progress[card.id]?.status==="RESET" || latest.get(card.id)?.correct===false))).length,
       unseen:cards.filter(card=>!progress[card.id]&&!latest.has(card.id)).length
@@ -379,6 +408,7 @@
     // A card counts as known after a successful scheduled review (stage >= 1).
     // Free practice does not affect this metric, consistent with scheduling.
     const progress = getProgress();
+    const unseen = cards.filter(card => !progress[card.id]);
     const known = cards.filter(card => cardState(card,progress).repetitionNumber >= 1).length;
     const knownPercent = cards.length ? Math.round(known * 100 / cards.length) : 0;
     const past = latestHistory().filter(item => item.examId === context.exam?.id);
@@ -387,7 +417,7 @@
     const unrelated = globalSession && !sessionForCurrentContext();
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
-      countBox("Нужно повторить",due.length)+countBox("Тренировок",past.length)+
+      countBox("Нужно повторить",due.length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
       countBox("Знаю карточек",knownPercent+"%")+
       '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
@@ -396,6 +426,7 @@
         '<button data-action="cancel-session" type="button" class="subtle">Отменить незавершённое</button>':
         '<button data-action="scheduled" class="primary" type="button" '+(!due.length?'disabled':'')+
         '>Повторить по расписанию ('+due.length+')</button>'+
+        '<button data-action="new-cards" type="button" '+(!unseen.length?'disabled':'')+'>Изучить новые ('+unseen.length+')</button>'+
         '<button data-action="practice" type="button" '+(!cards.length?'disabled':'')+'>Свободная тренировка</button>')+
       '</div>'+
       '<div class="quiz-actions secondary">'+
@@ -407,8 +438,8 @@
       '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(lastSyncError?"Нет связи с сервером. Результаты пока только на устройстве.":lastSyncAt?"Связь с сервером есть. Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение…")+(localStorage.getItem(PENDING_KEY)?" · Есть данные для отправки":"")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На телефоне результаты передаются серверу после завершения тренировки. Для доступа из ChatGPT потребуется отдельно подключить коннектор «Мои навыки».</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
-      '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 4 → 7 → 14 → 30 дней</div>'+
-      '<small>Первый правильный ответ — через 3 дня. После ошибки — повтор завтра и новый цикл 1 → 2 → 3 → 4 → 7 → 14 → 30. Свободная тренировка не меняет расписание.</small></div>'+
+      '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 7 → 14 → 30 дней</div>'+
+      '<small>День 1 — первичное изучение; первый правильный ответ — повтор через 2 дня, затем через 3, 7, 14 и 30. После ошибки — завтра. Новые карточки отдельно; свободная тренировка не меняет расписание.</small></div>'+
       (lesson?'<div class="quiz-last"><strong>Последний результат</strong><span>'+labelDate(lesson.date)+
         ' · '+lesson.correctFirstTry+' из '+lesson.totalCards+' с первой попытки</span></div>':"")+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
@@ -417,12 +448,15 @@
     window.dispatchEvent(new Event("study-home-rendered"));
   }
 
-  function startSession(mode) {
+  function startSession(mode,group="due") {
     const context = getContext();
     if (!context.exam || ui.session) return;
     const source=visibleCards();
     const today=engine.isoDay(),states=getProgress();
-    const cards=mode==="SCHEDULED"?source.filter(card=>cardState(card,states).dueDate<=today):source;
+    const cards=mode==="SCHEDULED" ? source.filter(card =>
+      group==="new" ? !states[card.id] :
+        Boolean(states[card.id]) && cardState(card,states).dueDate<=today
+    ) : source;
     if (!cards.length) {ui.notice="В выбранном разделе нет подходящих карточек.";renderHome();return;}
     const session = engine.startSession(mode,cards,{
       semesterId:context.semesterId,examId:context.exam.id,topicId:context.topicId
@@ -534,9 +568,8 @@
     if(session.mode==="SCHEDULED"){
       const states=getProgress();
       const prior=states[card.id];
-      // Quick "know" deliberately starts a fresh 3-day interval, even when
-      // a legacy state has an inconsistent stage.
-      const scheduled=known?{repetitionNumber:1,dueDate:engine.plusDays(engine.isoDay(),3),status:"ACTIVE"}:engine.afterReview(prior,false);
+      // Quick scoring uses the same progression as the multiple-choice quiz.
+      const scheduled=engine.afterReview(prior,known);
       states[card.id]={...scheduled,lastCorrect:known,updatedAt:new Date().toISOString()};
       writeJson(KEY_PROGRESS,states);
       queueSync();
@@ -549,7 +582,7 @@
   }
   function quickGradeButtons(){
     return '<div class="quiz-quick-grade" aria-label="Быстрая оценка знания">'+
-      '<button type="button" data-action="quick-known" class="quiz-quick-known">✓ Знаю <small>Следующее через 3 дня</small></button>'+
+      '<button type="button" data-action="quick-known" class="quiz-quick-known">✓ Знаю <small>Следующее по расписанию</small></button>'+
       '<button type="button" data-action="quick-unknown" class="quiz-quick-unknown">✕ Не знаю <small>Повторить завтра</small></button></div>';
   }
   function renderStudy() {
@@ -1071,6 +1104,7 @@
     } else if (action==="sync-now") {
       await sendSync();await pullSync();ui.notice=lastSyncError?"Синхронизация не удалась. Попробуй снова при наличии интернета.":"Данные проверены и отправлены на сервер.";renderHome();
     } else if (action==="scheduled") startSession("SCHEDULED");
+    else if (action==="new-cards") startSession("SCHEDULED","new");
     else if (action==="practice") {
       if (ui.session) return;
       startSession("PRACTICE");
