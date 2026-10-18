@@ -10,7 +10,9 @@ import java.time.Instant;
 import java.util.Locale;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -53,7 +55,15 @@ public class LessonPreparationService {
 
     @Transactional
     public LessonPreparationResponse uploadWorkbook(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
+        if (!looksLikePdf(pdf)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Workbook upload requires a non-empty PDF file");
+        }
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
+        // Never guess a document's role from incidental words in its filename.
+        // 'solutions_for_students.pdf' is still a workbook when the caller
+        // chooses the workbook slot. An explicit __answers__: legacy prefix
+        // is the ONLY backwards-compatible exception for older MCP clients.
         boolean answersCompatibility = isAnswersCompatibilityFilename(filename);
         String storedFilename = answersCompatibility ? cleanAnswersFilename(filename) : filename;
         if (answersCompatibility) {
@@ -152,10 +162,7 @@ public class LessonPreparationService {
         if (filename == null || filename.isBlank()) return false;
         String normalized = filename.trim().toLowerCase(Locale.ROOT);
         if (normalized.startsWith(ANSWERS_COMPAT_PREFIX)) return true;
-        return normalized.contains("answer")
-                || normalized.contains("solution")
-                || normalized.contains("ответ")
-                || normalized.contains("решен");
+        return false;
     }
 
     private String cleanAnswersFilename(String filename) {
