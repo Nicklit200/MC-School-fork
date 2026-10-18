@@ -163,7 +163,7 @@
       const reviewedAt = new Date(record.updatedAt);
       if (!Number.isFinite(reviewedAt.getTime())) continue;
       const lastReviewDay = engine.isoDay(reviewedAt);
-      const incorrect = record.lastCorrect === false || record.status === "RESET";
+      const incorrect = record.lastCorrect === false || record.status === "RESET" || engine.clampStage(record.repetitionNumber) === 0;
       const stage = incorrect ? 0 : Math.max(1,engine.clampStage(record.repetitionNumber));
       const delay = incorrect ? 1 : engine.reviewDelayDays(stage);
       if (!next) next = {...progress};
@@ -383,13 +383,13 @@
       due:cards.filter(card=>Boolean(progress[card.id]) && cardState(card,progress).dueDate<=today).length,
       known:cards.filter(card=>cardState(card,progress).repetitionNumber>=1).length,
       errors:cards.filter(card=>progress[card.id]?.lastCorrect===false || (progress[card.id]?.lastCorrect===undefined && (progress[card.id]?.status==="RESET" || latest.get(card.id)?.correct===false))).length,
-      unseen:cards.filter(card=>!progress[card.id]&&!latest.has(card.id)).length
+      unseen:cards.filter(card=>!progress[card.id]).length
     };
   }
   function packagesMarkup(){
     const packages=cardPackages();
     return '<section class="quiz-packages"><strong>История добавленных карточек</strong>'+
-      '<p>Когда и по какой теме добавлены карточки. Это оглавление, а не отдельные очереди повторения: все карточки повторяются вместе.</p>'+
+      '<p>Когда и по какой теме добавлены карточки. Это оглавление тем. Изученные карточки повторяются по индивидуальным датам, новые — отдельно.</p>'+
       packages.map(pack=>{
         const date=pack.date?labelDate(pack.date):"Дата добавления не сохранена";
         const stats=topicStats(pack.cards);
