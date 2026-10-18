@@ -1,0 +1,31 @@
+name: Study card review regression tests
+on:
+  push:
+    branches: [personal-study-map]
+    paths:
+      - 'personal-study-map/flashcard-engine.js'
+      - 'personal-study-map/flashcards.js'
+      - 'personal-study-map/quiz-portable-backup.js'
+      - 'personal-study-map/tests/**'
+      - '.github/workflows/study-card-review.yml'
+  pull_request:
+    paths:
+      - 'personal-study-map/flashcard-engine.js'
+      - 'personal-study-map/flashcards.js'
+      - 'personal-study-map/quiz-portable-backup.js'
+      - 'personal-study-map/tests/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify JavaScript syntax
+        run: |
+          node --check personal-study-map/flashcard-engine.js
+          node --check personal-study-map/flashcards.js
+          node --check personal-study-map/quiz-portable-backup.js
+      - name: Verify spaced repetition
+        run: node personal-study-map/tests/review-schedule.test.mjs
