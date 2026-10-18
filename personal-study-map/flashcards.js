@@ -100,6 +100,7 @@
       writeJson(KEY_HISTORY,[...rows.values()].sort((a,b)=>String(b.completedAt||b.date).localeCompare(String(a.completedAt||a.date))).slice(0,100));
       // Re-evaluate historical dates received from a second device too.
       migrateLegacyIntervals();
+      restoreHistoryProgress();
       window.dispatchEvent(new Event("study-reviews-updated"));
       updateBadge();
       if(ui.view==="home")renderHome();
@@ -107,7 +108,13 @@
   }
   window.addEventListener("study-reviews-updated",queueSync);
   window.addEventListener("online",()=>void pullSync());
-  window.addEventListener("visibilitychange",()=>{if(!document.hidden&&localStorage.getItem(PENDING_KEY))void sendSync();});
+  window.addEventListener("visibilitychange",()=>{
+    if(document.hidden)return;
+    void (async()=>{
+      if(localStorage.getItem(PENDING_KEY))await sendSync();
+      if(!ui.session)await pullSync();
+    })();
+  });
 
   function getContext() {
     return window.studyBoardCards?.context() || {exam:null,semesterId:"",topicId:"all"};
