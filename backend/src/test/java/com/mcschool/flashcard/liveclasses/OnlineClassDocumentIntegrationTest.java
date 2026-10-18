@@ -95,17 +95,27 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void filenamesMentioningAnswersStillUploadToWorkbookSlotOnIPad() {
-        byte[] pdf = "%PDF-1.4\\n1 0 obj\\n<< >>\\nendobj\\n%%EOF".getBytes();
-        var result = preparationService.uploadWorkbook(teacherPrincipal,
-                "event-doc", "Mathe Antworten und Lösungen.pdf", pdf);
-
-        assertThat(result.hasWorkbook()).isTrue();
-        assertThat(result.hasAnswers()).isFalse();
-        assertThat(documentService.workbook(studentPrincipal, onlineClass.getId()))
-                .contains(pdf);
-        assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), "event-doc")
-                .orElseThrow().getWorkbookFilename()).isEqualTo("Mathe Antworten und Lösungen.pdf");
+    void answersAndSolutionsInPdfFilenameStillRemainAStudentWorkbook() {
+        // These names would previously be misclassified as teacher-only answers,
+        // making POST /workbook return 200 followed by GET /document returning 404.
+        preparation(false, true);
+        for (String filename : java.util.List.of(
+                "math_answers.pdf", "lesson_solutions.pdf", "Ответы по математике.pdf",
+                "Решения заданий.pdf", "Mathe Antworten und Lösungen.pdf")) {
+            byte[] pdf = ("%PDF-1.4\\n% " + filename + "\\n%%EOF")
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            var result = preparationService.uploadWorkbook(teacherPrincipal,
+                    "event-doc", filename, pdf);
+            assertThat(result.hasWorkbook()).isTrue();
+            assertThat(result.hasAnswers()).isTrue();
+            assertThat(documentService.workbook(studentPrincipal, onlineClass.getId()))
+                    .contains(pdf);
+            var stored = preparations.findByTeacherIdAndEventId(teacher.getId(), "event-doc")
+                    .orElseThrow();
+            assertThat(stored.getWorkbookFilename()).isEqualTo(filename);
+            // Private answer PDF must never be changed or sent to the student.
+            assertThat(stored.getAnswersPdf()).isEqualTo(ANSWERS);
+        }
     }
 
     @Test
