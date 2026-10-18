@@ -135,7 +135,25 @@ describe('PDF upload contract', () => {
     const view = mount(true);
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(['pdf'], 'lesson.pdf', { type: 'application/pdf' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('PDF сохранён, но недоступен на доске');
+    expect(await screen.findByRole('alert')).toHaveTextContent('PDF сохранён, но пока недоступен на доске');
+    expect(onlineClassesApi.documentBytes).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report success if iPad upload was stored in the wrong slot', async () => {
+    vi.mocked(lessonPreparationApi.uploadWorkbook).mockResolvedValue({ hasWorkbook: false } as never);
+    const view = mount(true);
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, new File(['%PDF-1.4 sample'], 'math_answers.pdf', { type: 'application/pdf' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('не сохранил его как рабочую тетрадь');
+    expect(onlineClassesApi.documentBytes).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty iPad file before asking the server to store it', async () => {
+    const view = mount(true);
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, new File([], 'empty.pdf', { type: 'application/pdf' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Выбранный файл пустой');
+    expect(lessonPreparationApi.uploadWorkbook).not.toHaveBeenCalled();
   });
 
   it('reports a rejected upload instead of spinning forever', async () => {
