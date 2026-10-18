@@ -16,6 +16,8 @@ export const CONTROL_TOPIC = 'mc.class.control.v1';
 export const VIEW_TOPIC = 'mc.class.view.v1';
 /** In-progress strokes, shown to others while the pen is still down. */
 export const STROKE_TOPIC = 'mc.class.stroke.v1';
+/** New workbook pages are available to the class. */
+export const DOCUMENT_TOPIC = 'mc.class.document.v1';
 
 /** Hard cap per packet; annotation batches are chunked below this. */
 export const MAX_PACKET_BYTES = 8192;
@@ -29,6 +31,11 @@ interface BaseEvent {
   classId: string;
   id: string;
   at: number;
+}
+
+export interface DocumentEvent extends BaseEvent {
+  type: 'document';
+  version: number;
 }
 
 export interface HandEvent extends BaseEvent {
@@ -134,6 +141,7 @@ export interface ControlEvent {
 }
 
 export type ClassEvent =
+  | DocumentEvent
   | HandEvent
   | ReactionEvent
   | ChatEvent
@@ -173,6 +181,8 @@ export function parseClassEvent(raw: Uint8Array, classId: string): ClassEvent | 
   if (!isRecord(parsed) || !hasBase(parsed, classId)) return null;
 
   switch (parsed.type) {
+    case 'document':
+      return isInt(parsed.version, 1, Number.MAX_SAFE_INTEGER) ? (parsed as unknown as DocumentEvent) : null;
     case 'hand':
       return typeof parsed.raised === 'boolean' ? (parsed as unknown as HandEvent) : null;
     case 'reaction':
@@ -292,6 +302,10 @@ function newId(): string {
 
 export function encodeEvent(event: ClassEvent): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(event));
+}
+
+export function documentEvent(classId: string, version: number): DocumentEvent {
+  return { v: 1, type: 'document', classId, id: newId(), at: Date.now(), version };
 }
 
 export function handEvent(classId: string, raised: boolean): HandEvent {
