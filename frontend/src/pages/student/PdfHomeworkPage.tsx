@@ -210,15 +210,15 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
           <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             {!homework.submitted && (
               <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')}>
+                <button type="button" className={tool === 'pen' ? 'is-active' : undefined} onClick={() => setTool('pen')}>
                   {language === 'DE' ? 'Stift' : 'Ручка'}
                 </button>
-                <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')}>
+                <button type="button" className={tool === 'eraser' ? 'is-active' : undefined} onClick={() => setTool('eraser')}>
                   {language === 'DE' ? 'Radierer' : 'Ластик'}
                 </button>
                 <button
                   type="button"
-                  className={`btn ${touchDrawingEnabled ? '' : 'btn--secondary'}`}
+                  className={touchDrawingEnabled ? 'is-active' : undefined}
                   onClick={() => setTouchDrawingEnabled(!touchDrawingEnabled)}
                   title={language === 'DE' ? 'Für Android-Stifte, die als Touch erkannt werden' : 'Для Android-стилусов, которые определяются как касание'}
                 >
@@ -231,7 +231,7 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)}>←</button>
               <strong>{pageIndex + 1} / {pageCount}</strong>
-              <button className="btn btn--secondary" type="button" disabled={pageIndex >= pageCount - 1} onClick={() => setPageIndex((p) => p + 1)}>→</button>
+              <button type="button" disabled={pageIndex >= pageCount - 1} onClick={() => setPageIndex((p) => p + 1)}>→</button>
             </div>
           </div>
         </div>
@@ -767,24 +767,16 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
     <div>
       {!desktopControls && (
         <div
+          className="homework-island-rail"
           aria-label={language === 'DE' ? 'Werkzeuge' : 'Инструменты'}
           style={{
-            position: 'fixed',
             left: railLeft,
             top: railTop,
-            zIndex: 60,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 7,
-            padding: 8,
-            borderRadius: 14,
-            background: 'rgba(255,255,255,.97)',
-            boxShadow: '0 4px 18px rgba(0,0,0,.18)',
-            touchAction: 'manipulation',
             transform: `translateY(-50%) scale(${toolbarScale})`,
             transformOrigin: 'left center',
           }}
         >
+          <div className="homework-island-rail-group">
           <button type="button" className={`btn ${tool === 'pen' ? '' : 'btn--secondary'}`} onClick={() => setTool('pen')} title={language === 'DE' ? 'Stift' : 'Ручка'}>✎</button>
           <button type="button" className={`btn ${tool === 'eraser' ? '' : 'btn--secondary'}`} onClick={() => setTool('eraser')} title={language === 'DE' ? 'Radierer' : 'Ластик'}>⌫</button>
           <button
@@ -796,7 +788,8 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
           >
             ☝
           </button>
-          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
+          </div>
+          <div className="homework-island-rail-group homework-island-colors">
           {PEN_COLORS.map((color) => (
             <button
               key={color.value}
@@ -815,12 +808,13 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
               }}
             />
           ))}
-          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
+          </div>
+          <div className="homework-island-rail-group homework-island-size">
           {PEN_SIZES.map((size) => (
             <button
               key={size}
               type="button"
-              className={`btn ${penSize === size ? '' : 'btn--secondary'}`}
+              className={penSize === size ? 'is-active' : undefined}
               onClick={() => { setPenSize(size); setTool('pen'); }}
               title={`${language === 'DE' ? 'Breite' : 'Толщина'}: ${size}`}
               style={{ padding: '6px 7px' }}
@@ -828,13 +822,16 @@ function WorksheetCanvas({ pageUrl, initialDrawing, tool, setTool, touchDrawingE
               <span style={{ display: 'block', width: 20, height: Math.max(2, size / 2), borderRadius: 999, background: 'currentColor', margin: '0 auto' }} />
             </button>
           ))}
-          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
-          <button className="btn btn--secondary" type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)} title={language === 'DE' ? 'Vorherige Seite' : 'Предыдущая страница'}>↑</button>
+          </div>
+          <div className="homework-island-rail-group homework-island-pager">
+          <button type="button" disabled={pageIndex === 0} onClick={() => setPageIndex((p) => p - 1)} title={language === 'DE' ? 'Vorherige Seite' : 'Предыдущая страница'}>↑</button>
           <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{pageIndex + 1}/{pageCount}</div>
           <button className="btn btn--secondary" type="button" disabled={pageIndex >= pageCount - 1} onClick={() => setPageIndex((p) => p + 1)} title={language === 'DE' ? 'Nächste Seite' : 'Следующая страница'}>↓</button>
-          <div style={{ height: 1, background: 'rgba(0,0,0,.12)' }} />
-          <button className="btn btn--secondary" type="button" onClick={undo} disabled={undoCount === 0} title={language === 'DE' ? 'Rückgängig' : 'Шаг назад'}>↶</button>
-          <button className="btn btn--ghost" type="button" onClick={clear} disabled={undoCount === 0} title={language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}>×</button>
+          </div>
+          <div className="homework-island-rail-group">
+          <button type="button" onClick={undo} disabled={undoCount === 0} title={language === 'DE' ? 'Rückgängig' : 'Шаг назад'}>↶</button>
+          <button type="button" onClick={clear} disabled={undoCount === 0} title={language === 'DE' ? 'Seite löschen' : 'Очистить страницу'}>×</button>
+          </div>
         </div>
       )}
 
