@@ -163,10 +163,23 @@ function RoomBody({
       } else if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
         throw new Error('Unsupported file');
       }
-      await lessonPreparationApi.uploadWorkbook(eventId, pdfFile);
-      const bytes = await onlineClassesApi.documentBytes(classId);
+      if (!pdfFile.size) {
+        throw new Error('Выбранный файл пустой. Откройте его в «Файлах» и сохраните PDF на iPad перед загрузкой.');
+      }
+      const saved = await lessonPreparationApi.uploadWorkbook(eventId, pdfFile);
+      if (!saved.hasWorkbook) {
+        throw new Error('Сервер принял файл, но не сохранил его как рабочую тетрадь. Попробуйте ещё раз.');
+      }
+      // The classroom reads a different, student-authorized API. Verify that
+      // endpoint too before saying the upload is complete. A transient delay
+      // gets one short retry; do not silently tell teachers their PDF is gone.
+      let bytes = await onlineClassesApi.documentBytes(classId);
       if (!bytes || bytes.byteLength === 0) {
-        throw new Error('PDF сохранён, но недоступен на доске');
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+        bytes = await onlineClassesApi.documentBytes(classId);
+      }
+      if (!bytes || bytes.byteLength === 0) {
+        throw new Error('PDF сохранён, но пока недоступен на доске. Обновите урок или попробуйте снова.');
       }
       window.dispatchEvent(new Event('mc-workbook-updated'));
     } catch (error) {
