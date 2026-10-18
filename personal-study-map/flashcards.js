@@ -178,6 +178,34 @@
   }
   migrateLegacyIntervals();
 
+  // Recreate lost per-card dates only when an actual dated scheduled review
+  // provides the card ID and first-try result. Never infer IDs from totals.
+  function restoreHistoryProgress() {
+    const states=getProgress();
+    const sessions=storedHistory().filter(s=>s?.type==="SCHEDULED" &&
+      /^\\d{4}-\\d{2}-\\d{2}$/.test(s.date||"") && Array.isArray(s.review))
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)) ||
+        String(a.completedAt||"").localeCompare(String(b.completedAt||""));
+    let recovered=0;
+    for(const session of sessions) for(const item of session.review) {
+      if(typeof item?.cardId!=="string" || typeof item.correct!=="boolean")continue;
+      const old=states[item.cardId];
+      const priorTime=Date.parse(String(old?.updatedAt||""));
+      if(Number.isFinite(priorTime) && engine.isoDay(new Date(priorTime)) >= session.date)continue;
+      if(old?.dueDate && !Number.isFinite(priorTime))continue;
+      const schedule=engine.afterReview(old,item.correct,session.date);
+      states[item.cardId]={...old,...schedule,lastCorrect:item.correct,
+        updatedAt:session.completedAt||session.date+"T12:00:00.000Z"};
+      recovered++;
+    }
+    if(recovered){
+      writeJson(KEY_PROGRESS,states);
+      queueSync();
+    }
+    return recovered;
+  }
+  restoreHistoryProgress();
+
   function cardState(card, states = getProgress()) {
     const saved = states[card.id];
     return {
