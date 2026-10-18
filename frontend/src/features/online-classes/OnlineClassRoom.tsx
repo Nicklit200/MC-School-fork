@@ -35,6 +35,8 @@ import { WaitingRoomPanel } from './WaitingRoomPanel';
 import { useAnswersPanel } from './useAnswersPanel';
 import { useBoardDocument } from './useBoardDocument';
 import { useHostUserId } from './useHostUserId';
+import { useClassEvents } from './useClassEvents';
+import { DOCUMENT_TOPIC, documentEvent } from './events';
 import type { TranslationKey } from '../../i18n/translations';
 
 // Konva is ~300 kB; the board gets its own lazy boundary inside the already-lazy
@@ -135,11 +137,13 @@ function RoomBody({
     window.addEventListener('mc-workbook-render-error', report);
     return () => window.removeEventListener('mc-workbook-render-error', report);
   }, []);
-  const uploadMaterial = async (file: File) => {
+  const uploadMaterial = async (files: File[]) => {
     if (!eventId) { setMaterialError('Урок не связан с календарём. Загрузка недоступна.'); return; }
     setMaterialBusy(true);
     setMaterialError(null);
     try {
+      if (!files.length) return;
+      for (const file of files) {
       let pdfFile = file;
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
@@ -166,7 +170,7 @@ function RoomBody({
       if (!pdfFile.size) {
         throw new Error('Выбранный файл пустой. Откройте его в «Файлах» и сохраните PDF на iPad перед загрузкой.');
       }
-      const saved = await lessonPreparationApi.uploadWorkbook(eventId, pdfFile);
+      const saved = await lessonPreparationApi.appendWorkbook(eventId, pdfFile);
       if (!saved.hasWorkbook) {
         throw new Error('Сервер принял файл, но не сохранил его как рабочую тетрадь. Попробуйте ещё раз.');
       }
@@ -181,7 +185,13 @@ function RoomBody({
       if (!bytes || bytes.byteLength === 0) {
         throw new Error('PDF сохранён, но пока недоступен на доске. Обновите урок или попробуйте снова.');
       }
+      // Refresh teacher immediately, and push the update to every pupil over
+      // LiveKit. Each PDF is an atomic append, so earlier files survive if
+      // a later file fails.
       window.dispatchEvent(new Event('mc-workbook-updated'));
+      const revision = await onlineClassesApi.documentVersion(classId);
+      void publishDocument(documentEvent(classId, revision.version), true);
+      }
     } catch (error) {
       setMaterialError(error instanceof Error ? error.message : 'Не удалось загрузить файл.');
     } finally { setMaterialBusy(false); }
@@ -191,6 +201,13 @@ function RoomBody({
   const sharing = useScreenShareActive();
   const wasSharing = useRef(false);
   const hostUserId = useHostUserId(classId);
+  const { publish: publishDocument } = useClassEvents(classId, DOCUMENT_TOPIC, ({ event, senderIdentity }) => {
+    if (event.type !== 'document' || connection.host) return;
+    // Ignore document-update packets from students. Only the bound teacher
+    // can cause the shared PDF to reload.
+    if (!hostUserId || senderIdentity?.split('|')[0] !== hostUserId) return;
+    window.dispatchEvent(new Event('mc-workbook-updated'));
+  });
   const answers = useAnswersPanel(eventId, connection.host);
   const boardDocument = useBoardDocument(classId);
   const students = useStudentRoster(classId, connection.host);
@@ -239,10 +256,10 @@ function RoomBody({
         </button>
         {connection.host && (
           <label title="Загрузить PDF или фото на доску" style={{ cursor: materialBusy ? 'wait' : 'pointer', padding: '6px 10px', borderRadius: 8, background: '#1d4ed8', color: 'white' }}>
-            {materialBusy ? 'Загрузка…' : '＋ PDF / Фото'}
-            <input type="file" accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" disabled={materialBusy}
+            {materialBusy ? 'Загрузка…' : '＋ Добавить PDF / Фото'}
+            <input type="file" multiple accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" disabled={materialBusy}
               style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
-              onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadMaterial(file); event.target.value = ''; }} />
+              onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files); event.target.value = ''; }} />
           </label>
         )}
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
