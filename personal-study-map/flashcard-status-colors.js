@@ -1,7 +1,5 @@
-/* Dashboard presentation: total review inventory is separate from today's queue.
- * Reuse the rendered package inventory and topicStats.unseen so hidden/invalid
- * cards and the current subject/topic filter keep exactly the core's semantics.
- * No changes to saved answers, due dates or the scheduled-session engine.
+/* Add colors to per-topic card statuses without changing any counts.
+ * "К повторению" must match the actual due-card queue, never all studied cards.
  */
 (() => {
   "use strict";
@@ -42,7 +40,7 @@
   ];
   const todayLabel = "\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u043f\u043e \u0440\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u044e";
   const oldTotalLabel = "\u041d\u0443\u0436\u043d\u043e \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c";
-  const reviewHelp = "\u0412\u0441\u0435 \u0443\u0436\u0435 \u043d\u0430\u0447\u0430\u0442\u044b\u0435 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438, \u043d\u0435\u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e \u043e\u0442 \u0434\u0430\u0442\u044b \u043f\u043e\u0432\u0442\u043e\u0440\u0435\u043d\u0438\u044f. \u0412\u043a\u043b\u044e\u0447\u0430\u044f \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u0441 \u043e\u0448\u0438\u0431\u043a\u0430\u043c\u0438 \u0438 \u043e\u0441\u0432\u043e\u0435\u043d\u043d\u044b\u0435 \u043d\u0430 \u0438\u043d\u0442\u0435\u0440\u0432\u0430\u043b\u044c\u043d\u043e\u043c \u043f\u043e\u0432\u0442\u043e\u0440\u0435\u043d\u0438\u0438. \u041d\u043e\u0432\u044b\u0435 \u0441\u0447\u0438\u0442\u0430\u044e\u0442\u0441\u044f \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e.";
+  const reviewHelp = "Только уже изученные карточки, дата повторения которых наступила. Новые карточки показаны отдельно."; 
   const statsPattern = new RegExp("^" + labels.map(([, label]) => label + ":\\s*(\\d+)").join("\\s*\u00b7\\s*") + "$", "u");
 
   function colorCardStats() {
@@ -60,14 +58,9 @@
         if (!questions) continue;
         const total = questions.querySelectorAll(".quiz-package-question").length;
         const values = match.slice(1).map(Number);
-        const unseen = values[3];
-        // Do not invent a count if the core's markup ever changes.
-        if (unseen > total) continue;
+        if (values[3] > total || values[1] > total) continue;
         const dueToday = values[1];
-        // topicStats.unseen means neither saved progress nor answer history.
-        // Its complement is the entire started inventory, not just due today.
-        values[1] = total - unseen;
-        line.dataset.reviewTotal = String(values[1]);
+        // Style the values from the core, never replace today's count.
         line.dataset.reviewToday = String(dueToday);
         const badges = labels.map(([kind, label], index) => {
           const badge = document.createElement("span");
@@ -86,30 +79,7 @@
       }
     }
 
-    // The overview total follows the same definition. Keep the actual daily
-    // queue visible separately, without changing its button or eligibility.
-    const counters = packages.map(pack => pack.querySelector(".quiz-package-stats[data-review-total]"));
-    if (counters.some(line => !line)) return;
-    const totalReview = counters.reduce((sum, line) => sum + Number(line.dataset.reviewTotal), 0);
-    for (const box of host.querySelectorAll(".quiz-stat")) {
-      const label = box.querySelector(":scope > span");
-      const value = box.querySelector(":scope > strong");
-      if (!label || !value) continue;
-      const isDailyCount = label.textContent.trim() === oldTotalLabel;
-      if (!isDailyCount && box.dataset.reviewOverview !== "true") continue;
-      if (isDailyCount) box.dataset.dueToday = value.textContent.trim();
-      box.dataset.reviewOverview = "true";
-      label.textContent = labels[1][1];
-      value.textContent = String(totalReview);
-      box.title = reviewHelp;
-      let note = box.querySelector(".quiz-review-today");
-      if (!note) {
-        note = document.createElement("small");
-        note.className = "quiz-review-today";
-        box.append(note);
-      }
-      note.textContent = todayLabel + ": " + box.dataset.dueToday;
-    }
+
   }
 
   window.addEventListener("study-home-rendered", colorCardStats);
