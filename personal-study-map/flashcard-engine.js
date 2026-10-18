@@ -2,13 +2,17 @@
  * Personal Study Map quiz core.
  * Adapted from Mindcrafti School's DistractorGenerator, StudySessionItem,
  * StudyService and Sm2Scheduler (branch integration/railway-and-ux).
- * Same four-choice flow, first-attempt scoring, end-of-queue retries
- * and scheduled intervals: first correct answer in 3 days; after a mistake restart 1,2,3,4,7,14,30 days.
+ * Same four-choice flow, first-attempt scoring and end-of-queue retries.
+ * Day 1 is the initial study day. A first correct answer is reviewed
+ * 2 days later, then after 3, 7, 14 and 30 days; mistakes return tomorrow.
  * Pure client-side engine; UI/persistence lives in flashcards.js.
  */
 window.CardQuizEngine = (() => {
-  const INTERVAL_DAYS = Object.freeze([1, 2, 3, 4, 7, 14, 30]);
-  const FIRST_CORRECT_DELAY_DAYS = 3;
+  // The initial study is day 1. The 1-day interval is reserved for mistakes.
+  // Successful scheduled reviews progress through 2, 3, 7, 14 and 30 days.
+  const INTERVAL_DAYS = Object.freeze([1, 2, 3, 7, 14, 30]);
+  const FIRST_CORRECT_DELAY_DAYS = INTERVAL_DAYS[1];
+  const SCHEDULE_VERSION = 2;
 
   function isoDay(date = new Date()) {
     const d = date instanceof Date ? date : new Date(date);
@@ -27,21 +31,22 @@ window.CardQuizEngine = (() => {
     return Math.min(INTERVAL_DAYS.length, Math.max(0, Math.floor(Number(stage) || 0)));
   }
 
+  function reviewDelayDays(stage) {
+    // Stage 0 is a missed/unseen card; stage 1 is the first success.
+    // Clamp the final stage at the 30-day maintenance interval.
+    const index = Math.min(Math.max(1, clampStage(stage)), INTERVAL_DAYS.length - 1);
+    return INTERVAL_DAYS[index];
+  }
+
   function afterReview(previousState, firstTryCorrect, today = isoDay()) {
     if (!firstTryCorrect) {
-      return { repetitionNumber: 0, dueDate: plusDays(today, 1), status: "RESET" };
+      return { repetitionNumber: 0, dueDate: plusDays(today, INTERVAL_DAYS[0]),
+        status: "RESET", scheduleVersion: SCHEDULE_VERSION };
     }
-    // A brand-new card answered correctly on its first attempt is held for
-    // three days. Previously missed cards restart at the one-day interval.
-    const newCard = !previousState || (!previousState.updatedAt &&
-      !previousState.status && !Number(previousState.repetitionNumber));
-    if (newCard) {
-      return { repetitionNumber: 1, dueDate: plusDays(today, FIRST_CORRECT_DELAY_DAYS), status: "ACTIVE" };
-    }
-    const stage = clampStage(previousState?.repetitionNumber);
-    const nextStage = Math.min(stage + 1, INTERVAL_DAYS.length);
-    const interval = stage === 0 ? INTERVAL_DAYS[0] : INTERVAL_DAYS[nextStage - 1];
-    return { repetitionNumber: nextStage, dueDate: plusDays(today, interval), status: "ACTIVE" };
+    const nextStage = Math.min(clampStage(previousState?.repetitionNumber) + 1, INTERVAL_DAYS.length);
+    return { repetitionNumber: nextStage,
+      dueDate: plusDays(today, reviewDelayDays(nextStage)),
+      status: "ACTIVE", scheduleVersion: SCHEDULE_VERSION };
   }
 
   function shuffle(items, random = Math.random) {
@@ -197,6 +202,6 @@ window.CardQuizEngine = (() => {
     return {cards,warnings};
   }
 
-  return {INTERVAL_DAYS,isoDay,plusDays,afterReview,buildOptions,
+  return {INTERVAL_DAYS,FIRST_CORRECT_DELAY_DAYS,SCHEDULE_VERSION,reviewDelayDays,isoDay,plusDays,afterReview,buildOptions,
     startSession,recordAnswer,finishSession,parseImport,clampStage};
 })();
