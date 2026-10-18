@@ -63,6 +63,13 @@ public class LessonPreparationController {
         return service.uploadWorkbook(teacher, eventId, file.getOriginalFilename(), file.getBytes());
     }
 
+    @PostMapping(value = "/{eventId}/workbook/append", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public LessonPreparationResponse appendWorkbook(@AuthenticationPrincipal AuthenticatedUser teacher,
+                                                    @PathVariable String eventId,
+                                                    @RequestParam("file") MultipartFile file) throws Exception {
+        return service.appendWorkbook(teacher, eventId, file.getOriginalFilename(), file.getBytes());
+    }
+
     @GetMapping("/{eventId}/workbook")
     public ResponseEntity<byte[]> workbook(@AuthenticationPrincipal AuthenticatedUser teacher,
                                            @PathVariable String eventId) {
