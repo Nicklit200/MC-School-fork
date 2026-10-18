@@ -20,12 +20,26 @@
   function sessionSummary(rows) {
     const day = engine.plusDays(engine.isoDay(), -1);
     const results = (Array.isArray(rows) ? rows : []).filter(x =>
-      x?.date === day && Array.isArray(x.review));
+      x?.date === day && Array.isArray(x.review))
+      .sort((a,b)=>String(a.completedAt||"").localeCompare(String(b.completedAt||"")));
     const reviewed = new Map();
+    // The first try that day wins even when the student later fixes a mistake.
     for(const session of results)for(const item of session.review) {
-      if(item?.cardId && typeof item.correct === "boolean")reviewed.set(item.cardId,item.correct);
+      if(item?.cardId && typeof item.correct === "boolean" && !reviewed.has(item.cardId))
+        reviewed.set(item.cardId,item.correct);
+    }
+    const historyCount=reviewed.size;
+    if(!historyCount){
+      const saved=read(fields.progress,{});
+      for(const [id,state] of Object.entries(saved)){
+        const time=Date.parse(String(state?.updatedAt||""));
+        if(Number.isFinite(time) && engine.isoDay(new Date(time))===day &&
+           typeof state.lastCorrect==="boolean")reviewed.set(id,state.lastCorrect);
+      }
     }
     return {day, sessions:results.length, cards:reviewed.size,
+      source:historyCount?"history":"saved-progress",
+      practice:results.filter(x=>x.type==="PRACTICE").length,
       correct:[...reviewed.values()].filter(Boolean).length,
       wrong:[...reviewed.values()].filter(x=>!x).length};
   }
@@ -41,10 +55,11 @@
     description.textContent = "Экспортируй на компьютере и импортируй на iPhone. Так оба устройства будут пользоваться одной серверной историей. Исходные данные сохраняются."; 
     const report = document.createElement("p");
     const summary = sessionSummary(read(fields.sessions, []));
-    report.textContent = summary.sessions ?
-      "За вчера ("+summary.day+"): "+summary.cards+" карточек, "+
-      summary.correct+" правильных, "+summary.wrong+" с ошибкой." :
-      "За вчера ("+summary.day+") здесь нет завершённой истории. Проверь компьютер, на котором проходил занятие.";
+    report.textContent = summary.cards ?
+      "Вчера ("+summary.day+"): "+summary.cards+" ответов; "+
+      summary.correct+" правильных, "+summary.wrong+" с ошибкой. "+
+      (summary.source==="history"?"Есть запись занятия.":"По сохранённым ответам.") :
+      "Вчерашние ответы здесь не найдены. Открой сайт в том браузере компьютера, где проходил занятие.";
     report.style.fontWeight = "600";
     const warning = document.createElement("p");
     warning.textContent = "Приватный файл содержит ключ доступа к истории карточек. Не отправляй его в чат или посторонним, удали после переноса.";
