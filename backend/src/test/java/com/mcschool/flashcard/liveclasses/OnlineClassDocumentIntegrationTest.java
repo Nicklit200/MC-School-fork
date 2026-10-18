@@ -13,7 +13,6 @@ import java.io.ByteArrayOutputStream;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import com.mcschool.flashcard.lessons.LessonPreparationService;
 import org.springframework.web.server.ResponseStatusException;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -44,9 +43,6 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private LessonPreparationRepository preparations;
-
-    @Autowired
-    private LessonPreparationService preparationService;
 
     @Autowired
     private LessonPreparationService preparationService;
