@@ -98,6 +98,8 @@
       const rows=new Map((Array.isArray(response.sessions)?response.sessions:[]).map(x=>[x.id,x]));
       for(const x of storedHistory())rows.set(x.id,x);
       writeJson(KEY_HISTORY,[...rows.values()].sort((a,b)=>String(b.completedAt||b.date).localeCompare(String(a.completedAt||a.date))).slice(0,100));
+      // Re-evaluate historical dates received from a second device too.
+      migrateLegacyIntervals();
       window.dispatchEvent(new Event("study-reviews-updated"));
       updateBadge();
       if(ui.view==="home")renderHome();
@@ -727,9 +729,12 @@
     const session=ui.session;
     if (!session) return;
     const completed=engine.finishSession(session,session.cards,getProgress());
-    // Progress was already persisted on first answer: avoid applying it twice.
-    if(session.mode==="SCHEDULED")completed.states=getProgress();
+    // Progress was already persisted when each first answer was received.
+    // Do not advance again just to calculate the result's next-review date.
     if (session.mode==="SCHEDULED") {
+      completed.states=getProgress();
+      completed.result.nextReviewDate=session.cardIds
+        .map(id=>completed.states[id]?.dueDate).filter(Boolean).sort()[0]||null;
       writeJson(KEY_PROGRESS,completed.states);
     }
     const history=storedHistory();
