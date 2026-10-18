@@ -349,6 +349,9 @@ export const onlineClassesApi = {
    * The lesson's workbook PDF for the shared board, or null when the lesson has
    * none (404). Never the answers file: the server only serves the workbook.
    */
+  documentVersion: (classId: string) =>
+    request<{ version: number }>('GET', `/online-classes/${classId}/document/version`),
+
   documentBytes: async (classId: string): Promise<ArrayBuffer | null> => {
     try {
       return await (await requestBlob(`/online-classes/${classId}/document`)).arrayBuffer();
