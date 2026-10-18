@@ -267,3 +267,66 @@
   .school-islands-board .whiteboard__topline-pages .page-nav button{min-width:39px;min-height:39px}
   .pdf-homework-page .homework-island-rail{left:6px;width:52px;padding:5px}
 }
+
+/* Independently framed groups on iPad — each group looks like a separate island. */
+.pdf-homework-page .homework-island-rail {
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  padding:0;
+  width:auto;
+  max-height:min(86dvh,850px);
+  overflow:visible;
+  gap:7px;
+}
+.pdf-homework-page .homework-island-rail-group {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  padding:6px;
+  background:var(--island-surface);
+  border:1px solid var(--island-edge);
+  border-radius:14px;
+  box-shadow:var(--island-shadow);
+}
+.pdf-homework-page .homework-island-rail-group button {
+  width:40px;
+  min-width:40px;
+  min-height:40px;
+  color:#556d8e;
+  background:transparent;
+  border:1px solid transparent;
+}
+.pdf-homework-page .homework-island-rail-group button.is-active {
+  color:var(--island-blue);
+  border-color:#bad1f8;
+  background:var(--island-active);
+}
+.pdf-homework-page .homework-island-rail-group.homework-island-colors button {
+  border-radius:50%;
+  width:32px;
+  min-width:32px;
+  min-height:32px;
+}
+.pdf-homework-page .homework-island-header .homework-island {
+  flex:0 0 auto;
+}
+.pdf-homework-page .homework-island-header .homework-island .btn {
+  color:#556d8e;
+  background:transparent;
+  border:1px solid transparent;
+  box-shadow:none;
+}
+.pdf-homework-page .homework-island-header .homework-island button.is-active{
+  background:var(--island-active);
+  border-color:#bad1f8;
+  color:var(--island-blue);
+}
+.pdf-homework-page .homework-island-header .homework-island .btn:disabled{opacity:.4}
+@media(max-height:650px) and (pointer:coarse){
+  .pdf-homework-page .homework-island-rail{
+    transform:translateY(-50%) scale(.8)!important;
+    transform-origin:left center;
+  }
+}
