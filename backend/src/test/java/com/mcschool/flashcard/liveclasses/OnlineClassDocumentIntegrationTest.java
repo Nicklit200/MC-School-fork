@@ -9,6 +9,11 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.lessons.LessonPreparation;
 import com.mcschool.flashcard.lessons.LessonPreparationRepository;
 import com.mcschool.flashcard.lessons.LessonPreparationService;
+import java.io.ByteArrayOutputStream;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import com.mcschool.flashcard.lessons.LessonPreparationService;
 import org.springframework.web.server.ResponseStatusException;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -39,6 +44,9 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private LessonPreparationRepository preparations;
+
+    @Autowired
+    private LessonPreparationService preparationService;
 
     @Autowired
     private LessonPreparationService preparationService;
@@ -127,6 +135,42 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
                 .hasMessageContaining("non-empty PDF");
         assertThat(preparations.findByTeacherIdAndEventId(
                 teacher.getId(), "event-doc")).isEmpty();
+    }
+
+    private byte[] pdfWithPages(int pages) throws Exception {
+        try (var doc = new PDDocument(); var out = new ByteArrayOutputStream()) {
+            for (int index = 0; index < pages; index++) doc.addPage(new PDPage());
+            doc.save(out);
+            return out.toByteArray();
+        }
+    }
+
+    @Test
+    void appendWorkbookKeepsAllOriginalPagesAndExposesMoreToStudents() throws Exception {
+        byte[] original = pdfWithPages(2);
+        byte[] second = pdfWithPages(3);
+        preparationService.appendWorkbook(teacherPrincipal, "event-doc", "first.pdf", original);
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId())).isPositive();
+        var originalVersion = documentService.workbookVersion(studentPrincipal, onlineClass.getId());
+        preparationService.appendWorkbook(teacherPrincipal, "event-doc", "second.pdf", second);
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
+                .isGreaterThan(originalVersion);
+        byte[] joined = documentService.workbook(studentPrincipal, onlineClass.getId()).orElseThrow();
+        try (var merged = Loader.loadPDF(joined)) {
+            assertThat(merged.getNumberOfPages()).isEqualTo(5);
+        }
+        assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), "event-doc")
+                .orElseThrow().hasAnswers()).isFalse();
+    }
+
+    @Test
+    void malformedSecondFileDoesNotOverwriteExistingWorkbook() throws Exception {
+        byte[] first = pdfWithPages(2);
+        preparationService.appendWorkbook(teacherPrincipal, "event-doc", "first.pdf", first);
+        assertThatThrownBy(() -> preparationService.appendWorkbook(teacherPrincipal,
+                "event-doc", "bad.pdf", "%PDF-corrupted".getBytes()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(documentService.workbook(studentPrincipal, onlineClass.getId())).contains(first);
     }
 
     @Test
