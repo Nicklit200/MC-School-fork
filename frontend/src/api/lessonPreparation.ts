@@ -77,6 +77,13 @@ export const lessonPreparationApi = {
   uploadWorkbook(eventId: string, file: File) {
     return uploadPdf(eventId, 'workbook', file);
   },
+  appendWorkbook(eventId: string, file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/workbook/append`, {
+      method: 'POST', headers: authHeaders(), body: form,
+    }).then(parse<LessonPreparation>);
+  },
   uploadAnswers(eventId: string, file: File) {
     return uploadPdf(eventId, 'answers', file);
   },
