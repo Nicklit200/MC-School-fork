@@ -330,3 +330,62 @@
     transform-origin:left center;
   }
 }
+
+/* Refinements: touch targets, accessible focus, independent docks. */
+.school-islands-board .board-toolbar button:focus-visible,
+.school-islands-board .whiteboard__topline-pages button:focus-visible,
+.school-islands-board .whiteboard__zoom button:focus-visible,
+.pdf-homework-page .homework-island button:focus-visible,
+.pdf-homework-page .homework-island-rail button:focus-visible {
+  outline:2px solid #3977da;
+  outline-offset:2px;
+}
+.school-islands-board .whiteboard__topline {
+  max-width:calc(100% - 20px);
+}
+.school-islands-board .whiteboard__topline .board-toolbar {
+  overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.school-islands-board .whiteboard__topline-pages,
+.school-islands-board .whiteboard__zoom {
+  bottom:max(12px,env(safe-area-inset-bottom));
+}
+.pdf-homework-page .homework-island-header {
+  position:relative;
+  z-index:6;
+}
+.pdf-homework-page .homework-island-rail {
+  top:clamp(64px,50%,calc(100% - 64px));
+}
+@media (pointer:coarse) {
+  .school-islands-board .board-toolbar button,
+  .school-islands-board .whiteboard__zoom button,
+  .school-islands-board .whiteboard__topline-pages .page-nav button,
+  .pdf-homework-page .homework-island button,
+  .pdf-homework-page .homework-island-rail-group button {
+    min-width:44px;
+    min-height:44px;
+  }
+  .pdf-homework-page .homework-island-rail {
+    max-height:calc(100dvh - 120px);
+    overflow-y:auto;
+    overflow-x:visible;
+    scrollbar-width:none;
+  }
+}
+@media (max-width:620px) {
+  .school-islands-board .whiteboard__topline {
+    max-width:calc(100% - 14px);
+  }
+  .school-islands-board .whiteboard__topline .board-toolbar {
+    max-width:100%;
+  }
+  .pdf-homework-page .homework-island-header {
+    gap:6px;
+  }
+  .pdf-homework-page .homework-island-rail {
+    left:max(6px,env(safe-area-inset-left));
+    top:50%;
+  }
+}
