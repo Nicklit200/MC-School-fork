@@ -964,6 +964,9 @@ async function loadData() {
   state.semesterId = firstSemester?.id || "";
   state.examId = firstSemester?.exams?.[0]?.id || "";
   renderAll();
+  // Open the overview as a real map, not a 100% crop of a huge course.
+  // Wait for the stage dimensions so Safari/iPad and desktop fit correctly.
+  if (state.viewMode === "map") requestAnimationFrame(() => fitMap());
   if (state.viewMode === "list") {
     $("list-view").classList.add("active");
     $("map-view").classList.remove("active");
@@ -1714,7 +1717,7 @@ function fitMap() {
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
   const padding = 80;
-  const z = clamp(Math.min((map.clientWidth - padding) / width, (map.clientHeight - padding) / height, 1.25), .35, 1.25);
+  const z = clamp(Math.min((map.clientWidth - padding) / width, (map.clientHeight - padding) / height, 1.15), .3, 1.15);
   state.viewport.z = z;
   state.viewport.x = (map.clientWidth - width * z) / 2 - minX * z;
   state.viewport.y = (map.clientHeight - height * z) / 2 - minY * z;
