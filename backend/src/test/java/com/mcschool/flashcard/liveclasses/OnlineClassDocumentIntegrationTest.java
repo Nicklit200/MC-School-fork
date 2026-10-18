@@ -8,6 +8,8 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.lessons.LessonPreparation;
 import com.mcschool.flashcard.lessons.LessonPreparationRepository;
+import com.mcschool.flashcard.lessons.LessonPreparationService;
+import org.springframework.web.server.ResponseStatusException;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import java.time.Instant;
@@ -37,6 +39,9 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private LessonPreparationRepository preparations;
+
+    @Autowired
+    private LessonPreparationService preparationService;
 
     @Autowired
     private UserRepository userRepository;
@@ -87,6 +92,41 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
         // Answers exist, but this route only ever reads the workbook.
         assertThat(documentService.workbook(studentPrincipal, onlineClass.getId())).isEmpty();
         assertThat(documentService.workbook(teacherPrincipal, onlineClass.getId())).isEmpty();
+    }
+
+    @Test
+    void filenamesMentioningAnswersStillUploadToWorkbookSlotOnIPad() {
+        byte[] pdf = "%PDF-1.4\\n1 0 obj\\n<< >>\\nendobj\\n%%EOF".getBytes();
+        var result = preparationService.uploadWorkbook(teacherPrincipal,
+                "event-doc", "Mathe Antworten und Lösungen.pdf", pdf);
+
+        assertThat(result.hasWorkbook()).isTrue();
+        assertThat(result.hasAnswers()).isFalse();
+        assertThat(documentService.workbook(studentPrincipal, onlineClass.getId()))
+                .contains(pdf);
+        assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), "event-doc")
+                .orElseThrow().getWorkbookFilename()).isEqualTo("Mathe Antworten und Lösungen.pdf");
+    }
+
+    @Test
+    void explicitLegacyAnswersPrefixKeepsOldMcpClientsCompatible() {
+        byte[] pdf = "%PDF-1.4\\n%%EOF".getBytes();
+        var result = preparationService.uploadWorkbook(teacherPrincipal,
+                "event-doc", "__answers__:teacher-solutions.pdf", pdf);
+
+        assertThat(result.hasWorkbook()).isFalse();
+        assertThat(result.hasAnswers()).isTrue();
+        assertThat(documentService.workbook(studentPrincipal, onlineClass.getId())).isEmpty();
+    }
+
+    @Test
+    void anEmptyIPadUploadMustNotReportSuccess() {
+        assertThatThrownBy(() -> preparationService.uploadWorkbook(
+                teacherPrincipal, "event-doc", "Aufgaben.pdf", new byte[0]))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("non-empty PDF");
+        assertThat(preparations.findByTeacherIdAndEventId(
+                teacher.getId(), "event-doc")).isEmpty();
     }
 
     @Test
