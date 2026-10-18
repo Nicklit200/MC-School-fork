@@ -551,33 +551,36 @@
     }
   }
   function quickGrade(known) {
-    if(ui.view!=="study"||!ui.session)return;
-    // Grading from the visible feedback must not silently grade the next card.
-    if(ui.feedback)return;
+    if(ui.view!=="study"||!ui.session||ui.feedback)return;
     const session=ui.session,card=currentCard();
     if(!card)return;
     stopTimer();stopAdvance();
     const item=session.items?.[card.id];
     if(!item||item.state!=="PENDING")return;
-    // Mark the card finished immediately; do not add wrong answers back to
-    // the end of this fast sorting session.
+    const firstAttempt=!item.attempts;
+    const firstTryCorrect=firstAttempt && known;
+    // The first attempt is definitive. A card answered wrongly earlier
+    // cannot become "correct on first attempt" when it returns to the queue.
     session.queue=session.queue.filter(id=>id!==card.id);
     item.state="ANSWERED_CORRECT";
-    item.attempts=Math.max(1,item.attempts||0);
-    item.firstSelectedAnswer=known?card.answer:"";
-    item.hadWrongAttempt=!known;
+    if (firstAttempt) {
+      item.firstSelectedAnswer=known?card.answer:"";
+      item.hadWrongAttempt=!known;
+    }
+    item.attempts=(Number(item.attempts)||0)+1;
     session.currentQuestion=null;
-    if(session.mode==="SCHEDULED"){
+    if(session.mode==="SCHEDULED" && firstAttempt){
       const states=getProgress();
       const prior=states[card.id];
-      // Quick scoring uses the same progression as the multiple-choice quiz.
-      const scheduled=engine.afterReview(prior,known);
-      states[card.id]={...scheduled,lastCorrect:known,updatedAt:new Date().toISOString()};
+      const scheduled=engine.afterReview(prior,firstTryCorrect);
+      states[card.id]={...scheduled,lastCorrect:firstTryCorrect,updatedAt:new Date().toISOString()};
       writeJson(KEY_PROGRESS,states);
       queueSync();
       window.dispatchEvent(new Event("study-reviews-updated"));
     }
-    ui.notice=known?"Отмечено: знаю. Карточка убрана из сегодняшней очереди.":"Отмечено: не знаю. Карточка вернётся завтра.";
+    ui.notice=item.hadWrongAttempt
+      ?"Карточка записана как ошибка. Следующее повторение — завтра."
+      :"Отмечено: знаю. Следующее повторение — по расписанию.";
     saveSession();updateBadge();
     if(!session.queue.length)finishSession();
     else renderStudy();
