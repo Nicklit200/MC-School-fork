@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { renderHomeworkInkStroke } from '../../lib/homeworkInk';
 import { attachTabletInkInput, type TabletInkPoint } from '../../lib/tabletInkInput';
+import '../../styles/floating-islands.css';
 
 type Tool = 'pen' | 'eraser';
 type PenColor = '#111111' | '#2563eb' | '#dc2626' | '#16a34a';
