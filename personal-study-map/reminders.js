@@ -95,14 +95,16 @@
         for(const card of skill.flashcards||[]){
           if(overrides[card.id]?.hidden||overrides[card.id]?.deleted||excluded(card.id))continue;
           const item=progress[card.id];
-          all.push({id:card.id,dueDate:item?.dueDate||today(),subject:exam.title||"Учёба"});
+          if (!item) continue; // Never send a new card as a scheduled reminder.
+          all.push({id:card.id,dueDate:item.dueDate||today(),subject:exam.title||"Учёба"});
         }
       }
     }
     for(const card of custom) {
       if(card.hidden || excluded(card.id) || !knownSkills.has(card.skillId))continue;
       const item=progress[card.id];
-      all.push({id:card.id,dueDate:item?.dueDate||today(),subject:knownSkills.get(card.skillId)});
+      if (!item) continue;
+      all.push({id:card.id,dueDate:item.dueDate||today(),subject:knownSkills.get(card.skillId)});
     }
     const unique=new Map(all.map(item=>[item.id,item]));
     return [...unique.values()];
@@ -171,7 +173,7 @@
       '<div class="study-reminder-heading"><h3>Утренние напоминания</h3>'+
       '<span class="'+(enabled?"active":"inactive")+'">'+status+'</span></div>'+
       '<p class="study-reminder-lead">По расписанию повторений: <strong>'+
-      c.due+' из '+c.total+'</strong> карточек к повторению сегодня. Домашних заданий не выполнено: <strong>'+homeworkCount()+'</strong>.</p>'+
+      c.due+' карточек к повторению сегодня, '+c.total+' изученных всего</strong>. Домашних заданий не выполнено: <strong>'+homeworkCount()+'</strong>.</p>'+
       (c.next?'<p class="study-reminder-next">Следующее повторение: '+fmt(c.next)+'</p>':"")+
       '<div class="study-reminder-row"><label for="study-push-hour">Напоминать утром</label>'+
       '<select id="study-push-hour" aria-label="Час напоминания"'+(busy?' disabled':'')+'>'+options+'</select>'+
