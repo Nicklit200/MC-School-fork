@@ -43,6 +43,32 @@
       correct:[...reviewed.values()].filter(Boolean).length,
       wrong:[...reviewed.values()].filter(x=>!x).length};
   }
+  function countYesterdayPractice() {
+    const day=engine.plusDays(engine.isoDay(),-1);
+    const rows=read(fields.sessions,[]).filter(s=>s?.date===day &&
+      s.type==="PRACTICE" && Array.isArray(s.review))
+      .sort((a,b)=>String(a.completedAt||"").localeCompare(String(b.completedAt||"")));
+    const first=new Map();
+    for(const session of rows)for(const row of session.review)
+      if(row?.cardId && typeof row.correct==="boolean" && !first.has(row.cardId))
+        first.set(row.cardId,row.correct);
+    if(!first.size)return 0;
+    const progress=read(fields.progress,{});
+    let changed=0;
+    for(const [id,correct] of first){
+      const previous=progress[id];
+      const stamp=Date.parse(String(previous?.updatedAt||""));
+      if(Number.isFinite(stamp) && engine.isoDay(new Date(stamp))>=day)continue;
+      const review=engine.afterReview(previous,correct,day);
+      progress[id]={...previous,...review,lastCorrect:correct,updatedAt:day+"T12:00:00.000Z"};
+      changed++;
+    }
+    if(changed){
+      localStorage.setItem(fields.progress,JSON.stringify(progress));
+      localStorage.setItem(fields.pending,"1");
+    }
+    return changed;
+  }
   function showButtons() {
     const host = document.getElementById("flashcard-app");
     if (!host || host.querySelector("#quiz-transfer")) return;
@@ -74,6 +100,18 @@
     fileInput.type = "file";
     fileInput.accept = ".json,application/json";
     fileInput.hidden = true;
+    const repairButton=document.createElement("button");
+    repairButton.type="button";
+    repairButton.textContent="Засчитать вчерашнюю свободную тренировку";
+    repairButton.style.marginTop="8px";
+    repairButton.hidden=!summary.practice;
+    repairButton.addEventListener("click",()=>{
+      if(!confirm("Свободная тренировка обычно не меняет интервалы. Засчитать её вчерашние ответы с первой попытки, чтобы сегодня повторять ошибки?"))return;
+      const count=countYesterdayPractice();
+      alert(count?"Восстановлено карточек: "+count+". Сейчас страница обновится.":
+        "Ответы уже учтены или у них есть более свежий прогресс.");
+      if(count)location.reload();
+    });
     exportButton.addEventListener("click", () => {
       const syncToken=localStorage.getItem(fields.owner)||"";
       if(!/^[0-9a-f]{64}$/.test(syncToken)){
@@ -134,7 +172,7 @@
       }catch(error){alert("Не удалось прочитать копию: "+error.message);}
       finally{fileInput.value="";}
     });
-    section.append(title,description,report,exportButton,importButton,fileInput,warning);
+    section.append(title,description,report,repairButton,exportButton,importButton,fileInput,warning);
     host.append(section);
   }
   window.addEventListener("study-home-rendered",showButtons);
