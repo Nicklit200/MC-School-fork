@@ -214,7 +214,7 @@
     const sessions=storedHistory().filter(s=>s?.type==="SCHEDULED" &&
       /^\d{4}-\d{2}-\d{2}$/.test(s.date||"") && Array.isArray(s.review))
       .sort((a,b)=>String(a.date).localeCompare(String(b.date)) ||
-        String(a.completedAt||"").localeCompare(String(b.completedAt||""));
+        String(a.completedAt||"").localeCompare(String(b.completedAt||"")));
     let recovered=0;
     for(const session of sessions) for(const item of session.review) {
       if(typeof item?.cardId!=="string" || typeof item.correct!=="boolean")continue;
