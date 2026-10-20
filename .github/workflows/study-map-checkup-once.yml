@@ -25,6 +25,8 @@ jobs:
           s=s.replace("phone.goto(url)\n", "phone.goto(url)\n    phone.wait_for_function('window.studyBoardCards?.allExams?.().length>0 && window.CardQuizEngine')\n")
           s=s.replace("phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(force=True)", "phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(timeout=10000)")
           s=s.replace("page.locator('[data-action=\"home\"]').click()", "page.locator('[data-action=\"home\"]').first.click()")
+          s=s.replace("req=route.request\n", "req=route.request\n        cors_headers={'access-control-allow-origin':req.headers.get('origin','*'),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'authorization,content-type','access-control-max-age':'600'}\n")
+          s=s.replace('route.fulfill(status=', 'route.fulfill(headers=cors_headers,status=')
           p.write_text(s)
           PY
       - name: Syntax and scheduling gates
