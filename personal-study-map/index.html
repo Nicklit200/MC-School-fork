@@ -372,7 +372,32 @@
   <script src="./study-settings.js?v=20261017-1" defer></script>
   <script type="module" src="./app.js?v=20261017-percent-1"></script>
   <script src="./quiz-portable-backup.js?v=20261018-transfer-v3" defer></script>
-  <script type="module" src="./flashcards.js?v=20261020-global-due-v1"></script>
+  <script type="module" src="./flashcards.js?v=20261020-panel-recovery-v2"></script>
+  <script>
+  // Emergency panel opener: works even when the flashcards module fails to initialize.
+  // Capture only when the module has not handled the click by the next task.
+  (() => {
+    const buttons=["flashcard-toggle","flashcard-top-toggle","flashcard-sidebar-toggle"];
+    buttons.forEach(id=>{
+      const button=document.getElementById(id);
+      if(!button)return;
+      button.addEventListener("click",()=>{
+        const panel=document.getElementById("flashcard-panel");
+        const app=document.getElementById("flashcard-app");
+        const wasClosed=panel?.classList.contains("closed");
+        setTimeout(()=>{
+          if(!panel||!app||!wasClosed||!panel.classList.contains("closed"))return;
+          for(const other of ["inspector","review-panel","history-panel","study-calendar-panel","homework-panel"])
+            document.getElementById(other)?.classList.add("closed");
+          panel.classList.remove("closed");
+          if(!app.textContent.trim()){
+            app.textContent="Модуль карточек не запустился. Обнови страницу. Если проблема повторяется, сообщи об ошибке загрузки.";
+          }
+        },0);
+      },{capture:true});
+    });
+  })();
+  </script>
   <script type="module" src="./reminders.js?v=20261018-intervals-v2"></script>
 </body>
 </html>
