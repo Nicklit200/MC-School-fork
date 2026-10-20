@@ -45,7 +45,7 @@
   const SYNC_URL="https://personal-life-api-production.up.railway.app/api/quiz-sync";
   const OWNER_KEY="personal-study-map:owner-token:v1",PENDING_KEY="personal-study-map:pending-sync:v1";
   let busy=false,timer=null;
-  let lastSyncAt=null, lastSyncError=false;
+  let lastSyncAt=null, lastSyncError=false, lastVerifiedAt=null, lastVerifiedCount=0;
   function owner(){
     let value=localStorage.getItem(OWNER_KEY);
     if(!/^[a-f0-9]{64}$/.test(value||"")){
@@ -72,6 +72,16 @@
         overrides:getOverrides(),custom:getCustomCards(),sessions:storedHistory().slice(0,100)};
       const result=await remote("POST",data);
       if(result.ok){
+        // A successful POST is not enough: read back each saved card from PostgreSQL.
+        const check=await remote("GET");
+        const serverProgress=check.snapshot?.progress||{};
+        const missing=Object.entries(data.progress).filter(([id,record])=>{
+          const saved=serverProgress[id];
+          return !saved || String(saved.updatedAt||"")<String(record?.updatedAt||"");
+        });
+        if(missing.length)throw Error("Server verification failed for "+missing.length+" cards");
+        lastVerifiedAt=new Date().toISOString();
+        lastVerifiedCount=Object.keys(serverProgress).length;
         // Do not clear a newer pending write made while this request was in flight.
         if(JSON.stringify(data.progress)===JSON.stringify(getProgress()) &&
            JSON.stringify(data.sessions)===JSON.stringify(storedHistory().slice(0,100))){
@@ -479,7 +489,7 @@
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
       countBox("Нужно повторить",due.length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
-      countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+
+      countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+countBox("Подтверждено сервером",lastVerifiedAt?lastVerifiedCount:"Не проверено")+
       '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
       '<div class="quiz-actions">'+
@@ -496,7 +506,7 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
-      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(lastSyncError?"Нет связи с сервером. Результаты пока только на устройстве.":lastSyncAt?"Связь с сервером есть. Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение…")+(localStorage.getItem(PENDING_KEY)?" · Есть данные для отправки":"")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На телефоне результаты передаются серверу после завершения тренировки. Для доступа из ChatGPT потребуется отдельно подключить коннектор «Мои навыки».</small></div>'+
+      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(lastSyncError?"Нет связи с сервером. Результаты пока только на устройстве.":lastSyncAt?"Связь с сервером есть. Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение…")+(localStorage.getItem(PENDING_KEY)?" · Есть данные для отправки":"")+(lastVerifiedAt?" · Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):" · Сохранение ещё не подтверждено чтением из PostgreSQL")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На телефоне результаты передаются серверу после завершения тренировки. Для доступа из ChatGPT потребуется отдельно подключить коннектор «Мои навыки».</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
       '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 7 → 14 → 30 дней</div>'+
@@ -683,7 +693,7 @@
       (question.expiresAt!=null?'<strong id="quiz-timer" class="quiz-timer"></strong>':"")+
       '</div><div class="quiz-progress-track"><div style="width:'+
       Math.round((answered/total)*100)+'%"></div></div>'+
-      '<div class="quiz-question">'+esc(card.question)+'</div>'+
+      '<div class="quiz-question"><small>Карточка № '+esc(card.id)+'</small><div>'+esc(card.question)+'</div></div>'+
       '<div class="quiz-options">'+controls+'</div>'+
       (!feedback?'<div class="quiz-question-actions quiz-four-actions">'+
         '<button type="button" data-action="quick-known" class="quiz-quick-known"><span>✓ Знаю</span><small>Через 3 дня</small></button>'+
@@ -761,7 +771,7 @@
       '<button data-action="home" type="button">Пауза</button></div>'+
       '<div class="quiz-progress-row"><span>Завершено '+answered+' из '+total+'</span></div>'+
       '<div class="quiz-progress-track"><div style="width:'+Math.round(answered/total*100)+'%"></div></div>'+
-      '<div class="quiz-question">'+esc(last.question)+'</div><div class="quiz-options">'+
+      '<div class="quiz-question"><small>Карточка № '+esc(last.id)+'</small><div>'+esc(last.question)+'</div></div><div class="quiz-options">'+
       options.map((option,i)=>'<button class="quiz-option'+
         (option===feedback.correctAnswer?' correct':!feedback.correct&&option===selected?' wrong':'')+
         '" disabled type="button"><span class="quiz-option-letter">'+String.fromCharCode(65+i)+
@@ -886,7 +896,7 @@
         const progress=cardState(card,states);
         return '<div class="quiz-manage-row'+(card.hidden?' hidden-card':'')+
           (card.invalid?' invalid-card':'')+'">'+
-          '<strong>'+esc(card.question)+'</strong>'+
+          '<strong>'+esc(card.question)+'</strong>'+ '<small>Номер карточки: '+esc(card.id)+'</small>'+
           '<span>'+esc(card.skillTitle)+'</span>'+
           (card.invalid?'<small>Некорректная · не учитывается в тренировках и статистике</small>':
             '<small>Этап '+progress.repetitionNumber+'/7 · '+esc(labelDate(progress.dueDate))+
