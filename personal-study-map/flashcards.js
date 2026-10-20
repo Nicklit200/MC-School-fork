@@ -118,6 +118,16 @@
       if(ui.view==="home")renderHome();
     }catch(e){lastSyncError=true;console.warn("Quiz stays in local storage",e);}
   }
+  // Flush pending writes when leaving a page; refresh after returning from another device.
+  window.addEventListener("pagehide",()=>{
+    if(localStorage.getItem(PENDING_KEY))void sendSync();
+  });
+  // Periodic server refresh keeps a long-open tab in sync with the phone.
+  setInterval(()=>{
+    if(document.hidden||ui.session||busy)return;
+    if(localStorage.getItem(PENDING_KEY))void sendSync();
+    else void pullSync();
+  },30000);
   window.addEventListener("study-reviews-updated",queueSync);
   window.addEventListener("online",()=>void pullSync());
   window.addEventListener("visibilitychange",()=>{
@@ -458,6 +468,7 @@
     // A card counts as known after a successful scheduled review (stage >= 1).
     // Free practice does not affect this metric, consistent with scheduling.
     const progress = getProgress();
+    const globallyTracked=Object.keys(progress).length;
     const unseen = cards.filter(card => !progress[card.id]);
     const known = cards.filter(card => cardState(card,progress).repetitionNumber >= 1).length;
     const knownPercent = cards.length ? Math.round(known * 100 / cards.length) : 0;
@@ -468,7 +479,7 @@
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
       countBox("Нужно повторить",due.length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
-      countBox("Знаю карточек",knownPercent+"%")+
+      countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+
       '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
       '<div class="quiz-actions">'+
@@ -500,8 +511,10 @@
 
   function startSession(mode,group="due") {
     const context = getContext();
-    if (!context.exam || ui.session) return;
-    const source=visibleCards();
+    if (ui.session || (mode!=="SCHEDULED" && !context.exam)) return;
+    // Scheduled reviews are global, not limited to the currently selected exam.
+    const source=mode==="SCHEDULED" && group==="due" ?
+      allCards({disregardTopic:true}) : visibleCards();
     const today=engine.isoDay(),states=getProgress();
     const cards=mode==="SCHEDULED" ? source.filter(card =>
       group==="new" ? !states[card.id] :
