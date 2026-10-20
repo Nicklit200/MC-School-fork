@@ -41,7 +41,7 @@ export function AdminMindcraftiStudioPage() {
         ref={frame}
         title="Mindcrafti Stories Studio"
         srcDoc={studioHtml}
-        sandbox="allow-scripts allow-same-origin allow-downloads"
+        sandbox="allow-scripts allow-downloads"
         style={{ border: '1px solid #e7e9f0', borderRadius: 14, background: '#fff', flex: 1, minHeight: 730, width: '100%' }}
       />
       <p className="muted" style={{ margin: 0, fontSize: 12 }}>
