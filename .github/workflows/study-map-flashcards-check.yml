@@ -1,27 +1,37 @@
 name: Study Map flashcards checks
 on:
   push:
-    branches: [personal-study-map]
+    branches: [personal-study-map, study-map-checkup-20261020]
     paths:
       - 'personal-study-map/**'
       - '.github/workflows/study-map-flashcards-check.yml'
   pull_request:
     paths:
       - 'personal-study-map/**'
+      - '.github/workflows/study-map-flashcards-check.yml'
+permissions:
+  contents: read
+concurrency:
+  group: study-map-checks-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check all JavaScript syntax
+      - name: Check every JavaScript file
+        run: find personal-study-map -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+      - name: Module startup, calendar dates and card integrity
+        run: node --test personal-study-map/tests/*.test.mjs
+      - name: Install isolated test browsers
         run: |
-          find personal-study-map -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
-      - name: Test spaced repetition
-        run: node --test personal-study-map/tests/review-schedule.test.mjs
-      - name: Ensure flashcard module is included
-        run: |
-          grep -q 'id="flashcard-panel"' personal-study-map/index.html
-          grep -q 'src="./flashcards.js?' personal-study-map/index.html
+          python -m pip install -q playwright==1.55.0
+          python -m playwright install --with-deps chromium webkit > /tmp/browser-install.log 2>&1 || { tail -60 /tmp/browser-install.log; exit 1; }
+      - name: Desktop, mobile, tomorrow and offline recovery
+        run: python personal-study-map/tests/browser-checkup.py
+      - name: Verify the production image build gate
+        run: docker build -t study-map-verified personal-study-map
