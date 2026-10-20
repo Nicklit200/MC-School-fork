@@ -493,7 +493,7 @@
       (lesson?'<div class="quiz-last"><strong>Последний результат</strong><span>'+labelDate(lesson.date)+
         ' · '+lesson.correctFirstTry+' из '+lesson.totalCards+' с первой попытки</span></div>':"")+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
-      '<p class="quiz-storage-note">Карточки и история тренировки сохраняются в этом браузере. При включении уведомлений даты повторений также передаются серверу для расчёта напоминаний.</p>'+
+      '<p class="quiz-storage-note">Прогресс сохраняется в PostgreSQL Railway, а локальная копия нужна для работы без интернета. Чтобы история совпадала на компьютере и телефоне, подключи оба устройства одним секретным ключом. Не передавай его посторонним.</p>'+
       '<div id="study-reminder-settings" class="study-reminder-settings"></div>';
     window.dispatchEvent(new Event("study-home-rendered"));
   }
@@ -1124,7 +1124,30 @@
     if (!button || !host.contains(button) || button.disabled) return;
     const action=button.dataset.action;
     const id=button.dataset.id;
-    if (action==="home") {
+    if (action==="pair-export") {
+      // A bearer token grants access to all quiz history: show only on explicit request.
+      const key=owner();
+      window.prompt("Секретный ключ для другого устройства. Сохрани его в надёжном месте, никому не отправляй:",key);
+      return;
+    } else if (action==="pair-import") {
+      if(ui.session){ui.notice="Сначала заверши занятие.";renderHome();return;}
+      const key=window.prompt("Вставь секретный ключ с первого устройства (64 символа):");
+      if(key===null)return;
+      if(!/^[a-f0-9]{64}$/.test(key.trim())){ui.notice="Неверный формат ключа.";renderHome();return;}
+      if(key.trim()===owner()){ui.notice="Это устройство уже подключено.";renderHome();return;}
+      if(!window.confirm("Объединить историю этого устройства с историей другого? Текущие локальные данные сохранятся."))return;
+      // Preserve the old account key for recovery, then merge from the new account.
+      localStorage.setItem("personal-study-map:previous-owner-token:v1",owner());
+      localStorage.setItem(OWNER_KEY,key.trim());
+      localStorage.removeItem(PENDING_KEY);
+      lastSyncAt=null;
+      void pullSync().then(()=>{
+        queueSync();
+        ui.notice=lastSyncError?"Не удалось подключиться к серверу. Локальная история сохранена.":"Истории объединены. Отправляем на сервер.";
+        renderHome();
+      });
+      return;
+    } else if (action==="home") {
       cleanupTimers();ui.view="home";panel.classList.remove("quiz-fullscreen");document.body.classList.remove("quiz-learning-active");ui.feedback=null;ui.notice="";
       renderHome();
     } else if (action==="quick-known") {
