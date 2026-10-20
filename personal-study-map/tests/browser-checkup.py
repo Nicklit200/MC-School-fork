@@ -14,10 +14,11 @@ def run(browser,label):
     calls={'post':0,'get':0,'fail':False,'bad_readback':False,'corrupt_next':False}
     def api(route):
         req=route.request
+        cors_headers={'access-control-allow-origin':req.headers.get('origin','*'),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'authorization,content-type','access-control-max-age':'600'}
         if '/api/quiz-sync' not in req.url:
-            route.fulfill(status=200,content_type='application/json',body='[]');return
-        if req.method=='OPTIONS':route.fulfill(status=204);return
-        if calls['fail']:route.fulfill(status=503,body='unavailable');return
+            route.fulfill(headers=cors_headers,status=200,content_type='application/json',body='[]');return
+        if req.method=='OPTIONS':route.fulfill(headers=cors_headers,status=204);return
+        if calls['fail']:route.fulfill(headers=cors_headers,status=503,body='unavailable');return
         if req.method=='POST':
             calls['post']+=1
             body=req.post_data_json
@@ -32,13 +33,13 @@ def run(browser,label):
                 if x.get('id'):sessions[x['id']]=copy.deepcopy(x)
             cloud['sessions']=list(sessions.values())
             calls['corrupt_next']=calls['bad_readback']
-            route.fulfill(status=200,content_type='application/json',body=json.dumps({'ok':True}));return
+            route.fulfill(headers=cors_headers,status=200,content_type='application/json',body=json.dumps({'ok':True}));return
         calls['get']+=1
         payload=copy.deepcopy(cloud)
         if calls['corrupt_next']:
             for v in payload['snapshot']['progress'].values():v['dueDate']='2099-01-01'
             calls['corrupt_next']=False
-        route.fulfill(status=200,content_type='application/json',body=json.dumps(payload))
+        route.fulfill(headers=cors_headers,status=200,content_type='application/json',body=json.dumps(payload))
     context=browser.new_context(timezone_id='Europe/Berlin',viewport={'width':1440,'height':1000},service_workers='block')
     context.route('https://personal-life-api-production.up.railway.app/**',api)
     page=context.new_page();errors=[]
@@ -66,14 +67,15 @@ def run(browser,label):
     other=browser.new_context(timezone_id='Europe/Berlin',viewport={'width':390,'height':844},service_workers='block')
     other.route('https://personal-life-api-production.up.railway.app/**',api)
     other.add_init_script('localStorage.setItem('+json.dumps(O)+','+json.dumps(key)+');')
-    phone=other.new_page();phone.clock.set_fixed_time('2026-10-21T07:00:00Z');phone.goto(url)
+    phone=other.new_page();phone.on('pageerror',lambda e: print('EXPECTED injected network interruption:',str(e),flush=True) if calls.get('fault_window') and '/api/quiz-sync' in str(e) and 'access control checks' in str(e) else errors.append('phone: '+str(e)));phone.clock.set_fixed_time('2026-10-21T07:00:00Z');phone.goto(url)
+    phone.wait_for_function('window.studyBoardCards?.allExams?.().length>0 && window.CardQuizEngine')
     phone.wait_for_function('(key)=>Object.keys(JSON.parse(localStorage.getItem(key)||"{}")).length===2',arg=P,timeout=20000)
-    phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(force=True)
+    phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(timeout=10000)
     assert phone.locator('#flashcard-count').inner_text()=='1'
     phone.locator('[data-action="scheduled"]').click()
     assert 'qa-two' in phone.locator('.quiz-question').inner_text()
     print('PASS '+label+' fresh second device: tomorrow only error is due, stable ID retained',flush=True)
-    calls['fail']=True;phone.locator('[data-action="quick-known"]').click();phone.wait_for_timeout(200)
+    calls['fault_window']=True;calls['fail']=True;phone.locator('[data-action="quick-known"]').click();phone.wait_for_timeout(200)
     assert phone.evaluate('(key)=>localStorage.getItem(key)',Q)
     offline=phone.evaluate('(key)=>JSON.parse(localStorage.getItem(key))',P)
     phone.reload();phone.wait_for_function('window.CardQuizEngine')
@@ -84,7 +86,8 @@ def run(browser,label):
     page.evaluate("window.dispatchEvent(new Event('online'))")
     page.wait_for_function('(key)=>JSON.parse(localStorage.getItem(key))["qa-two"].dueDate==="2026-10-23"',arg=P,timeout=20000)
     print('PASS '+label+' offline/reload/reconnect and stale-tab synchronization',flush=True)
-    page.evaluate(fixture);page.locator('[data-action="home"]').click()
+    calls['fault_window']=False
+    page.evaluate(fixture);page.locator('[data-action="home"]').first.click()
     before=page.evaluate('(key)=>localStorage.getItem(key)',P)
     page.locator('[data-action="practice"]').click()
     page.locator('[data-action="quick-known"]').click();page.locator('[data-action="quick-known"]').click()

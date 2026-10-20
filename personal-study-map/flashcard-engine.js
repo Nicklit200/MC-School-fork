@@ -16,15 +16,19 @@ window.CardQuizEngine = (() => {
 
   function isoDay(date = new Date()) {
     const d = date instanceof Date ? date : new Date(date);
-    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
-      "-" + String(d.getDate()).padStart(2, "0");
+    if (!Number.isFinite(d.getTime())) throw new Error("Invalid review date");
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(d);
+    const get = key => parts.find(p => p.type === key).value;
+    return get("year") + "-" + get("month") + "-" + get("day");
   }
 
   function plusDays(day, amount) {
-    const parts = day.split("-").map(Number);
-    const date = new Date(parts[0], parts[1] - 1, parts[2], 12);
-    date.setDate(date.getDate() + amount);
-    return isoDay(date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Invalid calendar date");
+    const [year, month, date] = day.split("-").map(Number);
+    const value = new Date(Date.UTC(year, month - 1, date + amount, 12));
+    return value.toISOString().slice(0, 10);
   }
 
   function clampStage(stage) {
