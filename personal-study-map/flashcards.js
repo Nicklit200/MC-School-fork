@@ -71,12 +71,24 @@
       const data={progress:getProgress(),invalid:getInvalidCards(),deleted:getDeletedCards(),
         overrides:getOverrides(),custom:getCustomCards(),sessions:storedHistory().slice(0,100)};
       const result=await remote("POST",data);
-      if(result.ok){localStorage.removeItem(PENDING_KEY);lastSyncAt=new Date().toISOString();lastSyncError=false;}
+      if(result.ok){
+        // Do not clear a newer pending write made while this request was in flight.
+        if(JSON.stringify(data.progress)===JSON.stringify(getProgress()) &&
+           JSON.stringify(data.sessions)===JSON.stringify(storedHistory().slice(0,100))){
+          localStorage.removeItem(PENDING_KEY);
+        }
+        lastSyncAt=new Date().toISOString();lastSyncError=false;
+      }
     }catch(e){lastSyncError=true;console.warn("Sync retry on next visit",e);}
     finally{busy=false;}
   }
   async function pullSync(){
     try{
+      // Upload unsent local answers before reading a potentially stale snapshot.
+      if(localStorage.getItem(PENDING_KEY)){
+        await sendSync();
+        if(localStorage.getItem(PENDING_KEY))return;
+      }
       const response=await remote("GET");
       lastSyncAt=new Date().toISOString();lastSyncError=false;
       const payload=response.snapshot||{};
