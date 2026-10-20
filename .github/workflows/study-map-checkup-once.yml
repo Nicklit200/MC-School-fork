@@ -1,0 +1,39 @@
+name: Isolated Study Map checkup
+on:
+  push:
+    branches: [study-map-checkup-20261020]
+permissions:
+  contents: write
+jobs:
+  checkup:
+    if: github.ref == 'refs/heads/study-map-checkup-20261020'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare exact scoped changes
+        run: python ops/study-checkup/prepare.py
+      - name: Syntax and scheduling gates
+        run: |
+          find personal-study-map -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+          node --test personal-study-map/tests/*.test.mjs
+      - name: Install isolated browsers
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium webkit
+      - name: Browser startup and next-day recovery
+        run: python personal-study-map/tests/browser-checkup.py
+      - name: Verify production image gate
+        run: docker build -t study-map-checkup personal-study-map
+      - name: Commit only tested files to the isolated branch
+        run: |
+          git config user.name 'Study Map checkup'
+          git config user.email '78360431+Nicklit200@users.noreply.github.com'
+          git add personal-study-map/flashcards.js personal-study-map/flashcard-engine.js personal-study-map/index.html personal-study-map/Dockerfile
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(study-map): tested synchronization, Berlin dates and blocking build checks'
+            git push origin HEAD:study-map-checkup-20261020
+          fi
