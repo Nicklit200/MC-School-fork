@@ -224,12 +224,13 @@
   function allCards({includeHidden=false, includeInvalid=false, disregardTopic=false}={}) {
     const context = getContext();
     const exam = context.exam;
-    if (!exam) return [];
+    if (!exam && !disregardTopic) return [];
     const overrides = getOverrides();
     const invalid = getInvalidCards();
     const deleted = getDeletedCards();
     const out = [];
-    const skills = (exam.skills || []).filter(skill =>
+    const exams = disregardTopic ? (window.studyBoardCards?.allExams?.() || []) : [exam];
+    const skills = exams.flatMap(item => item?.skills || []).filter(skill =>
       disregardTopic || context.topicId === "all" || skill.topicId === context.topicId
     );
     const skillById = new Map(skills.map(skill => [skill.id, skill]));
@@ -296,12 +297,12 @@
     const today = engine.isoDay();
     const states = getProgress();
     // Newly imported and never-studied cards must not enter reviews.
-    return visibleCards().filter(card =>
+    return allCards({disregardTopic:true}).filter(card =>
       Boolean(states[card.id]) && cardState(card,states).dueDate <= today);
   }
 
   function updateBadge() {
-    const count = allCards({disregardTopic:true}).length;
+    const count = dueCards().length;
     for (const id of ["flashcard-count","flashcard-top-count","flashcard-sidebar-count"]) {
       const counter = document.getElementById(id);
       if (!counter) continue;
