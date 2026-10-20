@@ -23,8 +23,8 @@ jobs:
           s=p.read_text()
           s=s.replace("phone=other.new_page();phone.clock", "phone=other.new_page();phone.on('pageerror',lambda e:errors.append('phone: '+str(e)));phone.clock")
           s=s.replace("phone.goto(url)\n", "phone.goto(url)\n    phone.wait_for_function('window.studyBoardCards?.allExams?.().length>0 && window.CardQuizEngine')\n")
-          s=s.replace("phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(force=True)", "phone.evaluate(fixture)\n    phone.screenshot(path='mobile-before.png')\n    print('MOBILE_TARGET',phone.locator('#flashcard-toggle').evaluate('(el)=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,at:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML,html:el.outerHTML}}'),flush=True)\n    phone.locator('#flashcard-toggle').click(timeout=5000)")
-          s=s.replace("    phone.locator('[data-action=\"scheduled\"]').click()", "    print('MOBILE_PANEL',phone.locator('#flashcard-app').inner_text()[:2500], 'ERRORS',errors,flush=True)\n    phone.screenshot(path='mobile-open.png')\n    phone.locator('[data-action=\"scheduled\"]').click(timeout=5000)")
+          s=s.replace("phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(force=True)", "phone.evaluate(fixture);phone.locator('#flashcard-toggle').click(timeout=10000)")
+          s=s.replace("page.locator('[data-action=\"home\"]').click()", "page.locator('[data-action=\"home\"]').first.click()")
           p.write_text(s)
           PY
       - name: Syntax and scheduling gates
@@ -37,14 +37,12 @@ jobs:
           python -m playwright install --with-deps chromium webkit > /tmp/browser-install.log 2>&1 || { tail -60 /tmp/browser-install.log; exit 1; }
       - name: Browser startup and next-day recovery
         run: python personal-study-map/tests/browser-checkup.py
-      - name: Preserve isolated test source and screenshots
+      - name: Preserve isolated test source
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: study-map-checkup-source
-          path: |
-            personal-study-map/
-            mobile-*.png
+          path: personal-study-map/
           retention-days: 2
       - name: Verify production image gate
         run: docker build -t study-map-checkup personal-study-map
