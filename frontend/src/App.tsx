@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
+import { AdminMindcraftiStudioPage } from './pages/admin/AdminMindcraftiStudioPage';
 import { LearningTimeAdminPage } from './pages/admin/LearningTimeAdminPage';
 import { LearningTimeStudentPage } from './pages/admin/LearningTimeStudentPage';
 import { SkillsPage } from './pages/SkillsPage';
@@ -71,6 +72,7 @@ export function App() {
       <Route path="/admin/site-visits" element={<ProtectedRoute role="ADMIN"><Layout><SiteVisitsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute role="ADMIN"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/stories" element={<ProtectedRoute role="ADMIN"><Layout><AdminStoryTemplatesPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/studio" element={<ProtectedRoute role="ADMIN"><Layout><AdminMindcraftiStudioPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/prompts" element={<ProtectedRoute role="ADMIN"><Layout><AdminPromptSettingsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/teachers/:teacherId/lessons/:eventId" element={<ProtectedRoute role="ADMIN"><Layout><AdminLessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
 
