@@ -161,6 +161,8 @@ describe('WhiteboardPanel', () => {
     await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(3));
     const firstCanvas = screen.getAllByTestId('canvas')[0];
     expect(screen.queryByRole('button', { name: 'Следующая страница' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Страницы документа' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Добавить страницу' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
     const toggle = screen.getByRole('switch', { name: 'Непрерывная прокрутка' });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
@@ -179,7 +181,8 @@ describe('WhiteboardPanel', () => {
     await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
     await act(async () => { await pageCanvasProps.get('WHITEBOARD:board-1:0')!.onCommit({ kind: 'pen', points: [[.1, .2]] }); });
     const firstCanvas = screen.getAllByTestId('canvas')[0];
-    await user.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Добавить пустую страницу' }));
     await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
     await act(async () => { await pageCanvasProps.get('WHITEBOARD:board-1:1')!.onCommit({ kind: 'pen', points: [[.7, .8]] }); });
     expect(api.appendAnnotation.mock.calls.filter(call => call[3] === 'ADD').map(call => call[1])).toEqual(['doc-0', 'doc-1']);
@@ -203,7 +206,8 @@ describe('WhiteboardPanel', () => {
     mount('host', { document: { pageCount: 1 } as never });
     const list = await screen.findByRole('region', { name: 'Страницы доски' });
     await waitFor(() => expect((list.querySelector('article') as HTMLElement).style.height).toBe('200px'));
-    await userEvent.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Добавить' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Добавить пустую страницу' }));
     const second = list.querySelectorAll('article')[1] as HTMLElement;
     expect(second.style.height).toBe('500px');
     expect(pageCanvasProps.get('WHITEBOARD:board-1:1')!.sourceAspect).toBe(210 / 297);
@@ -230,16 +234,16 @@ describe('WhiteboardPanel', () => {
       act(() => notify(elements.map(target => ({ target, isIntersecting: true })) as unknown as IntersectionObserverEntry[], {} as IntersectionObserver));
       await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
       fireEvent.scroll(list, { target: { scrollTop: 550 } });
-      expect(screen.getByRole('status', { name: 'Страница 2 из 3' })).toHaveTextContent('2 / 3');
+      expect(screen.getByRole('article', { name: 'Страница 2 из 3' })).toHaveAttribute('aria-current', 'page');
       await act(async () => { await pageCanvasProps.get('WHITEBOARD:board-1:1')!.onCommit({ kind: 'pen', points: [[.4, .5]] }); });
       expect(api.appendAnnotation.mock.calls.find(call => call[3] === 'ADD')?.[1]).toBe('doc-1');
       await userEvent.click(screen.getByRole('button', { name: 'Отменить' }));
       await waitFor(() => expect(api.appendAnnotation.mock.calls.some(call => call[1] === 'doc-1' && call[3] === 'UNDO')).toBe(true));
       fireEvent.pointerDown(elements[1], { pointerId: 1, pointerType: 'touch' });
       fireEvent.scroll(list, { target: { scrollTop: 1100 } });
-      expect(screen.getByRole('status', { name: 'Страница 2 из 3' })).toBeInTheDocument();
+      expect(screen.getByRole('article', { name: 'Страница 2 из 3' })).toHaveAttribute('aria-current', 'page');
       fireEvent.pointerUp(elements[1], { pointerId: 1, pointerType: 'touch' });
-      expect(screen.getByRole('status', { name: 'Страница 3 из 3' })).toBeInTheDocument();
+      expect(screen.getByRole('article', { name: 'Страница 3 из 3' })).toHaveAttribute('aria-current', 'page');
     } finally { vi.unstubAllGlobals(); vi.stubGlobal('ResizeObserver', FakeResizeObserver); }
   });
 
@@ -277,11 +281,11 @@ describe('WhiteboardPanel', () => {
       // More of page one exists in the physical viewport, but page two has
       // more content visible between the toolbar and dock.
       await act(async () => { fireEvent.scroll(list, { target: { scrollTop: 150 } }); });
-      expect(screen.getByRole('status', { name: 'Страница 2 из 3' })).toBeInTheDocument();
+      expect(screen.getByRole('article', { name: 'Страница 2 из 3' })).toHaveAttribute('aria-current', 'page');
       await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
       await act(async () => { await Promise.resolve(); });
       await act(async () => { handlers[VIEW_TOPIC]({ event: hostView({ page: 2 }), senderIdentity: 'teacher|tab' }); });
-      expect(screen.getByRole('status', { name: 'Страница 3 из 3' })).toBeInTheDocument();
+      expect(screen.getByRole('article', { name: 'Страница 3 из 3' })).toHaveAttribute('aria-current', 'page');
       const visibleTop = list.scrollTop + 160, visibleBottom = list.scrollTop + 600 - 120;
       expect(elements[2].offsetTop).toBeGreaterThanOrEqual(visibleTop);
       expect(elements[2].offsetTop + elements[2].offsetHeight).toBeLessThanOrEqual(visibleBottom);

@@ -510,16 +510,11 @@ export function WhiteboardPanel({
       </div>
 
       <div ref={stageRef} className="whiteboard__stage">
-      <div className="whiteboard__topline-pages">
-        {continuous ? <nav className="page-nav" aria-label={t('onlineClass.board.page.nav')}>
-          <span className="page-nav__label" role="status" aria-live="polite"
-            aria-label={t('onlineClass.board.page.current', { current: pages.current + 1, total: pages.count })}>{pages.current + 1} / {pages.count}</span>
-          {(isHost || personal) && canAnnotate && <button type="button" className="page-nav__add" disabled={locked}
-            aria-label={t('onlineClass.board.page.add')} onClick={() => setPages(addPage)}>+</button>}
-        </nav> : <PageNavigator current={pages.current} count={pages.count} disabled={locked}
+      {!continuous && <div className="whiteboard__topline-pages">
+        <PageNavigator current={pages.current} count={pages.count} disabled={locked}
           onPrevious={() => setPages(previousPage)} onNext={() => setPages(nextPage)}
-          onAdd={(isHost || personal) && canAnnotate ? () => setPages(addPage) : undefined} />}
-      </div>
+          onAdd={(isHost || personal) && canAnnotate ? () => setPages(addPage) : undefined} />
+      </div>}
 
         <div ref={scrollRef} className={`whiteboard__pages${continuous ? ' whiteboard__pages--continuous' : ' whiteboard__pages--paged'}${locked ? ' whiteboard__pages--locked' : ''}`}
           role={continuous ? 'region' : undefined} aria-label={continuous ? (language === 'DE' ? 'Unterrichtsseiten' : 'Страницы доски') : undefined}
@@ -532,6 +527,7 @@ export function WhiteboardPanel({
           {Array.from({ length: pages.count }, (_, index) => <article key={`${targetType}:${targetId}:${index}`}
             ref={element => { if (element) pageElements.current.set(index, element); else pageElements.current.delete(index); }}
             className="whiteboard__page" data-page-index={index} hidden={!continuous && index !== pages.current}
+            aria-current={index === pages.current ? 'page' : undefined}
             aria-label={t('onlineClass.board.page.current', { current: index + 1, total: pages.count })}
             style={continuous ? { height: Math.min(pageHeight, pageWidth / (pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT))) } : undefined}>
             {(visitedPages.has(index) || index === pages.current) && <WhiteboardPageSurface
