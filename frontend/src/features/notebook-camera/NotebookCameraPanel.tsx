@@ -156,7 +156,7 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
       <option value="" disabled>Выберите камеру</option>
       {activeCameras.map(camera => <option key={camera.cameraId} value={camera.cameraId}>{camera.ownerName} · {camera.status === 'CONNECTED' ? 'телефон подключён' : 'ждём телефон'}</option>)}
     </select></label>}
-    {current ? <NotebookCameraViewer key={current.cameraId} cameraId={current.cameraId} /> : <p className="muted">Подключите телефон, чтобы увидеть тетрадь, выровнять лист и делать пометки поверх видео.</p>}
+    {current ? <NotebookCameraViewer key={current.cameraId} cameraId={current.cameraId} ownerId={current.ownerId} /> : <p className="muted">Подключите телефон, чтобы увидеть тетрадь, выровнять лист и делать пометки поверх видео.</p>}
   </section>;
 }
 

@@ -389,14 +389,17 @@ describe('OnlineClassRoom', () => {
     await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
     const paper = await screen.findByTestId('board-personal-u1');
     const video = document.createElement('video');
+    const view = { type: 'document-view', version: 1, corners: null, ratio: null, turn: 2, sourceAspect: 16 / 9 };
+    const renderer = {};
     act(() => {
       notebookFixture.viewerProps.get('camera-u1').onVideoAvailableChange(true);
-      notebookFixture.viewerProps.get('camera-u1').onBoardVideoChange({ video, width: 1920, height: 1080 });
+      notebookFixture.viewerProps.get('camera-u1').onBoardVideoChange({ video: document.createElement('canvas'), width: 1080, height: 1920,
+        rawVideo: video, rawWidth: 1920, rawHeight: 1080, view, renderer });
     });
     const camera = await screen.findByTestId('board-personal-u1-camera');
     const props = boardProps.filter(p => p.targetType === 'NOTEBOOK_CAMERA').at(-1)!;
     expect(props).toMatchObject({ targetId: 'personal-u1', isHost: true, canAnnotate: true, active: true,
-      liveBackground: { source: video, width: 1920, height: 1080 } });
+      liveBackground: { source: video, width: 1920, height: 1080, notebookView: { view, rawWidth: 1920, rawHeight: 1080, renderer } } });
     expect(props.document).toBeUndefined();
     expect(props.observedPage).toBeUndefined();
     expect(props.onSaveLessonDocuments).toBeUndefined();

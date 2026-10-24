@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,15 @@ import { penOutline, tracePenOutline } from './freehand';
 import { attachTabletInkInput, detectTabletInkBackend, getTabletInkPlatform } from '../../lib/tabletInkInput';
 import { normalizedTextSize, shapeTextSizePx, textStyleFor } from './textStyles';
 import { TabletBoardNavigation } from './tabletBoardNavigation';
+import type { DocumentRenderer } from '../notebook-camera/cameraModules';
+import {
+  createNotebookProjection,
+  notebookCanvasSource,
+  notebookRawToScreen,
+  notebookScreenToRaw,
+  paintNotebookProjection,
+  type NotebookCameraGeometry,
+} from './notebookCameraGeometry';
 
 export type Tool =
   | 'pen'
@@ -90,6 +100,8 @@ interface Props {
   navigationLocked?: boolean;
   /** Rendered page content (PDF page) under the marks. */
   background?: CanvasImageSource | null;
+  /** Project the raw camera plus every annotation together, without changing stored coordinates. */
+  notebookView?: NotebookCameraGeometry | null;
   /** Page fill shares the background geometry and cannot be removed by erasers. */
   paperColor?: string | null;
   /** Redraw only the background layer while a live video/canvas is visible. */
@@ -138,6 +150,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     onScrollGesture,
     navigationLocked = false,
     background = null,
+    notebookView = null,
     paperColor = null,
     backgroundLive = false,
     active = true,
@@ -164,6 +177,19 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const stageRef = useRef<Konva.Stage | null>(null);
   const backgroundLayerRef = useRef<Konva.Layer | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const projectionKey = notebookView ? JSON.stringify(notebookView.view) : '';
+  const projection = useMemo(() => createNotebookProjection(notebookView),
+    [notebookView?.renderer, notebookView?.rawWidth, notebookView?.rawHeight, projectionKey]);
+  const projectionRef = useRef(projection);
+  projectionRef.current = projection;
+  const sceneViewport = projection?.rawSize ?? viewport;
+  const sceneAspect = projection ? notebookView!.rawWidth / notebookView!.rawHeight : sourceAspect;
+  const projectedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const projectorRef = useRef<{ renderer: DocumentRenderer; renderFrame: () => void } | null>(null);
+  const projectionPainted = useRef(false);
+  const [projectionReady, setProjectionReady] = useState(false);
+  const [projectionError, setProjectionError] = useState(false);
+  const [projectionAttempt, setProjectionAttempt] = useState(0);
   const [draft, setDraft] = useState<Shape | null>(null);
   type PendingInk = { id: string; page: string; shape: Shape; status: 'saving' | 'saved' | 'failed' };
   const [pendingInk, setPendingInk] = useState<PendingInk[]>([]);
@@ -182,21 +208,117 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const dragDeltaRef = useRef<{ dx: number; dy: number } | null>(null);
 
   // Latest values for the long-lived gesture controller and its callbacks.
-  const live = useRef({ tool, color, strokeWidth, eraserMode, readOnly, view, viewport, sourceAspect, shapes, actorId });
-  live.current = { tool, color, strokeWidth, eraserMode, readOnly, view, viewport, sourceAspect, shapes, actorId };
+  const effectiveReadOnly = readOnly || Boolean(notebookView && (!projection || !projectionReady || projectionError));
+  const live = useRef({ tool, color, strokeWidth, eraserMode, readOnly: effectiveReadOnly, view, viewport, sourceAspect, shapes, actorId, projection });
+  live.current = { tool, color, strokeWidth, eraserMode, readOnly: effectiveReadOnly, view, viewport, sourceAspect, shapes, actorId, projection };
 
   useImperativeHandle(ref, () => ({
-    toDataURL: (mimeType = 'image/png') => stageRef.current?.toDataURL({ pixelRatio: 1, mimeType, quality: 0.9 }) ?? null,
+    toDataURL: (mimeType = 'image/png') => {
+      if (projectionRef.current) {
+        projectorRef.current?.renderFrame();
+        return projectionPainted.current ? projectedCanvasRef.current?.toDataURL(mimeType, 0.9) ?? null : null;
+      }
+      return stageRef.current?.toDataURL({ pixelRatio: 1, mimeType, quality: 0.9 }) ?? null;
+    },
     getSize: () => live.current.viewport,
   }));
 
   useEffect(() => {
     const layer = backgroundLayerRef.current;
-    if (!active || !backgroundLive || !background || !layer) return;
+    if (projection || !active || !backgroundLive || !background || !layer) return;
     const animation = new Konva.Animation(() => {}, layer);
     animation.start();
     return () => { animation.stop(); };
-  }, [active, backgroundLive, background]);
+  }, [active, backgroundLive, background, Boolean(projection)]);
+
+  // The Konva scene remains in canonical raw-camera space. The display canvas
+  // is the single projective warp of its complete video/marks/selection layers.
+  useLayoutEffect(() => {
+    const currentProjection = projectionRef.current;
+    const output = projectedCanvasRef.current;
+    const stage = stageRef.current;
+    projectionPainted.current = false;
+    setProjectionReady(false);
+    setProjectionError(false);
+    if (!currentProjection || !notebookView || !output || !stage) return;
+    let disposed = false;
+    const raw = document.createElement('canvas');
+    raw.width = currentProjection.rawSize.width; raw.height = currentProjection.rawSize.height;
+    const context = raw.getContext('2d');
+    const fail = () => {
+      if (disposed) return;
+      projectionPainted.current = false; setProjectionReady(false); setProjectionError(true);
+      output.getContext('2d')?.clearRect(0, 0, output.width, output.height);
+    };
+    if (!context) { fail(); return; }
+    let renderer: DocumentRenderer;
+    let configured = '';
+    const ratios = stage.getLayers().map(layer => ({ layer, ratio: layer.getCanvas().getPixelRatio() }));
+    // The raw stage already renders at source resolution; extra device pixels
+    // would consume memory without adding detail to the final projection.
+    for (const { layer } of ratios) layer.getCanvas().setPixelRatio(1);
+    try {
+      renderer = new notebookView.renderer.LiveDocumentRenderer(notebookCanvasSource(raw), document.createElement('canvas'), {
+        maxDimension: 1920,
+        onFrame: canvas => {
+          const mapping = projectionRef.current;
+          if (disposed || !mapping) return;
+          try {
+            if (paintNotebookProjection(output, canvas, live.current.viewport, live.current.view, mapping.aspect)) {
+              projectionPainted.current = true; setProjectionReady(true); setProjectionError(false);
+            }
+          } catch { fail(); }
+        },
+        onError: fail,
+      });
+    } catch {
+      fail();
+      return () => { disposed = true; for (const { layer, ratio } of ratios) layer.getCanvas().setPixelRatio(ratio); };
+    }
+    const renderFrame = () => {
+      const mapping = projectionRef.current;
+      if (disposed || !mapping) return;
+      try {
+        stage.draw();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.globalCompositeOperation = 'source-over';
+        context.clearRect(0, 0, raw.width, raw.height);
+        // Erasing has already affected only the marks layer; compositing that
+        // transparent layer over the camera cannot erase the source frame.
+        for (const layer of stage.getLayers()) context.drawImage(layer.getCanvas()._canvas, 0, 0, raw.width, raw.height);
+        const key = JSON.stringify(mapping.view);
+        if (configured !== key) { configured = key; renderer.setView(mapping.view); }
+        else renderer.render();
+      } catch { fail(); }
+    };
+    projectorRef.current = { renderer, renderFrame };
+    renderFrame();
+    return () => {
+      disposed = true; renderer.stop();
+      if (projectorRef.current?.renderer === renderer) projectorRef.current = null;
+      projectionPainted.current = false;
+      for (const { layer, ratio } of ratios) layer.getCanvas().setPixelRatio(ratio);
+    };
+  }, [Boolean(projection), notebookView?.renderer, projection?.rawSize.width, projection?.rawSize.height, projectionAttempt]);
+
+  useLayoutEffect(() => {
+    projectorRef.current?.renderFrame();
+  }, [projection, shapes, draft, pendingInk, remoteDrafts, ownLaser, lasers, selectedId, dragDelta,
+    viewport.width, viewport.height, view.zoom, view.panX, view.panY, background, paperColor]);
+
+  useEffect(() => {
+    if (!projection || !active) return;
+    let job = 0, previous = 0;
+    const tick = (time: number) => {
+      const current = projectorRef.current;
+      const runtime = current?.renderer as (DocumentRenderer & { gl?: unknown; renderMs?: number }) | undefined;
+      const interval = !runtime?.gl && projectionRef.current?.view.corners ? Math.max(100, (runtime?.renderMs ?? 0) * 1.6) : 30;
+      if (time - previous >= interval) { previous = time; current?.renderFrame(); }
+      job = requestAnimationFrame(tick);
+    };
+    job = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(job);
+  }, [Boolean(projection), active]);
 
   // ResizeObserver updates the canvas dimensions whenever a teacher opens the
   // answers column. Annotations remain normalized; only pixel pan is rescaled
@@ -230,14 +352,19 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
 
   /** Local pixel → normalized page coordinate, through the current zoom/pan. */
   const toPage = useCallback((local: Point) => {
-    const { view: currentView, viewport: size, sourceAspect: aspect } = live.current;
-    const point = toNormalized(screenToBoard(local, currentView), size, aspect);
+    const { view: currentView, viewport: size, sourceAspect: aspect, projection: mapping } = live.current;
+    const point = mapping ? notebookScreenToRaw(local, mapping, size, currentView)
+      : toNormalized(screenToBoard(local, currentView), size, aspect);
     // Exactly the same stable positions are used for instant display, LiveKit
     // updates, persistence and PDF export. Avoid 16-digit float packets.
     return { x: Math.round(point.x * 10000) / 10000, y: Math.round(point.y * 10000) / 10000 };
   }, []);
 
   const aspectOfBoard = () => {
+    if (live.current.projection) {
+      const { width, height } = live.current.projection.rawSize;
+      return width / height;
+    }
     const { viewport: size, sourceAspect: aspect } = live.current;
     const box = letterbox(size, aspect);
     return box.height > 0 ? box.width / box.height : 1;
@@ -646,7 +773,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       spaceHeld.current = true;
       event.preventDefault();
     }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && !readOnly) {
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && !live.current.readOnly) {
       onEraseShape?.(selectedId);
       setSelectedId(null);
     }
@@ -671,7 +798,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     textEditRef.current = null;
     setTextEdit(null);
     const text = value.trim();
-    if (!edit || !text || readOnly) return;
+    if (!edit || !text || live.current.readOnly) return;
     commitInk({ kind: 'text', x: edit.nx, y: edit.ny, text: text.slice(0, 500),
       size: normalizedTextSize(textFontSize), font: textFont, bold: textBold, color });
   };
@@ -684,19 +811,19 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
 
   const flatten = (points: [number, number][]) =>
     points.flatMap(([x, y]) => {
-      const pixel = toPixels({ x, y }, viewport, sourceAspect);
+      const pixel = toPixels({ x, y }, sceneViewport, sceneAspect);
       return [pixel.x, pixel.y];
     });
 
   const renderShape = (key: string, shape: Shape, dim = false) => {
     const stroke = shape.color ?? '#111111';
     // Stroke width is normalized to the surface, so it scales with the view.
-    const width = Math.max(1, (shape.width ?? 0.004) * viewport.width);
+    const width = Math.max(1, (shape.width ?? 0.004) * sceneViewport.width);
     const opacity = (shape.kind === 'highlighter' ? 0.35 : 1) * (dim ? 0.7 : 1);
 
     switch (shape.kind) {
       case 'pen': {
-        const outline = penOutline(shape, viewport, sourceAspect);
+        const outline = penOutline(shape, sceneViewport, sceneAspect);
         return <KonvaShape key={key} fill={stroke} opacity={opacity}
           sceneFunc={(context, node) => { if (tracePenOutline(context, outline)) context.fillStrokeShape(node); }} />;
       }
@@ -717,8 +844,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         );
       case 'line':
       case 'arrow': {
-        const from = toPixels({ x: shape.x1 ?? 0, y: shape.y1 ?? 0 }, viewport, sourceAspect);
-        const to = toPixels({ x: shape.x2 ?? 0, y: shape.y2 ?? 0 }, viewport, sourceAspect);
+        const from = toPixels({ x: shape.x1 ?? 0, y: shape.y1 ?? 0 }, sceneViewport, sceneAspect);
+        const to = toPixels({ x: shape.x2 ?? 0, y: shape.y2 ?? 0 }, sceneViewport, sceneAspect);
         const points = [from.x, from.y, to.x, to.y];
         return shape.kind === 'arrow' ? (
           <Arrow key={key} points={points} stroke={stroke} fill={stroke} strokeWidth={width} opacity={opacity} />
@@ -727,8 +854,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         );
       }
       case 'rect': {
-        const origin = toPixels({ x: shape.x ?? 0, y: shape.y ?? 0 }, viewport, sourceAspect);
-        const box = letterbox(viewport, sourceAspect);
+        const origin = toPixels({ x: shape.x ?? 0, y: shape.y ?? 0 }, sceneViewport, sceneAspect);
+        const box = letterbox(sceneViewport, sceneAspect);
         return (
           <Rect
             key={key}
@@ -743,8 +870,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         );
       }
       case 'ellipse': {
-        const origin = toPixels({ x: shape.x ?? 0, y: shape.y ?? 0 }, viewport, sourceAspect);
-        const box = letterbox(viewport, sourceAspect);
+        const origin = toPixels({ x: shape.x ?? 0, y: shape.y ?? 0 }, sceneViewport, sceneAspect);
+        const box = letterbox(sceneViewport, sceneAspect);
         return (
           <Ellipse
             key={key}
@@ -759,8 +886,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         );
       }
       case 'text': {
-        const origin = toPixels({ x: shape.x ?? 0, y: shape.y ?? 0 }, viewport, sourceAspect);
-        const box = letterbox(viewport, sourceAspect);
+        const origin = toPixels({ x: shape.x ?? 0, y: shape.y ?? 0 }, sceneViewport, sceneAspect);
+        const box = letterbox(sceneViewport, sceneAspect);
         return (
           <Text
             key={key}
@@ -796,7 +923,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     selectedShape && dragDelta ? translateShape(selectedShape.shape, dragDelta.dx, dragDelta.dy) : null;
   const selectionBounds = (movedShape ?? selectedShape?.shape) && shapeBounds(movedShape ?? selectedShape!.shape);
 
-  const backgroundBox = letterbox(viewport, sourceAspect);
+  const backgroundBox = letterbox(sceneViewport, sceneAspect);
+  const textPosition = textEdit && projection ? notebookRawToScreen({ x: textEdit.nx, y: textEdit.ny }, projection, viewport, view) : textEdit?.px;
+  const textBoxHeight = projection ? letterbox(viewport, projection.aspect).height * view.zoom : backgroundBox.height;
 
   return (
     <div
@@ -814,16 +943,19 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         spaceHeld.current = false;
       }}
       onContextMenu={(event) => event.preventDefault()}
-      style={{ touchAction: 'none' }}
+      style={{ touchAction: 'none', overflow: projection ? 'hidden' : undefined }}
     >
+      {projection && <canvas ref={projectedCanvasRef} aria-hidden="true" data-notebook-projection=""
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />}
       <Stage
         ref={stageRef}
-        width={viewport.width}
-        height={viewport.height}
-        x={view.panX}
-        y={view.panY}
-        scaleX={view.zoom}
-        scaleY={view.zoom}
+        width={sceneViewport.width}
+        height={sceneViewport.height}
+        x={projection ? 0 : view.panX}
+        y={projection ? 0 : view.panY}
+        scaleX={projection ? 1 : view.zoom}
+        scaleY={projection ? 1 : view.zoom}
+        style={projection ? { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' } : undefined}
         listening={false}
       >
         {/* The page sits on its own layer: partial-erase marks cut through the
@@ -853,8 +985,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         <Layer listening={false}>
           {selectionBounds && (
             <Rect
-              x={toPixels({ x: selectionBounds.minX, y: selectionBounds.minY }, viewport, sourceAspect).x - 6}
-              y={toPixels({ x: selectionBounds.minX, y: selectionBounds.minY }, viewport, sourceAspect).y - 6}
+              x={toPixels({ x: selectionBounds.minX, y: selectionBounds.minY }, sceneViewport, sceneAspect).x - 6}
+              y={toPixels({ x: selectionBounds.minX, y: selectionBounds.minY }, sceneViewport, sceneAspect).y - 6}
               width={(selectionBounds.maxX - selectionBounds.minX) * backgroundBox.width + 12}
               height={(selectionBounds.maxY - selectionBounds.minY) * backgroundBox.height + 12}
               stroke="#0353a4"
@@ -864,19 +996,25 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
           )}
           {ownLaser && (
             <Circle
-              x={toPixels(ownLaser, viewport, sourceAspect).x}
-              y={toPixels(ownLaser, viewport, sourceAspect).y}
+              x={toPixels(ownLaser, sceneViewport, sceneAspect).x}
+              y={toPixels(ownLaser, sceneViewport, sceneAspect).y}
               radius={7 / view.zoom}
               fill="#d62828"
               opacity={0.85}
             />
           )}
           {lasers.map((laser) => {
-            const at = toPixels({ x: laser.x, y: laser.y }, viewport, sourceAspect);
+            const at = toPixels({ x: laser.x, y: laser.y }, sceneViewport, sceneAspect);
             return <Circle key={laser.id} x={at.x} y={at.y} radius={7 / view.zoom} fill="#d62828" opacity={0.85} />;
           })}
         </Layer>
       </Stage>
+
+      {projectionError && <div className="whiteboard__ink-save-alert" role="alert" data-tablet-no-ink=""
+        onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>
+        <span>Не удалось обработать тетрадь. Повторите загрузку кадра.</span>
+        <button type="button" onClick={event => { event.stopPropagation(); setProjectionAttempt(current => current + 1); }}>Повторить</button>
+      </div>}
 
       {pendingOnPage.some((entry) => entry.status === 'failed') && (
         <div className="whiteboard__ink-save-alert" role="alert" data-tablet-no-ink=""
@@ -895,10 +1033,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         <textarea
           ref={focusTextInput}
           className="whiteboard__text-input"
-          style={{ left: textEdit.px.x, top: textEdit.px.y, color,
+          style={{ left: textPosition?.x, top: textPosition?.y, color,
             fontFamily: textStyleFor(textFont, textBold).fontFamily,
             fontWeight: textBold ? 700 : 400,
-            fontSize: Math.max(12, textFontSize * (backgroundBox.height / 800)) }}
+            fontSize: Math.max(12, textFontSize * (textBoxHeight / 800)) }}
           aria-label="Text"
           placeholder="Текст / Text..."
           rows={2}

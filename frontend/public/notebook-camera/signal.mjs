@@ -172,8 +172,8 @@ export async function setCameraFocus(track,action,value){
 
 // Full source frame is kept. CPU mode lowers cadence, not pixel dimensions.
 export class LiveDocumentRenderer {
- constructor(video,canvas,{maxDimension=1920,onError=()=>{},onCanvasReplace=()=>{},force2D=false}={}){
-  Object.assign(this,{video,canvas,maxDimension,onError,onCanvasReplace,view:rawDocumentView(),running:false,job:0,last:0,map:null,lastError:'',configKey:'',lookup:null,renderCount:0,renderMs:0,lastRenderAt:0});
+ constructor(video,canvas,{maxDimension=1920,onError=()=>{},onCanvasReplace=()=>{},onFrame=()=>{},force2D=false}={}){
+  Object.assign(this,{video,canvas,maxDimension,onError,onCanvasReplace,onFrame,view:rawDocumentView(),running:false,job:0,last:0,map:null,lastError:'',configKey:'',lookup:null,renderCount:0,renderMs:0,lastRenderAt:0});
   this.gl=null;
   try{if(!force2D)this.gl=canvas.getContext('webgl',{alpha:false,antialias:false,preserveDrawingBuffer:true});if(this.gl)this.setupGL();}catch{this.use2DCanvas();}
   if(!this.gl&&!this.ctx)this.use2DCanvas(false);
@@ -248,7 +248,7 @@ export class LiveDocumentRenderer {
     }
     this.ctx.putImageData(image,0,0);
    }
-   this.renderCount++;this.lastRenderAt=performance.now();this.renderMs=this.lastRenderAt-start;
+   this.renderCount++;this.lastRenderAt=performance.now();this.renderMs=this.lastRenderAt-start;this.onFrame(this.canvas);
   }catch(e){if(e.message!==this.lastError){this.lastError=e.message;this.onError(e.message);}}
  }
  start(){

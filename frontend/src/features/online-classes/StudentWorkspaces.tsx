@@ -47,6 +47,10 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
         <NotebookCameraViewer
           key={camera.cameraId}
           cameraId={camera.cameraId}
+          ownerId={camera.ownerId}
+          // The board projects video and ink together. This viewer only paints
+          // a frame when geometry changes, avoiding a second live render loop.
+          active={false}
           presentation="board"
           compact={compact}
           title={`Тетрадь ученика: ${student.displayName}`}
@@ -57,6 +61,7 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
             if (!next) return previous?.cameraId === camera.cameraId ? null : previous;
             return previous?.cameraId === camera.cameraId && previous.source.video === next.video
               && previous.source.width === next.width && previous.source.height === next.height
+              && previous.source.view === next.view && previous.source.rawVideo === next.rawVideo
               ? previous : { cameraId: camera.cameraId, source: next };
           })}
         />

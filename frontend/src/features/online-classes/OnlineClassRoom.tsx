@@ -513,7 +513,8 @@ function RoomBody({
                 canAnnotate={!compact}
                 active={active}
                 fileAction={active && !compact ? fileAction : undefined}
-                liveBackground={source ? { source: source.video, width: source.width, height: source.height } : null}
+                liveBackground={source ? { source: source.rawVideo, width: source.rawWidth, height: source.rawHeight,
+                  notebookView: { view: source.view, rawWidth: source.rawWidth, rawHeight: source.rawHeight, renderer: source.renderer } } : null}
                 hostActions={active && !compact ? <AnswersButton compact status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
               />
             </Suspense>}

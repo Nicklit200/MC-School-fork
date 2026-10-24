@@ -43,6 +43,7 @@ import {
 
 import { WhiteboardPageSurface, type PageSurfaceHandle, type PageSurfaceStatus } from './WhiteboardPageSurface';
 import { useBoardPageLayout } from './useBoardPageLayout';
+import type { NotebookCameraGeometry } from './notebookCameraGeometry';
 
 const INPUT_MODE_KEY = 'mc.board.inputMode';
 // Keep the teacher's pen settings while individual student boards mount/unmount.
@@ -65,6 +66,7 @@ export interface LiveBoardBackground {
   source: CanvasImageSource;
   width: number;
   height: number;
+  notebookView?: NotebookCameraGeometry | null;
 }
 
 function loadInputMode(): InputMode {

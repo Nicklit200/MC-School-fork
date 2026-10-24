@@ -1,4 +1,4 @@
-import {defaultDocumentView, rawDocumentView, validateDocumentView, validQuad, estimatedRatio, detectVideoDocument, makeDocumentMap, LiveDocumentRenderer, QUALITY_PROFILES} from './signal.mjs';
+import {defaultDocumentView, rawDocumentView, validateDocumentView, validQuad, estimatedRatio, detectVideoDocument, makeDocumentMap, LiveDocumentRenderer, QUALITY_PROFILES} from './signal.mjs?v=shared-notebook-1';
 
 const TEXT={"qualityOk": "\u0420\u0435\u0436\u0438\u043c \u0437\u0430\u043f\u0440\u043e\u0448\u0435\u043d. \u0424\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u043e \u043d\u0438\u0436\u0435.", "focusOk": "\u041a\u0430\u043c\u0435\u0440\u0430 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b\u0430 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0443 \u0444\u043e\u043a\u0443\u0441\u0430.", "failed": "\u041a\u0430\u043c\u0435\u0440\u0430 \u043d\u0435 \u043f\u0440\u0438\u043c\u0435\u043d\u0438\u043b\u0430 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0443.", "FOCUS_UNSUPPORTED": "\u042d\u0442\u043e\u0442 \u0431\u0440\u0430\u0443\u0437\u0435\u0440 \u043d\u0435 \u0434\u0430\u0451\u0442 \u0443\u043f\u0440\u0430\u0432\u043b\u044f\u0442\u044c \u0444\u043e\u043a\u0443\u0441\u043e\u043c. \u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u0435\u0442 \u0435\u0433\u043e \u0441\u0430\u043c.", "FOCUS_UNCONFIRMED": "\u0411\u0440\u0430\u0443\u0437\u0435\u0440 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u0444\u043e\u043a\u0443\u0441\u0430.", "BUSY": "\u041a\u0430\u043c\u0435\u0440\u0430 \u0437\u0430\u043d\u044f\u0442\u0430. \u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u043e\u0441\u043b\u0435 \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043a.", "waitCamera": "\u0414\u0430\u043d\u043d\u044b\u0435 \u043a\u0430\u043c\u0435\u0440\u044b \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f.", "manual": "\u0420\u0443\u0447\u043d\u043e\u0439 \u0444\u043e\u043a\u0443\u0441 \u0432\u043a\u043b\u044e\u0447\u0451\u043d. \u0422\u0435\u043b\u0435\u0444\u043e\u043d \u0438 \u043b\u0438\u0441\u0442 \u043d\u0435 \u0434\u0432\u0438\u0433\u0430\u0442\u044c.", "continuous": "\u041d\u0435\u043f\u0440\u0435\u0440\u044b\u0432\u043d\u044b\u0439 \u0430\u0432\u0442\u043e\u0444\u043e\u043a\u0443\u0441 \u0432\u043a\u043b\u044e\u0447\u0451\u043d.", "available": "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u044b \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u043c\u044b\u0435 \u043a\u0430\u043c\u0435\u0440\u043e\u0439 \u043a\u043d\u043e\u043f\u043a\u0438.", "returnView": "\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432\u0438\u0434 \u0441\u0432\u0435\u0440\u0445\u0443", "compare": "\u0421\u0440\u0430\u0432\u043d\u0438\u0442\u044c \u0441 \u0438\u0441\u0445\u043e\u0434\u043d\u044b\u043c", "original": "\u0418\u0441\u0445\u043e\u0434\u043d\u044b\u0439 \u043a\u0430\u0434\u0440 / \u043f\u043e\u0432\u043e\u0440\u043e\u0442 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d", "noChannel": "\u041d\u0435\u0442 \u043a\u0430\u043d\u0430\u043b\u0430 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f. \u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u0435 \u0442\u0435\u043b\u0435\u0444\u043e\u043d \u0437\u0430\u043d\u043e\u0432\u043e.", "timeout": "\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b. Страница камеры должна оставаться открытой.", "applying": "\u041f\u0440\u0438\u043c\u0435\u043d\u044f\u0435\u043c \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0443 \u043d\u0430 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0435...", "cpu": "\u0411\u0435\u0437 GPU: \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e, \u043a\u0430\u0434\u0440\u044b \u043e\u0431\u043d\u043e\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u0440\u0435\u0436\u0435.", "fullFrame": "\u041a\u0430\u0434\u0440 \u0432\u043f\u0438\u0441\u0430\u043d \u0432 \u044d\u043a\u0440\u0430\u043d \u0431\u0435\u0437 \u043e\u0431\u0440\u0435\u0437\u043a\u0438.", "fps": "\u043a\u0430\u0434\u0440/\u0441", "mbps": "\u041c\u0431\u0438\u0442/\u0441"};
 const $ = id => document.getElementById(id);
@@ -19,7 +19,8 @@ const renderer = new LiveDocumentRenderer(video, flattened, {onCanvasReplace:can
 let editor = null, cameraDevices = [];
 let comparing=false,cameraState=null,pendingCommand=null,statsPrevious=null,statsBusy=false,notebookCompact=false;
 const CORNER_GUTTER=26;
-// The receiving computer owns document geometry. The phone sends raw video only.
+// The processor edits canonical document geometry; only committed views cross
+// the parent bridge. Corner drafts and Compare remain local presentation state.
 function visibleDocumentView() {
   return editor?.editing || comparing ? {...rawDocumentView(video.videoWidth / video.videoHeight), turn: documentView.turn} : documentView;
 }
@@ -28,9 +29,17 @@ function rememberView() {
   if (!room) return;
   try { sessionStorage.setItem(`camera-document-${room.id}`, JSON.stringify({view: documentView, format: $('pageFormat').value})); } catch {}
 }
-function applyDocumentView(value) {
-  const validated=validateDocumentView(value); if(!validated) return;
-  finishStroke(); documentView=validated; rememberView(); syncVideoSize(); drawInk();
+function shareDocumentView() {
+  if(!room||window.parent===window)return;
+  const value=validateDocumentView(documentView);if(!value)return;
+  try{window.parent.postMessage({type:'mindcrafti-notebook-view',value},location.origin);}catch{}
+}
+function applyDocumentView(value,notify=true) {
+  const validated=validateDocumentView(value); if(!validated) return false;
+  const previous=JSON.stringify(documentView);
+  finishStroke(); documentView=validated; rememberView(); syncVideoSize(false); drawInk();
+  if(notify&&JSON.stringify(documentView)!==previous)shareDocumentView();
+  return true;
 }
 function receiveData(value) {
   receiveCameraData(value);
@@ -110,15 +119,17 @@ function drawInk() {
 function queuePaint() {
   if (!paintJob) paintJob = requestAnimationFrame(() => { paintJob = 0; drawInk(); });
 }
-function syncVideoSize() {
+function syncVideoSize(notify=true) {
   if(!hasVideo||!video.videoWidth||!video.videoHeight){renderer.stop();controls();return;}
   const sourceAspect=video.videoWidth/video.videoHeight;
-
+  let changed=false;
   if(documentView.corners&&Math.abs(sourceAspect/documentView.sourceAspect-1)>.06){
     documentView={...defaultDocumentView(sourceAspect),turn:documentView.turn};
     if(editor){editor.editing=false;editor.releaseDrag();editor.note('\u0424\u043e\u0440\u043c\u0430\u0442 \u043a\u0430\u043c\u0435\u0440\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u043b\u0441\u044f. \u0412\u044b\u0440\u043e\u0432\u043d\u044f\u0439\u0442\u0435 \u043b\u0438\u0441\u0442 \u0437\u0430\u043d\u043e\u0432\u043e \u0437\u0434\u0435\u0441\u044c.');}
-    rememberView();
+    changed=true;
   }
+  if(!documentView.corners&&documentView.sourceAspect!==sourceAspect){documentView={...documentView,sourceAspect};changed=true;}
+  if(changed){rememberView();if(notify!==false)shareDocumentView();}
   const view=visibleDocumentView();
   mapping=makeDocumentMap(view,video.videoWidth,video.videoHeight);
   flattened.hidden=!transformed();
@@ -382,6 +393,13 @@ function resetCamera(id){
  drawInk();controls();
 }
 window.setNotebookCameraId=resetCamera;
+window.getNotebookDocumentView=()=>validateDocumentView(documentView);
+window.setNotebookDocumentView=value=>{
+ if(!room||!validateDocumentView(value))return false;
+ finishStroke();comparing=false;
+ if(editor){editor.generation++;editor.editing=false;editor.detecting=false;editor.releaseDrag();}
+ return applyDocumentView(value,false);
+};
 window.setNotebookCompact=value=>{
  const next=value===true;if(next===notebookCompact)return;
  finishStroke();editor?.releaseDrag();notebookCompact=next;

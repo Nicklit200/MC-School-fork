@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { NotebookCamera } from '../../api/notebookCameras';
 import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
+import type { CameraModule } from '../notebook-camera/cameraModules';
 import { StudentWorkspaces } from './StudentWorkspaces';
 import { personalBoardId } from './boards';
 
@@ -33,9 +34,15 @@ function surface(props: Partial<ComponentProps<typeof StudentWorkspaces>> = {}) 
       data-active={String(active)} data-compact={String(compact)} data-source={String(Boolean(source))}>Тетрадь {id}</div>}
     {...props} />;
 }
+function cameraSource(overrides: Partial<NotebookCameraVideoSource> = {}): NotebookCameraVideoSource {
+  return { video: document.createElement('canvas'), width: 1080, height: 1920,
+    rawVideo: document.createElement('video'), rawWidth: 1920, rawHeight: 1080,
+    view: { type: 'document-view', version: 1, corners: null, ratio: null, turn: 1, sourceAspect: 16 / 9 },
+    renderer: {} as CameraModule, ...overrides };
+}
 const available = (cameraId: string, value: boolean) => act(() => {
   viewers.props.get(cameraId)!.onVideoAvailableChange(value);
-  viewers.props.get(cameraId)!.onBoardVideoChange(value ? { video: document.createElement('video'), width: 1920, height: 1080 } : null);
+  viewers.props.get(cameraId)!.onBoardVideoChange(value ? cameraSource() : null);
 });
 beforeEach(() => viewers.props.clear());
 
@@ -151,9 +158,33 @@ describe('pupil board and camera surfaces', () => {
     available('camera-p1', true);
     view.rerender(surface({ camerasByOwner: new Map([['p1', camera('p1', 'replacement')]]) }));
     expect(screen.getByTestId('board-p1').parentElement).not.toHaveAttribute('hidden');
-    act(() => viewers.props.get('camera-p1')!.onBoardVideoChange({ video: document.createElement('video'), width: 1920, height: 1080 }));
+    act(() => viewers.props.get('camera-p1')!.onBoardVideoChange(cameraSource()));
     expect(screen.getByTestId('camera-board-p1').parentElement).toHaveAttribute('hidden');
     available('replacement', true);
     expect(screen.getByTestId('camera-board-p1').parentElement).not.toHaveAttribute('hidden');
+  });
+
+  it('forwards each owner’s raw geometry and updates rotation when processed dimensions stay the same', () => {
+    const sources = new Map<string, NotebookCameraVideoSource | null>();
+    render(surface({ renderCameraBoard: (id, _active, _compact, source) => {
+      sources.set(id, source); return <div data-testid={`camera-board-${id}`} />;
+    } }));
+    const anna = cameraSource(), vera = cameraSource();
+    act(() => {
+      viewers.props.get('camera-p1')!.onVideoAvailableChange(true);
+      viewers.props.get('camera-p1')!.onBoardVideoChange(anna);
+      viewers.props.get('camera-p3')!.onVideoAvailableChange(true);
+      viewers.props.get('camera-p3')!.onBoardVideoChange(vera);
+    });
+    const board = screen.getByTestId('camera-board-p1');
+    expect(sources.get('p1')).toBe(anna); expect(sources.get('p3')).toBe(vera);
+    expect(anna.rawVideo).not.toBe(vera.rawVideo);
+    const rotated = { ...anna, view: { ...anna.view, turn: 3 } };
+    act(() => viewers.props.get('camera-p1')!.onBoardVideoChange(rotated));
+    expect(sources.get('p1')).toBe(rotated); expect(sources.get('p3')).toBe(vera);
+    expect(sources.get('p1')!.video).toBe(anna.video);
+    expect(sources.get('p1')!.rawVideo).toBe(anna.rawVideo);
+    expect(sources.get('p1')!.rawWidth).toBe(1920); expect(sources.get('p1')!.rawHeight).toBe(1080);
+    expect(screen.getByTestId('camera-board-p1')).toBe(board);
   });
 });

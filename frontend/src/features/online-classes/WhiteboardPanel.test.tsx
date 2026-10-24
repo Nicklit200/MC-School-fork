@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { ApiRequestError } from '../../api/client';
+import type { CameraModule } from '../notebook-camera/cameraModules';
+import type { NotebookCameraGeometry } from './notebookCameraGeometry';
 import {
   ANNOTATION_TOPIC,
   STROKE_TOPIC,
@@ -606,6 +608,36 @@ describe('WhiteboardPanel', () => {
       expect(screen.getByTestId('canvas').closest('section')).toHaveClass('whiteboard--camera');
       expect(screen.getAllByRole('status').some(node => node.textContent === '1 / 1')).toBe(true);
       expect(screen.queryByRole('button', { name: 'Следовать за учителем' })).not.toBeInTheDocument();
+    });
+
+    it('persists raw camera coordinates and forwards the processed geometry without reopening or replacing its annotation surface', async () => {
+      const rawVideo = document.createElement('video');
+      const geometry: NotebookCameraGeometry = {
+        rawWidth: 1920, rawHeight: 1080, renderer: {} as CameraModule,
+        view: { type: 'document-view', version: 1, turn: 1, sourceAspect: 16 / 9, ratio: 0.5,
+          corners: [{ x: 0.2, y: 0.1 }, { x: 0.8, y: 0.1 }, { x: 0.8, y: 0.9 }, { x: 0.2, y: 0.9 }] },
+      };
+      const content = (notebookView: NotebookCameraGeometry) => <I18nProvider><WhiteboardPanel classId="c1" actorId="teacher" isHost
+        {...notebook} liveBackground={{ source: rawVideo, width: 1920, height: 1080, notebookView }} /></I18nProvider>;
+      const { rerender } = render(content(geometry));
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'NOTEBOOK_CAMERA', 'personal-student', 0, 1920, 1080));
+      const canvas = screen.getByTestId('canvas'), pageKey = canvasProps.pageKey;
+      expect(canvasProps.background).toBe(rawVideo);
+      expect(canvasProps.sourceAspect).toBe(16 / 9);
+      expect(canvasProps.notebookView).toBe(geometry);
+      const stroke = { kind: 'pen', color: '#ff3344', width: 0.004, points: [[0.15, 0.25], [0.4, 0.7]] };
+      await act(async () => { await canvasProps.onCommit(stroke); });
+      expect(api.appendAnnotation).toHaveBeenCalledWith('c1', 'doc-0', expect.any(String), 'ADD', JSON.stringify(stroke));
+      expect(canvasProps.shapes).toHaveLength(1);
+      const savedShapes = canvasProps.shapes;
+      const rotated: NotebookCameraGeometry = { ...geometry, view: { ...geometry.view, turn: 3, ratio: 1 } };
+      rerender(content(rotated));
+      expect(canvasProps.notebookView).toBe(rotated);
+      expect(canvasProps.background).toBe(rawVideo); expect(canvasProps.sourceAspect).toBe(16 / 9);
+      expect(canvasProps.pageKey).toBe(pageKey); expect(screen.getByTestId('canvas')).toBe(canvas);
+      expect(canvasProps.shapes).toEqual(savedShapes);
+      expect(api.openAnnotationDocument).toHaveBeenCalledTimes(1);
+      expect(api.appendAnnotation).toHaveBeenCalledTimes(1);
     });
 
     it('keeps the ordinary tools, undo and independent camera pages backed by the annotation engine', async () => {

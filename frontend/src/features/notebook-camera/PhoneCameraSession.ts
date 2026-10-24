@@ -1,7 +1,7 @@
 import { Room, RoomEvent, Track, type LocalVideoTrack } from 'livekit-client';
 import { ApiRequestError } from '../../api/client';
 import { notebookCamerasApi, type CameraClaim } from '../../api/notebookCameras';
-import { loadCameraModule, type CameraModule, type CameraQuality } from './cameraModules';
+import { loadCameraModule, type CameraModule, type CameraQuality, type NotebookDocumentView, type NotebookDocumentViewState } from './cameraModules';
 
 const topic = 'mindcrafti-notebook-camera';
 const encoder = new TextEncoder();
@@ -20,6 +20,10 @@ export class PhoneCameraSession {
   private quality: CameraQuality = 'detail';
   private controlBusy = false;
   private devices: MediaDeviceInfo[] = [];
+  private documentView: NotebookDocumentView | null = null;
+  private documentRevision = 0;
+  private documentChangeId: string | undefined;
+  private documentChanges = new Set<string>();
 
   constructor(private cameraId: string, private pairingToken: string | null,
     private onStream: (stream: MediaStream | null) => void,
@@ -34,8 +38,9 @@ export class PhoneCameraSession {
     try {
       if (!/^[a-zA-Z0-9-]{1,128}$/.test(this.cameraId) || (!this.claim && !this.pairingToken)) throw new Error('Откройте страницу по новому QR-коду из урока.');
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('Откройте камеру по HTTPS-ссылке сайта Mindcrafti.');
-      this.module = await loadCameraModule();
+      const module = await loadCameraModule();
       if (generation !== this.generation) return;
+      this.module = module;
       candidate = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
         ...this.module.cameraConstraints(this.quality),
@@ -56,12 +61,22 @@ export class PhoneCameraSession {
       this.room = room;
       const currentRoom = room;
       room.on(RoomEvent.DataReceived, (payload, participant, _kind, dataTopic) => {
-        if (dataTopic !== topic || !participant || participant.identity === connection.phoneIdentity || payload.byteLength > 16000) return;
-        try { void this.receive(JSON.parse(new TextDecoder().decode(payload)), generation).catch(error => this.onStatus(error instanceof Error ? error.message : 'Не удалось изменить камеру.')); } catch { /* Ignore malformed data. */ }
+        if (generation !== this.generation || this.room !== currentRoom || dataTopic !== topic
+          || !participant || participant.identity === connection.phoneIdentity || payload.byteLength > 16000) return;
+        try {
+          const message = JSON.parse(new TextDecoder().decode(payload));
+          if (message?.type === 'document-view-update' && payload.byteLength > 4096) return;
+          void this.receive(message, generation, participant.identity).catch(error => {
+            if (generation === this.generation && this.room === currentRoom) this.onStatus(error instanceof Error ? error.message : 'Не удалось изменить камеру.');
+          });
+        } catch { /* Ignore malformed data. */ }
       });
-      room.on(RoomEvent.ParticipantConnected, () => void this.report());
-      room.on(RoomEvent.Reconnecting, () => this.onStatus('Связь прервалась. Восстанавливаем подключение…'));
-      room.on(RoomEvent.Reconnected, () => { this.onStatus('Камера включена. Оставьте эту страницу открытой.'); void this.report(); });
+      room.on(RoomEvent.ParticipantConnected, () => { if (generation === this.generation && this.room === currentRoom) void this.report(generation); });
+      room.on(RoomEvent.Reconnecting, () => { if (generation === this.generation && this.room === currentRoom) this.onStatus('Связь прервалась. Восстанавливаем подключение…'); });
+      room.on(RoomEvent.Reconnected, () => {
+        if (generation !== this.generation || this.room !== currentRoom) return;
+        this.onStatus('Камера включена. Оставьте эту страницу открытой.'); void this.report(generation);
+      });
       room.on(RoomEvent.Disconnected, () => {
         if (this.room === currentRoom) { this.stop(false); this.onStatus('Подключение завершено. Повторите или откройте новый QR из урока.'); }
       });
@@ -82,8 +97,9 @@ export class PhoneCameraSession {
       try { this.devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput'); }
       catch { this.devices = []; }
       if (generation !== this.generation) return;
-      await this.report();
-      this.timer = setInterval(() => void this.report(), 3000);
+      await this.report(generation);
+      if (generation !== this.generation) return;
+      this.timer = setInterval(() => void this.report(generation), 3000);
       this.validation = setInterval(() => {
         if (!this.claim) return;
         void notebookCamerasApi.phoneConnection(this.cameraId, this.claim.sessionToken).catch(reason => {
@@ -113,6 +129,7 @@ export class PhoneCameraSession {
     this.stream?.getTracks().forEach(track => track.stop());
     this.stream = null;
     this.publishedTrack = null;
+    this.controlBusy = false;
     const room = this.room; this.room = null;
     void room?.disconnect();
     void this.wakeLock?.release(); this.wakeLock = null;
@@ -120,24 +137,77 @@ export class PhoneCameraSession {
     if (announce) this.onStatus('Камера выключена. Можно включить снова.');
   }
 
-  private async send(value: unknown) {
-    if (!this.room || this.room.state !== 'connected') return;
+  private async send(value: unknown, generation = this.generation) {
+    if (generation !== this.generation || !this.room || this.room.state !== 'connected') return;
     try { await this.room.localParticipant.publishData(encoder.encode(JSON.stringify(value)), { reliable: true, topic }); } catch { /* Reconnection retries state. */ }
   }
-  private async report() {
-    const track = this.stream?.getVideoTracks()[0];
-    if (!track || !this.module) return;
-    await this.send({ type: 'camera-state', version: 1, quality: this.quality, ...this.module.inspectCamera(track) });
-    await this.send({ type: 'camera-list', selected: track.getSettings().deviceId,
-      devices: this.devices.slice(0, 8).map((device, index) => ({ id: device.deviceId, label: (device.label || `Камера ${index + 1}`).slice(0, 80) })) });
+  private documentState(track: MediaStreamTrack): NotebookDocumentViewState | null {
+    if (!this.module) return null;
+    const { width, height } = track.getSettings();
+    const aspect = Number.isFinite(width) && Number.isFinite(height) && width! > 0 && height! > 0
+      ? width! / height! : null;
+    if (!this.documentView) {
+      this.documentView = this.module.defaultDocumentView(aspect ?? 1);
+      this.documentRevision++;
+    } else if (aspect !== null && this.documentView.corners && Math.abs(aspect / this.documentView.sourceAspect - 1) > .06) {
+      this.documentView = { ...this.module.defaultDocumentView(aspect), turn: this.documentView.turn };
+      this.documentRevision++;
+      // Keep the last accepted command's ACK even when its crop needs a safe
+      // reset. Otherwise the owner can wait forever for that changeId.
+    }
+    return {
+      type: 'document-view-state', version: 1, cameraId: this.cameraId,
+      revision: this.documentRevision, ...(this.documentChangeId ? { changeId: this.documentChangeId } : {}),
+      view: this.documentView,
+    };
   }
-  private async receive(message: Record<string, unknown>, generation: number) {
+  private async sendDocumentState(generation: number) {
     if (generation !== this.generation) return;
-    if (message?.type === 'camera-request') { await this.report(); return; }
+    const track = this.stream?.getVideoTracks()[0];
+    const state = track ? this.documentState(track) : null;
+    if (state) await this.send(state, generation);
+  }
+  private isOwnerViewer(identity: string): boolean {
+    const ownerId = this.claim?.camera.ownerId;
+    if (!ownerId) return false;
+    const prefix = `notebook-viewer:${this.cameraId}:${ownerId}:`;
+    return identity.startsWith(prefix) && /^[a-f0-9]{8}$/i.test(identity.slice(prefix.length));
+  }
+  private async report(generation = this.generation) {
+    const track = this.stream?.getVideoTracks()[0];
+    if (generation !== this.generation || !track || !this.module) return;
+    await this.send({ type: 'camera-state', version: 1, quality: this.quality, ...this.module.inspectCamera(track) }, generation);
+    await this.sendDocumentState(generation);
+    await this.send({ type: 'camera-list', selected: track.getSettings().deviceId,
+      devices: this.devices.slice(0, 8).map((device, index) => ({ id: device.deviceId, label: (device.label || `Камера ${index + 1}`).slice(0, 80) })) }, generation);
+  }
+  private async receive(message: Record<string, unknown>, generation: number, senderIdentity: string) {
+    if (generation !== this.generation) return;
+    if (message?.type === 'document-view-update') {
+      if (message.version !== 1 || message.cameraId !== this.cameraId || !this.isOwnerViewer(senderIdentity)
+        || typeof message.changeId !== 'string' || message.changeId.length === 0 || message.changeId.length > 80 || !this.module) return;
+      const view = this.module.validateDocumentView(message.view);
+      if (!view) return;
+      const track = this.stream?.getVideoTracks()[0];
+      if (!track) return;
+      // A viewer can send during publishTrack(), before the first report.
+      // Reserve revision 1 for the default so owner geometry always starts at 2.
+      this.documentState(track);
+      if (!this.documentChanges.has(message.changeId)) {
+        this.documentView = view;
+        this.documentRevision++;
+        this.documentChangeId = message.changeId;
+        this.documentChanges.add(message.changeId);
+        if (this.documentChanges.size > 256) this.documentChanges.delete(this.documentChanges.values().next().value!);
+      }
+      await this.sendDocumentState(generation);
+      return;
+    }
+    if (message?.type === 'camera-request') { await this.report(generation); return; }
     if (message?.type === 'camera-select' && typeof message.deviceId === 'string' && !this.controlBusy
       && this.devices.some(device => device.deviceId === message.deviceId)) { await this.start(message.deviceId); return; }
     if (message?.type !== 'camera-control' || typeof message.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(message.requestId)) return;
-    const reply = (ok: boolean, error?: string) => this.send({ type: 'camera-result', requestId: message.requestId, ok, error });
+    const reply = (ok: boolean, error?: string) => this.send({ type: 'camera-result', requestId: message.requestId, ok, error }, generation);
     const track = this.stream?.getVideoTracks()[0];
     if (this.controlBusy || !track || !this.module) { await reply(false, 'BUSY'); return; }
     this.controlBusy = true;
@@ -160,14 +230,15 @@ export class PhoneCameraSession {
           fallback.encodings?.forEach(encoding => { encoding.maxBitrate = profile.bitrate; });
           await sender.setParameters(fallback);
         }
+        if (generation !== this.generation) return;
         if (this.publishedTrack?.publishOptions) this.publishedTrack.publishOptions.videoEncoding = { maxBitrate: profile.bitrate, maxFramerate: profile.fps };
         this.quality = message.value;
       } else if (typeof message.action === 'string' && ['auto', 'lock', 'distance'].includes(message.action)) {
         await this.module.setCameraFocus(track, message.action, message.value);
       } else throw new Error('INVALID_COMMAND');
       if (generation !== this.generation) return;
-      await this.report(); await reply(true);
+      await this.report(generation); await reply(true);
     } catch (error) { await reply(false, error instanceof Error ? error.message : 'CAMERA_REJECTED'); }
-    finally { this.controlBusy = false; }
+    finally { if (generation === this.generation) this.controlBusy = false; }
   }
 }

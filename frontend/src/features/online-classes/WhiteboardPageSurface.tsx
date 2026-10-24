@@ -245,6 +245,7 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
         background={camera ? cameraBackground?.source ?? null : renderedPage?.canvas ?? null}
         paperColor={camera ? null : targetType === 'WHITEBOARD' ? '#ffffff' : '#fffefa'}
         backgroundLive={camera && Boolean(cameraBackground)}
+        notebookView={cameraBackground?.notebookView}
         active={active}
         lasers={selected && !personal && !camera ? lasers : []}
         remoteDrafts={camera ? [] : live.drafts}

@@ -50,3 +50,14 @@ test('new notebooks have the prototype non-mirrored 180 degree orientation',()=>
   assert.ok(Math.abs(point.x-.8)<1e-8);assert.ok(Math.abs(point.y-.7)<1e-8);
  }
 });
+
+test('a processed source is announced only after a successful painted frame',()=>withDocument(()=>{
+ const canvas=canvasFixture({noGPU:true}),frames=[],errors=[];
+ const renderer=new LiveDocumentRenderer(video,canvas,{onFrame:c=>frames.push({canvas:c,width:c.width,height:c.height,draws:c.ctx.draws}),onError:e=>errors.push(e)});
+ assert.equal(frames.length,0);
+ renderer.setView(defaultDocumentView(16/9));
+ assert.deepEqual(frames,[{canvas,width:1920,height:1080,draws:1}]);
+ canvas.ctx.drawImage=()=>{throw Error('Frame cannot be painted');};
+ renderer.render();
+ assert.equal(frames.length,1);assert.deepEqual(errors,['Frame cannot be painted']);
+}));

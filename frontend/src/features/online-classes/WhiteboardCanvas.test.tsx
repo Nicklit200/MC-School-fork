@@ -1,11 +1,14 @@
 import { act, fireEvent, render } from '@testing-library/react';
 import { createRef } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WhiteboardCanvas, type WhiteboardCanvasHandle } from './WhiteboardCanvas';
+import type { CameraModule, DocumentRendererOptions, NotebookDocumentView } from '../notebook-camera/cameraModules';
+import { createNotebookProjection, notebookRawToScreen, type NotebookCameraGeometry } from './notebookCameraGeometry';
+import { DEFAULT_VIEW } from './boardView';
 
 const mock = vi.hoisted(() => ({
   stageProps: {} as Record<string, any>, imageProps: {} as Record<string, any>, rectProps: {} as Record<string, any>,
-  backgroundLayer: {}, stage: { toDataURL: vi.fn(() => 'data:image/jpeg;base64,/9j/2Q==') },
+  backgroundLayer: {}, stage: { toDataURL: vi.fn(() => 'data:image/jpeg;base64,/9j/2Q=='), draw: vi.fn(), getLayers: vi.fn(() => [] as any[]) },
   animations: [] as { layer: unknown; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }[],
   backend: 'pointer', nativeCallbacks: null as any, nativeConfig: null as any,
 }));
@@ -58,6 +61,122 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', SizedObserver); vi.stubGlobal('PointerEvent', TestPointerEvent);
 });
 afterEach(() => { vi.unstubAllGlobals(); });
+
+let cameraRuntime: CameraModule;
+beforeAll(async () => {
+  const path = '../../../public/notebook-camera/signal.mjs';
+  cameraRuntime = await import(path);
+});
+
+function projectedNotebook(patch: Partial<NotebookDocumentView> = {}) {
+  const context = { setTransform: vi.fn(), clearRect: vi.fn(), drawImage: vi.fn(), globalCompositeOperation: 'source-over' };
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+  const layers = ['camera', 'marks', 'selection'].map(name => {
+    const canvas = document.createElement('canvas'); canvas.dataset.layer = name;
+    const wrapper = { _canvas: canvas, getPixelRatio: () => 2, setPixelRatio: vi.fn() };
+    return { getCanvas: () => wrapper };
+  });
+  mock.stage.getLayers.mockReturnValue(layers);
+  const instances: { source: HTMLVideoElement; canvas: HTMLCanvasElement; setView: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }[] = [];
+  const Renderer = class {
+    gl = {};
+    constructor(public source: HTMLVideoElement, public canvas: HTMLCanvasElement, private options: DocumentRendererOptions = {}) { instances.push(this); }
+    setView = vi.fn((view: NotebookDocumentView) => {
+      const map = cameraRuntime.makeDocumentMap(view, this.source.videoWidth, this.source.videoHeight);
+      this.canvas.width = 960; this.canvas.height = Math.round(960 / map.aspect); this.render();
+    });
+    render = vi.fn(() => this.options.onFrame?.(this.canvas));
+    start = vi.fn(); stop = vi.fn(); setMaxDimension = vi.fn();
+  };
+  const geometry: NotebookCameraGeometry = {
+    rawWidth: 1920, rawHeight: 1080,
+    view: { type: 'document-view', version: 1, corners: null, ratio: null, turn: 2, sourceAspect: 16 / 9, ...patch },
+    renderer: { ...cameraRuntime, LiveDocumentRenderer: Renderer },
+  };
+  return { geometry, instances, context, layers };
+}
+
+describe('WhiteboardCanvas canonical notebook projection', () => {
+  it.each([false, true])('commits pen input in raw coordinates through 180-degree or perspective projection (crop=%s)', async crop => {
+    const fixture = projectedNotebook(crop ? { turn: 1, ratio: 210 / 297,
+      corners: [{ x: .1, y: .1 }, { x: .9, y: .2 }, { x: .8, y: .9 }, { x: .2, y: .8 }] } : {});
+    const onCommit = vi.fn().mockResolvedValue(true), view = { zoom: 2, panX: -120, panY: -80 };
+    const { container } = render(<WhiteboardCanvas {...props} sourceAspect={16 / 9} notebookView={fixture.geometry} active={false}
+      background={document.createElement('video')} onCommit={onCommit} view={view} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    const projection = createNotebookProjection(fixture.geometry)!;
+    const start = notebookRawToScreen({ x: .3, y: .4 }, projection, { width: 1000, height: 500 }, view);
+    const end = notebookRawToScreen({ x: .5, y: .6 }, projection, { width: 1000, height: 500 }, view);
+    await act(async () => {
+      fireEvent.pointerDown(surface, { pointerType: 'pen', clientX: start.x, clientY: start.y });
+      fireEvent.pointerUp(surface, { pointerType: 'pen', clientX: end.x, clientY: end.y });
+    });
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommit.mock.calls[0][0]).toMatchObject({ kind: 'pen', points: [[.3, .4], [.5, .6]] });
+    expect(mock.stageProps).toMatchObject({ width: 1920, height: 1080, x: 0, y: 0, scaleX: 1, scaleY: 1 });
+    expect(fixture.context.setTransform).toHaveBeenCalledWith(2, 0, 0, 2, -120, -80);
+  });
+
+  it('keeps legacy shapes on the same raw paper and warps the complete camera/marks/selection composite', () => {
+    const fixture = projectedNotebook();
+    const legacy = { operationId: 'legacy', layerOwnerId: 'teacher', sequence: 1,
+      shape: { kind: 'rect' as const, x: .2, y: .3, w: .1, h: .1 } };
+    const { getByTestId, rerender } = render(<WhiteboardCanvas {...props} sourceAspect={16 / 9} notebookView={fixture.geometry} active={false} shapes={[legacy]} />);
+    const stage = getByTestId('stage');
+    expect(mock.rectProps).toMatchObject({ x: 384, y: 324, width: 192, height: 108 });
+    const composites = fixture.context.drawImage.mock.calls.filter(call => (call[0] as HTMLCanvasElement)?.dataset?.layer);
+    expect(composites.slice(-3).map(call => (call[0] as HTMLCanvasElement).dataset.layer)).toEqual(['camera', 'marks', 'selection']);
+    rerender(<WhiteboardCanvas {...props} sourceAspect={16 / 9} notebookView={{ ...fixture.geometry, view: { ...fixture.geometry.view, turn: 1 } }} active={false} shapes={[legacy]} />);
+    expect(getByTestId('stage')).toBe(stage); expect(fixture.instances).toHaveLength(1);
+    expect(mock.rectProps).toMatchObject({ x: 384, y: 324, width: 192, height: 108 });
+    expect(fixture.instances[0].setView).toHaveBeenLastCalledWith(expect.objectContaining({ turn: 1 }));
+    expect(legacy.shape).toEqual({ kind: 'rect', x: .2, y: .3, w: .1, h: .1 });
+  });
+
+  it('erases the correct owned raw stroke through perspective without touching another owner or the video layer', () => {
+    const fixture = projectedNotebook({ turn: 2, ratio: 210 / 297,
+      corners: [{ x: .1, y: .1 }, { x: .9, y: .2 }, { x: .8, y: .9 }, { x: .2, y: .8 }] });
+    const onEraseShape = vi.fn(), onCommit = vi.fn();
+    const shapes = [{ operationId: 'own', layerOwnerId: 'teacher', sequence: 1, shape: { kind: 'pen' as const, width: .02, points: [[.3, .4], [.5, .4]] as [number, number][] } },
+      { operationId: 'other', layerOwnerId: 'student', sequence: 2, shape: { kind: 'pen' as const, width: .02, points: [[.3, .6], [.5, .6]] as [number, number][] } }];
+    const { container } = render(<WhiteboardCanvas {...props} actorId="teacher" tool="erase" eraserMode="stroke" sourceAspect={16 / 9}
+      notebookView={fixture.geometry} active={false} shapes={shapes} onEraseShape={onEraseShape} onCommit={onCommit} />);
+    const projection = createNotebookProjection(fixture.geometry)!, surface = container.querySelector('.whiteboard__surface')!;
+    for (const point of [{ x: .4, y: .4 }, { x: .4, y: .6 }]) {
+      const at = notebookRawToScreen(point, projection, { width: 1000, height: 500 }, DEFAULT_VIEW);
+      fireEvent.pointerDown(surface, { pointerId: point.y * 100, pointerType: 'pen', clientX: at.x, clientY: at.y });
+      fireEvent.pointerUp(surface, { pointerId: point.y * 100, pointerType: 'pen', clientX: at.x, clientY: at.y });
+    }
+    expect(onEraseShape).toHaveBeenCalledExactlyOnceWith('own'); expect(onCommit).not.toHaveBeenCalled();
+    expect(fixture.context.globalCompositeOperation).toBe('source-over');
+  });
+
+  it('keeps text editing anchored in presentation space but commits canonical raw text', async () => {
+    const fixture = projectedNotebook({ turn: 1 }), onCommit = vi.fn().mockResolvedValue(true);
+    const { container, getByRole } = render(<WhiteboardCanvas {...props} tool="text" sourceAspect={16 / 9} notebookView={fixture.geometry} active={false} onCommit={onCommit} />);
+    const projection = createNotebookProjection(fixture.geometry)!;
+    const at = notebookRawToScreen({ x: .3, y: .4 }, projection, { width: 1000, height: 500 }, DEFAULT_VIEW);
+    fireEvent.pointerDown(container.querySelector('.whiteboard__surface')!, { pointerType: 'pen', clientX: at.x, clientY: at.y });
+    const input = getByRole('textbox') as HTMLTextAreaElement;
+    expect(parseFloat(input.style.left)).toBeCloseTo(at.x); expect(parseFloat(input.style.top)).toBeCloseTo(at.y);
+    fireEvent.change(input, { target: { value: 'Проверка' } });
+    await act(async () => { fireEvent.blur(input); });
+    expect(onCommit.mock.calls[0][0]).toMatchObject({ kind: 'text', x: .3, y: .4, text: 'Проверка' });
+  });
+
+  it('exports the fully composited projected viewport and stops its sampler without losing the raw stage', () => {
+    const fixture = projectedNotebook(), ref = createRef<WhiteboardCanvasHandle>();
+    const snapshot = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,projected');
+    const { container, unmount } = render(<WhiteboardCanvas {...props} ref={ref} sourceAspect={16 / 9} notebookView={fixture.geometry} active={false} />);
+    expect(ref.current?.toDataURL('image/jpeg')).toBe('data:image/jpeg;base64,projected');
+    expect(snapshot).toHaveBeenCalledWith('image/jpeg', .9); expect(mock.stage.toDataURL).not.toHaveBeenCalled();
+    const output = container.querySelector<HTMLCanvasElement>('[data-notebook-projection]')!;
+    expect(output.width).toBe(1000); expect(output.height).toBe(500);
+    expect(ref.current?.getSize()).toEqual({ width: 1000, height: 500 });
+    unmount(); expect(fixture.instances[0].stop).toHaveBeenCalledOnce();
+  });
+});
+
 describe('WhiteboardCanvas live background', () => {
 
   it('renders video and normalized ink under the same stage zoom and pan in separate layers', () => {
