@@ -5,7 +5,7 @@ import { onlineClassesApi } from '../../api/onlineClasses';
 import type { Shape } from './annotations';
 import { DEFAULT_TOOL_SETTINGS } from './boardTools';
 import { DEFAULT_VIEW } from './boardView';
-import { ANNOTATION_TOPIC, STROKE_TOPIC, annotationEvent, strokeEvent } from './events';
+import { ANNOTATION_TOPIC, NOTEBOOK_STROKE_TOPIC, STROKE_TOPIC, annotationEvent, strokeEvent } from './events';
 import type { PdfDoc } from './pdfDocument';
 import type { ReceivedEvent } from './useClassEvents';
 import type { WhiteboardCanvas } from './WhiteboardCanvas';
@@ -280,7 +280,7 @@ describe('WhiteboardPageSurface', () => {
     expect(pdf.renderPage).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps camera geometry separate from PDF and disables paper realtime previews', async () => {
+  it('keeps camera geometry separate from PDF and targets camera drafts and save hints only to owner and host', async () => {
     const video = document.createElement('video');
     const pdf: PdfDoc = { pageCount: 5, renderPage: vi.fn(), destroy: vi.fn() };
     render(<WhiteboardPageSurface {...baseProps} targetType="NOTEBOOK_CAMERA" targetId="personal-student" pdfDocument={pdf}
@@ -294,8 +294,80 @@ describe('WhiteboardPageSurface', () => {
     expect(pdf.renderPage).not.toHaveBeenCalled();
     await act(async () => { props.onDraftChange?.(pen, 'camera-stroke', true); await props.onCommit(pen, 'camera-stroke'); });
     expect(api.appendAnnotation).toHaveBeenCalledWith('c1', 'doc-personal-student-0', 'camera-stroke', 'ADD', JSON.stringify(pen));
-    expect(publish).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'stroke', targetId: 'personal-student' }), true, ['student', 'teacher']);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'annotation', operationId: 'camera-stroke' }), true, ['student', 'teacher']);
     expect(props.remoteDrafts).toEqual([]);
+  });
+
+  it.each(['teacher', 'student'])('shows camera ink to %s before saving or polling, then replaces the preview without a blank gap', async (actorId) => {
+    render(<><WhiteboardPageSurface {...baseProps} actorId={actorId} isHost={actorId === 'teacher'}
+      targetType="NOTEBOOK_CAMERA" targetId="personal-student" />
+      <WhiteboardPageSurface {...baseProps} actorId={actorId} isHost={actorId === 'teacher'} targetId="personal-student" /></>);
+    await ready(0, 'personal-student', 'NOTEBOOK_CAMERA');
+    await ready(0, 'personal-student');
+    const sender = actorId === 'teacher' ? 'student' : 'teacher';
+    const strokeId = '11111111-1111-4111-8111-111111111111';
+    const event = strokeEvent('c1', 'personal-student', 0, true, pen as never, strokeId, 1);
+    api.replayAnnotations.mockClear();
+    act(() => {
+      receive(STROKE_TOPIC, { event, senderIdentity: `${sender}|tab` });
+      receive(NOTEBOOK_STROKE_TOPIC, { event, senderIdentity: 'unrelated-student|tab' });
+    });
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').remoteDrafts).toEqual([]);
+    act(() => receive(NOTEBOOK_STROKE_TOPIC, { event, senderIdentity: `${sender}|tab` }));
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').remoteDrafts?.[0].shape).toEqual(pen);
+    // Only the paper packet appeared on the ordinary board; camera geometry
+    // must never be interpreted as ink on the underlying personal A4 page.
+    const paperDrafts = canvas(0, 'personal-student').remoteDrafts;
+    expect(paperDrafts).toHaveLength(1);
+    expect(api.replayAnnotations).not.toHaveBeenCalled();
+    let resolveReplay!: (operations: ReturnType<typeof savedPen>[]) => void;
+    api.replayAnnotations.mockImplementation(() => new Promise(resolve => { resolveReplay = resolve; }));
+    act(() => {
+      receive(NOTEBOOK_STROKE_TOPIC, { event: { ...event, active: false, revision: 2 }, senderIdentity: `${sender}|tab` });
+      receive(ANNOTATION_TOPIC, { event: annotationEvent('c1', { documentId: 'doc-personal-student-0', operationId: strokeId,
+        sequence: 1, op: 'ADD', layerOwnerId: sender }), senderIdentity: `${sender}|tab` });
+    });
+    expect(api.replayAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'doc-personal-student-0', 0);
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').remoteDrafts).toHaveLength(1);
+    expect(canvas(0, 'personal-student').remoteDrafts).toEqual(paperDrafts);
+    await act(async () => { resolveReplay([{ ...savedPen(strokeId), actorId: sender, layerOwnerId: sender }]); });
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').shapes).toHaveLength(1);
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').remoteDrafts).toEqual([]);
+  });
+
+  it('rejects untrusted camera save hints and immediately refreshes an authorized undo from REST', async () => {
+    api.replayAnnotations.mockResolvedValueOnce([savedPen('prior')]);
+    render(<WhiteboardPageSurface {...baseProps} actorId="student" isHost={false} targetType="NOTEBOOK_CAMERA" targetId="personal-student" />);
+    await ready(0, 'personal-student', 'NOTEBOOK_CAMERA');
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').shapes).toHaveLength(1);
+    api.replayAnnotations.mockClear();
+    api.replayAnnotations.mockResolvedValue([{ ...savedPen('undo-id', 2), operationType: 'UNDO', payload: JSON.stringify({ targetOperationId: 'prior' }) }]);
+    const event = annotationEvent('c1', { documentId: 'doc-personal-student-0', operationId: 'undo-id', sequence: 2, op: 'UNDO', layerOwnerId: 'teacher' });
+    act(() => {
+      receive(ANNOTATION_TOPIC, { event, senderIdentity: 'unrelated-student|tab' });
+      receive(ANNOTATION_TOPIC, { event, senderIdentity: undefined });
+      receive(ANNOTATION_TOPIC, { event: { ...event, documentId: 'other-camera-document' }, senderIdentity: 'teacher|tab' });
+    });
+    expect(api.replayAnnotations).not.toHaveBeenCalled();
+    await act(async () => { receive(ANNOTATION_TOPIC, { event, senderIdentity: 'teacher|tab' }); });
+    expect(api.replayAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'doc-personal-student-0', 1);
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').shapes).toEqual([]);
+  });
+
+  it.each(['UNDO', 'CLEAR_LAYER', 'CLEAR_ALL'] as const)('does not leave a ghost camera preview when %s arrives in the same replay as its ADD', async (operationType) => {
+    render(<WhiteboardPageSurface {...baseProps} actorId="student" isHost={false} targetType="NOTEBOOK_CAMERA" targetId="personal-student" />);
+    await ready(0, 'personal-student', 'NOTEBOOK_CAMERA');
+    const strokeId = '22222222-2222-4222-8222-222222222222';
+    act(() => receive(NOTEBOOK_STROKE_TOPIC, { event: strokeEvent('c1', 'personal-student', 0, false, pen as never, strokeId, 2), senderIdentity: 'teacher|tab' }));
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').remoteDrafts).toHaveLength(1);
+    api.replayAnnotations.mockResolvedValue([savedPen(strokeId), { ...savedPen('remove-id', 2), operationType,
+      payload: operationType === 'UNDO' ? JSON.stringify({ targetOperationId: strokeId }) : '{}' }]);
+    await act(async () => { receive(ANNOTATION_TOPIC, { event: annotationEvent('c1', {
+      documentId: 'doc-personal-student-0', operationId: 'remove-id', sequence: 2, op: operationType, layerOwnerId: 'teacher',
+    }), senderIdentity: 'teacher|tab' }); });
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').shapes).toEqual([]);
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').remoteDrafts).toEqual([]);
   });
 
   it('sends scroll gestures only in continuous mode and shows lasers only on the selected page', async () => {

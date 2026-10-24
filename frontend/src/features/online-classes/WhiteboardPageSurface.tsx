@@ -142,9 +142,10 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
   const hostUserId = useHostUserId(classId);
   const live = useLiveStrokes({
     classId,
+    targetType,
     targetId,
     page: pageIndex,
-    enabled: !camera,
+    enabled: !camera || Boolean(ownerId),
     personalOwnerId: ownerId,
     hostUserId,
     currentUserId: actorId,
@@ -152,10 +153,14 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
 
   // A packet is only a replay hint. Never apply its operation or let a save on
   // another page refresh every surface in the continuous document.
-  const { publish: publishAnnotation } = useClassEvents(classId, ANNOTATION_TOPIC, ({ event }) => {
-    if (!personal && !camera && event.type === 'annotation' && event.documentId === boardRef.current?.document?.id) {
-      requestRefresh.current();
-    }
+  const { publish: publishAnnotation } = useClassEvents(classId, ANNOTATION_TOPIC, ({ event, senderIdentity }) => {
+    if (event.type !== 'annotation' || event.documentId !== boardRef.current?.document?.id) return;
+    if (camera) {
+      const sender = senderIdentity?.split('|')[0];
+      if (!ownerId || (actorId !== ownerId && actorId !== hostUserId) ||
+          !sender || (sender !== ownerId && sender !== hostUserId)) return;
+    } else if (personal) return;
+    requestRefresh.current();
   });
   const board = useAnnotationBoard({
     classId,
@@ -167,21 +172,28 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
     sourceWidth: cameraBackground?.width,
     sourceHeight: cameraBackground?.height,
     onSaved: (operation, documentId) => {
-      if (personal || camera) return;
-      void publishAnnotation(annotationEvent(classId, {
+      const hint = annotationEvent(classId, {
         documentId,
         operationId: operation.operationId,
         sequence: operation.sequence,
         op: operation.operationType,
         layerOwnerId: operation.layerOwnerId,
-      }));
+      });
+      if (camera) {
+        if (!ownerId || (actorId !== ownerId && actorId !== hostUserId)) return;
+        // Target only the owner and the roster's host. REST still verifies the
+        // saved operation; the hint accelerates erasing/undo as well as pen-up.
+        void publishAnnotation(hint, true, [ownerId, hostUserId].filter((id): id is string => Boolean(id)));
+      } else if (!personal) void publishAnnotation(hint);
     },
   });
   boardRef.current = board;
   useImperativeHandle(ref, () => ({ board, canvas: () => canvasRef.current }));
 
-  // Keep a preview until its authoritative, matching operation is rendered.
-  const savedOperationIds = board.shapes.map((entry) => entry.operationId).join(',');
+  // Reconcile only with confirmed server operations. An ADD may already have
+  // been undone/cleared in the same replay, so visible shapes alone are not
+  // enough: keeping that preview would temporarily resurrect erased ink.
+  const savedOperationIds = board.confirmedStrokeIds.join(',');
   useEffect(() => {
     live.acknowledgeRendered(savedOperationIds ? savedOperationIds.split(',') : []);
   }, [savedOperationIds, live.acknowledgeRendered]);
@@ -257,7 +269,7 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
         notebookView={cameraBackground?.notebookView}
         active={active}
         lasers={selected && !personal && !camera ? lasers : []}
-        remoteDrafts={camera ? [] : live.drafts}
+        remoteDrafts={live.drafts}
         onDraftChange={(shape, strokeId, finished) => live.sendDraft(shape ? toLiveShape(shape) : null, strokeId, finished)}
         actorId={actorId}
         onCommit={(shape, strokeId) => board.addShape(shape, strokeId)}

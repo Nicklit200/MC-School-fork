@@ -16,6 +16,8 @@ export const CONTROL_TOPIC = 'mc.class.control.v1';
 export const VIEW_TOPIC = 'mc.class.view.v1';
 /** In-progress strokes, shown to others while the pen is still down. */
 export const STROKE_TOPIC = 'mc.class.stroke.v1';
+/** Private notebook previews stay separate from the same pupil's paper board. */
+export const NOTEBOOK_STROKE_TOPIC = 'mc.class.notebook-stroke.v1';
 /** New workbook pages are available to the class. */
 export const DOCUMENT_TOPIC = 'mc.class.document.v1';
 

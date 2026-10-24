@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AnnotationTargetType } from '../../api/onlineClasses';
 import {
   MAX_LIVE_POINTS,
+  NOTEBOOK_STROKE_TOPIC,
   STROKE_KINDS,
   STROKE_TOPIC,
   type LiveShape,
@@ -8,6 +10,7 @@ import {
   strokeEvent,
 } from './events';
 import { useClassEvents } from './useClassEvents';
+import { personalBoardId } from './boards';
 
 /** Matches the protocol's ≤ 20 Hz cap for lossy traffic. */
 const SEND_INTERVAL_MS = 33;
@@ -19,6 +22,7 @@ const STALE_AFTER_MS = 15_000;
  */
 const LINGER_AFTER_END_MS = 20_000;
 const SWEEP_MS = 300;
+const MAX_CONFIRMED_STROKES = 512;
 
 export interface LiveDraft {
   /** Sender identity: each person has at most one stroke in progress. */
@@ -111,6 +115,7 @@ export function toLiveShape(shape: {
 export function useLiveStrokes({
   classId,
   targetId,
+  targetType = 'WHITEBOARD',
   page,
   enabled,
   hostUserId,
@@ -119,9 +124,10 @@ export function useLiveStrokes({
 }: {
   classId: string;
   targetId: string;
+  targetType?: AnnotationTargetType;
   page: number;
   enabled: boolean;
-  /** Used only for privacy-limited personal-board previews. */
+  /** Privacy-limited personal-board and notebook previews. */
   hostUserId?: string | null;
   personalOwnerId?: string | null;
   currentUserId?: string | null;
@@ -131,20 +137,36 @@ export function useLiveStrokes({
   const sentActive = useRef(false);
   const activeStrokeId = useRef<string | undefined>(undefined);
   const activeRevision = useRef(0);
-  // A late datagram must not resurrect a stroke once its final reliable packet
-  // or authoritative server copy has already arrived.
+  // A final reliable packet closes the lossy stream, but may itself carry a
+  // newer final shape until the authoritative saved operation arrives.
   const finalizedStrokes = useRef(new Map<string, number>());
+  // Durable ACKs have operation IDs even when no preview has arrived yet.
+  // Remember these separately so neither a late active nor final packet can
+  // resurrect an already saved (and potentially undone) operation.
+  const confirmedStrokes = useRef(new Set<string>());
+  const notebook = targetType === 'NOTEBOOK_CAMERA';
+  const topic = notebook ? NOTEBOOK_STROKE_TOPIC : STROKE_TOPIC;
+  const canAccess = (!notebook || Boolean(enabled && personalOwnerId && targetId === personalBoardId(personalOwnerId))) && (!personalOwnerId || Boolean(currentUserId &&
+    (currentUserId === personalOwnerId || currentUserId === hostUserId)));
 
-  const { publish } = useClassEvents(classId, STROKE_TOPIC, ({ event, senderIdentity }) => {
-    if (!enabled || event.type !== 'stroke' || event.targetId !== targetId || !senderIdentity) return;
+  useEffect(() => {
+    setEntries({});
+    lastSent.current = 0;
+    sentActive.current = false;
+    activeStrokeId.current = undefined;
+    activeRevision.current = 0;
+    finalizedStrokes.current.clear();
+    confirmedStrokes.current.clear();
+  }, [classId, targetId, targetType]);
+
+  const { publish } = useClassEvents(classId, topic, ({ event, senderIdentity }) => {
+    if (!enabled || !canAccess || event.type !== 'stroke' || event.targetId !== targetId || !senderIdentity) return;
     const now = Date.now();
     // Personal board previews must only originate from its owner or teacher,
     // and must never be visible to other students.
     const senderUser = senderIdentity.split('|')[0];
-    if (personalOwnerId && (
-      (currentUserId !== personalOwnerId && currentUserId !== hostUserId) ||
-      (senderUser !== personalOwnerId && senderUser !== hostUserId)
-    )) return;
+    if (personalOwnerId && senderUser !== personalOwnerId && senderUser !== hostUserId) return;
+    if (event.strokeId && confirmedStrokes.current.has(event.strokeId)) return;
     const id = event.strokeId ? senderIdentity + ':' + event.strokeId : senderIdentity;
     if (event.strokeId && event.active && finalizedStrokes.current.has(id)) return;
     if (!event.active && event.strokeId) {
@@ -208,19 +230,26 @@ export function useLiveStrokes({
   }, [entries]);
 
   /**
-   * Remove previews only AFTER their matching saved shape exists in the
-   * server-authoritative board. An annotation notification alone is not enough:
-   * the REST replay may still be loading and would create an ugly blank gap.
+   * Remove previews only AFTER their matching saved ADD is confirmed by the
+   * server-authoritative replay, including ADDs subsequently undone. A hint
+   * alone is not enough: REST may still be loading and create a blank gap.
    */
   const acknowledgeRendered = useCallback((operationIds: readonly string[]) => {
     if (operationIds.length === 0) return;
-    const visible = new Set(operationIds);
+    const acknowledged = new Set(operationIds);
+    for (const id of operationIds) {
+      confirmedStrokes.current.delete(id);
+      confirmedStrokes.current.add(id);
+      if (confirmedStrokes.current.size > MAX_CONFIRMED_STROKES) {
+        const oldest = confirmedStrokes.current.values().next().value;
+        if (oldest !== undefined) confirmedStrokes.current.delete(oldest);
+      }
+    }
     setEntries((current) => {
       let changed = false;
       const next: Record<string, Entry> = {};
       for (const [key, entry] of Object.entries(current)) {
-        if (entry.strokeId && visible.has(entry.strokeId)) {
-          finalizedStrokes.current.set(key, Date.now());
+        if (entry.strokeId && acknowledged.has(entry.strokeId)) {
           changed = true;
         } else {
           next[key] = entry;
@@ -240,9 +269,8 @@ export function useLiveStrokes({
    */
   const sendDraft = useCallback(
     (shape: LiveShape | null, strokeId?: string, finished = false) => {
-      if (!enabled) return;
+      if (!enabled || !canAccess) return;
       // Personal boards are private, including interim pencil coordinates.
-      if (personalOwnerId && (currentUserId !== personalOwnerId && currentUserId !== hostUserId)) return;
       const destinations = personalOwnerId
         ? [personalOwnerId, hostUserId].filter((id): id is string => Boolean(id))
         : undefined;
@@ -272,11 +300,11 @@ export function useLiveStrokes({
         lastSent.current = 0;
       }
     },
-    [classId, currentUserId, enabled, hostUserId, page, personalOwnerId, publish, targetId],
+    [canAccess, classId, enabled, hostUserId, page, personalOwnerId, publish, targetId],
   );
 
   const drafts: LiveDraft[] = Object.entries(entries)
-    .filter(([, entry]) => entry.page === page)
+    .filter(([, entry]) => canAccess && entry.page === page)
     .map(([id, entry]) => ({ id, shape: entry.shape }));
 
   return { drafts, sendDraft, settle, acknowledgeRendered };

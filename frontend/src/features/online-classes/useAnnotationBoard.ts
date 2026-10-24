@@ -153,6 +153,12 @@ export function useAnnotationBoard({
   }, [classId, targetType, targetId, pageIndex, sourceWidth, sourceHeight, update]);
 
   const shapes = useMemo(() => foldOperations(operations), [operations]);
+  // A durable ADD can already be hidden by a following undo/clear in the same
+  // replay batch. Its live preview is still settled by that authoritative ADD;
+  // optimistic negative sequences must never acknowledge a remote preview.
+  const confirmedStrokeIds = useMemo(() => operations
+    .filter(operation => operation.operationType === 'ADD' && operation.sequence > 0)
+    .map(operation => operation.operationId), [operations]);
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
 
   const submit = useCallback(
@@ -271,6 +277,7 @@ export function useAnnotationBoard({
   return {
     document,
     shapes,
+    confirmedStrokeIds,
     canUndo: undoable.length > 0,
     canRedo: redoStack.length > 0,
     addShape,

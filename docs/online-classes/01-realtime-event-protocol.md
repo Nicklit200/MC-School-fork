@@ -129,6 +129,32 @@ returns. The sender no longer includes `payload` (the field is not parsed), and 
 `CLEAR_ALL`) can at most trigger a harmless re-fetch. Bursts collapse into one
 replay per 150 ms.
 
+### `mc.class.notebook-stroke.v1`
+
+Notebook-camera ink uses the same validated `stroke` packets as the ordinary
+board's `mc.class.stroke.v1`, on a separate topic. A camera and a white paper
+board may have the same `personal-<owner>` target ID; their previews must never
+mix, including when a peer still runs an older client.
+
+Packets carry raw, normalized camera coordinates. The receiver projects the
+preview together with the video and durable ink using the committed notebook
+geometry. The first point is sent immediately, interim points are throttled,
+and pen-up sends the complete final preview reliably. Its stroke ID is also
+the durable annotation operation ID, so the preview remains until the matching
+saved shape is rendered.
+
+Only the personal owner and the roster's host send and receive these previews.
+Sends resolve those users' connected classroom device identities; missing
+recipients never fall back to broadcast. Camera targets without a valid owner
+are disabled. Receivers check the LiveKit sender identity, not a payload actor.
+
+Camera save notifications use targeted `mc.class.annotation.v1` hints to the
+same owner/host devices. An authorized, matching document hint immediately
+triggers REST replay, including undo and erasing; its operation is never applied
+directly. The private-document poll remains a fallback when realtime delivery
+is unavailable. Notebook phone media/signalling is a separate connection and
+does not carry classroom ink previews.
+
 ## Reconnect and late join
 
 1. Fetch durable state over REST (participants, chat page, annotation replay

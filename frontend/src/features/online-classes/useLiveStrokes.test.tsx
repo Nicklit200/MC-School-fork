@@ -1,14 +1,17 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_LIVE_POINTS, type ClassEvent, parseClassEvent, strokeEvent, encodeEvent } from './events';
+import { MAX_LIVE_POINTS, NOTEBOOK_STROKE_TOPIC, STROKE_TOPIC, type ClassEvent, parseClassEvent, strokeEvent, encodeEvent } from './events';
 import { capPoints, toLiveShape, useLiveStrokes } from './useLiveStrokes';
+import type { AnnotationTargetType } from '../../api/onlineClasses';
 
 const publish = vi.fn().mockResolvedValue(undefined);
 let handler: (received: { event: ClassEvent; senderIdentity: string | undefined }) => void = () => {};
+const topicHandlers = new Map<string, typeof handler>();
 
 vi.mock('./useClassEvents', () => ({
-  useClassEvents: (_c: string, _t: string, onEvent: typeof handler) => {
+  useClassEvents: (_c: string, topic: string, onEvent: typeof handler) => {
     handler = onEvent;
+    topicHandlers.set(topic, onEvent);
     return { publish };
   },
 }));
@@ -89,6 +92,7 @@ describe('useLiveStrokes', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     publish.mockClear();
+    topicHandlers.clear();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -234,5 +238,154 @@ describe('useLiveStrokes', () => {
     const on = mount();
     on.result.current.sendDraft(null);
     expect(publish).not.toHaveBeenCalled();
+  });
+});
+
+describe('private notebook stroke previews', () => {
+  const props = { classId: 'c1', targetId: 'personal-pupil', targetType: 'NOTEBOOK_CAMERA' as const,
+    page: 0, enabled: true, personalOwnerId: 'pupil', hostUserId: 'teacher', currentUserId: 'pupil' };
+  const strokeId = '11111111-1111-4111-8111-111111111111';
+  beforeEach(() => { vi.useFakeTimers(); publish.mockClear(); topicHandlers.clear(); });
+  afterEach(() => vi.useRealTimers());
+
+  it.each([
+    ['pupil', 'teacher|laptop'],
+    ['teacher', 'pupil|tablet'],
+  ])('allows %s to receive and send canonical notebook ink only with the owner and teacher', (currentUserId, senderIdentity) => {
+    const { result } = renderHook(() => useLiveStrokes({ ...props, currentUserId }));
+    const shape = { ...line, points: [[0.025, 0.96], [0.875, 0.14]] as [number, number][], pressures: [0.2, 0.8] };
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, shape, strokeId, 1), senderIdentity }));
+    expect(result.current.drafts).toEqual([{ id: `${senderIdentity}:${strokeId}`, shape }]);
+    act(() => result.current.sendDraft(shape, strokeId));
+    act(() => result.current.sendDraft(shape, strokeId, true));
+    expect(publish).toHaveBeenNthCalledWith(1, expect.objectContaining({ targetId: props.targetId, active: true, shape, strokeId, revision: 1 }), false, ['pupil', 'teacher']);
+    expect(publish).toHaveBeenNthCalledWith(2, expect.objectContaining({ active: false, shape, strokeId, revision: 2 }), true, ['pupil', 'teacher']);
+    expect(topicHandlers.has(NOTEBOOK_STROKE_TOPIC)).toBe(true);
+    expect(topicHandlers.has(STROKE_TOPIC)).toBe(false);
+  });
+
+  it('rejects a foreign pupil and a phone-room identity even for an authorized receiver', () => {
+    const { result } = renderHook(() => useLiveStrokes(props));
+    act(() => {
+      handler({ event: strokeEvent('c1', props.targetId, 0, true, line), senderIdentity: 'other-pupil|tablet' });
+      handler({ event: strokeEvent('c1', props.targetId, 0, true, line), senderIdentity: 'notebook-phone:camera-id' });
+      handler({ event: strokeEvent('c1', 'personal-other-pupil', 0, true, line), senderIdentity: 'teacher|laptop' });
+    });
+    expect(result.current.drafts).toEqual([]);
+  });
+
+  it.each([
+    ['no owner', { personalOwnerId: undefined }],
+    ['an empty owner', { personalOwnerId: '' }],
+    ['a mismatched personal board', { targetId: 'personal-other-pupil' }],
+    ['a shared board', { targetId: 'board-1' }],
+    ['an unknown local user', { currentUserId: undefined }],
+    ['a foreign local pupil', { currentUserId: 'other-pupil' }],
+  ])('fails closed with %s', (_name, overrides) => {
+    const configured = { ...props, ...overrides };
+    const { result } = renderHook(() => useLiveStrokes(configured));
+    act(() => {
+      handler({ event: strokeEvent('c1', configured.targetId, 0, true, line), senderIdentity: 'teacher|laptop' });
+      result.current.sendDraft(line, strokeId);
+      result.current.sendDraft(null);
+    });
+    expect(result.current.drafts).toEqual([]);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('hides existing private previews immediately when disabled or the receiver loses access', () => {
+    const { result, rerender } = renderHook(({ enabled, currentUserId }) => useLiveStrokes({ ...props, enabled, currentUserId }),
+      { initialProps: { enabled: true, currentUserId: 'pupil' } });
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, line), senderIdentity: 'teacher|laptop' }));
+    expect(result.current.drafts).toHaveLength(1);
+    rerender({ enabled: false, currentUserId: 'pupil' });
+    expect(result.current.drafts).toEqual([]);
+    rerender({ enabled: true, currentUserId: 'other-pupil' });
+    expect(result.current.drafts).toEqual([]);
+  });
+
+  it('separates paper and notebook previews even when their personal target and stroke ID match', () => {
+    const paper = renderHook(() => useLiveStrokes({ ...props, targetType: 'WHITEBOARD' }));
+    const notebook = renderHook(() => useLiveStrokes(props));
+    const packet = { event: strokeEvent('c1', props.targetId, 0, true, line, strokeId, 1), senderIdentity: 'teacher|laptop' };
+    act(() => topicHandlers.get(STROKE_TOPIC)!(packet));
+    expect(paper.result.current.drafts).toHaveLength(1);
+    expect(notebook.result.current.drafts).toEqual([]);
+    act(() => topicHandlers.get(NOTEBOOK_STROKE_TOPIC)!(packet));
+    expect(notebook.result.current.drafts).toHaveLength(1);
+    act(() => paper.result.current.acknowledgeRendered([strokeId]));
+    expect(paper.result.current.drafts).toEqual([]);
+    expect(notebook.result.current.drafts).toHaveLength(1);
+  });
+
+  it('clears previous target previews and packet counters when changing between paper and notebook modes', () => {
+    const { result, rerender } = renderHook(({ targetType }: { targetType: AnnotationTargetType }) => useLiveStrokes({ ...props, targetType }),
+      { initialProps: { targetType: 'WHITEBOARD' as AnnotationTargetType } });
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, line, strokeId, 8), senderIdentity: 'teacher|laptop' }));
+    act(() => result.current.sendDraft(line, strokeId));
+    expect(result.current.drafts).toHaveLength(1);
+    rerender({ targetType: 'NOTEBOOK_CAMERA' });
+    expect(result.current.drafts).toEqual([]);
+    act(() => result.current.sendDraft(line, strokeId));
+    expect(publish.mock.calls.at(-1)?.[0]).toMatchObject({ revision: 1, active: true });
+  });
+
+  it('keeps notebook previews until their saved operation is rendered and rejects delayed older revisions', () => {
+    const { result } = renderHook(() => useLiveStrokes(props));
+    const senderIdentity = 'teacher|laptop';
+    const longer = { ...line, points: [...line.points, [0.3, 0.3]] as [number, number][] };
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, longer, strokeId, 3), senderIdentity }));
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, line, strokeId, 2), senderIdentity }));
+    expect(result.current.drafts[0].shape).toEqual(longer);
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, longer, strokeId, 4), senderIdentity }));
+    act(() => result.current.settle('teacher'));
+    expect(result.current.drafts).toHaveLength(1);
+    act(() => result.current.acknowledgeRendered([strokeId]));
+    expect(result.current.drafts).toEqual([]);
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, line, strokeId, 5), senderIdentity }));
+    expect(result.current.drafts).toEqual([]);
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, line, strokeId, 6), senderIdentity }));
+    expect(result.current.drafts).toEqual([]);
+  });
+
+  it('rejects active and final packets when the durable ADD was confirmed before any preview arrived', () => {
+    const { result } = renderHook(() => useLiveStrokes(props));
+    act(() => result.current.acknowledgeRendered([strokeId]));
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, line, strokeId, 1), senderIdentity: 'teacher|laptop' }));
+    expect(result.current.drafts).toEqual([]);
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, line, strokeId, 2), senderIdentity: 'teacher|laptop' }));
+    expect(result.current.drafts).toEqual([]);
+    const nextId = '22222222-2222-4222-8222-222222222222';
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, true, line, nextId, 1), senderIdentity: 'teacher|laptop' }));
+    expect(result.current.drafts).toHaveLength(1);
+    expect(result.current.drafts[0].id).toBe(`teacher|laptop:${nextId}`);
+  });
+
+  it('keeps newer final geometry before durable confirmation and never revives it after confirmation', () => {
+    const { result } = renderHook(() => useLiveStrokes(props));
+    const senderIdentity = 'teacher|laptop';
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, line, strokeId, 2), senderIdentity }));
+    const final = { ...line, points: [...line.points, [0.3, 0.3]] as [number, number][] };
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, final, strokeId, 3), senderIdentity }));
+    expect(result.current.drafts[0].shape).toEqual(final);
+    act(() => result.current.acknowledgeRendered([strokeId]));
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, final, strokeId, 4), senderIdentity }));
+    expect(result.current.drafts).toEqual([]);
+  });
+
+  it('keeps the most recently confirmed IDs when a long lesson exceeds the bounded ACK history', () => {
+    const { result } = renderHook(() => useLiveStrokes(props));
+    const ids = Array.from({ length: 512 }, (_, i) => `${i.toString(16).padStart(8, '0')}-1111-4111-8111-111111111111`);
+    act(() => result.current.acknowledgeRendered(ids));
+    // Reconfirming the first operation keeps it recent when one more is saved.
+    act(() => result.current.acknowledgeRendered([ids[0], strokeId]));
+    act(() => {
+      handler({ event: strokeEvent('c1', props.targetId, 0, false, line, ids[0], 4), senderIdentity: 'teacher|laptop' });
+      handler({ event: strokeEvent('c1', props.targetId, 0, false, line, strokeId, 4), senderIdentity: 'teacher|laptop' });
+    });
+    expect(result.current.drafts).toEqual([]);
+    // Only the oldest untouched ID has been evicted; memory does not grow.
+    act(() => handler({ event: strokeEvent('c1', props.targetId, 0, false, line, ids[1], 4), senderIdentity: 'teacher|laptop' }));
+    expect(result.current.drafts).toHaveLength(1);
   });
 });

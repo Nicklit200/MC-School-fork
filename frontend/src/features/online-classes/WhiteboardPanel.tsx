@@ -140,9 +140,8 @@ export function WhiteboardPanel({
   const pdfDocument = camera ? null : providedPdfDocument;
   const cameraBackground = camera && liveBackground && Number.isFinite(liveBackground.width) && liveBackground.width > 0
     && Number.isFinite(liveBackground.height) && liveBackground.height > 0 ? liveBackground : null;
-  // A personal board is private: nothing about it is broadcast and it never
-  // follows (or is followed by) anyone. The teacher sees a student's marks by
-  // polling the server, which is what enforces who may read them.
+  // Personal ink previews go only to the owner and host; durable marks are
+  // authorized by the server. Personal boards never follow the shared view.
   const personal = isPersonalBoard(targetId);
   const ownerId = personalBoardOwner(targetId);
   const [tool, setTool] = useState<Tool>('pen');

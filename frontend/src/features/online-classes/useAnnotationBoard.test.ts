@@ -126,6 +126,39 @@ describe('useAnnotationBoard', () => {
     expect(result.current.shapes[0].sequence).toBeGreaterThan(0);
   });
 
+  it('acknowledges a stroke only after its optimistic ADD receives a positive server sequence', async () => {
+    let resolveSave!: (operation: unknown) => void;
+    api.appendAnnotation.mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }) as never);
+    const { result } = board();
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    let saving!: Promise<boolean>;
+    act(() => { saving = result.current.addShape(PEN, 'pending-stroke'); });
+    expect(result.current.shapes).toHaveLength(1);
+    expect(result.current.shapes[0].sequence).toBeLessThan(0);
+    expect(result.current.confirmedStrokeIds).toEqual([]);
+    await act(async () => {
+      resolveSave({ id: 'row-confirmed', operationId: 'pending-stroke', sequence: 1, actorId: 'teacher-1',
+        layerOwnerId: 'teacher-1', operationType: 'ADD', payload: JSON.stringify(PEN), createdAt: '' });
+      await saving;
+    });
+    expect(result.current.confirmedStrokeIds).toEqual(['pending-stroke']);
+  });
+
+  it.each(['UNDO', 'CLEAR_LAYER', 'CLEAR_ALL'] as const)('keeps a confirmed ADD available for preview ACK when %s hides it in the first replay', async operationType => {
+    api.replayAnnotations.mockResolvedValue([
+      { id: 'row-add', operationId: 'stroke-already-hidden', sequence: 1, actorId: 'teacher-1', layerOwnerId: 'teacher-1',
+        operationType: 'ADD', payload: JSON.stringify(PEN), createdAt: '' },
+      { id: 'row-hide', operationId: 'hide', sequence: 2, actorId: 'teacher-1', layerOwnerId: 'teacher-1',
+        operationType, payload: JSON.stringify({ targetOperationId: 'stroke-already-hidden' }), createdAt: '' },
+    ]);
+    const { result, rerender } = board(true);
+    await waitFor(() => expect(result.current.confirmedStrokeIds).toEqual(['stroke-already-hidden']));
+    expect(result.current.shapes).toEqual([]);
+    const confirmed = result.current.confirmedStrokeIds;
+    rerender();
+    expect(result.current.confirmedStrokeIds).toBe(confirmed);
+  });
+
   it('removes an optimistic stroke the server rejected', async () => {
     api.appendAnnotation.mockRejectedValue(new Error('invalid'));
     const { result } = board();

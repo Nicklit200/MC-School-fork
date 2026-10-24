@@ -10,6 +10,7 @@ import type { NotebookCameraGeometry } from './notebookCameraGeometry';
 import { DEFAULT_VIEW } from './boardView';
 import {
   ANNOTATION_TOPIC,
+  NOTEBOOK_STROKE_TOPIC,
   STROKE_TOPIC,
   VIEW_TOPIC,
   annotationEvent,
@@ -972,7 +973,7 @@ describe('WhiteboardPanel', () => {
       expect(canvasProps.backgroundLive).toBe(true);
     });
 
-    it('does not send camera strokes or camera views through the paper-board event protocol', async () => {
+    it('sends notebook ink privately on its own channel and ignores paper-board strokes and views', async () => {
       mount('student', { ...notebook, liveBackground: background() });
       await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
       await act(async () => {
@@ -981,8 +982,13 @@ describe('WhiteboardPanel', () => {
         handlers[STROKE_TOPIC]({ event: strokeEvent('c1', 'personal-student', 0, true, { kind: 'pen', color: '#111111', width: 0.004, points: [[0.3, 0.4]] }), senderIdentity: 'student|tab' });
       });
       expect(api.appendAnnotation).toHaveBeenCalled();
-      expect(publish).not.toHaveBeenCalled();
+      expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'stroke', targetId: 'personal-student' }), false, ['student', 'teacher']);
+      expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'annotation' }), true, ['student', 'teacher']);
+      expect(publish).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'view' }), expect.anything());
       expect(canvasProps.remoteDrafts).toEqual([]);
+      act(() => handlers[NOTEBOOK_STROKE_TOPIC]({ event: strokeEvent('c1', 'personal-student', 0, true,
+        { kind: 'pen', color: '#111111', width: 0.004, points: [[0.3, 0.4]] }), senderIdentity: 'teacher|tab' }));
+      expect(canvasProps.remoteDrafts).toHaveLength(1);
     });
 
     it('exports the current composited camera frame as a one-page PDF', async () => {
