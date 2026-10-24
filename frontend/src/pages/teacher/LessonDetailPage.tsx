@@ -40,12 +40,14 @@ const NICK_AI_PILOT_TEACHER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
 
 export function LessonDetailPage() {
   const { eventId = '' } = useParams();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { user } = useAuth();
   const isNickAiPilot = user?.id === NICK_AI_PILOT_TEACHER_ID;
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
+  const hasLessonAudience = Boolean(lesson?.studentId || lesson?.groupId);
   const [lessonStudents, setLessonStudents] = useState<LessonStudent[]>([]);
   const [preparation, setPreparation] = useState<LessonPreparation | null>(null);
+  const [coveredMaterial, setCoveredMaterial] = useState('');
   const [homeworkNotes, setHomeworkNotes] = useState('');
   const [difficulties, setDifficulties] = useState('');
   const [lessonPlan, setLessonPlan] = useState('');
@@ -96,6 +98,7 @@ export function LessonDetailPage() {
         const currentLesson = lessons.find((item) => item.eventId === eventId) ?? null;
         setLesson(currentLesson);
         setPreparation(prep);
+        setCoveredMaterial(prep.coveredMaterial ?? '');
         setHomeworkNotes(prep.homeworkNotes ?? '');
         setDifficulties(prep.difficulties ?? '');
         setLessonPlan(prep.lessonPlan ?? '');
@@ -167,16 +170,17 @@ export function LessonDetailPage() {
     if (!lesson) return '';
     if (isNativeLesson(lesson)) {
       return new Intl.DateTimeFormat('ru-RU', {
-        weekday: 'long', day: '2-digit', month: 'long',
+        weekday: 'long', day: '2-digit', month: 'long', timeZone: 'Europe/Berlin',
       }).format(new Date(lesson.startsAt)) + ' · ' + lessonDurationLabel(lesson, 'RU');
     }
     return new Intl.DateTimeFormat('ru-RU', {
-      weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
+      weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin',
     }).format(new Date(lesson.startsAt));
   }, [lesson]);
 
   function applyPreparation(updated: LessonPreparation) {
     setPreparation(updated);
+    setCoveredMaterial(updated.coveredMaterial ?? '');
     setHomeworkNotes(updated.homeworkNotes ?? '');
     setDifficulties(updated.difficulties ?? '');
     setLessonPlan(updated.lessonPlan ?? '');
@@ -189,7 +193,7 @@ export function LessonDetailPage() {
     setError(null);
     setMessage(null);
     try {
-      const saved = await lessonPreparationApi.update(eventId, { homeworkNotes, difficulties, lessonPlan, transcriptText });
+      const saved = await lessonPreparationApi.update(eventId, { coveredMaterial, homeworkNotes, difficulties, lessonPlan, transcriptText });
       applyPreparation(saved);
       const updated = action === 'prepare'
         ? await aiPilotApi.prepareLesson(eventId)
@@ -211,7 +215,7 @@ export function LessonDetailPage() {
     setError(null);
     setMessage(null);
     try {
-      const updated = await lessonPreparationApi.update(eventId, { homeworkNotes, difficulties, lessonPlan, transcriptText });
+      const updated = await lessonPreparationApi.update(eventId, { coveredMaterial, homeworkNotes, difficulties, lessonPlan, transcriptText });
       setPreparation(updated);
       setMessage('Информация для урока сохранена.');
     } catch (e) {
@@ -363,13 +367,18 @@ export function LessonDetailPage() {
           )}
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
           {lesson?.meetUrl && <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">Google Meet</a>}
-          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' && (
+          {isNickAiPilot && lesson && hasLessonAudience && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' && (
             <StartOnlineClassButton eventId={lesson.eventId} />
+          )}
+          {isNickAiPilot && lesson && !hasLessonAudience && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' && (
+            <p className="muted" style={{ maxWidth: 340, fontSize: 13 }}>{language === 'DE'
+              ? 'Ordnen Sie diesem Unterricht einen Schüler zu, damit er teilnehmen kann.'
+              : 'Для подключения ученика назначьте его этому уроку'}</p>
           )}
           {/* Mindcrafti Online will be enabled only after the live-classes API,
               migrations and LiveKit provider have passed staging acceptance tests.
               Keep the Google Meet action functional independently. */}
-          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED !== 'true' && (
+          {isNickAiPilot && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && (import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED !== 'true' || !hasLessonAudience) && (
             <Link className="btn btn--secondary" to={`/lesson-board/${encodeURIComponent(eventId)}`}>
               Mindcrafti доска (тест)
             </Link>
@@ -499,6 +508,13 @@ export function LessonDetailPage() {
       </section>
 
       <div className="stack" style={{ gap: 14 }}>
+        <section className="panel" style={{ padding: 20, margin: 0 }}>
+          <h2 style={{ margin: '0 0 8px' }}><label htmlFor="lesson-covered-material">Пройденный материал</label></h2>
+          <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>Что разобрали на занятии и к чему вернуться в следующий раз</p>
+          <textarea id="lesson-covered-material" className="input" rows={5} maxLength={100000}
+            value={coveredMaterial} onChange={event => setCoveredMaterial(event.target.value)}
+            placeholder="Темы, задания и результаты урока" style={{ width: '100%', resize: 'vertical' }} />
+        </section>
         <section className="panel" style={{ padding: 20, margin: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>

@@ -6,6 +6,7 @@ import { api } from '../../api/client';
 import type { GroupLesson, StudentGroup, StudentListItem, User } from '../../api/types';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { GroupLessonsPage } from './GroupLessonsPage';
+import { lessonDayInstant, schoolDateKey } from '../../lib/lessonSchedule';
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -22,8 +23,7 @@ const trialNameLabel = 'Имя ученика';
 const durationLabel = 'Длительность урока, минут';
 
 function lesson(title = 'Математика без Google'): GroupLesson {
-  const start = new Date();
-  start.setHours(12, 0, 0, 0);
+  const start = lessonDayInstant(schoolDateKey(new Date()), 12);
   return { eventId: 'local-lesson', bindingKey: 'local-lesson', title,
     groupId: null, groupName: null, studentId: null, studentName: null, participantStudentIds: [],
     startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 3600_000).toISOString(),
@@ -106,8 +106,8 @@ describe('native lesson schedule', () => {
     await waitFor(() => expect(lessonApi.create).toHaveBeenCalledOnce());
     const payload = lessonApi.create.mock.calls[0][0];
     expect(payload).toMatchObject({ title: trialTitle, groupId: null, studentId: null });
-    expect(payload.startsAt).toBe(new Date('2026-11-10T00:00:00').toISOString());
-    expect(payload.endsAt).toBe(new Date(new Date('2026-11-10T00:00:00').getTime() + 45 * 60_000).toISOString());
+    expect(payload.startsAt).toBe('2026-11-09T23:00:00.000Z');
+    expect(payload.endsAt).toBe('2026-11-09T23:45:00.000Z');
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Урок создан: ' + trialTitle));
     expect(lessonApi.groupLessons).toHaveBeenCalledTimes(2);
     expect(screen.getAllByRole('link', { name: 'Открыть урок' })).toHaveLength(2);

@@ -97,4 +97,4 @@ jobs:
       - name: Compile complete application and tests
         run: npm run build
       - name: Verify lesson planning, preserved document archives and student join refresh
-        run: npm test -- src/pages/teacher/GroupLessonsPage.test.tsx src/pages/teacher/LessonDetailPage.test.tsx src/pages/student/StudentLessonsCalendarPage.test.tsx src/lib/lessonRecurrence.test.ts
+        run: npm test -- src/pages/teacher/GroupLessonsPage.test.tsx src/pages/teacher/LessonDetailPage.test.tsx src/pages/student/StudentLessonsCalendarPage.test.tsx src/lib/lessonRecurrence.test.ts src/lib/lessonSchedule.test.ts

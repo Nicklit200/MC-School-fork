@@ -386,7 +386,7 @@ export function GroupLessonsPage() {
         <div className="lesson-agenda-days" role="group" aria-label={language === 'DE' ? 'Unterrichtstag auswählen' : 'Выбрать день уроков'}>
           {scheduleDays.map((day, index) => <button type="button" key={day.key} className={'lesson-agenda-day' + (day.key === todayKey ? ' is-today' : '')}
             aria-pressed={selectedDayKey === day.key} aria-label={formatAgendaDate(day.key, language) + ', ' + lessonCountText(day.lessons.length, language)} onClick={() => selectDate(day.key)}>
-            <span>{weekdayLabels(language)[index]}</span><strong>{day.date.getDate()}</strong>
+            <span>{weekdayLabels(language)[index]}</span><strong>{day.date.getUTCDate()}</strong>
             <i className={day.lessons.length > 0 ? 'has-lessons' : ''} aria-hidden="true" />
           </button>)}
         </div>
@@ -614,15 +614,15 @@ function buildStudentBrief(studentId: string, name: string, homeworks: Homework[
 }
 
 function formatMonthTitle(date: Date, language: 'DE' | 'RU') {
-  const value = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { month: 'long', year: 'numeric' }).format(date).replace(/\sг\.$/, '');
+  const value = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' }).format(date).replace(/\sг\.$/, '');
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function dateFromKey(key: string) { return new Date(key + 'T12:00:00'); }
+function dateFromKey(key: string) { return new Date(key + 'T12:00:00Z'); }
 function formatAgendaDate(key: string, language: 'DE' | 'RU') {
   const date = dateFromKey(key);
   return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    day: 'numeric', month: 'long', ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } as const : {}),
+    day: 'numeric', month: 'long', timeZone: 'Europe/Berlin', ...(date.getUTCFullYear() !== Number(berlinDateKey(new Date().toISOString()).slice(0, 4)) ? { year: 'numeric' } as const : {}),
   }).format(date);
 }
 function lessonCountText(count: number, language: 'DE' | 'RU') {
@@ -637,7 +637,7 @@ function weekdayLabels(language: 'DE' | 'RU') {
     : ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 }
 
-function startOfWeekMonday(date: Date) { const day = date.getDay(); const offset = day === 0 ? -6 : 1 - day; return addDays(startOfLocalDay(date), offset); }
+function startOfWeekMonday(date: Date) { const day = date.getUTCDay(); const offset = day === 0 ? -6 : 1 - day; return addDays(startOfLocalDay(date), offset); }
 function berlinDateKey(value: string) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Berlin',
@@ -652,7 +652,7 @@ function berlinDateKey(value: string) {
 }
 
 function formatStartTime(value: string, language: 'DE' | 'RU') { return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' }).format(new Date(value)); }
-function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') { const formatter = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }); return `${formatter.format(new Date(start))}–${formatter.format(new Date(end))}`; }
-function startOfLocalDay(date: Date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
-function addDays(date: Date, days: number) { return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days); }
-function localDateKey(date: Date) { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }
+function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') { const formatter = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' }); return `${formatter.format(new Date(start))}–${formatter.format(new Date(end))}`; }
+function startOfLocalDay(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12)); }
+function addDays(date: Date, days: number) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days, 12)); }
+function localDateKey(date: Date) { return date.toISOString().slice(0, 10); }

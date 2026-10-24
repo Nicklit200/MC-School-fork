@@ -85,4 +85,16 @@ describe('student online lesson discovery', () => {
     mount(); await settle();
     expect(screen.queryByRole('link', { name: /Mindcrafti Online.*подключиться/ })).not.toBeInTheDocument();
   });
+
+  it('places native date-only lessons on their Berlin date and shows their duration', async () => {
+    vi.mocked(api.studentLessons.list).mockResolvedValue([{
+      eventId: 'local-oct24', title: 'Урок на субботу', groupName: null,
+      startsAt: '2026-10-23T22:00:00Z', endsAt: '2026-10-23T23:00:00Z', meetUrl: null,
+      hasSharedDocument: false, sharedDocumentFilename: null,
+    }]);
+    mount(); await settle();
+    expect(screen.getByText('Урок на субботу')).toBeInTheDocument();
+    expect(screen.getByText('60 мин')).toBeInTheDocument();
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+  });
 });

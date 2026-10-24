@@ -1,6 +1,6 @@
 import '../../online-classes.css';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { onlineClassesApi } from '../../api/onlineClasses';
@@ -19,7 +19,7 @@ type MediaApiStatus = 'idle' | 'checking' | 'reachable' | 'authRejected' | 'unre
 
 export function OnlineClassPage() {
   const { classId } = useParams<{ classId: string }>();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
   const session = useClassSession(classId);
@@ -46,6 +46,18 @@ export function OnlineClassPage() {
 
   if (session.phase === 'unavailable') {
     return <p role="alert">{t('onlineClass.unavailable')}</p>;
+  }
+
+  if (!session.connection && session.onlineClass?.viewerIsHost && !session.onlineClass.joinWindowOpen
+      && (session.onlineClass.status === 'LIVE' || session.onlineClass.status === 'LOBBY_OPEN')) {
+    return <section className="panel">
+      <p role="status">{language === 'DE'
+        ? 'Diese Sitzung ist abgelaufen. Starten Sie den Unterricht erneut, damit der Schüler beitreten kann.'
+        : 'Время этой сессии истекло. Запустите урок заново, чтобы ученик мог подключиться.'}</p>
+      <Link className="btn" to={`/teacher/lessons/${encodeURIComponent(session.onlineClass.eventId)}`}>
+        {language === 'DE' ? 'Zum Unterricht' : 'Открыть карточку урока'}
+      </Link>
+    </section>;
   }
 
   if (session.connection) {

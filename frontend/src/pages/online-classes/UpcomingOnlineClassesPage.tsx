@@ -41,10 +41,13 @@ export function UpcomingOnlineClassesPage() {
         <ul>
           {classes.map((item) => (
             <li key={item.id}>
-              <Link to={`/online-classes/${item.id}`}>
-                {item.title} — {new Date(item.scheduledStartAt).toLocaleString(locale)}
+              <Link to={item.viewerIsHost && !item.joinWindowOpen && (item.status === 'LIVE' || item.status === 'LOBBY_OPEN')
+                ? `/teacher/lessons/${encodeURIComponent(item.eventId)}` : `/online-classes/${item.id}`}>
+                {item.title} — {new Date(item.scheduledStartAt).toLocaleString(locale, { timeZone: 'Europe/Berlin' })}
               </Link>
-              {item.status === 'LIVE' && <span className="badge">{t('onlineClass.live')}</span>}
+              {!item.joinWindowOpen && (item.status === 'LIVE' || item.status === 'LOBBY_OPEN')
+                ? <span className="badge">{language === 'DE' ? 'Neue Sitzung über den Unterricht starten' : 'Запустите новую сессию из урока'}</span>
+                : item.status === 'LIVE' && <span className="badge">{t('onlineClass.live')}</span>}
             </li>
           ))}
         </ul>

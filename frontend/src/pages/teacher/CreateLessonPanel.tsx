@@ -5,6 +5,7 @@ import type { GroupLesson, StudentGroup, StudentListItem } from '../../api/types
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { lessonOccurrenceDates, lessonPeriodEnd, lessonWeekday, localLessonDate, type LessonRepeatPeriod } from '../../lib/lessonRecurrence';
+import { lessonDayInstant, SCHOOL_TIME_ZONE } from '../../lib/lessonSchedule';
 import './create-lesson.css';
 import { LessonTargetPicker, type LessonTargetKind } from './LessonTargetPicker';
 
@@ -71,7 +72,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
     ? (trialName.trim() ? (de ? 'Probeunterricht · ' : 'Пробный урок · ') + trialName.trim() : '')
     : group?.name ?? student?.fullName ?? '';
   const duration = Number(durationMinutes);
-  const start = new Date(lessonDate + 'T00:00:00');
+  const start = lessonDayInstant(lessonDate);
   const validDuration = Number.isInteger(duration) && duration > 0 && duration <= 1440;
   const endsAt = Number.isFinite(start.getTime()) && validDuration
     ? new Date(start.getTime() + duration * 60_000) : null;
@@ -80,8 +81,8 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
   const series = period !== 'ONCE';
   const periodEnd = lessonPeriodEnd(lessonDate, period);
   const formatDate = (value: string) => new Intl.DateTimeFormat(de ? 'de-DE' : 'ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  }).format(new Date(value + 'T12:00:00'));
+    day: '2-digit', month: '2-digit', year: 'numeric', timeZone: SCHOOL_TIME_ZONE,
+  }).format(new Date(value + 'T12:00:00Z'));
   const weekdayNames = de
     ? ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']
     : ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];

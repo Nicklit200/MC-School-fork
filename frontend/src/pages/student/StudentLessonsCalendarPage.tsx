@@ -25,8 +25,9 @@ export function StudentLessonsCalendarPage() {
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
-  const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
+  const [monthCursor, setMonthCursor] = useState(() => startOfMonth(dateFromKey(berlinDateKey(new Date().toISOString()))));
   const [selectedMonthDayKey, setSelectedMonthDayKey] = useState<string | null>(null);
+  const todayKey = berlinDateKey(new Date().toISOString());
 
   useEffect(() => {
     let cancelled = false;
@@ -88,28 +89,24 @@ export function StudentLessonsCalendarPage() {
   }
 
   const scheduleDays = useMemo<ScheduleDay[]>(() => {
-    const start = startOfLocalDay(new Date());
-    const endExclusive = addDays(start, 7);
+    const start = dateFromKey(todayKey);
+    const endExclusive = localDateKey(addDays(start, 7));
     const visible = lessons
       .filter((lesson) => {
-        const startsAt = new Date(lesson.startsAt);
-        return startsAt >= start && startsAt < endExclusive;
+        const key = berlinDateKey(lesson.startsAt);
+        return key >= todayKey && key < endExclusive;
       })
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 
     return Array.from({ length: 7 }, (_, offset) => {
       const date = addDays(start, offset);
-      const next = addDays(date, 1);
       return {
         key: localDateKey(date),
         date,
-        lessons: visible.filter((lesson) => {
-          const startsAt = new Date(lesson.startsAt);
-          return startsAt >= date && startsAt < next;
-        }),
+        lessons: visible.filter(lesson => berlinDateKey(lesson.startsAt) === localDateKey(date)),
       };
     });
-  }, [lessons]);
+  }, [lessons, todayKey]);
 
   const lessonsByDay = useMemo(() => {
     const map = new Map<string, StudentLesson[]>();
@@ -137,7 +134,6 @@ export function StudentLessonsCalendarPage() {
     const selectedStillInMonth = selectedMonthDayKey?.startsWith(monthPrefix);
     if (selectedStillInMonth) return;
 
-    const todayKey = localDateKey(new Date());
     if (todayKey.startsWith(monthPrefix) && (lessonsByDay.get(todayKey)?.length ?? 0) > 0) {
       setSelectedMonthDayKey(todayKey);
       return;
@@ -147,7 +143,7 @@ export function StudentLessonsCalendarPage() {
       .map(localDateKey)
       .find((key) => key.startsWith(monthPrefix) && (lessonsByDay.get(key)?.length ?? 0) > 0);
     setSelectedMonthDayKey(firstLessonDay ?? null);
-  }, [viewMode, monthCursor, monthGridDays, lessonsByDay, selectedMonthDayKey]);
+  }, [viewMode, monthCursor, monthGridDays, lessonsByDay, selectedMonthDayKey, todayKey]);
 
   const selectedMonthLessons = selectedMonthDayKey ? (lessonsByDay.get(selectedMonthDayKey) ?? []) : [];
 
@@ -191,8 +187,8 @@ export function StudentLessonsCalendarPage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{formatStartTime(lesson.startsAt, language)}</div>
-          <div className="muted" style={{ fontSize: 12 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{lesson.eventId.startsWith('local-') ? nativeLessonDuration(lesson, language) : formatStartTime(lesson.startsAt, language)}</div>
+          <div className="muted" style={{ fontSize: 12 }}>{lesson.eventId.startsWith('local-') ? (language === 'DE' ? 'Dauer' : 'Длительность') : formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
         </div>
         <div style={{ marginTop: 6, fontWeight: 800, lineHeight: 1.3 }}>{lesson.title}</div>
         {lesson.groupName && (
@@ -263,10 +259,10 @@ export function StudentLessonsCalendarPage() {
           boxShadow: '0 6px 18px rgba(30, 45, 70, .05)',
         }}
       >
-        <div style={{ fontSize: 21, fontWeight: 900 }}>{formatStartTime(lesson.startsAt, language)}</div>
+        <div style={{ fontSize: 21, fontWeight: 900 }}>{lesson.eventId.startsWith('local-') ? nativeLessonDuration(lesson, language) : formatStartTime(lesson.startsAt, language)}</div>
         <div style={{ marginTop: 5, fontWeight: 800, lineHeight: 1.3 }}>{lesson.title}</div>
         <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-          {formatLessonTime(lesson.startsAt, lesson.endsAt, language)}
+          {lesson.eventId.startsWith('local-') ? (language === 'DE' ? 'Dauer' : 'Длительность') : formatLessonTime(lesson.startsAt, lesson.endsAt, language)}
         </div>
         {lesson.groupName && (
           <div className="muted" style={{ marginTop: 5, fontSize: 12 }}>
@@ -529,7 +525,7 @@ export function StudentLessonsCalendarPage() {
                   const hasLessons = dayLessons.length > 0;
                   const inMonth = date.getMonth() === monthCursor.getMonth() && date.getFullYear() === monthCursor.getFullYear();
                   const selected = selectedMonthDayKey === key;
-                  const today = key === localDateKey(new Date());
+                  const today = key === todayKey;
 
                   return (
                     <button
@@ -687,6 +683,16 @@ function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') {
 
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dateFromKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function nativeLessonDuration(lesson: StudentLesson, language: 'DE' | 'RU') {
+  const minutes = Math.round((new Date(lesson.endsAt).getTime() - new Date(lesson.startsAt).getTime()) / 60_000);
+  return `${minutes} ${language === 'DE' ? 'Min.' : 'мин'}`;
 }
 
 function startOfMonth(date: Date) {
