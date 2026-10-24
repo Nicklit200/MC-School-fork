@@ -12,25 +12,72 @@ interface ViewerWindow extends Window {
 }
 const topic = 'mindcrafti-notebook-camera';
 
+export type NotebookCameraVideoSource = { video: HTMLVideoElement; width: number; height: number };
+
 interface NotebookCameraViewerProps {
   cameraId: string;
   compact?: boolean;
+  presentation?: 'processor' | 'board';
   onVideoAvailableChange?: (available: boolean) => void;
+  onBoardVideoChange?: (source: NotebookCameraVideoSource | null) => void;
   title?: string;
 }
 
-export function NotebookCameraViewer({ cameraId, compact = false, onVideoAvailableChange, title = 'Тетрадь: выравнивание, фокус и пометки' }: NotebookCameraViewerProps) {
+export function NotebookCameraViewer({ cameraId, compact = false, presentation = 'processor', onVideoAvailableChange, onBoardVideoChange, title = 'Тетрадь: выравнивание, фокус и пометки' }: NotebookCameraViewerProps) {
   const iframe = useRef<HTMLIFrameElement>(null);
+  const boardVideo = useRef<HTMLVideoElement>(null);
+  const retainedBoardVideo = useRef<HTMLVideoElement | null>(null);
+  const boardSource = useRef<NotebookCameraVideoSource | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const latestState = useRef<unknown>(null);
   const roomRef = useRef<Room | null>(null);
   const compactRef = useRef(compact);
+  const presentationRef = useRef(presentation);
   const videoCallback = useRef(onVideoAvailableChange);
+  const boardVideoCallback = useRef(onBoardVideoChange);
   compactRef.current = compact;
+  presentationRef.current = presentation;
   videoCallback.current = onVideoAvailableChange;
+  boardVideoCallback.current = onBoardVideoChange;
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const clearBoardSource = () => {
+    boardSource.current = null;
+    boardVideoCallback.current?.(null);
+  };
+  const reportBoardSource = () => {
+    const video = boardVideo.current;
+    if (presentationRef.current !== 'board' || !video || !stream.current || video.srcObject !== stream.current
+      || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth <= 0 || video.videoHeight <= 0) return;
+    const previous = boardSource.current;
+    if (previous?.video === video && previous.width === video.videoWidth && previous.height === video.videoHeight) return;
+    const next = { video, width: video.videoWidth, height: video.videoHeight };
+    boardSource.current = next;
+    boardVideoCallback.current?.(next);
+  };
+  const releaseBoardVideo = () => {
+    const video = retainedBoardVideo.current;
+    if (video) { video.pause(); video.srcObject = null; }
+    retainedBoardVideo.current = null;
+    clearBoardSource();
+  };
   const sync = () => {
+    const video = boardVideo.current;
+    if (video) {
+      retainedBoardVideo.current = video;
+      if (video.srcObject !== stream.current) {
+        clearBoardSource();
+        video.srcObject = stream.current;
+        if (stream.current) {
+          const source = stream.current;
+          void video.play().catch(reason => {
+            if (boardVideo.current !== video || stream.current !== source || reason?.name === 'AbortError') return;
+            clearBoardSource(); videoCallback.current?.(false);
+            setError('Не удалось включить видео. Нажмите «Повторить».');
+          });
+        } else video.pause();
+      } else reportBoardSource();
+    }
     const view = iframe.current?.contentWindow as ViewerWindow | null;
     view?.setNotebookCameraId?.(cameraId);
     view?.setNotebookCompact?.(compactRef.current);
@@ -43,6 +90,10 @@ export function NotebookCameraViewer({ cameraId, compact = false, onVideoAvailab
   useEffect(() => {
     (iframe.current?.contentWindow as ViewerWindow | null)?.setNotebookCompact?.(compact);
   }, [compact]);
+  useEffect(() => {
+    if (presentation !== 'board') releaseBoardVideo();
+    sync();
+  }, [presentation]);
   useEffect(() => {
     let active = true;
     videoCallback.current?.(false);
@@ -62,7 +113,7 @@ export function NotebookCameraViewer({ cameraId, compact = false, onVideoAvailab
       attachedTrack = null; trackEnded = null;
     };
     const clearVideo = () => {
-      releaseTrack(); stream.current = null; sync(); videoCallback.current?.(false);
+      releaseTrack(); stream.current = null; clearBoardSource(); sync(); videoCallback.current?.(false);
     };
     const attach = (track: RemoteTrack, participant: RemoteParticipant) => {
       if (!active || participant.identity !== phoneIdentity || track.kind !== Track.Kind.Video
@@ -102,7 +153,8 @@ export function NotebookCameraViewer({ cameraId, compact = false, onVideoAvailab
     room.on(RoomEvent.Reconnected, () => { sync(); status('Связь восстановлена.'); });
     room.on(RoomEvent.Disconnected, () => { if (active) { clearVideo(); setError('Соединение завершено. Подключитесь снова или создайте новый QR.'); } });
     const message = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.source !== iframe.current?.contentWindow) return;
+      if (presentationRef.current !== 'processor' || !iframe.current
+        || event.origin !== window.location.origin || event.source !== iframe.current.contentWindow) return;
       if (event.data?.type === 'mindcrafti-notebook-ready') { sync(); return; }
       if (event.data?.type !== 'mindcrafti-notebook-command' || !phoneIdentity || room.state !== 'connected' || pendingCommand) return;
       const value = event.data.value;
@@ -129,14 +181,18 @@ export function NotebookCameraViewer({ cameraId, compact = false, onVideoAvailab
     return () => {
       active = false; window.removeEventListener('message', message);
       releaseTrack(); videoCallback.current?.(false);
+      releaseBoardVideo();
       const oldView = iframe.current?.contentWindow as ViewerWindow | null;
       oldView?.setNotebookConnected?.(false); oldView?.setNotebookStream?.(null);
       stream.current = null; latestState.current = null; roomRef.current = null;
       void room.disconnect();
     };
   }, [cameraId, attempt]);
-  return <div className={`notebook-camera-viewer${compact ? ' notebook-camera-viewer--compact' : ''}`}>
+  return <div className={`notebook-camera-viewer${compact ? ' notebook-camera-viewer--compact' : ''}${presentation === 'board' ? ' notebook-camera-viewer--board' : ''}`}>
     {error && <div role="alert" className="banner banner--error">{error} <button className="btn btn--secondary" onClick={() => setAttempt(value => value + 1)}>Повторить</button></div>}
-    <iframe ref={iframe} className="notebook-camera__viewer" title={title} src="/notebook-camera/index.html" onLoad={sync} />
+    {presentation === 'board'
+      ? <video ref={boardVideo} className="notebook-camera-viewer__source" autoPlay muted playsInline aria-hidden="true" tabIndex={-1}
+        onLoadedMetadata={reportBoardSource} onLoadedData={reportBoardSource} onPlaying={reportBoardSource} onResize={reportBoardSource} />
+      : <iframe ref={iframe} className="notebook-camera__viewer" title={title} src="/notebook-camera/index.html" onLoad={sync} />}
   </div>;
 }

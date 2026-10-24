@@ -20,11 +20,12 @@ import {
 // covered by the gesture, hit-test and geometry unit tests.
 type CanvasProps = Record<string, any>;
 let canvasProps: CanvasProps = {};
+const canvasSnapshot = vi.fn((mimeType?: string) => mimeType === 'image/jpeg' ? 'data:image/jpeg;base64,/9j/2Q==' : 'data:image/png;base64,AAA');
 vi.mock('./WhiteboardCanvas', () => ({
   WhiteboardCanvas: forwardRef((props: CanvasProps, ref) => {
     canvasProps = props;
     useImperativeHandle(ref, () => ({
-      toDataURL: () => 'data:image/png;base64,AAA',
+      toDataURL: canvasSnapshot,
       getSize: () => ({ width: 1000, height: 500 }),
     }));
     return <div data-testid="canvas" data-locked={String(props.navigationLocked)} />;
@@ -40,7 +41,8 @@ vi.mock('./useClassEvents', () => ({
   },
 }));
 
-vi.mock('./usePdf', () => ({ usePdfPage: () => null, usePdf: vi.fn() }));
+const renderPdfPage = vi.fn((_document: unknown, _page: number, _width: number) => null as { canvas: HTMLCanvasElement; aspect: number } | null);
+vi.mock('./usePdf', () => ({ usePdfPage: (...args: [unknown, number, number]) => renderPdfPage(...args), usePdf: vi.fn() }));
 
 const exportBoardPdf = vi.fn();
 const downloadBlob = vi.fn();
@@ -98,6 +100,7 @@ describe('WhiteboardPanel', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
     sequence = 0;
     canvasProps = {};
+    renderPdfPage.mockReturnValue(null);
     api.openAnnotationDocument.mockImplementation(async (_c, t, id, page = 0) => ({
       id: `doc-${page}`, targetType: t, targetId: id, pageIndex: page,
       sourceWidth: null, sourceHeight: null, revision: 0, snapshotSavedAt: null,
@@ -359,6 +362,84 @@ describe('WhiteboardPanel', () => {
     await screen.findByTestId('canvas');
     expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
     expect(canvasProps.readOnly).toBe(true);
+  });
+
+  describe('notebook camera board', () => {
+    const notebook = { targetType: 'NOTEBOOK_CAMERA' as const, targetId: 'personal-student' };
+    const background = () => ({ source: document.createElement('video'), width: 1920, height: 1080 });
+
+    it('uses an isolated camera target and its live geometry without the paper PDF or observed paper page', async () => {
+      const liveBackground = background();
+      const paper = { pageCount: 8 } as never;
+      renderPdfPage.mockReturnValue({ canvas: document.createElement('canvas'), aspect: 0.7 });
+      mount('host', { ...notebook, liveBackground, document: paper, observedPage: 6 });
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'NOTEBOOK_CAMERA', 'personal-student', 0, 1920, 1080));
+      expect(api.openAnnotationDocument.mock.calls.every(call => call[1] === 'NOTEBOOK_CAMERA')).toBe(true);
+      expect(renderPdfPage).toHaveBeenCalledWith(null, 0, 0);
+      expect(canvasProps.background).toBe(liveBackground.source);
+      expect(canvasProps.backgroundLive).toBe(true);
+      expect(canvasProps.sourceAspect).toBe(1920 / 1080);
+      expect(canvasProps.pageKey).toBe('NOTEBOOK_CAMERA:personal-student:0');
+      expect(screen.getByTestId('canvas').closest('section')).toHaveClass('whiteboard--camera');
+      expect(screen.getAllByRole('status').some(node => node.textContent === '1 / 1')).toBe(true);
+      expect(screen.queryByRole('button', { name: 'Следовать за учителем' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the ordinary tools, undo and independent camera pages backed by the annotation engine', async () => {
+      const user = userEvent.setup();
+      mount('host', { ...notebook, liveBackground: background() });
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
+      await user.click(screen.getByRole('button', { name: 'Линия' }));
+      expect(canvasProps.tool).toBe('line');
+      await act(async () => { await canvasProps.onCommit({ kind: 'line', x1: 0.1, y1: 0.2, x2: 0.8, y2: 0.7 }); });
+      expect(api.appendAnnotation).toHaveBeenCalledWith('c1', 'doc-0', expect.any(String), 'ADD', expect.stringContaining('"kind":"line"'));
+      await user.click(screen.getByRole('button', { name: 'Отменить' }));
+      await waitFor(() => expect(api.appendAnnotation).toHaveBeenCalledWith('c1', 'doc-0', expect.any(String), 'UNDO', expect.any(String)));
+      await user.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'NOTEBOOK_CAMERA', 'personal-student', 1, 1920, 1080));
+      expect(canvasProps.backgroundLive).toBe(true);
+    });
+
+    it('does not send camera strokes or camera views through the paper-board event protocol', async () => {
+      mount('student', { ...notebook, liveBackground: background() });
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
+      await act(async () => {
+        canvasProps.onDraftChange({ kind: 'pen', color: '#111111', width: 0.004, points: [[0.1, 0.2]] }, 'stroke-camera');
+        await canvasProps.onCommit({ kind: 'pen', points: [[0.1, 0.2]] });
+        handlers[STROKE_TOPIC]({ event: strokeEvent('c1', 'personal-student', 0, true, { kind: 'pen', color: '#111111', width: 0.004, points: [[0.3, 0.4]] }), senderIdentity: 'student|tab' });
+      });
+      expect(api.appendAnnotation).toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+      expect(canvasProps.remoteDrafts).toEqual([]);
+    });
+
+    it('exports the current composited camera frame as a one-page PDF', async () => {
+      const user = userEvent.setup();
+      mount('host', { ...notebook, liveBackground: background() });
+      await user.click(screen.getByRole('button', { name: 'Скачать кадр PDF' }));
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      expect(canvasSnapshot).toHaveBeenCalledWith('image/jpeg');
+      expect(exportBoardPdf).not.toHaveBeenCalled();
+      const [blob, filename] = downloadBlob.mock.calls[0];
+      expect(blob.type).toBe('application/pdf'); expect(filename).toMatch(/^notebook-frame-.*\.pdf$/);
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(blob);
+      });
+      expect(text).toContain('/Count 1'); expect(text).toContain('/Width 1000 /Height 500'); expect(text).toContain('/DCTDecode');
+    });
+
+    it('pauses live drawing when hidden and keeps paper boards on their original PDF path', async () => {
+      const liveBackground = background();
+      const { unmount } = mount('host', { ...notebook, liveBackground, active: false });
+      await act(async () => { await Promise.resolve(); });
+      expect(canvasProps.active).toBe(false); unmount();
+      const paper = { pageCount: 2 } as never, rendered = document.createElement('canvas');
+      renderPdfPage.mockReturnValue({ canvas: rendered, aspect: 0.7 });
+      mount('host', { document: paper, liveBackground });
+      await act(async () => { await Promise.resolve(); });
+      expect(canvasProps.background).toBe(rendered); expect(canvasProps.sourceAspect).toBe(0.7); expect(canvasProps.backgroundLive).toBe(false);
+      expect(renderPdfPage).toHaveBeenCalledWith(paper, 0, 0);
+    });
   });
 
   describe('personal board', () => {

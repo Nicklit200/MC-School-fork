@@ -3,14 +3,19 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { NotebookCamera } from '../../api/notebookCameras';
+import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import { StudentWorkspaces } from './StudentWorkspaces';
 import { personalBoardId } from './boards';
 
-const viewers = vi.hoisted(() => ({ props: new Map<string, { compact: boolean; onVideoAvailableChange: (value: boolean) => void }>() }));
+const viewers = vi.hoisted(() => ({ props: new Map<string, {
+  compact: boolean; presentation: string;
+  onVideoAvailableChange: (value: boolean) => void;
+  onBoardVideoChange: (value: NotebookCameraVideoSource | null) => void;
+}>() }));
 vi.mock('../notebook-camera/NotebookCameraViewer', () => ({
-  NotebookCameraViewer: (props: { cameraId: string; compact: boolean; title: string; onVideoAvailableChange: (value: boolean) => void }) => {
+  NotebookCameraViewer: (props: { cameraId: string; compact: boolean; title: string } & ReturnType<typeof viewers.props.get>) => {
     viewers.props.set(props.cameraId, props);
-    return <div><iframe title={props.title} data-testid={`camera-${props.cameraId}`} data-compact={String(props.compact)} />
+    return <div><video title={props.title} data-testid={`camera-${props.cameraId}`} data-compact={String(props.compact)} />
       <div role="alert">Ошибка подключения <button>Повторить</button></div></div>;
   },
 }));
@@ -24,9 +29,14 @@ function surface(props: Partial<ComponentProps<typeof StudentWorkspaces>> = {}) 
   return <StudentWorkspaces students={pupils} camerasByOwner={new Map([['p1', camera('p1')], ['p3', camera('p3')]])}
     activeBoard="all-student-boards" overview visible onSelect={vi.fn()} onOverview={vi.fn()}
     renderBoard={(id, active, compact) => <div data-testid={`board-${id}`} data-active={String(active)} data-compact={String(compact)}>Доска {id}</div>}
+    renderCameraBoard={(id, active, compact, source) => <div data-testid={`camera-board-${id}`}
+      data-active={String(active)} data-compact={String(compact)} data-source={String(Boolean(source))}>Тетрадь {id}</div>}
     {...props} />;
 }
-const available = (cameraId: string, value: boolean) => act(() => viewers.props.get(cameraId)!.onVideoAvailableChange(value));
+const available = (cameraId: string, value: boolean) => act(() => {
+  viewers.props.get(cameraId)!.onVideoAvailableChange(value);
+  viewers.props.get(cameraId)!.onBoardVideoChange(value ? { video: document.createElement('video'), width: 1920, height: 1080 } : null);
+});
 beforeEach(() => viewers.props.clear());
 
 describe('pupil board and camera surfaces', () => {
@@ -45,24 +55,30 @@ describe('pupil board and camera surfaces', () => {
     expect(screen.getByTestId('board-p4').parentElement).not.toHaveAttribute('hidden');
   });
 
-  it('keeps the same processor and board when going from the overview to a pupil and back', async () => {
+  it('keeps the same video, camera annotation board and ordinary board between overview and pupil views', async () => {
     const onSelect = vi.fn(); const onOverview = vi.fn();
     const view = render(surface({ onSelect, onOverview }));
     available('camera-p1', true);
     const processor = screen.getByTestId('camera-camera-p1');
     const board = screen.getByTestId('board-p1');
+    const cameraBoard = screen.getByTestId('camera-board-p1');
+    expect(viewers.props.get('camera-p1')!.presentation).toBe('board');
     await userEvent.click(within(screen.getByRole('region', { name: 'Работа ученика: Анна' })).getByRole('button', { name: 'Открыть' }));
     expect(onSelect).toHaveBeenCalledWith(personalBoardId('p1'));
     view.rerender(surface({ overview: false, activeBoard: personalBoardId('p1'), onOverview }));
     expect(screen.getByTestId('camera-camera-p1')).toBe(processor);
     expect(processor).toHaveAttribute('data-compact', 'false');
     expect(screen.getByTestId('board-p1')).toBe(board);
+    expect(screen.getByTestId('camera-board-p1')).toBe(cameraBoard);
+    expect(cameraBoard).toHaveAttribute('data-active', 'true');
+    expect(cameraBoard).toHaveAttribute('data-compact', 'false');
     expect(screen.getAllByRole('region', { name: /Работа ученика:/ })).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Все ученики' }));
     expect(onOverview).toHaveBeenCalledOnce();
     view.rerender(surface());
     expect(screen.getByTestId('camera-camera-p1')).toBe(processor);
     expect(processor).toHaveAttribute('data-compact', 'true');
+    expect(screen.getByTestId('camera-board-p1')).toBe(cameraBoard);
   });
 
   it('falls back to the board when the phone stops and automatically resumes its camera', () => {
@@ -70,15 +86,20 @@ describe('pupil board and camera surfaces', () => {
     const processor = screen.getByTestId('camera-camera-p1');
     const board = screen.getByTestId('board-p1');
     available('camera-p1', true);
+    const cameraBoard = screen.getByTestId('camera-board-p1');
     expect(board.parentElement).toHaveAttribute('hidden');
     available('camera-p1', false);
     expect(board.parentElement).not.toHaveAttribute('hidden');
+    expect(cameraBoard.parentElement).toHaveAttribute('hidden');
+    expect(cameraBoard).toHaveAttribute('data-active', 'false');
+    expect(cameraBoard).toHaveAttribute('data-source', 'false');
     expect(processor).toBeInTheDocument();
     expect(processor.closest('.student-workspace__camera')).toHaveClass('student-workspace__camera--waiting');
     expect(within(screen.getByRole('region', { name: 'Работа ученика: Анна' })).getByRole('button', { name: 'Повторить' })).toBeInTheDocument();
     available('camera-p1', true);
     expect(screen.getByTestId('camera-camera-p1')).toBe(processor);
     expect(board.parentElement).toHaveAttribute('hidden');
+    expect(screen.getByTestId('camera-board-p1')).toBe(cameraBoard);
   });
 
   it('removes a revoked camera and keeps its board, ignoring camera owners outside the roster', () => {
@@ -87,10 +108,13 @@ describe('pupil board and camera surfaces', () => {
     available('camera-p1', true);
     expect(screen.queryByTestId('camera-camera-outsider')).not.toBeInTheDocument();
     const board = screen.getByTestId('board-p1');
+    const cameraBoard = screen.getByTestId('camera-board-p1');
     view.rerender(surface({ camerasByOwner: new Map() }));
     expect(screen.queryByTestId('camera-camera-p1')).not.toBeInTheDocument();
     expect(screen.getByTestId('board-p1')).toBe(board);
     expect(board.parentElement).not.toHaveAttribute('hidden');
+    expect(screen.getByTestId('camera-board-p1')).toBe(cameraBoard);
+    expect(cameraBoard.parentElement).toHaveAttribute('hidden');
   });
 
   it('listens for a camera before opening a pupil and retains it while the shared board is shown', () => {
@@ -115,5 +139,21 @@ describe('pupil board and camera surfaces', () => {
     const dina = screen.getByRole('region', { name: 'Работа ученика: Дина' });
     expect(within(dina).getByTitle('Тетрадь ученика: Дина')).toBeInTheDocument();
     expect(within(dina).queryByTitle('Тетрадь ученика: Анна')).not.toBeInTheDocument();
+    expect(within(dina).getByTestId('camera-board-p5')).toHaveAttribute('data-source', 'true');
+    expect(within(dina).queryByTestId('camera-board-p1')).not.toBeInTheDocument();
+  });
+
+  it('waits for an actual video frame before replacing paper and ignores a revoked camera source', () => {
+    const view = render(surface());
+    act(() => viewers.props.get('camera-p1')!.onVideoAvailableChange(true));
+    expect(screen.getByTestId('board-p1').parentElement).not.toHaveAttribute('hidden');
+    expect(screen.queryByTestId('camera-board-p1')).not.toBeInTheDocument();
+    available('camera-p1', true);
+    view.rerender(surface({ camerasByOwner: new Map([['p1', camera('p1', 'replacement')]]) }));
+    expect(screen.getByTestId('board-p1').parentElement).not.toHaveAttribute('hidden');
+    act(() => viewers.props.get('camera-p1')!.onBoardVideoChange({ video: document.createElement('video'), width: 1920, height: 1080 }));
+    expect(screen.getByTestId('camera-board-p1').parentElement).toHaveAttribute('hidden');
+    available('replacement', true);
+    expect(screen.getByTestId('camera-board-p1').parentElement).not.toHaveAttribute('hidden');
   });
 });

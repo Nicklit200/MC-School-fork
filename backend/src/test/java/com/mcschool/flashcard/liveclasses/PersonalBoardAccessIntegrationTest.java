@@ -116,6 +116,40 @@ class PersonalBoardAccessIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void aNotebookCameraPersonalSurfaceIsPrivateAndSeparateFromTheOrdinaryBoard() {
+        AnnotationDocumentResponse notebook = service.openDocument(alice, classId,
+                AnnotationTargetType.NOTEBOOK_CAMERA, aliceBoard, 0, 1920, 1080);
+        AnnotationDocumentResponse ordinaryBoard = open(alice, aliceBoard);
+
+        assertThat(notebook.id()).isNotEqualTo(ordinaryBoard.id());
+        assertThat(service.openDocument(teacher, classId, AnnotationTargetType.NOTEBOOK_CAMERA,
+                aliceBoard, 0, null, null).id()).isEqualTo(notebook.id());
+        draw(alice, notebook.id());
+        draw(teacher, notebook.id());
+
+        assertThat(service.replay(alice, classId, notebook.id(), 0)).hasSize(2);
+        assertThat(service.replay(teacher, classId, notebook.id(), 0)).hasSize(2);
+        assertThat(service.replay(alice, classId, ordinaryBoard.id(), 0)).isEmpty();
+        draw(alice, ordinaryBoard.id());
+        assertThat(service.replay(teacher, classId, ordinaryBoard.id(), 0)).hasSize(1);
+        assertThat(service.replay(teacher, classId, notebook.id(), 0)).hasSize(2);
+
+        assertThatThrownBy(() -> service.openDocument(bob, classId,
+                AnnotationTargetType.NOTEBOOK_CAMERA, aliceBoard, 0, null, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> service.replay(bob, classId, notebook.id(), 0))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> draw(bob, notebook.id()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThat(service.listDocuments(bob, classId))
+                .extracting(AnnotationDocumentResponse::id).doesNotContain(notebook.id());
+        assertThat(service.listDocuments(alice, classId))
+                .extracting(AnnotationDocumentResponse::id).contains(notebook.id());
+        assertThat(service.listDocuments(teacher, classId))
+                .extracting(AnnotationDocumentResponse::id).contains(notebook.id());
+    }
+
+    @Test
     void aPersonalBoardIsNotEvenListedForOtherStudents() {
         open(alice, aliceBoard);
         open(teacher, "board-1");

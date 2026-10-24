@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { NotebookCamera } from '../../api/notebookCameras';
-import { NotebookCameraViewer } from '../notebook-camera/NotebookCameraViewer';
+import { NotebookCameraViewer, type NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import { personalBoardId } from './boards';
 import type { RosterStudent } from './useStudentRoster';
 
@@ -13,23 +13,26 @@ interface StudentSurfaceProps {
   onOverview: () => void;
   showOverview: boolean;
   renderBoard: (studentId: string, active: boolean, compact: boolean) => ReactNode;
-  cameraActions?: ReactNode;
+  renderCameraBoard: (studentId: string, active: boolean, compact: boolean, source: NotebookCameraVideoSource | null) => ReactNode;
 }
 
-function StudentSurface({ student, camera, visible, compact, onOpen, onOverview, showOverview, renderBoard, cameraActions }: StudentSurfaceProps) {
+function StudentSurface({ student, camera, visible, compact, onOpen, onOverview, showOverview, renderBoard, renderCameraBoard }: StudentSurfaceProps) {
   const [media, setMedia] = useState<{ cameraId: string; available: boolean } | null>(null);
+  const [video, setVideo] = useState<{ cameraId: string; source: NotebookCameraVideoSource } | null>(null);
   const [boardVisited, setBoardVisited] = useState(false);
-  const hasVideo = Boolean(camera && media?.cameraId === camera.cameraId && media.available);
+  const [cameraBoardVisited, setCameraBoardVisited] = useState(false);
+  const source = camera && video?.cameraId === camera.cameraId ? video.source : null;
+  const hasVideo = Boolean(source && camera && media?.cameraId === camera.cameraId && media.available);
   // A hidden viewer continues listening for the phone to start again. Switching
   // between the overview and one pupil only changes this same surface's layout.
   const boardNeeded = visible && !hasVideo;
   if (boardNeeded && !boardVisited) setBoardVisited(true);
+  if (visible && hasVideo && !cameraBoardVisited) setCameraBoardVisited(true);
 
   return <section className="student-workspace" hidden={!visible} aria-label={`Работа ученика: ${student.displayName}`}>
     <div className="online-class-room__student-tile-header">
       <strong>{student.displayName}</strong>
       <span className="student-workspace__kind">{hasVideo ? 'Камера тетради' : 'Доска'}</span>
-      {!compact && hasVideo && cameraActions}
       {compact ? <button type="button" onClick={onOpen}>Открыть</button>
         : showOverview && <button type="button" onClick={onOverview}>Все ученики</button>}
     </div>
@@ -37,22 +40,32 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
       {boardVisited && <div className="student-workspace__board" hidden={hasVideo}>
         {renderBoard(student.userId, boardNeeded, compact)}
       </div>}
+      {cameraBoardVisited && <div className="student-workspace__camera-board" hidden={!hasVideo}>
+        {renderCameraBoard(student.userId, visible && hasVideo, compact, hasVideo ? source : null)}
+      </div>}
       {camera && <div className={`student-workspace__camera${hasVideo ? '' : ' student-workspace__camera--waiting'}`}>
         <NotebookCameraViewer
           key={camera.cameraId}
           cameraId={camera.cameraId}
+          presentation="board"
           compact={compact}
           title={`Тетрадь ученика: ${student.displayName}`}
           onVideoAvailableChange={available => setMedia(previous =>
             previous?.cameraId === camera.cameraId && previous.available === available
               ? previous : { cameraId: camera.cameraId, available })}
+          onBoardVideoChange={next => setVideo(previous => {
+            if (!next) return previous?.cameraId === camera.cameraId ? null : previous;
+            return previous?.cameraId === camera.cameraId && previous.source.video === next.video
+              && previous.source.width === next.width && previous.source.height === next.height
+              ? previous : { cameraId: camera.cameraId, source: next };
+          })}
         />
       </div>}
     </div>
   </section>;
 }
 
-export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overview, visible, onSelect, onOverview, renderBoard, cameraActions }: {
+export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overview, visible, onSelect, onOverview, renderBoard, renderCameraBoard }: {
   students: RosterStudent[];
   camerasByOwner: Map<string, NotebookCamera>;
   activeBoard: string;
@@ -61,7 +74,7 @@ export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overv
   onSelect: (boardId: string) => void;
   onOverview: () => void;
   renderBoard: StudentSurfaceProps['renderBoard'];
-  cameraActions?: ReactNode;
+  renderCameraBoard: StudentSurfaceProps['renderCameraBoard'];
 }) {
   const [visited, setVisited] = useState<Set<string>>(() => new Set());
   const shown = new Set(visible ? overview ? students.slice(0, 4).map(student => student.userId)
@@ -77,7 +90,7 @@ export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overv
         visible={shown.has(student.userId)} compact={overview}
         onOpen={() => onSelect(personalBoardId(student.userId))}
         onOverview={onOverview} showOverview={students.length > 1}
-        renderBoard={renderBoard} cameraActions={cameraActions}
+        renderBoard={renderBoard} renderCameraBoard={renderCameraBoard}
       />)}
     {overview && students.length === 0 && <p className="online-class-room__student-grid-empty">Пока нет учеников</p>}
   </div>;

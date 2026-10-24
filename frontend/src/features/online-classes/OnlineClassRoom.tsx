@@ -480,7 +480,6 @@ function RoomBody({
             visible={showStudentWorkspaces}
             onSelect={selectBoard}
             onOverview={() => selectBoard(ALL_STUDENT_BOARDS_ID)}
-            cameraActions={<AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} />}
             renderBoard={(studentId, active, compact) => <Suspense fallback={null}>
               <WhiteboardPanel
                 classId={classId}
@@ -495,6 +494,19 @@ function RoomBody({
                 savingLessonDocuments={archiving}
                 lessonDocumentsStatus={archiveNotice}
                 lessonDocumentsError={archiveError}
+                hostActions={active && !compact ? <AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
+              />
+            </Suspense>}
+            renderCameraBoard={(studentId, active, compact, source) => <Suspense fallback={null}>
+              <WhiteboardPanel
+                classId={classId}
+                actorId={currentUserId}
+                isHost
+                targetType="NOTEBOOK_CAMERA"
+                targetId={personalBoardId(studentId)}
+                canAnnotate={!compact}
+                active={active}
+                liveBackground={source ? { source: source.video, width: source.width, height: source.height } : null}
                 hostActions={active && !compact ? <AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
               />
             </Suspense>}

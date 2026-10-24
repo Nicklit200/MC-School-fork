@@ -28,21 +28,41 @@ settings clear; its normal camera toggle remains available.
 For the teacher, a pupil's live notebook replaces that pupil's personal board.
 Use the existing pupil board picker or **Все ученики (2×2)**: pupils with live
 notebooks show their camera, while the other tiles retain their normal boards.
-Opening one pupil restores the full notebook tools; the overview shows a compact
-live preview. There is no separate teacher notebook workspace. The camera list
-refreshes automatically without issuing a replacement QR.
+Opening one pupil shows the live frame over the full board workspace, with the
+same BoardToolbar and WhiteboardCanvas used for an ordinary pupil board: pen,
+highlighter, erasers, text, shapes, selection, page navigation and zoom/pan. The
+teacher view contains no prototype iframe, camera settings sidebar or separate
+prototype ink toolbar. The overview remains a compact live preview. There is no
+separate teacher notebook workspace. The camera list refreshes automatically
+without issuing a replacement QR.
 
-Each pupil's processor remains in the same DOM location across overview,
-individual and shared-board views, preserving crop, rotation and unsaved ink.
-Phone video tracks determine whether the camera or board is visible; a claimed
+The teacher's native video subscription and camera annotation board remain in
+the same DOM location across overview, individual and shared-board views. A
+decoded video frame determines whether the camera or board is visible; a claimed
 camera record alone does not imply live video. Turning off the phone brings back
-the board, and publishing video again automatically restores the same camera.
-The viewer remains subscribed while the board is shown and keeps transport
-errors/retry accessible. Revocation or session expiry removes that viewer.
+the ordinary board, and publishing video again automatically restores the
+camera. Both annotation boards keep their state while hidden. The viewer remains
+subscribed while the board is shown and keeps transport errors/retry accessible.
+Revocation or session expiry removes that media viewer.
 
-Perspective, rotation and ink belong to each viewer screen, while supported
-camera hardware controls affect the shared phone capture. Notebook shortcuts
-on the lesson card and pupil calendar remain available.
+The live frame is a background image in a separate Konva layer. It preserves the
+phone video's natural orientation and aspect ratio; zoom/pan transform both the
+frame and marks together, and partial erasing affects only the ink layer. Camera
+annotations use `NOTEBOOK_CAMERA` with the same private `personal-<pupil UUID>`
+target id, distinct from the pupil's `WHITEBOARD` documents. Camera drafts, view
+events and remote lasers are disabled because the current realtime packet does
+not distinguish annotation target types. Saved marks use the authorized REST
+annotation API and visible personal surfaces poll for changes.
+
+The camera's save-material action captures the current frame together with its
+marks. **Скачать кадр PDF** downloads that current view as a single-page PDF;
+the ordinary board's full-document PDF export and lesson-board archive continue
+to export their own documents.
+
+The pupil's prototype workspace retains its perspective, rotation and local ink
+controls, which belong to that viewer screen. Supported camera hardware controls
+affect the shared phone capture. Notebook shortcuts on the lesson card and pupil
+calendar remain available.
 
 The teacher may select an enrolled pupil and create the QR for them. A
 teacher-owned camera also supports a trial lesson without a pupil account.

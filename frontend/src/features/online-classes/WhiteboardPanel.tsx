@@ -29,6 +29,7 @@ import { navigationLocked } from './followTeacher';
 import { PageNavigator } from './PageNavigator';
 import { describeView } from './followTeacher';
 import type { PdfDoc } from './pdfDocument';
+import { buildPdf, dataUrlToBytes } from './pdfWriter';
 import { useAnnotationBoard } from './useAnnotationBoard';
 import { useClassEvents } from './useClassEvents';
 import { useFollowTeacher } from './useFollowTeacher';
@@ -55,6 +56,12 @@ const ZOOM_BUTTON_FACTOR = 1.25;
 /** How often a personal board is re-read while it is on screen. */
 const PERSONAL_POLL_MS = 2000;
 
+export interface LiveBoardBackground {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+}
+
 function loadInputMode(): InputMode {
   try {
     return localStorage.getItem(INPUT_MODE_KEY) === 'stylus' ? 'stylus' : 'finger';
@@ -79,7 +86,8 @@ export function WhiteboardPanel({
   targetId = 'board-1',
   sourceAspect = null,
   canAnnotate = true,
-  document: pdfDocument = null,
+  document: providedPdfDocument = null,
+  liveBackground = null,
   hostActions,
   overlay,
   active = true,
@@ -98,6 +106,8 @@ export function WhiteboardPanel({
   canAnnotate?: boolean;
   /** A loaded PDF whose pages sit under the marks. */
   document?: PdfDoc | null;
+  /** Live camera frame rendered in the same coordinate system as the marks. */
+  liveBackground?: LiveBoardBackground | null;
   /** Extra teacher-only buttons next to "clear all" (e.g. Answers). */
   hostActions?: ReactNode;
   /** Floats over the board area, below the toolbar. */
@@ -112,6 +122,10 @@ export function WhiteboardPanel({
   lessonDocumentsError?: boolean;
 }) {
   const { t } = useI18n();
+  const camera = targetType === 'NOTEBOOK_CAMERA';
+  const pdfDocument = camera ? null : providedPdfDocument;
+  const cameraBackground = camera && liveBackground && Number.isFinite(liveBackground.width) && liveBackground.width > 0
+    && Number.isFinite(liveBackground.height) && liveBackground.height > 0 ? liveBackground : null;
   // A personal board is private: nothing about it is broadcast and it never
   // follows (or is followed by) anyone. The teacher sees a student's marks by
   // polling the server, which is what enforces who may read them.
@@ -137,18 +151,18 @@ export function WhiteboardPanel({
 
   // Teacher preview opens on the student's actual page, not always page one.
   useEffect(() => {
-    if (!isHost || !personal || observedPage === undefined) return;
+    if (camera || !isHost || !personal || observedPage === undefined) return;
     setPages((current) => goToPage(ensurePageCount(current, observedPage + 1), observedPage));
-  }, [isHost, personal, observedPage]);
+  }, [camera, isHost, personal, observedPage]);
 
   const { publish: publishPersonalView } = useClassEvents(classId, VIEW_TOPIC, () => undefined);
   useEffect(() => {
-    if (isHost || !personal || ownerId !== actorId || !active) return;
+    if (camera || isHost || !personal || ownerId !== actorId || !active) return;
     const send = () => void publishPersonalView(viewEvent(classId, describeView(pages, viewOf(pages), getBoardSize(), targetId, false)), true);
     send();
     const timer = window.setInterval(send, 2000);
     return () => window.clearInterval(timer);
-  }, [isHost, personal, ownerId, actorId, active, classId, pages, targetId, getBoardSize, publishPersonalView]);
+  }, [camera, isHost, personal, ownerId, actorId, active, classId, pages, targetId, getBoardSize, publishPersonalView]);
 
   const view = viewOf(pages);
   const follow = useFollowTeacher({
@@ -159,7 +173,7 @@ export function WhiteboardPanel({
     pages,
     setPages,
     getBoardSize,
-    enabled: !personal,
+    enabled: !personal && !camera,
   });
   const locked = navigationLocked(isHost, follow.following);
 
@@ -192,7 +206,7 @@ export function WhiteboardPanel({
     classId,
     targetId,
     page: pages.current,
-    enabled: true,
+    enabled: !camera,
     personalOwnerId: ownerId,
     hostUserId,
     currentUserId: actorId,
@@ -203,7 +217,7 @@ export function WhiteboardPanel({
   // the one source of truth, and a forged packet can at most trigger a harmless
   // re-fetch.
   const { publish: publishAnnotation } = useClassEvents(classId, ANNOTATION_TOPIC, ({ event }) => {
-    if (event.type === 'annotation' && !personal) {
+    if (event.type === 'annotation' && !personal && !camera) {
       requestRefresh.current();
       // The preview must persist until the matching REST-replayed shape is rendered.
       // A saved-event hint alone can arrive well before the actual geometry.
@@ -217,8 +231,10 @@ export function WhiteboardPanel({
     pageIndex: pages.current,
     actorId,
     isHost,
+    sourceWidth: cameraBackground?.width,
+    sourceHeight: cameraBackground?.height,
     onSaved: (operation, documentId) => {
-      if (personal) return;
+      if (personal || camera) return;
       void publishAnnotation(
         annotationEvent(classId, {
           documentId,
@@ -237,14 +253,14 @@ export function WhiteboardPanel({
   }, [savedOperationIds, live.acknowledgeRendered]);
 
   const { lasers, sendLaser: broadcastLaser } = useLaserPointers(classId, targetId);
-  const sendLaser = personal ? undefined : broadcastLaser;
+  const sendLaser = personal || camera ? undefined : broadcastLaser;
 
   // Personal board: nobody is told when it changes, so a viewer polls instead.
   useEffect(() => {
-    if (!personal || !active) return;
+    if ((!personal && !camera) || !active) return;
     const timer = window.setInterval(() => void boardRef.current?.refresh(), PERSONAL_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [personal, active]);
+  }, [personal, camera, active]);
 
   // --- Pages ----------------------------------------------------------------
   // A joiner (or a reload) learns how many pages already exist from the server.
@@ -282,7 +298,8 @@ export function WhiteboardPanel({
   }, []);
 
   const renderedPage = usePdfPage(pdfDocument, pages.current, stageWidth);
-  const pageAspect = renderedPage?.aspect ?? sourceAspect;
+  const pageAspect = camera ? (cameraBackground ? cameraBackground.width / cameraBackground.height : null)
+    : renderedPage?.aspect ?? sourceAspect;
 
   const setView = useCallback((next: PageView) => setPages((current) => withView(current, next)), []);
 
@@ -325,6 +342,14 @@ export function WhiteboardPanel({
     setExporting(true);
     setExportFailed(false);
     try {
+      if (camera) {
+        const image = canvasRef.current?.toDataURL('image/jpeg');
+        const size = getBoardSize();
+        if (!cameraBackground || !image || size.width <= 0 || size.height <= 0) throw new Error('No camera frame to export');
+        const blob = new Blob([buildPdf([{ jpeg: dataUrlToBytes(image), width: Math.max(1, Math.floor(size.width)), height: Math.max(1, Math.floor(size.height)) }]) as BlobPart], { type: 'application/pdf' });
+        downloadBlob(blob, `notebook-frame-${new Date().toISOString().slice(0, 10)}.pdf`);
+        return;
+      }
       const blob = await exportBoardPdf({
         classId,
         targetType,
@@ -364,7 +389,7 @@ export function WhiteboardPanel({
       <button type="button" disabled={savingLessonDocuments} onClick={() => onSaveLessonDocuments ? onSaveLessonDocuments() : void saveSnapshot()}>
         {onSaveLessonDocuments ? (savingLessonDocuments ? 'Сохраняем документы…' : 'Сохранить документы урока') : t('onlineClass.whiteboard.saveSnapshot')}
       </button>
-      {!personal && (
+      {!personal && !camera && (
         <button
           type="button"
           aria-pressed={follow.followEnabled}
@@ -385,7 +410,7 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className="whiteboard school-islands-board" aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
+    <section className={`whiteboard school-islands-board${camera ? ' whiteboard--camera' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
       <div className="whiteboard__topline">
       {canAnnotate && (
         <BoardToolbar
@@ -405,7 +430,7 @@ export function WhiteboardPanel({
           hostActions={hostButtons}
           sharedActions={
             <button type="button" onClick={() => void exportPdf()} disabled={exporting}>
-              {exporting ? t('onlineClass.whiteboard.exporting') : t('onlineClass.whiteboard.exportPdf')}
+              {exporting ? t('onlineClass.whiteboard.exporting') : camera ? 'Скачать кадр PDF' : t('onlineClass.whiteboard.exportPdf')}
             </button>
           }
         />
@@ -437,7 +462,7 @@ export function WhiteboardPanel({
         <WhiteboardCanvas
           ref={canvasRef}
           shapes={board.shapes}
-          pageKey={`${targetId}:${pages.current}`}
+          pageKey={`${targetType}:${targetId}:${pages.current}`}
           tool={tool}
           color={settingsOf.color}
           strokeWidth={settingsOf.width}
@@ -451,9 +476,11 @@ export function WhiteboardPanel({
           view={view}
           onViewChange={setView}
           navigationLocked={locked}
-          background={renderedPage?.canvas ?? null}
-          lasers={lasers}
-          remoteDrafts={live.drafts}
+          background={camera ? cameraBackground?.source ?? null : renderedPage?.canvas ?? null}
+          backgroundLive={camera && Boolean(cameraBackground)}
+          active={active}
+          lasers={camera ? [] : lasers}
+          remoteDrafts={camera ? [] : live.drafts}
           onDraftChange={(shape, strokeId, finished) => live.sendDraft(shape ? toLiveShape(shape) : null, strokeId, finished)}
           actorId={actorId}
           onCommit={(shape, strokeId) => board.addShape(shape, strokeId)}

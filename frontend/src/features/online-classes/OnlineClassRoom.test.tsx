@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { act, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { lessonPreparationApi } from '../../api/lessonPreparation';
@@ -6,6 +6,7 @@ import { onlineClassesApi, type OnlineClassConnection } from '../../api/onlineCl
 import { I18nProvider } from '../../i18n/I18nContext';
 
 let screenShares: unknown[] = [];
+const notebookFixture = vi.hoisted(() => ({ camerasByOwner: new Map(), viewerProps: new Map() }));
 
 vi.mock('@livekit/components-react', () => ({
   LiveKitRoom: ({ children, onDisconnected, onConnected, onError }: {
@@ -40,7 +41,13 @@ vi.mock('@livekit/components-react', () => ({
 }));
 vi.mock('./CameraColumn', () => ({ CameraColumn: () => <ul aria-label="cameras" /> }));
 vi.mock('../notebook-camera/useLessonNotebookCameras', () => ({
-  useLessonNotebookCameras: () => ({ cameras: [], camerasByOwner: new Map(), error: null }),
+  useLessonNotebookCameras: () => ({ cameras: [...notebookFixture.camerasByOwner.values()], camerasByOwner: notebookFixture.camerasByOwner, error: null }),
+}));
+vi.mock('../notebook-camera/NotebookCameraViewer', () => ({
+  NotebookCameraViewer: (props: Record<string, any>) => {
+    notebookFixture.viewerProps.set(props.cameraId, props);
+    return <video title={props.title} />;
+  },
 }));
 vi.mock('../notebook-camera/NotebookCameraPanel', () => ({
   NotebookCameraPanel: (props: {
@@ -84,7 +91,7 @@ vi.mock('./WhiteboardPanel', () => ({
   WhiteboardPanel: (props: Record<string, any>) => {
     boardProps.push(props);
     return (
-      <section data-testid={`board-${props.targetId}`} data-active={String(props.active)}>
+      <section data-testid={`board-${props.targetId}${props.targetType === 'NOTEBOOK_CAMERA' ? '-camera' : ''}`} data-active={String(props.active)}>
         {props.hostActions}
       </section>
     );
@@ -204,6 +211,8 @@ describe('OnlineClassRoom', () => {
     boardProps.length = 0;
     recordingProps.length = 0;
     screenShares = [];
+    notebookFixture.camerasByOwner.clear();
+    notebookFixture.viewerProps.clear();
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
       { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
     ]);
@@ -342,6 +351,32 @@ describe('OnlineClassRoom', () => {
     await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
     expect(screen.getByTestId('board-personal-u1')).toHaveAttribute('data-active', 'true');
     expect(screen.queryByRole('region', { name: 'Встроенная тетрадь' })).not.toBeInTheDocument();
+  });
+
+  it('uses the ordinary drawing panel with a private camera target and live video, without the pupil PDF', async () => {
+    notebookFixture.camerasByOwner.set('u1', { cameraId: 'camera-u1', ownerId: 'u1', status: 'CONNECTED' });
+    mount(true);
+    await screen.findByRole('option', { name: 'Доска ученика: Alice' });
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
+    const paper = await screen.findByTestId('board-personal-u1');
+    const video = document.createElement('video');
+    act(() => {
+      notebookFixture.viewerProps.get('camera-u1').onVideoAvailableChange(true);
+      notebookFixture.viewerProps.get('camera-u1').onBoardVideoChange({ video, width: 1920, height: 1080 });
+    });
+    const camera = await screen.findByTestId('board-personal-u1-camera');
+    const props = boardProps.filter(p => p.targetType === 'NOTEBOOK_CAMERA').at(-1)!;
+    expect(props).toMatchObject({ targetId: 'personal-u1', isHost: true, canAnnotate: true, active: true,
+      liveBackground: { source: video, width: 1920, height: 1080 } });
+    expect(props.document).toBeUndefined();
+    expect(props.observedPage).toBeUndefined();
+    expect(props.onSaveLessonDocuments).toBeUndefined();
+    expect(notebookFixture.viewerProps.get('camera-u1').presentation).toBe('board');
+    expect(paper).toHaveAttribute('data-active', 'false');
+    expect(await within(camera).findByRole('button', { name: 'Ответы' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'all-student-boards');
+    expect(screen.getByTestId('board-personal-u1-camera')).toBe(camera);
+    expect(boardProps.filter(p => p.targetType === 'NOTEBOOK_CAMERA').at(-1)).toMatchObject({ canAnnotate: false, active: true });
   });
 
   it('returns to the selected personal board without discarding the notebook processor', async () => {

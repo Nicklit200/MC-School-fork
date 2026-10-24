@@ -58,7 +58,7 @@ const HIT_TOLERANCE = 0.015;
 
 export interface WhiteboardCanvasHandle {
   /** PNG of the board as currently drawn, or null before it has a size. */
-  toDataURL: () => string | null;
+  toDataURL: (mimeType?: 'image/png' | 'image/jpeg') => string | null;
   /** Current size of the drawing surface in CSS pixels. */
   getSize: () => { width: number; height: number };
 }
@@ -88,6 +88,9 @@ interface Props {
   navigationLocked?: boolean;
   /** Rendered page content (PDF page) under the marks. */
   background?: CanvasImageSource | null;
+  /** Redraw only the background layer while a live video/canvas is visible. */
+  backgroundLive?: boolean;
+  active?: boolean;
   lasers?: RemoteLaser[];
   /** Other people's strokes that are still being drawn (preview only). */
   remoteDrafts?: { id: string; shape: Shape }[];
@@ -130,6 +133,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     onViewChange,
     navigationLocked = false,
     background = null,
+    backgroundLive = false,
+    active = true,
     lasers = [],
     remoteDrafts = [],
     actorId,
@@ -148,6 +153,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const onViewChangeRef = useRef(onViewChange);
   onViewChangeRef.current = onViewChange;
   const stageRef = useRef<Konva.Stage | null>(null);
+  const backgroundLayerRef = useRef<Konva.Layer | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Shape | null>(null);
   type PendingInk = { id: string; page: string; shape: Shape; status: 'saving' | 'saved' | 'failed' };
@@ -171,9 +177,17 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   live.current = { tool, color, strokeWidth, eraserMode, readOnly, view, viewport, sourceAspect, shapes, actorId };
 
   useImperativeHandle(ref, () => ({
-    toDataURL: () => stageRef.current?.toDataURL({ pixelRatio: 1 }) ?? null,
+    toDataURL: (mimeType = 'image/png') => stageRef.current?.toDataURL({ pixelRatio: 1, mimeType, quality: 0.9 }) ?? null,
     getSize: () => live.current.viewport,
   }));
+
+  useEffect(() => {
+    const layer = backgroundLayerRef.current;
+    if (!active || !backgroundLive || !background || !layer) return;
+    const animation = new Konva.Animation(() => {}, layer);
+    animation.start();
+    return () => { animation.stop(); };
+  }, [active, backgroundLive, background]);
 
   // ResizeObserver updates the canvas dimensions whenever a teacher opens the
   // answers column. Annotations remain normalized; only pixel pan is rescaled
@@ -773,7 +787,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       >
         {/* The page sits on its own layer: partial-erase marks cut through the
             marks layer only and must never punch holes in the PDF. */}
-        <Layer listening={false}>
+        <Layer ref={backgroundLayerRef} listening={false}>
           {background && (
             <KonvaImage
               image={background as CanvasImageSource & HTMLImageElement}
