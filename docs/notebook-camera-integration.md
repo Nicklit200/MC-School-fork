@@ -8,12 +8,28 @@ not part of the deployment.
 
 ## Pupil flow
 
-Open **Камера тетради** from the lesson, classroom or pupil calendar. Create a
-QR code on the computer/tablet, scan it with the phone, then tap **Включить
-камеру** and accept the normal browser camera prompt. The phone needs internet;
+Inside the online classroom, the pupil clicks **Подключить тетрадь** in the top
+lesson toolbar. This opens a notebook workspace in the lesson and immediately
+creates a QR code. An already connected phone is resumed without replacing its
+credential. Scan the QR with the phone, then tap **Включить камеру** and accept
+the normal browser camera prompt. The phone needs internet;
 it may use a different Wi-Fi network or mobile data. No phone app, development
 flag, certificate installation or account sign-in is required on the phone.
 Only video is captured. Keep the phone page visible; hiding it stops capture.
+
+The video and the existing perspective, rotation, ink, focus and quality tools
+are displayed in the lesson's notebook workspace. **Вернуться к доске**, the
+board selector, or the notebook toolbar button switches back to the board.
+Switching views keeps the notebook processor, QR, crop and unsaved ink mounted;
+it does not replace the QR or disconnect the phone. On narrow screens the
+participant rail folds away when opening the notebook, leaving the QR and
+settings clear; its normal camera toggle remains available.
+
+The teacher opens **Тетради учеников** in the same toolbar and selects an
+existing notebook. The list refreshes automatically; viewing it does not issue
+a replacement QR. Perspective, rotation and ink belong to each viewer screen,
+while supported camera hardware controls affect the shared phone capture.
+Notebook shortcuts on the lesson card and pupil calendar remain available.
 
 The teacher may select an enrolled pupil and create the QR for them. A
 teacher-owned camera also supports a trial lesson without a pupil account.

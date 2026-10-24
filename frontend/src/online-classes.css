@@ -1916,3 +1916,69 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+/* The notebook is a lesson surface alongside the board, rather than a modal
+   nested in the horizontally scrolling call controls. */
+.online-class-room__topbar .online-class-room__notebook-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px solid #dce6f3;
+  border-radius: 12px;
+  background: #eef4fd;
+  color: #224c85;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.online-class-room__topbar .online-class-room__notebook-toggle[aria-pressed='true'] {
+  background: #dceafd;
+  border-color: #78a4dd;
+}
+.online-class-room__notebook {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 12px calc(90px + env(safe-area-inset-bottom));
+  background: #f2f4f7;
+}
+.online-class-room__notebook[hidden] { display: none; }
+.online-class-room__notebook .notebook-camera { min-width: 0; padding: 16px; }
+.online-class-room__notebook .notebook-camera__heading {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  padding: 12px 0;
+  background: #fff;
+}
+.online-class-room__notebook .notebook-camera__heading h2 { font-size: 22px; }
+.online-class-room__notebook .notebook-camera__heading p { margin-bottom: 0; }
+.online-class-room__notebook .notebook-camera__heading > button { flex-shrink: 0; }
+.online-class-room__notebook .notebook-camera__connect { margin: 12px 0; gap: 16px; }
+.online-class-room__notebook .notebook-camera__connect > div:first-child { flex: 1 1 240px; }
+.online-class-room__notebook .notebook-camera__qr { flex: 0 1 304px; }
+.online-class-room__notebook .notebook-camera__viewer {
+  height: max(620px, calc(100dvh - 180px));
+  min-height: 0;
+}
+@media (min-width: 901px) {
+  .online-class-room__stage--notebook > .online-class-room__videos-drawer.is-open {
+    position: relative;
+    flex: 0 0 clamp(160px, 23vw, 250px);
+  }
+}
+@media (max-width: 700px) {
+  .online-class-room__notebook { padding: 6px 6px calc(85px + env(safe-area-inset-bottom)); }
+  .online-class-room__notebook .notebook-camera { padding: 10px; }
+  .online-class-room__notebook .notebook-camera__heading { top: -6px; gap: 8px; flex-wrap: wrap; }
+  .online-class-room__notebook .notebook-camera__heading h2 { font-size: 20px; }
+  .online-class-room__notebook .notebook-camera__qr { flex-basis: 100%; padding: 10px; }
+  .online-class-room__notebook .notebook-camera__viewer { height: 850px; }
+}

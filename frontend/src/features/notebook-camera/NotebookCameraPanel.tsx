@@ -12,8 +12,10 @@ export interface NotebookCameraProps {
   currentUserId: string;
   isTeacher: boolean;
   students?: NotebookStudent[];
+  autoPair?: boolean;
 }
-export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher, students: providedStudents, onClose }: NotebookCameraProps & { onClose?: () => void }) {
+interface PanelSession { active: boolean; mutation: number; listSequence: number; pairing: boolean; initialized: boolean }
+export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher, students: providedStudents, autoPair = false, onClose, closeLabel = 'Закрыть' }: NotebookCameraProps & { onClose?: () => void; closeLabel?: string }) {
   const [cameras, setCameras] = useState<NotebookCamera[]>([]);
   const [students, setStudents] = useState<NotebookStudent[]>(providedStudents ?? []);
   const [studentId, setStudentId] = useState(isTeacher ? providedStudents?.[0]?.userId ?? currentUserId : currentUserId);
@@ -21,18 +23,22 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
   const [pairing, setPairing] = useState<CameraPairing | null>(null);
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clock, setClock] = useState(Date.now());
   const qr = useRef<HTMLCanvasElement>(null);
-  const mounted = useRef(true);
-  const mutation = useRef(0);
+  const session = useRef<PanelSession | null>(null);
   const https = window.location.protocol === 'https:';
-  const activeCameras = cameras.filter(camera => ['PAIRING', 'CONNECTED'].includes(camera.status)
-    && Date.parse(camera.sessionExpiresAt) > clock && (!classId || camera.classId === classId));
+  const isActiveCamera = (camera: NotebookCamera, now: number) => camera.eventId === eventId
+    && (camera.classId ?? null) === (classId ?? null)
+    && (isTeacher || camera.ownerId === currentUserId)
+    && Date.parse(camera.sessionExpiresAt) > now
+    && (camera.status === 'CONNECTED' || camera.status === 'PAIRING' && Date.parse(camera.pairingExpiresAt) > now);
+  const activeCameras = cameras.filter(camera => isActiveCamera(camera, clock));
   const current = activeCameras.find(camera => camera.cameraId === selected);
   const url = useMemo(() => pairing ? pairingUrl(window.location.origin, pairing.camera.cameraId, pairing.pairingToken) : '', [pairing]);
   const qrValid = pairing && Date.parse(pairing.camera.pairingExpiresAt) > clock
-    && cameras.find(camera => camera.cameraId === pairing.camera.cameraId)?.status !== 'CONNECTED';
+    && activeCameras.find(camera => camera.cameraId === pairing.camera.cameraId)?.status === 'PAIRING';
   useEffect(() => {
     if (providedStudents) {
       setStudents(providedStudents);
@@ -41,22 +47,32 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
     }
   }, [providedStudents, currentUserId]);
   useEffect(() => {
-    mounted.current = true;
-    let active = true;
+    const scope: PanelSession = { active: true, mutation: 0, listSequence: 0, pairing: false, initialized: false };
+    session.current = scope;
+    setCameras([]); setSelected(''); setPairing(null); setBusy(false); setError(null); setLoading(true);
     const load = async () => {
-      const version = mutation.current;
+      const version = scope.mutation;
+      const sequence = ++scope.listSequence;
       try {
         const values = await notebookCamerasApi.list(eventId);
-        if (!active || version !== mutation.current) return;
+        if (!scope.active || version !== scope.mutation || sequence !== scope.listSequence) return;
+        const now = Date.now();
+        const available = values.filter(camera => isActiveCamera(camera, now));
+        const connected = available.find(camera => camera.status === 'CONNECTED');
         setCameras(values);
-        setSelected(previous => previous || values.find(camera => ['PAIRING', 'CONNECTED'].includes(camera.status)
-          && (!classId || camera.classId === classId))?.cameraId || '');
-      } catch (reason) { if (active) setError(notebookCameraError(reason)); }
+        setClock(now);
+        setSelected(previous => available.some(camera => camera.cameraId === previous) ? previous : (connected ?? available[0])?.cameraId ?? '');
+        if (autoPair && !isTeacher && !scope.initialized) {
+          scope.initialized = true;
+          if (!connected) void createPairing(scope);
+        }
+      } catch (reason) { if (scope.active && version === scope.mutation && sequence === scope.listSequence) setError(notebookCameraError(reason)); }
+      finally { if (scope.active && sequence === scope.listSequence) setLoading(false); }
     };
     void load();
     const timer = setInterval(() => { setClock(Date.now()); void load(); }, 5000);
-    return () => { active = false; mounted.current = false; clearInterval(timer); };
-  }, [eventId, classId]);
+    return () => { scope.active = false; clearInterval(timer); };
+  }, [eventId, classId, currentUserId, isTeacher, autoPair]);
   useEffect(() => {
     if (!isTeacher || providedStudents) return;
     let active = true;
@@ -79,35 +95,40 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
     void drawCameraQR(qr.current, url).catch(() => { if (active) setError('Не удалось построить QR. Можно скопировать ссылку подключения.'); });
     return () => { active = false; };
   }, [url, qrValid]);
-  const createPairing = async () => {
-    if (!https || (isTeacher && !studentId)) return;
+  async function createPairing(scope = session.current) {
+    if (!scope?.active || scope.pairing || !https || (isTeacher && !studentId)) return;
+    scope.pairing = true;
+    scope.initialized = true;
     setBusy(true); setError(null);
-    mutation.current++;
+    scope.mutation++;
     try {
       const value = await notebookCamerasApi.pair(eventId, isTeacher ? studentId : undefined, classId);
-      if (!mounted.current) return;
-      mutation.current++;
+      if (!scope.active) return;
+      scope.mutation++;
       setPairing(value); setSelected(value.camera.cameraId); setClock(Date.now());
       setCameras(previous => [...previous.filter(camera => camera.ownerId !== value.camera.ownerId), value.camera]);
-    } catch (reason) { if (mounted.current) setError(notebookCameraError(reason)); }
-    finally { if (mounted.current) setBusy(false); }
-  };
+    } catch (reason) { if (scope.active) setError(notebookCameraError(reason)); }
+    finally { scope.pairing = false; if (scope.active) setBusy(false); }
+  }
   const revoke = async () => {
-    if (!current) return;
+    const scope = session.current;
+    if (!current || !scope?.active) return;
     setBusy(true); setError(null);
-    mutation.current++;
+    scope.mutation++;
     try {
       await notebookCamerasApi.revoke(current.cameraId);
-      if (!mounted.current) return;
-      mutation.current++;
+      if (!scope.active) return;
+      scope.mutation++;
       setCameras(previous => previous.filter(camera => camera.cameraId !== current.cameraId));
       setSelected(''); setPairing(null);
-    } catch (reason) { if (mounted.current) setError(notebookCameraError(reason)); }
-    finally { if (mounted.current) setBusy(false); }
+    } catch (reason) { if (scope.active) setError(notebookCameraError(reason)); }
+    finally { if (scope.active) setBusy(false); }
   };
   return <section className="notebook-camera" aria-label="Камера тетради">
-    <div className="notebook-camera__heading"><div><h2>Камера тетради</h2><p>QR-код → открыть страницу → разрешить камеру.</p></div>
-      {onClose && <button type="button" className="btn btn--secondary" onClick={onClose}>Закрыть</button>}
+    <div className="notebook-camera__heading"><div><h2>Камера тетради</h2><p>{isTeacher
+      ? 'Подключённые тетради учеников появляются здесь автоматически. Выберите нужную тетрадь ниже.'
+      : 'Сканируйте QR-код телефоном, включите камеру и разместите телефон над тетрадью.'}</p></div>
+      {onClose && <button type="button" className="btn btn--secondary" onClick={onClose}>{closeLabel}</button>}
     </div>
     {error && <div className="banner banner--error" role="alert">{error}</div>}
     {!https && <p role="alert">Подключение телефона доступно на HTTPS-сайте Mindcrafti. Откройте урок по защищённому адресу сайта.</p>}
@@ -117,7 +138,7 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
           <option value={currentUserId}>Камера для пробного урока</option>
           {students.map(student => <option key={student.userId} value={student.userId}>{student.displayName}</option>)}
         </select></label>}
-        <button className="btn" type="button" disabled={busy || !https || (isTeacher && !studentId)} onClick={() => void createPairing()}>
+        <button className="btn" type="button" disabled={busy || !https || (autoPair && !isTeacher && loading) || (isTeacher && !studentId)} onClick={() => void createPairing()}>
           {busy ? 'Подождите…' : pairing || current ? 'Новый QR-код' : 'Подключить телефон'}
         </button>
         <p className="muted">Телефон может быть в другой сети. Нужен только интернет. QR одноразовый и действует 5 минут.</p>

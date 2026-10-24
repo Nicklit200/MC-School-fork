@@ -1,6 +1,6 @@
 import { lessonPreparationApi, completedLessonApi } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
-import { NotebookCameraButton } from '../notebook-camera/NotebookCameraPanel';
+import { NotebookCameraPanel } from '../notebook-camera/NotebookCameraPanel';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { buildPdf, dataUrlToBytes } from './pdfWriter';
 import {
@@ -126,7 +126,7 @@ function RoomBody({
   onEndForAll?: () => void;
   onStateChanged?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   // Automatically start Soniox transcription when the teacher joins a live lesson.
   // Never start for a student or if the feature is unavailable, already running,
   // or deliberately stopped during this room session.
@@ -215,7 +215,9 @@ function RoomBody({
     } finally { setMaterialBusy(false); }
   };
   const [waiting, setWaiting] = useState(0);
-  const [mainView, setMainView] = useState<'board' | 'screen'>('board');
+  const [mainView, setMainView] = useState<'board' | 'screen' | 'notebook'>('board');
+  const [notebookOpened, setNotebookOpened] = useState(false);
+  const notebookTrigger = useRef<HTMLButtonElement>(null);
   const sharing = useScreenShareActive();
   const wasSharing = useRef(false);
   const hostUserId = useHostUserId(classId);
@@ -311,12 +313,17 @@ function RoomBody({
   // A new screen share takes the main area; the user can switch back to the
   // board at any time, and the board keeps its marks while it is not shown.
   useEffect(() => {
-    if (sharing && !wasSharing.current) setMainView('screen');
-    if (!sharing) setMainView('board');
+    if (sharing && !wasSharing.current) setMainView(view => view === 'notebook' ? view : 'screen');
+    if (!sharing) setMainView(view => view === 'screen' ? 'board' : view);
     wasSharing.current = sharing;
   }, [sharing]);
 
   const showScreen = sharing && mainView === 'screen';
+  const showNotebook = Boolean(eventId) && mainView === 'notebook';
+  const returnToBoard = () => {
+    setMainView('board');
+    notebookTrigger.current?.focus();
+  };
 
   // Homework and teacher-only solutions are both on the left, never stacked.
   useEffect(() => {
@@ -344,6 +351,32 @@ function RoomBody({
             <path d="M8 7h6M8 11h4"/>
           </svg>
         </button>
+        {eventId && <button
+          ref={notebookTrigger}
+          type="button"
+          className="online-class-room__notebook-toggle"
+          aria-pressed={showNotebook}
+          aria-expanded={showNotebook}
+          aria-controls="classroom-notebook"
+          onClick={() => {
+            if (showNotebook) { returnToBoard(); return; }
+            setNotebookOpened(true);
+            setMainView('notebook');
+            setHomeworkOpen(false);
+            answers.close();
+            setPanelsOpen(false);
+            // The participant rail otherwise covers the QR and settings on a
+            // narrow tablet. It remains available from its normal toggle.
+            if (window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
+          }}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 4h10v16H7zM4 7h3M4 12h3M4 17h3M10 8h4M10 12h4M10 16h2" />
+          </svg>
+          {connection.host
+            ? language === 'DE' ? 'Schülerhefte' : 'Тетради учеников'
+            : language === 'DE' ? 'Heft verbinden' : 'Подключить тетрадь'}
+        </button>}
         {connection.host && (
           <label title="Загрузить PDF или фото на доску" style={{ cursor: materialBusy ? 'wait' : 'pointer', padding: '6px 10px', borderRadius: 8, background: '#1d4ed8', color: 'white' }}>
             {materialBusy ? 'Загрузка…' : '＋ Добавить PDF / Фото'}
@@ -378,11 +411,11 @@ function RoomBody({
           currentUserId={currentUserId}
           students={students}
           activeId={activeBoard}
-          onChange={setActiveBoard}
+          onChange={boardId => { setActiveBoard(boardId); setMainView('board'); }}
         />
       </div>
 
-      <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}`}>
+      <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showNotebook ? ' online-class-room__stage--notebook' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
               canvas: the sibling board reflows to the remaining available width. */}
           {connection.host && answers.open && answers.status === 'available' && !homeworkOpen && (
@@ -402,7 +435,7 @@ function RoomBody({
           {/* The board stays mounted while a screen is shown, so switching back
               returns to the same page, zoom, tool and marks. */}
           {boardsToShow.map((boardId) => {
-            const visible = boardId === activeBoard && !showScreen;
+            const visible = boardId === activeBoard && !showScreen && !showNotebook;
             return (
               <div key={boardId} className="online-class-room__board" hidden={!visible}>
                 <Suspense fallback={null}>
@@ -431,7 +464,7 @@ function RoomBody({
               </div>
             );
           })}
-          {showingAllStudents && !showScreen && (
+          {showingAllStudents && !showScreen && !showNotebook && (
             <div className="online-class-room__student-grid" aria-label="Доски всех учеников">
               {students.slice(0, 4).map((student) => (
                 <div className="online-class-room__student-tile" key={student.userId}>
@@ -458,6 +491,27 @@ function RoomBody({
               <ScreenShareView />
             </div>
           )}
+
+          {/* The processor and its media subscription stay mounted while the
+              pupil looks at the board, preserving the QR, crop, rotation and
+              unsaved ink. Leaving the classroom still releases the viewer. */}
+          {eventId && notebookOpened && <div
+            id="classroom-notebook"
+            className="online-class-room__notebook"
+            hidden={!showNotebook}
+          >
+            <NotebookCameraPanel
+              key={`${eventId}:${classId}`}
+              eventId={eventId}
+              classId={classId}
+              currentUserId={currentUserId}
+              isTeacher={connection.host}
+              students={connection.host ? students : undefined}
+              autoPair={!connection.host}
+              onClose={returnToBoard}
+              closeLabel={language === 'DE' ? 'Zurück zur Tafel' : 'Вернуться к доске'}
+            />
+          </div>}
 
           {homeworkOpen && !connection.host && (
             <HomeworkDrawer classId={classId} onClose={() => setHomeworkOpen(false)} />
@@ -489,7 +543,6 @@ function RoomBody({
       <ConnectionStateToast />
 
       <div className="online-class-room__controls">
-        {eventId && <NotebookCameraButton eventId={eventId} classId={classId} currentUserId={currentUserId} isTeacher={connection.host} students={connection.host ? students : undefined} />}
         {/* Leave is handled by our own button. LiveKit's built-in Leave
             would look like an unexpected network disconnect here. */}
         <ControlBar variation="verbose" controls={{ leave: false }} />
