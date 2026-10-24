@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, type ReactNode } from 'react';
 import { TeacherShell } from './TeacherShell';
+import { StudentShell } from './StudentShell';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n/I18nContext';
 import { api, setAccessToken, setSessionAccessToken } from '../api/client';
@@ -58,6 +59,11 @@ export function Layout({ children }: { children: ReactNode }) {
   if (isTeacher) {
     return <TeacherShell user={user} isImpersonating={isImpersonating} returningToAdmin={returningToAdmin}
       onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>{children}</TeacherShell>;
+  }
+
+  if (isStudent) {
+    return <StudentShell name={user.fullName} isImpersonating={isImpersonating} returningToAdmin={returningToAdmin}
+      onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>{children}</StudentShell>;
   }
 
   const links: { to: string; label: TranslationKey | string }[] = isStudent

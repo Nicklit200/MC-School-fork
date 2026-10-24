@@ -25,28 +25,19 @@ export function MyCardsPage() {
   if (!items) return <p className="muted">{t('common.loading')}</p>;
 
   return (
-    <div>
-      <h1>{t('nav.myCards')}</h1>
-      {cardBatches.length === 0 ? (
-        <p className="muted">{t('cards.empty')}</p>
-      ) : (
-        <div className="panel stack">
-          {cardBatches.map((homework) => (
-            <Link
-              key={homework.id}
-              className="list-row"
-              to={`/my-cards/${homework.id}`}
-              style={{ textDecoration: 'none' }}
-            >
-              <div className="list-row__title">{homework.startDate}</div>
-              <div className="muted">
-                {t('homeworks.total')}: {homework.totalCards} · {t('homeworks.notStarted')}: {homework.notStarted} ·{' '}
-                {t('homeworks.inProgress')}: {homework.inProgress} · {t('homeworks.learned')}: {homework.learned}
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+    <div><h1>{t('nav.myCards')}</h1>
+      {cardBatches.length === 0 ? <p className="muted">{t('cards.empty')}</p> : <div className="student-batches">
+        {cardBatches.map(homework => <Link key={homework.id} className="panel student-batch" to={`/my-cards/${homework.id}`}>
+          <h2>{homework.startDate}</h2>
+          <div className="student-batch__stats">
+            <div><strong>{homework.totalCards}</strong><small>{t('homeworks.total')}</small></div>
+            <div><strong>{homework.notStarted}</strong><small>{t('homeworks.notStarted')}</small></div>
+            <div><strong>{homework.inProgress}</strong><small>{t('homeworks.inProgress')}</small></div>
+            <div><strong>{homework.learned}</strong><small>{t('homeworks.learned')}</small></div>
+          </div>
+          <span className="student-batch__open" aria-hidden="true">→</span>
+        </Link>)}
+      </div>}
     </div>
   );
 }

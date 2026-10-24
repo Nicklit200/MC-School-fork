@@ -1,0 +1,271 @@
+/* Mindcrafti student theme. All application changes are scoped to this role. */
+.student-shell {
+  --bg:#151719; --surface:#202326; --border:#353b3e; --text:#f0f3f2; --muted:#a6b0b4;
+  --accent:#f56b18; --accent-dark:#de5a10; --green:#93d6bd; --green-dark:#93d6bd;
+  --danger:#f5a5a5; --radius:18px; --student-raised:#282c30;
+  --student-selected:#422e22; --student-orange:#ffad72; --student-success:#253e34;
+  background:var(--bg); color:var(--text); color-scheme:dark; min-height:100dvh;
+  display:grid; grid-template-columns:212px minmax(0,1fr); font-size:14px; line-height:1.5;
+}
+body:has(.student-shell) { background:#151719; }
+.student-shell * { box-sizing:border-box; }
+.student-shell svg { width:20px; height:20px; flex-shrink:0; }
+.student-shell :is(button,a,input,select,textarea):focus-visible { outline:2px solid var(--student-orange); outline-offset:4px; }
+.student-shell :is(button,a) { touch-action:manipulation; }
+.student-shell__skip { position:fixed; left:12px; top:-80px; z-index:100; padding:12px 18px; border-radius:10px; background:var(--accent); color:#fff; }
+.student-shell__skip:focus { top:12px; }
+.student-shell__sidebar { position:fixed; inset:0 auto 0 0; z-index:30; width:212px; padding:28px 15px 19px; background:#1c1f21; border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+.student-shell__brand { display:flex; align-items:center; gap:10px; padding:0 8px; text-decoration:none; color:var(--text); font-size:20px; font-weight:750; letter-spacing:-.6px; }
+.student-shell__brand img { width:34px; height:35px; object-fit:contain; }
+.student-shell__brand small { display:block; color:var(--muted); font-size:9px; font-weight:500; letter-spacing:3px; margin-top:2px; }
+.student-shell__nav-label { color:#879297; font-size:9px; letter-spacing:1.4px; margin:38px 12px 14px; }
+.student-shell__nav { display:grid; gap:7px; }
+.student-shell__link { display:flex; align-items:center; gap:11px; padding:12px; min-height:46px; border-radius:12px; color:var(--muted); font-size:13px; text-decoration:none; }
+.student-shell__link:hover { background:var(--student-raised); color:var(--text); }
+.student-shell__link.is-active { background:var(--student-selected); color:var(--student-orange); font-weight:600; }
+.student-shell__account { margin-top:auto; border-top:1px solid var(--border); padding:19px 5px 0; display:flex; gap:9px; align-items:center; }
+.student-shell__avatar { display:grid; place-items:center; flex-shrink:0; width:36px; height:36px; background:var(--student-selected); color:var(--student-orange); border-radius:11px; font-weight:600; text-decoration:none; }
+.student-shell__account > div { min-width:0; flex:1; }
+.student-shell__account strong { display:block; overflow-wrap:anywhere; font-size:12px; }
+.student-shell__account small { display:block; font-size:10px; color:var(--muted); }
+.student-shell__account button { background:none; border:0; color:var(--muted); min-height:42px; padding:7px; cursor:pointer; }
+.student-shell__body { grid-column:2; min-width:0; }
+.student-shell__topbar { height:72px; padding:0 34px; display:flex; justify-content:space-between; align-items:center; gap:14px; border-bottom:1px solid #2a2f32; }
+.student-shell__breadcrumb { color:var(--muted); font-size:12px; }
+.student-shell__breadcrumb span { color:var(--text); margin-left:9px; }
+.student-shell__mobile-brand { display:none; }
+.student-shell__main.content { padding:30px 34px 45px; width:100%; max-width:1440px; margin:0 auto; min-width:0; }
+.student-shell__main h1 { font-size:30px; line-height:1.25; letter-spacing:-.8px; font-weight:650; margin-bottom:25px; overflow-wrap:anywhere; }
+.student-shell__main h2 { font-size:18px; font-weight:650; letter-spacing:-.3px; }
+.student-shell__main p { line-height:1.7; }
+.student-shell .panel { background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:18px; padding:22px; box-shadow:none; }
+.student-shell .muted { color:var(--muted); }
+.student-shell .btn { min-height:44px; border:1px solid var(--accent); border-radius:12px; background:var(--accent); color:#fff; padding:10px 16px; font-size:13px; font-weight:600; text-decoration:none; line-height:1.5; display:inline-flex; justify-content:center; align-items:center; gap:8px; }
+.student-shell .btn:hover:not(:disabled) { background:var(--accent-dark); border-color:var(--accent-dark); }
+.student-shell .btn--secondary { background:var(--surface); color:var(--text); border-color:var(--border); }
+.student-shell .btn--secondary:hover:not(:disabled) { background:var(--student-raised); border-color:#566064; }
+.student-shell .btn--ghost { background:transparent; border-color:transparent; color:var(--muted); }
+.student-shell .btn--ghost:hover:not(:disabled) { background:var(--student-raised); color:var(--text); }
+.student-shell .btn:disabled { opacity:.45; cursor:default; }
+.student-shell .btn--block { display:flex; width:100%; }
+.student-shell :is(.input,.textarea,.select) { background:var(--bg); color:var(--text); border-color:var(--border); border-radius:11px; min-height:44px; }
+.student-shell :is(.input,.textarea)::placeholder { color:#879399; }
+.student-shell .pill { border-radius:7px; font-size:11px; padding:4px 8px; white-space:normal; line-height:1.5; }
+.student-shell :is(.pill--active,.pill--pending) { background:var(--student-selected); color:var(--student-orange); }
+.student-shell .pill--learned { background:var(--student-success); color:var(--green); }
+.student-shell :is(.pill--wrong,.pill--danger) { background:#432b30; color:var(--danger); }
+.student-shell .banner { border-radius:12px; font-size:13px; }
+.student-shell .banner--error { background:#432b30; color:var(--danger); border-color:#66434b; }
+.student-shell .banner--success { background:var(--student-success); color:var(--green); border-color:#405e50; }
+.student-shell .banner--info { background:var(--student-selected); color:var(--student-orange); border-color:#65432d; }
+.student-shell .list-row { padding:17px 0; border-color:var(--border); color:var(--text); text-decoration:none; min-width:0; gap:14px; }
+.student-shell .list-row__title { font-size:14px; font-weight:600; line-height:1.6; overflow-wrap:anywhere; }
+.student-shell .list-row .muted { font-size:12px; line-height:1.7; }
+.student-shell .row { gap:14px; }
+.student-shell .progressbar { background:var(--student-raised); height:6px; }
+.student-shell .progressbar__fill { background:var(--green); }
+.student-shell .question { background:var(--surface); color:var(--text); border-color:var(--border); padding:45px 26px; font-size:30px; line-height:1.5; border-radius:20px; }
+.student-shell .option { background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:13px; min-height:58px; font-size:17px; }
+.student-shell .option:hover:not(:disabled) { border-color:#9c663f; background:var(--student-selected); }
+.student-shell .option--correct { border-color:#5f997e; background:var(--student-success); color:var(--green); }
+.student-shell .option--wrong { border-color:#9e666f; background:#432b30; color:var(--danger); }
+.student-shell .option--selected { background:var(--student-selected); border-color:#9c663f; }
+.student-shell .session-guard { max-width:760px; margin:0 auto; }
+.student-shell .result { max-width:850px; margin:0 auto; }
+.student-shell .result__stat { color:var(--green); font-size:44px; line-height:1.2; }
+.student-shell .result-review__item { border-color:var(--border); }
+.student-shell__admin { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; padding:8px 24px; background:#2b231c; border-bottom:1px solid #4e392a; color:var(--student-orange); font-size:11px; }
+.student-shell__admin .btn { min-height:32px; font-size:11px; padding:6px 10px; }
+
+/* The homepage renders the same Today payload and the same homework links. */
+.student-today__grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr); gap:22px; align-items:start; }
+.student-shell .student-today__review { background:#2b241f; border-color:#65412b; padding:28px; }
+.student-today__review h2 { color:var(--student-orange); font-size:13px; margin-bottom:22px; }
+.student-shell .student-today__review .result__stat { color:var(--text); font-size:56px; text-align:left; margin:0 0 9px; }
+.student-today__actions { display:grid; gap:12px; margin:24px 0 17px; max-width:410px; }
+.student-today__review > .muted { font-size:12px; }
+.student-today__homework h2 { margin-bottom:22px; }
+.student-today__homework .center { text-align:left; }
+.student-today__homework .result__stat { font-size:37px; color:var(--text); margin:0 0 8px; }
+.student-today__homework .muted { font-size:12px; }
+.student-today__homework .list-row { align-items:flex-start; flex-wrap:wrap; }
+.student-batches { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:17px; }
+.student-batch { display:flex; flex-direction:column; color:var(--text); text-decoration:none; transition:border-color .15s; }
+.student-shell .student-batch:hover { border-color:#8e5a35; }
+.student-batch h2 { font-size:19px; margin-bottom:22px; }
+.student-batch__stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+.student-batch__stats strong { display:block; font-size:25px; font-weight:600; }
+.student-batch__stats small { display:block; color:var(--muted); font-size:10px; line-height:1.6; margin-top:5px; }
+.student-batch__open { display:block; border-top:1px solid var(--border); padding-top:14px; margin-top:22px; color:var(--student-orange); font-size:12px; }
+
+/* Calendar: compact days and one selected day's existing lesson actions. */
+.student-calendar { width:100%; min-width:0; }
+.student-calendar__heading { display:flex; justify-content:space-between; align-items:center; gap:20px; margin-bottom:27px; }
+.student-calendar__heading h1 { margin-bottom:8px; }
+.student-calendar__heading p { margin:0; font-size:13px; color:var(--muted); }
+.student-calendar__toggle { display:flex; gap:4px; padding:4px; border:1px solid var(--border); background:var(--surface); border-radius:12px; flex-shrink:0; }
+.student-calendar__toggle button { border:0; border-radius:8px; min-height:40px; background:transparent; color:var(--muted); padding:8px 17px; font:inherit; font-size:12px; cursor:pointer; }
+.student-calendar__toggle button[aria-pressed='true'] { color:var(--student-orange); background:var(--student-selected); font-weight:600; }
+.student-calendar__week-title { text-align:center; margin:8px 0 20px; font-size:18px; font-weight:650; }
+.student-calendar__week { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:9px; }
+.student-calendar__day { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border); border-radius:13px; min-height:94px; padding:12px 4px; color:var(--text); cursor:pointer; }
+.student-calendar__day > span { color:var(--muted); font-size:11px; }
+.student-calendar__day > strong { font-size:23px; font-weight:600; }
+.student-calendar__day > i { width:4px; height:4px; background:transparent; border-radius:50%; }
+.student-calendar__day.has-lessons > i { background:var(--student-orange); }
+.student-calendar__day[aria-pressed='true'] { border-color:#805133; background:var(--student-selected); }
+.student-calendar__day[aria-pressed='true'] :is(span,strong) { color:var(--student-orange); }
+.student-calendar__agenda-title { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:25px 0 15px; }
+.student-calendar__agenda-title h2 { font-size:18px; margin:0; }
+.student-calendar__agenda-title span { font-size:12px; color:var(--muted); }
+.student-calendar__lessons { display:grid; gap:15px; }
+.student-shell .student-lesson { display:grid; grid-template-columns:76px minmax(0,1fr) minmax(200px,.65fr); align-items:center; gap:22px; padding:23px; margin:0; }
+.student-lesson__time strong { display:block; font-size:23px; font-weight:600; }
+.student-lesson__time small { display:block; margin-top:5px; font-size:11px; color:var(--muted); }
+.student-lesson__body { border-left:2px solid var(--student-orange); padding-left:19px; }
+.student-lesson__body h3 { font-size:16px; line-height:1.5; margin:0 0 9px; font-weight:600; }
+.student-lesson__body p { font-size:12px; color:var(--muted); margin:5px 0; }
+.student-lesson__actions { display:grid; gap:8px; }
+.student-lesson__actions .btn { width:100%; white-space:normal; font-size:12px; text-align:center; }
+.student-calendar__empty { border:1px dashed var(--border); border-radius:16px; padding:30px 20px; text-align:center; color:var(--muted); font-size:13px; }
+.student-calendar__month { display:grid; grid-template-columns:minmax(235px,.8fr) minmax(0,1.7fr); align-items:start; gap:20px; }
+.student-calendar__selected { min-width:0; }
+.student-calendar__selected h2 { font-size:20px; line-height:1.4; margin-bottom:19px; }
+.student-calendar__selected-label { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+.student-calendar__selected .student-lesson { display:block; padding:16px 0; border:0; border-top:1px solid var(--border); border-radius:0; }
+.student-calendar__selected .student-lesson__body { border:0; padding:14px 0; }
+.student-calendar__month-heading { display:grid; grid-template-columns:42px minmax(0,1fr) 42px; align-items:center; gap:12px; margin-bottom:16px; }
+.student-calendar__month-heading h2 { text-align:center; font-size:20px; margin:0; }
+.student-calendar__month-heading button { min-height:42px; border:1px solid var(--border); border-radius:11px; background:var(--surface); color:var(--text); font-size:25px; cursor:pointer; }
+.student-calendar__weekdays,.student-calendar__cells { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+.student-calendar__weekdays > div { text-align:center; padding:9px 2px 14px; font-size:11px; font-weight:600; color:var(--muted); }
+.student-calendar__cell { min-width:0; min-height:77px; padding:8px 3px; border:1px solid #303639; background:transparent; color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; cursor:pointer; }
+.student-calendar__cell > span { height:29px; width:29px; border-radius:50%; display:grid; place-items:center; font-size:14px; font-weight:600; }
+.student-calendar__cell > i { height:4px; width:4px; border-radius:50%; background:transparent; }
+.student-calendar__cell.has-lessons { background:#2d2823; }
+.student-calendar__cell.has-lessons > span { color:var(--student-orange); }
+.student-calendar__cell.has-lessons > i { background:var(--accent); }
+.student-calendar__cell.is-today > span { outline:1px solid #98613b; outline-offset:2px; }
+.student-calendar__cell.is-outside { color:#69757a; }
+.student-calendar__cell[aria-pressed='true'] { box-shadow:inset 0 0 0 1px #a3683e; background:var(--student-selected); }
+.student-calendar__note { margin-top:20px; font-size:11px; color:var(--muted); line-height:1.8; }
+
+@media(min-width:1001px) and (max-width:1366px) {
+  .student-shell { grid-template-columns:156px minmax(0,1fr); }
+  .student-shell__sidebar { width:156px; padding:23px 10px 16px; }
+  .student-shell__brand { font-size:16px; gap:7px; padding:0 3px; }
+  .student-shell__brand img { width:29px; height:31px; }
+  .student-shell__brand small { font-size:8px; letter-spacing:2.6px; }
+  .student-shell__link { gap:9px; padding:11px 10px; font-size:12px; }
+  .student-shell__link svg { width:18px; height:18px; }
+  .student-shell__account { gap:7px; padding-left:3px; padding-right:3px; }
+  .student-shell__account strong { font-size:11px; }
+  .student-shell__account .student-shell__avatar { width:29px; height:31px; }
+  .student-shell__account button { padding:4px; }
+  .student-shell__account button svg { width:16px; }
+}
+@media(min-width:701px) and (max-width:1366px) {
+  .student-shell__topbar { height:60px; padding:0 24px; }
+  .student-shell__main.content { padding:26px 24px 35px; }
+  .student-shell__main h1 { font-size:27px; margin-bottom:23px; }
+  .student-shell .panel { padding:20px; border-radius:16px; }
+  .student-calendar__cell { min-height:66px; }
+  .student-batches { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(min-width:701px) and (max-width:1000px) {
+  .student-shell { grid-template-columns:72px minmax(0,1fr); }
+  .student-shell__sidebar { width:72px; padding:24px 10px 16px; }
+  .student-shell__brand { padding:0; justify-content:center; }
+  .student-shell__brand > span,.student-shell__nav-label,.student-shell__link > span,.student-shell__account > div,.student-shell__account button { display:none; }
+  .student-shell__nav { margin-top:30px; gap:9px; }
+  .student-shell__link { justify-content:center; padding:13px; }
+  .student-shell__account { justify-content:center; padding:18px 0 0; }
+  .student-today__grid { grid-template-columns:1fr; gap:19px; }
+  .student-calendar__month { grid-template-columns:1fr; }
+  .student-calendar__month > section { grid-row:1; }
+  .student-shell .student-lesson { grid-template-columns:65px minmax(0,1fr); gap:17px; }
+  .student-lesson__actions { grid-column:2; grid-template-columns:1fr 1fr; padding-left:19px; }
+  .student-calendar__selected .student-lesson__actions { padding-left:0; }
+}
+@media(max-width:700px) {
+  .student-shell { display:block; }
+  .student-shell__body { width:100%; min-width:0; }
+  .student-shell__topbar { height:64px; padding:0 18px; }
+  .student-shell__breadcrumb { display:none; }
+  .student-shell__mobile-brand { display:flex; padding:0; font-size:17px; gap:8px; }
+  .student-shell__mobile-brand img { width:30px; height:31px; }
+  .student-shell__main.content { padding:24px 18px calc(112px + env(safe-area-inset-bottom)); max-width:600px; }
+  .student-shell__main h1 { font-size:27px; letter-spacing:-.7px; line-height:1.3; margin-bottom:22px; }
+  .student-shell__sidebar { inset:auto 12px max(12px,env(safe-area-inset-bottom)); height:68px; width:auto; padding:5px; border:1px solid #41494d; border-radius:20px; background:#24282bf5; box-shadow:0 8px 32px #0007; overflow:visible; backdrop-filter:blur(16px); }
+  .student-shell__sidebar > .student-shell__brand,.student-shell__nav-label,.student-shell__account { display:none; }
+  .student-shell__nav { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); height:100%; gap:2px; }
+  .student-shell__link { flex-direction:column; justify-content:center; gap:5px; padding:7px 0 5px; min-height:55px; font-size:9px; line-height:1.3; text-align:center; border-radius:13px; }
+  .student-shell__link svg { width:21px; height:21px; }
+  .student-shell__link > span { max-width:100%; overflow-wrap:normal; }
+  .student-shell .panel { padding:20px; border-radius:18px; }
+  .student-shell .btn { min-height:46px; font-size:13px; padding:11px 15px; }
+  .student-shell :is(.input,.textarea,.select) { font-size:16px; min-height:46px; }
+  .student-shell .list-row { flex-wrap:wrap; gap:11px; }
+  .student-shell .list-row__title { font-size:14px; }
+  .student-shell .list-row .muted { font-size:12px; }
+  .student-shell .question { padding:37px 21px; font-size:28px; }
+  .student-shell .option { min-height:55px; padding:14px 16px; font-size:16px; }
+  .student-shell .result__stat { font-size:41px; }
+  .student-shell .row > * { flex-basis:120px; }
+  .student-shell__admin { padding:9px 14px; font-size:10px; }
+  .student-shell__admin .btn { min-height:34px; font-size:10px; }
+  .student-today__grid { grid-template-columns:1fr; gap:20px; }
+  .student-shell .student-today__review { padding:25px 22px; }
+  .student-today__review h2 { font-size:13px; margin-bottom:22px; }
+  .student-today__actions { max-width:none; }
+  .student-today__homework .list-row { border-top:1px solid var(--border); padding-top:18px; }
+  .student-batches { grid-template-columns:1fr; gap:16px; }
+  .student-batch h2 { font-size:21px; }
+  .student-batch__stats strong { font-size:24px; }
+  .student-batch__stats small { font-size:11px; }
+  .student-batch__open { min-height:36px; font-size:12px; }
+  .student-calendar__heading { display:block; margin-bottom:24px; }
+  .student-calendar__heading p { font-size:13px; }
+  .student-calendar__toggle { margin-top:20px; }
+  .student-calendar__toggle button { flex:1; min-height:43px; font-size:13px; }
+  .student-calendar__week-title { margin:3px 0 19px; font-size:17px; }
+  .student-calendar__week { gap:5px; }
+  .student-calendar__day { padding:9px 1px; min-height:78px; gap:6px; border-radius:10px; }
+  .student-calendar__day > span { font-size:10px; }
+  .student-calendar__day > strong { font-size:19px; }
+  .student-calendar__agenda-title { margin-top:24px; }
+  .student-calendar__agenda-title h2 { font-size:17px; }
+  .student-calendar__agenda-title span { font-size:11px; }
+  .student-shell .student-lesson { padding:20px 17px; grid-template-columns:50px minmax(0,1fr); gap:14px; align-items:start; }
+  .student-lesson__time strong { font-size:18px; }
+  .student-lesson__time small { font-size:10px; line-height:1.5; }
+  .student-lesson__body { padding-left:14px; }
+  .student-lesson__body h3 { font-size:15px; }
+  .student-lesson__body p { font-size:12px; }
+  .student-lesson__actions { grid-column:1/-1; padding:0; grid-template-columns:1fr; gap:9px; }
+  .student-lesson__actions .btn { min-height:45px; font-size:12px; }
+  .student-calendar__month { grid-template-columns:1fr; gap:17px; }
+  .student-calendar__month > section { grid-row:1; }
+  .student-shell .student-calendar__month > section { padding:17px 12px; }
+  .student-calendar__month-heading { gap:8px; }
+  .student-calendar__month-heading h2 { font-size:17px; }
+  .student-calendar__cell { min-height:56px; padding:7px 2px; gap:6px; }
+  .student-calendar__cell > span { width:26px; height:26px; font-size:13px; }
+  .student-calendar__weekdays > div { font-size:10px; padding-bottom:12px; }
+  .student-calendar__selected h2 { font-size:19px; }
+  .student-calendar__empty { padding:28px 17px; font-size:13px; }
+}
+@media(max-width:370px) {
+  .student-shell__main.content { padding-left:14px; padding-right:14px; }
+  .student-shell__topbar { padding-left:14px; padding-right:14px; }
+  .student-shell .panel { padding:18px; }
+  .student-shell__link { font-size:8px; }
+  .student-calendar__week { gap:3px; }
+  .student-calendar__day { min-height:73px; }
+  .student-calendar__day > span { font-size:9px; }
+  .student-calendar__day > strong { font-size:18px; }
+  .student-shell .student-lesson { grid-template-columns:46px minmax(0,1fr); padding:18px 14px; gap:11px; }
+  .student-lesson__body { padding-left:11px; }
+  .student-batch__stats small { font-size:10px; }
+}
+@media(prefers-reduced-motion:reduce) { .student-shell * { transition:none !important; scroll-behavior:auto !important; } }

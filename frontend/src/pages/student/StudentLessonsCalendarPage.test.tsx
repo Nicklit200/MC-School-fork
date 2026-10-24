@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiRequestError } from '../../api/client';
@@ -8,7 +8,7 @@ import { StudentLessonsCalendarPage } from './StudentLessonsCalendarPage';
 
 vi.mock('../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client');
-  return { ...actual, api: { studentLessons: { list: vi.fn() } } };
+  return { ...actual, api: { studentLessons: { list: vi.fn(), sharedDocument: vi.fn() } } };
 });
 vi.mock('../../api/onlineClasses', () => ({ onlineClassesApi: { listUpcoming: vi.fn() } }));
 
@@ -21,6 +21,10 @@ const room = (overrides: Partial<OnlineClass> = {}): OnlineClass => ({
   actualStartAt: '2026-10-24T16:00:00Z', actualEndAt: null, viewerIsHost: false,
   joinWindowOpen: true, recordingAvailable: false, transcriptionAvailable: false, ...overrides,
 });
+const scheduledLessons = [
+  { eventId: 'available', title: 'Уравнения', groupName: 'Группа 8', startsAt: '2026-10-26T16:00:00Z', endsAt: '2026-10-26T17:00:00Z', meetUrl: 'https://meet.google.com/example', hasSharedDocument: true, sharedDocumentFilename: 'lesson.pdf' },
+  { eventId: 'waiting', title: 'Дроби', groupName: null, startsAt: '2026-10-27T16:00:00Z', endsAt: '2026-10-27T17:00:00Z', meetUrl: null, hasSharedDocument: false, sharedDocumentFilename: null },
+];
 function mount() {
   return render(<MemoryRouter><I18nProvider><StudentLessonsCalendarPage /></I18nProvider></MemoryRouter>);
 }
@@ -37,7 +41,7 @@ describe('student online lesson discovery', () => {
     // Student discovery relies on server authorization even in an older web build.
     vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'false');
   });
-  afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
   it('shows a late room automatically, including lessons outside the visible calendar week', async () => {
     list.mockResolvedValueOnce([]).mockResolvedValue([room()]);
@@ -96,5 +100,76 @@ describe('student online lesson discovery', () => {
     expect(screen.getByText('Урок на субботу')).toBeInTheDocument();
     expect(screen.getByText('60 мин')).toBeInTheDocument();
     expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+  });
+
+  it('selects one of seven days and keeps document, Meet, notebook and server-authorized room actions', async () => {
+    vi.mocked(api.studentLessons.list).mockResolvedValue(scheduledLessons);
+    list.mockResolvedValue([room({ id: 'available-room', eventId: 'available', title: 'Уравнения' })]);
+    mount(); await settle();
+    const picker = screen.getByRole('group', { name: 'Выбери день недели' });
+    expect(within(picker).getAllByRole('button')).toHaveLength(7);
+    expect(within(picker).getByRole('button', { name: /24 октября/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('heading', { name: 'Уравнения' })).not.toBeInTheDocument();
+    fireEvent.click(within(picker).getByRole('button', { name: /26 октября/ }));
+    const card = within(screen.getByRole('heading', { name: 'Уравнения' }).closest('article')!);
+    expect(card.getByRole('button', { name: 'Общий документ' })).toBeEnabled();
+    expect(card.getByRole('link', { name: 'Подключиться к уроку' })).toHaveAttribute('href', scheduledLessons[0].meetUrl);
+    expect(card.getByRole('link', { name: /Mindcrafti Online.*подключиться/ })).toHaveAttribute('href', '/online-classes/available-room');
+    expect(card.getByRole('link', { name: 'Камера тетради' })).toHaveAttribute('href', '/lesson-notebook/available');
+    // The older package used a client flag. The server remains authoritative.
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps missing actions disabled and retains the selected week day after a month view', async () => {
+    vi.mocked(api.studentLessons.list).mockResolvedValue(scheduledLessons);
+    mount(); await settle();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Выбери день недели' })).getByRole('button', { name: /27 октября/ }));
+    const unavailable = screen.getByRole('button', { name: 'Документ ещё не готов' });
+    expect(unavailable).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Ссылка на урок ещё не готова' })).toBeDisabled();
+    fireEvent.click(unavailable);
+    expect(api.studentLessons.sharedDocument).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Месяц' }));
+    const month = screen.getByRole('group', { name: 'Выбери день' });
+    expect(within(month).getAllByRole('button')).toHaveLength(42);
+    fireEvent.click(within(month).getByRole('button', { name: /26 октября/ }));
+    expect(screen.getByRole('button', { name: 'Общий документ' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Неделя' }));
+    expect(screen.getByRole('heading', { name: 'Дроби' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Документ ещё не готов' })).toBeDisabled();
+    expect(within(screen.getByRole('group', { name: 'Выбери день недели' })).getByRole('button', { name: /27 октября/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('changes calendar months and keeps native lessons on their Berlin date in month view', async () => {
+    vi.mocked(api.studentLessons.list).mockResolvedValue([{
+      eventId: 'local-oct24', title: 'Урок на субботу', groupName: null,
+      startsAt: '2026-10-23T22:00:00Z', endsAt: '2026-10-23T22:45:00Z', meetUrl: null,
+      hasSharedDocument: false, sharedDocumentFilename: null,
+    }]);
+    mount(); await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Месяц' }));
+    const month = screen.getByRole('group', { name: 'Выбери день' });
+    expect(within(month).getByRole('button', { name: /24 октября/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('45 мин')).toBeInTheDocument();
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }));
+    expect(screen.getByRole('heading', { name: /Ноябрь 2026/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Урок на субботу' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    expect(screen.getByRole('heading', { name: 'Урок на субботу' })).toBeInTheDocument();
+  });
+
+  it('pauses background discovery and refreshes when the pupil returns to the page', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    list.mockResolvedValueOnce([]).mockResolvedValue([room()]);
+    mount(); await settle();
+    visibility.mockReturnValue('hidden');
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await vi.advanceTimersByTimeAsync(20_000); });
+    expect(list).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('link', { name: /Mindcrafti Online.*подключиться/ })).toBeInTheDocument();
   });
 });
