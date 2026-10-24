@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import '../../styles/floating-islands.css';
 import '../../styles/whiteboard-original-v3.css';
 import { ApiRequestError } from '../../api/client';
@@ -25,38 +25,29 @@ import {
   type PageView,
 } from './boardView';
 import { isPersonalBoard, personalBoardOwner } from './boards';
-import { ANNOTATION_TOPIC, annotationEvent, VIEW_TOPIC, viewEvent } from './events';
+import { VIEW_TOPIC, viewEvent } from './events';
 import type { InputMode } from './inputPolicy';
 import { navigationLocked } from './followTeacher';
 import { PageNavigator } from './PageNavigator';
 import { describeView } from './followTeacher';
 import type { PdfDoc } from './pdfDocument';
 import { buildPdf, dataUrlToBytes } from './pdfWriter';
-import { useAnnotationBoard } from './useAnnotationBoard';
 import { useClassEvents } from './useClassEvents';
 import { useFollowTeacher } from './useFollowTeacher';
 import { useHostUserId } from './useHostUserId';
 import { useLaserPointers } from './useLaserPointers';
-import { toLiveShape, useLiveStrokes } from './useLiveStrokes';
-import { usePdfPage } from './usePdf';
 import {
-  WhiteboardCanvas,
   type EraserMode,
   type Tool,
-  type WhiteboardCanvasHandle,
 } from './WhiteboardCanvas';
+
+import { WhiteboardPageSurface, type PageSurfaceHandle, type PageSurfaceStatus } from './WhiteboardPageSurface';
+import { useBoardPageLayout } from './useBoardPageLayout';
 
 const INPUT_MODE_KEY = 'mc.board.inputMode';
 // Keep the teacher's pen settings while individual student boards mount/unmount.
 const boardToolPreferences = new Map<string, Record<Tool, ToolSettings>>();
-/**
- * After a refresh, further packets within this window collapse into one more
- * refresh, so a burst of strokes costs a couple of replays, not one per packet.
- */
-const REFRESH_COOLDOWN_MS = 150;
 const ZOOM_BUTTON_FACTOR = 1.25;
-/** How often a personal board is re-read while it is on screen. */
-const PERSONAL_POLL_MS = 2000;
 
 export interface LiveBoardBackground {
   source: CanvasImageSource;
@@ -147,12 +138,22 @@ export function WhiteboardPanel({
   const [saveError, setSaveError] = useState<'unavailable' | 'failed' | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
-  const [stageWidth, setStageWidth] = useState(0);
-  const canvasRef = useRef<WhiteboardCanvasHandle | null>(null);
+  const [layout, setLayout] = useBoardPageLayout(actorId);
+  const continuous = targetType === 'WHITEBOARD' && canAnnotate && layout === 'continuous';
+  const pageHandles = useRef(new Map<number, PageSurfaceHandle>());
+  const pageElements = useRef(new Map<number, HTMLElement>());
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+  const currentPage = useCallback(() => pageHandles.current.get(pagesRef.current.current), []);
   const stageRef = useRef<HTMLDivElement | null>(null);
 
   const hostUserId = useHostUserId(classId);
-  const getBoardSize = useCallback(() => canvasRef.current?.getSize() ?? { width: 0, height: 0 }, []);
+  const getBoardSize = useCallback((index = pagesRef.current.current) => {
+    const size = pageHandles.current.get(index)?.canvas()?.getSize();
+    if (size && size.width > 0 && size.height > 0) return size;
+    const element = pageElements.current.get(index);
+    return { width: element?.clientWidth ?? 0, height: element?.clientHeight ?? 0 };
+  }, []);
 
   // Teacher preview opens on the student's actual page, not always page one.
   useEffect(() => {
@@ -182,90 +183,23 @@ export function WhiteboardPanel({
   });
   const locked = navigationLocked(isHost, follow.following);
 
-  // --- Realtime marks -------------------------------------------------------
-  // The board hook and the packet handler need each other, so the handler
-  // reaches the board through a ref.
-  const boardRef = useRef<ReturnType<typeof useAnnotationBoard> | null>(null);
-  const refresh = useRef({ cooling: false, pending: false });
-  const requestRefresh = useRef<() => void>(() => undefined);
-  requestRefresh.current = () => {
-    const state = refresh.current;
-    if (state.cooling) {
-      state.pending = true;
-      return;
-    }
-    state.cooling = true;
-    void boardRef.current?.refresh();
-    window.setTimeout(() => {
-      state.cooling = false;
-      if (state.pending) {
-        state.pending = false;
-        requestRefresh.current();
-      }
-    }, REFRESH_COOLDOWN_MS);
+  const [pageStatuses, setPageStatuses] = useState<Record<number, PageSurfaceStatus>>({});
+  const reportPageStatus = useCallback((index: number, status: PageSurfaceStatus) => {
+    setPageStatuses(current => {
+      const previous = current[index];
+      return previous?.canUndo === status.canUndo && previous.canRedo === status.canRedo
+        && previous.loadingPdfPage === status.loadingPdfPage ? current : { ...current, [index]: status };
+    });
+  }, []);
+  const status = pageStatuses[pages.current];
+  const loadingPdfPage = status?.loadingPdfPage ?? false;
+  const board = {
+    canUndo: status?.canUndo ?? false, canRedo: status?.canRedo ?? false,
+    undo: () => currentPage()?.board.undo(), redo: () => currentPage()?.board.redo(),
+    clearMine: () => currentPage()?.board.clearMine(), clearAll: () => currentPage()?.board.clearAll(),
   };
-
-  // Others watch a stroke grow while it is drawn. Preview only: the saved stroke
-  // still comes from the server, and a personal board broadcasts nothing.
-  const live = useLiveStrokes({
-    classId,
-    targetId,
-    page: pages.current,
-    enabled: !camera,
-    personalOwnerId: ownerId,
-    hostUserId,
-    currentUserId: actorId,
-  });
-
-  // A packet only says "something was saved". Any participant can publish on
-  // the data channel, so its contents are never applied: the server's replay is
-  // the one source of truth, and a forged packet can at most trigger a harmless
-  // re-fetch.
-  const { publish: publishAnnotation } = useClassEvents(classId, ANNOTATION_TOPIC, ({ event }) => {
-    if (event.type === 'annotation' && !personal && !camera) {
-      requestRefresh.current();
-      // The preview must persist until the matching REST-replayed shape is rendered.
-      // A saved-event hint alone can arrive well before the actual geometry.
-    }
-  });
-
-  const board = useAnnotationBoard({
-    classId,
-    targetType,
-    targetId,
-    pageIndex: pages.current,
-    actorId,
-    isHost,
-    sourceWidth: cameraBackground?.width,
-    sourceHeight: cameraBackground?.height,
-    onSaved: (operation, documentId) => {
-      if (personal || camera) return;
-      void publishAnnotation(
-        annotationEvent(classId, {
-          documentId,
-          operationId: operation.operationId,
-          sequence: operation.sequence,
-          op: operation.operationType,
-          layerOwnerId: operation.layerOwnerId,
-        }),
-      );
-    },
-  });
-  boardRef.current = board;
-  const savedOperationIds = board.shapes.map((entry) => entry.operationId).join(',');
-  useEffect(() => {
-    live.acknowledgeRendered(savedOperationIds ? savedOperationIds.split(',') : []);
-  }, [savedOperationIds, live.acknowledgeRendered]);
-
   const { lasers, sendLaser: broadcastLaser } = useLaserPointers(classId, targetId);
   const sendLaser = personal || camera ? undefined : broadcastLaser;
-
-  // Personal board: nobody is told when it changes, so a viewer polls instead.
-  useEffect(() => {
-    if ((!personal && !camera) || !active) return;
-    const timer = window.setInterval(() => void boardRef.current?.refresh(), PERSONAL_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [personal, camera, active]);
 
   // --- Pages ----------------------------------------------------------------
   // A joiner (or a reload) learns how many pages already exist from the server.
@@ -291,23 +225,106 @@ export function WhiteboardPanel({
     if (pdfDocument) setPages((current) => ensurePageCount(current, pdfDocument.pageCount));
   }, [pdfDocument]);
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [pageHeight, setPageHeight] = useState(500);
+  const [pageWidth, setPageWidth] = useState(800);
+  const [pageAspects, setPageAspects] = useState<Record<number, number>>({});
+  const aspectCache = useRef<Record<number, number>>({});
+  const geometryAnchor = useRef<{ index: number; ratio: number } | null>(null);
+  const [visitedPages, setVisitedPages] = useState(() => new Set([0]));
+  const [visiblePages, setVisiblePages] = useState(() => new Set([0]));
+  const scrollSelected = useRef<number | null>(null);
+  const drawingPage = useRef<number | null>(null);
+  const pointerScrollStart = useRef(0);
   useEffect(() => {
-    const element = stageRef.current;
+    setVisitedPages(current => current.has(pages.current) ? current : new Set([...current, pages.current]));
+  }, [pages.current]);
+  useEffect(() => {
+    const element = scrollRef.current;
     if (!element) return;
-    const observer = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      if (box) setStageWidth(box.width);
-    });
+    const resize = () => {
+      if (element.clientHeight > 0) setPageHeight(Math.max(160, Math.round(element.clientHeight * .92)));
+      if (element.clientWidth > 0) {
+        const style = getComputedStyle(element);
+        setPageWidth(Math.max(1, element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)));
+      }
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
     observer.observe(element);
     return () => observer.disconnect();
+  }, [continuous]);
+  const reportPageAspect = useCallback((index: number, aspect: number | null) => {
+    if (!aspect || !Number.isFinite(aspect) || aspect <= 0 || aspectCache.current[index] === aspect) return;
+    const root = scrollRef.current, selected = pageElements.current.get(pagesRef.current.current);
+    if (continuous && root && selected && selected.offsetHeight > 0) geometryAnchor.current = {
+      index: pagesRef.current.current, ratio: (root.scrollTop - selected.offsetTop) / selected.offsetHeight,
+    };
+    aspectCache.current = { ...aspectCache.current, [index]: aspect };
+    setPageAspects(aspectCache.current);
+  }, [continuous]);
+  useLayoutEffect(() => {
+    const anchor = geometryAnchor.current, root = scrollRef.current;
+    if (!continuous) { geometryAnchor.current = null; return; }
+    if (!anchor || !root) return;
+    const element = pageElements.current.get(anchor.index);
+    if (element) root.scrollTop = Math.max(0, element.offsetTop + anchor.ratio * element.offsetHeight);
+    geometryAnchor.current = null;
+  }, [continuous, pageAspects]);
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!continuous || !root || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      setVisiblePages(current => {
+        const next = new Set(current);
+        for (const entry of entries) {
+          const index = Number((entry.target as HTMLElement).dataset.pageIndex);
+          if (entry.isIntersecting) next.add(index); else next.delete(index);
+        }
+        return next;
+      });
+      const incoming = entries.filter(entry => entry.isIntersecting).map(entry => Number((entry.target as HTMLElement).dataset.pageIndex));
+      if (incoming.length) setVisitedPages(current => new Set([...current, ...incoming]));
+    }, { root, rootMargin: '50% 0px', threshold: 0 });
+    for (const element of pageElements.current.values()) observer.observe(element);
+    return () => observer.disconnect();
+  }, [continuous, pages.count, active]);
+  const alignCurrentPage = useCallback(() => {
+    const root = scrollRef.current, element = pageElements.current.get(pagesRef.current.current);
+    if (root && element) root.scrollTop = Math.max(0, element.offsetTop - root.clientHeight * .02);
   }, []);
-
-  const renderedPage = usePdfPage(pdfDocument, pages.current, stageWidth);
-  const hasPdfPage = Boolean(pdfDocument && pages.current < pdfDocument.pageCount);
-  const loadingPdfPage = hasPdfPage && !renderedPage;
-  const validSourceAspect = sourceAspect !== null && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : null;
-  const pageAspect = camera ? (cameraBackground ? cameraBackground.width / cameraBackground.height : null)
-    : renderedPage?.aspect ?? validSourceAspect ?? (targetType === 'WHITEBOARD' && !hasPdfPage ? A4_PORTRAIT_ASPECT : null);
+  useLayoutEffect(() => {
+    if (!continuous || !active) return;
+    if (scrollSelected.current === pages.current && !locked) { scrollSelected.current = null; return; }
+    scrollSelected.current = null;
+    alignCurrentPage();
+  }, [continuous, active, pages.current, pages.count, pageHeight, pageWidth, locked, alignCurrentPage]);
+  const activatePage = useCallback((index: number) => {
+    if (locked) return;
+    scrollSelected.current = index;
+    setPages(current => goToPage(current, index));
+  }, [locked]);
+  const scrollPages = (dx: number, dy: number) => {
+    const root = scrollRef.current;
+    if (!locked && root) { root.scrollLeft += dx; root.scrollTop += dy; }
+  };
+  const handleScroll = () => {
+    const root = scrollRef.current;
+    if (!continuous || !root || drawingPage.current !== null) return;
+    if (locked) { alignCurrentPage(); return; }
+    const focus = root.scrollTop + root.clientHeight / 2;
+    let nearest = pagesRef.current.current, distance = Infinity, mostVisible = -1;
+    for (const [index, element] of pageElements.current) {
+      const visible = Math.max(0, Math.min(element.offsetTop + element.offsetHeight, root.scrollTop + root.clientHeight) - Math.max(element.offsetTop, root.scrollTop));
+      const next = Math.abs(element.offsetTop + element.offsetHeight / 2 - focus);
+      if (visible > mostVisible || (visible === mostVisible && next < distance)) { nearest = index; distance = next; mostVisible = visible; }
+    }
+    activatePage(nearest);
+  };
+  const finishPointerNavigation = () => {
+    drawingPage.current = null;
+    if (Math.abs((scrollRef.current?.scrollTop ?? 0) - pointerScrollStart.current) > .5) handleScroll();
+  };
 
   const setView = useCallback((next: PageView) => setPages((current) => withView(current, next)), []);
 
@@ -328,13 +345,14 @@ export function WhiteboardPanel({
   const saveSnapshot = async () => {
     setSaved(false);
     setSaveError(null);
-    const image = canvasRef.current?.toDataURL();
-    if (!image || !board.document) {
+    const image = currentPage()?.canvas()?.toDataURL();
+    const document = currentPage()?.board.document;
+    if (!image || !document) {
       setSaveError('failed');
       return;
     }
     try {
-      await onlineClassesApi.saveAnnotationSnapshot(classId, board.document.id, image);
+      await onlineClassesApi.saveAnnotationSnapshot(classId, document.id, image);
       setSaved(true);
     } catch (error) {
       // 409 means the server has nowhere to put files; say so rather than
@@ -351,7 +369,7 @@ export function WhiteboardPanel({
     setExportFailed(false);
     try {
       if (camera) {
-        const image = canvasRef.current?.toDataURL('image/jpeg');
+        const image = currentPage()?.canvas()?.toDataURL('image/jpeg');
         const size = getBoardSize();
         if (!cameraBackground || !image || size.width <= 0 || size.height <= 0) throw new Error('No camera frame to export');
         const blob = new Blob([buildPdf([{ jpeg: dataUrlToBytes(image), width: Math.max(1, Math.floor(size.width)), height: Math.max(1, Math.floor(size.height)) }]) as BlobPart], { type: 'application/pdf' });
@@ -414,7 +432,7 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
+    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}${continuous ? ' whiteboard--continuous' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
       <div className="whiteboard__topline">
       {canAnnotate && (
         <BoardToolbar
@@ -442,11 +460,16 @@ export function WhiteboardPanel({
               <BoardToolbarIcon name="save" />
             </button>
           </> : undefined}
-          sharedActions={
+          sharedActions={<>
+            {targetType === 'WHITEBOARD' && <button type="button" role="switch" aria-checked={layout === 'continuous'}
+              onClick={() => setLayout(layout === 'continuous' ? 'paged' : 'continuous')}>
+              <span aria-hidden="true">{layout === 'continuous' ? '✓' : '○'}</span>
+              {language === 'DE' ? 'Fortlaufendes Scrollen' : 'Непрерывная прокрутка'}
+            </button>}
             <button type="button" onClick={() => void exportPdf()} disabled={exporting}>
               {exporting ? t('onlineClass.whiteboard.exporting') : camera ? 'Скачать кадр PDF' : t('onlineClass.whiteboard.exportPdf')}
             </button>
-          }
+          </>}
         />
       )}
 
@@ -468,43 +491,42 @@ export function WhiteboardPanel({
 
       <div ref={stageRef} className="whiteboard__stage">
       <div className="whiteboard__topline-pages">
-        <PageNavigator current={pages.current} count={pages.count} disabled={locked}
-          onPrevious={() => setPages(previousPage)}
-          onNext={() => setPages(nextPage)}
-          onAdd={(isHost || personal) && canAnnotate ? () => setPages(addPage) : undefined} />
+        {continuous ? <nav className="page-nav" aria-label={t('onlineClass.board.page.nav')}>
+          <span className="page-nav__label" role="status" aria-live="polite"
+            aria-label={t('onlineClass.board.page.current', { current: pages.current + 1, total: pages.count })}>{pages.current + 1} / {pages.count}</span>
+          {(isHost || personal) && canAnnotate && <button type="button" className="page-nav__add" disabled={locked}
+            aria-label={t('onlineClass.board.page.add')} onClick={() => setPages(addPage)}>+</button>}
+        </nav> : <PageNavigator current={pages.current} count={pages.count} disabled={locked}
+          onPrevious={() => setPages(previousPage)} onNext={() => setPages(nextPage)}
+          onAdd={(isHost || personal) && canAnnotate ? () => setPages(addPage) : undefined} />}
       </div>
 
-        <WhiteboardCanvas
-          ref={canvasRef}
-          shapes={board.shapes}
-          pageKey={`${targetType}:${targetId}:${pages.current}`}
-          tool={tool}
-          color={settingsOf.color}
-          strokeWidth={settingsOf.width}
-          textFont={toolSettings.text.font ?? 'clean'}
-          textFontSize={toolSettings.text.fontSize ?? 24}
-          textBold={Boolean(toolSettings.text.bold)}
-          sourceAspect={pageAspect}
-          readOnly={!canAnnotate || loadingPdfPage}
-          eraserMode={eraserMode}
-          inputMode={inputMode}
-          view={view}
-          onViewChange={setView}
-          navigationLocked={locked}
-          background={camera ? cameraBackground?.source ?? null : renderedPage?.canvas ?? null}
-          paperColor={camera ? null : targetType === 'WHITEBOARD' ? '#ffffff' : '#fffefa'}
-          backgroundLive={camera && Boolean(cameraBackground)}
-          active={active}
-          lasers={camera ? [] : lasers}
-          remoteDrafts={camera ? [] : live.drafts}
-          onDraftChange={(shape, strokeId, finished) => live.sendDraft(shape ? toLiveShape(shape) : null, strokeId, finished)}
-          actorId={actorId}
-          onCommit={(shape, strokeId) => board.addShape(shape, strokeId)}
-          onEraseShape={(id) => void board.eraseShape(id)}
-          onMoveShape={(id, shape) => void board.moveShape(id, shape)}
-          onLaserMove={sendLaser}
-        />
-
+        <div ref={scrollRef} className={`whiteboard__pages${continuous ? ' whiteboard__pages--continuous' : ' whiteboard__pages--paged'}${locked ? ' whiteboard__pages--locked' : ''}`}
+          role={continuous ? 'region' : undefined} aria-label={continuous ? (language === 'DE' ? 'Unterrichtsseiten' : 'Страницы доски') : undefined}
+          tabIndex={continuous ? 0 : undefined} onScroll={handleScroll}
+          onPointerDownCapture={event => {
+            drawingPage.current = Number((event.target as Element).closest('[data-page-index]')?.getAttribute('data-page-index') ?? pages.current);
+            pointerScrollStart.current = scrollRef.current?.scrollTop ?? 0;
+          }}
+          onPointerUpCapture={finishPointerNavigation} onPointerCancelCapture={finishPointerNavigation}>
+          {Array.from({ length: pages.count }, (_, index) => <article key={`${targetType}:${targetId}:${index}`}
+            ref={element => { if (element) pageElements.current.set(index, element); else pageElements.current.delete(index); }}
+            className="whiteboard__page" data-page-index={index} hidden={!continuous && index !== pages.current}
+            aria-label={t('onlineClass.board.page.current', { current: index + 1, total: pages.count })}
+            style={continuous ? { height: Math.min(pageHeight, pageWidth / (pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT))) } : undefined}>
+            {(visitedPages.has(index) || index === pages.current) && <WhiteboardPageSurface
+              ref={handle => { if (handle) pageHandles.current.set(index, handle); else pageHandles.current.delete(index); }}
+              classId={classId} actorId={actorId} isHost={isHost} targetType={targetType} targetId={targetId} pageIndex={index}
+              pdfDocument={pdfDocument} sourceAspect={sourceAspect} liveBackground={cameraBackground}
+              tool={tool} settings={settingsOf} textSettings={toolSettings.text} eraserMode={eraserMode} inputMode={inputMode}
+              view={viewOf(pages, index)} onViewChange={next => setPages(current => withView(current, next, index))}
+              canAnnotate={canAnnotate} navigationLocked={locked} continuous={continuous}
+              active={active && (index === pages.current || (continuous && visiblePages.has(index)))} selected={index === pages.current}
+              lasers={index === pages.current && !camera ? lasers : []} onLaser={sendLaser}
+              onActivate={activatePage} onStatusChange={reportPageStatus} onAspectChange={reportPageAspect} onScrollGesture={scrollPages}
+            />}
+          </article>)}
+        </div>
 
         <div className="whiteboard__zoom" role="group">
           <button

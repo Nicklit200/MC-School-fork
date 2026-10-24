@@ -269,3 +269,25 @@ body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:2
   .whiteboard--original-v3.school-islands-board .board-toolbar__island button { min-width:24px; width:24px; padding:3px; }
   .whiteboard--original-v3 .board-toolbar__island svg { width:16px; height:16px; }
 }
+
+/* Page canvases keep a fixed page identity when the reading layout changes. */
+.whiteboard--original-v3 .whiteboard__pages--paged { position:absolute; inset:0; }
+.whiteboard--original-v3 .whiteboard__page { margin:0; padding:0; min-width:0; }
+.whiteboard--original-v3 .whiteboard__page[hidden] { display:none!important; }
+.whiteboard--original-v3 .whiteboard__pages--paged > .whiteboard__page { position:absolute; inset:0; }
+.whiteboard--original-v3 .whiteboard__page-surface.whiteboard__stage { position:absolute; inset:0; width:100%; height:100%; }
+.whiteboard--original-v3 .whiteboard__pages--continuous {
+  position:absolute; inset:132px 14px 64px; padding:0 12px 8px;
+  overflow:auto; overscroll-behavior:contain; scrollbar-width:thin;
+  scrollbar-color:#535c63 transparent; touch-action:pan-y;
+}
+.whiteboard--original-v3 .whiteboard__pages--continuous > .whiteboard__page { position:relative; width:100%; margin-bottom:24px; }
+.whiteboard--original-v3 .whiteboard__pages--continuous > .whiteboard__page:last-child { margin-bottom:0; }
+.whiteboard--original-v3.school-islands-board .whiteboard__page-surface--continuous .whiteboard__surface { inset:0; width:100%; height:100%; }
+.whiteboard--original-v3 .whiteboard__pages--locked { overflow:hidden; }
+.whiteboard--original-v3 .whiteboard__topline-pages,
+.whiteboard--original-v3 .whiteboard__zoom { z-index:8; }
+.whiteboard--original-v3 .board-toolbar__more-actions button[role='switch'][aria-checked='true'] { color:var(--v3-orange)!important; background:var(--v3-selected); }
+@media(max-width:600px) {
+  .whiteboard--original-v3 .whiteboard__pages--continuous { inset:152px 8px 64px; padding:0 4px 8px; }
+}

@@ -65,6 +65,74 @@ describe('useFollowTeacher — student', () => {
     expect(viewOf(result.current.pages)).toEqual({ zoom: 2, panX: -500, panY: -125 });
   });
 
+  it('maps pan using the incoming page dimensions instead of the previously selected page', () => {
+    const getBoardSize = vi.fn((pageIndex?: number) => pageIndex === 2
+      ? { width: 300, height: 180 }
+      : { width: 1000, height: 500 });
+    const { result } = renderHook(() => {
+      const [pages, setPages] = useState(initialPages(3));
+      const follow = useFollowTeacher({
+        classId: 'c1', boardId: 'board-1', isHost: false, hostUserId: 'teacher',
+        pages, setPages, getBoardSize,
+      });
+      return { pages, ...follow };
+    });
+    expect(result.current.pages.current).toBe(0);
+    act(() => handler({ event: hostView(), senderIdentity: 'teacher|tab' }));
+    expect(getBoardSize).toHaveBeenCalledExactlyOnceWith(2);
+    expect(result.current.pages.current).toBe(2);
+    expect(result.current.following).toBe(true);
+    expect(viewOf(result.current.pages)).toEqual({ zoom: 2, panX: -150, panY: -45 });
+    expect(viewOf(result.current.pages, 0)).toEqual({ zoom: 1, panX: 0, panY: 0 });
+  });
+
+  it('applies the latest trusted view when an initially unmounted target page gets its dimensions', () => {
+    let targetSize = { width: 0, height: 0 };
+    const getBoardSize = vi.fn(() => targetSize);
+    const { result, rerender } = renderHook(() => {
+      const [pages, setPages] = useState(initialPages(1));
+      const follow = useFollowTeacher({
+        classId: 'c1', boardId: 'board-1', isHost: false, hostUserId: 'teacher',
+        pages, setPages, getBoardSize,
+      });
+      return { pages, ...follow };
+    });
+    act(() => handler({ event: hostView(), senderIdentity: 'teacher|tab' }));
+    expect(result.current.pages.current).toBe(2);
+    expect(result.current.pages.count).toBe(3);
+    expect(viewOf(result.current.pages)).toEqual({ zoom: 1, panX: 0, panY: 0 });
+    act(() => handler({ event: hostView({ zoom: 3 }), senderIdentity: 'teacher|tab' }));
+    targetSize = { width: 300, height: 180 };
+    rerender();
+    expect(result.current.following).toBe(true);
+    expect(viewOf(result.current.pages)).toEqual({ zoom: 3, panX: -150, panY: -45 });
+    const lookups = getBoardSize.mock.calls.length;
+    rerender();
+    expect(getBoardSize).toHaveBeenCalledTimes(lookups);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it.each(['follow-off', 'disabled'] as const)('discards a pending view after %s', (reason) => {
+    let targetSize = { width: 0, height: 0 };
+    const { result, rerender } = renderHook(({ enabled }) => {
+      const [pages, setPages] = useState(initialPages(1));
+      const follow = useFollowTeacher({
+        classId: 'c1', boardId: 'board-1', isHost: false, hostUserId: 'teacher',
+        pages, setPages, getBoardSize: () => targetSize, enabled,
+      });
+      return { pages, ...follow };
+    }, { initialProps: { enabled: true } });
+    act(() => handler({ event: hostView(), senderIdentity: 'teacher|tab' }));
+    if (reason === 'follow-off') {
+      act(() => handler({ event: hostView({ follow: false }), senderIdentity: 'teacher|tab' }));
+    } else {
+      rerender({ enabled: false });
+    }
+    targetSize = { width: 300, height: 180 };
+    rerender({ enabled: true });
+    expect(viewOf(result.current.pages)).toEqual({ zoom: 1, panX: 0, panY: 0 });
+  });
+
   it('ignores a view packet from anyone but the host', () => {
     const { result } = mount(false);
     act(() => handler({ event: hostView(), senderIdentity: 'student-2|tab' }));

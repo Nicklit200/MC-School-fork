@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { forwardRef, useImperativeHandle } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { I18nProvider } from '../../i18n/I18nContext';
@@ -20,23 +20,34 @@ import {
 // covered by the gesture, hit-test and geometry unit tests.
 type CanvasProps = Record<string, any>;
 let canvasProps: CanvasProps = {};
+const pageCanvasProps = new Map<string, CanvasProps>();
 const canvasSnapshot = vi.fn((mimeType?: string) => mimeType === 'image/jpeg' ? 'data:image/jpeg;base64,/9j/2Q==' : 'data:image/png;base64,AAA');
 vi.mock('./WhiteboardCanvas', () => ({
   WhiteboardCanvas: forwardRef((props: CanvasProps, ref) => {
-    canvasProps = props;
+    if (props.active !== false || !canvasProps.pageKey) canvasProps = props;
+    pageCanvasProps.set(props.pageKey, props);
     useImperativeHandle(ref, () => ({
       toDataURL: canvasSnapshot,
       getSize: () => ({ width: 1000, height: 500 }),
     }));
-    return <div data-testid="canvas" data-locked={String(props.navigationLocked)} />;
+    return <div data-testid="canvas" data-page-key={props.pageKey} data-locked={String(props.navigationLocked)} />;
   }),
 }));
 
 const publish = vi.fn().mockResolvedValue(undefined);
 const handlers: Record<string, (received: { event: ClassEvent; senderIdentity?: string }) => void> = {};
+const subscriptions = new Map<string, Set<(typeof handlers)[string]>>();
 vi.mock('./useClassEvents', () => ({
   useClassEvents: (_classId: string, topic: string, onEvent: (typeof handlers)[string]) => {
-    handlers[topic] = onEvent;
+    const current = useRef(onEvent);
+    current.current = onEvent;
+    useEffect(() => {
+      const listener: (typeof handlers)[string] = received => current.current(received);
+      const listeners = subscriptions.get(topic) ?? new Set();
+      subscriptions.set(topic, listeners); listeners.add(listener);
+      handlers[topic] = received => subscriptions.get(topic)?.forEach(callback => callback(received));
+      return () => { listeners.delete(listener); };
+    }, [topic]);
     return { publish };
   },
 }));
@@ -98,6 +109,12 @@ const hostView = (patch = {}) =>
     boardId: 'board-1', page: 1, pageCount: 3, zoom: 2, panX: -0.5, panY: -0.25, follow: true, ...patch,
   });
 
+function chooseLayout(actorId: string, layout: 'continuous' | 'paged') {
+  const key = `mc.board.pageLayout:${actorId}`;
+  localStorage.setItem(key, layout);
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: layout, storageArea: localStorage }));
+}
+
 describe('WhiteboardPanel', () => {
   let sequence = 0;
   beforeEach(() => {
@@ -105,6 +122,8 @@ describe('WhiteboardPanel', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
     sequence = 0;
     canvasProps = {};
+    pageCanvasProps.clear(); subscriptions.clear();
+    chooseLayout('teacher', 'paged'); chooseLayout('student', 'paged');
     renderPdfPage.mockReturnValue(null);
     api.openAnnotationDocument.mockImplementation(async (_c, t, id, page = 0) => ({
       id: `doc-${page}`, targetType: t, targetId: id, pageIndex: page,
@@ -131,6 +150,95 @@ describe('WhiteboardPanel', () => {
     expect(canvasProps.paperColor).toBe('#ffffff');
     expect(canvasProps.background).toBeNull();
     expect(canvasProps.readOnly).toBe(false);
+  });
+
+  it('starts with a continuous page list and changes layout in More without replacing its canvas', async () => {
+    const user = userEvent.setup();
+    mount('host', { actorId: 'continuous-default', document: { pageCount: 3 } as never });
+    const list = await screen.findByRole('region', { name: 'Страницы доски' });
+    await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(3));
+    const firstCanvas = screen.getAllByTestId('canvas')[0];
+    expect(screen.queryByRole('button', { name: 'Следующая страница' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
+    const toggle = screen.getByRole('switch', { name: 'Непрерывная прокрутка' });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await user.click(toggle);
+    expect(screen.queryByRole('region', { name: 'Страницы доски' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Следующая страница' })).toBeEnabled();
+    expect(screen.getAllByTestId('canvas')[0]).toBe(firstCanvas);
+    expect(localStorage.getItem('mc.board.pageLayout:continuous-default')).toBe('paged');
+    expect(screen.getByRole('button', { name: 'Другие инструменты' })).toHaveFocus();
+  });
+
+  it('keeps ink and undo bound to each page while switching layouts', async () => {
+    chooseLayout('teacher', 'continuous');
+    const user = userEvent.setup();
+    mount('host');
+    await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
+    await act(async () => { await pageCanvasProps.get('WHITEBOARD:board-1:0')!.onCommit({ kind: 'pen', points: [[.1, .2]] }); });
+    const firstCanvas = screen.getAllByTestId('canvas')[0];
+    await user.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+    await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
+    await act(async () => { await pageCanvasProps.get('WHITEBOARD:board-1:1')!.onCommit({ kind: 'pen', points: [[.7, .8]] }); });
+    expect(api.appendAnnotation.mock.calls.filter(call => call[3] === 'ADD').map(call => call[1])).toEqual(['doc-0', 'doc-1']);
+    await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
+    await user.click(screen.getByRole('switch', { name: 'Непрерывная прокрутка' }));
+    await user.click(screen.getByRole('button', { name: 'Предыдущая страница' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Отменить' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Отменить' }));
+    await waitFor(() => expect(api.appendAnnotation.mock.calls.some(call => call[1] === 'doc-0' && call[3] === 'UNDO')).toBe(true));
+    expect(pageCanvasProps.get('WHITEBOARD:board-1:1')!.shapes).toHaveLength(1);
+    expect(screen.getAllByTestId('canvas')[0]).toBe(firstCanvas);
+    await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
+    await user.click(screen.getByRole('switch', { name: 'Непрерывная прокрутка' }));
+    expect(screen.getByRole('region', { name: 'Страницы доски' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('canvas')[0]).toBe(firstCanvas);
+  });
+
+  it('fits a wide PDF page without adding empty vertical space before the next A4 page', async () => {
+    chooseLayout('teacher', 'continuous');
+    renderPdfPage.mockImplementation((_doc, index) => index === 0 ? { canvas: document.createElement('canvas'), aspect: 4 } : null);
+    mount('host', { document: { pageCount: 1 } as never });
+    const list = await screen.findByRole('region', { name: 'Страницы доски' });
+    await waitFor(() => expect((list.querySelector('article') as HTMLElement).style.height).toBe('200px'));
+    await userEvent.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+    const second = list.querySelectorAll('article')[1] as HTMLElement;
+    expect(second.style.height).toBe('500px');
+    expect(pageCanvasProps.get('WHITEBOARD:board-1:1')!.sourceAspect).toBe(210 / 297);
+  });
+
+  it('selects the scrolled page and sends its drawing and undo to that page document', async () => {
+    chooseLayout('teacher', 'continuous');
+    let notify!: IntersectionObserverCallback;
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { notify = callback; }
+      observe() {} disconnect() {} unobserve() {}
+    });
+    try {
+      renderPdfPage.mockReturnValue({ canvas: document.createElement('canvas'), aspect: 210 / 297 });
+      mount('host', { document: { pageCount: 3 } as never });
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(3));
+      const elements = Array.from(list.querySelectorAll<HTMLElement>('article'));
+      Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
+      elements.forEach((element, index) => {
+        Object.defineProperty(element, 'offsetTop', { configurable: true, value: index * 500 });
+        Object.defineProperty(element, 'offsetHeight', { configurable: true, value: 460 });
+      });
+      act(() => notify(elements.map(target => ({ target, isIntersecting: true })) as unknown as IntersectionObserverEntry[], {} as IntersectionObserver));
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
+      fireEvent.scroll(list, { target: { scrollTop: 550 } });
+      expect(screen.getByRole('status', { name: 'Страница 2 из 3' })).toHaveTextContent('2 / 3');
+      await act(async () => { await pageCanvasProps.get('WHITEBOARD:board-1:1')!.onCommit({ kind: 'pen', points: [[.4, .5]] }); });
+      expect(api.appendAnnotation.mock.calls.find(call => call[3] === 'ADD')?.[1]).toBe('doc-1');
+      await userEvent.click(screen.getByRole('button', { name: 'Отменить' }));
+      await waitFor(() => expect(api.appendAnnotation.mock.calls.some(call => call[1] === 'doc-1' && call[3] === 'UNDO')).toBe(true));
+      fireEvent.pointerDown(elements[1], { pointerId: 1, pointerType: 'touch' });
+      fireEvent.scroll(list, { target: { scrollTop: 1100 } });
+      expect(screen.getByRole('status', { name: 'Страница 2 из 3' })).toBeInTheDocument();
+      fireEvent.pointerUp(elements[1], { pointerId: 1, pointerType: 'touch' });
+      expect(screen.getByRole('status', { name: 'Страница 3 из 3' })).toBeInTheDocument();
+    } finally { vi.unstubAllGlobals(); vi.stubGlobal('ResizeObserver', FakeResizeObserver); }
   });
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('uses the blank A4 default when an explicit source aspect is invalid: %s', async sourceAspect => {
@@ -401,7 +509,7 @@ describe('WhiteboardPanel', () => {
     await act(async () => {
       handlers[VIEW_TOPIC]({ event: hostView(), senderIdentity: 'teacher|tab' });
     });
-    expect(screen.getByTestId('canvas')).toHaveAttribute('data-locked', 'true');
+    expect(screen.getAllByTestId('canvas').every(node => node.getAttribute('data-locked') === 'true')).toBe(true);
     expect(screen.getByRole('button', { name: 'Следующая страница' })).toBeDisabled();
     expect(screen.getByText(/Вы следуете за учителем/)).toBeInTheDocument();
     expect(canvasProps.view).toEqual({ zoom: 2, panX: -500, panY: -125 });
@@ -409,7 +517,7 @@ describe('WhiteboardPanel', () => {
     await act(async () => {
       handlers[VIEW_TOPIC]({ event: hostView({ follow: false }), senderIdentity: 'teacher|tab' });
     });
-    expect(screen.getByTestId('canvas')).toHaveAttribute('data-locked', 'false');
+    expect(screen.getAllByTestId('canvas').every(node => node.getAttribute('data-locked') === 'false')).toBe(true);
     expect(screen.getByRole('button', { name: 'Следующая страница' })).toBeEnabled();
   });
 

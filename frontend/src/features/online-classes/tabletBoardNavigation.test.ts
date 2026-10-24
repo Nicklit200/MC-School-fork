@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TabletBoardNavigation } from './tabletBoardNavigation';
 import type { PageView } from './boardView';
 import type { TabletInkContact } from '../../lib/tabletInkInput';
@@ -67,5 +67,35 @@ describe('native iPad two-finger whiteboard navigation', () => {
     expect(gesture.update([], location, view, board, enabled)).toBeNull();
     expect(gesture.update([finger(3, 300, 300), finger(4, 500, 300)],
       location, view, board, enabled)).toBeNull();
+  });
+});
+
+describe('native iPad continuous document navigation', () => {
+  it('scrolls at fit size and does not amplify movement when the sheet moves under the finger', () => {
+    const gesture = new TabletBoardNavigation(), onScrollGesture = vi.fn();
+    const options = { ...enabled, onScrollGesture };
+    gesture.update([finger(1, 100, 200)], location, view, board, options);
+    gesture.update([finger(1, 100, 170)], location, view, board, options);
+    gesture.update([finger(1, 100, 150)], { ...location, top: location.top - 30 }, view, board, options);
+    expect(onScrollGesture.mock.calls).toEqual([[0, 30], [0, 20]]);
+  });
+
+  it('uses two fingers to scroll in finger mode and preserves pinch zoom', () => {
+    const gesture = new TabletBoardNavigation(), onScrollGesture = vi.fn();
+    const options = { locked: false, allowOneFingerPan: false, onScrollGesture };
+    gesture.update([finger(1, 300, 300), finger(2, 500, 300)], location, view, board, options);
+    expect(gesture.update([finger(1, 300, 260), finger(2, 500, 260)], location, view, board, options)?.zoom).toBe(1);
+    expect(onScrollGesture).toHaveBeenCalledExactlyOnceWith(0, 40);
+    const zoomed = gesture.update([finger(1, 200, 260), finger(2, 600, 260)], location, view, board, options)!;
+    expect(zoomed.zoom).toBe(2);
+  });
+
+  it('blocks scrolling while locked and starts a fresh contact origin after release', () => {
+    const gesture = new TabletBoardNavigation(), onScrollGesture = vi.fn();
+    const options = { ...enabled, onScrollGesture };
+    gesture.update([finger(1, 100, 200)], location, view, board, options);
+    gesture.update([finger(1, 100, 150)], location, view, board, { ...options, locked: true });
+    expect(onScrollGesture).not.toHaveBeenCalled();
+    expect(gesture.update([finger(1, 100, 150)], location, view, board, options)).toBeNull();
   });
 });

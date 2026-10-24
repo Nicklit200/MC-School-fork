@@ -10,6 +10,7 @@ import {
   actionFor,
   shouldCancelStroke,
 } from './inputPolicy';
+import { panWithScroll, pinchWithScroll } from './continuousBoardNavigation';
 
 /**
  * Turns raw pointer events into board intents.
@@ -24,7 +25,8 @@ export type Intent =
   | { type: 'stroke-move'; point: Point; pressure?: number }
   | { type: 'stroke-end' }
   | { type: 'stroke-cancel' }
-  | { type: 'view'; view: PageView };
+  | { type: 'view'; view: PageView }
+  | { type: 'scroll'; dx: number; dy: number };
 
 type State = 'idle' | 'draw' | 'pan' | 'pinch';
 
@@ -36,6 +38,7 @@ export interface GestureDeps {
   locked: () => boolean;
   /** Clock, injected to make post-pencil palm rejection deterministic in tests. */
   now?: () => number;
+  continuous?: () => boolean;
 }
 
 export class GestureController {
@@ -49,6 +52,7 @@ export class GestureController {
   private startView: PageView = { zoom: 1, panX: 0, panY: 0 };
   private anchors: [Point, Point] | null = null;
   private panStart: Point | null = null;
+  private pinchStartedAtFit = false;
 
   constructor(private readonly deps: GestureDeps) {}
 
@@ -57,11 +61,6 @@ export class GestureController {
    *   space held), so a mouse user can move a zoomed page without a touch screen
    */
   down(id: number, kind: PointerKind, position: Point, palm = false, navigate = false, pressure?: number): Intent[] {
-    if (navigate && this.state === 'idle') {
-      this.touches.set(id, position);
-      this.beginNavigation();
-      return [];
-    }
     // Do not let a resting palm pinch the page during or just after writing.
     // iPadOS may report a palm as one or two regular touch pointers.
     if (kind === 'touch' && (
@@ -69,6 +68,12 @@ export class GestureController {
       this.penDown !== null ||
       (this.deps.mode() === 'stylus' && this.now() - this.lastPenRelease < GestureController.PALM_GRACE_MS)
     )) return [];
+    if (navigate && this.state === 'idle') {
+      if (kind === 'pen') this.penDown = id;
+      this.touches.set(id, position);
+      this.beginNavigation();
+      return [];
+    }
 
     const intents: Intent[] = [];
     if (kind === 'pen') {
@@ -125,6 +130,11 @@ export class GestureController {
 
     if (this.state === 'pinch' && this.anchors && this.touches.size >= 2) {
       const [a, b] = this.firstTwoTouches();
+      if (this.deps.continuous?.()) {
+        const next = pinchWithScroll(this.startView, this.anchors, [a, b], this.deps.board(), this.pinchStartedAtFit);
+        this.anchors = [a, b];
+        return this.applyContinuousNavigation(next);
+      }
       return [
         {
           type: 'view',
@@ -133,6 +143,11 @@ export class GestureController {
       ];
     }
     if (this.state === 'pan' && this.panStart && this.touches.has(id)) {
+      if (this.deps.continuous?.()) {
+        const next = panWithScroll(this.startView, position.x - this.panStart.x, position.y - this.panStart.y, this.deps.board());
+        this.panStart = position;
+        return this.applyContinuousNavigation(next);
+      }
       return [
         {
           type: 'view',
@@ -195,12 +210,25 @@ export class GestureController {
     return this.state === 'draw';
   }
 
+  get isNavigating(): boolean { return this.state === 'pan' || this.state === 'pinch'; }
+
+  private applyContinuousNavigation(next: ReturnType<typeof panWithScroll>): Intent[] {
+    const intents: Intent[] = [];
+    if (next.view.zoom !== this.startView.zoom || next.view.panX !== this.startView.panX || next.view.panY !== this.startView.panY) {
+      intents.push({ type: 'view', view: next.view });
+    }
+    this.startView = next.view;
+    if (next.scroll.x || next.scroll.y) intents.push({ type: 'scroll', dx: next.scroll.x, dy: next.scroll.y });
+    return intents;
+  }
+
   private beginNavigation(): void {
     this.startView = this.deps.view();
     if (this.touches.size >= 2) {
       const [a, b] = this.firstTwoTouches();
       this.state = 'pinch';
       this.anchors = [a, b];
+      this.pinchStartedAtFit = this.startView.zoom <= 1;
       this.panStart = null;
     } else {
       const only = [...this.touches.values()][0];

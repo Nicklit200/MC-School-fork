@@ -7,6 +7,7 @@
  */
 import type { TabletInkContact } from '../../lib/tabletInkInput';
 import { panBy, pinchView, type PageView, type Point } from './boardView';
+import { panWithScroll, pinchWithScroll } from './continuousBoardNavigation';
 
 type BoardSize = { width: number; height: number };
 type Origin = { left: number; top: number };
@@ -25,6 +26,7 @@ type PinchAnchor = {
   first: Point;
   second: Point;
   view: PageView;
+  scrollAtFit: boolean;
 };
 
 type Anchor = PanAnchor | PinchAnchor;
@@ -40,9 +42,11 @@ function inBoard(contact: TabletInkContact, origin: Origin): Point {
  */
 export class TabletBoardNavigation {
   private anchor: Anchor | null = null;
+  private continuousOrigin: Origin | null = null;
 
   reset(): void {
     this.anchor = null;
+    this.continuousOrigin = null;
   }
 
   update(
@@ -50,12 +54,15 @@ export class TabletBoardNavigation {
     origin: Origin,
     view: PageView,
     board: BoardSize,
-    options: { locked: boolean; allowOneFingerPan: boolean },
+    options: { locked: boolean; allowOneFingerPan: boolean; onScrollGesture?: (dx: number, dy: number) => void },
   ): PageView | null {
     if (options.locked || board.width <= 0 || board.height <= 0 || contacts.length === 0) {
       this.reset();
       return null;
     }
+    // The page itself moves while its document scrolls. Keep the contact
+    // coordinate origin fixed for this gesture to avoid scroll feedback.
+    const contactOrigin = options.onScrollGesture ? (this.continuousOrigin ??= { ...origin }) : origin;
 
     if (contacts.length === 1) {
       if (!options.allowOneFingerPan) {
@@ -63,10 +70,16 @@ export class TabletBoardNavigation {
         return null;
       }
       const contact = contacts[0];
-      const point = inBoard(contact, origin);
+      const point = inBoard(contact, contactOrigin);
       if (!this.anchor || this.anchor.kind !== 'pan' || this.anchor.id !== contact.id) {
         this.anchor = { kind: 'pan', id: contact.id, initial: point, view: { ...view } };
         return null;
+      }
+      if (options.onScrollGesture) {
+        const next = panWithScroll(this.anchor.view, point.x - this.anchor.initial.x, point.y - this.anchor.initial.y, board);
+        this.anchor.initial = point; this.anchor.view = next.view;
+        if (next.scroll.x || next.scroll.y) options.onScrollGesture(next.scroll.x, next.scroll.y);
+        return next.view;
       }
       return panBy(this.anchor.view,
         point.x - this.anchor.initial.x, point.y - this.anchor.initial.y, board);
@@ -85,13 +98,20 @@ export class TabletBoardNavigation {
       [a, b] = contacts;
       this.anchor = {
         kind: 'pinch', firstId: a.id, secondId: b.id,
-        first: inBoard(a, origin), second: inBoard(b, origin),
-        view: { ...view },
+        first: inBoard(a, contactOrigin), second: inBoard(b, contactOrigin),
+        view: { ...view }, scrollAtFit: view.zoom <= 1,
       };
       return null;
     }
 
     const anchor = this.anchor as PinchAnchor;
+    if (options.onScrollGesture) {
+      const first = inBoard(a, contactOrigin), second = inBoard(b, contactOrigin);
+      const next = pinchWithScroll(anchor.view, [anchor.first, anchor.second], [first, second], board, anchor.scrollAtFit);
+      anchor.first = first; anchor.second = second; anchor.view = next.view;
+      if (next.scroll.x || next.scroll.y) options.onScrollGesture(next.scroll.x, next.scroll.y);
+      return next.view;
+    }
     return pinchView(anchor.view, anchor.first, anchor.second,
       inBoard(a, origin), inBoard(b, origin), board);
   }

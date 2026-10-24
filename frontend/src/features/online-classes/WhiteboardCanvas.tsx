@@ -84,6 +84,8 @@ interface Props {
   /** Zoom and pan for the visible page. Controlled by the parent. */
   view?: PageView;
   onViewChange?: (view: PageView) => void;
+  /** Continuous document navigation; positive deltas scroll right/down. */
+  onScrollGesture?: (dx: number, dy: number) => void;
   /** Student under follow mode: the canvas may not be moved by the viewer. */
   navigationLocked?: boolean;
   /** Rendered page content (PDF page) under the marks. */
@@ -133,6 +135,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     inputMode = 'finger',
     view = DEFAULT_VIEW,
     onViewChange,
+    onScrollGesture,
     navigationLocked = false,
     background = null,
     paperColor = null,
@@ -155,6 +158,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const tabletNavigation = useMemo(() => new TabletBoardNavigation(), []);
   const onViewChangeRef = useRef(onViewChange);
   onViewChangeRef.current = onViewChange;
+  const onScrollGestureRef = useRef(onScrollGesture);
+  onScrollGestureRef.current = onScrollGesture;
+  const gestureOrigin = useRef<{ left: number; top: number } | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const backgroundLayerRef = useRef<Konva.Layer | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -450,6 +456,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         case 'view':
           onViewChange?.(intent.view);
           break;
+        case 'scroll':
+          if (!lockedRef.current) onScrollGestureRef.current?.(intent.dx, intent.dy);
+          break;
       }
     }
   };
@@ -461,6 +470,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         view: () => live.current.view,
         board: () => live.current.viewport,
         locked: () => lockedRef.current,
+        continuous: () => Boolean(onScrollGestureRef.current),
       }),
     [],
   );
@@ -476,6 +486,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     const rect = containerRef.current?.getBoundingClientRect();
     return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) };
   };
+  const gesturePoint = (event: React.MouseEvent): Point => {
+    const origin = onScrollGestureRef.current && !controller.isDrawing ? gestureOrigin.current : null;
+    return origin ? { x: event.clientX - origin.left, y: event.clientY - origin.top } : localPoint(event);
+  };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     // On iPadOS native Touch Events own Pencil strokes; pointer events would
@@ -483,6 +497,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
     if (textEdit) return;
     const kind = normalizePointerKind(event.pointerType);
+    if (onScrollGestureRef.current && ((!controller.isDrawing && !controller.isNavigating) || kind === 'pen')) {
+      const rect = containerRef.current?.getBoundingClientRect();
+      gestureOrigin.current = rect ? { left: rect.left, top: rect.top } : null;
+    }
     // A resting hand must not change the zoom in stylus mode either.
     const palm = isPalmContact(kind, event.width, event.height);
     try {
@@ -493,7 +511,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // Middle button, or space held, moves the page instead of drawing.
     const navigate = (live.current.tool === 'pan' && !lockedRef.current) || (kind === 'mouse' && (event.button === 1 || spaceHeld.current));
     if (navigate) event.preventDefault();
-    applyIntents(controller.down(event.pointerId, kind, localPoint(event), palm, navigate, kind === 'pen' ? event.pressure : undefined));
+    applyIntents(controller.down(event.pointerId, kind, gesturePoint(event), palm, navigate, kind === 'pen' ? event.pressure : undefined));
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
@@ -506,7 +524,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       }
       return;
     }
-    applyIntents(controller.move(event.pointerId, localPoint(event), event.pointerType === 'pen' ? event.pressure : undefined));
+    applyIntents(controller.move(event.pointerId, gesturePoint(event), event.pointerType === 'pen' ? event.pressure : undefined));
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
@@ -533,17 +551,21 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     };
     const driver = attachTabletInkInput(surface, {
       onStart(point, meta) {
+        // React owns real mouse events; the native driver owns Pencil/touch.
+        if (meta.device === 'mouse') return;
         if (textEdit) return;
         if (meta.device === 'pen') tabletNavigation.reset();
         applyInkIntentsRef.current(controller.down(meta.inputId, meta.device === 'finger' ? 'touch' : meta.device,
-          local(point.clientX, point.clientY), false, false,
+          local(point.clientX, point.clientY), false, live.current.tool === 'pan' && !lockedRef.current,
           meta.device === 'pen' ? point.pressure : undefined));
       },
       onMove(point, meta) {
+        if (meta.device === 'mouse') return;
         applyInkIntentsRef.current(controller.move(meta.inputId,
           local(point.clientX, point.clientY), meta.device === 'pen' ? point.pressure : undefined));
       },
       onEnd(point, meta, cancelled) {
+        if (meta.device === 'mouse') return;
         if (!cancelled && controller.isDrawing) {
           moveStroke(local(point.clientX, point.clientY), point.pressure, true);
         }
@@ -567,13 +589,14 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
             locked: lockedRef.current,
             // Stylus mode: one finger pans; finger-draw mode: only two fingers
             // navigate, preventing unintended marks from the pinch.
-            allowOneFingerPan: inputModeRef.current === 'stylus',
+            allowOneFingerPan: inputModeRef.current === 'stylus' || live.current.tool === 'pan',
+            onScrollGesture: onScrollGestureRef.current,
           },
         );
         if (next) onViewChangeRef.current?.(next);
       },
     }, {
-      allowFinger: () => inputModeRef.current === 'finger' && !live.current.readOnly,
+      allowFinger: () => inputModeRef.current === 'finger' && !live.current.readOnly && live.current.tool !== 'pan',
       // Do NOT hand fingers to Safari's native pinch zoom. The board itself
       // interprets touch contacts and transforms only its Konva stage.
       nativeFingerNavigation: false,
@@ -588,16 +611,31 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   }, [controller, tabletNavigation, textEdit]);
 
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (navigationLocked || !onViewChange || controller.isDrawing) return;
+    if (navigationLocked || controller.isDrawing) { if (onScrollGesture) event.stopPropagation(); return; }
     const local = localPoint(event);
     // Ctrl/⌘ + wheel (and trackpad pinch, which arrives the same way) zooms;
     // a plain wheel scrolls the zoomed page.
     if (event.ctrlKey || event.metaKey) {
-      onViewChange(zoomAbout(view, view.zoom * Math.exp(-event.deltaY * 0.01), local, viewport));
+      event.stopPropagation();
+      onViewChange?.(zoomAbout(view, view.zoom * Math.exp(-event.deltaY * 0.01), local, viewport));
+    } else if (onScrollGesture) {
+      event.stopPropagation();
+      onScrollGesture(event.deltaX, event.deltaY);
     } else if (view.zoom > 1) {
-      onViewChange(panBy(view, -event.deltaX, -event.deltaY, viewport));
+      onViewChange?.(panBy(view, -event.deltaX, -event.deltaY, viewport));
     }
   };
+  useEffect(() => {
+    const surface = containerRef.current;
+    if (!surface) return;
+    // React's wheel listener is passive in browsers. Prevent native scrolling
+    // separately, so one wheel event cannot move the document twice.
+    const preventNativeWheel = (event: WheelEvent) => {
+      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey) && onViewChangeRef.current)) event.preventDefault();
+    };
+    surface.addEventListener('wheel', preventNativeWheel, { passive: false });
+    return () => surface.removeEventListener('wheel', preventNativeWheel);
+  }, []);
 
   const onKeyUp = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === ' ') spaceHeld.current = false;

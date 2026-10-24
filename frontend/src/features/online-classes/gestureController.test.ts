@@ -5,7 +5,7 @@ import type { InputMode } from './inputPolicy';
 
 const board = { width: 800, height: 600 };
 
-function setup(mode: InputMode = 'stylus', locked = false) {
+function setup(mode: InputMode = 'stylus', locked = false, continuous = false) {
   const state = { mode, locked, clock: 1000, view: { zoom: 1, panX: 0, panY: 0 } as PageView };
   const controller = new GestureController({
     mode: () => state.mode,
@@ -13,6 +13,7 @@ function setup(mode: InputMode = 'stylus', locked = false) {
     board: () => board,
     locked: () => state.locked,
     now: () => state.clock,
+    continuous: () => continuous,
   });
   return { controller, state };
 }
@@ -76,6 +77,54 @@ describe('stylus mode', () => {
   it('ignores a contact the browser reports as a palm', () => {
     expect(ctx.controller.down(1, 'touch', { x: 5, y: 5 }, true)).toEqual([]);
     expect(ctx.controller.move(1, { x: 50, y: 50 })).toEqual([]);
+  });
+});
+
+describe('continuous document navigation', () => {
+  it('routes raw fit-size mouse pan into incremental document scroll', () => {
+    const { controller } = setup('stylus', false, true);
+    controller.down(1, 'mouse', { x: 100, y: 200 }, false, true);
+    expect(controller.move(1, { x: 90, y: 170 })).toEqual([{ type: 'scroll', dx: 10, dy: 30 }]);
+    expect(controller.move(1, { x: 90, y: 150 })).toEqual([{ type: 'scroll', dx: 0, dy: 20 }]);
+    expect(controller.up(1)).toEqual([]);
+  });
+
+  it('pans the zoomed page first and sends only edge overflow to the document', () => {
+    const { controller, state } = setup('stylus', false, true);
+    state.view = { zoom: 2, panX: -100, panY: -590 };
+    controller.down(1, 'touch', { x: 100, y: 200 });
+    expect(controller.move(1, { x: 100, y: 170 })).toEqual([
+      { type: 'view', view: { zoom: 2, panX: -100, panY: -600 } }, { type: 'scroll', dx: 0, dy: 20 },
+    ]);
+  });
+
+  it('scrolls a two-finger translation in finger-draw mode without committing the cancelled first finger', () => {
+    const { controller } = setup('finger', false, true);
+    controller.down(1, 'touch', { x: 300, y: 300 });
+    expect(types(controller.down(2, 'touch', { x: 500, y: 300 }))).toEqual(['stroke-cancel']);
+    const moved = [...controller.move(1, { x: 300, y: 260 }), ...controller.move(2, { x: 500, y: 260 })];
+    const dy = moved.reduce((sum, intent) => sum + (intent.type === 'scroll' ? intent.dy : 0), 0);
+    expect(dy).toBeCloseTo(40); expect(controller.isDrawing).toBe(false);
+    expect(types([...controller.up(2), ...controller.up(1)])).not.toContain('stroke-end');
+  });
+
+  it('keeps pen strokes and palm rejection while continuous navigation is enabled', () => {
+    const { controller, state } = setup('stylus', false, true);
+    expect(types(controller.down(1, 'pen', { x: 10, y: 10 }))).toEqual(['stroke-start']);
+    expect(controller.down(2, 'touch', { x: 100, y: 200 })).toEqual([]);
+    expect(types(controller.move(1, { x: 20, y: 20 }))).toEqual(['stroke-move']);
+    expect(types(controller.up(1))).toEqual(['stroke-end']);
+    expect(controller.down(3, 'touch', { x: 100, y: 200 }, false, true)).toEqual([]);
+    expect(controller.move(3, { x: 100, y: 100 })).toEqual([]);
+    state.clock += 400;
+    controller.down(4, 'touch', { x: 100, y: 200 });
+    expect(controller.move(4, { x: 100, y: 170 })).toEqual([{ type: 'scroll', dx: 0, dy: 30 }]);
+  });
+
+  it('blocks continuous scrolling while following the teacher', () => {
+    const { controller } = setup('stylus', true, true);
+    controller.down(1, 'mouse', { x: 100, y: 200 }, false, true);
+    expect(controller.move(1, { x: 100, y: 170 })).toEqual([]);
   });
 });
 

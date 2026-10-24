@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
 import { type BoardPages, ensurePageCount, type PageView, viewOf } from './boardView';
-import { VIEW_TOPIC, viewEvent } from './events';
+import { VIEW_TOPIC, viewEvent, type ViewEvent } from './events';
 import { type BoardSize, applyHostView, describeView, isFromHost } from './followTeacher';
 import { useClassEvents } from './useClassEvents';
 
@@ -35,7 +35,7 @@ export function useFollowTeacher({
   hostUserId: string | null;
   pages: BoardPages;
   setPages: Dispatch<SetStateAction<BoardPages>>;
-  getBoardSize: () => BoardSize;
+  getBoardSize: (pageIndex?: number) => BoardSize;
   /** Off for personal boards: follow mode only ever applies to the shared board. */
   enabled?: boolean;
 }) {
@@ -44,6 +44,7 @@ export function useFollowTeacher({
   const lastHostEvent = useRef(0);
   const lastSentCount = useRef(0);
   const lastSentFollow = useRef(false);
+  const pendingView = useRef<{ event: ViewEvent; hostUserId: string | null } | null>(null);
 
   const { publish } = useClassEvents(classId, VIEW_TOPIC, ({ event, senderIdentity }) => {
     if (!enabled || isHost || event.type !== 'view' || event.boardId !== boardId) return;
@@ -51,11 +52,30 @@ export function useFollowTeacher({
     if (!isFromHost(senderIdentity, hostUserId)) return;
     lastHostEvent.current = Date.now();
     setFollowing(event.follow);
-    setPages((current) =>
-      event.follow
-        ? applyHostView(current, event, getBoardSize())
-        : ensurePageCount(current, event.pageCount),
-    );
+    if (event.follow) {
+      const size = getBoardSize(event.page);
+      pendingView.current = size.width > 0 && size.height > 0 ? null : { event, hostUserId };
+      setPages((current) => applyHostView(current, event, size));
+    } else {
+      pendingView.current = null;
+      setPages((current) => ensurePageCount(current, event.pageCount));
+    }
+  });
+
+  // A remote page may only mount after its packet selects it. Apply the last
+  // trusted view once that page has geometry, without waiting for a heartbeat.
+  useEffect(() => {
+    const pending = pendingView.current;
+    if (!pending) return;
+    if (!enabled || isHost || !following || pending.hostUserId !== hostUserId
+      || pending.event.boardId !== boardId || pending.event.classId !== classId) {
+      pendingView.current = null;
+      return;
+    }
+    const size = getBoardSize(pending.event.page);
+    if (!(size.width > 0 && size.height > 0)) return;
+    pendingView.current = null;
+    setPages((current) => applyHostView(current, pending.event, size));
   });
 
   const latest = useRef({ pages, followEnabled });
