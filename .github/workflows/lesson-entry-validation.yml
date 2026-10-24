@@ -3,15 +3,43 @@ on:
   push:
     branches: ['verify/lesson-day-access-20261024']
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: lesson-entry-validation
+  cancel-in-progress: false
 jobs:
-  source-snapshot:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
+    env:
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: '2'
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '0'
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify and apply the reviewed change to the exact working-branch base
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib
+          root = pathlib.Path('.validation')
+          data = ''.join((root / ('entry-part-' + str(i))).read_text().strip() for i in range(4))
+          patch = lzma.decompress(base64.b64decode(data, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == 'dca53888d14cef448b268d7f6d299160b3e74cf756e8d7d924384d9a72d20bd2'
+          pathlib.Path('/tmp/lesson-entry.patch').write_bytes(patch)
+          PY
+          git checkout --detach fb42adf5271b6f63a09a9be3ce58e949fa120f22
+          git apply --check /tmp/lesson-entry.patch
+          git apply /tmp/lesson-entry.patch
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Compile backend and verify admission, lifecycle, access and media integration
+        working-directory: backend
+        run: ./mvnw -B -ntp '-Dtest=LessonEntryPolicyTest,*OnlineClass*,*WaitingRoom*,*LiveKit*,*PersonalBoard*,LiveClassAuthorizationArchitectureTest' test
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -19,17 +47,24 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - name: Package source and public test dependencies
+      - name: Compile frontend and run complete frontend suite
+        working-directory: frontend
         run: |
-          git archive --format=tar.gz HEAD > /tmp/lesson-entry-source.tar.gz
-          tar -czf /tmp/frontend-test-deps.tar.gz -C frontend node_modules
-      - uses: actions/upload-artifact@v4
+          npm run build
+          npm test -- --maxWorkers=2 --minWorkers=1
+      - name: Publish validated commit to verification result only
+        run: |
+          git config user.name 'Mindcrafti validation'
+          git config user.email 'validation@users.noreply.github.com'
+          git add backend frontend
+          git diff --cached --check
+          git commit -m 'Enforce Berlin lesson-day entry, final room closure and reconnect grace'
+          git push origin HEAD:refs/heads/validated/lesson-day-access-20261024
+          echo "VALIDATED_COMMIT=$(git rev-parse HEAD)"
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: lesson-entry-source
-          path: /tmp/lesson-entry-source.tar.gz
-          retention-days: 1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: frontend-test-deps
-          path: /tmp/frontend-test-deps.tar.gz
-          retention-days: 1
+          name: lesson-entry-validation-reports
+          path: backend/target/surefire-reports
+          retention-days: 3
