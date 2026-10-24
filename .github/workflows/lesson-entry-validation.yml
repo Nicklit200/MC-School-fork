@@ -34,6 +34,7 @@ jobs:
           git apply --check /tmp/lesson-entry.patch
           git apply /tmp/lesson-entry.patch
           python3 /tmp/entry-refine.py
+          sed -i 's/com.fasterxml.jackson.databind/tools.jackson.databind/g; s/catch (java.io.IOException ignored)/catch (java.io.IOException | RuntimeException ignored)/g' backend/src/main/java/com/mcschool/flashcard/liveclasses/provider/livekit/LiveKitMediaProvider.java
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
