@@ -336,14 +336,15 @@ describe('OnlineClassRoom', () => {
     expect(boardProps.some((p) => p.targetId === 'board-1' && p.canAnnotate)).toBe(true);
   });
 
-  it('gives only the teacher the switch for student screen sharing', async () => {
+  it('keeps the removed class screen-sharing permission switch out of the lesson toolbar', async () => {
     const student = mount(false);
     await screen.findByTestId('board-board-1');
     expect(screen.queryByRole('button', { name: /показывать экран/i })).not.toBeInTheDocument();
     student.unmount();
 
     mount(true);
-    expect(await screen.findByRole('button', { name: /показывать экран/i })).toBeInTheDocument();
+    await screen.findByTestId('board-board-1');
+    expect(screen.queryByRole('button', { name: /показывать экран/i })).not.toBeInTheDocument();
   });
 
   it('tells the recording button what the server can do, so it is not offered when it cannot work', async () => {

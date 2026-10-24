@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -80,15 +80,27 @@ describe('BoardToolbar', () => {
     expect(screen.queryByRole('group', { name: 'Настройки инструмента' })).not.toBeInTheDocument();
   });
 
-  it('applies a colour at once and leaves the menu open without a confirm step', async () => {
+  it('applies a colour immediately from its picker without a confirm step', async () => {
+    const user = userEvent.setup();
+    const onSettings = vi.fn();
+    render(<Harness onSettings={onSettings} />);
+    await user.click(screen.getByRole('button', { name: 'Выбрать цвет / Farbe wählen' }));
+    await user.click(screen.getByRole('radio', { name: '#d62828' }));
+
+    expect(onSettings).toHaveBeenCalledWith('pen', { color: '#d62828' });
+    expect(screen.queryByRole('radio', { name: '#d62828' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ok|ок|apply|применить/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps pen settings open when thickness changes', async () => {
     const user = userEvent.setup();
     const onSettings = vi.fn();
     render(<Harness onSettings={onSettings} />);
     await user.click(screen.getByRole('button', { name: 'Перо' }));
-    await user.click(screen.getByRole('radio', { name: '#d62828' }));
-
-    expect(onSettings).toHaveBeenCalledWith('pen', { color: '#d62828' });
-    expect(screen.queryByRole('button', { name: /ok|ок|apply|применить/i })).not.toBeInTheDocument();
+    const menu = screen.getByRole('group', { name: 'Настройки инструмента' });
+    fireEvent.change(within(menu).getByRole('slider'), { target: { value: '6' } });
+    expect(onSettings).toHaveBeenCalledWith('pen', { width: 0.006 });
+    expect(menu).toBeInTheDocument();
   });
 
   it('closes the menu when the user touches outside the bar or presses Escape', async () => {

@@ -26,12 +26,14 @@ describe('BoardSwitcher', () => {
     expect(onChange).toHaveBeenCalledWith('personal-me');
     // No way to name another student's board from a student's UI.
     expect(screen.queryByText(/Alice|Bob/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Все ученики (2×2)')).not.toBeInTheDocument();
   });
 
   it('lets the teacher open any student’s personal board', async () => {
     const onChange = renderSwitcher(true);
     const select = screen.getByRole('combobox');
-    expect(screen.getAllByRole('option')).toHaveLength(3);
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+    expect(screen.getByRole('option', { name: 'Все ученики (2×2)' })).toHaveValue('all-student-boards');
     await userEvent.selectOptions(select, 'personal-u2');
     expect(onChange).toHaveBeenCalledWith('personal-u2');
   });

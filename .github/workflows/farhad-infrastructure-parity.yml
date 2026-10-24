@@ -42,6 +42,15 @@ jobs:
           grep -Fq "media-src 'self' blob:" /tmp/headers
           curl -fsS http://127.0.0.1:8086/online-classes/example > /tmp/room
           grep -qi '<html' /tmp/room
+          curl -fsSI http://127.0.0.1:8086/notebook-camera/index.html > /tmp/notebook-headers
+          grep -Fiq 'X-Frame-Options: SAMEORIGIN' /tmp/notebook-headers
+          grep -Fq "frame-ancestors 'self'" /tmp/notebook-headers
+          curl -fsSI http://127.0.0.1:8086/notebook-camera/signal.mjs > /tmp/notebook-module-headers
+          grep -Fiq 'Content-Type: application/javascript' /tmp/notebook-module-headers
+          curl -fsS http://127.0.0.1:8086/lesson-notebook/example > /tmp/notebook-route
+          grep -qi '<html' /tmp/notebook-route
+          curl -fsS http://127.0.0.1:8086/phone-camera > /tmp/phone-route
+          grep -qi '<html' /tmp/phone-route
           docker exec mindcrafti-nginx-parity nginx -t
 
   frontend-integration-tests:
