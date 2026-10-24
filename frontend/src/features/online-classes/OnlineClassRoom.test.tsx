@@ -63,14 +63,6 @@ vi.mock('../notebook-camera/NotebookCameraPanel', () => ({
 }));
 vi.mock('./ChatPanel', () => ({ ChatPanel: () => null }));
 vi.mock('./CaptionsPanel', () => ({ CaptionsPanel: () => null }));
-vi.mock('./HomeworkDrawer', () => ({
-  HomeworkDrawer: ({ onClose }: { onClose: () => void }) => (
-    <aside id="classroom-homework-panel" aria-label="Домашнее задание">
-      <span>Текст или PDF домашки</span>
-      <button type="button" onClick={onClose}>Закрыть домашнее задание</button>
-    </aside>
-  ),
-}));
 const recordingProps: Record<string, any>[] = [];
 vi.mock('./RecordingControls', () => ({
   RecordingControls: (props: Record<string, any>) => {
@@ -337,16 +329,12 @@ describe('OnlineClassRoom', () => {
     }
   });
 
-  it('opens an assignment drawer from a single top-row icon and closes it', async () => {
+  it('keeps homework out of the pupil classroom while notebook pairing remains available', async () => {
     mount(false);
-    const toggle = screen.getByRole('button', { name: 'Домашнее задание' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await screen.findByTestId('board-board-1');
+    expect(screen.queryByRole('button', { name: 'Домашнее задание' })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Домашнее задание' })).not.toBeInTheDocument();
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('Текст или PDF домашки')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Закрыть домашнее задание' }));
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Подключить тетрадь' })).toBeEnabled();
   });
 
   it('shows the camera column next to the board', async () => {

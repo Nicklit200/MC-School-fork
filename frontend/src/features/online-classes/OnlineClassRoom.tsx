@@ -29,7 +29,6 @@ import { BoardToolbarIcon } from './BoardToolbar';
 import '../../styles/whiteboard-original-v3.css';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
-import { HomeworkDrawer } from './HomeworkDrawer';
 import { CameraColumn } from './CameraColumn';
 import { CaptionsPanel } from './CaptionsPanel';
 import { RecordingControls } from './RecordingControls';
@@ -171,7 +170,6 @@ function RoomBody({
   const [panelsOpen, setPanelsOpen] = useState(false);
   const [videosOpen, setVideosOpen] = useState(false);
   const materialInput = useRef<HTMLInputElement>(null);
-  const [homeworkOpen, setHomeworkOpen] = useState(false);
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
   useEffect(() => {
@@ -356,10 +354,6 @@ function RoomBody({
     notebookTrigger.current?.focus();
   };
 
-  // Homework and teacher-only solutions are both on the left, never stacked.
-  useEffect(() => {
-    if (answers.open) setHomeworkOpen(false);
-  }, [answers.open]);
   const fileAction = connection.host ? <button type="button" className="board-toolbar__action"
     aria-label={materialBusy ? 'Загрузка…' : 'Добавить PDF / Фото'}
     title="Добавить PDF / Фото" disabled={materialBusy} onClick={() => materialInput.current?.click()}>
@@ -374,24 +368,6 @@ function RoomBody({
           <ConnectionStatus />
         </div>
         <div className="online-class-room__lesson-actions">
-        {!connection.host && <button type="button" className="classroom-homework-toggle"
-          onClick={() => {
-            if (!homeworkOpen) answers.close();
-            setHomeworkOpen((open) => !open);
-          }}
-          aria-label={t('onlineClass.room.homework')}
-          title={t('onlineClass.room.homework')}
-          aria-expanded={homeworkOpen}
-          aria-controls="classroom-homework-panel"
-          aria-pressed={homeworkOpen}
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none"
-            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8"/>
-            <path d="m9 15 2.5 2.5L21 8"/>
-            <path d="M8 7h6M8 11h4"/>
-          </svg>
-        </button>}
         {eventId && !connection.host && <button
           ref={notebookTrigger}
           type="button"
@@ -403,7 +379,6 @@ function RoomBody({
             if (showNotebook) { returnToBoard(); return; }
             setNotebookOpened(true);
             setMainView('notebook');
-            setHomeworkOpen(false);
             answers.close();
             setPanelsOpen(false);
             // The participant rail otherwise covers the QR and settings on a
@@ -569,10 +544,6 @@ function RoomBody({
               closeLabel={language === 'DE' ? 'Zurück zur Tafel' : 'Вернуться к доске'}
             />
           </div>}
-
-          {homeworkOpen && !connection.host && (
-            <HomeworkDrawer classId={classId} onClose={() => setHomeworkOpen(false)} />
-          )}
 
           {/* Kept mounted (just hidden) so chat history, the roster and the
               waiting-room poll are not reset by closing the drawer. */}
