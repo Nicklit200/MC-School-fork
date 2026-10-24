@@ -1,6 +1,7 @@
 import { lessonPreparationApi, completedLessonApi } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
 import { NotebookCameraPanel } from '../notebook-camera/NotebookCameraPanel';
+import { useLessonNotebookCameras } from '../notebook-camera/useLessonNotebookCameras';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { buildPdf, dataUrlToBytes } from './pdfWriter';
 import {
@@ -23,6 +24,7 @@ import { categorizeLiveKitError, type LiveKitErrorCategory } from './livekitDiag
 import { ALL_STUDENT_BOARDS_ID, BoardSwitcher } from './BoardSwitcher';
 import { SHARED_BOARD_ID, personalBoardId } from './boards';
 import { useStudentRoster } from './useStudentRoster';
+import { StudentWorkspaces } from './StudentWorkspaces';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
 import { HomeworkDrawer } from './HomeworkDrawer';
@@ -231,6 +233,7 @@ function RoomBody({
   const answers = useAnswersPanel(eventId, connection.host);
   const boardDocument = useBoardDocument(classId);
   const students = useStudentRoster(classId, connection.host);
+  const { camerasByOwner } = useLessonNotebookCameras({ eventId, classId, enabled: connection.host });
   const [archiving, setArchiving] = useState(false);
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
   const [archiveError, setArchiveError] = useState(false);
@@ -308,7 +311,7 @@ function RoomBody({
   // walking through a whole group does not pile up one canvas per student
   // (their marks live on the server, so reopening one loses nothing).
   const showingAllStudents = connection.host && activeBoard === ALL_STUDENT_BOARDS_ID;
-  const boardsToShow = showingAllStudents || activeBoard === SHARED_BOARD_ID ? [SHARED_BOARD_ID] : [SHARED_BOARD_ID, activeBoard];
+  const boardsToShow = connection.host || activeBoard === SHARED_BOARD_ID ? [SHARED_BOARD_ID] : [SHARED_BOARD_ID, activeBoard];
 
   // A new screen share takes the main area; the user can switch back to the
   // board at any time, and the board keeps its marks while it is not shown.
@@ -319,7 +322,13 @@ function RoomBody({
   }, [sharing]);
 
   const showScreen = sharing && mainView === 'screen';
-  const showNotebook = Boolean(eventId) && mainView === 'notebook';
+  const showNotebook = !connection.host && Boolean(eventId) && mainView === 'notebook';
+  const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !showScreen;
+  const selectBoard = (boardId: string) => {
+    setActiveBoard(boardId);
+    setMainView('board');
+    if (connection.host && boardId !== SHARED_BOARD_ID && window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
+  };
   const returnToBoard = () => {
     setMainView('board');
     notebookTrigger.current?.focus();
@@ -351,7 +360,7 @@ function RoomBody({
             <path d="M8 7h6M8 11h4"/>
           </svg>
         </button>
-        {eventId && <button
+        {eventId && !connection.host && <button
           ref={notebookTrigger}
           type="button"
           className="online-class-room__notebook-toggle"
@@ -373,9 +382,7 @@ function RoomBody({
           <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M7 4h10v16H7zM4 7h3M4 12h3M4 17h3M10 8h4M10 12h4M10 16h2" />
           </svg>
-          {connection.host
-            ? language === 'DE' ? 'Schülerhefte' : 'Тетради учеников'
-            : language === 'DE' ? 'Heft verbinden' : 'Подключить тетрадь'}
+          {language === 'DE' ? 'Heft verbinden' : 'Подключить тетрадь'}
         </button>}
         {connection.host && (
           <label title="Загрузить PDF или фото на доску" style={{ cursor: materialBusy ? 'wait' : 'pointer', padding: '6px 10px', borderRadius: 8, background: '#1d4ed8', color: 'white' }}>
@@ -411,11 +418,11 @@ function RoomBody({
           currentUserId={currentUserId}
           students={students}
           activeId={activeBoard}
-          onChange={boardId => { setActiveBoard(boardId); setMainView('board'); }}
+          onChange={selectBoard}
         />
       </div>
 
-      <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showNotebook ? ' online-class-room__stage--notebook' : ''}`}>
+      <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showNotebook ? ' online-class-room__stage--notebook' : ''}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
               canvas: the sibling board reflows to the remaining available width. */}
           {connection.host && answers.open && answers.status === 'available' && !homeworkOpen && (
@@ -464,28 +471,34 @@ function RoomBody({
               </div>
             );
           })}
-          {showingAllStudents && !showScreen && !showNotebook && (
-            <div className="online-class-room__student-grid" aria-label="Доски всех учеников">
-              {students.slice(0, 4).map((student) => (
-                <div className="online-class-room__student-tile" key={student.userId}>
-                  <div className="online-class-room__student-tile-header">
-                    <strong>{student.displayName}</strong>
-                    <button type="button" onClick={() => setActiveBoard(personalBoardId(student.userId))}>Открыть</button>
-                  </div>
-                  <WhiteboardPanel
-                    classId={classId}
-                    actorId={currentUserId}
-                    isHost={connection.host}
-                    targetId={personalBoardId(student.userId)}
-                    observedPage={studentPages[personalBoardId(student.userId)]}
-                    canAnnotate={false}
-                    document={boardDocument}
-                  />
-                </div>
-              ))}
-              {students.length === 0 && <p className="online-class-room__student-grid-empty">Пока нет учеников</p>}
-            </div>
-          )}
+          {connection.host && <StudentWorkspaces
+            key={classId}
+            students={students}
+            camerasByOwner={camerasByOwner}
+            activeBoard={activeBoard}
+            overview={showingAllStudents}
+            visible={showStudentWorkspaces}
+            onSelect={selectBoard}
+            onOverview={() => selectBoard(ALL_STUDENT_BOARDS_ID)}
+            cameraActions={<AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} />}
+            renderBoard={(studentId, active, compact) => <Suspense fallback={null}>
+              <WhiteboardPanel
+                classId={classId}
+                actorId={currentUserId}
+                isHost
+                targetId={personalBoardId(studentId)}
+                observedPage={studentPages[personalBoardId(studentId)]}
+                canAnnotate={!compact}
+                active={active}
+                document={boardDocument}
+                onSaveLessonDocuments={!compact ? archiveBoards : undefined}
+                savingLessonDocuments={archiving}
+                lessonDocumentsStatus={archiveNotice}
+                lessonDocumentsError={archiveError}
+                hostActions={active && !compact ? <AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
+              />
+            </Suspense>}
+          />}
           {showScreen && (
             <div className="online-class-room__screen">
               <ScreenShareView />
@@ -495,7 +508,7 @@ function RoomBody({
           {/* The processor and its media subscription stay mounted while the
               pupil looks at the board, preserving the QR, crop, rotation and
               unsaved ink. Leaving the classroom still releases the viewer. */}
-          {eventId && notebookOpened && <div
+          {eventId && !connection.host && notebookOpened && <div
             id="classroom-notebook"
             className="online-class-room__notebook"
             hidden={!showNotebook}

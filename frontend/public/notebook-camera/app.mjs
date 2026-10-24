@@ -17,7 +17,7 @@ let flattened = $('flattened');
 const renderer = new LiveDocumentRenderer(video, flattened, {onCanvasReplace:canvas=>{flattened=canvas;},onError:()=>status('Не удалось обработать видео. Переподключите камеру в уроке.')});
 
 let editor = null, cameraDevices = [];
-let comparing=false,cameraState=null,pendingCommand=null,statsPrevious=null,statsBusy=false;
+let comparing=false,cameraState=null,pendingCommand=null,statsPrevious=null,statsBusy=false,notebookCompact=false;
 const CORNER_GUTTER=26;
 // The receiving computer owns document geometry. The phone sends raw video only.
 function visibleDocumentView() {
@@ -76,7 +76,9 @@ function fit() {
   const {width, height} = $('stage').getBoundingClientRect();
   const w = ink.width, h = ink.height;
   if (!canDraw() || !w || !h) return;
-  const scale = Math.max(1 / Math.max(w, h), Math.min((width - 2 * CORNER_GUTTER - 24) / w, (height - 2 * CORNER_GUTTER - 100) / h));
+  const horizontalSpace = notebookCompact ? 12 : 2 * CORNER_GUTTER + 24;
+  const verticalSpace = notebookCompact ? 12 : 2 * CORNER_GUTTER + 100;
+  const scale = Math.max(1 / Math.max(w, h), Math.min((width - horizontalSpace) / w, (height - verticalSpace) / h));
   $('surface').style.width = `${w * scale}px`;
   $('surface').style.height = `${h * scale}px`;
   editor?.drawCorners();
@@ -380,6 +382,11 @@ function resetCamera(id){
  drawInk();controls();
 }
 window.setNotebookCameraId=resetCamera;
+window.setNotebookCompact=value=>{
+ const next=value===true;if(next===notebookCompact)return;
+ finishStroke();editor?.releaseDrag();notebookCompact=next;
+ document.body.classList.toggle('notebook-compact',next);fit();
+};
 window.setNotebookStream=source=>{if(source!==video.srcObject)stream(source);};
 window.receiveNotebookData=value=>{try{if(JSON.stringify(value).length<=4096)receiveData(value);}catch{}};
 window.setNotebookConnected=connected=>{

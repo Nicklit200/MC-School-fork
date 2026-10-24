@@ -39,6 +39,9 @@ vi.mock('@livekit/components-react', () => ({
   useTracks: () => screenShares,
 }));
 vi.mock('./CameraColumn', () => ({ CameraColumn: () => <ul aria-label="cameras" /> }));
+vi.mock('../notebook-camera/useLessonNotebookCameras', () => ({
+  useLessonNotebookCameras: () => ({ cameras: [], camerasByOwner: new Map(), error: null }),
+}));
 vi.mock('../notebook-camera/NotebookCameraPanel', () => ({
   NotebookCameraPanel: (props: {
     eventId: string; classId: string; currentUserId: string; isTeacher: boolean;
@@ -332,14 +335,13 @@ describe('OnlineClassRoom', () => {
     expect(processor).toBeVisible();
   });
 
-  it('lets the teacher view enrolled pupils’ notebooks without replacing their phone QR', async () => {
+  it('uses the existing pupil board picker instead of a separate teacher notebook workspace', async () => {
     mount(true);
     await screen.findByRole('option', { name: 'Доска ученика: Alice' });
-    await userEvent.click(screen.getByRole('button', { name: 'Тетради учеников' }));
-    const notebook = screen.getByRole('region', { name: 'Встроенная тетрадь' });
-    expect(notebook).toHaveAttribute('data-auto-pair', 'false');
-    expect(notebook).toHaveAttribute('data-roster', '1');
-    expect(notebook).toHaveAttribute('data-teacher', 'true');
+    expect(screen.queryByRole('button', { name: 'Тетради учеников' })).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
+    expect(screen.getByTestId('board-personal-u1')).toHaveAttribute('data-active', 'true');
+    expect(screen.queryByRole('region', { name: 'Встроенная тетрадь' })).not.toBeInTheDocument();
   });
 
   it('returns to the selected personal board without discarding the notebook processor', async () => {

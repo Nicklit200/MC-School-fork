@@ -14,3 +14,6 @@
 .notebook-phone__preview video{width:100%;height:100%;object-fit:contain}.notebook-phone button{display:block;width:100%;margin:10px 0;padding:14px;font-size:17px}
 .notebook-phone p{line-height:1.55}.notebook-phone .muted{font-size:13px;color:#5e6a7b}
 @media(max-width:700px){.notebook-camera{padding:14px}.notebook-camera__viewer{height:78vh;min-height:650px}.notebook-camera__heading h2{font-size:21px}.notebook-camera__qr{width:100%}.notebook-camera__backdrop{padding:4px}}
+.notebook-camera-viewer{width:100%;min-width:0;min-height:0}
+.notebook-camera-viewer--compact{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.notebook-camera-viewer--compact>.notebook-camera__viewer{flex:1 1 0;height:100%;min-height:0;border:0;border-radius:0}

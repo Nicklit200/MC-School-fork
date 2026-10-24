@@ -25,11 +25,24 @@ it does not replace the QR or disconnect the phone. On narrow screens the
 participant rail folds away when opening the notebook, leaving the QR and
 settings clear; its normal camera toggle remains available.
 
-The teacher opens **Тетради учеников** in the same toolbar and selects an
-existing notebook. The list refreshes automatically; viewing it does not issue
-a replacement QR. Perspective, rotation and ink belong to each viewer screen,
-while supported camera hardware controls affect the shared phone capture.
-Notebook shortcuts on the lesson card and pupil calendar remain available.
+For the teacher, a pupil's live notebook replaces that pupil's personal board.
+Use the existing pupil board picker or **Все ученики (2×2)**: pupils with live
+notebooks show their camera, while the other tiles retain their normal boards.
+Opening one pupil restores the full notebook tools; the overview shows a compact
+live preview. There is no separate teacher notebook workspace. The camera list
+refreshes automatically without issuing a replacement QR.
+
+Each pupil's processor remains in the same DOM location across overview,
+individual and shared-board views, preserving crop, rotation and unsaved ink.
+Phone video tracks determine whether the camera or board is visible; a claimed
+camera record alone does not imply live video. Turning off the phone brings back
+the board, and publishing video again automatically restores the same camera.
+The viewer remains subscribed while the board is shown and keeps transport
+errors/retry accessible. Revocation or session expiry removes that viewer.
+
+Perspective, rotation and ink belong to each viewer screen, while supported
+camera hardware controls affect the shared phone capture. Notebook shortcuts
+on the lesson card and pupil calendar remain available.
 
 The teacher may select an enrolled pupil and create the QR for them. A
 teacher-owned camera also supports a trial lesson without a pupil account.

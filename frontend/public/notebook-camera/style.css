@@ -56,3 +56,12 @@
 
 /* Embedded in the existing lesson. */
 .topbar{height:60px;padding:0 20px}.workspace{padding:12px;gap:14px;max-width:none}.side-panel{margin-top:46px}.stage{height:calc(100dvh - 170px);min-height:420px}.board-column{top:0}.hint{margin-bottom:0}@media(min-width:761px){.side-panel{max-height:calc(100dvh - 120px)}}@media(max-width:760px){.side-panel{margin-top:0}.stage{height:65dvh;min-height:390px}}
+
+/* A teacher's overview tile uses the same document and media subscription.
+   Only its presentation changes; crop, rotation and ink remain in memory. */
+body.notebook-compact{height:100dvh;overflow:hidden}
+.notebook-compact .topbar,.notebook-compact .side-panel,.notebook-compact .hint,.notebook-compact .toolbar,.notebook-compact .board-status,.notebook-compact #cornerActions,.notebook-compact #corners{display:none!important}
+.notebook-compact .workspace{display:block;width:100%;height:100%;margin:0;padding:0}
+.notebook-compact .board-column{position:static;width:100%;height:100%;min-height:0}
+.notebook-compact .stage{height:100%;min-height:0;max-height:none;border:0;border-radius:0;padding:0}
+.notebook-compact #ink,.notebook-compact #corners{pointer-events:none}

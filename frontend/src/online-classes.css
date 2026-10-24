@@ -1982,3 +1982,65 @@
   .online-class-room__notebook .notebook-camera__qr { flex-basis: 100%; padding: 10px; }
   .online-class-room__notebook .notebook-camera__viewer { height: 850px; }
 }
+
+/* Each pupil keeps one surface in the same DOM location. The camera replaces
+   that pupil's board both in the overview and when opened on its own. */
+.student-workspaces {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 8px calc(80px + env(safe-area-inset-bottom));
+  background: #edf3fb;
+}
+.student-workspaces--overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.student-workspace {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #dce6f3;
+  border-radius: 13px;
+  background: #fff;
+}
+.student-workspaces[hidden], .student-workspace[hidden], .student-workspace__board[hidden] { display: none; }
+.student-workspace__kind {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 11px;
+  color: #526b88;
+}
+.student-workspace__content { position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; }
+.student-workspace__board, .student-workspace__camera { position: absolute; inset: 0; min-width: 0; min-height: 0; }
+.student-workspace__board { display: flex; flex-direction: column; }
+.student-workspace__board > .whiteboard { flex: 1 1 0%; min-height: 0; }
+.student-workspace__camera > div { height: 100%; min-height: 0; }
+.student-workspace__camera .notebook-camera__viewer { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; }
+.student-workspace__camera--waiting { pointer-events: none; }
+.student-workspace__camera--waiting iframe { visibility: hidden; }
+.student-workspace__camera [role='alert'] { position: absolute; inset: 0 0 auto; z-index: 4; pointer-events: auto; margin: 0; }
+.student-workspaces--overview .whiteboard__topline,
+.student-workspaces--overview .whiteboard__topline-pages,
+.student-workspaces--overview .whiteboard__zoom,
+.student-workspaces--overview .whiteboard__notice { display: none !important; }
+@media (min-width: 901px) {
+  .online-class-room__stage--student-workspaces > .online-class-room__videos-drawer.is-open {
+    position: relative;
+    flex: 0 0 clamp(160px, 23vw, 250px);
+  }
+}
+@media (max-width: 600px) {
+  .student-workspaces { padding: 4px 4px calc(72px + env(safe-area-inset-bottom)); }
+  .student-workspaces--overview { gap: 4px; }
+  .student-workspace .online-class-room__student-tile-header { flex-wrap: wrap; gap: 3px; padding: 4px; }
+  .student-workspace__kind { font-size: 10px; }
+}
