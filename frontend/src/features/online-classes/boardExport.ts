@@ -13,6 +13,7 @@ import { buildPdf, dataUrlToBytes, type JpegPage } from './pdfWriter';
 import type { PdfDoc } from './pdfDocument';
 import { penOutline, tracePenOutline } from './freehand';
 import { shapeTextSizePx, textStyleFor } from './textStyles';
+import { A4_PORTRAIT_ASPECT } from './boardPaper';
 
 /**
  * Konva is loaded when the first export runs, not with the board: most lessons
@@ -184,7 +185,7 @@ export async function exportBoardPdf({
     let aspect =
       document?.sourceWidth && document?.sourceHeight
         ? document.sourceWidth / document.sourceHeight
-        : DEFAULT_ASPECT;
+        : targetType === 'WHITEBOARD' ? A4_PORTRAIT_ASPECT : DEFAULT_ASPECT;
     if (pdfDocument && index < pdfDocument.pageCount) {
       const rendered = await pdfDocument.renderPage(index, EXPORT_WIDTH);
       background = rendered.canvas;

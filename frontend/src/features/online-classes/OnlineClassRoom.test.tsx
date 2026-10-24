@@ -85,6 +85,7 @@ vi.mock('./useBoardDocument', () => ({ useBoardDocument: () => null }));
 vi.mock('./useClassEvents', () => ({ useClassEvents: () => ({ publish: vi.fn() }) }));
 vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
 vi.mock('./usePdf', () => ({ usePdf: () => ({ status: 'idle' }), usePdfPage: () => null }));
+vi.mock('./pdfDocument', () => ({ openPdf: vi.fn(async () => ({ pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() })) }));
 
 const boardProps: Record<string, any>[] = [];
 vi.mock('./WhiteboardPanel', () => ({
@@ -100,7 +101,7 @@ vi.mock('./WhiteboardPanel', () => ({
 }));
 
 vi.mock('../../api/lessonPreparation', () => ({
-  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), appendWorkbook: vi.fn() },
+  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn() },
 }));
 vi.mock('../../api/onlineClasses', async () => {
   const actual = await vi.importActual<typeof import('../../api/onlineClasses')>('../../api/onlineClasses');
@@ -266,18 +267,18 @@ describe('OnlineClassRoom', () => {
     expect(screen.queryByRole('button', { name: /Ответы/ })).not.toBeInTheDocument();
     expect(lessonPreparationApi.get).not.toHaveBeenCalled();
     expect(lessonPreparationApi.answersBytes).not.toHaveBeenCalled();
+    expect(lessonPreparationApi.uploadAnswers).not.toHaveBeenCalled();
   });
 
-  it('opens top-row teacher solutions as a sibling of the resizable main board', async () => {
-    const view = mount(true);
-    await screen.findByTestId('board-board-1');
-    await userEvent.click(screen.getByRole('button', { name: 'Решения' }));
-    const sidebar = screen.getByRole('complementary', { name: 'Решения' });
-    expect(sidebar.parentElement).toHaveClass('online-class-room__stage');
-    expect(sidebar.nextElementSibling).toHaveClass('online-class-room__main');
-    expect(view.container.querySelector('.online-class-room__board')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Закрыть решения' }));
-    expect(screen.queryByRole('complementary', { name: 'Решения' })).not.toBeInTheDocument();
+  it('keeps one teacher answers entry on the board and a lesson title without a logo', async () => {
+    const view = mount(true, { lessonTitle: 'Группа 1' });
+    const board = await screen.findByTestId('board-board-1');
+    expect(await within(board).findByRole('button', { name: 'Ответы' })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: 'Ответы' })).toHaveLength(1);
+    const topbar = view.container.querySelector('.online-class-room__topbar') as HTMLElement;
+    expect(within(topbar).queryByRole('button', { name: /Ответы|Решения/ })).not.toBeInTheDocument();
+    expect(within(topbar).getByText('Группа 1')).toBeInTheDocument();
+    expect(within(topbar).queryByRole('img')).not.toBeInTheDocument();
   });
 
   it('opens board toolbar answers in the same separate teacher sidebar', async () => {
@@ -307,6 +308,33 @@ describe('OnlineClassRoom', () => {
     mount(true);
     const board = await screen.findByTestId('board-board-1');
     expect(await within(board).findByRole('button', { name: 'Ответы' })).toBeEnabled();
+  });
+
+  it('uploads the first teacher answers PDF through the only board answers action', async () => {
+    const previous = globalThis.ResizeObserver;
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
+    try {
+      vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+      vi.mocked(lessonPreparationApi.uploadAnswers).mockResolvedValue({ hasAnswers: true, answersFilename: 'solutions.pdf' } as never);
+      vi.mocked(lessonPreparationApi.answersBytes).mockResolvedValue(new ArrayBuffer(16));
+      mount(true);
+      const board = await screen.findByTestId('board-board-1');
+      const action = await within(board).findByRole('button', { name: 'Ответы' });
+      await waitFor(() => expect(action).toBeEnabled());
+      await userEvent.click(action);
+      const sidebar = screen.getByRole('complementary', { name: 'Панель ответов' });
+      expect(sidebar.parentElement).toHaveClass('online-class-room__stage');
+      expect(within(sidebar).getByText('Добавьте PDF с решениями')).toBeInTheDocument();
+      const file = new File(['%PDF-1.4 solutions'], 'solutions.pdf', { type: 'application/pdf' });
+      await userEvent.upload(within(sidebar).getByLabelText('PDF решений'), file);
+      await waitFor(() => expect(lessonPreparationApi.uploadAnswers).toHaveBeenCalledWith('e1', file));
+      await waitFor(() => expect(lessonPreparationApi.answersBytes).toHaveBeenCalledWith('e1'));
+      await waitFor(() => expect(action).toHaveAttribute('title', 'Ответы'));
+      expect(screen.getAllByRole('button', { name: 'Ответы' })).toHaveLength(1);
+    } finally {
+      if (previous) vi.stubGlobal('ResizeObserver', previous);
+      else vi.unstubAllGlobals();
+    }
   });
 
   it('opens an assignment drawer from a single top-row icon and closes it', async () => {

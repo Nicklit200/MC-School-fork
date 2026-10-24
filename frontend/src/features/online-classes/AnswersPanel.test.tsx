@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nContext';
@@ -22,26 +22,28 @@ const ready = (pageCount = 12): PdfState => ({
   doc: { pageCount, renderPage: vi.fn(), destroy: vi.fn() },
 });
 
-function renderPanel(pdf: PdfState, view: Partial<AnswersView> = {}) {
+function renderPanel(pdf: PdfState, view: Partial<AnswersView> = {}, extra: Partial<React.ComponentProps<typeof AnswersPanel>> = {}) {
   const handlers = { onViewChange: vi.fn(), onScroll: vi.fn(), onClose: vi.fn() };
   const full: AnswersView = { page: 2, zoom: 1, scrollTop: 0, scrollLeft: 0, ...view };
-  render(
+  const rendered = render(
     <I18nProvider>
-      <AnswersPanel pdf={pdf} view={full} getView={() => full} {...handlers} />
+      <AnswersPanel pdf={pdf} view={full} getView={() => full} {...handlers} {...extra} />
     </I18nProvider>,
   );
-  return handlers;
+  return { ...handlers, ...rendered };
 }
 
 describe('AnswersButton', () => {
-  it('stays in place, inert, and says answers are missing', () => {
+  it('opens the empty panel to add answers and explains the missing file in its title', async () => {
+    const onToggle = vi.fn();
     render(
       <I18nProvider>
-        <AnswersButton status="none" open={false} onToggle={vi.fn()} />
+        <AnswersButton status="none" open={false} onToggle={onToggle} />
       </I18nProvider>,
     );
-    const button = screen.getByRole('button', { name: 'Ответы не добавлены' });
-    expect(button).toBeDisabled();
+    const button = screen.getByRole('button', { name: 'Ответы' });
+    expect(button).toBeEnabled(); expect(button).toHaveAttribute('title', 'Ответы не добавлены');
+    await userEvent.click(button); expect(onToggle).toHaveBeenCalledOnce();
   });
 
   it('is active and toggles when answers exist', async () => {
@@ -61,6 +63,13 @@ describe('AnswersButton', () => {
         <AnswersButton status="checking" open={false} onToggle={vi.fn()} />
       </I18nProvider>,
     );
+    expect(screen.getByRole('button', { name: 'Ответы' })).toBeDisabled();
+  });
+
+  it('keeps the compact empty-state action accessible and disables only an unavailable lesson', () => {
+    const { rerender } = render(<I18nProvider><AnswersButton compact status="none" open={false} onToggle={vi.fn()} /></I18nProvider>);
+    expect(screen.getByRole('button', { name: 'Ответы' })).toBeEnabled();
+    rerender(<I18nProvider><AnswersButton compact status="unavailable" open={false} onToggle={vi.fn()} /></I18nProvider>);
     expect(screen.getByRole('button', { name: 'Ответы' })).toBeDisabled();
   });
 });
@@ -103,5 +112,44 @@ describe('AnswersPanel', () => {
   it('reports an unreadable file without breaking the lesson', () => {
     renderPanel({ status: 'error', message: 'PDF parse failed' });
     expect(screen.getByRole('alert')).toHaveTextContent('Не удалось открыть файл ответов');
+  });
+
+  it('offers the first PDF upload in the empty panel and permits selecting the same file again', async () => {
+    const user = userEvent.setup(), onUpload = vi.fn();
+    renderPanel({ status: 'idle' }, {}, { onUpload });
+    expect(screen.getByText('Добавьте PDF с решениями')).toBeInTheDocument();
+    const input = screen.getByLabelText('PDF решений') as HTMLInputElement;
+    const openPicker = vi.spyOn(input, 'click');
+    await user.click(screen.getByRole('button', { name: 'Загрузить PDF решений' })); expect(openPicker).toHaveBeenCalledOnce();
+    const file = new File(['%PDF'], 'solutions.pdf', { type: 'application/pdf' });
+    await user.upload(input, file); await user.upload(input, file);
+    expect(onUpload).toHaveBeenCalledTimes(2); expect(onUpload).toHaveBeenLastCalledWith(file); expect(input.value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Добавить страницу' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the current PDF available while showing upload failures and busy state', () => {
+    const { rerender } = renderPanel(ready(), {}, { onUpload: vi.fn(), uploadError: 'Не удалось загрузить решения' });
+    expect(screen.getByRole('alert')).toHaveTextContent('Не удалось загрузить решения');
+    expect(screen.getByRole('button', { name: 'Заменить PDF решений' })).toBeEnabled();
+    expect(screen.getByLabelText('Страница 3 из 12', { selector: 'canvas' })).toBeInTheDocument();
+    const view = { page: 2, zoom: 1, scrollTop: 0, scrollLeft: 0 };
+    rerender(<I18nProvider><AnswersPanel pdf={ready()} view={view} getView={() => view} onViewChange={vi.fn()} onScroll={vi.fn()} onClose={vi.fn()} onUpload={vi.fn()} uploading /></I18nProvider>);
+    expect(screen.getByRole('button', { name: 'Загрузка…' })).toBeDisabled(); expect(screen.getByLabelText('PDF решений')).toBeDisabled();
+    expect(screen.getByLabelText('Страница 3 из 12', { selector: 'canvas' })).toBeInTheDocument();
+  });
+
+  it('does not render upload controls unless the caller provides the upload action', () => {
+    renderPanel(ready()); expect(screen.queryByLabelText('PDF решений')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Заменить PDF решений' })).not.toBeInTheDocument();
+  });
+
+  it('resets both scroll offsets after a replacement document even when the page was already zero', () => {
+    const first = ready(4), next = ready(2), view = { page: 0, zoom: 1, scrollTop: 340, scrollLeft: 20 };
+    const { container, rerender, onScroll } = renderPanel(first, view);
+    const scroll = container.querySelector('.answers-panel__scroll') as HTMLDivElement;
+    fireEvent.scroll(scroll, { target: { scrollTop: 340, scrollLeft: 20 } }); expect(onScroll).toHaveBeenCalledWith(340, 20);
+    const reset = { page: 0, zoom: 1, scrollTop: 0, scrollLeft: 0 };
+    rerender(<I18nProvider><AnswersPanel pdf={next} view={reset} getView={() => reset} onViewChange={vi.fn()} onScroll={onScroll} onClose={vi.fn()} /></I18nProvider>);
+    expect(scroll.scrollTop).toBe(0); expect(scroll.scrollLeft).toBe(0);
   });
 });

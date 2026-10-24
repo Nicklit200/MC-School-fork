@@ -124,6 +124,68 @@ describe('WhiteboardPanel', () => {
     );
   });
 
+  it('opens an ordinary blank whiteboard as a white portrait A4 page', async () => {
+    mount('host');
+    await screen.findByTestId('canvas');
+    expect(canvasProps.sourceAspect).toBe(210 / 297);
+    expect(canvasProps.paperColor).toBe('#ffffff');
+    expect(canvasProps.background).toBeNull();
+    expect(canvasProps.readOnly).toBe(false);
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('uses the blank A4 default when an explicit source aspect is invalid: %s', async sourceAspect => {
+    mount('host', { sourceAspect });
+    await screen.findByTestId('canvas');
+    expect(canvasProps.sourceAspect).toBe(210 / 297);
+  });
+
+  it('prevents drawing on a loading PDF page until its actual geometry is ready', async () => {
+    const pdf = { pageCount: 1 } as never;
+    const { rerender } = mount('host', { document: pdf });
+    await screen.findByTestId('canvas');
+    expect(canvasProps.readOnly).toBe(true);
+    expect(canvasProps.sourceAspect).toBeNull();
+    expect(screen.getByText('Загрузка…')).toBeInTheDocument();
+    const pageCanvas = document.createElement('canvas');
+    renderPdfPage.mockReturnValue({ canvas: pageCanvas, aspect: 1.6 });
+    rerender(<I18nProvider><WhiteboardPanel classId="c1" actorId="teacher" isHost document={pdf} /></I18nProvider>);
+    expect(canvasProps.readOnly).toBe(false);
+    expect(canvasProps.sourceAspect).toBe(1.6);
+    expect(canvasProps.background).toBe(pageCanvas);
+    expect(screen.queryByText('Загрузка…')).not.toBeInTheDocument();
+  });
+
+  it('preserves the PDF page format and uses portrait A4 for a blank page added after it', async () => {
+    const user = userEvent.setup();
+    const pdf = { pageCount: 1 } as never;
+    const pageCanvas = document.createElement('canvas');
+    renderPdfPage.mockImplementation((_doc, page) => page === 0 ? { canvas: pageCanvas, aspect: 1.6 } : null);
+    mount('host', { document: pdf });
+    await screen.findByTestId('canvas');
+    expect(canvasProps.sourceAspect).toBe(1.6);
+    expect(canvasProps.background).toBe(pageCanvas);
+    await user.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+    await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
+    expect(canvasProps.sourceAspect).toBe(210 / 297);
+    expect(canvasProps.background).toBeNull();
+    expect(canvasProps.readOnly).toBe(false);
+    expect(screen.queryByText('Загрузка…')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Предыдущая страница' }));
+    expect(canvasProps.sourceAspect).toBe(1.6);
+    expect(canvasProps.background).toBe(pageCanvas);
+  });
+
+  it('preserves explicit source geometry and non-whiteboard projection defaults', async () => {
+    const { unmount } = mount('host', { sourceAspect: 16 / 9 });
+    await screen.findByTestId('canvas');
+    expect(canvasProps.sourceAspect).toBe(16 / 9);
+    unmount();
+    mount('host', { targetType: 'SCREEN_SHARE' });
+    await screen.findByTestId('canvas');
+    expect(canvasProps.sourceAspect).toBeNull();
+    expect(canvasProps.paperColor).toBe('#fffefa');
+  });
+
   it('gives a student the board and page switcher but no teacher-only controls', async () => {
     mount('student');
     await screen.findByTestId('canvas');

@@ -6,6 +6,7 @@ import { onlineClassesApi, type AnnotationTargetType } from '../../api/onlineCla
 import { useI18n } from '../../i18n/I18nContext';
 import { BoardToolbar, BoardToolbarIcon } from './BoardToolbar';
 import { downloadBlob, exportBoardPdf } from './boardExport';
+import { A4_PORTRAIT_ASPECT } from './boardPaper';
 import {
   DEFAULT_TOOL_SETTINGS,
   type ToolSettings,
@@ -302,8 +303,11 @@ export function WhiteboardPanel({
   }, []);
 
   const renderedPage = usePdfPage(pdfDocument, pages.current, stageWidth);
+  const hasPdfPage = Boolean(pdfDocument && pages.current < pdfDocument.pageCount);
+  const loadingPdfPage = hasPdfPage && !renderedPage;
+  const validSourceAspect = sourceAspect !== null && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : null;
   const pageAspect = camera ? (cameraBackground ? cameraBackground.width / cameraBackground.height : null)
-    : renderedPage?.aspect ?? sourceAspect;
+    : renderedPage?.aspect ?? validSourceAspect ?? (targetType === 'WHITEBOARD' && !hasPdfPage ? A4_PORTRAIT_ASPECT : null);
 
   const setView = useCallback((next: PageView) => setPages((current) => withView(current, next)), []);
 
@@ -448,6 +452,7 @@ export function WhiteboardPanel({
 
       </div>
       <div role="status" aria-live="polite" className="whiteboard__notice">
+        {loadingPdfPage && <span>{t('common.loading')}</span>}
         {lessonDocumentsStatus && <span role={lessonDocumentsError ? 'alert' : 'status'} style={lessonDocumentsError ? {color:'#dc2626'} : undefined}>{lessonDocumentsStatus}</span>}
         {saved && <span>{t('onlineClass.whiteboard.saved')}</span>}
         {saveError === 'unavailable' && (
@@ -480,14 +485,14 @@ export function WhiteboardPanel({
           textFontSize={toolSettings.text.fontSize ?? 24}
           textBold={Boolean(toolSettings.text.bold)}
           sourceAspect={pageAspect}
-          readOnly={!canAnnotate}
+          readOnly={!canAnnotate || loadingPdfPage}
           eraserMode={eraserMode}
           inputMode={inputMode}
           view={view}
           onViewChange={setView}
           navigationLocked={locked}
           background={camera ? cameraBackground?.source ?? null : renderedPage?.canvas ?? null}
-          paperColor={camera ? null : '#fffefa'}
+          paperColor={camera ? null : targetType === 'WHITEBOARD' ? '#ffffff' : '#fffefa'}
           backgroundLive={camera && Boolean(cameraBackground)}
           active={active}
           lasers={camera ? [] : lasers}

@@ -27,27 +27,33 @@
   --lk-control-bg:#202427; --lk-control-hover-bg:var(--v3-raised);
 }
 .online-class-room--original-v3 .online-class-room__topbar {
-  flex:0 0 auto; min-height:52px; padding:8px 18px; gap:10px;
-  background:#202427; border-bottom:1px solid #30363b; overflow-x:auto;
+  flex:0 0 auto; min-height:60px; padding:8px 18px; gap:10px;
+  background:transparent; border:0; overflow-x:auto;
   color:var(--v3-text);
 }
-.online-class-room--original-v3 .online-class-room__lesson-brand {
-  display:flex; align-items:center; gap:12px; margin-right:0; min-width:120px;
+.online-class-room--original-v3 .online-class-room__lesson-island,
+.online-class-room--original-v3 .online-class-room__board-controls {
+  display:flex; align-items:center; gap:10px; min-height:44px; padding:5px 10px;
+  border:1px solid #4b5359; border-radius:13px; background:#2a2f33f5;
+  box-shadow:0 6px 20px #0003;
 }
-.online-class-room--original-v3 .online-class-room__lesson-brand img { width:30px; height:30px; object-fit:contain; border-radius:9px; }
-.online-class-room--original-v3 .online-class-room__lesson-brand strong {
-  display:block; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+.online-class-room--original-v3 .online-class-room__lesson-island { flex-direction:column; align-items:flex-start; justify-content:center; gap:1px; min-width:100px; }
+.online-class-room--original-v3 .online-class-room__lesson-island strong {
+  display:block; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-size:13px; font-weight:600; line-height:1.3;
 }
-.online-class-room--original-v3 .online-class-room__lesson-brand span { display:block; font-size:10px; color:var(--v3-muted); }
+.online-class-room--original-v3 .online-class-room__lesson-actions { display:flex; align-items:center; gap:8px; flex:0 1 auto; min-width:0; }
+.online-class-room--original-v3 .online-class-room__board-controls { margin-left:auto; flex-shrink:0; gap:4px; padding:4px 6px; }
 .online-class-room--original-v3 .online-class-room__topbar button,
 .online-class-room--original-v3 .online-class-room__topbar select {
   height:34px; min-height:34px; padding:5px 10px; border:1px solid #3b4348;
-  border-radius:9px; color:var(--v3-muted); background:transparent; box-shadow:none; font-size:11px;
+  border-radius:9px; color:var(--v3-muted); background:#2a2f33f5; box-shadow:none; font-size:11px;
 }
+.online-class-room--original-v3 .online-class-room__board-controls button,
+.online-class-room--original-v3 .online-class-room__board-controls select { border:0; background:transparent; }
 .online-class-room--original-v3 .online-class-room__topbar button[aria-pressed='true'] { color:var(--v3-orange); background:var(--v3-selected); }
 .online-class-room--original-v3 .online-class-room__topbar .board-switcher { margin:0; }
-.online-class-room--original-v3 .online-class-room__topbar .online-class-room__videos-toggle { margin-left:auto; }
+.online-class-room--original-v3 .online-class-room__topbar .online-class-room__videos-toggle { margin-left:0; }
 .online-class-room--original-v3 .board-switcher select { max-width:220px; color-scheme:dark; }
 .online-class-room--original-v3 .online-class-room__status { font-size:10px; color:var(--v3-muted); }
 .online-class-room--original-v3 .online-class-room__stage { flex:1 1 0%; min-width:0; min-height:0; background:var(--v3-bg); }
@@ -192,7 +198,11 @@ body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:2
 .online-class-room--original-v3 .classroom-homework__header strong { font-size:11px; line-height:1.35; font-weight:600; }
 .online-class-room--original-v3 .answers-panel .answers-panel__close { position:static; width:26px; height:26px; min-height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--v3-muted); box-shadow:none; }
 .online-class-room--original-v3 .answers-panel__private { margin:0; font-size:9px; color:var(--v3-muted); }
+.online-class-room--original-v3 .answers-panel__upload button { width:100%; min-height:32px; padding:6px 8px; border:1px solid var(--v3-edge); border-radius:8px; background:var(--v3-raised); color:var(--v3-text); font-size:11px; }
+.online-class-room--original-v3 .answers-panel__upload button:disabled { opacity:.5; }
+.online-class-room--original-v3 .answers-panel__upload-error { margin:0; color:#f1a4a4; font-size:11px; }
 .online-class-room--original-v3 .answers-panel .answers-panel__scroll { flex:1 1 0%; min-height:0; width:100%; padding:0; background:var(--v3-paper); border-radius:2px; overflow:auto; }
+.online-class-room--original-v3 .answers-panel__scroll p { padding:12px; margin:0; color:#34414c; font-size:11px; }
 .online-class-room--original-v3 .answers-panel .answers-panel__page { display:block; max-width:none; margin:0; border:0; box-shadow:none; }
 .online-class-room--original-v3 .answers-panel .answers-panel__controls { padding:0; border:0; background:transparent; display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
 .online-class-room--original-v3 .answers-panel .page-nav { border:0; padding:0; color:var(--v3-muted); background:transparent; box-shadow:none; font-size:9px; }
@@ -223,11 +233,12 @@ body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:2
 }
 @media(max-width:600px) {
   .online-class-room--original-v3 .online-class-room__topbar { padding:8px 12px; gap:8px; }
-  .online-class-room--original-v3 .online-class-room__lesson-brand { gap:0; min-width:80px; }
-  .online-class-room--original-v3 .online-class-room__lesson-brand img { display:none; }
-  .online-class-room--original-v3 .online-class-room__lesson-brand strong { max-width:110px; font-size:12px; }
-  .online-class-room--original-v3 .online-class-room__status { display:none; }
-  .online-class-room--original-v3 .board-switcher select { max-width:150px; font-size:10px; }
+  .online-class-room--original-v3 .online-class-room__lesson-island { min-width:0; padding:5px 8px; }
+  .online-class-room--original-v3 .online-class-room__lesson-island strong { max-width:clamp(64px,25vw,110px); font-size:12px; }
+  .online-class-room--original-v3 .online-class-room__topbar { flex-wrap:wrap; overflow:visible; }
+  .online-class-room--original-v3 .online-class-room__lesson-actions { order:3; flex:1 0 100%; flex-wrap:wrap; }
+  .online-class-room--original-v3 .online-class-room__lesson-actions:not(:has(button, [role='alert'], [role='alertdialog'], .recording__active, .transcription span)) { display:none; }
+  .online-class-room--original-v3 .board-switcher select { max-width:clamp(120px,34vw,150px); font-size:10px; }
   .online-class-room--original-v3 .online-class-room__stage { flex-direction:column; }
   .online-class-room--original-v3 .online-class-room__stage > .answers-panel,
   .online-class-room--original-v3 .online-class-room__stage > .classroom-solutions { flex:0 1 240px; width:100%; max-height:32%; padding:10px 12px; gap:6px; border-right:0; border-bottom:1px solid #3b4348; }

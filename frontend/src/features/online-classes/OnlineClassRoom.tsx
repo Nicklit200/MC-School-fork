@@ -30,7 +30,6 @@ import '../../styles/whiteboard-original-v3.css';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
 import { HomeworkDrawer } from './HomeworkDrawer';
-import { SolutionsDrawer } from './SolutionsDrawer';
 import { CameraColumn } from './CameraColumn';
 import { CaptionsPanel } from './CaptionsPanel';
 import { RecordingControls } from './RecordingControls';
@@ -352,17 +351,18 @@ function RoomBody({
   return (
     <>
       <div className="online-class-room__topbar">
-        <div className="online-class-room__lesson-brand">
-          <img src="/brand/Mindcrafti_Logo_M_OFFICIAL.webp" alt="Mindcrafti" />
-          <div><strong>{lessonTitle || t('onlineClass.title')}</strong><span>{language === 'DE' ? 'Unterrichtstafel' : 'Доска урока'}</span></div>
+        <div className="online-class-room__lesson-island">
+          <strong>{lessonTitle || t('onlineClass.title')}</strong>
+          <ConnectionStatus />
         </div>
-        <button type="button" className="classroom-homework-toggle"
+        <div className="online-class-room__lesson-actions">
+        {!connection.host && <button type="button" className="classroom-homework-toggle"
           onClick={() => {
             if (!homeworkOpen) answers.close();
             setHomeworkOpen((open) => !open);
           }}
-          aria-label={connection.host ? 'Решения' : t('onlineClass.room.homework')}
-          title={connection.host ? 'Решения' : t('onlineClass.room.homework')}
+          aria-label={t('onlineClass.room.homework')}
+          title={t('onlineClass.room.homework')}
           aria-expanded={homeworkOpen}
           aria-controls="classroom-homework-panel"
           aria-pressed={homeworkOpen}
@@ -373,7 +373,7 @@ function RoomBody({
             <path d="m9 15 2.5 2.5L21 8"/>
             <path d="M8 7h6M8 11h4"/>
           </svg>
-        </button>
+        </button>}
         {eventId && !connection.host && <button
           ref={notebookTrigger}
           type="button"
@@ -399,7 +399,6 @@ function RoomBody({
           {language === 'DE' ? 'Heft verbinden' : 'Подключить тетрадь'}
         </button>}
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
-        <ConnectionStatus />
         {archiveNotice && <span role={archiveError ? 'alert' : 'status'} style={{fontSize:12,color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>}
         <RecordingControls
           classId={classId}
@@ -416,6 +415,8 @@ function RoomBody({
           available={transcriptionAvailable}
           onChanged={onStateChanged}
         />
+        </div>
+        <div className="online-class-room__board-controls">
         <button type="button" className="online-class-room__videos-toggle" aria-expanded={videosOpen} aria-controls="online-class-videos" onClick={() => setVideosOpen((open) => !open)} title={videosOpen ? 'Скрыть видео участников' : 'Показать видео участников'}>
           {videosOpen ? 'Видео ›' : '‹ Видео'}
         </button>
@@ -426,6 +427,7 @@ function RoomBody({
           activeId={activeBoard}
           onChange={selectBoard}
         />
+        </div>
       </div>
       {connection.host && <input ref={materialInput} type="file" multiple accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
         disabled={materialBusy} hidden
@@ -434,7 +436,7 @@ function RoomBody({
       <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showNotebook ? ' online-class-room__stage--notebook' : ''}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
               canvas: the sibling board reflows to the remaining available width. */}
-          {connection.host && answers.open && answers.status === 'available' && !homeworkOpen && (
+          {connection.host && answers.open && (
             <AnswersPanel
               pdf={answers.pdf}
               view={answers.view}
@@ -442,10 +444,10 @@ function RoomBody({
               onViewChange={answers.setView}
               onScroll={answers.rememberScroll}
               onClose={answers.close}
+              onUpload={answers.upload}
+              uploading={answers.uploading}
+              uploadError={answers.uploadError}
             />
-          )}
-          {connection.host && homeworkOpen && (
-            <SolutionsDrawer eventId={eventId} onClose={() => setHomeworkOpen(false)} />
           )}
         <div className="online-class-room__main">
           {/* The board stays mounted while a screen is shown, so switching back
