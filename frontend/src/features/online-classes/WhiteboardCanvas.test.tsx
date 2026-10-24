@@ -73,4 +73,11 @@ describe('WhiteboardCanvas live background', () => {
     expect(mock.stage.toDataURL).toHaveBeenCalledWith({ pixelRatio: 1, mimeType: 'image/jpeg', quality: 0.9 });
     expect(ref.current?.getSize()).toEqual({ width: 1000, height: 500 });
   });
+
+  it('fills the paper in the background layer using the same page geometry as its marks', () => {
+    const { getByTestId } = render(<WhiteboardCanvas {...props} paperColor="#fffefa" view={{ zoom: 2, panX: -100, panY: -50 }} />);
+    expect(mock.rectProps).toMatchObject({ x: 250, y: 0, width: 500, height: 500, fill: '#fffefa', listening: false });
+    expect(getByTestId('rectangle').parentElement).toBe(getByTestId('background-layer'));
+    expect(mock.stageProps).toMatchObject({ x: -100, y: -50, scaleX: 2, scaleY: 2 });
+  });
 });

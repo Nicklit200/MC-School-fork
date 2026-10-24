@@ -30,7 +30,7 @@ export function AnswersPanel({
   onScroll: (top: number, left: number) => void;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [width, setWidth] = useState(0);
@@ -84,6 +84,8 @@ export function AnswersPanel({
 
   return (
     <aside id="answers-panel" className="answers-panel" aria-label={t('onlineClass.answers.title')}>
+      <header className="answers-panel__heading">
+        <strong>{language === 'DE' ? 'Lösungen für Lehrkräfte' : 'Решения для учителя'}</strong>
       <button
         type="button"
         className="answers-panel__close"
@@ -92,6 +94,8 @@ export function AnswersPanel({
       >
         <span aria-hidden="true">×</span>
       </button>
+      </header>
+      <p className="answers-panel__private">{language === 'DE' ? 'Nur für die Lehrkraft sichtbar' : 'Видны только преподавателю'}</p>
 
       <div
         ref={scrollRef}
@@ -130,6 +134,7 @@ export function AnswersPanel({
             >
               −
             </button>
+            <span>{Math.round(view.zoom * 100)}%</span>
             <button
               type="button"
               onClick={() => onViewChange({ zoom: Math.min(MAX_ANSWERS_ZOOM, view.zoom + ZOOM_STEP) })}

@@ -88,6 +88,11 @@ function mount(role: 'host' | 'student', extra: Partial<React.ComponentProps<typ
   );
 }
 
+async function additionalAction(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
+  await user.click(screen.getByRole('button', { name }));
+}
+
 const hostView = (patch = {}) =>
   viewEvent('c1', {
     boardId: 'board-1', page: 1, pageCount: 3, zoom: 2, panX: -0.5, panY: -0.25, follow: true, ...patch,
@@ -133,6 +138,7 @@ describe('WhiteboardPanel', () => {
     const user = userEvent.setup();
     mount('host', { hostActions: <button type="button">Ответы</button> });
     await screen.findByTestId('canvas');
+    await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
     expect(screen.getByRole('button', { name: 'Очистить всё' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Следовать за учителем' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ответы' })).toBeInTheDocument();
@@ -237,7 +243,7 @@ describe('WhiteboardPanel', () => {
       exportBoardPdf.mockResolvedValue(pdf);
       mount('student');
       await screen.findByTestId('canvas');
-      await user.click(screen.getByRole('button', { name: 'Скачать PDF' }));
+      await additionalAction(user, 'Скачать PDF');
 
       await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
       expect(exportBoardPdf).toHaveBeenCalledWith(
@@ -252,7 +258,7 @@ describe('WhiteboardPanel', () => {
       exportBoardPdf.mockResolvedValue(new Blob(['%PDF']));
       mount('student', { targetId: 'personal-student' });
       await screen.findByTestId('canvas');
-      await user.click(screen.getByRole('button', { name: 'Скачать PDF' }));
+      await additionalAction(user, 'Скачать PDF');
       await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
       expect(downloadBlob.mock.calls[0][1]).toMatch(/^my-board-/);
     });
@@ -262,11 +268,11 @@ describe('WhiteboardPanel', () => {
       exportBoardPdf.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(new Blob(['%PDF']));
       mount('host');
       await screen.findByTestId('canvas');
-      await user.click(screen.getByRole('button', { name: 'Скачать PDF' }));
+      await additionalAction(user, 'Скачать PDF');
       expect(await screen.findByText('Не удалось подготовить PDF')).toBeInTheDocument();
       expect(downloadBlob).not.toHaveBeenCalled();
 
-      await user.click(screen.getByRole('button', { name: 'Скачать PDF' }));
+      await additionalAction(user, 'Скачать PDF');
       await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
       expect(screen.queryByText('Не удалось подготовить PDF')).not.toBeInTheDocument();
     });
@@ -275,7 +281,7 @@ describe('WhiteboardPanel', () => {
       const user = userEvent.setup();
       mount('host');
       await screen.findByTestId('canvas');
-      await user.click(screen.getByRole('button', { name: 'Следовать за учителем' }));
+      await additionalAction(user, 'Следовать за учителем');
       expect(screen.getByText('Ученики следуют за вашим экраном')).toBeInTheDocument();
     });
   });
@@ -389,7 +395,7 @@ describe('WhiteboardPanel', () => {
       const user = userEvent.setup();
       mount('host', { ...notebook, liveBackground: background() });
       await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
-      await user.click(screen.getByRole('button', { name: 'Линия' }));
+      await additionalAction(user, 'Линия');
       expect(canvasProps.tool).toBe('line');
       await act(async () => { await canvasProps.onCommit({ kind: 'line', x1: 0.1, y1: 0.2, x2: 0.8, y2: 0.7 }); });
       expect(api.appendAnnotation).toHaveBeenCalledWith('c1', 'doc-0', expect.any(String), 'ADD', expect.stringContaining('"kind":"line"'));
@@ -416,7 +422,7 @@ describe('WhiteboardPanel', () => {
     it('exports the current composited camera frame as a one-page PDF', async () => {
       const user = userEvent.setup();
       mount('host', { ...notebook, liveBackground: background() });
-      await user.click(screen.getByRole('button', { name: 'Скачать кадр PDF' }));
+      await additionalAction(user, 'Скачать кадр PDF');
       await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
       expect(canvasSnapshot).toHaveBeenCalledWith('image/jpeg');
       expect(exportBoardPdf).not.toHaveBeenCalled();

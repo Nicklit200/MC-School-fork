@@ -88,6 +88,8 @@ interface Props {
   navigationLocked?: boolean;
   /** Rendered page content (PDF page) under the marks. */
   background?: CanvasImageSource | null;
+  /** Page fill shares the background geometry and cannot be removed by erasers. */
+  paperColor?: string | null;
   /** Redraw only the background layer while a live video/canvas is visible. */
   backgroundLive?: boolean;
   active?: boolean;
@@ -133,6 +135,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     onViewChange,
     navigationLocked = false,
     background = null,
+    paperColor = null,
     backgroundLive = false,
     active = true,
     lasers = [],
@@ -788,6 +791,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         {/* The page sits on its own layer: partial-erase marks cut through the
             marks layer only and must never punch holes in the PDF. */}
         <Layer ref={backgroundLayerRef} listening={false}>
+          {paperColor && <Rect x={backgroundBox.left} y={backgroundBox.top} width={backgroundBox.width} height={backgroundBox.height} fill={paperColor} listening={false} />}
           {background && (
             <KonvaImage
               image={background as CanvasImageSource & HTMLImageElement}

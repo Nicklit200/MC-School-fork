@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import '../../styles/floating-islands.css';
+import '../../styles/whiteboard-original-v3.css';
 import { ApiRequestError } from '../../api/client';
 import { onlineClassesApi, type AnnotationTargetType } from '../../api/onlineClasses';
 import { useI18n } from '../../i18n/I18nContext';
-import { BoardToolbar } from './BoardToolbar';
+import { BoardToolbar, BoardToolbarIcon } from './BoardToolbar';
 import { downloadBlob, exportBoardPdf } from './boardExport';
 import {
   DEFAULT_TOOL_SETTINGS,
@@ -88,6 +89,7 @@ export function WhiteboardPanel({
   canAnnotate = true,
   document: providedPdfDocument = null,
   liveBackground = null,
+  fileAction,
   hostActions,
   overlay,
   active = true,
@@ -108,6 +110,8 @@ export function WhiteboardPanel({
   document?: PdfDoc | null;
   /** Live camera frame rendered in the same coordinate system as the marks. */
   liveBackground?: LiveBoardBackground | null;
+  /** The classroom's real workbook upload action. */
+  fileAction?: ReactNode;
   /** Extra teacher-only buttons next to "clear all" (e.g. Answers). */
   hostActions?: ReactNode;
   /** Floats over the board area, below the toolbar. */
@@ -121,7 +125,7 @@ export function WhiteboardPanel({
   lessonDocumentsStatus?: string | null;
   lessonDocumentsError?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const camera = targetType === 'NOTEBOOK_CAMERA';
   const pdfDocument = camera ? null : providedPdfDocument;
   const cameraBackground = camera && liveBackground && Number.isFinite(liveBackground.width) && liveBackground.width > 0
@@ -386,9 +390,6 @@ export function WhiteboardPanel({
       >
         {t('onlineClass.whiteboard.clearAll')}
       </button>
-      <button type="button" disabled={savingLessonDocuments} onClick={() => onSaveLessonDocuments ? onSaveLessonDocuments() : void saveSnapshot()}>
-        {onSaveLessonDocuments ? (savingLessonDocuments ? 'Сохраняем документы…' : 'Сохранить документы урока') : t('onlineClass.whiteboard.saveSnapshot')}
-      </button>
       {!personal && !camera && (
         <button
           type="button"
@@ -399,7 +400,6 @@ export function WhiteboardPanel({
           {t('onlineClass.board.follow')}
         </button>
       )}
-      {hostActions}
     </>
   ) : null;
 
@@ -410,7 +410,7 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className={`whiteboard school-islands-board${camera ? ' whiteboard--camera' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
+    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
       <div className="whiteboard__topline">
       {canAnnotate && (
         <BoardToolbar
@@ -428,6 +428,16 @@ export function WhiteboardPanel({
           onRedo={() => void board.redo()}
           onClearMine={() => void board.clearMine()}
           hostActions={hostButtons}
+          fileAction={fileAction}
+          primaryActions={isHost ? <>
+            {hostActions}
+            <button type="button" className="board-toolbar__action" disabled={savingLessonDocuments}
+              aria-label={onSaveLessonDocuments ? (savingLessonDocuments ? 'Сохраняем документы…' : 'Сохранить документы урока') : t('onlineClass.whiteboard.saveSnapshot')}
+              title={onSaveLessonDocuments ? 'Сохранить документы урока' : t('onlineClass.whiteboard.saveSnapshot')}
+              onClick={() => onSaveLessonDocuments ? onSaveLessonDocuments() : void saveSnapshot()}>
+              <BoardToolbarIcon name="save" />
+            </button>
+          </> : undefined}
           sharedActions={
             <button type="button" onClick={() => void exportPdf()} disabled={exporting}>
               {exporting ? t('onlineClass.whiteboard.exporting') : camera ? 'Скачать кадр PDF' : t('onlineClass.whiteboard.exportPdf')}
@@ -477,6 +487,7 @@ export function WhiteboardPanel({
           onViewChange={setView}
           navigationLocked={locked}
           background={camera ? cameraBackground?.source ?? null : renderedPage?.canvas ?? null}
+          paperColor={camera ? null : '#fffefa'}
           backgroundLive={camera && Boolean(cameraBackground)}
           active={active}
           lasers={camera ? [] : lasers}
@@ -499,6 +510,7 @@ export function WhiteboardPanel({
           >
             −
           </button>
+          <span className="whiteboard__zoom-label">{view.zoom === 1 ? (language === 'DE' ? 'Einpassen' : 'По размеру') : `${Math.round(view.zoom * 100)}%`}</span>
           <button
             type="button"
             onClick={() => zoomBy(ZOOM_BUTTON_FACTOR)}

@@ -1,0 +1,260 @@
+/* The supplied Original v3 board: dark chrome, a single tool island and real
+   application controls. Scope it to the classroom and board, not the cabinet. */
+.online-class-room.online-class-room--original-v3,
+.whiteboard--original-v3.school-islands-board {
+  --v3-bg:#191c1e;
+  --v3-panel:#272b2f;
+  --v3-raised:#383e43;
+  --v3-edge:#444b51;
+  --v3-text:#eef2f1;
+  --v3-muted:#abb4ba;
+  --v3-orange:#ffb47c;
+  --v3-selected:#4a3325;
+  --v3-paper:#fffefa;
+  --surface:var(--v3-bg);
+  --border:var(--v3-edge);
+  --muted:var(--v3-muted);
+  --text:var(--v3-text);
+  --orange:var(--v3-orange);
+  color-scheme:dark;
+  color:var(--v3-text);
+  background:var(--v3-bg);
+  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+.online-class-room.online-class-room--original-v3.lk-room-container {
+  position:fixed; inset:0; height:100dvh; overflow:hidden;
+  --lk-bg:var(--v3-bg); --lk-fg:var(--v3-text);
+  --lk-control-bg:#202427; --lk-control-hover-bg:var(--v3-raised);
+}
+.online-class-room--original-v3 .online-class-room__topbar {
+  flex:0 0 auto; min-height:52px; padding:8px 18px; gap:10px;
+  background:#202427; border-bottom:1px solid #30363b; overflow-x:auto;
+  color:var(--v3-text);
+}
+.online-class-room--original-v3 .online-class-room__lesson-brand {
+  display:flex; align-items:center; gap:12px; margin-right:0; min-width:120px;
+}
+.online-class-room--original-v3 .online-class-room__lesson-brand img { width:30px; height:30px; object-fit:contain; border-radius:9px; }
+.online-class-room--original-v3 .online-class-room__lesson-brand strong {
+  display:block; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:13px; font-weight:600; line-height:1.3;
+}
+.online-class-room--original-v3 .online-class-room__lesson-brand span { display:block; font-size:10px; color:var(--v3-muted); }
+.online-class-room--original-v3 .online-class-room__topbar button,
+.online-class-room--original-v3 .online-class-room__topbar select {
+  height:34px; min-height:34px; padding:5px 10px; border:1px solid #3b4348;
+  border-radius:9px; color:var(--v3-muted); background:transparent; box-shadow:none; font-size:11px;
+}
+.online-class-room--original-v3 .online-class-room__topbar button[aria-pressed='true'] { color:var(--v3-orange); background:var(--v3-selected); }
+.online-class-room--original-v3 .online-class-room__topbar .board-switcher { margin:0; }
+.online-class-room--original-v3 .online-class-room__topbar .online-class-room__videos-toggle { margin-left:auto; }
+.online-class-room--original-v3 .board-switcher select { max-width:220px; color-scheme:dark; }
+.online-class-room--original-v3 .online-class-room__status { font-size:10px; color:var(--v3-muted); }
+.online-class-room--original-v3 .online-class-room__stage { flex:1 1 0%; min-width:0; min-height:0; background:var(--v3-bg); }
+.online-class-room--original-v3 .online-class-room__main { min-width:0; min-height:0; }
+.online-class-room--original-v3 .online-class-room__videos-drawer { background:#202427; border-left:1px solid #3b4348; }
+.online-class-room--original-v3 .online-class-room__drawer { background:var(--v3-panel); color:var(--v3-text); }
+.online-class-room--original-v3 .online-class-room__controls {
+  position:relative; inset:auto; flex:0 0 auto; min-height:58px; width:100%;
+  padding:10px 18px max(10px,env(safe-area-inset-bottom)); gap:7px;
+  background:#202427; border-top:1px solid #343c41; pointer-events:auto;
+  overflow-x:auto; overflow-y:hidden; isolation:auto;
+}
+.online-class-room--original-v3 .online-class-room__controls > .lk-control-bar { gap:7px; }
+.online-class-room--original-v3 .online-class-room__controls .lk-button,
+.online-class-room--original-v3 .online-class-room__controls > button:not([class*='lk-']) {
+  height:32px; min-height:32px; padding:6px 9px; border:1px solid #3d464d;
+  border-radius:9px; box-shadow:none; color:var(--v3-muted); background:transparent;
+  font-size:11px; font-weight:400;
+}
+.online-class-room--original-v3 .online-class-room__controls .lk-button:hover,
+.online-class-room--original-v3 .online-class-room__controls > button:hover { background:var(--v3-raised); }
+.online-class-room--original-v3 .online-class-room__controls .lk-button[aria-pressed='true'],
+.online-class-room--original-v3 .online-class-room__controls > button[aria-pressed='true'] { background:var(--v3-raised); color:var(--v3-text); }
+.online-class-room--original-v3 .online-class-room__controls > .online-class-room__leave { margin-left:auto; }
+.online-class-room--original-v3 .online-class-room__controls > .online-class-room__end { color:#e5a6a4!important; border-color:#62474b!important; }
+.online-class-room--original-v3 .online-class-room__controls .lk-device-menu { bottom:calc(62px + env(safe-area-inset-bottom))!important; }
+.online-class-room--original-v3 :focus-visible,
+.whiteboard--original-v3.school-islands-board :focus-visible { outline:2px solid var(--v3-orange); outline-offset:3px; }
+
+/* Reserve space for both tool rows even while settings are closed. Opening or
+   dismissing a menu must never resize the canvas in the middle of a stroke. */
+.whiteboard--original-v3.school-islands-board { position:relative; min-width:0; min-height:0; }
+.whiteboard--original-v3.school-islands-board .whiteboard__stage { padding:0; background:var(--v3-bg); background-image:none; }
+.whiteboard--original-v3.school-islands-board .whiteboard__surface {
+  position:absolute; inset:132px 30px 68px; width:calc(100% - 60px); height:calc(100% - 200px);
+  background:var(--v3-bg); border-radius:2px; color-scheme:light;
+}
+.whiteboard--original-v3.whiteboard--camera .whiteboard__surface { inset:0; width:100%; height:100%; border-radius:0; }
+.whiteboard--original-v3.school-islands-board .whiteboard__topline {
+  position:absolute; top:16px; left:14px; right:14px; width:auto; min-height:44px;
+  padding:0; display:flex; align-items:flex-start; justify-content:center; background:transparent;
+  border:0; box-shadow:none; z-index:9; pointer-events:none; overflow:visible;
+}
+.whiteboard--original-v3.school-islands-board .whiteboard__topline .board-toolbar--original {
+  position:relative; display:block; flex:0 1 auto; width:max-content; max-width:100%;
+  min-width:0; padding:0; margin:0; overflow:visible; background:transparent; border:0; box-shadow:none;
+  color:var(--v3-text); pointer-events:auto;
+}
+.whiteboard--original-v3 .board-toolbar__island {
+  display:flex; align-items:center; justify-content:center; gap:3px; width:max-content; max-width:100%;
+  height:44px; min-height:44px; padding:5px 7px; border:1px solid #4b5359;
+  border-radius:13px; background:#2a2f33f5; box-shadow:0 6px 20px #0003;
+}
+.whiteboard--original-v3.school-islands-board .board-toolbar button {
+  display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+  min-width:32px; width:32px; height:32px; min-height:32px; padding:5px;
+  border:0; border-radius:8px; background:transparent; box-shadow:none;
+  color:#c5cdd2!important; opacity:1; font-size:11px; font-weight:400;
+}
+.whiteboard--original-v3.school-islands-board .board-toolbar button:hover { background:var(--v3-raised); color:var(--v3-text)!important; }
+.whiteboard--original-v3.school-islands-board .board-toolbar button.is-active,
+.whiteboard--original-v3.school-islands-board .board-toolbar button[aria-pressed='true'],
+.whiteboard--original-v3.school-islands-board .board-toolbar button[aria-checked='true'] { background:var(--v3-selected); color:var(--v3-orange)!important; }
+.whiteboard--original-v3.school-islands-board .board-toolbar button:disabled { opacity:.35; cursor:default; }
+.whiteboard--original-v3 .board-toolbar svg { width:18px; height:18px; flex-shrink:0; pointer-events:none; }
+.whiteboard--original-v3 .board-toolbar__divider { width:1px; height:19px; flex:0 0 1px; margin:0 4px; background:#50585f; }
+.whiteboard--original-v3 .board-toolbar__file-action,
+.whiteboard--original-v3 .board-toolbar__primary-actions { display:flex; align-items:center; gap:3px; }
+.whiteboard--original-v3 .board-toolbar__file-action { border-left:1px solid #50585f; padding-left:8px; margin-left:4px; }
+.whiteboard--original-v3 .board-toolbar__more { position:relative; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__settings {
+  position:absolute; top:52px; left:50%; right:auto; transform:translateX(-50%);
+  display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; gap:10px; width:max-content; max-width:calc(100vw - 32px);
+  min-height:40px; padding:4px 9px; margin:0; border:1px solid #4b5359; border-radius:11px;
+  color:var(--v3-text); background:#2a2f33f5; box-shadow:0 5px 18px #0003; z-index:11;
+}
+.whiteboard--original-v3 .board-toolbar__settings-name { font-size:10px; color:var(--v3-muted); white-space:nowrap; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__color-picker { border:0; border-radius:0; background:transparent; padding:0; box-shadow:none; }
+.whiteboard--original-v3.school-islands-board .board-toolbar button.board-toolbar__color-trigger { min-width:30px; width:30px; height:30px; min-height:30px; padding:4px; touch-action:none; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__color-preview { display:block; width:21px; height:21px; flex:0 0 21px; border:2px solid #f3f4ef; border-radius:50%; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__size {
+  display:flex; flex-direction:row; align-items:center; gap:6px; min-height:0; padding:0; margin:0;
+  border:0; border-radius:0; background:transparent; color:var(--v3-muted)!important; box-shadow:none;
+  font-size:10px; font-weight:400; white-space:nowrap;
+}
+.whiteboard--original-v3 .board-toolbar__size output { width:15px; color:var(--v3-text); font-variant-numeric:tabular-nums; }
+.whiteboard--original-v3 .board-toolbar__size input { width:66px; height:22px; margin:0; accent-color:var(--v3-orange); }
+.whiteboard--original-v3 .board-toolbar__input-mode { display:flex; gap:2px; border-left:1px solid #50585f; padding-left:9px; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__input-mode button,
+.whiteboard--original-v3.school-islands-board .board-toolbar__eraser-modes button { width:auto; height:28px; min-height:28px; padding:5px 8px; border-radius:6px; font-size:10px; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__input-mode button.is-active { background:#454d53; color:var(--v3-text)!important; }
+.whiteboard--original-v3 .board-toolbar__eraser-modes { display:flex; gap:2px; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__text-style { display:flex; align-items:center; gap:6px; padding:0; border:0; background:transparent; box-shadow:none; }
+.whiteboard--original-v3 .board-toolbar__text-control { color:var(--v3-muted); font-size:9px; }
+.whiteboard--original-v3 .board-toolbar__text-control select,
+.whiteboard--original-v3 .board-toolbar__text-control input { max-width:160px; height:26px; padding:3px; color:var(--v3-text); background:#383e43; border:1px solid #50585f; border-radius:6px; font-size:10px; }
+.whiteboard--original-v3 .board-toolbar__text-control input { width:48px; }
+.whiteboard--original-v3 .board-toolbar__more-menu {
+  position:absolute; top:41px; right:0; z-index:20; width:230px; max-width:calc(100vw - 24px);
+  max-height:min(440px,65dvh); overflow:auto; padding:8px; background:var(--v3-panel);
+  border:1px solid #50595f; border-radius:12px; box-shadow:0 10px 30px #0005;
+}
+.whiteboard--original-v3 .board-toolbar__extra-tools { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; justify-items:center; }
+.whiteboard--original-v3 .board-toolbar__more-actions { display:flex; flex-direction:column; gap:3px; margin-top:8px; padding-top:8px; border-top:1px solid #444b51; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__more-actions button { width:100%; height:auto; min-height:32px; justify-content:flex-start; gap:7px; text-align:left; white-space:normal; padding:7px; }
+body > .board-toolbar__color-popover[role='dialog'] { display:block; width:210px; height:auto; padding:14px; color:#eef2f1; background:#272b2f; border:1px solid #50595f; border-radius:12px; box-shadow:0 12px 30px #0006; z-index:110; }
+body > .board-toolbar__color-popover[role='dialog'] .board-toolbar__swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding:0; border:0; background:transparent; box-shadow:none; }
+body > .board-toolbar__color-popover[role='dialog'] .board-toolbar__swatches button { width:27px!important; min-width:27px; height:27px!important; min-height:27px; padding:0; border:2px solid #fff; border-radius:50%; }
+body > .board-toolbar__color-popover[role='dialog'] .board-toolbar__swatches button.is-active { outline:2px solid #ffb47c; outline-offset:3px; }
+body > .board-toolbar__color-popover[role='dialog'] .board-toolbar__custom-color { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:14px; padding-top:10px; border-top:1px solid #444b51; font-size:10px; color:#abb4ba; }
+body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:28px; padding:0; border:0; background:transparent; }
+
+.whiteboard--original-v3.school-islands-board .whiteboard__stage .whiteboard__topline-pages,
+.whiteboard--original-v3.school-islands-board .whiteboard__stage .whiteboard__zoom { position:absolute; bottom:17px; padding:3px; border:1px solid #454e55; border-radius:9px; background:#292f33e8; color:var(--v3-text); box-shadow:none; }
+.whiteboard--original-v3.school-islands-board .whiteboard__topline-pages { left:20px; }
+.whiteboard--original-v3.school-islands-board .whiteboard__zoom { right:20px; display:flex; align-items:center; gap:3px; }
+.whiteboard--original-v3.school-islands-board .whiteboard__topline-pages .page-nav { gap:3px; padding:0; border:0; background:transparent; box-shadow:none; color:var(--v3-text); }
+.whiteboard--original-v3.school-islands-board .whiteboard__topline-pages .page-nav button,
+.whiteboard--original-v3.school-islands-board .whiteboard__zoom button { width:28px; min-width:28px; height:28px; min-height:28px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--v3-muted); font-size:17px; }
+.whiteboard--original-v3.school-islands-board .whiteboard__topline-pages .page-nav__label,
+.whiteboard--original-v3 .whiteboard__zoom-label { color:var(--v3-text); padding:0 5px; font-size:10px; white-space:nowrap; }
+.whiteboard--original-v3.school-islands-board .whiteboard__notice:not(:empty) { top:112px; left:16px; right:auto; max-width:calc(100% - 32px); padding:3px 8px; font-size:10px; background:#272b2ff5; color:var(--v3-muted); border:1px solid #444b51; border-radius:7px; box-shadow:none; z-index:8; }
+.whiteboard--original-v3 .whiteboard__text-input { color:#29333c; background:#fffefa; border-color:#df6835; }
+.online-class-room--original-v3 .student-workspaces { padding:8px; background:var(--v3-bg); }
+.online-class-room--original-v3 .student-workspace { border-color:#3b4348; border-radius:8px; background:var(--v3-bg); }
+.online-class-room--original-v3 .online-class-room__student-tile-header { color:var(--v3-text); background:#202427; border-color:#3b4348; font-size:11px; }
+.online-class-room--original-v3 .student-workspace__kind { color:var(--v3-muted); font-size:10px; }
+.online-class-room--original-v3 .online-class-room__student-tile-header button { color:var(--v3-muted); background:transparent; border-color:#444b51; font-size:10px; }
+.online-class-room--original-v3 .student-workspaces--overview .whiteboard--original-v3 .whiteboard__surface { inset:8px; width:calc(100% - 16px); height:calc(100% - 16px); }
+.online-class-room--original-v3 .student-workspaces--overview .whiteboard--camera .whiteboard__surface { inset:0; width:100%; height:100%; }
+.online-class-room--original-v3 .online-class-room__notebook { padding:12px; background:var(--v3-bg); }
+
+/* Answers remain a separate, authorized PDF column with independent scrolling. */
+.online-class-room--original-v3 .online-class-room__stage > .answers-panel,
+.online-class-room--original-v3 .online-class-room__stage > .classroom-solutions {
+  flex:0 0 204px; width:204px; max-width:none; height:auto; min-height:0; padding:16px 12px;
+  display:flex; flex-direction:column; gap:12px; background:#222629; color:var(--v3-text);
+  border:0; border-right:1px solid #3b4348; border-radius:0;
+}
+.online-class-room--original-v3 .answers-panel__heading { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:28px; }
+.online-class-room--original-v3 .answers-panel__heading strong,
+.online-class-room--original-v3 .classroom-homework__header strong { font-size:11px; line-height:1.35; font-weight:600; }
+.online-class-room--original-v3 .answers-panel .answers-panel__close { position:static; width:26px; height:26px; min-height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--v3-muted); box-shadow:none; }
+.online-class-room--original-v3 .answers-panel__private { margin:0; font-size:9px; color:var(--v3-muted); }
+.online-class-room--original-v3 .answers-panel .answers-panel__scroll { flex:1 1 0%; min-height:0; width:100%; padding:0; background:var(--v3-paper); border-radius:2px; overflow:auto; }
+.online-class-room--original-v3 .answers-panel .answers-panel__page { display:block; max-width:none; margin:0; border:0; box-shadow:none; }
+.online-class-room--original-v3 .answers-panel .answers-panel__controls { padding:0; border:0; background:transparent; display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+.online-class-room--original-v3 .answers-panel .page-nav { border:0; padding:0; color:var(--v3-muted); background:transparent; box-shadow:none; font-size:9px; }
+.online-class-room--original-v3 .answers-panel__zoom { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--v3-muted); }
+.online-class-room--original-v3 .answers-panel .page-nav button,
+.online-class-room--original-v3 .answers-panel__zoom button { min-width:28px; width:28px; height:28px; min-height:28px; border:1px solid #444b51; border-radius:7px; background:transparent; color:var(--v3-text); padding:0; }
+.online-class-room--original-v3 .classroom-homework__header { padding:0; border:0; background:transparent; color:var(--v3-text); }
+.online-class-room--original-v3 .classroom-solutions .classroom-solutions__toolbar { padding:0; gap:6px; background:transparent; border:0; }
+.online-class-room--original-v3 .classroom-solutions__toolbar button { padding:5px; border:1px solid #444b51; border-radius:7px; background:transparent; color:var(--v3-muted); font-size:10px; }
+.online-class-room--original-v3 .classroom-solutions__scroller { flex:1 1 0%; min-height:0; padding:0; background:var(--v3-paper); }
+.online-class-room--original-v3 .classroom-solutions__sheet { padding:0; color:#29333c; }
+
+@media(min-width:901px) {
+  .online-class-room--original-v3 .online-class-room__videos-drawer.is-open { position:relative; flex:0 0 clamp(160px,23vw,250px); }
+}
+@media(max-width:1100px) {
+  .online-class-room--original-v3 .online-class-room__topbar { padding:8px 14px; }
+  .online-class-room--original-v3 .online-class-room__stage > .answers-panel,
+  .online-class-room--original-v3 .online-class-room__stage > .classroom-solutions { width:188px; flex-basis:188px; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__surface { left:24px; right:24px; width:calc(100% - 48px); }
+  .whiteboard--original-v3.whiteboard--camera .whiteboard__surface { left:0; right:0; width:100%; }
+}
+@media(orientation:portrait) and (min-width:601px) and (max-width:1100px), (min-width:601px) and (max-width:900px) {
+  .online-class-room--original-v3 .online-class-room__stage > .answers-panel,
+  .online-class-room--original-v3 .online-class-room__stage > .classroom-solutions { width:172px; flex-basis:172px; padding:14px 10px; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__surface { left:18px; right:18px; width:calc(100% - 36px); }
+  .whiteboard--original-v3.whiteboard--camera .whiteboard__surface { left:0; right:0; width:100%; }
+}
+@media(max-width:600px) {
+  .online-class-room--original-v3 .online-class-room__topbar { padding:8px 12px; gap:8px; }
+  .online-class-room--original-v3 .online-class-room__lesson-brand { gap:0; min-width:80px; }
+  .online-class-room--original-v3 .online-class-room__lesson-brand img { display:none; }
+  .online-class-room--original-v3 .online-class-room__lesson-brand strong { max-width:110px; font-size:12px; }
+  .online-class-room--original-v3 .online-class-room__status { display:none; }
+  .online-class-room--original-v3 .board-switcher select { max-width:150px; font-size:10px; }
+  .online-class-room--original-v3 .online-class-room__stage { flex-direction:column; }
+  .online-class-room--original-v3 .online-class-room__stage > .answers-panel,
+  .online-class-room--original-v3 .online-class-room__stage > .classroom-solutions { flex:0 1 240px; width:100%; max-height:32%; padding:10px 12px; gap:6px; border-right:0; border-bottom:1px solid #3b4348; }
+  .online-class-room--original-v3 .answers-panel .answers-panel__scroll,
+  .online-class-room--original-v3 .classroom-solutions__scroller { min-height:60px; max-height:160px; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__topline { top:14px; left:8px; right:8px; }
+  .whiteboard--original-v3.school-islands-board .board-toolbar__island { height:40px; min-height:40px; gap:1px; padding:4px 5px; border-radius:11px; }
+  .whiteboard--original-v3.school-islands-board .board-toolbar__island button { min-width:28px; width:28px; height:30px; min-height:30px; padding:4px; }
+  .whiteboard--original-v3 .board-toolbar__file-action { padding-left:5px; margin-left:2px; }
+  .whiteboard--original-v3 .board-toolbar__divider { margin:0 3px; }
+  .whiteboard--original-v3.school-islands-board .board-toolbar__settings { top:48px; flex-wrap:wrap; justify-content:center; gap:5px 8px; width:max-content; max-width:calc(100vw - 24px); padding:7px 10px; }
+  .whiteboard--original-v3 .board-toolbar__input-mode { justify-content:center; border-left:0; border-top:1px solid #50585f; padding:5px 0 0; flex:1 0 100%; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__surface { inset:152px 12px 64px; width:calc(100% - 24px); height:calc(100% - 216px); }
+  .whiteboard--original-v3.whiteboard--camera .whiteboard__surface { inset:0; width:100%; height:100%; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__stage .whiteboard__topline-pages { left:10px; bottom:14px; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__stage .whiteboard__zoom { right:10px; bottom:14px; }
+  .online-class-room--original-v3 .online-class-room__controls { padding:8px 12px max(8px,env(safe-area-inset-bottom)); }
+  .online-class-room--original-v3 .online-class-room__controls .lk-button,
+  .online-class-room--original-v3 .online-class-room__controls > button { font-size:10px; padding:5px 7px; }
+}
+@media(pointer:coarse) and (min-width:601px) {
+  .whiteboard--original-v3.school-islands-board .board-toolbar__island { height:auto; min-height:44px; }
+  .whiteboard--original-v3.school-islands-board .board-toolbar__island button { min-width:34px; width:34px; min-height:36px; height:36px; }
+  .whiteboard--original-v3.school-islands-board .whiteboard__topline-pages button,
+  .whiteboard--original-v3.school-islands-board .whiteboard__zoom button { min-width:36px; width:36px; min-height:36px; height:36px; }
+}
+@media(max-width:360px) {
+  .whiteboard--original-v3.school-islands-board .board-toolbar__island button { min-width:24px; width:24px; padding:3px; }
+  .whiteboard--original-v3 .board-toolbar__island svg { width:16px; height:16px; }
+}

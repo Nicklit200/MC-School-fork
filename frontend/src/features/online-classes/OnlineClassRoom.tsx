@@ -25,6 +25,8 @@ import { ALL_STUDENT_BOARDS_ID, BoardSwitcher } from './BoardSwitcher';
 import { SHARED_BOARD_ID, personalBoardId } from './boards';
 import { useStudentRoster } from './useStudentRoster';
 import { StudentWorkspaces } from './StudentWorkspaces';
+import { BoardToolbarIcon } from './BoardToolbar';
+import '../../styles/whiteboard-original-v3.css';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
 import { HomeworkDrawer } from './HomeworkDrawer';
@@ -105,6 +107,7 @@ function ConnectionStatus() {
  */
 function RoomBody({
   classId,
+  lessonTitle,
   currentUserId,
   eventId,
   connection,
@@ -117,6 +120,7 @@ function RoomBody({
   onStateChanged,
 }: {
   classId: string;
+  lessonTitle?: string;
   currentUserId: string;
   eventId?: string;
   connection: OnlineClassConnection;
@@ -148,7 +152,8 @@ function RoomBody({
     return () => { alive = false; };
   }, [classId, connection.host, connectionState, transcriptionAvailable, transcriptionState, onStateChanged]);
   const [panelsOpen, setPanelsOpen] = useState(false);
-  const [videosOpen, setVideosOpen] = useState(true);
+  const [videosOpen, setVideosOpen] = useState(false);
+  const materialInput = useRef<HTMLInputElement>(null);
   const [homeworkOpen, setHomeworkOpen] = useState(false);
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
@@ -338,10 +343,19 @@ function RoomBody({
   useEffect(() => {
     if (answers.open) setHomeworkOpen(false);
   }, [answers.open]);
+  const fileAction = connection.host ? <button type="button" className="board-toolbar__action"
+    aria-label={materialBusy ? 'Загрузка…' : 'Добавить PDF / Фото'}
+    title="Добавить PDF / Фото" disabled={materialBusy} onClick={() => materialInput.current?.click()}>
+    <BoardToolbarIcon name="file" />
+  </button> : undefined;
 
   return (
     <>
       <div className="online-class-room__topbar">
+        <div className="online-class-room__lesson-brand">
+          <img src="/brand/Mindcrafti_Logo_M_OFFICIAL.webp" alt="Mindcrafti" />
+          <div><strong>{lessonTitle || t('onlineClass.title')}</strong><span>{language === 'DE' ? 'Unterrichtstafel' : 'Доска урока'}</span></div>
+        </div>
         <button type="button" className="classroom-homework-toggle"
           onClick={() => {
             if (!homeworkOpen) answers.close();
@@ -384,14 +398,6 @@ function RoomBody({
           </svg>
           {language === 'DE' ? 'Heft verbinden' : 'Подключить тетрадь'}
         </button>}
-        {connection.host && (
-          <label title="Загрузить PDF или фото на доску" style={{ cursor: materialBusy ? 'wait' : 'pointer', padding: '6px 10px', borderRadius: 8, background: '#1d4ed8', color: 'white' }}>
-            {materialBusy ? 'Загрузка…' : '＋ Добавить PDF / Фото'}
-            <input type="file" multiple accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" disabled={materialBusy}
-              style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
-              onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files); event.target.value = ''; }} />
-          </label>
-        )}
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
         <ConnectionStatus />
         {archiveNotice && <span role={archiveError ? 'alert' : 'status'} style={{fontSize:12,color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>}
@@ -421,6 +427,9 @@ function RoomBody({
           onChange={selectBoard}
         />
       </div>
+      {connection.host && <input ref={materialInput} type="file" multiple accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
+        disabled={materialBusy} hidden
+        onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files); event.target.value = ''; }} />}
 
       <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showNotebook ? ' online-class-room__stage--notebook' : ''}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
@@ -454,6 +463,7 @@ function RoomBody({
                     // Everyone in the class may draw, on the shared board and on their own.
                     canAnnotate
                     document={boardDocument}
+                    fileAction={visible ? fileAction : undefined}
                     active={visible}
                     observedPage={studentPages[boardId]}
                     onSaveLessonDocuments={connection.host ? archiveBoards : undefined}
@@ -463,7 +473,7 @@ function RoomBody({
                     // Answers belong to whichever board the teacher is looking at.
                     hostActions={
                       connection.host && visible ? (
-                        <AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} />
+                        <AnswersButton compact status={answers.status} open={answers.open} onToggle={answers.toggle} />
                       ) : undefined
                     }
                   />
@@ -490,11 +500,12 @@ function RoomBody({
                 canAnnotate={!compact}
                 active={active}
                 document={boardDocument}
+                fileAction={active && !compact ? fileAction : undefined}
                 onSaveLessonDocuments={!compact ? archiveBoards : undefined}
                 savingLessonDocuments={archiving}
                 lessonDocumentsStatus={archiveNotice}
                 lessonDocumentsError={archiveError}
-                hostActions={active && !compact ? <AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
+                hostActions={active && !compact ? <AnswersButton compact status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
               />
             </Suspense>}
             renderCameraBoard={(studentId, active, compact, source) => <Suspense fallback={null}>
@@ -506,8 +517,9 @@ function RoomBody({
                 targetId={personalBoardId(studentId)}
                 canAnnotate={!compact}
                 active={active}
+                fileAction={active && !compact ? fileAction : undefined}
                 liveBackground={source ? { source: source.video, width: source.width, height: source.height } : null}
-                hostActions={active && !compact ? <AnswersButton status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
+                hostActions={active && !compact ? <AnswersButton compact status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
               />
             </Suspense>}
           />}
@@ -613,6 +625,7 @@ function RoomBody({
  */
 export function OnlineClassRoom({
   classId,
+  lessonTitle,
   currentUserId,
   eventId,
   connection,
@@ -628,6 +641,7 @@ export function OnlineClassRoom({
   onStateChanged,
 }: {
   classId: string;
+  lessonTitle?: string;
   currentUserId: string;
   /** Calendar event of the lesson; used to find the teacher's bound answers file. */
   eventId?: string;
@@ -676,10 +690,11 @@ export function OnlineClassRoom({
         onConnectionLost(reason == null ? undefined : String(reason), connectedSinceMount.current);
       }}
       data-lk-theme="default"
-      className="online-class-room"
+      className="online-class-room online-class-room--original-v3"
     >
       <RoomBody
         classId={classId}
+        lessonTitle={lessonTitle}
         currentUserId={currentUserId}
         eventId={eventId}
         connection={connection}

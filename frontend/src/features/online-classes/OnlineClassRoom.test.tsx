@@ -92,6 +92,7 @@ vi.mock('./WhiteboardPanel', () => ({
     boardProps.push(props);
     return (
       <section data-testid={`board-${props.targetId}${props.targetType === 'NOTEBOOK_CAMERA' ? '-camera' : ''}`} data-active={String(props.active)}>
+        {props.fileAction}
         {props.hostActions}
       </section>
     );
@@ -137,6 +138,17 @@ describe('PDF upload contract', () => {
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([]);
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
     vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 2 });
+  });
+
+  it('opens the real workbook picker from the compact board action', async () => {
+    const view = mount(true, { lessonTitle: 'Алгебра' });
+    const action = await screen.findByRole('button', { name: 'Добавить PDF / Фото' });
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    const picker = vi.spyOn(input, 'click').mockImplementation(() => undefined);
+    await userEvent.click(action);
+    expect(picker).toHaveBeenCalledOnce();
+    expect(screen.getByText('Алгебра')).toBeInTheDocument();
+    expect(lessonPreparationApi.appendWorkbook).not.toHaveBeenCalled();
   });
 
   it('uploads a PDF and verifies that the classroom can read it', async () => {
@@ -201,7 +213,7 @@ describe('PDF upload contract', () => {
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(['pdf'], 'large.pdf', { type: 'application/pdf' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 413');
-    await waitFor(() => expect(screen.getByText('＋ Добавить PDF / Фото')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Добавить PDF / Фото' })).toBeEnabled());
   });
 });
 
@@ -311,6 +323,7 @@ describe('OnlineClassRoom', () => {
 
   it('shows the camera column next to the board', async () => {
     mount(false);
+    await userEvent.click(screen.getByRole('button', { name: '‹ Видео' }));
     expect(await screen.findByRole('list', { name: 'cameras' })).toBeInTheDocument();
   });
 
@@ -330,7 +343,7 @@ describe('OnlineClassRoom', () => {
     expect(notebook).toHaveAttribute('data-teacher', 'false');
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(board).toHaveAttribute('data-active', 'false');
-    expect(screen.getByRole('list', { name: 'cameras' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'cameras', hidden: true })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     const processor = screen.getByTitle('Notebook processor');

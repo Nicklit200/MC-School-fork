@@ -64,6 +64,7 @@ export function OnlineClassPage() {
     return (
       <OnlineClassRoom
         classId={classId!}
+        lessonTitle={session.onlineClass?.title}
         currentUserId={user?.id ?? ''}
         eventId={session.onlineClass?.eventId}
         connection={session.connection}
