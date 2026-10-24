@@ -241,6 +241,53 @@ describe('WhiteboardPanel', () => {
     } finally { vi.unstubAllGlobals(); vi.stubGlobal('ResizeObserver', FakeResizeObserver); }
   });
 
+  it('selects and follows pages inside the area left uncovered by floating toolbar and footer', async () => {
+    chooseLayout('student', 'continuous');
+    let resizeList = () => {};
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(element: Element) {
+        if (element.classList.contains('whiteboard__pages')) {
+          resizeList = () => this.callback([], this as unknown as ResizeObserver);
+        }
+      }
+      disconnect() {}
+    });
+    try {
+      mount('student', { document: { pageCount: 3 } as never });
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(3));
+      const elements = Array.from(list.querySelectorAll<HTMLElement>('article'));
+      list.style.padding = '160px 10px 120px';
+      Object.defineProperties(list, {
+        clientHeight: { configurable: true, value: 600 },
+        clientWidth: { configurable: true, value: 800 },
+      });
+      elements.forEach((element, index) => Object.defineProperties(element, {
+        offsetTop: { configurable: true, value: 160 + index * 318 },
+        offsetHeight: { configurable: true, value: 294 },
+        clientHeight: { configurable: true, value: 294 },
+        clientWidth: { configurable: true, value: 780 },
+      }));
+      await act(async () => { resizeList(); });
+      // The page fits the 320px unobscured area, rather than the full screen.
+      expect(parseFloat(elements[0].style.height)).toBeLessThanOrEqual(320);
+      // More of page one exists in the physical viewport, but page two has
+      // more content visible between the toolbar and dock.
+      await act(async () => { fireEvent.scroll(list, { target: { scrollTop: 150 } }); });
+      expect(screen.getByRole('status', { name: 'Страница 2 из 3' })).toBeInTheDocument();
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => { handlers[VIEW_TOPIC]({ event: hostView({ page: 2 }), senderIdentity: 'teacher|tab' }); });
+      expect(screen.getByRole('status', { name: 'Страница 3 из 3' })).toBeInTheDocument();
+      const visibleTop = list.scrollTop + 160, visibleBottom = list.scrollTop + 600 - 120;
+      expect(elements[2].offsetTop).toBeGreaterThanOrEqual(visibleTop);
+      expect(elements[2].offsetTop + elements[2].offsetHeight).toBeLessThanOrEqual(visibleBottom);
+      expect(pageCanvasProps.get('WHITEBOARD:board-1:2')!.navigationLocked).toBe(true);
+      expect(pageCanvasProps.get('WHITEBOARD:board-1:2')!.sourceAspect).toBeNull();
+    } finally { vi.stubGlobal('ResizeObserver', FakeResizeObserver); }
+  });
+
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('uses the blank A4 default when an explicit source aspect is invalid: %s', async sourceAspect => {
     mount('host', { sourceAspect });
     await screen.findByTestId('canvas');

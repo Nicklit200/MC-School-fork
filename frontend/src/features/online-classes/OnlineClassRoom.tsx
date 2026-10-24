@@ -19,7 +19,7 @@ import { ConnectionState, Track } from 'livekit-client';
 import { useI18n } from '../../i18n/I18nContext';
 import type { ClassFeatureState, OnlineClassConnection } from '../../api/onlineClasses';
 import { ChatPanel } from './ChatPanel';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { categorizeLiveKitError, type LiveKitErrorCategory } from './livekitDiagnostics';
 import { ALL_STUDENT_BOARDS_ID, BoardSwitcher } from './BoardSwitcher';
 import { SHARED_BOARD_ID, personalBoardId } from './boards';
@@ -132,6 +132,24 @@ function RoomBody({
   onStateChanged?: () => void;
 }) {
   const { t, language } = useI18n();
+  const topbarRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const topbar = topbarRef.current, controls = controlsRef.current;
+    const room = topbar?.closest<HTMLElement>('.online-class-room');
+    if (!room || !topbar || !controls) return;
+    // The chrome overlays the board. Its actual wrapped height also keeps the
+    // first/last page, device menu and chat composer reachable on small screens.
+    const measure = () => {
+      room.style.setProperty('--classroom-header-height', `${topbar.offsetHeight}px`);
+      room.style.setProperty('--classroom-dock-height', `${controls.offsetHeight}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(topbar);
+    observer.observe(controls);
+    return () => observer.disconnect();
+  }, []);
   // Automatically start Soniox transcription when the teacher joins a live lesson.
   // Never start for a student or if the feature is unavailable, already running,
   // or deliberately stopped during this room session.
@@ -350,7 +368,7 @@ function RoomBody({
 
   return (
     <>
-      <div className="online-class-room__topbar">
+      <div ref={topbarRef} className="online-class-room__topbar">
         <div className="online-class-room__lesson-island">
           <strong>{lessonTitle || t('onlineClass.title')}</strong>
           <ConnectionStatus />
@@ -581,10 +599,11 @@ function RoomBody({
       <RoomAudioRenderer />
       <ConnectionStateToast />
 
-      <div className="online-class-room__controls">
+      <div ref={controlsRef} className="online-class-room__controls">
+        <div className="online-class-room__control-island">
         {/* Leave is handled by our own button. LiveKit's built-in Leave
             would look like an unexpected network disconnect here. */}
-        <ControlBar variation="verbose" controls={{ leave: false }} />
+        <ControlBar controls={{ leave: false }} />
         <button
           type="button"
           aria-pressed={panelsOpen}
@@ -599,6 +618,8 @@ function RoomBody({
             {t(showScreen ? 'onlineClass.room.showBoard' : 'onlineClass.room.showScreen')}
           </button>
         )}
+        </div>
+        <div className="online-class-room__control-island online-class-room__control-island--exit">
         <button type="button" className="online-class-room__leave" onClick={onLeave}>
           {t('onlineClass.leave')}
         </button>
@@ -615,6 +636,7 @@ function RoomBody({
             {t('onlineClass.end')}
           </button>
         )}
+        </div>
       </div>
     </>
   );

@@ -49,6 +49,18 @@ const INPUT_MODE_KEY = 'mc.board.inputMode';
 const boardToolPreferences = new Map<string, Record<Tool, ToolSettings>>();
 const ZOOM_BUTTON_FACTOR = 1.25;
 
+/** The part of the page list left visible between floating control islands. */
+function readScrollViewport(element: HTMLElement) {
+  const style = getComputedStyle(element);
+  const top = parseFloat(style.paddingTop) || 0;
+  const bottom = parseFloat(style.paddingBottom) || 0;
+  return {
+    top,
+    height: Math.max(0, element.clientHeight - top - bottom),
+    width: Math.max(0, element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)),
+  };
+}
+
 export interface LiveBoardBackground {
   source: CanvasImageSource;
   width: number;
@@ -243,11 +255,9 @@ export function WhiteboardPanel({
     const element = scrollRef.current;
     if (!element) return;
     const resize = () => {
-      if (element.clientHeight > 0) setPageHeight(Math.max(160, Math.round(element.clientHeight * .92)));
-      if (element.clientWidth > 0) {
-        const style = getComputedStyle(element);
-        setPageWidth(Math.max(1, element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)));
-      }
+      const viewport = readScrollViewport(element);
+      if (element.clientHeight > 0) setPageHeight(Math.max(1, Math.round(viewport.height * .92)));
+      if (element.clientWidth > 0) setPageWidth(Math.max(1, viewport.width));
     };
     resize();
     const observer = new ResizeObserver(resize);
@@ -291,7 +301,10 @@ export function WhiteboardPanel({
   }, [continuous, pages.count, active]);
   const alignCurrentPage = useCallback(() => {
     const root = scrollRef.current, element = pageElements.current.get(pagesRef.current.current);
-    if (root && element) root.scrollTop = Math.max(0, element.offsetTop - root.clientHeight * .02);
+    if (root && element) {
+      const viewport = readScrollViewport(root);
+      root.scrollTop = Math.max(0, element.offsetTop - viewport.top - viewport.height * .02);
+    }
   }, []);
   useLayoutEffect(() => {
     if (!continuous || !active) return;
@@ -312,10 +325,13 @@ export function WhiteboardPanel({
     const root = scrollRef.current;
     if (!continuous || !root || drawingPage.current !== null) return;
     if (locked) { alignCurrentPage(); return; }
-    const focus = root.scrollTop + root.clientHeight / 2;
+    const viewport = readScrollViewport(root);
+    const visibleTop = root.scrollTop + viewport.top;
+    const visibleBottom = visibleTop + viewport.height;
+    const focus = (visibleTop + visibleBottom) / 2;
     let nearest = pagesRef.current.current, distance = Infinity, mostVisible = -1;
     for (const [index, element] of pageElements.current) {
-      const visible = Math.max(0, Math.min(element.offsetTop + element.offsetHeight, root.scrollTop + root.clientHeight) - Math.max(element.offsetTop, root.scrollTop));
+      const visible = Math.max(0, Math.min(element.offsetTop + element.offsetHeight, visibleBottom) - Math.max(element.offsetTop, visibleTop));
       const next = Math.abs(element.offsetTop + element.offsetHeight / 2 - focus);
       if (visible > mostVisible || (visible === mostVisible && next < distance)) { nearest = index; distance = next; mostVisible = visible; }
     }
