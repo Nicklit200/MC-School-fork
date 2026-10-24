@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
 import { type BoardPages, ensurePageCount, type PageView, viewOf } from './boardView';
-import { VIEW_TOPIC, viewEvent, type ViewEvent } from './events';
+import { VIEW_TOPIC, isDocumentViewport, viewEvent, type DocumentViewport, type ViewEvent } from './events';
 import { type BoardSize, applyHostView, describeView, isFromHost } from './followTeacher';
 import { useClassEvents } from './useClassEvents';
 
@@ -28,6 +28,8 @@ export function useFollowTeacher({
   setPages,
   getBoardSize,
   enabled = true,
+  documentView,
+  onDocumentView,
 }: {
   classId: string;
   boardId: string;
@@ -38,24 +40,30 @@ export function useFollowTeacher({
   getBoardSize: (pageIndex?: number) => BoardSize;
   /** Off for personal boards: follow mode only ever applies to the shared board. */
   enabled?: boolean;
+  documentView?: DocumentViewport;
+  onDocumentView?: (value: DocumentViewport, page: number) => void;
 }) {
   const [followEnabled, setFollowEnabled] = useState(false);
   const [following, setFollowing] = useState(false);
+  const [followLayout, setFollowLayout] = useState<'continuous' | 'paged'>('paged');
   const lastHostEvent = useRef(0);
   const lastSentCount = useRef(0);
   const lastSentFollow = useRef(false);
   const pendingView = useRef<{ event: ViewEvent; hostUserId: string | null } | null>(null);
 
   const { publish } = useClassEvents(classId, VIEW_TOPIC, ({ event, senderIdentity }) => {
-    if (!enabled || isHost || event.type !== 'view' || event.boardId !== boardId) return;
+    if (!enabled || isHost || event.type !== 'view' || event.classId !== classId || event.boardId !== boardId) return;
     // Any participant can publish data, so only the host's packets count.
     if (!isFromHost(senderIdentity, hostUserId)) return;
     lastHostEvent.current = Date.now();
     setFollowing(event.follow);
     if (event.follow) {
+      const continuous = isDocumentViewport(event.documentView);
+      setFollowLayout(continuous ? 'continuous' : 'paged');
       const size = getBoardSize(event.page);
       pendingView.current = size.width > 0 && size.height > 0 ? null : { event, hostUserId };
       setPages((current) => applyHostView(current, event, size));
+      if (continuous) onDocumentView?.({ ...event.documentView! }, event.page);
     } else {
       pendingView.current = null;
       setPages((current) => ensurePageCount(current, event.pageCount));
@@ -78,21 +86,24 @@ export function useFollowTeacher({
     setPages((current) => applyHostView(current, pending.event, size));
   });
 
-  const latest = useRef({ pages, followEnabled });
-  latest.current = { pages, followEnabled };
+  const latest = useRef({ pages, followEnabled, documentView });
+  latest.current = { pages, followEnabled, documentView };
   const viewNow: PageView = viewOf(pages);
   const viewRef = useRef(viewNow);
   viewRef.current = viewNow;
 
   const send = useCallback(() => {
-    const { pages: current, followEnabled: follow } = latest.current;
+    const { pages: current, followEnabled: follow, documentView: document } = latest.current;
     // A hidden board (a screen share is showing) has no size, so a view sent now
     // would be a bogus pan of zero. Students keep the last real one.
     if (follow && getBoardSize().width <= 0) return;
     lastSentCount.current = current.count;
     lastSentFollow.current = follow;
     void publish(
-      viewEvent(classId, describeView(current, viewRef.current, getBoardSize(), boardId, follow)),
+      viewEvent(classId, {
+        ...describeView(current, viewRef.current, getBoardSize(), boardId, follow),
+        ...(isDocumentViewport(document) ? { documentView: { ...document } } : {}),
+      }),
     );
   }, [boardId, classId, getBoardSize, publish]);
 
@@ -105,7 +116,7 @@ export function useFollowTeacher({
     if (!followEnabled && !countChanged && !followChanged && lastSentCount.current !== 0) return;
     const timer = window.setTimeout(send, SEND_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [isHost, enabled, followEnabled, pages, viewNow, send]);
+  }, [isHost, enabled, followEnabled, pages, viewNow, documentView?.zoom, documentView?.x, documentView?.y, send]);
 
   // Teacher: heartbeat while following.
   useEffect(() => {
@@ -128,5 +139,7 @@ export function useFollowTeacher({
     setFollowEnabled,
     /** True only for a student currently mirrored to the teacher. */
     following: enabled && !isHost && following,
+    /** A temporary host layout; the caller keeps its own saved preference. */
+    followLayout: enabled && !isHost && following ? followLayout : null,
   };
 }

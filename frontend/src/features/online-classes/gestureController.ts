@@ -11,6 +11,7 @@ import {
   shouldCancelStroke,
 } from './inputPolicy';
 import { panWithScroll, pinchWithScroll } from './continuousBoardNavigation';
+import { documentPinch, type DocumentGesture } from './documentGesture';
 
 /**
  * Turns raw pointer events into board intents.
@@ -26,6 +27,7 @@ export type Intent =
   | { type: 'stroke-end' }
   | { type: 'stroke-cancel' }
   | { type: 'view'; view: PageView }
+  | { type: 'document-gesture'; gesture: DocumentGesture }
   | { type: 'scroll'; dx: number; dy: number };
 
 type State = 'idle' | 'draw' | 'pan' | 'pinch';
@@ -39,6 +41,8 @@ export interface GestureDeps {
   /** Clock, injected to make post-pencil palm rejection deterministic in tests. */
   now?: () => number;
   continuous?: () => boolean;
+  /** Page dimensions already include document zoom; emit deltas, never local page zoom. */
+  documentZoom?: () => boolean;
 }
 
 export class GestureController {
@@ -130,6 +134,11 @@ export class GestureController {
 
     if (this.state === 'pinch' && this.anchors && this.touches.size >= 2) {
       const [a, b] = this.firstTwoTouches();
+      if (this.deps.documentZoom?.()) {
+        const gesture = documentPinch(this.anchors, [a, b]);
+        this.anchors = [a, b];
+        return [{ type: 'document-gesture', gesture }];
+      }
       if (this.deps.continuous?.()) {
         const next = pinchWithScroll(this.startView, this.anchors, [a, b], this.deps.board(), this.pinchStartedAtFit);
         this.anchors = [a, b];
@@ -143,8 +152,9 @@ export class GestureController {
       ];
     }
     if (this.state === 'pan' && this.panStart && this.touches.has(id)) {
-      if (this.deps.continuous?.()) {
-        const next = panWithScroll(this.startView, position.x - this.panStart.x, position.y - this.panStart.y, this.deps.board());
+      if (this.deps.continuous?.() || this.deps.documentZoom?.()) {
+        const next = panWithScroll(this.startView, position.x - this.panStart.x, position.y - this.panStart.y,
+          this.deps.board(), Boolean(this.deps.documentZoom?.()));
         this.panStart = position;
         return this.applyContinuousNavigation(next);
       }

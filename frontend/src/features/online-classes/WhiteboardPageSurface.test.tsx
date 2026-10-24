@@ -307,4 +307,23 @@ describe('WhiteboardPageSurface', () => {
     expect(canvas().lasers).toEqual([]); expect(canvas().onLaserMove).toBeUndefined(); expect(canvas().onScrollGesture).toBeUndefined();
     expect(canvas().readOnly).toBe(true); expect(canvas().navigationLocked).toBe(true);
   });
+
+  it('routes document zoom only for continuous WHITEBOARD pages and keeps large PDF raster requests bounded', async () => {
+    const onDocumentGesture = vi.fn(), onDocumentPenContact = vi.fn(), texture = document.createElement('canvas');
+    const pdf: PdfDoc = { pageCount: 1, renderPage: vi.fn().mockResolvedValue({ canvas: texture, aspect: 1.6 }), destroy: vi.fn() };
+    const { rerender } = render(<WhiteboardPageSurface {...baseProps} onDocumentGesture={onDocumentGesture} onDocumentPenContact={onDocumentPenContact} pdfDocument={pdf} />);
+    await ready();
+    expect(canvas().onDocumentGesture).toBe(onDocumentGesture);
+    expect(canvas().onDocumentPenContact).toBe(onDocumentPenContact);
+    act(() => FakeResizeObserver.resize(9000));
+    await waitFor(() => expect(canvas().background).toBe(texture));
+    expect(pdf.renderPage).toHaveBeenCalledExactlyOnceWith(0, 4096);
+    rerender(<WhiteboardPageSurface {...baseProps} onDocumentGesture={onDocumentGesture} onDocumentPenContact={onDocumentPenContact} continuous={false} />);
+    expect(canvas().onDocumentGesture).toBeUndefined();
+    expect(canvas().onDocumentPenContact).toBeUndefined();
+    rerender(<WhiteboardPageSurface {...baseProps} targetType="NOTEBOOK_CAMERA" targetId="personal-student" onDocumentGesture={onDocumentGesture} onDocumentPenContact={onDocumentPenContact} />);
+    await ready(0, 'personal-student', 'NOTEBOOK_CAMERA');
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').onDocumentGesture).toBeUndefined();
+    expect(canvas(0, 'personal-student', 'NOTEBOOK_CAMERA').onDocumentPenContact).toBeUndefined();
+  });
 });

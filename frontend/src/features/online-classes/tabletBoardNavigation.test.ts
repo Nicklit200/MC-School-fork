@@ -71,6 +71,30 @@ describe('native iPad two-finger whiteboard navigation', () => {
 });
 
 describe('native iPad continuous document navigation', () => {
+  it('reports incremental document pinch around client coordinates despite reordered touches and a moving sheet', () => {
+    const gesture = new TabletBoardNavigation(), onDocumentGesture = vi.fn(), onScrollGesture = vi.fn();
+    const options = { ...enabled, onDocumentGesture, onScrollGesture };
+    gesture.update([finger(1, 100, 200), finger(2, 300, 200)], location, view, board, options);
+    expect(gesture.update([finger(2, 500, 200), finger(1, 100, 200)], location, view, board, options)).toBeNull();
+    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 2, anchor: { x: 220, y: 240 }, pan: { x: 100, y: 0 } });
+    expect(gesture.update([finger(1, 200, 200), finger(2, 500, 200)], { left: -180, top: -60 }, view, board, options)).toBeNull();
+    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 0.75, anchor: { x: 320, y: 240 }, pan: { x: 50, y: 0 } });
+    expect(onScrollGesture).not.toHaveBeenCalled();
+    gesture.update([], location, view, board, options);
+    gesture.update([finger(3, 100, 200)], location, { zoom: 3, panX: -200, panY: -100 }, board, options);
+    expect(gesture.update([finger(3, 100, 170)], location, view, board, options)).toBeNull();
+    expect(onScrollGesture).toHaveBeenCalledExactlyOnceWith(0, 30);
+  });
+
+  it('does not emit document gestures under follow lock or continue stale pinch after unlock', () => {
+    const gesture = new TabletBoardNavigation(), onDocumentGesture = vi.fn();
+    const options = { ...enabled, onDocumentGesture };
+    gesture.update([finger(1, 100, 200), finger(2, 300, 200)], location, view, board, options);
+    gesture.update([finger(1, 0, 200), finger(2, 400, 200)], location, view, board, { ...options, locked: true });
+    gesture.update([finger(1, 0, 200), finger(2, 400, 200)], location, view, board, options);
+    expect(onDocumentGesture).not.toHaveBeenCalled();
+  });
+
   it('scrolls at fit size and does not amplify movement when the sheet moves under the finger', () => {
     const gesture = new TabletBoardNavigation(), onScrollGesture = vi.fn();
     const options = { ...enabled, onScrollGesture };

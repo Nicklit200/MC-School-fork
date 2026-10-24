@@ -34,6 +34,8 @@ import { penOutline, tracePenOutline } from './freehand';
 import { attachTabletInkInput, detectTabletInkBackend, getTabletInkPlatform } from '../../lib/tabletInkInput';
 import { normalizedTextSize, shapeTextSizePx, textStyleFor } from './textStyles';
 import { TabletBoardNavigation } from './tabletBoardNavigation';
+import type { DocumentGesture } from './documentGesture';
+import { canvasBackingRatio } from './canvasBacking';
 import type { DocumentRenderer } from '../notebook-camera/cameraModules';
 import {
   createNotebookProjection,
@@ -71,6 +73,8 @@ export interface WhiteboardCanvasHandle {
   toDataURL: (mimeType?: 'image/png' | 'image/jpeg') => string | null;
   /** Current size of the drawing surface in CSS pixels. */
   getSize: () => { width: number; height: number };
+  /** Parent owns a multi-touch document gesture, including contacts on other pages. */
+  setDocumentNavigation?: (active: boolean) => void;
 }
 
 export interface RemoteLaser {
@@ -96,6 +100,9 @@ interface Props {
   onViewChange?: (view: PageView) => void;
   /** Continuous document navigation; positive deltas scroll right/down. */
   onScrollGesture?: (dx: number, dy: number) => void;
+  onDocumentGesture?: (gesture: DocumentGesture) => void;
+  /** Native iPad Pencil may have no Pointer Events for the document parent. */
+  onDocumentPenContact?: (active: boolean) => void;
   /** Student under follow mode: the canvas may not be moved by the viewer. */
   navigationLocked?: boolean;
   /** Rendered page content (PDF page) under the marks. */
@@ -148,6 +155,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     view = DEFAULT_VIEW,
     onViewChange,
     onScrollGesture,
+    onDocumentGesture,
+    onDocumentPenContact,
     navigationLocked = false,
     background = null,
     notebookView = null,
@@ -168,11 +177,24 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const nativeAppleInkRef = useRef(false);
+  const externalNavigation = useRef(false);
   const tabletNavigation = useMemo(() => new TabletBoardNavigation(), []);
   const onViewChangeRef = useRef(onViewChange);
   onViewChangeRef.current = onViewChange;
   const onScrollGestureRef = useRef(onScrollGesture);
   onScrollGestureRef.current = onScrollGesture;
+  const onDocumentGestureRef = useRef(onDocumentGesture);
+  onDocumentGestureRef.current = onDocumentGesture;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const documentPenCallback = useRef(onDocumentPenContact);
+  documentPenCallback.current = onDocumentPenContact;
+  const nativePenContact = useRef(false);
+  const reportNativePenContact = (value: boolean) => {
+    if (nativePenContact.current === value) return;
+    nativePenContact.current = value;
+    documentPenCallback.current?.(value);
+  };
   const gestureOrigin = useRef<{ left: number; top: number } | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const backgroundLayerRef = useRef<Konva.Layer | null>(null);
@@ -184,6 +206,24 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   projectionRef.current = projection;
   const sceneViewport = projection?.rawSize ?? viewport;
   const sceneAspect = projection ? notebookView!.rawWidth / notebookView!.rawHeight : sourceAspect;
+  const boundLayerBacking = (size: { width: number; height: number }, onlyReduce = false) => {
+    // Set lower ratios before React resizes the stage, so zooming the document
+    // never temporarily allocates a full-resolution, multi-megapixel layer.
+    const ratio = projectionRef.current ? 1 : canvasBackingRatio(size.width, size.height, window.devicePixelRatio,
+      Boolean(onDocumentGestureRef.current && !activeRef.current));
+    for (const layer of stageRef.current?.getLayers() ?? []) {
+      let changed = false;
+      for (const [canvas, requested] of [[layer.getCanvas(), ratio], [layer.getHitCanvas?.(), Math.min(1, ratio)]] as const) {
+        if (!canvas) continue;
+        const current = canvas.getPixelRatio();
+        const next = onlyReduce ? Math.min(current, requested) : requested;
+        if (Math.abs(current - next) > 0.000001) { canvas.setPixelRatio(next); changed = true; }
+      }
+      // Updating a backing ratio clears it even when no Konva props changed
+      // (e.g. a retained page re-enters the viewport). Repaint its existing ink.
+      if (changed) layer.batchDraw?.();
+    }
+  };
   const projectedCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const projectorRef = useRef<{ renderer: DocumentRenderer; renderFrame: () => void } | null>(null);
   const projectionPainted = useRef(false);
@@ -218,9 +258,20 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         projectorRef.current?.renderFrame();
         return projectionPainted.current ? projectedCanvasRef.current?.toDataURL(mimeType, 0.9) ?? null : null;
       }
-      return stageRef.current?.toDataURL({ pixelRatio: 1, mimeType, quality: 0.9 }) ?? null;
+      const size = live.current.viewport;
+      return stageRef.current?.toDataURL({ pixelRatio: canvasBackingRatio(size.width, size.height, 1), mimeType, quality: 0.9 }) ?? null;
     },
     getSize: () => live.current.viewport,
+    setDocumentNavigation: active => {
+      if (externalNavigation.current === active) return;
+      // This flag must change before cancelling the draft: the parent calls us
+      // in pointer capture, before React can render or native Touch Events run.
+      externalNavigation.current = active;
+      controller.reset();
+      tabletNavigation.reset();
+      gestureOrigin.current = null;
+      if (active) cancelStroke();
+    },
   }));
 
   useEffect(() => {
@@ -230,6 +281,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     animation.start();
     return () => { animation.stop(); };
   }, [active, backgroundLive, background, Boolean(projection)]);
+
+  useLayoutEffect(() => {
+    boundLayerBacking(sceneViewport);
+  }, [sceneViewport.width, sceneViewport.height, Boolean(projection), active, Boolean(onDocumentGesture)]);
 
   // The Konva scene remains in canonical raw-camera space. The display canvas
   // is the single projective warp of its complete video/marks/selection layers.
@@ -339,6 +394,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         }
       }
       previousViewport.current = next;
+      boundLayerBacking(projectionRef.current?.rawSize ?? next, true);
       setViewport(current =>
         current.width === next.width && current.height === next.height ? current : next,
       );
@@ -586,6 +642,13 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         case 'scroll':
           if (!lockedRef.current) onScrollGestureRef.current?.(intent.dx, intent.dy);
           break;
+        case 'document-gesture': {
+          if (lockedRef.current) break;
+          const origin = gestureOrigin.current ?? containerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+          onDocumentGestureRef.current?.({ ...intent.gesture,
+            anchor: { x: intent.gesture.anchor.x + origin.left, y: intent.gesture.anchor.y + origin.top } });
+          break;
+        }
       }
     }
   };
@@ -598,6 +661,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         board: () => live.current.viewport,
         locked: () => lockedRef.current,
         continuous: () => Boolean(onScrollGestureRef.current),
+        documentZoom: () => Boolean(onDocumentGestureRef.current),
       }),
     [],
   );
@@ -614,7 +678,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) };
   };
   const gesturePoint = (event: React.MouseEvent): Point => {
-    const origin = onScrollGestureRef.current && !controller.isDrawing ? gestureOrigin.current : null;
+    const origin = (onScrollGestureRef.current || onDocumentGestureRef.current) && !controller.isDrawing ? gestureOrigin.current : null;
     return origin ? { x: event.clientX - origin.left, y: event.clientY - origin.top } : localPoint(event);
   };
 
@@ -622,9 +686,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // On iPadOS native Touch Events own Pencil strokes; pointer events would
     // otherwise duplicate or drop fast short strokes when Scribble is enabled.
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
+    if (externalNavigation.current && event.pointerType === 'touch') return;
     if (textEdit) return;
     const kind = normalizePointerKind(event.pointerType);
-    if (onScrollGestureRef.current && ((!controller.isDrawing && !controller.isNavigating) || kind === 'pen')) {
+    if ((onScrollGestureRef.current || onDocumentGestureRef.current) && ((!controller.isDrawing && !controller.isNavigating) || kind === 'pen')) {
       const rect = containerRef.current?.getBoundingClientRect();
       gestureOrigin.current = rect ? { left: rect.left, top: rect.top } : null;
     }
@@ -642,6 +707,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
+    if (externalNavigation.current && event.pointerType === 'touch') return;
     // A laser follows the pointer even with no button down, like a real one.
     if (live.current.tool === 'laser' && event.buttons === 0) {
       const now = performance.now();
@@ -655,6 +721,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
+    if (externalNavigation.current && event.pointerType === 'touch') return;
     // Preserve the final position even when the entire short stroke fits in
     // one 16ms sample window; do not turn quick crossbars into dots.
     if (controller.isDrawing) moveStroke(localPoint(event), event.pressure, true);
@@ -662,6 +729,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   };
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
     if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
+    if (externalNavigation.current && event.pointerType === 'touch') return;
     applyIntents(controller.up(event.pointerId, true));
   };
 
@@ -680,29 +748,38 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       onStart(point, meta) {
         // React owns real mouse events; the native driver owns Pencil/touch.
         if (meta.device === 'mouse') return;
+        if (externalNavigation.current && meta.device === 'finger') return;
         if (textEdit) return;
-        if (meta.device === 'pen') tabletNavigation.reset();
+        if (meta.device === 'pen') {
+          tabletNavigation.reset();
+          // Notify before starting ink: the parent releases any cross-page
+          // navigation synchronously, without cancelling this new Pencil stroke.
+          reportNativePenContact(true);
+        }
         applyInkIntentsRef.current(controller.down(meta.inputId, meta.device === 'finger' ? 'touch' : meta.device,
           local(point.clientX, point.clientY), false, live.current.tool === 'pan' && !lockedRef.current,
           meta.device === 'pen' ? point.pressure : undefined));
       },
       onMove(point, meta) {
         if (meta.device === 'mouse') return;
+        if (externalNavigation.current && meta.device === 'finger') return;
         applyInkIntentsRef.current(controller.move(meta.inputId,
           local(point.clientX, point.clientY), meta.device === 'pen' ? point.pressure : undefined));
       },
       onEnd(point, meta, cancelled) {
         if (meta.device === 'mouse') return;
+        if (externalNavigation.current && meta.device === 'finger') return;
         if (!cancelled && controller.isDrawing) {
           moveStroke(local(point.clientX, point.clientY), point.pressure, true);
         }
         applyInkIntentsRef.current(controller.up(meta.inputId, cancelled));
+        if (meta.device === 'pen') reportNativePenContact(false);
       },
       onGesture(contacts) {
         // Track actual native fingers, not the duplicate Safari Pointer Events.
         // Never navigate while a Pencil stroke is active, nor while the
         // participant is locked into following the teacher's view.
-        if (controller.isDrawing) {
+        if (externalNavigation.current || controller.isDrawing) {
           tabletNavigation.reset();
           return;
         }
@@ -718,6 +795,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
             // navigate, preventing unintended marks from the pinch.
             allowOneFingerPan: inputModeRef.current === 'stylus' || live.current.tool === 'pan',
             onScrollGesture: onScrollGestureRef.current,
+            onDocumentGesture: onDocumentGestureRef.current,
           },
         );
         if (next) onViewChangeRef.current?.(next);
@@ -734,17 +812,20 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       nativeAppleInkRef.current = false;
       tabletNavigation.reset();
       driver.destroy();
+      reportNativePenContact(false);
     };
   }, [controller, tabletNavigation, textEdit]);
 
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (navigationLocked || controller.isDrawing) { if (onScrollGesture) event.stopPropagation(); return; }
+    if (navigationLocked || controller.isDrawing) { if (onScrollGesture || onDocumentGesture) event.stopPropagation(); return; }
     const local = localPoint(event);
     // Ctrl/⌘ + wheel (and trackpad pinch, which arrives the same way) zooms;
     // a plain wheel scrolls the zoomed page.
     if (event.ctrlKey || event.metaKey) {
       event.stopPropagation();
-      onViewChange?.(zoomAbout(view, view.zoom * Math.exp(-event.deltaY * 0.01), local, viewport));
+      if (onDocumentGestureRef.current) {
+        onDocumentGestureRef.current({ scale: Math.exp(-event.deltaY * 0.01), anchor: { x: event.clientX, y: event.clientY }, pan: { x: 0, y: 0 } });
+      } else onViewChange?.(zoomAbout(view, view.zoom * Math.exp(-event.deltaY * 0.01), local, viewport));
     } else if (onScrollGesture) {
       event.stopPropagation();
       onScrollGesture(event.deltaX, event.deltaY);
@@ -758,7 +839,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // React's wheel listener is passive in browsers. Prevent native scrolling
     // separately, so one wheel event cannot move the document twice.
     const preventNativeWheel = (event: WheelEvent) => {
-      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey) && onViewChangeRef.current)) event.preventDefault();
+      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey) && (onViewChangeRef.current || onDocumentGestureRef.current))) event.preventDefault();
     };
     surface.addEventListener('wheel', preventNativeWheel, { passive: false });
     return () => surface.removeEventListener('wheel', preventNativeWheel);

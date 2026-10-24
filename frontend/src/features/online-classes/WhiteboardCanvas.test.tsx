@@ -222,6 +222,174 @@ describe('WhiteboardCanvas live background', () => {
 });
 
 describe('WhiteboardCanvas continuous scrolling', () => {
+  it('reports native Pencil before new ink and releases its parent contact on end, cancellation and unmount', async () => {
+    mock.backend = 'ios-touch';
+    const ref = createRef<WhiteboardCanvasHandle>(), order: string[] = [];
+    const onCommit = vi.fn(() => { order.push('commit'); });
+    const onDraftChange = vi.fn((shape: unknown) => { if (shape) order.push('draft'); });
+    const onDocumentPenContact = vi.fn((active: boolean) => {
+      order.push(`pen:${active}`);
+      // The parent releases its central finger gesture before this new pen
+      // starts, including iPads where no pointerdown reached the parent.
+      if (active) ref.current!.setDocumentNavigation!(false);
+    });
+    const { unmount } = render(<WhiteboardCanvas {...props} ref={ref} onDocumentGesture={vi.fn()}
+      onDocumentPenContact={onDocumentPenContact} onCommit={onCommit} onDraftChange={onDraftChange} />);
+    const pen = { source: 'touch', device: 'pen', inputId: 9 };
+    const point = { clientX: 300, clientY: 200, pressure: .5, timeStamp: 1 };
+    act(() => { ref.current!.setDocumentNavigation!(true); });
+    order.length = 0;
+    act(() => { mock.nativeCallbacks.onStart(point, pen); });
+    expect(order).toEqual(['pen:true', 'draft']);
+    await act(async () => { mock.nativeCallbacks.onEnd({ ...point, clientX: 340 }, pen, false); });
+    expect(order.slice(-2)).toEqual(['commit', 'pen:false']);
+    expect(onCommit).toHaveBeenCalledOnce();
+    act(() => { mock.nativeCallbacks.onStart(point, pen); mock.nativeCallbacks.onEnd(point, pen, true); });
+    expect(onDocumentPenContact.mock.calls.map(([active]) => active)).toEqual([true, false, true, false]);
+    expect(onCommit).toHaveBeenCalledOnce();
+    act(() => { mock.nativeCallbacks.onStart(point, pen); });
+    unmount();
+    expect(onDocumentPenContact.mock.calls.map(([active]) => active)).toEqual([true, false, true, false, true, false]);
+  });
+
+  it.each(['pointer', 'ios-touch'])('synchronously cancels %s finger ink when a cross-page document gesture takes ownership', async backend => {
+    mock.backend = backend;
+    const ref = createRef<WhiteboardCanvasHandle>(), onCommit = vi.fn(), onDraftChange = vi.fn(), onDocumentGesture = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} ref={ref} inputMode="finger" onCommit={onCommit}
+      onDraftChange={onDraftChange} onDocumentGesture={onDocumentGesture} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    const point = (x: number) => ({ clientX: x, clientY: 200, pressure: .5, timeStamp: 1 });
+    const finger = { source: 'touch', device: 'finger', inputId: 1 };
+    if (backend === 'pointer') fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 200 });
+    else act(() => mock.nativeCallbacks.onStart(point(300), finger));
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pen' }), expect.any(String));
+    act(() => {
+      ref.current!.setDocumentNavigation!(true);
+      // Events in the same stack must already be blocked, without waiting for
+      // the draft cancellation's React state update to render.
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 350, clientY: 200 });
+      fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'touch', clientX: 350, clientY: 200 });
+      if (backend === 'ios-touch') {
+        mock.nativeCallbacks.onMove(point(350), finger);
+        mock.nativeCallbacks.onEnd(point(350), finger, false);
+        mock.nativeCallbacks.onStart(point(400), { ...finger, inputId: 2 });
+        mock.nativeCallbacks.onGesture([{ id: 1, clientX: 300, clientY: 200 }, { id: 2, clientX: 500, clientY: 200 }]);
+        mock.nativeCallbacks.onGesture([{ id: 1, clientX: 200, clientY: 200 }, { id: 2, clientX: 600, clientY: 200 }]);
+      }
+    });
+    expect(onCommit).not.toHaveBeenCalled(); expect(onDocumentGesture).not.toHaveBeenCalled();
+    expect(onDraftChange.mock.calls.at(-1)?.[0]).toBeNull();
+    const cancelledCalls = onDraftChange.mock.calls.length;
+    act(() => ref.current!.setDocumentNavigation!(true));
+    expect(onDraftChange).toHaveBeenCalledTimes(cancelledCalls);
+    await act(async () => {
+      ref.current!.setDocumentNavigation!(false);
+      if (backend === 'pointer') {
+        fireEvent.pointerDown(surface, { pointerId: 3, pointerType: 'pen', clientX: 320, clientY: 200 });
+        fireEvent.pointerUp(surface, { pointerId: 3, pointerType: 'pen', clientX: 340, clientY: 220 });
+      } else {
+        const pen = { source: 'touch', device: 'pen', inputId: 3 };
+        mock.nativeCallbacks.onStart(point(320), pen); mock.nativeCallbacks.onEnd(point(340), pen, false);
+      }
+      fireEvent.pointerDown(surface, { pointerId: 4, pointerType: 'mouse', clientX: 340, clientY: 220 });
+      fireEvent.pointerUp(surface, { pointerId: 4, pointerType: 'mouse', clientX: 360, clientY: 240 });
+    });
+    expect(onCommit).toHaveBeenCalledTimes(2);
+    expect(onCommit.mock.calls.every(([shape]) => shape.kind === 'pen')).toBe(true);
+  });
+
+  it('routes Ctrl/trackpad zoom once to document coordinates and never changes the local page view', () => {
+    const onDocumentGesture = vi.fn(), onScrollGesture = vi.fn(), onViewChange = vi.fn(), outerWheel = vi.fn();
+    const { container } = render(<div onWheel={outerWheel}><WhiteboardCanvas {...props} onDocumentGesture={onDocumentGesture}
+      onScrollGesture={onScrollGesture} onViewChange={onViewChange} /></div>);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    const wheel = new WheelEvent('wheel', { deltaY: -20, ctrlKey: true, clientX: 300, clientY: 200, bubbles: true, cancelable: true });
+    act(() => { surface.dispatchEvent(wheel); });
+    expect(onDocumentGesture).toHaveBeenCalledExactlyOnceWith({ scale: Math.exp(0.2), anchor: { x: 300, y: 200 }, pan: { x: 0, y: 0 } });
+    expect(wheel.defaultPrevented).toBe(true); expect(outerWheel).not.toHaveBeenCalled();
+    expect(onViewChange).not.toHaveBeenCalled(); expect(onScrollGesture).not.toHaveBeenCalled();
+    expect(mock.stageProps).toMatchObject({ scaleX: 1, scaleY: 1, x: 0, y: 0 });
+  });
+
+  it('keeps pointer document pinch client coordinates stable while the parent resizes and scrolls the sheet', () => {
+    const onDocumentGesture = vi.fn(), onCommit = vi.fn(), onViewChange = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} onDocumentGesture={onDocumentGesture} onViewChange={onViewChange} onCommit={onCommit} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    let left = 20, top = 40;
+    vi.spyOn(surface, 'getBoundingClientRect').mockImplementation(() => ({ left, top, width: 1000, height: 500 } as DOMRect));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 240 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 320, clientY: 240 });
+    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 520, clientY: 240 });
+    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 2, anchor: { x: 220, y: 240 }, pan: { x: 100, y: 0 } });
+    left = -180; top = -60;
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 220, clientY: 240 });
+    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 0.75, anchor: { x: 320, y: 240 }, pan: { x: 50, y: 0 } });
+    fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch' }); fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'touch' });
+    expect(onCommit).not.toHaveBeenCalled(); expect(onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('uses the same document gesture bridge for native iPad pinch without a second page zoom', () => {
+    mock.backend = 'ios-touch'; const onDocumentGesture = vi.fn(), onViewChange = vi.fn();
+    render(<WhiteboardCanvas {...props} onDocumentGesture={onDocumentGesture} onViewChange={onViewChange} />);
+    act(() => {
+      mock.nativeCallbacks.onGesture([{ id: 1, clientX: 100, clientY: 200 }, { id: 2, clientX: 300, clientY: 200 }]);
+      mock.nativeCallbacks.onGesture([{ id: 1, clientX: 100, clientY: 220 }, { id: 2, clientX: 500, clientY: 220 }]);
+    });
+    expect(onDocumentGesture).toHaveBeenCalledExactlyOnceWith({ scale: 2, anchor: { x: 200, y: 200 }, pan: { x: 100, y: 20 } });
+    expect(onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('bounds every scene and hit canvas while retaining full logical dimensions and releases hidden page backing', () => {
+    const scene = { getPixelRatio: () => 2, setPixelRatio: vi.fn() }, hit = { getPixelRatio: () => 1, setPixelRatio: vi.fn() };
+    const batchDraw = vi.fn();
+    mock.stage.getLayers.mockReturnValue([{ getCanvas: () => scene, getHitCanvas: () => hit, batchDraw }]);
+    class ZoomedObserver {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe() { this.callback([{ contentRect: { width: 7000, height: 9900 } } as ResizeObserverEntry], this as unknown as ResizeObserver); }
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ZoomedObserver);
+    const onDocumentGesture = vi.fn(), ref = createRef<WhiteboardCanvasHandle>();
+    const { rerender } = render(<WhiteboardCanvas {...props} ref={ref} onDocumentGesture={onDocumentGesture} />);
+    expect(mock.stageProps).toMatchObject({ width: 7000, height: 9900, scaleX: 1, scaleY: 1 });
+    const visible = scene.setPixelRatio.mock.calls.at(-1)![0];
+    expect(7000 * 9900 * visible * visible).toBeLessThanOrEqual(8_000_001);
+    expect(hit.setPixelRatio).toHaveBeenLastCalledWith(visible);
+    ref.current!.toDataURL();
+    expect(mock.stage.toDataURL).toHaveBeenLastCalledWith({ pixelRatio: visible, mimeType: 'image/png', quality: 0.9 });
+    rerender(<WhiteboardCanvas {...props} ref={ref} onDocumentGesture={onDocumentGesture} active={false} />);
+    const dormant = scene.setPixelRatio.mock.calls.at(-1)![0];
+    expect(9900 * dormant).toBeLessThanOrEqual(512); expect(dormant).toBeLessThan(visible);
+    batchDraw.mockClear();
+    rerender(<WhiteboardCanvas {...props} ref={ref} onDocumentGesture={onDocumentGesture} active />);
+    expect(scene.setPixelRatio).toHaveBeenLastCalledWith(visible);
+    expect(batchDraw).toHaveBeenCalledOnce();
+  });
+
+  it('normalizes new ink against actual enlarged DOM dimensions after document zoom without a second page transform', async () => {
+    let resize!: ResizeObserverCallback;
+    class DocumentResizeObserver {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() { resize([{ contentRect: { width: 1000, height: 500 } } as ResizeObserverEntry], this as unknown as ResizeObserver); }
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', DocumentResizeObserver);
+    const onCommit = vi.fn(), onViewChange = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} sourceAspect={null} onDocumentGesture={vi.fn()} onCommit={onCommit} onViewChange={onViewChange} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ left: 20, top: 40, width: 2000, height: 1000 } as DOMRect);
+    act(() => resize([{ contentRect: { width: 2000, height: 1000 } } as ResizeObserverEntry], {} as ResizeObserver));
+    await act(async () => {
+      fireEvent.pointerDown(surface, { pointerId: 7, pointerType: 'pen', clientX: 620, clientY: 440 });
+      fireEvent.pointerUp(surface, { pointerId: 7, pointerType: 'pen', clientX: 820, clientY: 540 });
+    });
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommit.mock.calls[0][0].points[0].slice(0, 2)).toEqual([0.3, 0.4]);
+    expect(onCommit.mock.calls[0][0].points.at(-1).slice(0, 2)).toEqual([0.4, 0.5]);
+    expect(onViewChange).not.toHaveBeenCalled();
+    expect(mock.stageProps).toMatchObject({ width: 2000, height: 1000, scaleX: 1, scaleY: 1 });
+  });
+
   it('forwards plain wheel once, prevents native duplicate scroll and keeps Ctrl/meta wheel as page zoom', () => {
     const onScrollGesture = vi.fn(), onViewChange = vi.fn(), outerWheel = vi.fn();
     const { container } = render(<div onWheel={outerWheel}><WhiteboardCanvas {...props} onScrollGesture={onScrollGesture} onViewChange={onViewChange} /></div>);

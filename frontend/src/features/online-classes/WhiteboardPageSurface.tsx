@@ -6,6 +6,7 @@ import type { PageView } from './boardView';
 import { isPersonalBoard, personalBoardOwner } from './boards';
 import { ANNOTATION_TOPIC, annotationEvent } from './events';
 import type { InputMode } from './inputPolicy';
+import type { DocumentGesture } from './documentGesture';
 import type { PdfDoc } from './pdfDocument';
 import { useAnnotationBoard } from './useAnnotationBoard';
 import { useClassEvents } from './useClassEvents';
@@ -62,6 +63,8 @@ export interface WhiteboardPageSurfaceProps {
   onLaser?: (point: { x: number; y: number }) => void;
   continuous: boolean;
   onScrollGesture?: (dx: number, dy: number) => void;
+  onDocumentGesture?: (gesture: DocumentGesture) => void;
+  onDocumentPenContact?: (active: boolean) => void;
   onActivate?: (pageIndex: number) => void;
   onStatusChange?: (pageIndex: number, status: PageSurfaceStatus) => void;
   onAspectChange?: (pageIndex: number, aspect: number | null) => void;
@@ -96,6 +99,8 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
   onLaser,
   continuous,
   onScrollGesture,
+  onDocumentGesture,
+  onDocumentPenContact,
   onActivate,
   onStatusChange,
   onAspectChange,
@@ -199,7 +204,9 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
     return () => observer.disconnect();
   }, []);
 
-  const renderedPage = usePdfPage(pdfDocument, pageIndex, stageWidth);
+  // DOM sheets may become five times wider during document zoom. Keep their
+  // PDF texture bounded independently; drawing still uses the full CSS size.
+  const renderedPage = usePdfPage(pdfDocument, pageIndex, Math.min(stageWidth, continuous && !active ? 512 : 4096));
   const hasPdfPage = Boolean(pdfDocument && pageIndex < pdfDocument.pageCount);
   const loadingPdfPage = hasPdfPage && !renderedPage;
   const validSourceAspect = sourceAspect !== null && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : null;
@@ -242,6 +249,8 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
         onViewChange={onViewChange}
         navigationLocked={navigationLocked}
         onScrollGesture={continuous ? onScrollGesture : undefined}
+        onDocumentGesture={continuous && targetType === 'WHITEBOARD' ? onDocumentGesture : undefined}
+        onDocumentPenContact={continuous && targetType === 'WHITEBOARD' ? onDocumentPenContact : undefined}
         background={camera ? cameraBackground?.source ?? null : renderedPage?.canvas ?? null}
         paperColor={camera ? null : targetType === 'WHITEBOARD' ? '#ffffff' : '#fffefa'}
         backgroundLive={camera && Boolean(cameraBackground)}

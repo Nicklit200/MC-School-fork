@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type BoardPages, goToPage, initialPages, viewOf } from './boardView';
-import { type ClassEvent, VIEW_TOPIC, viewEvent } from './events';
+import { type ClassEvent, type DocumentViewport, VIEW_TOPIC, viewEvent } from './events';
 import { HEARTBEAT_MS, STALE_AFTER_MS, useFollowTeacher } from './useFollowTeacher';
 
 const publish = vi.fn().mockResolvedValue(undefined);
@@ -18,9 +18,11 @@ vi.mock('./useClassEvents', () => ({
 
 let board = { width: 1000, height: 500 };
 
-function mount(isHost: boolean, hostUserId: string | null = 'teacher', enabled = true) {
+type DocumentOptions = { documentView?: DocumentViewport; onDocumentView?: (value: DocumentViewport, page: number) => void };
+
+function mount(isHost: boolean, hostUserId: string | null = 'teacher', enabled = true, options: DocumentOptions = {}) {
   return renderHook(
-    ({ start }: { start: BoardPages }) => {
+    ({ start, documentView, onDocumentView }: { start: BoardPages } & DocumentOptions) => {
       const [pages, setPages] = useState<BoardPages>(start);
       const follow = useFollowTeacher({
         classId: 'c1',
@@ -31,10 +33,12 @@ function mount(isHost: boolean, hostUserId: string | null = 'teacher', enabled =
         setPages,
         getBoardSize: () => board,
         enabled,
+        documentView,
+        onDocumentView,
       });
       return { pages, setPages, ...follow };
     },
-    { initialProps: { start: initialPages(3) } },
+    { initialProps: { start: initialPages(3), ...options } },
   );
 }
 
@@ -63,6 +67,54 @@ describe('useFollowTeacher — student', () => {
     expect(result.current.following).toBe(true);
     expect(result.current.pages.current).toBe(2);
     expect(viewOf(result.current.pages)).toEqual({ zoom: 2, panX: -500, panY: -125 });
+  });
+
+  it('delivers a trusted whole-document anchor once, preserving legacy page fallback and temporary layout', () => {
+    const onDocumentView = vi.fn(), documentView = { zoom: 2.5, x: .4, y: 1.1 };
+    const { result } = mount(false, 'teacher', true, { onDocumentView });
+    expect(result.current.followLayout).toBeNull();
+    act(() => handler({ event: hostView({ documentView }), senderIdentity: 'teacher|tab' }));
+    expect(onDocumentView).toHaveBeenCalledExactlyOnceWith(documentView, 2);
+    expect(result.current.pages.current).toBe(2);
+    expect(viewOf(result.current.pages)).toEqual({ zoom: 2, panX: -500, panY: -125 });
+    expect(result.current.followLayout).toBe('continuous');
+    act(() => handler({ event: hostView(), senderIdentity: 'teacher|tab' }));
+    expect(result.current.followLayout).toBe('paged');
+    expect(onDocumentView).toHaveBeenCalledOnce();
+    act(() => handler({ event: hostView({ documentView, follow: false }), senderIdentity: 'teacher|tab' }));
+    expect(result.current.followLayout).toBeNull();
+    expect(onDocumentView).toHaveBeenCalledOnce();
+    act(() => handler({ event: hostView({ documentView }), senderIdentity: 'teacher|tab' }));
+    act(() => vi.advanceTimersByTime(STALE_AFTER_MS + 2000));
+    expect(result.current.followLayout).toBeNull();
+  });
+
+  it.each([
+    ['non-host', false, 'teacher', true, 'student-2|tab', {}],
+    ['unknown host', false, null, true, 'teacher|tab', {}],
+    ['disabled personal board', false, 'teacher', false, 'teacher|tab', {}],
+    ['teacher itself', true, 'teacher', true, 'teacher|tab', {}],
+    ['another board', false, 'teacher', true, 'teacher|tab', { boardId: 'other' }],
+    ['follow off', false, 'teacher', true, 'teacher|tab', { follow: false }],
+  ] as const)('does not apply a document anchor from %s', (_name, isHost, host, enabled, senderIdentity, patch) => {
+    const onDocumentView = vi.fn();
+    const { result } = mount(isHost, host, enabled, { onDocumentView });
+    act(() => handler({ event: hostView({ documentView: { zoom: 2, x: .5, y: .5 }, ...patch }), senderIdentity }));
+    expect(onDocumentView).not.toHaveBeenCalled();
+    expect(result.current.followLayout).toBeNull();
+  });
+
+  it('delivers the document anchor before a target page mounts without replaying it on every rerender', () => {
+    const onDocumentView = vi.fn(), documentView = { zoom: 3, x: .25, y: .75 };
+    board = { width: 0, height: 0 };
+    try {
+      const { rerender } = mount(false, 'teacher', true, { onDocumentView });
+      act(() => handler({ event: hostView({ documentView }), senderIdentity: 'teacher|tab' }));
+      expect(onDocumentView).toHaveBeenCalledExactlyOnceWith(documentView, 2);
+      board = { width: 1000, height: 500 };
+      rerender({ start: initialPages(3), onDocumentView });rerender({ start: initialPages(3), onDocumentView });
+      expect(onDocumentView).toHaveBeenCalledOnce();
+    } finally { board = { width: 1000, height: 500 }; }
   });
 
   it('maps pan using the incoming page dimensions instead of the previously selected page', () => {
@@ -240,6 +292,26 @@ describe('useFollowTeacher — teacher', () => {
       vi.advanceTimersByTime(HEARTBEAT_MS * 2 + 50);
     });
     expect(publish.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('throttles whole-document anchor changes and repeats the latest anchor for late joiners', () => {
+    const first = { zoom: 1.5, x: .5, y: .2 }, latest = { zoom: 3, x: .3, y: .8 };
+    const { result, rerender } = mount(true, 'teacher', true, { documentView: first });
+    act(() => result.current.setFollowEnabled(true));
+    act(() => vi.advanceTimersByTime(150));
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ documentView: first, follow: true }));
+    publish.mockClear();
+    rerender({ start: initialPages(3), documentView: { zoom: 2, x: .5, y: .4 } });
+    act(() => vi.advanceTimersByTime(50));
+    rerender({ start: initialPages(3), documentView: latest });
+    act(() => vi.advanceTimersByTime(99));
+    expect(publish).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(publish).toHaveBeenCalledOnce();
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ documentView: latest }));
+    publish.mockClear();
+    act(() => vi.advanceTimersByTime(HEARTBEAT_MS));
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ documentView: latest }));
   });
 
   it('sends nothing for the view while the board is hidden', () => {

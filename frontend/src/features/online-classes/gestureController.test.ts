@@ -5,7 +5,7 @@ import type { InputMode } from './inputPolicy';
 
 const board = { width: 800, height: 600 };
 
-function setup(mode: InputMode = 'stylus', locked = false, continuous = false) {
+function setup(mode: InputMode = 'stylus', locked = false, continuous = false, documentZoom = false) {
   const state = { mode, locked, clock: 1000, view: { zoom: 1, panX: 0, panY: 0 } as PageView };
   const controller = new GestureController({
     mode: () => state.mode,
@@ -14,6 +14,7 @@ function setup(mode: InputMode = 'stylus', locked = false, continuous = false) {
     locked: () => state.locked,
     now: () => state.clock,
     continuous: () => continuous,
+    documentZoom: () => documentZoom,
   });
   return { controller, state };
 }
@@ -81,6 +82,36 @@ describe('stylus mode', () => {
 });
 
 describe('continuous document navigation', () => {
+  it('emits incremental document pinch deltas without changing the page view or committing cancelled finger ink', () => {
+    const { controller } = setup('finger', false, true, true);
+    controller.down(1, 'touch', { x: 100, y: 100 });
+    expect(types(controller.down(2, 'touch', { x: 300, y: 100 }))).toEqual(['stroke-cancel']);
+    expect(controller.move(2, { x: 500, y: 100 })).toEqual([
+      { type: 'document-gesture', gesture: { scale: 2, anchor: { x: 200, y: 100 }, pan: { x: 100, y: 0 } } },
+    ]);
+    expect(controller.move(1, { x: 200, y: 100 })).toEqual([
+      { type: 'document-gesture', gesture: { scale: 0.75, anchor: { x: 300, y: 100 }, pan: { x: 50, y: 0 } } },
+    ]);
+    expect(types([...controller.up(2), ...controller.up(1)])).not.toContain('stroke-end');
+  });
+
+  it('routes document hand pan only to the scroll parent even if an old page view was zoomed', () => {
+    const { controller, state } = setup('stylus', false, true, true);
+    state.view = { zoom: 3, panX: -300, panY: -200 };
+    controller.down(1, 'mouse', { x: 200, y: 200 }, false, true);
+    expect(controller.move(1, { x: 180, y: 150 })).toEqual([{ type: 'scroll', dx: 20, dy: 50 }]);
+  });
+
+  it('blocks document pinch under follow lock and preserves pencil palm grace', () => {
+    const { controller, state } = setup('stylus', true, true, true);
+    controller.down(1, 'touch', { x: 100, y: 100 }); controller.down(2, 'touch', { x: 300, y: 100 });
+    expect(controller.move(2, { x: 500, y: 100 })).toEqual([]);
+    controller.reset(); state.locked = false;
+    controller.down(3, 'pen', { x: 20, y: 20 }); controller.up(3);
+    controller.down(4, 'touch', { x: 100, y: 100 }); controller.down(5, 'touch', { x: 300, y: 100 });
+    expect(controller.move(5, { x: 500, y: 100 })).toEqual([]);
+  });
+
   it('routes raw fit-size mouse pan into incremental document scroll', () => {
     const { controller } = setup('stylus', false, true);
     controller.down(1, 'mouse', { x: 100, y: 200 }, false, true);

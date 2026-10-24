@@ -61,6 +61,13 @@ export interface PointerEvent_ extends BaseEvent {
   y: number;
 }
 
+/** Point on `event.page` beneath the clear scroll viewport's centre. */
+export interface DocumentViewport {
+  zoom: number;
+  x: number;
+  y: number;
+}
+
 /**
  * The teacher's view of the shared board. Pan is a fraction of the board size,
  * not pixels, so a tablet and a laptop land on the same part of the page.
@@ -75,6 +82,8 @@ export interface ViewEvent extends BaseEvent {
   panY: number;
   /** Whether students are currently locked to this view. */
   follow: boolean;
+  /** Optional whole-document zoom/anchor; absent for legacy paged navigation. */
+  documentView?: DocumentViewport;
 }
 
 /**
@@ -154,6 +163,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function isDocumentViewport(value: unknown): value is DocumentViewport {
+  return isRecord(value) && !Array.isArray(value)
+    && isFiniteIn(value.zoom, 1, 5) && isFiniteIn(value.x, -10, 10) && isFiniteIn(value.y, -10, 10);
+}
+
 function hasBase(value: Record<string, unknown>, classId: string): boolean {
   return (
     value.v === 1 &&
@@ -215,7 +229,8 @@ export function parseClassEvent(raw: Uint8Array, classId: string): ClassEvent | 
         isFiniteIn(parsed.zoom, 1, 5) &&
         isFiniteIn(parsed.panX, -5, 0) &&
         isFiniteIn(parsed.panY, -5, 0) &&
-        typeof parsed.follow === 'boolean'
+        typeof parsed.follow === 'boolean' &&
+        (parsed.documentView === undefined || isDocumentViewport(parsed.documentView))
         ? (parsed as unknown as ViewEvent)
         : null;
     case 'annotation':

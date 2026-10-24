@@ -25,6 +25,8 @@ export interface PdfDoc {
 const MAX_PIXEL_RATIO = 2;
 /** Widths are bucketed so a small resize does not re-render every page. */
 const WIDTH_BUCKET = 200;
+/** Keep recent zoom levels without retaining a raster for every visited width. */
+const MAX_RENDER_CACHE_ENTRIES = 4;
 
 export function widthBucket(width: number): number {
   return Math.max(WIDTH_BUCKET, Math.ceil(width / WIDTH_BUCKET) * WIDTH_BUCKET);
@@ -46,13 +48,22 @@ export async function openPdf(data: ArrayBuffer): Promise<PdfDoc> {
     const bucket = widthBucket(width);
     const key = `${index}:${bucket}`;
     const cached = cache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      cache.delete(key);
+      cache.set(key, cached);
+      return cached;
+    }
 
     const rendering = (async () => {
       const page = await document.getPage(index + 1);
       const base = page.getViewport({ scale: 1 });
       const ratio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
-      const viewport = page.getViewport({ scale: (bucket * ratio) / base.width });
+      // A document can be zoomed far beyond the viewport. Bound both sides
+      // and area after learning its actual aspect, including unusually tall
+      // pages, before pdf.js allocates any raster backing storage.
+      const scale = Math.min((bucket * ratio) / base.width,
+        3072 / base.width, 3072 / base.height, Math.sqrt(6_000_000 / base.width / base.height));
+      const viewport = page.getViewport({ scale });
       const canvas = window.document.createElement('canvas');
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
@@ -62,8 +73,15 @@ export async function openPdf(data: ArrayBuffer): Promise<PdfDoc> {
       return { canvas, aspect: base.width / base.height };
     })();
     // A failed render must not poison the cache: the next attempt retries.
-    rendering.catch(() => cache.delete(key));
+    rendering.catch(() => {
+      // An evicted request may reject after a replacement for this key began.
+      if (cache.get(key) === rendering) cache.delete(key);
+    });
     cache.set(key, rendering);
+    while (cache.size > MAX_RENDER_CACHE_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
     return rendering;
   };
 

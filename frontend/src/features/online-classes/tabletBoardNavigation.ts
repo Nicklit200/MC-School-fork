@@ -8,6 +8,7 @@
 import type { TabletInkContact } from '../../lib/tabletInkInput';
 import { panBy, pinchView, type PageView, type Point } from './boardView';
 import { panWithScroll, pinchWithScroll } from './continuousBoardNavigation';
+import { documentPinch, type DocumentGesture } from './documentGesture';
 
 type BoardSize = { width: number; height: number };
 type Origin = { left: number; top: number };
@@ -54,7 +55,8 @@ export class TabletBoardNavigation {
     origin: Origin,
     view: PageView,
     board: BoardSize,
-    options: { locked: boolean; allowOneFingerPan: boolean; onScrollGesture?: (dx: number, dy: number) => void },
+    options: { locked: boolean; allowOneFingerPan: boolean; onScrollGesture?: (dx: number, dy: number) => void;
+      onDocumentGesture?: (gesture: DocumentGesture) => void },
   ): PageView | null {
     if (options.locked || board.width <= 0 || board.height <= 0 || contacts.length === 0) {
       this.reset();
@@ -62,7 +64,7 @@ export class TabletBoardNavigation {
     }
     // The page itself moves while its document scrolls. Keep the contact
     // coordinate origin fixed for this gesture to avoid scroll feedback.
-    const contactOrigin = options.onScrollGesture ? (this.continuousOrigin ??= { ...origin }) : origin;
+    const contactOrigin = options.onScrollGesture || options.onDocumentGesture ? (this.continuousOrigin ??= { ...origin }) : origin;
 
     if (contacts.length === 1) {
       if (!options.allowOneFingerPan) {
@@ -76,10 +78,11 @@ export class TabletBoardNavigation {
         return null;
       }
       if (options.onScrollGesture) {
-        const next = panWithScroll(this.anchor.view, point.x - this.anchor.initial.x, point.y - this.anchor.initial.y, board);
+        const next = panWithScroll(this.anchor.view, point.x - this.anchor.initial.x, point.y - this.anchor.initial.y,
+          board, Boolean(options.onDocumentGesture));
         this.anchor.initial = point; this.anchor.view = next.view;
         if (next.scroll.x || next.scroll.y) options.onScrollGesture(next.scroll.x, next.scroll.y);
-        return next.view;
+        return options.onDocumentGesture ? null : next.view;
       }
       return panBy(this.anchor.view,
         point.x - this.anchor.initial.x, point.y - this.anchor.initial.y, board);
@@ -105,6 +108,13 @@ export class TabletBoardNavigation {
     }
 
     const anchor = this.anchor as PinchAnchor;
+    if (options.onDocumentGesture) {
+      const first = inBoard(a, contactOrigin), second = inBoard(b, contactOrigin);
+      const gesture = documentPinch([anchor.first, anchor.second], [first, second]);
+      anchor.first = first; anchor.second = second;
+      options.onDocumentGesture({ ...gesture, anchor: { x: gesture.anchor.x + contactOrigin.left, y: gesture.anchor.y + contactOrigin.top } });
+      return null;
+    }
     if (options.onScrollGesture) {
       const first = inBoard(a, contactOrigin), second = inBoard(b, contactOrigin);
       const next = pinchWithScroll(anchor.view, [anchor.first, anchor.second], [first, second], board, anchor.scrollAtFit);
