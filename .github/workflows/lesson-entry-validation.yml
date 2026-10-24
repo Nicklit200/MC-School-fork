@@ -28,10 +28,12 @@ jobs:
           patch = lzma.decompress(base64.b64decode(data, validate=True))
           assert hashlib.sha256(patch).hexdigest() == 'dca53888d14cef448b268d7f6d299160b3e74cf756e8d7d924384d9a72d20bd2'
           pathlib.Path('/tmp/lesson-entry.patch').write_bytes(patch)
+          pathlib.Path('/tmp/entry-refine.py').write_bytes((root / 'refine.py').read_bytes())
           PY
           git checkout --detach fb42adf5271b6f63a09a9be3ce58e949fa120f22
           git apply --check /tmp/lesson-entry.patch
           git apply /tmp/lesson-entry.patch
+          python3 /tmp/entry-refine.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
