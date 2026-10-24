@@ -469,6 +469,8 @@ export function WhiteboardPanel({
           onClearMine={() => void board.clearMine()}
           hostActions={hostButtons}
           fileAction={fileAction}
+          onAddPage={targetType === 'WHITEBOARD' && (isHost || personal) ? () => setPages(addPage) : undefined}
+          addPageDisabled={locked}
           primaryActions={isHost ? <>
             {hostActions}
             <button type="button" className="board-toolbar__action" disabled={savingLessonDocuments}

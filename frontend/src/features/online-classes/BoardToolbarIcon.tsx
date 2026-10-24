@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Tool } from './WhiteboardCanvas';
 
-type IconName = Tool | 'undo' | 'redo' | 'file' | 'save' | 'answers' | 'more' | 'clear';
+type IconName = Tool | 'undo' | 'redo' | 'file' | 'blankPage' | 'save' | 'answers' | 'more' | 'clear';
 const icons: Record<IconName, ReactNode> = {
   undo: <path d="m8 4-5 5 5 5M4 9h9a7 7 0 0 1 0 14" />,
   redo: <path d="m16 4 5 5-5 5m4-5h-9a7 7 0 0 0 0 14" />,
@@ -17,6 +17,7 @@ const icons: Record<IconName, ReactNode> = {
   ellipse: <ellipse cx="12" cy="12" rx="10" ry="8" />,
   laser: <><path d="m3 21 8-8m4-5 1-4m3 8 4-1m-8 7 2 4M8 8 5 5" /><circle cx="13" cy="11" r="2" /></>,
   file: <path d="M14 2H5v20h14V7zM14 2v6h5M8 14h8m-4-4v8" />,
+  blankPage: <path d="M14 2H5v20h14V7zM14 2v6h5" />,
   save: <path d="M4 3h14l3 3v15H3V3zm3 0v6h10V3M7 21v-8h10v8" />,
   answers: <><rect x="2" y="3" width="20" height="18" rx="3" /><path d="M9 3v18M5 8h1m-1 4h1" /></>,
   more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,

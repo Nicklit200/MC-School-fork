@@ -142,7 +142,7 @@
 .whiteboard--original-v3 .board-toolbar__divider { width:1px; height:19px; flex:0 0 1px; margin:0 4px; background:#50585f; }
 .whiteboard--original-v3 .board-toolbar__file-action,
 .whiteboard--original-v3 .board-toolbar__primary-actions { display:flex; align-items:center; gap:3px; }
-.whiteboard--original-v3 .board-toolbar__file-action { border-left:1px solid #50585f; padding-left:8px; margin-left:4px; }
+.whiteboard--original-v3 .board-toolbar__file-action { position:relative; border-left:1px solid #50585f; padding-left:8px; margin-left:4px; }
 .whiteboard--original-v3 .board-toolbar__more { position:relative; }
 .whiteboard--original-v3.school-islands-board .board-toolbar__settings {
   position:absolute; top:52px; left:50%; right:auto; transform:translateX(-50%);
@@ -171,11 +171,18 @@
 .whiteboard--original-v3 .board-toolbar__text-control select,
 .whiteboard--original-v3 .board-toolbar__text-control input { max-width:160px; height:26px; padding:3px; color:var(--v3-text); background:#383e43; border:1px solid #50585f; border-radius:6px; font-size:10px; }
 .whiteboard--original-v3 .board-toolbar__text-control input { width:48px; }
-.whiteboard--original-v3 .board-toolbar__more-menu {
+.whiteboard--original-v3 .board-toolbar__more-menu,
+.whiteboard--original-v3 .board-toolbar__add-menu {
   position:absolute; top:41px; right:0; z-index:20; width:230px; max-width:calc(100vw - 24px);
   max-height:min(440px,65dvh); overflow:auto; padding:8px; background:var(--v3-panel);
   border:1px solid #50595f; border-radius:12px; box-shadow:0 10px 30px #0005;
 }
+.whiteboard--original-v3 .board-toolbar__add-menu { display:flex; flex-direction:column; gap:3px; }
+.whiteboard--original-v3.school-islands-board .board-toolbar__island .board-toolbar__add-menu button {
+  width:100%; height:auto; min-height:38px; justify-content:flex-start; gap:9px; padding:9px 8px;
+  text-align:left; white-space:normal; line-height:1.4;
+}
+.whiteboard--original-v3 .board-toolbar__add-menu svg { flex:0 0 20px; }
 .whiteboard--original-v3 .board-toolbar__extra-tools { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; justify-items:center; }
 .whiteboard--original-v3 .board-toolbar__more-actions { display:flex; flex-direction:column; gap:3px; margin-top:8px; padding-top:8px; border-top:1px solid #444b51; }
 .whiteboard--original-v3.school-islands-board .board-toolbar__more-actions button { width:100%; height:auto; min-height:32px; justify-content:flex-start; gap:7px; text-align:left; white-space:normal; padding:7px; }

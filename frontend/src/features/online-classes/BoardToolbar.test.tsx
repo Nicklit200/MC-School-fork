@@ -14,6 +14,8 @@ function Harness({
   hostActions,
   sharedActions,
   fileAction,
+  onAddPage,
+  addPageDisabled,
   primaryActions,
   canUndo = false,
   canRedo = false,
@@ -27,6 +29,8 @@ function Harness({
   hostActions?: React.ReactNode;
   sharedActions?: React.ReactNode;
   fileAction?: React.ReactNode;
+  onAddPage?: () => void;
+  addPageDisabled?: boolean;
   primaryActions?: React.ReactNode;
   canUndo?: boolean;
   canRedo?: boolean;
@@ -58,6 +62,8 @@ function Harness({
         hostActions={hostActions}
         sharedActions={sharedActions}
         fileAction={fileAction}
+        onAddPage={onAddPage}
+        addPageDisabled={addPageDisabled}
         primaryActions={primaryActions}
       />
     </I18nProvider>
@@ -181,14 +187,49 @@ describe('BoardToolbar', () => {
   it('keeps the compact island order and invokes the supplied upload, save, answers and undo callbacks', async () => {
     const user = userEvent.setup(), upload = vi.fn(), save = vi.fn(), answers = vi.fn(), undo = vi.fn(), redo = vi.fn();
     render(<Harness canUndo canRedo onUndo={undo} onRedo={redo}
-      fileAction={<button onClick={upload}>Добавить PDF / фото</button>}
+      fileAction={<button role="menuitem" onClick={upload}>Добавить документ</button>}
       primaryActions={<><button onClick={answers}>Ответы</button><button onClick={save}>Сохранить документы урока</button></>} />);
     const island = screen.getByRole('toolbar').querySelector('.board-toolbar__island') as HTMLElement;
     expect(within(island).getAllByRole('button').map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
-      'Отменить', 'Вернуть', 'Перемещение', 'Перо', 'Ластик', 'Маркер', 'Добавить PDF / фото', 'Ответы', 'Сохранить документы урока', 'Другие инструменты',
+      'Отменить', 'Вернуть', 'Перемещение', 'Перо', 'Ластик', 'Маркер', 'Добавить', 'Ответы', 'Сохранить документы урока', 'Другие инструменты',
     ]);
-    for (const name of ['Отменить', 'Вернуть', 'Добавить PDF / фото', 'Ответы', 'Сохранить документы урока']) await user.click(screen.getByRole('button', { name }));
+    for (const name of ['Отменить', 'Вернуть', 'Ответы', 'Сохранить документы урока']) await user.click(screen.getByRole('button', { name }));
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Добавить документ' }));
     for (const callback of [undo, redo, upload, answers, save]) expect(callback).toHaveBeenCalledOnce();
+  });
+
+  it('chooses a document or blank page from Add and supports keyboard and dismissal', async () => {
+    const user = userEvent.setup(), upload = vi.fn(), add = vi.fn();
+    render(<Harness onAddPage={add} fileAction={<button role="menuitem" onClick={upload}>Добавить документ</button>} />);
+    const trigger = screen.getByRole('button', { name: 'Добавить' });
+    await user.click(screen.getByRole('button', { name: 'Перо' }));
+    await user.click(trigger);
+    expect(screen.queryByRole('group', { name: 'Настройки инструмента' })).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Добавить документ' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(add).toHaveBeenCalledOnce(); expect(upload).not.toHaveBeenCalled();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument(); expect(trigger).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{Enter}');
+    expect(upload).toHaveBeenCalledOnce(); expect(trigger).toHaveFocus();
+    await user.click(trigger); await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument(); expect(trigger).toHaveFocus();
+    await user.click(trigger); await user.click(screen.getByRole('button', { name: 'outside' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await user.click(trigger); await user.click(screen.getByRole('button', { name: 'Другие инструменты' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('keeps an unavailable blank page disabled and omits actions not supplied by the caller', async () => {
+    const user = userEvent.setup(), add = vi.fn();
+    render(<Harness onAddPage={add} addPageDisabled />);
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    const item = screen.getByRole('menuitem', { name: 'Добавить пустую страницу' });
+    expect(item).toBeDisabled();
+    expect(screen.queryByRole('menuitem', { name: 'Добавить документ' })).not.toBeInTheDocument();
+    await user.click(item); expect(add).not.toHaveBeenCalled();
   });
 
   it('keeps unavailable undo and redo disabled', async () => {

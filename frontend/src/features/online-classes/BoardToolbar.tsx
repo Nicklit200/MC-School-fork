@@ -25,8 +25,10 @@ interface Props {
   /** The caller supplies authorized actions; this component never infers a role. */
   hostActions?: ReactNode;
   sharedActions?: ReactNode;
-  /** Optional upload action between the main tools and More. */
+  /** Authorized document menu item, including its upload/disabled behavior. */
   fileAction?: ReactNode;
+  onAddPage?: () => void;
+  addPageDisabled?: boolean;
   /** Compact actions such as teacher answers and saving lesson documents. */
   primaryActions?: ReactNode;
 }
@@ -38,14 +40,18 @@ const HOLD_MS = 400;
 
 /** One compact island with contextual tool settings below it. */
 export function BoardToolbar({ tool, onToolChange, settings, onSettingsChange, eraserMode, onEraserModeChange,
-  inputMode, onInputModeChange, canUndo, canRedo, onUndo, onRedo, onClearMine, hostActions, sharedActions, fileAction, primaryActions }: Props) {
+  inputMode, onInputModeChange, canUndo, canRedo, onUndo, onRedo, onClearMine, hostActions, sharedActions, fileAction, onAddPage, addPageDisabled, primaryActions }: Props) {
   const { t, language } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [fileOpen, setFileOpen] = useState(false);
+  const [fileMenuRight, setFileMenuRight] = useState(0);
   const [colorsOpen, setColorsOpen] = useState(false);
   const [colorMenuPosition, setColorMenuPosition] = useState({ top: 64, left: 12 });
   const rootRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
+  const fileRef = useRef<HTMLButtonElement>(null);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
   const colorTrigger = useRef<HTMLButtonElement>(null);
   const toolButtons = useRef<Partial<Record<Tool, HTMLButtonElement | null>>>({});
@@ -54,14 +60,24 @@ export function BoardToolbar({ tool, onToolChange, settings, onSettingsChange, e
   const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
   const holdOpened = useRef(false);
-  const moreId = useId(), settingsId = useId(), paletteId = useId();
+  const moreId = useId(), settingsId = useId(), paletteId = useId(), fileId = useId();
   const activeSettings = settings[tool];
   const definition = TOOL_DEFINITIONS.find(entry => entry.tool === tool);
   const moreLabel = language === 'DE' ? 'Weitere Werkzeuge' : 'Другие инструменты';
+  const addLabel = language === 'DE' ? 'Hinzufügen' : 'Добавить';
   const toolLabel = (value: Tool) => value === 'pan' ? (language === 'DE' ? 'Verschieben' : 'Перемещение')
     : t(TOOL_DEFINITIONS.find(entry => entry.tool === value)!.labelKey);
   const cancelHold = () => { clearTimeout(holdTimer.current); holdTimer.current = undefined; holdStart.current = null; };
-  const closeMenus = () => { setMenuOpen(false); setMoreOpen(false); setColorsOpen(false); cancelHold(); };
+  const closeMenus = () => { setMenuOpen(false); setMoreOpen(false); setFileOpen(false); setColorsOpen(false); cancelHold(); };
+  const openFileMenu = () => {
+    const rect = fileRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = Math.min(230, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+      setFileMenuRight(rect.right - left - width);
+    }
+    closeMenus(); setFileOpen(true);
+  };
 
   useEffect(() => () => clearTimeout(holdTimer.current), []);
   useEffect(() => {
@@ -73,24 +89,32 @@ export function BoardToolbar({ tool, onToolChange, settings, onSettingsChange, e
     if (moreOpen && focusMore.current) { toolButtons.current.select?.focus(); focusMore.current = false; }
   }, [moreOpen]);
   useEffect(() => {
-    if (!menuOpen && !colorsOpen && !moreOpen) return;
+    if (fileOpen) fileMenuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    if (!fileOpen) return;
+    const close = () => setFileOpen(false);
+    window.addEventListener('resize', close);
+    return () => window.removeEventListener('resize', close);
+  }, [fileOpen]);
+  useEffect(() => {
+    if (!menuOpen && !colorsOpen && !moreOpen && !fileOpen) return;
     const outside = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node) && !paletteRef.current?.contains(event.target as Node)) closeMenus();
     };
     const escape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault(); closeMenus();
-      if (moreOpen || !MAIN_TOOLS.includes(tool)) moreRef.current?.focus();
+      if (fileOpen) fileRef.current?.focus();
+      else if (moreOpen || !MAIN_TOOLS.includes(tool)) moreRef.current?.focus();
       else toolButtons.current[tool]?.focus();
     };
     document.addEventListener('pointerdown', outside, true); document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', escape); };
-  }, [menuOpen, colorsOpen, moreOpen, tool]);
+  }, [menuOpen, colorsOpen, moreOpen, fileOpen, tool]);
 
   const chooseTool = (value: Tool) => {
     if (value !== tool) onToolChange(value);
     setMenuOpen(hasSettings(value) && !(value === tool && menuOpen));
-    setMoreOpen(false); setColorsOpen(false); cancelHold();
+    setMoreOpen(false); setFileOpen(false); setColorsOpen(false); cancelHold();
     if (MORE_TOOLS.includes(value)) moreRef.current?.focus();
   };
   const renderTool = (value: Tool) => <button key={value} ref={button => { toolButtons.current[value] = button; }} type="button"
@@ -124,17 +148,35 @@ export function BoardToolbar({ tool, onToolChange, settings, onSettingsChange, e
         disabled={!canRedo} onClick={() => { closeMenus(); onRedo(); }}><BoardToolbarIcon name="redo" /></button>
       <span className="board-toolbar__divider" aria-hidden="true" />
       {MAIN_TOOLS.map(renderTool)}
-      {fileAction && <span className="board-toolbar__file-action">{fileAction}</span>}
+      {(fileAction || onAddPage) && <div className="board-toolbar__file-action"
+        onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setFileOpen(false); }}>
+        <button ref={fileRef} className={`board-toolbar__tool${fileOpen ? ' is-active' : ''}`} type="button"
+          aria-label={addLabel} title={addLabel} aria-haspopup="menu" aria-expanded={fileOpen} aria-controls={fileId}
+          onClick={() => { if (fileOpen) closeMenus(); else openFileMenu(); }}
+          onKeyDown={event => { if (event.key === 'ArrowDown') {
+            event.preventDefault(); openFileMenu();
+            fileMenuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+          } }}><BoardToolbarIcon name="file" /></button>
+        {fileOpen && <div ref={fileMenuRef} id={fileId} className="board-toolbar__add-menu" style={{ right: fileMenuRight }} role="menu" aria-label={addLabel}
+          onKeyDown={navigateMenu} onClick={event => {
+            if ((event.target as Element).closest('button:not(:disabled)')) { setFileOpen(false); fileRef.current?.focus(); }
+          }}>
+          {fileAction}
+          {onAddPage && <button type="button" role="menuitem" tabIndex={-1} disabled={addPageDisabled} onClick={onAddPage}>
+            <BoardToolbarIcon name="blankPage" />{language === 'DE' ? 'Leere Seite hinzufügen' : 'Добавить пустую страницу'}
+          </button>}
+        </div>}
+      </div>}
       {primaryActions && <span className="board-toolbar__primary-actions">{primaryActions}</span>}
       <div className="board-toolbar__more">
         <button ref={moreRef} className={`board-toolbar__tool${MORE_TOOLS.includes(tool) ? ' is-active' : ''}`} type="button"
           aria-label={moreLabel} title={moreLabel} aria-expanded={moreOpen} aria-controls={moreId}
-          onClick={() => { setMoreOpen(!moreOpen); setMenuOpen(false); setColorsOpen(false); cancelHold(); }}
+          onClick={() => { setMoreOpen(!moreOpen); setFileOpen(false); setMenuOpen(false); setColorsOpen(false); cancelHold(); }}
           onKeyDown={event => { if (event.key === 'ArrowDown') {
             event.preventDefault();
             if (moreOpen) toolButtons.current.select?.focus();
             else { focusMore.current = true; setMoreOpen(true); }
-            setMenuOpen(false); setColorsOpen(false);
+            setMenuOpen(false); setFileOpen(false); setColorsOpen(false);
           } }}>
           <BoardToolbarIcon name="more" />
         </button>

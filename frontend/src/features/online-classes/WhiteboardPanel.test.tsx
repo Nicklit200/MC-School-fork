@@ -321,7 +321,8 @@ describe('WhiteboardPanel', () => {
     await screen.findByTestId('canvas');
     expect(canvasProps.sourceAspect).toBe(1.6);
     expect(canvasProps.background).toBe(pageCanvas);
-    await user.click(screen.getByRole('button', { name: 'Добавить страницу' }));
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Добавить пустую страницу' }));
     await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', 'board-1', 1, undefined, undefined));
     expect(canvasProps.sourceAspect).toBe(210 / 297);
     expect(canvasProps.background).toBeNull();

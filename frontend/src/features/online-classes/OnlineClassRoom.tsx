@@ -354,10 +354,9 @@ function RoomBody({
     notebookTrigger.current?.focus();
   };
 
-  const fileAction = connection.host ? <button type="button" className="board-toolbar__action"
-    aria-label={materialBusy ? 'Загрузка…' : 'Добавить PDF / Фото'}
-    title="Добавить PDF / Фото" disabled={materialBusy} onClick={() => materialInput.current?.click()}>
-    <BoardToolbarIcon name="file" />
+  const fileAction = connection.host ? <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
+    disabled={materialBusy} onClick={() => materialInput.current?.click()}>
+    <BoardToolbarIcon name="file" />{materialBusy ? 'Загрузка…' : language === 'DE' ? 'Dokument hinzufügen' : 'Добавить документ'}
   </button> : undefined;
 
   return (

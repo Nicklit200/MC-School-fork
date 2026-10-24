@@ -135,7 +135,7 @@ describe('PDF upload contract', () => {
 
   it('opens the real workbook picker from the compact board action', async () => {
     const view = mount(true, { lessonTitle: 'Алгебра' });
-    const action = await screen.findByRole('button', { name: 'Добавить PDF / Фото' });
+    const action = await screen.findByRole('menuitem', { name: 'Добавить документ' });
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     const picker = vi.spyOn(input, 'click').mockImplementation(() => undefined);
     await userEvent.click(action);
@@ -206,7 +206,7 @@ describe('PDF upload contract', () => {
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(['pdf'], 'large.pdf', { type: 'application/pdf' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 413');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Добавить PDF / Фото' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Добавить документ' })).toBeEnabled());
   });
 });
 
