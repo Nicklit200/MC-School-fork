@@ -13,9 +13,9 @@
   max-height: min(420px, calc(100vh - 24px));
   overflow-y: auto;
   padding: 7px;
-  border: 1px solid #e7eaf0;
+  border: 1px solid var(--teacher-border, #e7eaf0);
   border-radius: 12px;
-  background: #fff;
+  background: var(--teacher-surface, #fff);
   box-shadow: 0 16px 38px rgba(21, 32, 56, .14);
 }
 
@@ -29,7 +29,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #26344f;
+  color: var(--teacher-text, #26344f);
   font-size: 12px;
   font-weight: 600;
   text-align: left;
@@ -37,8 +37,8 @@
 }
 
 .teacher-student-menu button:hover:not(:disabled) {
-  background: #fff5ee;
-  color: #e95a09;
+  background: var(--teacher-selected, #fff5ee);
+  color: var(--teacher-selected-text, #e95a09);
 }
 
 .teacher-student-menu button:disabled {
@@ -47,11 +47,11 @@
 }
 
 .teacher-student-menu button.is-danger {
-  color: #df352a;
+  color: var(--teacher-error-text, #df352a);
 }
 
 .teacher-student-menu button.is-danger:hover {
-  background: #fff0ee;
+  background: var(--teacher-selected, #fff0ee);
 }
 
 .teacher-student-menu button span {

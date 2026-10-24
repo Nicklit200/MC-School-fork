@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext';
@@ -27,7 +27,7 @@ function mount() {
 }
 
 function showTeacherSidebar() {
-  fireEvent.click(screen.getByRole('button', { name: 'Показать меню' }));
+  expect(screen.getByRole('navigation', { name: 'Основная навигация' })).toBeInTheDocument();
 }
 
 describe('Layout: owner-only online classroom pilot navigation', () => {
@@ -68,9 +68,30 @@ describe('Layout: owner-only online classroom pilot navigation', () => {
     expect(screen.queryByRole('link', { name: 'Онлайн-уроки' })).not.toBeInTheDocument();
   });
 
-  it('keeps the future-only homework shortcut disabled', () => {
+  it('does not expose a dead-end homework shortcut', () => {
     mount();
     showTeacherSidebar();
-    expect(screen.getByText('Домашние задания').closest('a')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Домашние задания' })).not.toBeInTheDocument();
+  });
+  it('opens the additional sections, traps focus, and returns it on Escape', () => {
+    mount();
+    const more = screen.getByRole('button', { name: 'Показать меню' });
+    fireEvent.click(more);
+    const dialog = screen.getByRole('dialog', { name: 'Разделы кабинета' });
+    const close = within(dialog).getByRole('button', { name: 'Закрыть меню' });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(within(dialog).getByRole('button', { name: 'Выйти' })).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(more).toHaveFocus();
+  });
+
+  it('closes the additional menu when navigating and keeps the official logo', () => {
+    mount();
+    expect(screen.getAllByRole('img', { name: 'Mindcrafti School' })[0]).toHaveAttribute('src', '/brand/Mindcrafti_Logo_M_OFFICIAL.webp');
+    fireEvent.click(screen.getByRole('button', { name: 'Показать меню' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('link', { name: 'Родители' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

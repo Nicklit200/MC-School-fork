@@ -64,7 +64,13 @@ public class GoogleCalendarLessonService {
 
     @Transactional
     public List<GroupLessonResponse> listGroupLessons(AuthenticatedUser teacher) {
-        String accessToken = oauthService.accessTokenForTeacher(teacher.id());
+        String accessToken;
+        try {
+            accessToken = oauthService.accessTokenForTeacher(teacher.id());
+        } catch (RuntimeException unavailable) {
+            // An expired Google connection must not hide native lessons or their history.
+            return archivedLessons(teacher.id());
+        }
         if (accessToken == null || accessToken.isBlank()) return archivedLessons(teacher.id());
         User teacherEntity = userRepository.findById(teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));

@@ -165,7 +165,7 @@ export function GroupCardsDetailPage() {
                     <div className="row" style={{ gap: 16, alignItems: 'center' }}>
                       <span className="badge">{language === 'DE' ? 'Aktiv' : 'Активна'}</span>
                       <button type="button" className="btn btn--ghost" onClick={() => startEdit(card)}>{language === 'DE' ? 'Bearbeiten' : 'Редактировать'}</button>
-                      <button type="button" className="btn btn--ghost" style={{ color: '#dc2626' }} onClick={() => void deleteCard(card)}>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
+                      <button type="button" className="btn btn--ghost" style={{ color: 'var(--teacher-error-text, #dc2626)' }} onClick={() => void deleteCard(card)}>{language === 'DE' ? 'Löschen' : 'Удалить'}</button>
                     </div>
                   </div>
                 )}

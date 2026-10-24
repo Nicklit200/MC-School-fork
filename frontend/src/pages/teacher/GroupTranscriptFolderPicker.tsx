@@ -104,7 +104,7 @@ export function GroupTranscriptFolderPicker({ groupId }: { groupId: string }) {
   }
 
   return (
-    <section className="panel" style={{ margin: '16px 0 20px', padding: 20, border: '1px solid #f0d8c8' }}>
+    <section className="panel" style={{ margin: '16px 0 20px', padding: 20, border: '1px solid var(--teacher-selected-border, #f0d8c8)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ margin: 0 }}>Транскрипции уроков</h2>

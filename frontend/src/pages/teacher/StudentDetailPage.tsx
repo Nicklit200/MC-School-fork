@@ -225,7 +225,7 @@ export function StudentDetailPage() {
               <button
                 type="button"
                 className="btn btn--ghost"
-                style={{ color: '#dc2626', flex: '0 0 auto' }}
+                style={{ color: 'var(--teacher-error-text, #dc2626)', flex: '0 0 auto' }}
                 disabled={deletingBatchId === batch.id}
                 onClick={() => void deleteCardBatch(batch)}
               >

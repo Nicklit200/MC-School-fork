@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CreateLessonPanel } from './CreateLessonPanel';
 import { Link } from 'react-router-dom';
+import { isNativeLesson, lessonDurationLabel } from '../../lib/lessonSchedule';
 import { api } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
 import { lessonPreparationApi } from '../../api/lessonPreparation';
 import type { DailyReviewHistoryItem, GoogleCalendarConnection, GroupLesson, Homework, StudentGroup, StudentListItem, User } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
+import './lesson-agenda.css';
 
 type StudentBrief = {
   studentId: string;
@@ -23,7 +26,6 @@ type LessonBrief = {
 
 type BriefMap = Record<string, LessonBrief>;
 type ScheduleDay = { key: string; date: Date; lessons: GroupLesson[] };
-type ViewMode = 'week' | 'month';
 
 const STARTED_LESSON_KEY = 'mindcrafti.startedGroupLesson';
 const STARTED_LESSON_AT_KEY = 'mindcrafti.startedGroupLessonOpenedAt';
@@ -39,6 +41,8 @@ export function GroupLessonsPage() {
   const [briefs, setBriefs] = useState<BriefMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [createdLesson, setCreatedLesson] = useState<GroupLesson | null>(null);
+  const [createdCount, setCreatedCount] = useState(1);
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [startReminderLessonId, setStartReminderLessonId] = useState<string | null>(null);
   const [finishReminderLessonId, setFinishReminderLessonId] = useState<string | null>(null);
@@ -46,9 +50,9 @@ export function GroupLessonsPage() {
   const [finishedLessonId, setFinishedLessonId] = useState<string | null>(null);
   const [returnedLessonId, setReturnedLessonId] = useState<string | null>(null);
   const [unsafeReturnContext, setUnsafeReturnContext] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
-  const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
-  const [selectedMonthDayKey, setSelectedMonthDayKey] = useState<string | null>(null);
+  const [weekCursor, setWeekCursor] = useState(() => startOfWeekMonday(dateFromKey(berlinDateKey(new Date().toISOString()))));
+  const [selectedDayKey, setSelectedDayKey] = useState(() => berlinDateKey(new Date().toISOString()));
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -105,7 +109,7 @@ export function GroupLessonsPage() {
     setError(null);
     try {
       const [googleConnection, currentTeacher, studentList, groupList] = await Promise.all([
-        api.lessons.googleCalendarConnection(),
+        api.lessons.googleCalendarConnection().catch(() => ({ connected: false, authorizationUrl: null })),
         api.auth.me(),
         api.students.list(),
         api.groups.list(),
@@ -114,12 +118,6 @@ export function GroupLessonsPage() {
       setTeacher(currentTeacher);
       setStudents(studentList);
       setGroups(groupList);
-      if (!googleConnection.connected) {
-        setLessons([]);
-        setBriefs({});
-        return;
-      }
-
       const lessonList = await api.lessons.groupLessons();
       setLessons(lessonList);
       const groupIds = Array.from(new Set(lessonList.map((lesson) => lesson.groupId).filter((id): id is string => Boolean(id))));
@@ -172,19 +170,6 @@ export function GroupLessonsPage() {
     return () => window.clearInterval(timer);
   }, [startedLessonId, lessons, language]);
 
-  const scheduleDays = useMemo<ScheduleDay[]>(() => {
-    const start = startOfLocalDay(new Date());
-    const endExclusive = addDays(start, 7);
-    const weekLessons = lessons
-      .filter((lesson) => { const startsAt = new Date(lesson.startsAt); return startsAt >= start && startsAt < endExclusive; })
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-    return Array.from({ length: 7 }, (_, offset) => {
-      const date = addDays(start, offset);
-      const nextDate = addDays(date, 1);
-      return { key: localDateKey(date), date, lessons: weekLessons.filter((lesson) => { const startsAt = new Date(lesson.startsAt); return startsAt >= date && startsAt < nextDate; }) };
-    });
-  }, [lessons]);
-
   const lessonsByDay = useMemo(() => {
     const map = new Map<string, GroupLesson[]>();
     for (const lesson of lessons) {
@@ -199,30 +184,20 @@ export function GroupLessonsPage() {
     return map;
   }, [lessons]);
 
-  const monthGridDays = useMemo(() => {
-    const first = startOfMonth(monthCursor);
-    const gridStart = startOfWeekMonday(first);
-    return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
-  }, [monthCursor]);
-
-  useEffect(() => {
-    if (viewMode !== 'month') return;
-    const monthPrefix = monthKey(monthCursor);
-    if (selectedMonthDayKey?.startsWith(monthPrefix)) return;
-
-    const todayKey = localDateKey(new Date());
-    if (todayKey.startsWith(monthPrefix) && (lessonsByDay.get(todayKey)?.length ?? 0) > 0) {
-      setSelectedMonthDayKey(todayKey);
-      return;
-    }
-
-    const firstLessonDay = monthGridDays
-      .map(localDateKey)
-      .find((key) => key.startsWith(monthPrefix) && (lessonsByDay.get(key)?.length ?? 0) > 0);
-    setSelectedMonthDayKey(firstLessonDay ?? null);
-  }, [viewMode, monthCursor, monthGridDays, lessonsByDay, selectedMonthDayKey]);
-
-  const selectedMonthLessons = selectedMonthDayKey ? (lessonsByDay.get(selectedMonthDayKey) ?? []) : [];
+  const scheduleDays = useMemo<ScheduleDay[]>(() => Array.from({ length: 7 }, (_, offset) => {
+    const date = addDays(weekCursor, offset);
+    const key = localDateKey(date);
+    return { key, date, lessons: lessonsByDay.get(key) ?? [] };
+  }), [weekCursor, lessonsByDay]);
+  const selectedLessons = lessonsByDay.get(selectedDayKey) ?? [];
+  const selectedDate = dateFromKey(selectedDayKey);
+  const todayKey = berlinDateKey(new Date().toISOString());
+  function selectDate(key: string) {
+    setSelectedDayKey(key);
+    setWeekCursor(startOfWeekMonday(dateFromKey(key)));
+    setExpandedLessonId(null);
+  }
+  function moveWeek(offset: number) { selectDate(localDateKey(addDays(selectedDate, offset * 7))); }
 
   const returnedLesson = returnedLessonId ? lessons.find((lesson) => lesson.eventId === returnedLessonId) ?? null : null;
   const returnedGroup = returnedLesson?.groupId
@@ -249,9 +224,7 @@ export function GroupLessonsPage() {
     if (!window.confirm(language === 'DE' ? 'Google Calendar trennen?' : 'Отключить Google Calendar?')) return;
     try {
       await api.lessons.disconnectGoogleCalendar();
-      setConnection(await api.lessons.googleCalendarConnection());
-      setLessons([]);
-      setBriefs({});
+      await loadAll();
     } catch (e) { setError(toErrorMessage(e, t)); }
   }
 
@@ -297,16 +270,28 @@ export function GroupLessonsPage() {
     const expanded = expandedLessonId === lesson.eventId;
     const finished = finishedLessonId === lesson.eventId;
 
+    const native = isNativeLesson(lesson);
+    const past = native ? berlinDateKey(lesson.startsAt) < todayKey : new Date(lesson.endsAt).getTime() < Date.now();
+    const kind = lesson.groupId ? (language === 'DE' ? 'Gruppenunterricht' : 'Групповое занятие')
+      : lesson.studentId ? (language === 'DE' ? 'Einzelunterricht' : 'Индивидуальное занятие')
+        : (language === 'DE' ? 'Probeunterricht' : 'Пробный урок');
     return (
-      <div key={lesson.eventId} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: '#fff' }}>
-        <div style={{ fontSize: 17, fontWeight: 800 }}>{formatStartTime(lesson.startsAt, language)}</div>
-        <div style={{ fontWeight: 750, marginTop: 4 }}>{lesson.title}</div>
-        <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt, language)}</div>
-
-        {linkedGroup && (
-          <div className="banner banner--info" style={{ marginTop: 8, padding: 8, fontSize: 12 }}>{language === 'DE' ? `Gruppe: ${lesson.groupName}` : `Группа: ${lesson.groupName}`}</div>
-        )}
-
+      <article key={lesson.eventId} className="lesson-agenda-card">
+        <div className="lesson-agenda-card__row">
+          <div className="lesson-agenda-card__when">
+            <strong>{native ? lessonDurationLabel(lesson, language) : formatStartTime(lesson.startsAt, language)}</strong>
+            <span>{native ? (language === 'DE' ? 'Dauer' : 'Длительность') : (language === 'DE' ? 'bis ' : 'до ') + formatStartTime(lesson.endsAt, language)}</span>
+          </div>
+          <div className="lesson-agenda-card__info">
+            <h3>{lesson.title}</h3><p>{kind}{lesson.meetUrl ? ' · Google Meet' : ''}</p>
+            <span className={'lesson-agenda-status' + (past ? ' is-past' : '')}>{past ? (language === 'DE' ? 'Vergangen' : 'Прошедший') : (language === 'DE' ? 'Geplant' : 'Запланирован')}</span>
+          </div>
+          <div className="lesson-agenda-card__actions">
+            <Link className="btn" to={'/teacher/lessons/' + encodeURIComponent(lesson.eventId)}>{language === 'DE' ? 'Unterricht öffnen' : 'Открыть урок'}</Link>
+            <button className="teacher-icon-button" type="button" aria-label={(language === 'DE' ? 'Unterrichtseinstellungen: ' : 'Настройки урока: ') + lesson.title} aria-expanded={expanded} aria-controls={'lesson-options-' + lesson.eventId} onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)}>⋯</button>
+          </div>
+        </div>
+        {expanded && <div className="lesson-agenda-card__options" id={'lesson-options-' + lesson.eventId}>
         <label className="field" style={{ marginTop: 8, marginBottom: 0 }}>
           <span className="field__label" style={{ fontSize: 12 }}>{language === 'DE' ? 'Gruppe oder Schüler für diesen Termin' : 'Группа или ученик для этого события'}</span>
           <select className="select" value={selectedTarget} onChange={(e) => void bindTarget(lesson, e.target.value)}>
@@ -315,13 +300,10 @@ export function GroupLessonsPage() {
             {students.length > 0 && <optgroup label={language === 'DE' ? 'Schüler' : 'Ученики'}>{students.map((student) => <option key={student.id} value={`student:${student.id}`}>{student.fullName}</option>)}</optgroup>}
           </select>
         </label>
-
-        <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-          <button className="btn" type="button" data-mindcrafti-lesson-id={lesson.eventId} data-mindcrafti-group-id={lesson.groupId ?? ''} data-mindcrafti-student-id={lesson.studentId ?? ''} onClick={() => void requestStartLesson(lesson)} style={{ width: '100%' }}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>
-          {linkedGroup && <button className="btn btn--secondary" type="button" onClick={() => setExpandedLessonId(expanded ? null : lesson.eventId)} style={{ width: '100%' }}>{expanded ? (language === 'DE' ? 'Details schließen' : 'Скрыть детали') : (language === 'DE' ? 'Vorbereitung' : 'Подготовка')}</button>}
-          {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer" style={{ width: '100%', textAlign: 'center' }}>Google Calendar</a>}
-        </div>
-
+          <div className="lesson-agenda-card__links">
+            {lesson.meetUrl && <button className="btn" type="button" data-mindcrafti-lesson-id={lesson.eventId} data-mindcrafti-group-id={lesson.groupId ?? ''} data-mindcrafti-student-id={lesson.studentId ?? ''} onClick={() => void requestStartLesson(lesson)}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>}
+            {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
+          </div>
         {expanded && linkedGroup && brief && lesson.groupId && (
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontWeight: 750, marginBottom: 8 }}>{language === 'DE' ? 'Kurz vor dem Unterricht' : 'Кратко перед уроком'}</div>
@@ -333,39 +315,37 @@ export function GroupLessonsPage() {
           </div>
         )}
 
+        </div>}
+
         {finished && !returnedLessonId && linkedGroup && lesson.groupId && <TranscriptUpload eventId={lesson.eventId} target={{ kind: 'group', id: lesson.groupId, initialFolderId: brief?.group.googleDriveTranscriptFolderId ?? groups.find((group) => group.id === lesson.groupId)?.googleDriveTranscriptFolderId ?? null }} language={language} />}
         {finished && !returnedLessonId && !linkedGroup && lesson.studentId && <TranscriptUpload eventId={lesson.eventId} target={{ kind: 'student', id: lesson.studentId, initialFolderId: students.find((student) => student.id === lesson.studentId)?.googleDriveTranscriptFolderId ?? null }} language={language} />}
         {finished && !returnedLessonId && !linkedGroup && !lesson.studentId && teacher && <TranscriptUpload eventId={lesson.eventId} target={{ kind: 'trial', id: teacher.id, initialFolderId: teacher.googleDriveTrialTranscriptFolderId ?? null }} language={language} />}
-      </div>
+      </article>
     );
   }
 
-  if (loading) return <p className="muted">{t('common.loading')}</p>;
   const startReminderLesson = startReminderLessonId ? lessons.find((lesson) => lesson.eventId === startReminderLessonId) ?? null : null;
   const finishReminderLesson = finishReminderLessonId ? lessons.find((lesson) => lesson.eventId === finishReminderLessonId) ?? null : null;
 
   return (
     <div className="teacher-lessons-page">
-      <div className="teacher-page-heading" style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div>
-          <h1>{language === 'DE' ? 'Unterricht' : 'Уроки'}</h1>
-          <p>
-            {viewMode === 'week'
-              ? (language === 'DE' ? 'Dein Stundenplan für die nächsten 7 Tage.' : 'Расписание на ближайшие 7 дней.')
-              : (language === 'DE' ? 'Monatsübersicht: Unterrichtstage sind orange markiert.' : 'Календарь на месяц: дни с уроками отмечены оранжевым.')}
-          </p>
+      <div className="teacher-page-heading lesson-agenda-heading">
+        <div><h1>{language === 'DE' ? 'Unterricht' : 'Уроки'}</h1>
+          <p>{language === 'DE' ? 'Stundenplan und Unterrichtsmaterialien' : 'Расписание и переход к материалам урока'}</p>
         </div>
-        {connection?.connected === true && (
-          <div style={{ display: 'inline-flex', padding: 4, borderRadius: 12, background: '#eef1f5', border: '1px solid #e1e5ea' }}>
-            <button type="button" onClick={() => setViewMode('week')} style={viewToggleStyle(viewMode === 'week')}>
-              {language === 'DE' ? 'Woche' : 'Неделя'}
-            </button>
-            <button type="button" onClick={() => setViewMode('month')} style={viewToggleStyle(viewMode === 'month')}>
-              {language === 'DE' ? 'Monat' : 'Месяц'}
-            </button>
-          </div>
-        )}
+        <CreateLessonPanel students={students} groups={groups} selectedDate={selectedDayKey} disabled={loading} onCreated={async (created) => {
+          const lesson = created[0];
+          if (!lesson) return;
+          selectDate(berlinDateKey(lesson.startsAt));
+          await loadAll();
+          setCreatedCount(created.length);
+          setCreatedLesson(lesson);
+        }} />
       </div>
+      {createdLesson && <div className="banner banner--success" role="status" style={{ marginBottom: 18 }}>
+        {createdCount > 1 ? (language === 'DE' ? 'Unterrichtstermine erstellt: ' : 'Создано уроков: ') + createdCount + '. ' : (language === 'DE' ? 'Unterricht erstellt: ' : 'Урок создан: ')}{createdLesson.title}.{' '}
+        <Link to={'/teacher/lessons/' + encodeURIComponent(createdLesson.eventId)}>{language === 'DE' ? 'Unterricht öffnen' : 'Открыть урок'}</Link>
+      </div>}
 
       {error && <div className="banner banner--error">{error}</div>}
       {unsafeReturnContext && (
@@ -377,7 +357,7 @@ export function GroupLessonsPage() {
       )}
 
       {returnedLessonId && (
-        <div className="panel" style={{ marginBottom: 18, padding: 22, border: '2px solid #ff6a00', boxShadow: '0 12px 32px rgba(255,106,0,.10)' }}>
+        <div className="panel" style={{ marginBottom: 18, padding: 22, border: '2px solid var(--teacher-selected-border, #ff6a00)', boxShadow: '0 12px 32px rgba(255,106,0,.10)' }}>
           <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>{language === 'DE' ? 'Unterricht beendet' : 'Урок завершён'}</div>
           <div style={{ fontSize: 16, marginBottom: 14 }}>
             {returnedLesson?.title
@@ -394,159 +374,41 @@ export function GroupLessonsPage() {
         </div>
       )}
 
-      {connection?.connected !== true ? (
-        <div className="panel" style={{ maxWidth: 720, padding: 24 }}>
-          <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Google Calendar verbinden' : 'Подключить Google Calendar'}</h2>
-          <p className="muted">{language === 'DE' ? 'Verbinde dein Google-Konto, damit deine Termine hier erscheinen.' : 'Подключи свой Google-аккаунт, и события календаря появятся здесь.'}</p>
-          {connection?.authorizationUrl ? <a className="btn" href={connection.authorizationUrl}>{language === 'DE' ? 'Mit Google verbinden' : 'Войти через Google'}</a> : <div className="banner banner--info">{language === 'DE' ? 'Google OAuth ist noch nicht eingerichtet.' : 'Google OAuth на сервере пока не настроен.'}</div>}
+      <section className="lesson-agenda" aria-label={language === 'DE' ? 'Unterrichtsplan' : 'Расписание уроков'} aria-busy={loading}>
+        <div className="lesson-agenda-navigation">
+          <button className="lesson-agenda-arrow" type="button" aria-label={language === 'DE' ? 'Vorherige Woche' : 'Предыдущая неделя'} onClick={() => moveWeek(-1)}>‹</button>
+          <label className="lesson-agenda-month" title={language === 'DE' ? 'Datum auswählen' : 'Выбрать дату'}>
+            <strong>{formatMonthTitle(selectedDate, language)}</strong>
+            <input type="date" aria-label={language === 'DE' ? 'Zu Datum wechseln' : 'Перейти к дате'} value={selectedDayKey} onClick={(event) => event.currentTarget.showPicker?.()} onChange={(event) => { if (event.target.value) selectDate(event.target.value); }} />
+          </label>
+          <button className="lesson-agenda-arrow" type="button" aria-label={language === 'DE' ? 'Nächste Woche' : 'Следующая неделя'} onClick={() => moveWeek(1)}>›</button>
         </div>
-      ) : <>
+        <div className="lesson-agenda-days" role="group" aria-label={language === 'DE' ? 'Unterrichtstag auswählen' : 'Выбрать день уроков'}>
+          {scheduleDays.map((day, index) => <button type="button" key={day.key} className={'lesson-agenda-day' + (day.key === todayKey ? ' is-today' : '')}
+            aria-pressed={selectedDayKey === day.key} aria-label={formatAgendaDate(day.key, language) + ', ' + lessonCountText(day.lessons.length, language)} onClick={() => selectDate(day.key)}>
+            <span>{weekdayLabels(language)[index]}</span><strong>{day.date.getDate()}</strong>
+            <i className={day.lessons.length > 0 ? 'has-lessons' : ''} aria-hidden="true" />
+          </button>)}
+        </div>
+        <div className="lesson-agenda-day-heading"><h2>{formatAgendaDate(selectedDayKey, language)}</h2><span>{lessonCountText(selectedLessons.length, language)}</span></div>
+        {loading ? <p className="muted">{t('common.loading')}</p> : error ? <div className="teacher-empty-state"><button className="btn btn--secondary" type="button" onClick={() => void loadAll()}>{language === 'DE' ? 'Erneut versuchen' : 'Повторить загрузку'}</button></div>
+          : selectedLessons.length ? <div className="lesson-agenda-list">{selectedLessons.map(renderLessonCard)}</div>
+            : <div className="lesson-agenda-empty"><strong>{language === 'DE' ? 'Kein Unterricht geplant' : 'На этот день уроков нет'}</strong><p>{language === 'DE' ? 'Wähle einen anderen Tag oder plane einen neuen Unterricht.' : 'Выберите другой день или запланируйте новое занятие.'}</p></div>}
+      </section>
+      <div className="lesson-agenda-integration">
+      {connection?.connected !== true ? (
+        <details className="lesson-calendar-option">
+          <summary>{language === 'DE' ? 'Google Calendar verbinden (optional)' : 'Подключить Google Calendar (необязательно)'}</summary>
+          <p className="muted">{language === 'DE' ? 'Kalendertermine werden zusätzlich zu den hier erstellten Unterrichten angezeigt.' : 'Занятия из календаря будут отображаться вместе с уроками, созданными здесь.'}</p>
+          {connection?.authorizationUrl ? <a className="btn btn--secondary" href={connection.authorizationUrl}>{language === 'DE' ? 'Mit Google verbinden' : 'Подключить Google Calendar'}</a> : <p className="muted">{language === 'DE' ? 'Die Synchronisierung ist derzeit nicht verfügbar. Du kannst Unterricht direkt hier erstellen.' : 'Синхронизация пока недоступна. Создавайте уроки прямо здесь.'}</p>}
+        </details>
+      ) : (
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
           <div className="banner banner--success" style={{ margin: 0 }}>{language === 'DE' ? 'Google Calendar ist verbunden.' : 'Google Calendar подключён.'}</div>
           <button className="btn btn--ghost" type="button" onClick={() => void disconnectCalendar()}>{language === 'DE' ? 'Trennen' : 'Отключить календарь'}</button>
         </div>
-
-        {viewMode === 'week' ? (
-          <div style={{ overflowX: 'auto', paddingBottom: 10 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(220px, 1fr))', gap: 12, minWidth: 1540 }}>
-              {scheduleDays.map((day, index) => (
-                <section key={day.key} className="panel" style={{ padding: 14, margin: 0, minHeight: 260 }}>
-                  <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{formatDayTitle(day.date, index, language)}</div>
-                    <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>{formatDayDate(day.date, language)}</div>
-                  </div>
-                  {day.lessons.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 13, padding: '8px 0' }}>{language === 'DE' ? 'Kein Unterricht' : 'Уроков нет'}</div>
-                  ) : (
-                    <div className="stack" style={{ gap: 8 }}>{day.lessons.map(renderLessonCard)}</div>
-                  )}
-                </section>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 420px) minmax(760px, 1fr)', gap: 22, alignItems: 'start' }}>
-            <aside className="panel" style={{ margin: 0, padding: 18, minHeight: 500, position: 'sticky', top: 86 }}>
-              <div style={{ paddingBottom: 13, borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 750, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                  {language === 'DE' ? 'Unterricht an diesem Tag' : 'Уроки в этот день'}
-                </div>
-                <h2 style={{ margin: '6px 0 0', fontSize: 20, lineHeight: 1.25 }}>
-                  {selectedMonthDayKey ? formatSelectedDayTitle(selectedMonthDayKey, language) : (language === 'DE' ? 'Wähle einen Tag' : 'Выбери день')}
-                </h2>
-              </div>
-
-              {!selectedMonthDayKey ? (
-                <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  {language === 'DE' ? 'Klicke rechts im Kalender auf einen Tag.' : 'Нажми справа на нужный день в календаре.'}
-                </div>
-              ) : selectedMonthLessons.length === 0 ? (
-                <div style={{ padding: '12px 4px' }}>
-                  <div style={{ fontWeight: 800, marginBottom: 5 }}>{language === 'DE' ? 'Kein Unterricht' : 'Уроков нет'}</div>
-                  <div className="muted" style={{ fontSize: 13, lineHeight: 1.45 }}>
-                    {language === 'DE' ? 'Für diesen Tag ist kein Unterricht geplant.' : 'На этот день нет запланированных уроков.'}
-                  </div>
-                </div>
-              ) : (
-                <div className="stack" style={{ gap: 10 }}>{selectedMonthLessons.map(renderLessonCard)}</div>
-              )}
-            </aside>
-
-            <section className="panel" style={{ padding: 16, margin: 0, overflowX: 'auto', width: '100%', maxWidth: 1160, justifySelf: 'end' }}>
-              <div style={{ minWidth: 760 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '52px 1fr 52px', alignItems: 'center', marginBottom: 12 }}>
-                  <button
-                    type="button"
-                    aria-label={language === 'DE' ? 'Vorheriger Monat' : 'Предыдущий месяц'}
-                    onClick={() => { setMonthCursor((value) => addMonths(value, -1)); setSelectedMonthDayKey(null); }}
-                    style={{ ...monthNavButtonStyle, width: 38, height: 38, fontSize: 26 }}
-                  >
-                    ‹
-                  </button>
-                  <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 850, color: '#1f2933' }}>
-                    {formatMonthTitle(monthCursor, language)}
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={language === 'DE' ? 'Nächster Monat' : 'Следующий месяц'}
-                    onClick={() => { setMonthCursor((value) => addMonths(value, 1)); setSelectedMonthDayKey(null); }}
-                    style={{ ...monthNavButtonStyle, width: 38, height: 38, fontSize: 26, justifySelf: 'end' }}
-                  >
-                    ›
-                  </button>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #e8e9ec' }}>
-                  {weekdayLabels(language).map((label) => (
-                    <div key={label} style={{ textAlign: 'center', padding: '6px 4px 9px', fontSize: 12, fontWeight: 800, color: '#7b8493' }}>
-                      {label}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-                  {monthGridDays.map((date) => {
-                    const key = localDateKey(date);
-                    const dayLessons = lessonsByDay.get(key) ?? [];
-                    const hasLessons = dayLessons.length > 0;
-                    const inMonth = date.getMonth() === monthCursor.getMonth() && date.getFullYear() === monthCursor.getFullYear();
-                    const selected = selectedMonthDayKey === key;
-                    const today = key === localDateKey(new Date());
-
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setSelectedMonthDayKey(key)}
-                        style={{
-                          appearance: 'none',
-                          border: 'none',
-                          borderRight: '1px solid #eceef1',
-                          borderBottom: '1px solid #eceef1',
-                          background: selected ? '#fff5ed' : '#fff',
-                          minHeight: 86,
-                          padding: 7,
-                          cursor: 'pointer',
-                          opacity: inMonth ? 1 : 0.30,
-                          outline: selected ? '2px solid #ffb27a' : 'none',
-                          outlineOffset: -2,
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                          <div
-                            style={{
-                              width: 34,
-                              height: 34,
-                              borderRadius: '50%',
-                              display: 'grid',
-                              placeItems: 'center',
-                              fontSize: 15,
-                              fontWeight: 850,
-                              background: hasLessons && inMonth ? '#ff6a00' : '#fff',
-                              color: hasLessons && inMonth ? '#fff' : inMonth ? '#1f2933' : '#8f98a6',
-                              border: !hasLessons && today && inMonth ? '2px solid #ff6a00' : '2px solid transparent',
-                              boxShadow: hasLessons && inMonth ? '0 4px 10px rgba(255, 106, 0, .20)' : 'none',
-                            }}
-                          >
-                            {date.getDate()}
-                          </div>
-                        </div>
-                        {inMonth && hasLessons && (
-                          <div style={{ marginTop: 7, textAlign: 'center', fontSize: 10, fontWeight: 800, color: '#c04b00', lineHeight: 1.2 }}>
-                            {dayLessons.length === 1
-                              ? (language === 'DE' ? '1 Unterricht' : '1 урок')
-                              : (language === 'DE' ? dayLessons.length + ' Unterrichte' : dayLessons.length + ' урока')}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          </div>
-        )}
-      </>}
+      )}
+      </div>
 
       {startReminderLesson && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,23,42,.55)', display: 'grid', placeItems: 'center', padding: 20 }}>
@@ -564,8 +426,8 @@ export function GroupLessonsPage() {
 
       {finishReminderLesson && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(15,23,42,.62)', display: 'grid', placeItems: 'center', padding: 20 }}>
-          <div className="panel" style={{ width: 'min(580px, 100%)', padding: 30, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.32)', border: '2px solid #ff6a00' }}>
-            <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: '#d94f00' }}>{language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}</div>
+          <div className="panel" style={{ width: 'min(580px, 100%)', padding: 30, textAlign: 'center', boxShadow: '0 24px 70px rgba(15,23,42,.32)', border: '2px solid var(--teacher-selected-border, #ff6a00)' }}>
+            <div style={{ fontSize: 30, fontWeight: 900, marginBottom: 10, color: 'var(--teacher-selected-text, #d94f00)' }}>{language === 'DE' ? 'Soniox stoppen' : 'Останови Soniox'}</div>
             <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 18 }}>{language === 'DE' ? 'Google Meet meldet, dass du den Anruf verlassen hast. Stoppe jetzt Soniox.' : 'Google Meet сообщил, что ты вышел из звонка. Сейчас останови запись Soniox.'}</div>
             <div style={{ fontWeight: 800, marginBottom: 20 }}>{finishReminderLesson.title}</div>
             <div className="stack" style={{ gap: 10 }}>
@@ -751,49 +613,22 @@ function buildStudentBrief(studentId: string, name: string, homeworks: Homework[
   return { studentId, name, homeworkText, errorText, recommendation };
 }
 
-function viewToggleStyle(active: boolean) {
-  return {
-    appearance: 'none' as const,
-    border: 'none',
-    borderRadius: 9,
-    padding: '9px 18px',
-    fontSize: 14,
-    fontWeight: 800,
-    cursor: 'pointer',
-    background: active ? '#fff' : 'transparent',
-    color: active ? '#1f2933' : '#6b7280',
-    boxShadow: active ? '0 2px 8px rgba(31, 41, 51, .10)' : 'none',
-  };
-}
-
-const monthNavButtonStyle = {
-  appearance: 'none' as const,
-  width: 44,
-  height: 44,
-  borderRadius: 12,
-  border: '1px solid #e1e4e8',
-  background: '#fff',
-  color: '#26313f',
-  fontSize: 30,
-  lineHeight: 1,
-  cursor: 'pointer',
-  display: 'grid',
-  placeItems: 'center',
-};
-
 function formatMonthTitle(date: Date, language: 'DE' | 'RU') {
-  const value = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { month: 'long', year: 'numeric' }).format(date);
+  const value = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { month: 'long', year: 'numeric' }).format(date).replace(/\sг\.$/, '');
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function formatSelectedDayTitle(key: string, language: 'DE' | 'RU') {
-  const [year, month, day] = key.split('-').map(Number);
+function dateFromKey(key: string) { return new Date(key + 'T12:00:00'); }
+function formatAgendaDate(key: string, language: 'DE' | 'RU') {
+  const date = dateFromKey(key);
   return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(year, month - 1, day));
+    day: 'numeric', month: 'long', ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } as const : {}),
+  }).format(date);
+}
+function lessonCountText(count: number, language: 'DE' | 'RU') {
+  if (language === 'DE') return count + (count === 1 ? ' Termin' : ' Termine');
+  const mod10 = count % 10, mod100 = count % 100;
+  return count + ' ' + (mod10 === 1 && mod100 !== 11 ? 'занятие' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'занятия' : 'занятий');
 }
 
 function weekdayLabels(language: 'DE' | 'RU') {
@@ -802,10 +637,7 @@ function weekdayLabels(language: 'DE' | 'RU') {
     : ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 }
 
-function startOfMonth(date: Date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
 function startOfWeekMonday(date: Date) { const day = date.getDay(); const offset = day === 0 ? -6 : 1 - day; return addDays(startOfLocalDay(date), offset); }
-function addMonths(date: Date, months: number) { return new Date(date.getFullYear(), date.getMonth() + months, 1); }
-function monthKey(date: Date) { return localDateKey(startOfMonth(date)).slice(0, 7); }
 function berlinDateKey(value: string) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Berlin',
@@ -819,9 +651,7 @@ function berlinDateKey(value: string) {
   return `${year}-${month}-${day}`;
 }
 
-function formatDayTitle(date: Date, index: number, language: 'DE' | 'RU') { if (index === 0) return language === 'DE' ? 'Heute' : 'Сегодня'; if (index === 1) return language === 'DE' ? 'Morgen' : 'Завтра'; return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { weekday: 'short' }).format(date); }
-function formatDayDate(date: Date, language: 'DE' | 'RU') { return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { day: '2-digit', month: '2-digit' }).format(date); }
-function formatStartTime(value: string, language: 'DE' | 'RU') { return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(value)); }
+function formatStartTime(value: string, language: 'DE' | 'RU') { return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' }).format(new Date(value)); }
 function formatLessonTime(start: string, end: string, language: 'DE' | 'RU') { const formatter = new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' }); return `${formatter.format(new Date(start))}–${formatter.format(new Date(end))}`; }
 function startOfLocalDay(date: Date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
 function addDays(date: Date, days: number) { return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days); }

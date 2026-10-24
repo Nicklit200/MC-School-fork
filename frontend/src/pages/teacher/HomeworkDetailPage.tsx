@@ -414,7 +414,7 @@ export function HomeworkDetailPage() {
                       <img
                         src={url}
                         alt={language === 'DE' ? `Hausaufgabe Seite ${index + 1}` : `Домашка, страница ${index + 1}`}
-                        style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
+                        style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--teacher-surface, #fff)' }}
                       />
                     </div>
                   ))}
@@ -447,7 +447,7 @@ export function HomeworkDetailPage() {
                         <img
                           src={url}
                           alt={language === 'DE' ? `Schülerlösung ${index + 1}` : `Решение ученика ${index + 1}`}
-                          style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}
+                          style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--teacher-surface, #fff)' }}
                         />
                       </div>
                     ))}

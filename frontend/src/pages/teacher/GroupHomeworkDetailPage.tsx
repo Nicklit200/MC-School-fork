@@ -230,7 +230,7 @@ export function GroupHomeworkDetailPage() {
           </div>
         )}
 
-        <div style={{ paddingTop: 16, borderTop: '1px solid var(--border-color, #ddd)' }}>
+        <div style={{ paddingTop: 16, borderTop: '1px solid var(--border-color, var(--teacher-border, #ddd))' }}>
           <div className="row" style={{ justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 420px' }}>
               <strong>Редактировать в ChatGPT</strong>
@@ -265,7 +265,7 @@ export function GroupHomeworkDetailPage() {
                 <img
                   src={url}
                   alt={`Домашка группы, страница ${index + 1}`}
-                  style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border-color, #ddd)', borderRadius: 12, background: '#fff' }}
+                  style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid var(--border-color, var(--teacher-border, #ddd))', borderRadius: 12, background: 'var(--teacher-surface, #fff)' }}
                 />
               </div>
             ))}

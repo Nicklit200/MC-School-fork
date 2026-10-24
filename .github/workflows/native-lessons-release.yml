@@ -1,0 +1,100 @@
+name: Native lessons and student joining
+
+on:
+  pull_request:
+    branches: ['integration/railway-and-ux']
+    paths:
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/**'
+      - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/liveclasses/**'
+      - 'backend/src/main/java/com/mcschool/flashcard/notebookcamera/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/notebookcamera/**'
+      - 'backend/src/main/resources/db/migration/V86__*'
+      - 'backend/src/main/resources/db/migration/V87__*'
+      - 'backend/pom.xml'
+      - 'frontend/src/api/**'
+      - 'frontend/src/pages/teacher/CreateLessonPanel*'
+      - 'frontend/src/pages/teacher/GroupLessonsPage*'
+      - 'frontend/src/pages/teacher/LessonDetailPage*'
+      - 'frontend/src/pages/teacher/LessonTargetPicker*'
+      - 'frontend/src/pages/teacher/create-lesson.css'
+      - 'frontend/src/pages/teacher/lesson-agenda.css'
+      - 'frontend/src/pages/student/StudentLessonsCalendarPage*'
+      - 'frontend/src/lib/lessonRecurrence*'
+      - 'frontend/src/lib/lessonSchedule*'
+      - 'frontend/src/features/online-classes/**'
+      - 'frontend/package*.json'
+      - 'frontend/vitest.config.ts'
+      - '.github/workflows/native-lessons-release.yml'
+  push:
+    branches: ['codex/lesson-design-and-student-join']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-lessons-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-lessons-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: '2'
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '0'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Require Docker for real PostgreSQL verification
+        run: docker info > /dev/null
+      - name: Verify native lessons, atomic series, PDF compatibility and bounded student joining
+        run: ./mvnw -B -ntp '-Dtest=ManualLesson*,LessonSeriesServiceTest,CoveredMaterialServiceTest,DateOnlyLessonScheduleTest,NativeLessonPdfCompatibilityTest,OnlineClassServiceIntegrationTest,NotebookCameraPersistenceIntegrationTest' test
+      - name: Require executed PostgreSQL tests without skips
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          suites = {
+              'com.mcschool.flashcard.lessons.ManualLessonPersistenceIntegrationTest': 3,
+              'com.mcschool.flashcard.liveclasses.OnlineClassServiceIntegrationTest': 1,
+              'com.mcschool.flashcard.notebookcamera.NotebookCameraPersistenceIntegrationTest': 1,
+          }
+          for name, minimum in suites.items():
+              report = Path('target/surefire-reports') / f'TEST-{name}.xml'
+              suite = ElementTree.parse(report).getroot()
+              assert int(suite.get('tests', '0')) >= minimum, f'{name}: missing PostgreSQL coverage'
+              for count in ('skipped', 'failures', 'errors'):
+                  assert int(suite.get(count, '0')) == 0, f'{name}: {count} must be zero'
+              print(f'{name}: {suite.get("tests")} passed, no skips')
+          PY
+
+  native-lessons-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Compile complete application and tests
+        run: npm run build
+      - name: Verify lesson planning, preserved document archives and student join refresh
+        run: npm test -- src/pages/teacher/GroupLessonsPage.test.tsx src/pages/teacher/LessonDetailPage.test.tsx src/pages/student/StudentLessonsCalendarPage.test.tsx src/lib/lessonRecurrence.test.ts

@@ -1,0 +1,36 @@
+.lesson-create { padding: 24px; margin-bottom: 20px; border-color: #ffd8bd; background: linear-gradient(120deg, #fff8f2, #fff 72%); }
+.lesson-create__heading, .lesson-create__intro, .lesson-create__actions { display: flex; align-items: center; gap: 18px; }
+.lesson-create__heading, .lesson-create__actions { justify-content: space-between; flex-wrap: wrap; }
+.lesson-create__intro { flex: 1; min-width: 220px; }
+.lesson-create__intro h2 { margin: 0 0 6px; font-size: 21px; }
+.lesson-create__intro p { margin: 0; font-size: 14px; line-height: 1.5; }
+.lesson-create__icon { display: grid; place-items: center; flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: #ffeadb; color: #e95b00; font-size: 30px; }
+.lesson-create__form { border-top: 1px solid #ffe1cd; margin-top: 22px; padding-top: 20px; }
+.lesson-create__form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.lesson-create__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.lesson-create__fields .field { margin: 0; }
+.lesson-create__fields input, .lesson-create__fields select { box-sizing: border-box; min-width: 0; width: 100%; }
+.lesson-create__actions { margin-top: 20px; font-size: 12px; }
+.lesson-create__form .banner { margin-top: 16px; }
+.lesson-calendar-option { margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 12px; }
+.lesson-calendar-option summary { cursor: pointer; font-weight: 650; }
+@media (max-width: 640px) {
+  .lesson-create { padding: 18px; }
+  .lesson-create__fields { grid-template-columns: 1fr; }
+  .lesson-create__heading > .btn, .lesson-create__actions .btn { width: 100%; }
+}
+
+.lesson-create__full-row { grid-column: 1 / -1; }
+.lesson-create__preview { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: #fff7f0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+
+.lesson-repeat { margin-top: 20px; }
+.lesson-repeat__periods, .lesson-repeat__days { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.lesson-repeat__period { border: 1px solid #e6e1dc; background: #fff; color: #394454; border-radius: 10px; padding: 10px 16px; font: inherit; font-size: 14px; cursor: pointer; }
+.lesson-repeat__period.is-selected, .lesson-repeat__day.is-selected { background: #fff0e3; border-color: #ff8b3d; color: #a83d00; }
+.lesson-create__form .lesson-repeat__weekdays { margin-top: 18px; }
+.lesson-repeat__day { display: flex; align-items: center; gap: 7px; padding: 9px 12px; border: 1px solid #e6e1dc; border-radius: 9px; background: #fff; font-size: 14px; cursor: pointer; }
+.lesson-repeat__day input { accent-color: #ef6500; }
+.lesson-repeat__dates { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.lesson-repeat__dates li { padding: 3px 9px; background: #fff; border: 1px solid #ffe0ca; border-radius: 7px; }
+.lesson-repeat__period:focus-visible, .lesson-repeat__day:focus-within { outline: 2px solid #ff8b3d; outline-offset: 2px; }
+.lesson-repeat__period:disabled { cursor: wait; opacity: .6; }

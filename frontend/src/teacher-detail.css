@@ -7,21 +7,21 @@
 .teacher-shell .teacher-content > div > .row:first-child h1 {
   font-size: 28px;
   line-height: 1.15;
-  color: #172033;
+  color: var(--teacher-text, #172033);
   margin: 0 0 5px;
 }
 
 .teacher-shell .teacher-content > div > .row:first-child .muted {
-  color: #7b869d;
+  color: var(--teacher-muted, #7b869d);
   font-size: 14px;
 }
 
 .teacher-shell .teacher-content > div > .row:first-child > .btn,
 .teacher-shell .teacher-content > div > p:first-child .btn,
 .teacher-shell .teacher-content > div > p:first-child a {
-  background: #fff;
-  color: #ff5b00;
-  border: 1px solid #ffc6a5;
+  background: var(--teacher-surface, #fff);
+  color: var(--teacher-selected-text, #ff5b00);
+  border: 1px solid var(--teacher-selected-border, #ffc6a5);
   border-radius: 10px;
   min-height: 40px;
   display: inline-flex;
@@ -33,33 +33,33 @@
 }
 
 .teacher-shell .teacher-content .panel {
-  border: 1px solid #ffe0cf;
+  border: 1px solid var(--teacher-selected-border, #ffe0cf);
   border-radius: 17px;
-  background: #fff;
+  background: var(--teacher-surface, #fff);
   padding: 22px 24px;
   margin-bottom: 18px;
   box-shadow: 0 4px 16px rgba(255,91,0,.025);
 }
 
 .teacher-shell .teacher-content .panel .panel {
-  border-color: #edf0f5;
+  border-color: var(--teacher-border, #edf0f5);
   border-radius: 13px;
   box-shadow: none;
-  background: #fff;
+  background: var(--teacher-surface, #fff);
 }
 
 .teacher-shell .teacher-content h2 {
   font-size: 18px;
-  color: #18223a;
+  color: var(--teacher-text, #18223a);
   margin-bottom: 14px;
 }
 
 .teacher-shell .teacher-content h3 {
-  color: #18223a;
+  color: var(--teacher-text, #18223a);
 }
 
 .teacher-shell .teacher-content .field__label {
-  color: #66728a;
+  color: var(--teacher-muted, #66728a);
   font-size: 12px;
   margin-bottom: 7px;
 }
@@ -67,10 +67,10 @@
 .teacher-shell .teacher-content .input,
 .teacher-shell .teacher-content .textarea,
 .teacher-shell .teacher-content .select {
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--teacher-border, #dce2ec);
   border-radius: 10px;
-  background: #fff;
-  color: #273653;
+  background: var(--teacher-surface, #fff);
+  color: var(--teacher-text, #273653);
   font-size: 13px;
 }
 
@@ -85,8 +85,8 @@
 .teacher-shell .teacher-content .input:focus,
 .teacher-shell .teacher-content .textarea:focus,
 .teacher-shell .teacher-content .select:focus {
-  border-color: #ff9b63;
-  outline: 2px solid #fff0e7;
+  border-color: var(--teacher-selected-border, #ff9b63);
+  outline: 2px solid var(--teacher-selected-border, #fff0e7);
 }
 
 .teacher-shell .teacher-content .btn {
@@ -95,31 +95,31 @@
   font-weight: 650;
   min-height: 38px;
   padding: 0 15px;
-  background: linear-gradient(180deg, #ff650e, #ff5400);
+  background: linear-gradient(180deg, var(--teacher-selected, #ff650e), var(--teacher-selected, #ff5400));
 }
 
 .teacher-shell .teacher-content .btn:hover:not(:disabled) {
-  background: #e84f00;
+  background: var(--teacher-selected, #e84f00);
 }
 
 .teacher-shell .teacher-content .btn--secondary {
-  background: #fff4ed;
-  color: #e85608;
-  border: 1px solid #ffd9c2;
+  background: var(--teacher-selected, #fff4ed);
+  color: var(--teacher-selected-text, #e85608);
+  border: 1px solid var(--teacher-selected-border, #ffd9c2);
 }
 
 .teacher-shell .teacher-content .btn--secondary:hover:not(:disabled) {
-  background: #ffeadc;
+  background: var(--teacher-selected, #ffeadc);
 }
 
 .teacher-shell .teacher-content .btn--ghost {
   background: transparent;
-  color: #66728a;
+  color: var(--teacher-muted, #66728a);
 }
 
 .teacher-shell .teacher-content .btn--danger {
   background: transparent;
-  color: #e52e20;
+  color: var(--teacher-error-text, #e52e20);
   border: none;
 }
 
@@ -129,27 +129,27 @@
 }
 
 .teacher-shell .teacher-content .banner--info {
-  background: #fff8f3;
-  color: #9b4c1e;
-  border-color: #ffd9c2;
+  background: var(--teacher-selected, #fff8f3);
+  color: var(--teacher-selected-text, #9b4c1e);
+  border-color: var(--teacher-selected-border, #ffd9c2);
 }
 
 .teacher-shell .teacher-content .banner--success {
-  background: #eef9f4;
-  color: #187158;
-  border-color: #cdebdc;
+  background: var(--teacher-success, #eef9f4);
+  color: var(--teacher-success-text, #187158);
+  border-color: var(--teacher-border, #cdebdc);
 }
 
 .teacher-shell .teacher-content .list-row {
-  border: 1px solid #edf0f5;
+  border: 1px solid var(--teacher-border, #edf0f5);
   border-radius: 13px;
   padding: 14px 16px;
   margin-bottom: 8px;
 }
 
 .teacher-shell .teacher-content .list-row:hover {
-  border-color: #ffd2b8;
-  background: #fffdfb;
+  border-color: var(--teacher-selected-border, #ffd2b8);
+  background: var(--teacher-selected, #fffdfb);
 }
 
 /* Homework completion matrix */
@@ -157,16 +157,16 @@
   width: 100%;
   border-collapse: separate !important;
   border-spacing: 0;
-  color: #273653;
+  color: var(--teacher-text, #273653);
   font-size: 12px;
 }
 
 .teacher-shell .teacher-content table thead th {
-  background: #fff8f3;
-  color: #65718a;
+  background: var(--teacher-selected, #fff8f3);
+  color: var(--teacher-muted, #65718a);
   font-size: 11px;
   font-weight: 700;
-  border-bottom: 1px solid #ffe0cf !important;
+  border-bottom: 1px solid var(--teacher-selected-border, #ffe0cf) !important;
 }
 
 .teacher-shell .teacher-content table thead th:first-child {
@@ -178,25 +178,25 @@
 }
 
 .teacher-shell .teacher-content table tbody td {
-  border-bottom: 1px solid #edf0f5 !important;
-  background: #fff;
+  border-bottom: 1px solid var(--teacher-border, #edf0f5) !important;
+  background: var(--teacher-surface, #fff);
 }
 
 .teacher-shell .teacher-content table tbody tr:hover td {
-  background: #fffdfb;
+  background: var(--teacher-selected, #fffdfb);
 }
 
 /* PDF day cards */
 .teacher-shell .teacher-content input[type='file'] {
   padding: 8px 10px;
   min-height: 42px;
-  background: #fbfcfe;
+  background: var(--teacher-surface, #fbfcfe);
 }
 
 .teacher-shell .teacher-content input[type='file']::file-selector-button {
-  border: 1px solid #ffd1b6;
-  background: #fff3eb;
-  color: #d85208;
+  border: 1px solid var(--teacher-selected-border, #ffd1b6);
+  background: var(--teacher-selected, #fff3eb);
+  color: var(--teacher-selected-text, #d85208);
   border-radius: 8px;
   padding: 7px 11px;
   margin-right: 10px;

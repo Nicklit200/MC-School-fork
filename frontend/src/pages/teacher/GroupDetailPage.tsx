@@ -5,6 +5,7 @@ import type { DailyReviewHistoryItem, GroupLesson, Homework, ImportPreview, Stud
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
+import { isNativeLesson, lessonDateLabel, lessonDurationLabel } from '../../lib/lessonSchedule';
 
 type CardTab = 'manual' | 'import';
 type PageTab = 'overview' | 'students' | 'lessons' | 'homework' | 'cards';
@@ -342,7 +343,7 @@ export function GroupDetailPage() {
           <div className="group-summary-card__icon group-summary-card__icon--green">▣</div>
           <div>
             <span>Следующий урок</span>
-            <strong className="group-summary-card__lesson">{nextLesson ? formatNextLesson(nextLesson.startsAt) : '—'}</strong>
+            <strong className="group-summary-card__lesson">{nextLesson ? (isNativeLesson(nextLesson) ? lessonDateLabel(nextLesson, 'RU') : formatNextLesson(nextLesson.startsAt)) : '—'}</strong>
           </div>
           {nextLesson ? (
             <small><Link to={`/teacher/lessons/${encodeURIComponent(nextLesson.eventId)}`}>{nextLesson.title} · открыть урок →</Link></small>
@@ -428,12 +429,12 @@ export function GroupDetailPage() {
                                 title="Действия"
                                 style={{ cursor: 'pointer', listStyle: 'none', fontSize: 24, lineHeight: 1, padding: '8px 10px', userSelect: 'none' }}
                               >⋮</summary>
-                              <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, minWidth: 170, padding: 6, background: '#fff', border: '1px solid #eadfd8', borderRadius: 12, boxShadow: '0 10px 30px rgba(15,23,42,.12)' }}>
+                              <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, minWidth: 170, padding: 6, background: 'var(--teacher-surface, #fff)', border: '1px solid var(--teacher-border, #eadfd8)', borderRadius: 12, boxShadow: '0 10px 30px rgba(15,23,42,.12)' }}>
                                 <button
                                   type="button"
                                   disabled={deletingHomeworkKey === row.key}
                                   onClick={() => void deleteGroupHomework(row)}
-                                  style={{ width: '100%', border: 0, background: 'transparent', color: '#c2410c', fontWeight: 700, textAlign: 'left', padding: '10px 12px', cursor: 'pointer' }}
+                                  style={{ width: '100%', border: 0, background: 'transparent', color: 'var(--teacher-selected-text, #c2410c)', fontWeight: 700, textAlign: 'left', padding: '10px 12px', cursor: 'pointer' }}
                                 >
                                   {deletingHomeworkKey === row.key ? 'Удаляем…' : 'Удалить домашку'}
                                 </button>
@@ -573,7 +574,7 @@ export function GroupDetailPage() {
                         border: '1px solid var(--border)',
                         borderRadius: 16,
                         padding: '15px 17px',
-                        background: '#fff',
+                        background: 'var(--teacher-surface, #fff)',
                         display: 'grid',
                         gridTemplateColumns: 'minmax(170px, 220px) 1fr auto',
                         gap: 16,
@@ -582,7 +583,7 @@ export function GroupDetailPage() {
                     >
                       <div>
                         <strong>{formatGroupLessonDate(lesson.startsAt)}</strong>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{formatGroupLessonTime(lesson.startsAt, lesson.endsAt)}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{isNativeLesson(lesson) ? lessonDurationLabel(lesson, 'RU') : formatGroupLessonTime(lesson.startsAt, lesson.endsAt)}</div>
                       </div>
                       <div>
                         <div style={{ fontWeight: 800 }}>{lesson.title}</div>
@@ -627,7 +628,7 @@ export function GroupDetailPage() {
                         <label
                           htmlFor={`group-homework-pdf-${index}`}
                           className="input"
-                          style={{ display: 'flex', alignItems: 'center', minHeight: 46, cursor: creatingHomework ? 'default' : 'pointer', color: file ? '#172033' : '#6d7890' }}
+                          style={{ display: 'flex', alignItems: 'center', minHeight: 46, cursor: creatingHomework ? 'default' : 'pointer', color: file ? 'var(--teacher-text, #172033)' : 'var(--teacher-muted, #6d7890)' }}
                         >
                           {file ? file.name : 'Выбрать PDF с компьютера'}
                         </label>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
+import { isNativeLesson, lessonDateLabel, lessonDurationLabel } from '../../lib/lessonSchedule';
 import { adminLessonsApi } from '../../api/adminLessons';
 import type { GoogleCalendarConnection, GroupLesson, User } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -44,7 +45,7 @@ export function AdminTeacherLessonsPage() {
     setError(null);
     Promise.all([
       adminLessonsApi.list(teacherId),
-      adminLessonsApi.calendarConnection(teacherId),
+      adminLessonsApi.calendarConnection(teacherId).catch(() => ({ connected: false, authorizationUrl: null })),
     ])
       .then(([lessonItems, calendar]) => {
         setLessons(lessonItems);
@@ -74,7 +75,7 @@ export function AdminTeacherLessonsPage() {
       await adminLessonsApi.disconnectCalendar(teacherId);
       const next = await adminLessonsApi.calendarConnection(teacherId);
       setConnection(next);
-      setLessons([]);
+      setLessons(await adminLessonsApi.list(teacherId));
     } catch (e) {
       setError(toErrorMessage(e, t));
     } finally {
@@ -116,7 +117,7 @@ export function AdminTeacherLessonsPage() {
               <div className="muted" style={{ marginTop: 3, fontSize: 13 }}>
                 {connection.connected
                   ? `Уроки ${selectedTeacher?.fullName ?? 'преподавателя'} читаются из его календаря.`
-                  : `Подключите Google-аккаунт ${selectedTeacher?.fullName ?? 'преподавателя'}. Пароль вводится только на странице Google.`}
+                  : 'Уроки можно создавать в кабинете преподавателя без подключения Google.'}
               </div>
             </div>
             {connection.connected ? (
@@ -132,15 +133,10 @@ export function AdminTeacherLessonsPage() {
         )}
       </section>
 
-      {loading ? <p className="muted">Загрузка…</p> : !connection?.connected ? (
-        <div className="panel" style={{ padding: 24 }}>
-          <strong>Сначала подключите Google Calendar.</strong>
-          <div className="muted" style={{ marginTop: 5 }}>После подключения уроки {selectedTeacher?.fullName ?? 'преподавателя'} появятся здесь автоматически.</div>
-        </div>
-      ) : !hasLessons ? (
+      {loading ? <p className="muted">Загрузка…</p> : !hasLessons ? (
         <div className="panel" style={{ padding: 24 }}>
           <strong>На ближайшие 7 дней уроков не найдено.</strong>
-          <div className="muted" style={{ marginTop: 5 }}>Календарь подключён, но в ближайшие 7 дней у {selectedTeacher?.fullName ?? 'преподавателя'} нет подходящих уроков.</div>
+          <div className="muted" style={{ marginTop: 5 }}>У {selectedTeacher?.fullName ?? 'преподавателя'} пока нет занятий в расписании на ближайшие 7 дней.</div>
         </div>
       ) : (
         <div style={{ overflowX: 'auto', paddingBottom: 10 }}>
@@ -158,9 +154,9 @@ export function AdminTeacherLessonsPage() {
                   <div className="stack" style={{ gap: 8 }}>
                     {day.lessons.map((lesson) => (
                       <article key={lesson.eventId} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: '#fff' }}>
-                        <div style={{ fontSize: 17, fontWeight: 900 }}>{formatTime(lesson.startsAt)}</div>
+                        <div style={{ fontSize: 17, fontWeight: 900 }}>{isNativeLesson(lesson) ? lessonDateLabel(lesson, 'RU') : formatTime(lesson.startsAt)}</div>
                         <div style={{ fontWeight: 800, marginTop: 4 }}>{lesson.title}</div>
-                        <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>{formatTime(lesson.startsAt)}–{formatTime(lesson.endsAt)}</div>
+                        <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>{isNativeLesson(lesson) ? lessonDurationLabel(lesson, 'RU') : formatTime(lesson.startsAt) + '–' + formatTime(lesson.endsAt)}</div>
                         {(lesson.groupName || lesson.studentName) && (
                           <div style={{ marginTop: 8, fontSize: 12, color: '#d94f00', fontWeight: 750 }}>
                             {lesson.groupName ? `Группа: ${lesson.groupName}` : `Ученик: ${lesson.studentName}`}

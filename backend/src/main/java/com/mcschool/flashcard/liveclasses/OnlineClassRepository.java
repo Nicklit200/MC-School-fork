@@ -6,11 +6,14 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> {
 
     /** Guards duplicate materialization of the same calendar occurrence. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<OnlineClass> findByTeacherIdAndEventIdAndScheduledStartAt(
             UUID teacherId, String eventId, Instant scheduledStartAt);
 
@@ -36,7 +39,7 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
      */
     @Query("""
             SELECT c FROM OnlineClass c
-            WHERE c.scheduledStartAt >= :from
+            WHERE (c.scheduledEndAt >= :from OR c.studentJoinUntil >= :now)
               AND c.status IN :statuses
               AND (
                     c.student.id = :studentId
@@ -48,5 +51,6 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
             """)
     List<OnlineClass> findVisibleToStudent(@Param("studentId") UUID studentId,
                                            @Param("from") Instant from,
+                                           @Param("now") Instant now,
                                            @Param("statuses") List<OnlineClassStatus> statuses);
 }

@@ -15,5 +15,6 @@ public record LessonPreparationResponse(
         boolean hasAnswers,
         String answersFilename,
         String answersUploadHint,
-        Instant siteOpenedAt
+        Instant siteOpenedAt,
+        String coveredMaterial
 ) {}

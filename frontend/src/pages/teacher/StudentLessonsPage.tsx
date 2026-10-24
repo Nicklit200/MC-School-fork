@@ -64,7 +64,7 @@ export function StudentLessonsPage() {
                   border: '1px solid var(--border)',
                   borderRadius: 16,
                   padding: '15px 17px',
-                  background: '#fff',
+                  background: 'var(--teacher-surface, #fff)',
                   display: 'grid',
                   gridTemplateColumns: 'minmax(170px, 220px) 1fr auto',
                   gap: 16,

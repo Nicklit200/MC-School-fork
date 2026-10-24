@@ -46,6 +46,9 @@ public class LessonPreparation {
     @Column(name = "lesson_plan", columnDefinition = "text")
     private String lessonPlan;
 
+    @Column(name = "covered_material", columnDefinition = "text")
+    private String coveredMaterial;
+
     @Column(name = "transcript_text", columnDefinition = "text")
     private String transcriptText;
 
@@ -98,6 +101,10 @@ public class LessonPreparation {
         if (!hasTranscriptPdf()) {
             this.transcriptText = normalize(transcriptText);
         }
+    }
+
+    public void updateCoveredMaterial(String coveredMaterial) {
+        this.coveredMaterial = normalize(coveredMaterial);
     }
 
     public void attachWorkbook(String filename, byte[] pdf) {

@@ -1,0 +1,27 @@
+/* Theme is selected only by the teacher iframe; the administrator editor keeps its palette. */
+:root[data-theme='teacher'] { color-scheme: dark; --mc-bg: #151719; --mc-surface: #202326; --mc-raised: #282c30; --mc-border: #353b3e; --mc-text: #f0f3f2; --mc-muted: #a6b0b4; --mc-selected: #422e22; --mc-orange: #ffad72; }
+:root[data-theme='teacher'] :is(body, #app) { background: var(--mc-bg); color: var(--mc-text); font-family: system-ui,-apple-system,'Segoe UI',sans-serif; }
+:root[data-theme='teacher'] :is(.bar,.toolbar,.catalog,.inspector,.history-panel,.history-head,.node,.modal) { background: var(--mc-surface); color: var(--mc-text); border-color: var(--mc-border); box-shadow: none; }
+:root[data-theme='teacher'] :is(button,input,textarea,select) { background: var(--mc-raised); border-color: var(--mc-border); color: var(--mc-text); }
+:root[data-theme='teacher'] button:hover:not(:disabled) { background: #343a40; border-color: #59646b; }
+:root[data-theme='teacher'] button.active { background: var(--mc-selected); color: var(--mc-orange); border-color: #80502f; }
+:root[data-theme='teacher'] button.primary { background: #f56b18; color: #fff; border-color: #f56b18; }
+:root[data-theme='teacher'] #canvas { background-color: var(--mc-bg); background-image: radial-gradient(#353b3e 1px,transparent 1px); }
+:root[data-theme='teacher'] :is(.canvas-pill,.canvas-help,.grade,.section .number,.source-note,.history-head #history-count) { color: var(--mc-muted); background: var(--mc-raised); border-color: var(--mc-border); }
+:root[data-theme='teacher'] :is(.eyebrow,.catalog-title,.source-note strong,.node .kind,.node .de,.inspector label,.inspector .help,.history-head,#save-state) { color: var(--mc-muted); }
+:root[data-theme='teacher'] .node.kind-root { background: #2d3e4c; color: var(--mc-text); border-color: #56697a; }
+:root[data-theme='teacher'] .node.kind-note { background: #3c3424; }
+:root[data-theme='teacher'] .port { border-color: var(--mc-surface); }
+:root[data-theme='teacher'] .separator { background: var(--mc-border); }
+:root[data-theme='teacher'] .draft-badge, :root[data-theme='teacher'] #notice { background: var(--mc-selected); color: var(--mc-orange); border-color: #80502f; }
+:root[data-theme='teacher'] #notice.error { background: #432b30; color: #f5a5a5; border-color: #6b4047; }
+:root[data-theme='teacher'] .brand-icon { padding: 0; width: 34px; height: 34px; flex: none; overflow: hidden; background: transparent; }
+:root[data-theme='teacher'] .brand-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+:root[data-theme='teacher'] { --mc-board: #151719; --mc-panel: #202326f5; --mc-line: #353b3e; --mc-shadow: 0 16px 40px #0005; --mc-shadow-soft: 0 8px 24px #0003; }
+:root[data-theme='teacher'] :is(.brand-block,.top-search,.top-actions) { background: var(--mc-surface); color: var(--mc-text); border-color: var(--mc-border); }
+:root[data-theme='teacher'] .bar { background: transparent; }
+:root[data-theme='teacher'] .top-search input { background: transparent; }
+:root[data-theme='teacher'] #empty strong { color: var(--mc-text); }
+:root[data-theme='teacher'] #canvas::after { background: none; }
+:root[data-theme='teacher'] .top-actions { display: none; }
+@media(max-width:850px) { :root[data-theme='teacher'] .brand-block { max-width: calc(100vw - 150px); } }

@@ -16,6 +16,7 @@ export function TeacherParentsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openChatStudentId, setOpenChatStudentId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +48,7 @@ export function TeacherParentsPage() {
       setCreatedAccess({ username: created.username ?? '', password: chosenPassword });
       setFullName('');
       setPassword('');
+      setCreateOpen(false);
       await reload();
     } catch (e) {
       setError(errorMessage(e));
@@ -122,19 +124,22 @@ export function TeacherParentsPage() {
 
   return (
     <div className="teacher-students-page">
-      <div className="teacher-page-heading">
-        <h1>{language === 'DE' ? 'Eltern' : 'Родители'}</h1>
+      <div className="teacher-page-heading teacher-heading-row">
+        <div><h1>{language === 'DE' ? 'Eltern' : 'Родители'}</h1>
         <p>
           {language === 'DE'
             ? 'Erstelle Elternkonten, verknüpfe Kinder und schreibe direkt mit den Eltern.'
             : 'Создавайте аккаунты родителей, привязывайте учеников и общайтесь с родителями прямо здесь.'}
-        </p>
+        </p></div>
+        <button className="btn" type="button" aria-expanded={createOpen} aria-controls="teacher-add-parent" onClick={() => setCreateOpen(!createOpen)}>
+          {createOpen ? (language === 'DE' ? 'Schließen' : 'Закрыть') : (language === 'DE' ? '+ Eltern hinzufügen' : '+ Добавить родителя')}
+        </button>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
 
       {createdAccess && (
-        <section className="panel stack" style={{ marginBottom: 24, border: '2px solid #ffb37f' }}>
+        <section className="panel stack" style={{ marginBottom: 24, border: '2px solid var(--teacher-selected-border, #ffb37f)' }}>
           <div>
             <strong>{language === 'DE' ? 'Zugangsdaten für Eltern' : 'Данные для входа родителя'}</strong>
             <div className="muted" style={{ marginTop: 4 }}>
@@ -164,7 +169,7 @@ export function TeacherParentsPage() {
         </section>
       )}
 
-      <section className="teacher-create-student">
+      {createOpen && <section className="teacher-create-student" id="teacher-add-parent">
         <h2>{language === 'DE' ? 'Elternkonto hinzufügen' : 'Добавить родителя'}</h2>
         <form onSubmit={createParent}>
           <div className="teacher-create-grid">
@@ -203,7 +208,7 @@ export function TeacherParentsPage() {
               : (language === 'DE' ? 'Elternkonto hinzufügen' : 'Добавить родителя')}
           </button>
         </form>
-      </section>
+      </section>}
 
       <h2 style={{ marginTop: 28 }}>{language === 'DE' ? 'Elternkonten' : 'Аккаунты родителей'}</h2>
       {loading ? (

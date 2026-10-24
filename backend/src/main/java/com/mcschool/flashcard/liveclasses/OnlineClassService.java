@@ -105,16 +105,23 @@ public class OnlineClassService {
             return toResponse(create(caller, lesson), caller);
         }
         if (!scheduled.isTerminal()) {
-            return toResponse(scheduled, caller);
+            if (hasCurrentTarget(scheduled, lesson)
+                    && (!scheduled.isConnectable() || canStudentJoin(scheduled))) {
+                return toResponse(scheduled, caller);
+            }
+            retireSession(caller, scheduled);
         }
         // Reuse an already-created retry if the teacher clicks Start again.
-        Instant cutoff = now().minus(java.time.Duration.ofHours(3));
-        OnlineClass retry = classRepository.findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(caller.id(), eventId)
-                .stream()
-                .filter(item -> !item.isTerminal()
-                        && item.getScheduledStartAt().isAfter(lesson.startsAt())
-                        && item.getScheduledStartAt().isAfter(cutoff)
-                        && item.getBindingKey().equals(lesson.bindingKey()))
+        List<OnlineClass> occurrences = classRepository
+                .findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(caller.id(), eventId);
+        for (OnlineClass occurrence : occurrences) {
+            if (!occurrence.isTerminal() && (!hasCurrentTarget(occurrence, lesson)
+                    || (occurrence.isConnectable() && !canStudentJoin(occurrence)))) {
+                retireSession(caller, occurrence);
+            }
+        }
+        OnlineClass retry = occurrences.stream()
+                .filter(item -> !item.isTerminal() && hasCurrentTarget(item, lesson))
                 .findFirst()
                 .orElse(null);
         if (retry != null) {
@@ -123,22 +130,37 @@ public class OnlineClassService {
         return toResponse(createRetry(caller, lesson), caller);
     }
 
+    private void retireSession(AuthenticatedUser caller, OnlineClass onlineClass) {
+        if (onlineClass.isConnectable()) {
+            end(caller, onlineClass.getId());
+        } else {
+            cancel(caller, onlineClass.getId());
+        }
+    }
+
+    private boolean hasCurrentTarget(OnlineClass onlineClass, GroupLessonResponse lesson) {
+        return onlineClass.getBindingKey().equals(lesson.bindingKey())
+                && java.util.Objects.equals(onlineClass.getStudent() == null ? null : onlineClass.getStudent().getId(), lesson.studentId())
+                && java.util.Objects.equals(onlineClass.getGroup() == null ? null : onlineClass.getGroup().getId(), lesson.groupId());
+    }
+
     private OnlineClass create(AuthenticatedUser caller, GroupLessonResponse lesson) {
         User teacher = accessService.requireActiveUser(caller.id());
         if (lesson.startsAt() == null || lesson.endsAt() == null) {
             throw new ConflictException("This lesson has no scheduled time");
         }
 
+        Instant scheduledEnd = DateOnlyLessonSchedule.onlineClassEnd(lesson);
         OnlineClass created;
         if (lesson.groupId() != null) {
             StudentGroup group = groupRepository.findByIdAndTeacherId(lesson.groupId(), caller.id())
                     .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
             created = OnlineClass.forGroup(teacher, lesson.eventId(), lesson.bindingKey(),
-                    lesson.title(), lesson.startsAt(), lesson.endsAt(), group);
+                    lesson.title(), lesson.startsAt(), scheduledEnd, group);
         } else if (lesson.studentId() != null) {
             User student = accessService.requireActiveUser(lesson.studentId());
             created = OnlineClass.forStudent(teacher, lesson.eventId(), lesson.bindingKey(),
-                    lesson.title(), lesson.startsAt(), lesson.endsAt(), student);
+                    lesson.title(), lesson.startsAt(), scheduledEnd, student);
         } else {
             throw new ConflictException("This lesson is not linked to a student or group yet");
         }
@@ -234,9 +256,11 @@ public class OnlineClassService {
 
         List<OnlineClass> classes = caller.role() == Role.TEACHER
                 ? classRepository.findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(caller.id(), active)
-                : classRepository.findVisibleToStudent(caller.id(), from, active);
+                : classRepository.findVisibleToStudent(caller.id(), from, now(), active);
 
-        return classes.stream().map(item -> toResponse(item, caller)).toList();
+        return classes.stream()
+                .filter(item -> caller.role() == Role.TEACHER || !item.isConnectable() || canStudentJoin(item))
+                .map(item -> toResponse(item, caller)).toList();
     }
 
     /**
@@ -268,8 +292,12 @@ public class OnlineClassService {
     @Transactional
     public OnlineClassResponse openLobby(AuthenticatedUser caller, UUID classId) {
         OnlineClass onlineClass = requireHostForMutation(caller, classId);
+        requireCurrentSession(onlineClass);
         if (!mediaProvider.isConfigured()) {
             throw new ConflictException("Online classes are not available on this server");
+        }
+        if (!onlineClass.isConnectable() && !onlineClass.isTerminal()) {
+            extendJoinWindowForOpening(onlineClass);
         }
         onlineClass.openLobby();
         ensureHostParticipant(onlineClass);
@@ -279,6 +307,7 @@ public class OnlineClassService {
     @Transactional
     public OnlineClassResponse start(AuthenticatedUser caller, UUID classId) {
         OnlineClass onlineClass = requireHostForMutation(caller, classId);
+        requireCurrentSession(onlineClass);
         // Fail with a precise, teacher-facing message rather than a 500 when the
         // provider is not configured. Checked before any state change so a
         // misconfigured server does not leave a half-started class behind.
@@ -286,6 +315,9 @@ public class OnlineClassService {
             throw new ConflictException("Online classes are not available on this server");
         }
 
+        if (onlineClass.getStatus() == OnlineClassStatus.SCHEDULED) {
+            extendJoinWindowForOpening(onlineClass);
+        }
         onlineClass.start(now());
         ensureHostParticipant(onlineClass);
         try {
@@ -396,10 +428,9 @@ public class OnlineClassService {
         if (!onlineClass.isConnectable()) {
             throw new ConflictException("This class is not open");
         }
-        // Opening a room early overrides the calendar's earliest join time, but
-        // never reopens a historical lesson after its scheduled end plus grace.
-        // Participant authorization and teacher admission still apply below.
-        if (!host && now().isAfter(onlineClass.getScheduledEndAt().plus(properties.joinWindowAfterEnd()))) {
+        // A teacher may deliberately open a late lesson. Its explicit opening
+        // has a bounded expiry; an abandoned historical room still expires.
+        if (!host && !canStudentJoin(onlineClass)) {
             throw new ConflictException("This class is not open for joining anymore");
         }
 
@@ -471,6 +502,30 @@ public class OnlineClassService {
         return !now.isBefore(opensAt) && !now.isAfter(closesAt);
     }
 
+    private boolean canStudentJoin(OnlineClass onlineClass) {
+        Instant closesAt = onlineClass.getStudentJoinUntil() != null
+                ? onlineClass.getStudentJoinUntil()
+                : onlineClass.getScheduledEndAt().plus(properties.joinWindowAfterEnd());
+        return onlineClass.isConnectable() && !now().isAfter(closesAt);
+    }
+
+    private void extendJoinWindowForOpening(OnlineClass onlineClass) {
+        java.time.Duration duration = java.time.Duration.between(
+                onlineClass.getScheduledStartAt(), onlineClass.getScheduledEndAt());
+        if (duration.compareTo(java.time.Duration.ofHours(24)) > 0) {
+            duration = java.time.Duration.ofHours(24);
+        }
+        Instant fromOpening = now().plus(duration).plus(properties.joinWindowAfterEnd());
+        Instant fromSchedule = onlineClass.getScheduledEndAt().plus(properties.joinWindowAfterEnd());
+        onlineClass.allowStudentJoiningUntil(fromOpening.isAfter(fromSchedule) ? fromOpening : fromSchedule);
+    }
+
+    private void requireCurrentSession(OnlineClass onlineClass) {
+        if (onlineClass.isConnectable() && !canStudentJoin(onlineClass)) {
+            throw new ConflictException("This session has expired; start a new session from the lesson page");
+        }
+    }
+
     private OnlineClass requireHostForMutation(AuthenticatedUser caller, UUID classId) {
         requireEnabled();
         return accessService.requireHost(caller, classId);
@@ -492,7 +547,8 @@ public class OnlineClassService {
     private OnlineClassResponse toResponse(OnlineClass onlineClass, AuthenticatedUser caller) {
         return OnlineClassResponse.from(onlineClass,
                 accessService.isHost(caller, onlineClass),
-                onlineClass.isConnectable() || isWithinJoinWindow(onlineClass),
+                !onlineClass.isTerminal() && (onlineClass.isConnectable()
+                        ? canStudentJoin(onlineClass) : isWithinJoinWindow(onlineClass)),
                 recordingProvider.isConfigured(),
                 transcriptionProvider.isConfigured());
     }

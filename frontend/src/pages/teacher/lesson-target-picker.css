@@ -1,0 +1,33 @@
+.lesson-target-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin: 0 0 14px; }
+.lesson-target-tabs > button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 9px; min-height: 45px; border: 1px solid var(--border); border-radius: 11px; background: var(--teacher-raised); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.lesson-target-tabs > button:hover:not(:disabled) { border-color: #737b80; color: var(--text); }
+.lesson-target-tabs > button[aria-selected=true] { background: var(--teacher-selected); color: var(--teacher-selected-text); border-color: var(--teacher-selected-border); }
+.lesson-target-tabs .teacher-icon { width: 17px; height: 17px; flex-basis: 17px; }
+.lesson-target-tabs small { font-size: 10px; border-radius: 5px; padding: 1px 4px; background: #ffffff0b; }
+.lesson-target-search { display: flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; color: var(--muted); background: var(--teacher-raised); margin-bottom: 0; }
+.lesson-target-search:focus-within { outline: 2px solid var(--teacher-selected-text); outline-offset: 2px; }
+.teacher-shell .lesson-drawer .lesson-target-search input { min-width: 0; width: 100%; min-height: 40px; background: transparent; border: 0; outline: none; color: var(--text); font: inherit; font-size: 13px; padding: 8px 0; }
+.lesson-target-control { position: relative; }
+.lesson-target-popover { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 5; padding: 5px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 14px 36px #0008; }
+.lesson-target-options { display: grid; gap: 4px; max-height: min(240px,35dvh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.lesson-target-chevron { flex: 0 0 14px; text-align: center; transition: transform .15s; }
+.lesson-target-chevron.is-open { transform: rotate(180deg); }
+.lesson-target-search:has(input[aria-invalid=true]) { border-color: var(--teacher-error-text); }
+.lesson-target-option { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--teacher-raised); cursor: pointer; min-width: 0; width: 100%; font: inherit; text-align: left; }
+.lesson-target-option:hover, .lesson-target-option.is-active { border-color: #737b80; }
+.lesson-target-option.is-selected { border-color: var(--teacher-selected-border); background: var(--teacher-selected); }
+.lesson-target-option:focus-visible { outline: 2px solid var(--teacher-selected-text); outline-offset: -2px; }
+.lesson-target-avatar { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 9px; background: #ffffff08; color: var(--teacher-selected-text); font-weight: 650; font-size: 15px; }
+.lesson-target-option__text { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.lesson-target-option__text strong { font-size: 13px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; font-weight: 550; }
+.lesson-target-option__text small { font-size: 11px; color: var(--muted); }
+.lesson-target-check { color: var(--teacher-selected-text); flex: 0 0 18px; text-align: center; }
+.lesson-target-empty { padding: 16px; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
+@media(max-width:600px) {
+  .lesson-target-tabs { gap: 5px; }
+  .lesson-target-tabs > button { font-size: 11px; gap: 5px; padding: 10px 6px; }
+  .lesson-target-tabs .teacher-icon { width: 16px; height: 16px; flex-basis: 16px; }
+  .teacher-shell .lesson-drawer .lesson-target-search input { font-size: 16px; min-height: 42px; }
+  .lesson-target-option { padding: 10px; gap: 9px; }
+  .lesson-target-tabs small { padding: 1px 3px; font-size: 9px; }
+}

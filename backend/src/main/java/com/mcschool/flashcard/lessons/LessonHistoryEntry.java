@@ -112,6 +112,12 @@ public class LessonHistoryEntry {
         this.calendarUrl = lesson.calendarUrl();
     }
 
+    /** Explicit reassignment replaces the enrollment snapshot for a native lesson. */
+    public void reassign(GroupLessonResponse lesson) {
+        sync(lesson);
+        this.participantStudentIds = encodeParticipants(lesson.participantStudentIds());
+    }
+
     public GroupLessonResponse toResponse() {
         return new GroupLessonResponse(
                 eventId,

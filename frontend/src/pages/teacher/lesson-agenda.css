@@ -1,0 +1,105 @@
+/* A week of dates, then the agenda for the selected day. */
+.teacher-shell #teacher-main:has(> .teacher-lessons-page) { max-width: none; padding-top: 12px; }
+.teacher-shell .teacher-content .lesson-agenda-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
+.teacher-shell .teacher-content .lesson-agenda-heading h1 { font-size: 30px; margin-bottom: 8px; }
+.teacher-shell .teacher-content .lesson-agenda-heading p { font-size: 13px; }
+.teacher-shell .teacher-content .lesson-agenda-heading .lesson-plan-trigger { flex: none; min-height: 42px; padding: 11px 18px; font-size: 13px; border-radius: 12px; }
+.lesson-agenda-navigation { display: grid; grid-template-columns: 40px minmax(0,1fr) 40px; gap: 12px; align-items: center; margin: 0 0 24px; }
+.lesson-agenda-arrow { display: grid; place-items: center; height: 36px; width: 36px; padding: 0; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 24px; cursor: pointer; }
+.lesson-agenda-arrow:last-child { justify-self: end; }
+.lesson-agenda-arrow:hover { color: var(--teacher-selected-text); background: var(--surface); }
+.lesson-agenda-month { position: relative; justify-self: center; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 18px; text-align: center; }
+.lesson-agenda-month input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.lesson-agenda-month:focus-within { outline: 2px solid var(--teacher-selected-text); outline-offset: 3px; }
+.lesson-agenda-month:hover { background: var(--surface); }
+.lesson-agenda-days { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 9px; margin-bottom: 30px; }
+.lesson-agenda-day { display: grid; align-content: center; justify-items: center; gap: 9px; padding: 15px 4px; min-width: 0; min-height: 100px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--muted); cursor: pointer; font: inherit; }
+.lesson-agenda-day > span { font-size: 12px; }
+.lesson-agenda-day > strong { color: var(--text); font-size: 23px; font-weight: 650; line-height: 1.2; }
+.lesson-agenda-day > i { width: 4px; height: 4px; background: var(--muted); opacity: .3; border-radius: 50%; }
+.lesson-agenda-day > i.has-lessons { background: var(--teacher-selected-text); opacity: 1; width: 5px; height: 5px; }
+.lesson-agenda-day:hover { border-color: #69747a; }
+.lesson-agenda-day.is-today:not([aria-pressed=true]) { border-color: #737c80; }
+.lesson-agenda-day[aria-pressed=true] { background: var(--teacher-selected); border-color: var(--teacher-selected-border); color: var(--teacher-selected-text); }
+.lesson-agenda-day[aria-pressed=true] strong { color: var(--teacher-selected-text); }
+.lesson-agenda-day-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.teacher-shell .teacher-content .lesson-agenda-day-heading h2 { margin: 0; font-size: 19px; font-weight: 650; }
+.lesson-agenda-day-heading > span { color: var(--muted); font-size: 12px; }
+.lesson-agenda-list { display: grid; gap: 12px; }
+.lesson-agenda-card { min-width: 0; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); padding: 22px; }
+.lesson-agenda-card__row { display: grid; grid-template-columns: 94px minmax(0,1fr) auto; gap: 22px; align-items: center; }
+.lesson-agenda-card__when { min-height: 82px; display: flex; flex-direction: column; justify-content: center; gap: 7px; border-right: 2px solid var(--teacher-selected-text); padding-right: 18px; }
+.lesson-agenda-card__when strong { font-size: 20px; line-height: 1.3; font-weight: 650; }
+.lesson-agenda-card__when > span { color: var(--muted); font-size: 11px; }
+.teacher-shell .teacher-content .lesson-agenda-card__info h3 { margin: 0 0 8px; font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
+.lesson-agenda-card__info p { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.lesson-agenda-status { display: inline-block; padding: 4px 8px; border-radius: 7px; font-size: 11px; color: var(--teacher-selected-text); background: var(--teacher-selected); }
+.lesson-agenda-status.is-past { color: var(--muted); background: var(--teacher-raised); }
+.lesson-agenda-card__actions { display: flex; align-items: center; gap: 8px; }
+.teacher-shell .teacher-content .lesson-agenda-card__actions .btn { min-height: 40px; padding: 10px 16px; font-size: 12px; white-space: nowrap; border-radius: 11px; }
+.lesson-agenda-card__options { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.lesson-agenda-card__links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.lesson-agenda-empty { padding: 32px 20px; border: 1px dashed var(--border); border-radius: 16px; color: var(--muted); text-align: center; }
+.lesson-agenda-empty strong { color: var(--text); font-size: 15px; font-weight: 550; }
+.lesson-agenda-empty p { margin: 7px 0 0; font-size: 12px; }
+.lesson-agenda-integration { margin-top: 30px; }
+.lesson-agenda-integration .lesson-calendar-option { border: 0; border-top: 1px solid var(--border); padding: 14px 0; border-radius: 0; margin: 0; }
+/* The overlay is portaled to the shell, above the workspace and mobile navigation. */
+.lesson-drawer-layer { position: fixed; inset: 0; z-index: 12000; display: flex; justify-content: flex-end; background: #0009; backdrop-filter: blur(3px); animation: lesson-backdrop-in .2s ease-out; }
+.teacher-shell .lesson-drawer.teacher-content { width: min(560px,100%); min-width: 0; max-width: 100%; height: 100dvh; margin: 0; padding: 0 28px 24px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); color: var(--text); border-left: 1px solid var(--border); box-shadow: -20px 0 70px #0005; animation: lesson-drawer-in .28s cubic-bezier(.2,.8,.2,1); font-size: 14px; }
+.lesson-drawer__header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 24px 0 18px; background: var(--surface); }
+.lesson-drawer__eyebrow { display: block; font-size: 11px; color: var(--teacher-selected-text); margin-bottom: 5px; }
+.teacher-shell .lesson-drawer .lesson-drawer__header h2 { font-size: 24px; margin: 0; letter-spacing: -.4px; }
+.teacher-shell .lesson-drawer .teacher-icon-button { width: 38px; height: 38px; min-width: 38px; border: 1px solid var(--border); background: var(--teacher-raised); }
+.teacher-shell .lesson-drawer .teacher-icon-button:disabled { opacity: .4; cursor: wait; }
+.lesson-drawer__description { margin: 0 0 24px; font-size: 13px; line-height: 1.6; }
+.teacher-shell .lesson-drawer .lesson-create__form { border: 0; padding: 0; margin: 0; }
+.teacher-shell .lesson-drawer.teacher-content .field__label { font-size: 12px; margin-bottom: 7px; }
+.teacher-shell .lesson-drawer.teacher-content :is(.input,.select) { font-size: 14px; min-height: 42px; padding: 10px 12px; background: var(--teacher-raised); }
+.teacher-shell .lesson-drawer .lesson-repeat__period { font-size: 12px; padding: 9px 12px; min-height: 38px; }
+.teacher-shell .lesson-drawer .lesson-repeat__day { font-size: 12px; padding: 9px 10px; }
+.teacher-shell .lesson-drawer .lesson-repeat__days { gap: 7px; }
+.teacher-shell .lesson-drawer .lesson-create__preview { margin-top: 20px; padding: 14px; background: var(--teacher-raised); font-size: 12px; }
+.teacher-shell .lesson-drawer .lesson-create__actions { position: sticky; bottom: -24px; background: var(--surface); border-top: 1px solid var(--border); margin: 24px -28px -24px; padding: 18px 28px 24px; gap: 12px; align-items: center; }
+.teacher-shell .lesson-drawer .lesson-create__actions > span { flex: 1 1 160px; font-size: 11px; }
+.teacher-shell .lesson-drawer.teacher-content .lesson-create__actions .btn { min-height: 42px; font-size: 13px; padding: 10px 16px; }
+@keyframes lesson-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes lesson-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@media(max-width:760px) {
+  .lesson-agenda-card { padding: 18px; }
+  .lesson-agenda-card__row { grid-template-columns: 78px minmax(0,1fr); gap: 14px; }
+  .lesson-agenda-card__actions { grid-column: 2; }
+  .lesson-agenda-card__when { padding-right: 12px; }
+  .lesson-agenda-card__when strong { font-size: 18px; }
+}
+@media(max-width:600px) {
+  .teacher-shell .teacher-content .lesson-agenda-heading { align-items: flex-start; gap: 12px; margin-bottom: 22px; }
+  .teacher-shell .teacher-content .lesson-agenda-heading h1 { font-size: 26px; }
+  .teacher-shell .teacher-content .lesson-agenda-heading p { font-size: 11px; max-width: 190px; }
+  .teacher-shell .teacher-content .lesson-agenda-heading .lesson-plan-trigger { max-width: 135px; min-height: 42px; font-size: 11px; padding: 9px 12px; }
+  .lesson-agenda-navigation { margin-bottom: 14px; }
+  .lesson-agenda-month { font-size: 16px; }
+  .lesson-agenda-days { gap: 5px; margin-bottom: 24px; }
+  .lesson-agenda-day { min-height: 76px; padding: 10px 2px; gap: 7px; border-radius: 10px; }
+  .lesson-agenda-day > span { font-size: 10px; }
+  .lesson-agenda-day > strong { font-size: 19px; }
+  .teacher-shell .teacher-content .lesson-agenda-day-heading h2 { font-size: 17px; }
+  .lesson-agenda-day-heading > span { font-size: 11px; }
+  .teacher-shell .teacher-content .lesson-agenda-card__info h3 { font-size: 16px; }
+  .lesson-agenda-card__info p { font-size: 11px; line-height: 1.5; margin-bottom: 8px; }
+  .lesson-agenda-status { font-size: 10px; }
+  .lesson-agenda-card__row { grid-template-columns: 66px minmax(0,1fr); gap: 12px; }
+  .lesson-agenda-card__when strong { font-size: 16px; }
+  .lesson-agenda-card__when > span { font-size: 10px; }
+  .lesson-agenda-card__actions { justify-content: space-between; gap: 6px; }
+  .teacher-shell .teacher-content .lesson-agenda-card__actions .btn { padding: 9px 12px; min-height: 36px; font-size: 11px; }
+  .lesson-drawer-layer { align-items: flex-end; }
+  .teacher-shell .lesson-drawer.teacher-content { height: auto; max-height: 94dvh; padding: 0 20px 20px; border: 1px solid var(--border); border-bottom: 0; border-radius: 20px 20px 0 0; animation-name: lesson-sheet-in; }
+  .lesson-drawer__header { padding: 20px 0 14px; }
+  .teacher-shell .lesson-drawer .lesson-drawer__header h2 { font-size: 22px; }
+  .teacher-shell .lesson-drawer.teacher-content :is(.input,.select) { font-size: 16px; }
+  .teacher-shell .lesson-drawer .lesson-create__actions { bottom: -20px; margin: 24px -20px -20px; padding: 16px 20px calc(20px + env(safe-area-inset-bottom,0px)); }
+  .teacher-shell .lesson-drawer .lesson-create__actions .btn { width: 100%; }
+}
+@keyframes lesson-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media(prefers-reduced-motion:reduce) { .lesson-drawer-layer, .teacher-shell .lesson-drawer.teacher-content { animation: none; } }

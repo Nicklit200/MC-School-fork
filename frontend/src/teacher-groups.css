@@ -1,14 +1,14 @@
 .teacher-groups-page {
-  color: #172033;
+  color: var(--teacher-text, #172033);
 }
 
 .teacher-group-create {
-  border: 1px solid #ffe0cf;
+  border: 1px solid var(--teacher-selected-border, #ffe0cf);
   border-radius: 17px;
   padding: 22px 24px;
   margin-bottom: 22px;
   box-shadow: 0 4px 16px rgba(255,91,0,.035);
-  background: #fff;
+  background: var(--teacher-surface, #fff);
 }
 
 .teacher-group-create h2 {
@@ -17,14 +17,14 @@
 }
 
 .teacher-group-create .field__label {
-  color: #59657d;
+  color: var(--teacher-muted, #59657d);
   font-size: 13px;
 }
 
 .teacher-group-create .input,
 .teacher-group-create .select {
   min-height: 43px;
-  border-color: #d9deea;
+  border-color: var(--teacher-border, #d9deea);
   border-radius: 9px;
   font-size: 13px;
 }
@@ -32,7 +32,7 @@
 .teacher-group-create .input:focus,
 .teacher-group-create .select:focus {
   border-color: var(--orange);
-  outline: 2px solid #ffe4d3;
+  outline: 2px solid var(--teacher-selected-border, #ffe4d3);
 }
 
 .teacher-group-chips {
@@ -49,8 +49,8 @@
   min-height: 32px;
   padding: 0 12px;
   border-radius: 10px;
-  background: #f3f5f8;
-  color: #4e5b73;
+  background: var(--teacher-raised, #f3f5f8);
+  color: var(--teacher-muted, #4e5b73);
   font-size: 12px;
 }
 
@@ -58,7 +58,7 @@
   appearance: none;
   border: none;
   background: transparent;
-  color: #68748b;
+  color: var(--teacher-muted, #68748b);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -84,10 +84,10 @@
 
 .teacher-stat-card {
   min-height: 108px;
-  border: 1px solid #ffe3d3;
+  border: 1px solid var(--teacher-selected-border, #ffe3d3);
   border-radius: 17px;
   padding: 17px 20px;
-  background: #fff;
+  background: var(--teacher-surface, #fff);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -105,14 +105,14 @@
   font-weight: 700;
 }
 
-.teacher-stat-card__icon--blue { background: #edf4ff; color: #2d6bea; }
-.teacher-stat-card__icon--orange { background: #fff0e6; color: #ff5b00; }
-.teacher-stat-card__icon--green { background: #eaf7f1; color: #168567; }
+.teacher-stat-card__icon--blue { background: var(--teacher-raised, #edf4ff); color: var(--teacher-muted, #2d6bea); }
+.teacher-stat-card__icon--orange { background: var(--teacher-selected, #fff0e6); color: var(--teacher-selected-text, #ff5b00); }
+.teacher-stat-card__icon--green { background: var(--teacher-success, #eaf7f1); color: var(--teacher-success-text, #168567); }
 
 .teacher-stat-card span {
   display: block;
   font-size: 12px;
-  color: #69758e;
+  color: var(--teacher-muted, #69758e);
   margin-bottom: 2px;
 }
 
@@ -120,20 +120,20 @@
   display: block;
   font-size: 24px;
   line-height: 1.05;
-  color: #17223b;
+  color: var(--teacher-text, #17223b);
   margin-bottom: 5px;
 }
 
 .teacher-stat-card small {
-  color: #7a869d;
+  color: var(--teacher-muted, #7a869d);
   font-size: 11px;
 }
 
 .teacher-groups-list {
-  border: 1px solid #ffe3d3;
+  border: 1px solid var(--teacher-selected-border, #ffe3d3);
   border-radius: 17px;
   overflow: hidden;
-  background: #fff;
+  background: var(--teacher-surface, #fff);
 }
 
 .teacher-group-row {
@@ -143,7 +143,7 @@
   align-items: center;
   min-height: 106px;
   padding: 18px 20px;
-  border-bottom: 1px solid #edf0f5;
+  border-bottom: 1px solid var(--teacher-border, #edf0f5);
 }
 
 .teacher-group-row:last-child {
@@ -151,7 +151,7 @@
 }
 
 .teacher-group-row:hover {
-  background: #fffdfb;
+  background: var(--teacher-selected, #fffdfb);
 }
 
 .teacher-group-avatar {
@@ -162,12 +162,12 @@
   place-items: center;
   font-size: 18px;
   font-weight: 700;
-  background: #fff0e8;
-  color: #e85608;
+  background: var(--teacher-selected, #fff0e8);
+  color: var(--teacher-selected-text, #e85608);
 }
 
-.teacher-group-avatar--1 { background: #fff5eb; color: #d66b1e; }
-.teacher-group-avatar--2 { background: #fff0e4; color: #bd4900; }
+.teacher-group-avatar--1 { background: var(--teacher-selected, #fff5eb); color: var(--teacher-selected-text, #d66b1e); }
+.teacher-group-avatar--2 { background: var(--teacher-selected, #fff0e4); color: var(--teacher-selected-text, #bd4900); }
 
 .teacher-group-info {
   display: grid;
@@ -176,11 +176,11 @@
 
 .teacher-group-info strong {
   font-size: 15px;
-  color: #17223b;
+  color: var(--teacher-text, #17223b);
 }
 
 .teacher-group-info span {
-  color: #69758e;
+  color: var(--teacher-muted, #69758e);
   font-size: 12px;
 }
 
@@ -194,7 +194,7 @@
   width: 40px;
   height: 40px;
   margin-left: -7px;
-  border: 3px solid #fff;
+  border: 3px solid var(--teacher-border, #fff);
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -202,11 +202,11 @@
   font-weight: 700;
 }
 
-.teacher-member-avatar--0 { background: #fff0e7; color: #cc5008; }
-.teacher-member-avatar--1 { background: #ffe8f1; color: #ce3f78; }
-.teacher-member-avatar--2 { background: #f0e8fb; color: #7840a8; }
-.teacher-member-avatar--3 { background: #e8f6ef; color: #1d8060; }
-.teacher-member-avatar--more { background: #f0f2f6; color: #5d687c; }
+.teacher-member-avatar--0 { background: var(--teacher-selected, #fff0e7); color: var(--teacher-selected-text, #cc5008); }
+.teacher-member-avatar--1 { background: var(--teacher-error, #ffe8f1); color: var(--teacher-error-text, #ce3f78); }
+.teacher-member-avatar--2 { background: var(--teacher-raised, #f0e8fb); color: var(--teacher-muted, #7840a8); }
+.teacher-member-avatar--3 { background: var(--teacher-success, #e8f6ef); color: var(--teacher-success-text, #1d8060); }
+.teacher-member-avatar--more { background: var(--teacher-raised, #f0f2f6); color: var(--teacher-muted, #5d687c); }
 
 .teacher-open-group-btn {
   min-width: 180px;
@@ -215,10 +215,10 @@
   align-items: center;
   justify-content: center;
   padding: 0 28px;
-  border: 1px solid #ffc6a5;
+  border: 1px solid var(--teacher-selected-border, #ffc6a5);
   border-radius: 14px;
   color: var(--orange);
-  background: #fff;
+  background: var(--teacher-surface, #fff);
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
@@ -227,7 +227,7 @@
 }
 
 .teacher-open-group-btn:hover {
-  background: #fff6f0;
+  background: var(--teacher-selected, #fff6f0);
   border-color: var(--orange);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(255, 91, 0, .12);

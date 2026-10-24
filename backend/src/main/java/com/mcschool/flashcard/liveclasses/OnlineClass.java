@@ -95,6 +95,10 @@ public class OnlineClass {
     @Column(name = "actual_end_at")
     private Instant actualEndAt;
 
+    /** Explicit teacher opening may move a lesson later than its calendar slot. */
+    @Column(name = "student_join_until")
+    private Instant studentJoinUntil;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -169,6 +173,10 @@ public class OnlineClass {
         }
         requireNonTerminal("open the lobby for");
         this.status = OnlineClassStatus.LOBBY_OPEN;
+    }
+
+    public void allowStudentJoiningUntil(Instant expiresAt) {
+        this.studentJoinUntil = expiresAt;
     }
 
     /** Idempotent; records the first actual start only. */

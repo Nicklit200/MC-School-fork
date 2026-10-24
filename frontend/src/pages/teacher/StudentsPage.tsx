@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { TeacherIcon } from '../../components/TeacherIcon';
 
 type TodayCompletion = {
   cards: 'done' | 'pending' | 'none';
@@ -12,7 +13,6 @@ type TodayCompletion = {
 
 export function StudentsPage() {
   const { language, t } = useI18n();
-  const navigate = useNavigate();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [summaries, setSummaries] = useState<Record<string, CardSummary>>({});
   const [todayCompletion, setTodayCompletion] = useState<Record<string, TodayCompletion>>({});
@@ -22,6 +22,9 @@ export function StudentsPage() {
   const [showInactive, setShowInactive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   async function reload() {
     const list = await api.students.list();
@@ -48,20 +51,25 @@ export function StudentsPage() {
   }
 
   useEffect(() => {
-    reload().catch((e) => setError(toErrorMessage(e, t)));
+    reload().catch((e) => { setError(toErrorMessage(e, t)); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
+    if (creating) return;
+    setCreating(true);
     setError(null);
     try {
       const created = await api.students.create(fullName.trim(), '');
       setCreatedStudent(created);
       setFullName('');
+      setCreateOpen(false);
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -152,65 +160,64 @@ export function StudentsPage() {
 
   const activeStudents = students.filter((student) => student.status !== 'INACTIVE');
   const inactiveStudents = students.filter((student) => student.status === 'INACTIVE');
-  const visibleStudents = showInactive ? inactiveStudents : activeStudents;
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleStudents = (showInactive ? inactiveStudents : activeStudents).filter((student) =>
+    [student.fullName, student.username, student.grade, schoolTypeLabel(student.schoolType, language)]
+      .filter(Boolean).join(' ').toLocaleLowerCase().includes(normalizedQuery),
+  );
 
   return (
     <div className="teacher-students-page" onClick={() => openMenuId && setOpenMenuId(null)}>
-      <div className="teacher-page-heading">
-        <h1>{language === 'DE' ? 'Meine Schüler' : 'Мои ученики'}</h1>
-        <p>{language === 'DE' ? 'Verwalte Schüler und ihren Zugriff auf Materialien' : 'Управляйте своими учениками и их доступом к материалам'}</p>
-        <div className="row" style={{ marginTop: 14, gap: 8 }}>
-          <button
-            type="button"
-            className={showInactive ? 'btn btn--ghost' : 'btn'}
-            onClick={() => setShowInactive(false)}
-          >
-            {language === 'DE' ? `Aktiv (${activeStudents.length})` : `Активные (${activeStudents.length})`}
-          </button>
-          <button
-            type="button"
-            className={showInactive ? 'btn' : 'btn btn--ghost'}
-            onClick={() => setShowInactive(true)}
-          >
-            {language === 'DE' ? `Inaktiv (${inactiveStudents.length})` : `Неактивные (${inactiveStudents.length})`}
-          </button>
+      <div className="teacher-page-heading teacher-heading-row">
+        <div><h1>{language === 'DE' ? 'Meine Schüler' : 'Мои ученики'}</h1>
+        <p>{language === 'DE' ? 'Alles für die Arbeit mit jedem Schüler' : 'Всё для работы с каждым учеником'}</p></div>
+        <button className="btn" type="button" aria-expanded={createOpen} aria-controls="teacher-add-student" onClick={() => setCreateOpen(!createOpen)}>
+          {createOpen ? (language === 'DE' ? 'Schließen' : 'Закрыть') : (language === 'DE' ? '+ Schüler hinzufügen' : '+ Добавить ученика')}
+        </button>
+      </div>
+      <div className="teacher-students-toolbar">
+        <div className="teacher-filter-tabs" role="group" aria-label={language === 'DE' ? 'Schülerstatus' : 'Статус учеников'}>
+          <button type="button" aria-pressed={!showInactive} onClick={() => setShowInactive(false)}>{language === 'DE' ? 'Aktiv' : 'Активные'} · {activeStudents.length}</button>
+          <button type="button" aria-pressed={showInactive} onClick={() => setShowInactive(true)}>{language === 'DE' ? 'Inaktiv' : 'Неактивные'} · {inactiveStudents.length}</button>
         </div>
+        <label className="teacher-student-search"><TeacherIcon name="search" />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={language === 'DE' ? 'Schüler suchen' : 'Поиск учеников'} placeholder={language === 'DE' ? 'Nach Name oder Klasse suchen' : 'Поиск по имени или классу'} />
+        </label>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      <section className="teacher-create-student">
+      {createOpen && <section className="teacher-create-student" id="teacher-add-student">
         <h2>{language === 'DE' ? 'Neuen Schüler hinzufügen' : 'Добавить нового ученика'}</h2>
         <form onSubmit={onCreate}>
           <div className="teacher-create-grid">
             <label className="field">
               <span className="field__label">{language === 'DE' ? 'Name des Schülers' : 'Имя ученика'}</span>
-              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={language === 'DE' ? 'Name eingeben' : 'Введите имя ученика'} required />
+              <input className="input" autoFocus disabled={creating} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={language === 'DE' ? 'Name eingeben' : 'Введите имя ученика'} required />
             </label>
           </div>
           <p className="teacher-form-hint"><span>ⓘ</span>{language === 'DE' ? 'Der Schüler ist sofort vollständig im System verfügbar. Login und Passwort können später weitergegeben werden.' : 'Ученик сразу полностью доступен в системе. Логин и пароль можно передать ему позже.'}</p>
-          <button className="btn teacher-primary-btn" type="submit">{language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
+          <button className="btn teacher-primary-btn" type="submit" disabled={creating}>{language === 'DE' ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
         </form>
-        {createdStudent && (
-          <div className="banner banner--success" style={{ marginTop: 16 }}>
-            {language === 'DE' ? 'Schüler erstellt. Login' : 'Ученик создан. Логин'}: <strong>{createdStudent.student.username}</strong>.{' '}
-            {language === 'DE' ? 'Das Passwort kann über das Menü festgelegt werden.' : 'Пароль можно задать через меню ученика.'}
-          </div>
-        )}
-      </section>
+      </section>}
+      {createdStudent && <div className="banner banner--success" role="status">
+        {language === 'DE' ? 'Schüler erstellt. Login' : 'Ученик создан. Логин'}: <strong>{createdStudent.student.username}</strong>.{' '}
+        {language === 'DE' ? 'Das Passwort kann über das Menü festgelegt werden.' : 'Пароль можно задать через меню ученика.'}
+      </div>}
+      <div className="teacher-section-label"><span>{visibleStudents.length} {language === 'DE' ? 'Schüler' : studentCountWord(visibleStudents.length)}</span><span>{language === 'DE' ? 'Aufgabenstatus heute' : 'Статус заданий на сегодня'}</span></div>
 
       {loading ? <p className="muted">{t('common.loading')}</p> : visibleStudents.length === 0 ? (
         <div className="teacher-empty-state">
-          {showInactive
+          {query.trim() ? (language === 'DE' ? 'Keine Schüler gefunden.' : 'Ученики не найдены.') : showInactive
             ? (language === 'DE' ? 'Keine inaktiven Schüler.' : 'Неактивных учеников нет.')
             : t('students.empty')}
         </div>
       ) : (
-        <div className="teacher-student-list">
+        <div className="teacher-student-list teacher-student-list--cards">
           {visibleStudents.map((student, index) => {
             const completion = todayCompletion[student.id] ?? { cards: 'none', homework: 'none' };
             return (
-              <article key={student.id} className="teacher-student-card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/students/${student.id}`)}>
+              <article key={student.id} className="teacher-student-card">
                 <div className={`teacher-student-avatar teacher-student-avatar--${index % 4}`}>{studentInitial(student.fullName)}</div>
                 <div className="teacher-student-main">
                   <div className="teacher-student-name">
@@ -221,16 +228,9 @@ export function StudentsPage() {
                       </span>
                     )}
                   </div>
-                  <div className="teacher-student-email">{language === 'DE' ? 'Login' : 'Логин'}: <strong>{student.username ?? '—'}</strong></div>
                   <div className="teacher-student-meta">
-                    {language === 'DE' ? 'Klasse' : 'Класс'}: <strong>{student.grade ?? '—'}</strong>
-                    <span aria-hidden="true"> · </span>
-                    {language === 'DE' ? 'Schultyp' : 'Тип школы'}: <strong>{schoolTypeLabel(student.schoolType, language)}</strong>
-                  </div>
-                  <div className="teacher-student-meta">
-                    {student.parentFullName
-                      ? `${language === 'DE' ? 'Elternteil' : 'Родитель'}: ${student.parentFullName}`
-                      : (language === 'DE' ? 'Elternteil im Bereich „Eltern“ verknüpfen' : 'Родителя можно привязать в разделе «Родители»')}
+                    {student.grade ? `${student.grade} ${language === 'DE' ? 'Klasse' : 'класс'}` : (language === 'DE' ? 'Klasse nicht angegeben' : 'Класс не указан')}
+                    {student.schoolType && <> · {schoolTypeLabel(student.schoolType, language)}</>}
                   </div>
                 </div>
 
@@ -243,7 +243,6 @@ export function StudentsPage() {
                     </div>
                   ) : (
                     <>
-                      <div>{activeCount(summaries[student.id])} {language === 'DE' ? 'aktive Karten' : 'активных карточек'}</div>
                       <div className="teacher-today-statuses">
                         <TodayStatusBadge label={language === 'DE' ? 'Karten heute' : 'Карточки сегодня'} status={completion.cards} language={language} />
                         <TodayStatusBadge label={language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'} status={completion.homework} language={language} />
@@ -252,10 +251,7 @@ export function StudentsPage() {
                   )}
                 </div>
 
-                <div className="teacher-student-actions">
-                  <div className="teacher-student-actions__top">
-                    <Link to={`/students/${student.id}`} className="teacher-action-chip">{language === 'DE' ? 'Profil öffnen' : 'Открыть ученика'}</Link>
-                    <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                <div className="teacher-student-menu-wrap" onClick={(event) => event.stopPropagation()}>
                       <button type="button" className="teacher-more-btn" aria-label="Дополнительные действия" aria-expanded={openMenuId === student.id} onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}>⋮</button>
                       {openMenuId === student.id && (
                         <div className="teacher-student-menu">
@@ -276,8 +272,14 @@ export function StudentsPage() {
                         </div>
                       )}
                     </div>
-                  </div>
+                <div className="teacher-student-footer">
+                  <span>{language === 'DE' ? 'Aktive Karten' : 'Карточек в работе'}: {activeCount(summaries[student.id])}</span>
+                  <Link to={`/students/${student.id}`}>{language === 'DE' ? 'Profil öffnen' : 'Открыть профиль'} →</Link>
                 </div>
+                <details className="teacher-student-extra"><summary>{language === 'DE' ? 'Zugang und Eltern' : 'Доступ и родитель'}</summary>
+                  <p>{language === 'DE' ? 'Login' : 'Логин'}: {student.username ?? '—'}</p>
+                  <p>{student.parentFullName ?? (language === 'DE' ? 'Elternteil im Bereich „Eltern“ verknüpfen' : 'Родителя можно привязать в разделе «Родители»')}</p>
+                </details>
               </article>
             );
           })}
@@ -288,9 +290,8 @@ export function StudentsPage() {
 }
 
 function TodayStatusBadge({ label, status, language }: { label: string; status: TodayCompletion['cards']; language: 'DE' | 'RU' }) {
-  const icon = status === 'done' ? '✓' : status === 'pending' ? '✕' : '—';
-  const text = status === 'done' ? (language === 'DE' ? 'erledigt' : 'сделано') : status === 'pending' ? (language === 'DE' ? 'offen' : 'не сделано') : (language === 'DE' ? 'nichts geplant' : 'не задано');
-  return <div className={`teacher-today-status teacher-today-status--${status}`} title={`${label}: ${text}`}><span className="teacher-today-status__icon">{icon}</span><span>{label}</span></div>;
+  const text = status === 'done' ? (language === 'DE' ? 'Erledigt' : 'Выполнено') : status === 'pending' ? (language === 'DE' ? 'Offen' : 'Не выполнено') : (language === 'DE' ? 'Nicht geplant' : 'Не задано');
+  return <div className={`teacher-today-status teacher-today-status--${status}`}><span>{label}</span><span className="teacher-today-status__value">{text}</span></div>;
 }
 
 function buildTodayCompletion(today: string, summary: CardSummary, homeworks: Homework[], reviewHistory: DailyReviewHistoryItem[]): TodayCompletion {
@@ -329,4 +330,11 @@ function schoolTypeLabel(schoolType: StudentListItem['schoolType'], language: 'D
 
 function studentInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || '?';
+}
+
+function studentCountWord(count: number) {
+  const mod10 = count % 10, mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'ученик';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'ученика';
+  return 'учеников';
 }

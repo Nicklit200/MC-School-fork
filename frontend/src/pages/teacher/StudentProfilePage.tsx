@@ -130,7 +130,7 @@ function LearningProfileCard({ student, language, onSaved }: {
       {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
       {saveError && <div className="banner banner--error" style={{ marginBottom: 14 }}>{saveError}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+      <div className="teacher-profile-fields">
         <label className="field">
           <span className="field__label">{tr('Класс', 'Klasse')}</span>
           <select className="input" value={grade} onChange={(e) => setGrade(e.target.value)}>
@@ -151,7 +151,7 @@ function LearningProfileCard({ student, language, onSaved }: {
 
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 14, marginTop: 14 }}>
+      <div className="teacher-profile-notes">
         <label className="field">
           <span className="field__label">{tr('Что даётся тяжело', 'Schwierigkeiten')}</span>
           <textarea className="input" rows={4} value={learningDifficulties} onChange={(e) => setLearningDifficulties(e.target.value)} placeholder={tr('Например: теряется при скобках, путает знаки, боится текстовых задач…', 'Zum Beispiel: Klammern, Vorzeichen, Textaufgaben…')} />

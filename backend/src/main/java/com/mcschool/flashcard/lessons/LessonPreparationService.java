@@ -48,6 +48,9 @@ public class LessonPreparationService {
     public LessonPreparationResponse update(AuthenticatedUser teacher, String eventId, UpdateLessonPreparationRequest request) {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
         preparation.updateNotes(request.homeworkNotes(), request.difficulties(), request.lessonPlan(), request.transcriptText());
+        if (request.coveredMaterial() != null) {
+            preparation.updateCoveredMaterial(request.coveredMaterial());
+        }
         return response(repository.save(preparation));
     }
 
@@ -257,6 +260,7 @@ public class LessonPreparationService {
                 preparation.hasAnswers(),
                 preparation.getAnswersFilename(),
                 preparation.hasAnswers() ? null : ANSWERS_UPLOAD_HINT,
-                preparation.getSiteOpenedAt());
+                preparation.getSiteOpenedAt(),
+                preparation.getCoveredMaterial());
     }
 }

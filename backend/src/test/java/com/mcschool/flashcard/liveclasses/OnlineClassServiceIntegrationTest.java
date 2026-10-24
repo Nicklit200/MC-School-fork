@@ -358,6 +358,145 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> service.connect(studentPrincipal, longOver.getId(), "tab-1"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("not open for joining");
+        assertThat(service.get(studentPrincipal, longOver.getId()).joinWindowOpen()).isFalse();
+        assertThat(service.listUpcoming(studentPrincipal)).isEmpty();
+    }
+
+    @Test
+    void explicitlyOpeningALateLessonMakesItDiscoverableAndJoinable() {
+        OnlineClass late = classRepository.save(OnlineClass.forStudent(teacher, "event-late",
+                "binding-late", "Late lesson", NOW.minus(6, ChronoUnit.HOURS),
+                NOW.minus(5, ChronoUnit.HOURS), student));
+        late.setWaitingRoomEnabled(false);
+        classRepository.save(late);
+
+        OnlineClassResponse lobby = service.openLobby(teacherPrincipal, late.getId());
+        assertThat(lobby.joinWindowOpen()).isTrue();
+        assertThat(service.listUpcoming(studentPrincipal)).extracting(OnlineClassResponse::id).contains(late.getId());
+        assertThat(service.connect(studentPrincipal, late.getId(), "student-tab").token()).isNotBlank();
+
+        Instant expiry = classRepository.findById(late.getId()).orElseThrow().getStudentJoinUntil();
+        assertThat(expiry).isEqualTo(NOW.plus(2, ChronoUnit.HOURS));
+        service.openLobby(teacherPrincipal, late.getId());
+        assertThat(classRepository.findById(late.getId()).orElseThrow().getStudentJoinUntil()).isEqualTo(expiry);
+        service.end(teacherPrincipal, late.getId());
+        assertThat(service.get(studentPrincipal, late.getId()).joinWindowOpen()).isFalse();
+        assertThat(service.listUpcoming(studentPrincipal)).isEmpty();
+    }
+
+    @Test
+    void teacherRestartingExpiredSessionGetsAFreshRoomAndArchivesTheOldSession() {
+        OnlineClass original = materialize();
+        // The original calendar slot was much earlier than the current lesson.
+        when(lessonService.listGroupLessons(any())).thenReturn(List.of(new GroupLessonResponse(
+                "event-old-restart", "binding-old-restart", null, null,
+                student.getId(), "Student", List.of(student.getId()), "Maths",
+                NOW.minus(6, ChronoUnit.HOURS), NOW.minus(5, ChronoUnit.HOURS), null, null)));
+        OnlineClassResponse scheduled = service.materializeFromCalendar(teacherPrincipal, "event-old-restart");
+        OnlineClass expired = classRepository.findById(scheduled.id()).orElseThrow();
+        expired.start(NOW.minus(6, ChronoUnit.HOURS));
+        classRepository.save(expired); // legacy row without an explicit opening deadline
+
+        OnlineClassResponse retry = service.materializeFromCalendar(teacherPrincipal, "event-old-restart");
+        assertThat(retry.id()).isNotEqualTo(expired.getId()).isNotEqualTo(original.getId());
+        assertThat(retry.scheduledStartAt()).isEqualTo(NOW);
+        assertThat(service.get(teacherPrincipal, expired.getId()).status()).isEqualTo(OnlineClassStatus.ENDED);
+        service.start(teacherPrincipal, retry.id());
+        assertThat(service.listUpcoming(studentPrincipal)).extracting(OnlineClassResponse::id)
+                .contains(retry.id()).doesNotContain(expired.getId());
+        assertThat(service.materializeFromCalendar(teacherPrincipal, "event-old-restart").id()).isEqualTo(retry.id());
+    }
+
+    @Test
+    void discoveryKeepsTheWholeGracePeriodAfterLessonEnd() {
+        OnlineClass inGrace = classRepository.save(OnlineClass.forStudent(teacher, "event-grace",
+                "binding-grace", "Maths", NOW.minus(90, ChronoUnit.MINUTES),
+                NOW.minus(30, ChronoUnit.MINUTES), student));
+        inGrace.start(NOW.minus(90, ChronoUnit.MINUTES));
+        inGrace.setWaitingRoomEnabled(false);
+        classRepository.save(inGrace);
+        assertThat(service.listUpcoming(studentPrincipal)).extracting(OnlineClassResponse::id).contains(inGrace.getId());
+        assertThat(service.connect(studentPrincipal, inGrace.getId(), "tab").token()).isNotBlank();
+    }
+
+    @Test
+    void startingAnAlreadyOpenLobbyDoesNotSlideItsDeadline() {
+        OnlineClass onlineClass = materialize();
+        onlineClass.openLobby();
+        Instant deadline = NOW.plus(30, ChronoUnit.MINUTES);
+        onlineClass.allowStudentJoiningUntil(deadline);
+        classRepository.save(onlineClass);
+        service.start(teacherPrincipal, onlineClass.getId());
+        service.start(teacherPrincipal, onlineClass.getId());
+        assertThat(classRepository.findById(onlineClass.getId()).orElseThrow().getStudentJoinUntil()).isEqualTo(deadline);
+    }
+
+    @Test
+    void anExplicitOpeningDeadlineStillExpiresForStudents() {
+        OnlineClass expired = classRepository.save(OnlineClass.forStudent(teacher, "expired-open",
+                "expired-open", "Maths", NOW.minus(6, ChronoUnit.HOURS), NOW.minus(5, ChronoUnit.HOURS), student));
+        expired.start(NOW.minus(5, ChronoUnit.HOURS));
+        expired.allowStudentJoiningUntil(NOW.minusSeconds(1));
+        expired.setWaitingRoomEnabled(false);
+        classRepository.save(expired);
+        assertThat(service.listUpcoming(studentPrincipal)).isEmpty();
+        assertThat(service.get(studentPrincipal, expired.getId()).joinWindowOpen()).isFalse();
+        assertThatThrownBy(() -> service.connect(studentPrincipal, expired.getId(), "tab"))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("not open for joining");
+    }
+
+    @Test
+    void changingThePupilCreatesANewSessionWithoutGrantingOldPupilAccess() {
+        OnlineClass original = materialize();
+        service.start(teacherPrincipal, original.getId());
+        User next = userRepository.save(User.invitedStudent("Next student", "next@test.local",
+                teacher, "s-next", NOW.plusSeconds(3600)));
+        when(lessonService.listGroupLessons(any())).thenReturn(List.of(new GroupLessonResponse(
+                "event-1", "binding-1", null, null, next.getId(), "Next student", List.of(next.getId()),
+                "Maths", LESSON_START, LESSON_END, null, null)));
+
+        OnlineClassResponse replacement = service.materializeFromCalendar(teacherPrincipal, "event-1");
+        assertThat(replacement.id()).isNotEqualTo(original.getId());
+        assertThat(replacement.studentId()).isEqualTo(next.getId());
+        assertThat(service.get(teacherPrincipal, original.getId()).status()).isEqualTo(OnlineClassStatus.ENDED);
+        assertThat(service.listUpcoming(studentPrincipal)).isEmpty();
+        assertThatThrownBy(() -> service.connect(studentPrincipal, replacement.id(), "old-pupil"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void parallelRetriesReuseOneFreshSession() throws Exception {
+        OnlineClass original = materialize();
+        service.end(teacherPrincipal, original.getId());
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            java.util.concurrent.Callable<UUID> retry = () -> {
+                start.await();
+                return service.materializeFromCalendar(teacherPrincipal, "event-1").id();
+            };
+            var first = executor.submit(retry);
+            var second = executor.submit(retry);
+            start.countDown();
+            UUID firstId = first.get(15, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(second.get(15, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(firstId);
+            assertThat(classRepository.findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(teacher.getId(), "event-1"))
+                    .hasSize(2);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void retryOpenedBeforeAFutureCalendarSlotIsReused() {
+        when(lessonService.listGroupLessons(any())).thenReturn(List.of(new GroupLessonResponse(
+                "future-event", "future-event", null, null, student.getId(), "Student", List.of(student.getId()),
+                "Maths", NOW.plus(1, ChronoUnit.DAYS), NOW.plus(25, ChronoUnit.HOURS), null, null)));
+        OnlineClassResponse original = service.materializeFromCalendar(teacherPrincipal, "future-event");
+        service.end(teacherPrincipal, original.id());
+        OnlineClassResponse retry = service.materializeFromCalendar(teacherPrincipal, "future-event");
+        service.start(teacherPrincipal, retry.id());
+        assertThat(service.materializeFromCalendar(teacherPrincipal, "future-event").id()).isEqualTo(retry.id());
     }
 
     @Test

@@ -14,6 +14,7 @@ export function GroupsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   async function reload() {
     const [groupList, studentList] = await Promise.all([
@@ -58,6 +59,7 @@ export function GroupsPage() {
       await api.groups.create(name.trim(), selectedStudentIds);
       setName('');
       setSelectedStudentIds([]);
+      setCreateOpen(false);
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
@@ -77,14 +79,14 @@ export function GroupsPage() {
 
   return (
     <div className="teacher-groups-page">
-      <div className="teacher-page-heading">
-        <h1>Мои группы</h1>
-        <p>Создавайте группы, добавляйте учеников и быстро переходите к материалам</p>
+      <div className="teacher-page-heading teacher-heading-row">
+        <div><h1>Мои группы</h1><p>Ученики, общие материалы и история занятий</p></div>
+        <button className="btn" type="button" aria-expanded={createOpen} aria-controls="teacher-add-group" onClick={() => setCreateOpen(!createOpen)}>{createOpen ? 'Закрыть' : '+ Создать группу'}</button>
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      <section className="teacher-group-create">
+      {createOpen && <section className="teacher-group-create" id="teacher-add-group">
         <h2>Создать новую группу</h2>
         <form onSubmit={onCreate}>
           <label className="field">
@@ -139,7 +141,7 @@ export function GroupsPage() {
             {creating ? 'Создаём…' : 'Создать группу'}
           </button>
         </form>
-      </section>
+      </section>}
 
       <section className="teacher-group-stats">
         <div className="teacher-stat-card">
@@ -159,7 +161,7 @@ export function GroupsPage() {
       {loading ? (
         <p className="muted">{t('common.loading')}</p>
       ) : groups.length === 0 ? (
-        <div className="teacher-empty-state">Групп пока нет. Создай первую группу выше.</div>
+        <div className="teacher-empty-state">Групп пока нет. Нажмите «Создать группу», чтобы добавить первую.</div>
       ) : (
         <section className="teacher-groups-list">
           {groups.map((group, index) => (
@@ -187,7 +189,6 @@ export function GroupsPage() {
               <div className="teacher-group-row__spacer" />
 
               <Link className="teacher-open-group-btn" to={`/groups/${group.id}`}>Открыть группу</Link>
-              <button type="button" className="teacher-more-btn" title="Дополнительно">⋮</button>
             </div>
           ))}
         </section>

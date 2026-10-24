@@ -70,7 +70,7 @@ function PromptCard({ title, text, copied, onCopy }: { title: string; text: stri
         </button>
       </div>
       {text ? (
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, padding: 16, border: '1px solid #e1e5ec', borderRadius: 12, maxHeight: 420, overflow: 'auto' }}>
+        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, padding: 16, border: '1px solid var(--teacher-border, #e1e5ec)', borderRadius: 12, maxHeight: 420, overflow: 'auto' }}>
           {text}
         </div>
       ) : (

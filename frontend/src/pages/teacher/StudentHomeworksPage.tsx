@@ -158,7 +158,7 @@ export function StudentHomeworksPage() {
               {plannedDates.map((date, index) => {
                 const file = pdfFiles[index];
                 return (
-                  <div key={`${date}-${index}`} className="panel" style={{ padding: 12, margin: 0, border: '1px solid var(--border-color, #ddd)' }}>
+                  <div key={`${date}-${index}`} className="panel" style={{ padding: 12, margin: 0, border: '1px solid var(--border-color, var(--teacher-border, #ddd))' }}>
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <div><strong>{language === 'DE' ? `Tag ${index + 1}` : `День ${index + 1}`}</strong><div className="muted">{formatDate(date, language)}</div></div>
                       {file && (

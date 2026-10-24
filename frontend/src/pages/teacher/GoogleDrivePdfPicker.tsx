@@ -234,7 +234,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
           overscrollBehavior: 'contain',
           margin: 0,
           padding: 'clamp(14px, 2vw, 20px)',
-          background: '#fff',
+          background: 'var(--teacher-surface, #fff)',
           boxShadow: '0 24px 80px rgba(15, 23, 42, .26)',
         }}
       >
@@ -321,7 +321,7 @@ export function GoogleDrivePdfPicker({ disabled = false, onSelect, onSelectMany,
                         width: '100%',
                         textAlign: 'left',
                         cursor: 'pointer',
-                        borderColor: selectedIndex >= 0 ? '#ff9f6a' : undefined,
+                        borderColor: selectedIndex >= 0 ? 'var(--teacher-selected-border, #ff9f6a)' : undefined,
                       }}
                     >
                       <div className="list-row__title">📄 {file.name}</div>
