@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { notebookCamerasApi, notebookCameraError, pairingUrl, type CameraPairing, type NotebookCamera } from '../../api/notebookCameras';
 import { drawCameraQR } from './cameraModules';
-import { NotebookCameraViewer } from './NotebookCameraViewer';
+import { NotebookCameraViewer, type NotebookCameraVideoSource } from './NotebookCameraViewer';
 import './notebookCamera.css';
 
 export interface NotebookStudent { userId: string; displayName: string }
@@ -13,9 +13,12 @@ export interface NotebookCameraProps {
   isTeacher: boolean;
   students?: NotebookStudent[];
   autoPair?: boolean;
+  presentation?: 'processor' | 'lesson';
+  settingsOpen?: boolean;
+  onBoardVideoChange?: (cameraId: string, source: NotebookCameraVideoSource | null) => void;
 }
-interface PanelSession { active: boolean; mutation: number; listSequence: number; pairing: boolean; initialized: boolean }
-export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher, students: providedStudents, autoPair = false, onClose, closeLabel = 'Закрыть' }: NotebookCameraProps & { onClose?: () => void; closeLabel?: string }) {
+interface PanelSession { active: boolean; mutation: number; listSequence: number; pairing: boolean; initialized: boolean; load?: () => Promise<void> }
+export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher, students: providedStudents, autoPair = false, presentation = 'processor', settingsOpen = false, onBoardVideoChange, onClose, closeLabel = 'Закрыть' }: NotebookCameraProps & { onClose?: () => void; closeLabel?: string }) {
   const [cameras, setCameras] = useState<NotebookCamera[]>([]);
   const [students, setStudents] = useState<NotebookStudent[]>(providedStudents ?? []);
   const [studentId, setStudentId] = useState(isTeacher ? providedStudents?.[0]?.userId ?? currentUserId : currentUserId);
@@ -28,6 +31,11 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
   const [clock, setClock] = useState(Date.now());
   const qr = useRef<HTMLCanvasElement>(null);
   const session = useRef<PanelSession | null>(null);
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
+  const previousSettingsOpen = useRef(settingsOpen);
+  const boardCallback = useRef(onBoardVideoChange);
+  boardCallback.current = onBoardVideoChange;
   const https = window.location.protocol === 'https:';
   const isActiveCamera = (camera: NotebookCamera, now: number) => camera.eventId === eventId
     && (camera.classId ?? null) === (classId ?? null)
@@ -36,6 +44,11 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
     && (camera.status === 'CONNECTED' || camera.status === 'PAIRING' && Date.parse(camera.pairingExpiresAt) > now);
   const activeCameras = cameras.filter(camera => isActiveCamera(camera, clock));
   const current = activeCameras.find(camera => camera.cameraId === selected);
+  const currentId = current?.cameraId;
+  const reportBoardVideo = useCallback((source: NotebookCameraVideoSource | null) => {
+    if (currentId) boardCallback.current?.(currentId, source);
+  }, [currentId]);
+  const showSettings = presentation !== 'lesson' || settingsOpen;
   const url = useMemo(() => pairing ? pairingUrl(window.location.origin, pairing.camera.cameraId, pairing.pairingToken) : '', [pairing]);
   const qrValid = pairing && Date.parse(pairing.camera.pairingExpiresAt) > clock
     && activeCameras.find(camera => camera.cameraId === pairing.camera.cameraId)?.status === 'PAIRING';
@@ -53,6 +66,7 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
     const load = async () => {
       const version = scope.mutation;
       const sequence = ++scope.listSequence;
+      if (autoPair && !isTeacher && !scope.initialized && (presentation !== 'lesson' || settingsOpenRef.current)) setLoading(true);
       try {
         const values = await notebookCamerasApi.list(eventId);
         if (!scope.active || version !== scope.mutation || sequence !== scope.listSequence) return;
@@ -62,17 +76,23 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
         setCameras(values);
         setClock(now);
         setSelected(previous => available.some(camera => camera.cameraId === previous) ? previous : (connected ?? available[0])?.cameraId ?? '');
-        if (autoPair && !isTeacher && !scope.initialized) {
+        if (autoPair && !isTeacher && !scope.initialized && (presentation !== 'lesson' || settingsOpenRef.current)) {
           scope.initialized = true;
           if (!connected) void createPairing(scope);
         }
       } catch (reason) { if (scope.active && version === scope.mutation && sequence === scope.listSequence) setError(notebookCameraError(reason)); }
       finally { if (scope.active && sequence === scope.listSequence) setLoading(false); }
     };
+    scope.load = load;
     void load();
     const timer = setInterval(() => { setClock(Date.now()); void load(); }, 5000);
     return () => { scope.active = false; clearInterval(timer); };
-  }, [eventId, classId, currentUserId, isTeacher, autoPair]);
+  }, [eventId, classId, currentUserId, isTeacher, autoPair, presentation]);
+  useEffect(() => {
+    const opening = settingsOpen && !previousSettingsOpen.current;
+    previousSettingsOpen.current = settingsOpen;
+    if (presentation === 'lesson' && opening) void session.current?.load?.();
+  }, [presentation, settingsOpen]);
   useEffect(() => {
     if (!isTeacher || providedStudents) return;
     let active = true;
@@ -124,8 +144,9 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
     } catch (reason) { if (scope.active) setError(notebookCameraError(reason)); }
     finally { if (scope.active) setBusy(false); }
   };
-  return <section className="notebook-camera" aria-label="Камера тетради">
-    <div className="notebook-camera__heading"><div><h2>Камера тетради</h2><p>{isTeacher
+  return <section className="notebook-camera" aria-label={presentation === 'lesson' ? 'Настройки тетради' : 'Камера тетради'}>
+    <div hidden={!showSettings}>
+    <div className="notebook-camera__heading"><div><h2>{presentation === 'lesson' ? 'Настройки тетради' : 'Камера тетради'}</h2><p>{isTeacher
       ? 'Подключённые тетради учеников появляются здесь автоматически. Выберите нужную тетрадь ниже.'
       : 'Сканируйте QR-код телефоном, включите камеру и разместите телефон над тетрадью.'}</p></div>
       {onClose && <button type="button" className="btn btn--secondary" onClick={onClose}>{closeLabel}</button>}
@@ -156,7 +177,11 @@ export function NotebookCameraPanel({ eventId, classId, currentUserId, isTeacher
       <option value="" disabled>Выберите камеру</option>
       {activeCameras.map(camera => <option key={camera.cameraId} value={camera.cameraId}>{camera.ownerName} · {camera.status === 'CONNECTED' ? 'телефон подключён' : 'ждём телефон'}</option>)}
     </select></label>}
-    {current ? <NotebookCameraViewer key={current.cameraId} cameraId={current.cameraId} ownerId={current.ownerId} /> : <p className="muted">Подключите телефон, чтобы увидеть тетрадь, выровнять лист и делать пометки поверх видео.</p>}
+    </div>
+    {current ? <NotebookCameraViewer key={current.cameraId} cameraId={current.cameraId} ownerId={current.ownerId}
+      presentation={presentation} settingsOpen={settingsOpen} active={presentation === 'lesson' ? false : undefined}
+      onBoardVideoChange={reportBoardVideo} onSettingsClose={presentation === 'lesson' ? onClose : undefined}
+    /> : showSettings && <p className="muted">Подключите телефон, чтобы увидеть тетрадь, выровнять лист и делать пометки поверх видео.</p>}
   </section>;
 }
 

@@ -17,3 +17,6 @@
 .notebook-camera-viewer{width:100%;min-width:0;min-height:0}
 .notebook-camera-viewer--compact{display:flex;flex-direction:column;height:100%;overflow:hidden}
 .notebook-camera-viewer--compact>.notebook-camera__viewer{flex:1 1 0;height:100%;min-height:0;border:0;border-radius:0}
+.notebook-camera-viewer__source{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.notebook-camera-viewer--lesson>.notebook-camera__viewer{height:1100px;min-height:500px;border:0;border-radius:12px;background:#1e222a}
+.notebook-camera__viewer[hidden]{display:none!important}

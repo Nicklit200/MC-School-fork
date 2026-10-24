@@ -1,8 +1,26 @@
-import {defaultDocumentView, rawDocumentView, validateDocumentView, validQuad, estimatedRatio, detectVideoDocument, makeDocumentMap, LiveDocumentRenderer, QUALITY_PROFILES} from './signal.mjs?v=shared-notebook-1';
+import {defaultDocumentView, rawDocumentView, validateDocumentView, validQuad, estimatedRatio, detectVideoDocument, makeDocumentMap, LiveDocumentRenderer, QUALITY_PROFILES} from './signal.mjs?v=lesson-notebook-1';
 
 const TEXT={"qualityOk": "\u0420\u0435\u0436\u0438\u043c \u0437\u0430\u043f\u0440\u043e\u0448\u0435\u043d. \u0424\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u043e \u043d\u0438\u0436\u0435.", "focusOk": "\u041a\u0430\u043c\u0435\u0440\u0430 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b\u0430 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0443 \u0444\u043e\u043a\u0443\u0441\u0430.", "failed": "\u041a\u0430\u043c\u0435\u0440\u0430 \u043d\u0435 \u043f\u0440\u0438\u043c\u0435\u043d\u0438\u043b\u0430 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0443.", "FOCUS_UNSUPPORTED": "\u042d\u0442\u043e\u0442 \u0431\u0440\u0430\u0443\u0437\u0435\u0440 \u043d\u0435 \u0434\u0430\u0451\u0442 \u0443\u043f\u0440\u0430\u0432\u043b\u044f\u0442\u044c \u0444\u043e\u043a\u0443\u0441\u043e\u043c. \u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u0435\u0442 \u0435\u0433\u043e \u0441\u0430\u043c.", "FOCUS_UNCONFIRMED": "\u0411\u0440\u0430\u0443\u0437\u0435\u0440 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u0444\u043e\u043a\u0443\u0441\u0430.", "BUSY": "\u041a\u0430\u043c\u0435\u0440\u0430 \u0437\u0430\u043d\u044f\u0442\u0430. \u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u043e\u0441\u043b\u0435 \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043a.", "waitCamera": "\u0414\u0430\u043d\u043d\u044b\u0435 \u043a\u0430\u043c\u0435\u0440\u044b \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f.", "manual": "\u0420\u0443\u0447\u043d\u043e\u0439 \u0444\u043e\u043a\u0443\u0441 \u0432\u043a\u043b\u044e\u0447\u0451\u043d. \u0422\u0435\u043b\u0435\u0444\u043e\u043d \u0438 \u043b\u0438\u0441\u0442 \u043d\u0435 \u0434\u0432\u0438\u0433\u0430\u0442\u044c.", "continuous": "\u041d\u0435\u043f\u0440\u0435\u0440\u044b\u0432\u043d\u044b\u0439 \u0430\u0432\u0442\u043e\u0444\u043e\u043a\u0443\u0441 \u0432\u043a\u043b\u044e\u0447\u0451\u043d.", "available": "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u044b \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u043c\u044b\u0435 \u043a\u0430\u043c\u0435\u0440\u043e\u0439 \u043a\u043d\u043e\u043f\u043a\u0438.", "returnView": "\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432\u0438\u0434 \u0441\u0432\u0435\u0440\u0445\u0443", "compare": "\u0421\u0440\u0430\u0432\u043d\u0438\u0442\u044c \u0441 \u0438\u0441\u0445\u043e\u0434\u043d\u044b\u043c", "original": "\u0418\u0441\u0445\u043e\u0434\u043d\u044b\u0439 \u043a\u0430\u0434\u0440 / \u043f\u043e\u0432\u043e\u0440\u043e\u0442 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d", "noChannel": "\u041d\u0435\u0442 \u043a\u0430\u043d\u0430\u043b\u0430 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f. \u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u0435 \u0442\u0435\u043b\u0435\u0444\u043e\u043d \u0437\u0430\u043d\u043e\u0432\u043e.", "timeout": "\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b. Страница камеры должна оставаться открытой.", "applying": "\u041f\u0440\u0438\u043c\u0435\u043d\u044f\u0435\u043c \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0443 \u043d\u0430 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0435...", "cpu": "\u0411\u0435\u0437 GPU: \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e, \u043a\u0430\u0434\u0440\u044b \u043e\u0431\u043d\u043e\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u0440\u0435\u0436\u0435.", "fullFrame": "\u041a\u0430\u0434\u0440 \u0432\u043f\u0438\u0441\u0430\u043d \u0432 \u044d\u043a\u0440\u0430\u043d \u0431\u0435\u0437 \u043e\u0431\u0440\u0435\u0437\u043a\u0438.", "fps": "\u043a\u0430\u0434\u0440/\u0441", "mbps": "\u041c\u0431\u0438\u0442/\u0441"};
 const $ = id => document.getElementById(id);
 const video = $('remote'), ink = $('ink'), ctx = ink.getContext('2d');
+const settingsMode=new URLSearchParams(location.search).get('mode')==='settings';
+let settingsOpen=!settingsMode;
+document.body.classList.toggle('notebook-settings',settingsMode);
+let settingsSizeJob=0,lastSettingsHeight=0;
+function queueSettingsSize(){
+ if(!settingsMode||!settingsOpen||settingsSizeJob)return;
+ settingsSizeJob=requestAnimationFrame(()=>{
+  settingsSizeJob=0;if(!settingsOpen)return;
+  const height=Math.ceil(document.documentElement.scrollHeight);
+  if(height>=240&&height<=8000&&height!==lastSettingsHeight){lastSettingsHeight=height;window.parent.postMessage({type:'mindcrafti-notebook-settings-size',height},location.origin);}
+ });
+}
+if(settingsMode){
+ const observer=new ResizeObserver(queueSettingsSize);observer.observe(document.documentElement);observer.observe(document.body);
+ window.addEventListener('keydown',event=>{
+  if(settingsOpen&&event.key==='Escape'){event.preventDefault();event.stopPropagation();window.parent.postMessage({type:'mindcrafti-notebook-close-settings'},location.origin);}
+ });
+}
 let room=null,hasVideo=false,bridgeConnected=false;
 // Media and authentication stay in the lesson React component. Only typed
 // camera commands cross this bridge; media is assigned by the same-origin parent.
@@ -67,17 +85,17 @@ function canDraw() {
 }
 function controls() {
   const enabled = canDraw() && !editor?.editing && !editor?.detecting;
-  for (const id of ['pen', 'eraser', 'color', 'stylusOnly', 'save']) $(id).disabled = !enabled;
-  $('undo').disabled = !enabled || strokes.length === 0;
-  $('redo').disabled = !enabled || undone.length === 0;
-  $('clear').disabled = !enabled || strokes.length === 0;
+  for (const id of ['pen', 'eraser', 'color', 'stylusOnly', 'save']) $(id).disabled = settingsMode || !enabled;
+  $('undo').disabled = settingsMode || !enabled || strokes.length === 0;
+  $('redo').disabled = settingsMode || !enabled || undone.length === 0;
+  $('clear').disabled = settingsMode || !enabled || strokes.length === 0;
   $('mode').textContent = enabled
     ? '\u041f\u0420\u042f\u041c\u041e\u0419 \u042d\u0424\u0418\u0420 + \u041f\u041e\u041c\u0415\u0422\u041a\u0418'
     : '\u041e\u0416\u0418\u0414\u0410\u041d\u0418\u0415 \u041a\u0410\u041c\u0415\u0420\u042b';
   if (enabled && documentView.corners) $('mode').textContent = 'ВИД СВЕРХУ + ПОМЕТКИ';
   $('viewState').textContent = enabled ? (documentView.corners ? 'Лист выровнен' : 'Весь кадр') + ' / ' + documentView.turn * 90 + '°' : '';
   $('mode').classList.toggle('live', enabled);
-  ink.hidden = !enabled;
+  ink.hidden = settingsMode || !enabled;
   $('cameraDevice').disabled = !enabled || cameraDevices.length === 0;
   editor?.refreshControls(); refreshCameraControls();
 }
@@ -133,7 +151,7 @@ function syncVideoSize(notify=true) {
   const view=visibleDocumentView();
   mapping=makeDocumentMap(view,video.videoWidth,video.videoHeight);
   flattened.hidden=!transformed();
-  if(transformed()){renderer.setView(view);renderer.start();}else renderer.stop();
+  if(transformed()){renderer.setView(view);if(settingsOpen)renderer.start();else renderer.stop();}else renderer.stop();
   const w=transformed()?flattened.width:video.videoWidth,h=transformed()?flattened.height:video.videoHeight;
   if(ink.width!==w||ink.height!==h){ink.width=w;ink.height=h;}
   lastAspect=sourceAspect;drawInk();fit();controls();updateQualityDisplay();
@@ -157,7 +175,7 @@ function finishStroke(cancel = false) {
   queuePaint(); controls();
 }
 ink.addEventListener('pointerdown', event => {
-  if (!canDraw() || editor?.editing || editor?.detecting || event.button > 0 || pointerId !== null) return;
+  if (settingsMode || !canDraw() || editor?.editing || editor?.detecting || event.button > 0 || pointerId !== null) return;
   if ($('stylusOnly').checked && event.pointerType !== 'pen') return;
   if (event.isPrimary === false) return;
   event.preventDefault();
@@ -198,7 +216,7 @@ $('clear').onclick = () => { finishStroke(); strokes = []; undone = []; drawInk(
 
 // A still image may be downloaded, but taking it NEVER pauses the live video.
 $('save').onclick = () => {
-  if (!canDraw() || editor?.editing || editor?.detecting) return;
+  if (settingsMode || !canDraw() || editor?.editing || editor?.detecting) return;
   finishStroke(); drawInk();
   const canvas = document.createElement('canvas');
   canvas.width=ink.width;canvas.height=ink.height;
@@ -393,9 +411,20 @@ function resetCamera(id){
  drawInk();controls();
 }
 window.setNotebookCameraId=resetCamera;
+window.setNotebookSettingsOpen=value=>{
+ if(!settingsMode)return;
+ const next=value===true;if(next===settingsOpen)return;
+ settingsOpen=next;
+ // Closing only pauses presentation. Draft corners, canonical geometry,
+ // camera commands and the assigned remote stream stay with this iframe.
+ if(next){syncVideoSize(false);fit();queueSettingsSize();}else renderer.stop();
+};
 window.getNotebookDocumentView=()=>validateDocumentView(documentView);
 window.setNotebookDocumentView=value=>{
- if(!room||!validateDocumentView(value))return false;
+ const validated=validateDocumentView(value);if(!room||!validated)return false;
+ // An ACK of the same committed settings must not discard corner edits the
+ // pupil began while that update was travelling through the phone.
+ if(settingsMode&&JSON.stringify(validated)===JSON.stringify(documentView))return true;
  finishStroke();comparing=false;
  if(editor){editor.generation++;editor.editing=false;editor.detecting=false;editor.releaseDrag();}
  return applyDocumentView(value,false);

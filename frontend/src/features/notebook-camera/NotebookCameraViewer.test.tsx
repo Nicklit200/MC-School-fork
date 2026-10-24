@@ -106,6 +106,100 @@ async function expectCanvasSource(callback: ReturnType<typeof vi.fn>, width: num
   expect(source.view).toEqual(renderer.view);
   return source.video as HTMLCanvasElement;
 }
+describe('owner notebook on the ordinary lesson board', () => {
+  const ownerConnection = { serverUrl: 'wss://media.example', token: 'viewer-token', phoneIdentity: 'phone-1', identity: 'notebook-viewer:camera-1:student-1:a1b2c3d4' };
+
+  it('keeps one room, raw source and processor iframe through settings close/open without reapplying corner geometry', async () => {
+    mocks.connection.mockResolvedValue(ownerConnection);
+    const source = vi.fn(), setView = vi.fn(), setStream = vi.fn(), setSettingsOpen = vi.fn();
+    const base = { cameraId: 'camera-1', ownerId: 'student-1', presentation: 'lesson' as const, active: false, onBoardVideoChange: source };
+    const { container, rerender, unmount } = render(<NotebookCameraViewer {...base} />);
+    const frame = container.querySelector('iframe')!, video = container.querySelector('video')!;
+    expect(frame).toHaveAttribute('src', '/notebook-camera/index.html?mode=settings&v=lesson-notebook-1');
+    expect(frame).toHaveAttribute('hidden');
+    Object.assign(frame.contentWindow!, { setNotebookSettingsOpen: setSettingsOpen, setNotebookDocumentView: setView, setNotebookStream: setStream });
+    await waitFor(() => expect(mocks.rooms[0].connect).toHaveBeenCalled());
+    fireEvent.load(frame);
+    const room = mocks.rooms[0], track = videoTrack();
+    act(() => room.handlers.track(track, {}, { identity: 'phone-1' }));
+    videoDimensions(video, 1920, 1080); fireEvent.loadedData(video);
+    const canvas = await expectCanvasSource(source, 1920, 1080);
+    phoneState(room, documentView(), 1);
+    setStream.mockClear(); setView.mockClear(); source.mockClear();
+    rerender(<NotebookCameraViewer {...base} settingsOpen />);
+    expect(frame).not.toHaveAttribute('hidden'); expect(setSettingsOpen).toHaveBeenLastCalledWith(true);
+    rerender(<NotebookCameraViewer {...base} settingsOpen={false} compact />);
+    expect(frame).toHaveAttribute('hidden'); expect(setSettingsOpen).toHaveBeenLastCalledWith(false);
+    expect(container.querySelector('iframe')).toBe(frame); expect(container.querySelector('video')).toBe(video);
+    expect(mocks.rooms).toHaveLength(1); expect(mocks.connection).toHaveBeenCalledOnce();
+    expect(room.disconnect).not.toHaveBeenCalled(); expect(setStream).not.toHaveBeenCalled(); expect(setView).not.toHaveBeenCalled();
+    expect(source).not.toHaveBeenCalled(); expect(mocks.renderers).toHaveLength(1);
+    expect(mocks.renderers[0].canvas).toBe(canvas); expect(mocks.renderers[0].running).toBe(false);
+    unmount(); expect(source).toHaveBeenLastCalledWith(null); expect(room.disconnect).toHaveBeenCalledOnce();
+    expect(track.mediaStreamTrack.stop).not.toHaveBeenCalled();
+  });
+
+  it('projects owner crop immediately, preserves its pending update through drawer toggles and accepts the phone canonical ACK', async () => {
+    mocks.connection.mockResolvedValue(ownerConnection);
+    const source = vi.fn(), setView = vi.fn(() => true);
+    const base = { cameraId: 'camera-1', ownerId: 'student-1', presentation: 'lesson' as const, active: false, onBoardVideoChange: source };
+    const { container, rerender } = render(<NotebookCameraViewer {...base} settingsOpen />);
+    const frame = container.querySelector('iframe')!, video = container.querySelector('video')!;
+    Object.assign(frame.contentWindow!, { setNotebookDocumentView: setView });
+    await waitFor(() => expect(mocks.rooms[0].connect).toHaveBeenCalled());
+    const room = mocks.rooms[0], track = videoTrack();
+    act(() => room.handlers.track(track, {}, { identity: 'phone-1' }));
+    videoDimensions(video, 1920, 1080); fireEvent.loadedData(video);
+    phoneState(room, documentView(), 1);
+    const cropped = documentView({ turn: 1, ratio: .5, corners: [{ x: .2, y: .1 }, { x: .8, y: .1 }, { x: .8, y: .9 }, { x: .2, y: .9 }] });
+    fireEvent(window, new MessageEvent('message', { origin: window.location.origin, source: frame.contentWindow,
+      data: { type: 'mindcrafti-notebook-view', value: cropped } }));
+    await expectCanvasSource(source, 1920, 960);
+    expect(source.mock.calls.at(-1)?.[0].view).toEqual(cropped);
+    const update = sentData(room).find((value: any) => value.type === 'document-view-update');
+    expect(update).toMatchObject({ view: cropped, changeId: expect.any(String) });
+    rerender(<NotebookCameraViewer {...base} settingsOpen={false} />);
+    rerender(<NotebookCameraViewer {...base} settingsOpen />);
+    phoneState(room, documentView({ turn: 0 }), 2);
+    expect(source.mock.calls.at(-1)?.[0].view).toEqual(cropped);
+    const canonical = documentView({ turn: 1 });
+    phoneState(room, canonical, 3, { changeId: update.changeId });
+    await expectCanvasSource(source, 1080, 1920);
+    expect(source.mock.calls.at(-1)?.[0]).toMatchObject({ rawVideo: video, rawWidth: 1920, rawHeight: 1080, view: canonical });
+    expect(setView).toHaveBeenLastCalledWith(canonical);
+    expect(sentData(room).filter((value: any) => value.type === 'document-view-update')).toHaveLength(1);
+    act(() => room.handlers.untrack(track, {}, { identity: 'phone-1' }));
+    expect(source).toHaveBeenLastCalledWith(null);
+    act(() => room.handlers.track(track, {}, { identity: 'phone-1' })); fireEvent.playing(video);
+    await expectCanvasSource(source, 1080, 1920);
+    expect(mocks.rooms).toHaveLength(1); expect(mocks.connection).toHaveBeenCalledOnce();
+  });
+
+  it('accepts bounded settings size and Escape close only from its own same-origin iframe, using the latest callback', async () => {
+    const close = vi.fn(), latestClose = vi.fn();
+    const base = { cameraId: 'camera-1', presentation: 'lesson' as const, settingsOpen: true };
+    const { container, rerender } = render(<NotebookCameraViewer {...base} onSettingsClose={close} />);
+    const frame = container.querySelector('iframe')!;
+    await waitFor(() => expect(mocks.rooms[0].connect).toHaveBeenCalled());
+    const message = (data: unknown, origin = window.location.origin, source: MessageEventSource | null = frame.contentWindow) =>
+      fireEvent(window, new MessageEvent('message', { origin, source, data }));
+    message({ type: 'mindcrafti-notebook-settings-size', height: 1600 }, 'https://foreign.example');
+    message({ type: 'mindcrafti-notebook-settings-size', height: 1600 }, window.location.origin, window);
+    for (const height of [-1, 239, 8001, '1600', null, NaN]) message({ type: 'mindcrafti-notebook-settings-size', height });
+    expect(frame.style.height).toBe('');
+    message({ type: 'mindcrafti-notebook-settings-size', height: 1600.2 }); expect(frame.style.height).toBe('1601px');
+    message({ type: 'mindcrafti-notebook-close-settings' }, 'https://foreign.example');
+    message({ type: 'mindcrafti-notebook-close-settings' }, window.location.origin, window);
+    expect(close).not.toHaveBeenCalled();
+    rerender(<NotebookCameraViewer {...base} onSettingsClose={latestClose} />);
+    message({ type: 'mindcrafti-notebook-close-settings' }); expect(latestClose).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    rerender(<NotebookCameraViewer {...base} settingsOpen={false} onSettingsClose={latestClose} />);
+    message({ type: 'mindcrafti-notebook-close-settings' }); expect(latestClose).toHaveBeenCalledOnce();
+    expect(container.querySelector('iframe')).toBe(frame); expect(frame.style.height).toBe('1601px'); expect(mocks.rooms).toHaveLength(1);
+  });
+});
+
 describe('notebook viewer isolation', () => {
   it('accepts camera state only from this session phone identity', async () => {
     render(<NotebookCameraViewer cameraId="camera-1" />);
@@ -418,7 +512,7 @@ describe('persistent pupil notebook surface', () => {
     const firstCalls = firstCallback.mock.calls.length;
     rerender(<NotebookCameraViewer cameraId="camera-1" compact title="Тетрадь ученика Alice" onVideoAvailableChange={latestCallback} />);
     expect(screen.getByTitle('Тетрадь ученика Alice')).toBe(frame);
-    expect(frame).toHaveAttribute('src', '/notebook-camera/index.html?v=shared-notebook-1');
+    expect(frame).toHaveAttribute('src', '/notebook-camera/index.html?v=lesson-notebook-1');
     expect(frame.parentElement).toHaveClass('notebook-camera-viewer--compact');
     expect(compact).toHaveBeenLastCalledWith(true);
     fireEvent.load(frame); expect(compact).toHaveBeenLastCalledWith(true);

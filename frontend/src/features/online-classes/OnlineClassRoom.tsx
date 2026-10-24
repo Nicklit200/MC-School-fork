@@ -1,6 +1,7 @@
 import { lessonPreparationApi, completedLessonApi } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
 import { NotebookCameraPanel } from '../notebook-camera/NotebookCameraPanel';
+import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import { useLessonNotebookCameras } from '../notebook-camera/useLessonNotebookCameras';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { buildPdf, dataUrlToBytes } from './pdfWriter';
@@ -19,7 +20,7 @@ import { ConnectionState, Track } from 'livekit-client';
 import { useI18n } from '../../i18n/I18nContext';
 import type { ClassFeatureState, OnlineClassConnection } from '../../api/onlineClasses';
 import { ChatPanel } from './ChatPanel';
-import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { categorizeLiveKitError, type LiveKitErrorCategory } from './livekitDiagnostics';
 import { ALL_STUDENT_BOARDS_ID, BoardSwitcher } from './BoardSwitcher';
 import { SHARED_BOARD_ID, personalBoardId } from './boards';
@@ -237,9 +238,37 @@ function RoomBody({
     } finally { setMaterialBusy(false); }
   };
   const [waiting, setWaiting] = useState(0);
-  const [mainView, setMainView] = useState<'board' | 'screen' | 'notebook'>('board');
-  const [notebookOpened, setNotebookOpened] = useState(false);
+  const [mainView, setMainView] = useState<'board' | 'screen'>('board');
+  const [notebookSettingsOpen, setNotebookSettingsOpen] = useState(false);
   const notebookTrigger = useRef<HTMLButtonElement>(null);
+  const notebookScope = JSON.stringify([eventId, classId, currentUserId]);
+  const currentNotebookScope = useRef({ scope: notebookScope, host: connection.host });
+  currentNotebookScope.current = { scope: notebookScope, host: connection.host };
+  const [notebookVideo, setNotebookVideo] = useState<{ scope: string; cameraId: string; source: NotebookCameraVideoSource } | null>(null);
+  const [cameraBoardScope, setCameraBoardScope] = useState('');
+  const autoSelectedCamera = useRef('');
+  const receiveNotebookVideo = useCallback((cameraId: string, source: NotebookCameraVideoSource | null) => {
+    if (currentNotebookScope.current.scope !== notebookScope || currentNotebookScope.current.host) return;
+    setNotebookVideo(previous => {
+      if (currentNotebookScope.current.scope !== notebookScope || currentNotebookScope.current.host) return previous;
+      return source ? { scope: notebookScope, cameraId, source }
+        : previous?.scope === notebookScope && previous.cameraId === cameraId ? null : previous;
+    });
+  }, [notebookScope]);
+  const ownNotebook = !connection.host && notebookVideo?.scope === notebookScope ? notebookVideo : null;
+  const closeNotebookSettings = useCallback(() => {
+    setNotebookSettingsOpen(false);
+    notebookTrigger.current?.focus();
+  }, []);
+  useEffect(() => {
+    setNotebookSettingsOpen(false);
+  }, [notebookScope, connection.host]);
+  useEffect(() => {
+    if (!notebookSettingsOpen) return;
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); closeNotebookSettings(); } };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [notebookSettingsOpen, closeNotebookSettings]);
   const sharing = useScreenShareActive();
   const wasSharing = useRef(false);
   const hostUserId = useHostUserId(classId);
@@ -319,6 +348,15 @@ function RoomBody({
     }
   };
   const [activeBoard, setActiveBoard] = useState(SHARED_BOARD_ID);
+  useEffect(() => {
+    if (!ownNotebook) return;
+    setCameraBoardScope(notebookScope);
+    const key = `${notebookScope}:${ownNotebook.cameraId}`;
+    if (autoSelectedCamera.current === key) return;
+    autoSelectedCamera.current = key;
+    setActiveBoard(personalBoardId(currentUserId));
+    setMainView('board');
+  }, [ownNotebook, notebookScope, currentUserId]);
   const [studentPages, setStudentPages] = useState<Record<string, number>>({});
   useClassEvents(classId, VIEW_TOPIC, ({ event, senderIdentity }) => {
     if (!connection.host || event.type !== 'view' || !event.boardId.startsWith('personal-')) return;
@@ -336,22 +374,17 @@ function RoomBody({
   // A new screen share takes the main area; the user can switch back to the
   // board at any time, and the board keeps its marks while it is not shown.
   useEffect(() => {
-    if (sharing && !wasSharing.current) setMainView(view => view === 'notebook' ? view : 'screen');
+    if (sharing && !wasSharing.current) setMainView('screen');
     if (!sharing) setMainView(view => view === 'screen' ? 'board' : view);
     wasSharing.current = sharing;
   }, [sharing]);
 
   const showScreen = sharing && mainView === 'screen';
-  const showNotebook = !connection.host && Boolean(eventId) && mainView === 'notebook';
   const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !showScreen;
   const selectBoard = (boardId: string) => {
     setActiveBoard(boardId);
     setMainView('board');
     if (connection.host && boardId !== SHARED_BOARD_ID && window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
-  };
-  const returnToBoard = () => {
-    setMainView('board');
-    notebookTrigger.current?.focus();
   };
 
   const fileAction = connection.host ? <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
@@ -367,29 +400,6 @@ function RoomBody({
           <ConnectionStatus />
         </div>
         <div className="online-class-room__lesson-actions">
-        {eventId && !connection.host && <button
-          ref={notebookTrigger}
-          type="button"
-          className="online-class-room__notebook-toggle"
-          aria-pressed={showNotebook}
-          aria-expanded={showNotebook}
-          aria-controls="classroom-notebook"
-          onClick={() => {
-            if (showNotebook) { returnToBoard(); return; }
-            setNotebookOpened(true);
-            setMainView('notebook');
-            answers.close();
-            setPanelsOpen(false);
-            // The participant rail otherwise covers the QR and settings on a
-            // narrow tablet. It remains available from its normal toggle.
-            if (window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
-          }}
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7 4h10v16H7zM4 7h3M4 12h3M4 17h3M10 8h4M10 12h4M10 16h2" />
-          </svg>
-          {language === 'DE' ? 'Heft verbinden' : 'Подключить тетрадь'}
-        </button>}
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
         {archiveNotice && <span role={archiveError ? 'alert' : 'status'} style={{fontSize:12,color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>}
         <RecordingControls
@@ -425,7 +435,7 @@ function RoomBody({
         disabled={materialBusy} hidden
         onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files); event.target.value = ''; }} />}
 
-      <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showNotebook ? ' online-class-room__stage--notebook' : ''}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
+      <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
               canvas: the sibling board reflows to the remaining available width. */}
           {connection.host && answers.open && (
@@ -445,7 +455,7 @@ function RoomBody({
           {/* The board stays mounted while a screen is shown, so switching back
               returns to the same page, zoom, tool and marks. */}
           {boardsToShow.map((boardId) => {
-            const visible = boardId === activeBoard && !showScreen && !showNotebook;
+            const visible = boardId === activeBoard && !showScreen && !(ownNotebook && boardId === personalBoardId(currentUserId));
             return (
               <div key={boardId} className="online-class-room__board" hidden={!visible}>
                 <Suspense fallback={null}>
@@ -475,6 +485,16 @@ function RoomBody({
               </div>
             );
           })}
+          {!connection.host && cameraBoardScope === notebookScope && <div className="online-class-room__board online-class-room__own-notebook"
+            hidden={!ownNotebook || activeBoard !== personalBoardId(currentUserId) || showScreen}>
+            <Suspense fallback={null}>
+              <WhiteboardPanel key={notebookScope} classId={classId} actorId={currentUserId} isHost={false}
+                targetType="NOTEBOOK_CAMERA" targetId={personalBoardId(currentUserId)} canAnnotate
+                active={Boolean(ownNotebook) && activeBoard === personalBoardId(currentUserId) && !showScreen}
+                liveBackground={ownNotebook ? { source: ownNotebook.source.rawVideo, width: ownNotebook.source.rawWidth, height: ownNotebook.source.rawHeight,
+                  notebookView: { view: ownNotebook.source.view, rawWidth: ownNotebook.source.rawWidth, rawHeight: ownNotebook.source.rawHeight, renderer: ownNotebook.source.renderer } } : null} />
+            </Suspense>
+          </div>}
           {connection.host && <StudentWorkspaces
             key={classId}
             students={students}
@@ -524,14 +544,22 @@ function RoomBody({
             </div>
           )}
 
-          {/* The processor and its media subscription stay mounted while the
-              pupil looks at the board, preserving the QR, crop, rotation and
-              unsaved ink. Leaving the classroom still releases the viewer. */}
-          {eventId && !connection.host && notebookOpened && <div
+          {/* One owner connection supplies the ordinary board and the settings
+              preview. Closing settings preserves its stream and calibration. */}
+          {eventId && !connection.host && <aside
             id="classroom-notebook"
-            className="online-class-room__notebook"
-            hidden={!showNotebook}
+            className="online-class-room__notebook-settings"
+            aria-label={language === 'DE' ? 'Hefteinstellungen' : 'Настройки тетради'}
+            hidden={!notebookSettingsOpen}
+            ref={element => element?.toggleAttribute('inert', !notebookSettingsOpen)}
           >
+            <div className="online-class-room__notebook-settings-heading">
+              <strong>{language === 'DE' ? 'Hefteinstellungen' : 'Настройки тетради'}</strong>
+              <button type="button" onClick={closeNotebookSettings}
+                aria-label={language === 'DE' ? 'Hefteinstellungen schließen' : 'Закрыть настройки тетради'}>
+                {language === 'DE' ? 'Schließen' : 'Закрыть'}
+              </button>
+            </div>
             <NotebookCameraPanel
               key={`${eventId}:${classId}`}
               eventId={eventId}
@@ -540,10 +568,13 @@ function RoomBody({
               isTeacher={connection.host}
               students={connection.host ? students : undefined}
               autoPair={!connection.host}
-              onClose={returnToBoard}
-              closeLabel={language === 'DE' ? 'Zurück zur Tafel' : 'Вернуться к доске'}
+              presentation="lesson"
+              settingsOpen={notebookSettingsOpen}
+              onBoardVideoChange={receiveNotebookVideo}
+              onClose={closeNotebookSettings}
+              closeLabel={language === 'DE' ? 'Schließen' : 'Закрыть настройки'}
             />
-          </div>}
+          </aside>}
 
           {/* Kept mounted (just hidden) so chat history, the roster and the
               waiting-room poll are not reset by closing the drawer. */}
@@ -579,11 +610,24 @@ function RoomBody({
           type="button"
           aria-pressed={panelsOpen}
           aria-controls="online-class-drawer"
-          onClick={() => setPanelsOpen((open) => !open)}
+          onClick={() => { setPanelsOpen((open) => !open); setNotebookSettingsOpen(false); }}
         >
           {t('onlineClass.room.panels')}
           {waiting > 0 && <span className="online-class-room__badge"> ({waiting})</span>}
         </button>
+        {eventId && !connection.host && <button ref={notebookTrigger} type="button"
+          className="online-class-room__notebook-settings-toggle"
+          aria-pressed={notebookSettingsOpen} aria-expanded={notebookSettingsOpen} aria-controls="classroom-notebook"
+          onClick={() => {
+            if (notebookSettingsOpen) { closeNotebookSettings(); return; }
+            setNotebookSettingsOpen(true); setPanelsOpen(false);
+            if (window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
+          }}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 3 1-1h4l1 3 3 1 3-1 2 4-2 2v3l2 2-2 4-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-4 2-2v-3L1 9l2-4 3 1 3-1z" /><circle cx="12" cy="12" r="3" />
+          </svg>
+          {language === 'DE' ? 'Hefteinstellungen' : 'Настройки тетради'}
+        </button>}
         {sharing && (
           <button type="button" onClick={() => setMainView(showScreen ? 'board' : 'screen')}>
             {t(showScreen ? 'onlineClass.room.showBoard' : 'onlineClass.room.showScreen')}

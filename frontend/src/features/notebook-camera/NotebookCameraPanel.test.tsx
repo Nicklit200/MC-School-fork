@@ -3,17 +3,22 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CameraPairing, NotebookCamera } from '../../api/notebookCameras';
+import type { NotebookCameraVideoSource, NotebookCameraViewer } from './NotebookCameraViewer';
 import { NotebookCameraPanel } from './NotebookCameraPanel';
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), pair: vi.fn() }));
+type ViewerProps = Parameters<typeof NotebookCameraViewer>[0];
+const mocks = vi.hoisted(() => ({ list: vi.fn(), pair: vi.fn(), revoke: vi.fn(), viewer: vi.fn() }));
 vi.mock('../../api/notebookCameras', async () => {
   const actual = await vi.importActual<typeof import('../../api/notebookCameras')>('../../api/notebookCameras');
-  return { ...actual, notebookCamerasApi: { list: mocks.list, pair: mocks.pair } };
+  return { ...actual, notebookCamerasApi: { list: mocks.list, pair: mocks.pair, revoke: mocks.revoke } };
 });
 vi.mock('./cameraModules', () => ({ drawCameraQR: vi.fn(async () => {}) }));
-vi.mock('./NotebookCameraViewer', () => ({ NotebookCameraViewer: ({ cameraId }: { cameraId: string }) => <div data-testid="notebook-viewer" data-camera-id={cameraId}>Изображение тетради</div> }));
+vi.mock('./NotebookCameraViewer', () => ({ NotebookCameraViewer: (props: ViewerProps) => {
+  mocks.viewer(props);
+  return <div data-testid="notebook-viewer" data-camera-id={props.cameraId}>Изображение тетради</div>;
+} }));
 beforeEach(() => {
-  vi.clearAllMocks(); mocks.list.mockReset(); mocks.pair.mockReset(); mocks.list.mockResolvedValue([]);
+  vi.clearAllMocks(); mocks.list.mockReset(); mocks.pair.mockReset(); mocks.revoke.mockReset(); mocks.list.mockResolvedValue([]); mocks.revoke.mockResolvedValue(undefined);
   mocks.pair.mockResolvedValue({ camera: { cameraId: 'camera-1', eventId: 'trial-event', ownerId: 'teacher-1', ownerName: 'Учитель', status: 'PAIRING',
     pairingExpiresAt: new Date(Date.now() + 300000).toISOString(), sessionExpiresAt: new Date(Date.now() + 10800000).toISOString() }, pairingToken: 'single-use-secret' });
 });
@@ -30,6 +35,7 @@ function deferred<T>() {
 }
 const studentProps = { eventId: 'lesson-1', classId: 'class-1', currentUserId: 'pupil-1', isTeacher: false, autoPair: true };
 async function poll() { await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); }
+function latestViewerProps(): ViewerProps { return mocks.viewer.mock.calls.at(-1)![0]; }
 describe('trial lesson camera pairing', () => {
   it('creates a teacher-owned QR for a trial pupil without a registered account', async () => {
     render(<NotebookCameraPanel eventId="trial-event" currentUserId="teacher-1" isTeacher students={[]} />);
@@ -201,5 +207,116 @@ describe('student workspace camera pairing', () => {
     await act(async () => { await mocks.list.mock.results[0].value; });
     expect(mocks.pair).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Вернуться к доске' })); expect(close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('lesson notebook settings', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    mocks.pair.mockResolvedValue({ camera: camera(), pairingToken: 'lesson-secret' });
+  });
+
+  it('discovers while closed but creates one class-bound QR only after opening settings in StrictMode', async () => {
+    const { rerender } = render(<StrictMode><NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} /></StrictMode>);
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+    await poll();
+    expect(mocks.pair).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Подключить телефон' })).not.toBeInTheDocument();
+
+    const openingList = deferred<NotebookCamera[]>();
+    mocks.list.mockReturnValueOnce(openingList.promise);
+    rerender(<StrictMode><NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen /></StrictMode>);
+    expect(mocks.list).toHaveBeenCalledTimes(4);
+    expect(mocks.pair).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Подключить телефон' })).toBeDisabled();
+    await act(async () => { openingList.resolve([]); });
+
+    expect(await screen.findByLabelText('QR-код для камеры тетради')).toBeVisible();
+    expect(mocks.pair).toHaveBeenCalledExactlyOnceWith('lesson-1', undefined, 'class-1');
+    expect(latestViewerProps()).toMatchObject({ cameraId: 'student-camera', ownerId: 'pupil-1', presentation: 'lesson', settingsOpen: true, active: false });
+    mocks.list.mockResolvedValue([camera()]);
+    await poll();
+    expect(mocks.pair).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a discovered connection and its board callback when settings open and close', async () => {
+    mocks.list.mockResolvedValue([camera({ cameraId: 'connected-camera', status: 'CONNECTED' })]);
+    const firstCallback = vi.fn(), nextCallback = vi.fn(), close = vi.fn();
+    const { rerender } = render(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} onBoardVideoChange={firstCallback} onClose={close} />);
+    const viewer = await screen.findByTestId('notebook-viewer');
+    const report = latestViewerProps().onBoardVideoChange!;
+    expect(latestViewerProps()).toMatchObject({ presentation: 'lesson', settingsOpen: false, active: false });
+    const source = { video: document.createElement('canvas') } as NotebookCameraVideoSource;
+    act(() => report(source));
+    expect(firstCallback).toHaveBeenCalledExactlyOnceWith('connected-camera', source);
+
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen onBoardVideoChange={nextCallback} onClose={close} />);
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('notebook-viewer')).toBe(viewer);
+    expect(latestViewerProps().onBoardVideoChange).toBe(report);
+    expect(latestViewerProps().onSettingsClose).toBe(close);
+    act(() => report(source));
+    expect(nextCallback).toHaveBeenCalledExactlyOnceWith('connected-camera', source);
+    act(() => latestViewerProps().onSettingsClose?.());
+    expect(close).toHaveBeenCalledOnce();
+
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} onBoardVideoChange={nextCallback} onClose={close} />);
+    expect(screen.getByTestId('notebook-viewer')).toBe(viewer);
+    expect(latestViewerProps().settingsOpen).toBe(false);
+    expect(screen.queryByRole('heading', { name: 'Настройки тетради' })).not.toBeInTheDocument();
+    expect(mocks.pair).not.toHaveBeenCalled();
+    act(() => report(null));
+    expect(nextCallback).toHaveBeenLastCalledWith('connected-camera', null);
+  });
+
+  it('retains the QR across closing, allows replacement and revoke, and does not pair again on reopening', async () => {
+    const { rerender } = render(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen />);
+    const qr = await screen.findByLabelText('QR-код для камеры тетради');
+    const viewer = screen.getByTestId('notebook-viewer');
+    const firstReport = latestViewerProps().onBoardVideoChange!;
+    mocks.list.mockResolvedValue([camera()]);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} />);
+    expect(qr).not.toBeVisible();
+    await poll();
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Новый QR-код' })).toBeEnabled());
+    expect(screen.getByLabelText('QR-код для камеры тетради')).toBe(qr);
+    expect(screen.getByTestId('notebook-viewer')).toBe(viewer);
+    expect(mocks.pair).toHaveBeenCalledTimes(1);
+
+    const replacement = camera({ cameraId: 'replacement-camera' });
+    mocks.pair.mockResolvedValueOnce({ camera: replacement, pairingToken: 'replacement-secret' });
+    fireEvent.click(screen.getByRole('button', { name: 'Новый QR-код' }));
+    await waitFor(() => expect(screen.getByTestId('notebook-viewer')).toHaveAttribute('data-camera-id', 'replacement-camera'));
+    expect(latestViewerProps().onBoardVideoChange).not.toBe(firstReport);
+    expect(mocks.pair).toHaveBeenCalledTimes(2);
+    mocks.list.mockResolvedValue([replacement]);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} />);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Отключить телефон' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Отключить телефон' }));
+    await waitFor(() => expect(screen.queryByTestId('notebook-viewer')).not.toBeInTheDocument());
+    expect(mocks.revoke).toHaveBeenCalledExactlyOnceWith('replacement-camera');
+    mocks.list.mockResolvedValue([]);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} />);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Подключить телефон' })).toBeEnabled());
+    expect(mocks.pair).toHaveBeenCalledTimes(2);
+    expect(screen.queryByLabelText('QR-код для камеры тетради')).not.toBeInTheDocument();
+  });
+
+  it('does not create a QR from an opening request that resolves after settings close', async () => {
+    const { rerender } = render(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} />);
+    await act(async () => { await mocks.list.mock.results[0].value; });
+    const openingList = deferred<NotebookCamera[]>();
+    mocks.list.mockReturnValueOnce(openingList.promise);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen />);
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen={false} />);
+    await act(async () => { openingList.resolve([]); });
+    await poll();
+    expect(mocks.pair).not.toHaveBeenCalled();
+    rerender(<NotebookCameraPanel {...studentProps} presentation="lesson" settingsOpen />);
+    expect(await screen.findByLabelText('QR-код для камеры тетради')).toBeVisible();
+    expect(mocks.pair).toHaveBeenCalledTimes(1);
   });
 });

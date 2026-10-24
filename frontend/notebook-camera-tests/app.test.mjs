@@ -10,10 +10,10 @@ const corners=[{x:.22,y:.12},{x:.78,y:.18},{x:.92,y:.91},{x:.09,y:.86}];
 const crop=()=>({...signal.defaultDocumentView(16/9),corners:corners.map(p=>({...p})),ratio:1/Math.sqrt(2)});
 const copy=value=>JSON.parse(JSON.stringify(value));
 
-function fixture(t){
- const dom=new JSDOM(html,{url:'https://school.example/notebook-camera/index.html',runScripts:'outside-only'});
+function fixture(t,settings=false){
+ const dom=new JSDOM(html,{url:`https://school.example/notebook-camera/index.html${settings?'?mode=settings':''}`,runScripts:'outside-only'});
  t.after(()=>dom.window.close());
- const {window}=dom,messages=[],contexts=new WeakMap(),frames=[];
+ const {window}=dom,messages=[],contexts=new WeakMap(),frames=[],renderers=[];
  Object.defineProperty(window,'parent',{value:{postMessage:(value,origin)=>messages.push({value:copy(value),origin})}});
  window.ResizeObserver=class{observe(){}};
  window.setInterval=()=>1;window.clearInterval=()=>{};
@@ -27,9 +27,9 @@ function fixture(t){
  window.HTMLElement.prototype.hasPointerCapture=()=>false;
  window.HTMLElement.prototype.setPointerCapture=()=>{};
  class Renderer{
-  constructor(video,canvas){this.video=video;this.canvas=canvas;this.gl={};}
+  constructor(video,canvas){this.video=video;this.canvas=canvas;this.gl={};this.running=false;renderers.push(this);}
   setView(view){const map=signal.makeDocumentMap(view,this.video.videoWidth,this.video.videoHeight);Object.assign(this.canvas,signal.outputSize(map.aspect,Math.max(this.video.videoWidth,this.video.videoHeight)));}
-  start(){}stop(){}setMaxDimension(){}
+  start(){this.running=true;}stop(){this.running=false;}setMaxDimension(){}
  }
  window.__signal={...signal,LiveDocumentRenderer:Renderer};
  // Execute the real app against its complete HTML; only the media renderer is
@@ -40,13 +40,55 @@ function fixture(t){
  const $=id=>window.document.getElementById(id),video=$('remote');
  let width=1920,height=1080;
  Object.defineProperties(video,{videoWidth:{get:()=>width},videoHeight:{get:()=>height},readyState:{get:()=>2}});
- return {window,$,messages,contexts,frames,
+ return {window,$,messages,contexts,frames,renderers,
   changes:()=>messages.filter(message=>message.value.type==='mindcrafti-notebook-view'),
   start(id='camera-1'){window.setNotebookCameraId(id);window.setNotebookStream({id});},
   resize(w,h){width=w;height=h;video.dispatchEvent(new window.Event('resize'));},
   view:()=>copy(window.getNotebookDocumentView()),
  };
 }
+
+test('lesson settings pause only their preview and keep crop drafts, shared state and quality controls through close/open',async t=>{
+ const f=fixture(t,true);f.start();f.messages.length=0;
+ assert.equal(f.window.document.body.classList.contains('notebook-settings'),true);
+ assert.equal(f.renderers[0].running,false,'a closed settings drawer cannot run a second projection loop');
+ assert.equal(f.$('ink').hidden,true);assert.equal(f.$('pen').disabled,true);assert.equal(f.$('save').disabled,true);
+ f.window.setNotebookSettingsOpen(true);
+ assert.equal(f.renderers[0].running,true);
+ f.$('viewerRotate90').click();const committed=f.view();
+ assert.equal(committed.turn,3);assert.equal(f.changes().length,1);
+ f.$('adjustCorners').click();assert.equal(f.$('corners').hidden,false);
+ assert.equal(f.window.setNotebookDocumentView(committed),true);
+ assert.equal(f.$('corners').hidden,false,'the ACK of a preceding rotation cannot discard a new corner draft');
+ const remote=f.$('remote').srcObject;
+ f.window.setNotebookSettingsOpen(false);assert.equal(f.renderers[0].running,false);
+ f.window.setNotebookSettingsOpen(true);
+ assert.equal(f.renderers[0].running,true);assert.equal(f.$('remote').srcObject,remote);
+ assert.equal(f.$('corners').hidden,false);assert.deepEqual(f.view(),committed);
+ f.$('applyCorners').click();assert.ok(signal.validQuad(f.view().corners));
+ assert.equal(f.changes().length,2);assert.equal(f.$('ink').hidden,true);
+ f.window.setNotebookConnected(true);
+ f.window.receiveNotebookData({type:'camera-state',version:1,quality:'detail',settings:{width:1920,height:1080},focus:{modes:['continuous']}});
+ assert.equal(f.$('qualityMode').disabled,false);assert.equal(f.$('focusAuto').disabled,false);
+ f.$('qualityMode').value='balanced';f.$('qualityMode').dispatchEvent(new f.window.Event('change'));
+ assert.ok(f.messages.some(message=>message.value.type==='mindcrafti-notebook-command'&&message.value.value.action==='quality'&&message.value.value.value==='balanced'));
+ await Promise.resolve();
+});
+
+test('lesson settings publish their content height and request close on Escape only while open',t=>{
+ const f=fixture(t,true);
+ Object.defineProperty(f.window.document.documentElement,'scrollHeight',{configurable:true,value:1640});
+ f.window.dispatchEvent(new f.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.equal(f.messages.some(message=>message.value.type==='mindcrafti-notebook-close-settings'),false);
+ f.window.setNotebookSettingsOpen(true);
+ for(const callback of f.frames.splice(0))callback(0);
+ assert.ok(f.messages.some(message=>message.origin==='https://school.example'&&message.value.type==='mindcrafti-notebook-settings-size'&&message.value.height===1640));
+ f.window.dispatchEvent(new f.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.equal(f.messages.filter(message=>message.value.type==='mindcrafti-notebook-close-settings').length,1);
+ f.window.setNotebookSettingsOpen(false);
+ f.window.dispatchEvent(new f.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.equal(f.messages.filter(message=>message.value.type==='mindcrafti-notebook-close-settings').length,1);
+});
 
 test('only committed local rotate, crop, format and reset publish one canonical view each',t=>{
  const f=fixture(t);f.start();f.messages.length=0;

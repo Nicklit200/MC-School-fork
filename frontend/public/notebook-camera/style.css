@@ -65,3 +65,24 @@ body.notebook-compact{height:100dvh;overflow:hidden}
 .notebook-compact .board-column{position:static;width:100%;height:100%;min-height:0}
 .notebook-compact .stage{height:100%;min-height:0;max-height:none;border:0;border-radius:0;padding:0}
 .notebook-compact #ink,.notebook-compact #corners{pointer-events:none}
+
+/* Lesson settings edit camera geometry; shared ink belongs to the main board. */
+body.notebook-settings{color:#e5e9f0;background:#1e222a;color-scheme:dark}
+.notebook-settings .topbar,.notebook-settings .toolbar,.notebook-settings .hint,.notebook-settings #ink,.notebook-settings #mode{display:none!important}
+.notebook-settings #ink{pointer-events:none}
+.notebook-settings .workspace{display:grid;grid-template-columns:minmax(0,1fr);padding:12px;gap:12px}
+.notebook-settings .board-column{position:static;min-width:0}
+.notebook-settings .board-status{color:#b4c0ce;min-height:0;margin:0 0 10px;font-size:12px;line-height:1.5}
+.notebook-settings .view-state{color:#87d6c8}
+.notebook-settings .stage{height:38dvh;min-height:240px;max-height:380px;padding-bottom:58px;border:1px solid #3b4350;border-radius:14px;background:#11161e}
+.notebook-settings .side-panel{margin:0;max-height:none;overflow:visible;padding:0;gap:12px}
+.notebook-settings .document-controls,.notebook-settings .quality-controls{color:#e5e9f0;background:#262c36;border-color:#3b4350;border-radius:14px;padding:14px}
+.notebook-settings .side-panel h2{font-size:18px;margin:8px 0 12px}
+.notebook-settings button{color:#e5e9f0;background:#353e4c;border-color:#4b5666}
+.notebook-settings button:hover{background:#445062}
+.notebook-settings .primary,.notebook-settings .quality-controls [aria-pressed=true]{background:#267b73;color:#fff;border-color:#348b83}
+.notebook-settings .device-field,.notebook-settings .document-status,.notebook-settings .quality-controls .small,.notebook-settings .focus-distance{color:#b4c0ce}
+.notebook-settings .device-field select{background:#1b212a;color:#e5e9f0;border-color:#4b5666}
+.notebook-settings .quality-meters{background:#1b212a}.notebook-settings .quality-meters dd{color:#e5e9f0}
+.notebook-settings .empty h1{font-size:23px;color:#e5e9f0}.notebook-settings .empty p{color:#b4c0ce}
+.notebook-settings #cornerActions{background:#262c36;border-color:#4b5666;bottom:8px}

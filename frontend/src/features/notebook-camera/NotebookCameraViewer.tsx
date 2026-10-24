@@ -12,6 +12,7 @@ interface ViewerWindow extends Window {
   setNotebookCompact?: (compact: boolean) => void;
   setNotebookDocumentView?: (view: NotebookDocumentView) => boolean;
   getNotebookDocumentView?: () => NotebookDocumentView;
+  setNotebookSettingsOpen?: (open: boolean) => void;
 }
 const topic = 'mindcrafti-notebook-camera';
 
@@ -27,13 +28,15 @@ interface NotebookCameraViewerProps {
   ownerId?: string;
   active?: boolean;
   compact?: boolean;
-  presentation?: 'processor' | 'board';
+  presentation?: 'processor' | 'board' | 'lesson';
+  settingsOpen?: boolean;
+  onSettingsClose?: () => void;
   onVideoAvailableChange?: (available: boolean) => void;
   onBoardVideoChange?: (source: NotebookCameraVideoSource | null) => void;
   title?: string;
 }
 
-export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true, compact = false, presentation = 'processor', onVideoAvailableChange, onBoardVideoChange, title = 'Тетрадь: выравнивание, фокус и пометки' }: NotebookCameraViewerProps) {
+export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true, compact = false, presentation = 'processor', settingsOpen = false, onSettingsClose, onVideoAvailableChange, onBoardVideoChange, title = 'Тетрадь: выравнивание, фокус и пометки' }: NotebookCameraViewerProps) {
   const iframe = useRef<HTMLIFrameElement>(null);
   const boardVideo = useRef<HTMLVideoElement>(null);
   const retainedBoardVideo = useRef<HTMLVideoElement | null>(null);
@@ -62,10 +65,14 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
   const visibleRef = useRef(visible);
   const compactRef = useRef(compact);
   const presentationRef = useRef(presentation);
+  const settingsOpenRef = useRef(settingsOpen);
+  const settingsCloseCallback = useRef(onSettingsClose);
   const videoCallback = useRef(onVideoAvailableChange);
   const boardVideoCallback = useRef(onBoardVideoChange);
   compactRef.current = compact;
   presentationRef.current = presentation;
+  settingsOpenRef.current = settingsOpen;
+  settingsCloseCallback.current = onSettingsClose;
   visibleRef.current = visible;
   videoCallback.current = onVideoAvailableChange;
   boardVideoCallback.current = onBoardVideoChange;
@@ -90,7 +97,7 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
   const reportBoardSource = () => {
     const video = boardVideo.current;
     const module = moduleRef.current;
-    if (presentationRef.current !== 'board' || !module || !video || !stream.current || video.srcObject !== stream.current
+    if (presentationRef.current === 'processor' || !module || !video || !stream.current || video.srcObject !== stream.current
       || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth <= 0 || video.videoHeight <= 0) return;
     try {
       if (!rendererRef.current) {
@@ -140,13 +147,16 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
   };
   const publishDocumentView = (value: unknown) => {
     const view = moduleRef.current?.validateDocumentView(value);
-    if (!view || !canConfigure.current || presentationRef.current !== 'processor') return;
+    if (!view || !canConfigure.current || presentationRef.current === 'board') return;
     documentView.current = view;
     pendingView.current = { changeId: `${changePrefix.current}-${++changeSequence.current}`, view };
+    // The owner's regular board follows a committed settings change instantly;
+    // the phone ACK still resolves the canonical revision (including crop reset).
+    reportBoardSource();
     flushDocumentView();
   };
   const captureRestoredView = () => {
-    if (restoreCaptured.current || !moduleRef.current || !canConfigure.current || presentationRef.current !== 'processor') return;
+    if (restoreCaptured.current || !moduleRef.current || !canConfigure.current || presentationRef.current === 'board') return;
     restoreCaptured.current = true;
     try {
       const saved = JSON.parse(sessionStorage.getItem(`camera-document-${cameraId}`) ?? 'null');
@@ -169,7 +179,7 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
     captureRestoredView();
     documentRevision.current = state.revision;
     latestDocumentPacket.current = { ...state, view };
-    if (canConfigure.current && presentationRef.current === 'processor' && !restoreResolved.current) {
+    if (canConfigure.current && presentationRef.current !== 'board' && !restoreResolved.current) {
       restoreResolved.current = true;
       const restored = restoredCandidate.current;
       // Migrate the old local-only alignment only into a fresh phone session.
@@ -183,7 +193,7 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
     if (pendingView.current && state.changeId !== pendingView.current.changeId) return;
     pendingView.current = null;
     documentView.current = view;
-    if (presentationRef.current === 'processor') (iframe.current?.contentWindow as ViewerWindow | null)?.setNotebookDocumentView?.(view);
+    if (presentationRef.current !== 'board') (iframe.current?.contentWindow as ViewerWindow | null)?.setNotebookDocumentView?.(view);
     reportBoardSource();
   };
   const sync = () => {
@@ -204,6 +214,9 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
       } else reportBoardSource();
     }
     const view = iframe.current?.contentWindow as ViewerWindow | null;
+    // Pause the settings preview before assigning media or geometry, which
+    // would otherwise start a second renderer while the drawer is closed.
+    if (presentationRef.current === 'lesson') view?.setNotebookSettingsOpen?.(settingsOpenRef.current);
     view?.setNotebookCameraId?.(cameraId);
     captureRestoredView();
     if (documentView.current) view?.setNotebookDocumentView?.(documentView.current);
@@ -219,9 +232,14 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
     (iframe.current?.contentWindow as ViewerWindow | null)?.setNotebookCompact?.(compact);
   }, [compact]);
   useEffect(() => {
-    if (presentation !== 'board') releaseBoardVideo();
+    if (presentation === 'processor') releaseBoardVideo();
     sync();
   }, [presentation, visible]);
+  useEffect(() => {
+    // Do not call sync here: reapplying canonical geometry would discard an
+    // unfinished corner draft whenever the drawer is closed and reopened.
+    if (presentation === 'lesson') (iframe.current?.contentWindow as ViewerWindow | null)?.setNotebookSettingsOpen?.(settingsOpen);
+  }, [presentation, settingsOpen]);
   useEffect(() => {
     let active = true;
     videoCallback.current?.(false);
@@ -284,11 +302,23 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
     room.on(RoomEvent.Reconnected, () => { sentChange.current = null; sync(); status('Связь восстановлена.'); });
     room.on(RoomEvent.Disconnected, () => { if (active) { clearVideo(); setError('Соединение завершено. Подключитесь снова или создайте новый QR.'); } });
     const message = (event: MessageEvent) => {
-      if (presentationRef.current !== 'processor' || !iframe.current
+      if (presentationRef.current === 'board' || !iframe.current
         || event.origin !== window.location.origin || event.source !== iframe.current.contentWindow) return;
+      if (event.data?.type === 'mindcrafti-notebook-settings-size') {
+        const height = event.data.height;
+        if (presentationRef.current === 'lesson' && Number.isFinite(height) && height >= 240 && height <= 8000) {
+          iframe.current.style.height = `${Math.ceil(height)}px`;
+        }
+        return;
+      }
+      if (event.data?.type === 'mindcrafti-notebook-close-settings') {
+        if (presentationRef.current === 'lesson' && settingsOpenRef.current) settingsCloseCallback.current?.();
+        return;
+      }
       if (event.data?.type === 'mindcrafti-notebook-ready') { sync(); return; }
       if (event.data?.type === 'mindcrafti-notebook-view') { publishDocumentView(event.data.value); return; }
       if (event.data?.type !== 'mindcrafti-notebook-command' || !phoneIdentity || room.state !== 'connected' || pendingCommand) return;
+      if (presentationRef.current === 'lesson' && !canConfigure.current) return;
       const value = event.data.value;
       if (!value || !['camera-request', 'camera-control', 'camera-select'].includes(value.type)) return;
       const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -304,7 +334,7 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
       if (!active) return;
       moduleRef.current = module;
       const pending = latestDocumentPacket.current;
-      if (presentationRef.current === 'processor') sync();
+      if (presentationRef.current !== 'board') sync();
       if (pending) receiveDocumentView(pending);
       sync(); reportBoardSource();
     }).catch(() => { if (active) setError('Не удалось загрузить обработку тетради. Нажмите «Повторить».'); });
@@ -335,11 +365,12 @@ export function NotebookCameraViewer({ cameraId, ownerId, active: visible = true
       void room.disconnect();
     };
   }, [cameraId, ownerId, attempt]);
-  return <div className={`notebook-camera-viewer${compact ? ' notebook-camera-viewer--compact' : ''}${presentation === 'board' ? ' notebook-camera-viewer--board' : ''}`}>
+  return <div className={`notebook-camera-viewer${compact ? ' notebook-camera-viewer--compact' : ''}${presentation !== 'processor' ? ' notebook-camera-viewer--board' : ''}${presentation === 'lesson' ? ' notebook-camera-viewer--lesson' : ''}`}>
     {error && <div role="alert" className="banner banner--error">{error} <button className="btn btn--secondary" onClick={() => setAttempt(value => value + 1)}>Повторить</button></div>}
-    {presentation === 'board'
-      ? <video ref={boardVideo} className="notebook-camera-viewer__source" autoPlay muted playsInline aria-hidden="true" tabIndex={-1}
-        onLoadedMetadata={reportBoardSource} onLoadedData={reportBoardSource} onPlaying={reportBoardSource} onResize={reportBoardSource} />
-      : <iframe ref={iframe} className="notebook-camera__viewer" title={title} src="/notebook-camera/index.html?v=shared-notebook-1" onLoad={sync} />}
+    {presentation !== 'processor' && <video ref={boardVideo} className="notebook-camera-viewer__source" autoPlay muted playsInline aria-hidden="true" tabIndex={-1}
+      onLoadedMetadata={reportBoardSource} onLoadedData={reportBoardSource} onPlaying={reportBoardSource} onResize={reportBoardSource} />}
+    {presentation !== 'board' && <iframe ref={iframe} className="notebook-camera__viewer" title={title}
+      hidden={presentation === 'lesson' && !settingsOpen}
+      src={presentation === 'lesson' ? '/notebook-camera/index.html?mode=settings&v=lesson-notebook-1' : '/notebook-camera/index.html?v=lesson-notebook-1'} onLoad={sync} />}
   </div>;
 }
