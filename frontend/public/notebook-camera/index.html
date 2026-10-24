@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Mindcrafti · Камера тетради</title><link rel="stylesheet" href="./style.css"><script type="module" src="./app.mjs"></script></head>
+<body class="viewer">
+<header class="topbar"><div class="brand"><div><strong>Камера тетради</strong><small>Mindcrafti · пометки поверх живого видео</small></div></div></header>
+<main class="workspace">
+ <div class="board-column">
+  <div class="board-status"><span id="mode" class="mode">ОЖИДАНИЕ КАМЕРЫ</span><span id="viewState" class="view-state"></span><span id="status" role="status">Подключите телефон в панели урока.</span></div>
+  <section class="stage" id="stage" aria-label="Изображение тетради">
+   <div class="empty" id="empty"><div class="paper-icon"><i></i><i></i><i></i><i></i></div><h1>Пишите в тетради.<br>Смотрите на планшете.</h1><p>Отсканируйте QR-код в уроке и разрешите камеру.<br>Изображение тетради появится здесь.</p></div>
+   <div id="surface" class="surface" hidden><video id="remote" autoplay playsinline muted></video><canvas id="flattened" hidden></canvas><canvas id="ink" hidden aria-label="Пометки поверх живого видео"></canvas><canvas id="corners" hidden aria-label="Углы листа"></canvas></div>
+   <button id="resumeVideo" class="resume-video primary" hidden>Показать видео</button>
+   <div class="toolbar" role="toolbar" aria-label="Инструменты тетради">
+    <button id="pen" disabled class="selected" aria-pressed="true" title="Рисовать">Перо</button><button id="eraser" disabled aria-pressed="false">Ластик</button>
+    <label class="color-label" title="Цвет пера"><input id="color" type="color" value="#e8534b" aria-label="Цвет пера" disabled></label>
+    <button id="undo" disabled aria-label="Отменить последний штрих">↶</button><button id="redo" disabled aria-label="Вернуть штрих">↷</button><button id="clear" disabled>Очистить</button><span class="divider"></span><label class="stylus-mode"><input id="stylusOnly" type="checkbox" disabled>Только стилус</label><span class="divider"></span><button id="save" disabled>Сохранить PNG</button>
+   </div>
+   <div class="document-row" id="cornerActions" hidden><button id="applyCorners" class="primary">Готово</button><button id="cancelCorners" class="secondary">Отмена</button></div>
+  </section>
+  <p class="hint" id="hint">Пишите прямо поверх эфира: видео не останавливается. Телефон и тетрадь нужно держать неподвижно. Пометки видны на этом экране и исчезнут при обновлении страницы. Сохраните их кнопкой «Сохранить PNG».</p>
+ </div>
+ <aside class="side-panel"><section class="document-controls" id="documentControls"><span class="eyebrow">НАСТРОЙКИ ЛИСТА</span><h2>Вид сверху</h2>
+<button id="alignPage" class="primary wide">Выровнять лист</button>
+<div class="document-row"><button id="viewerRotate90" class="secondary">Поворот 90°</button><button id="viewerRotate180" class="secondary">180&deg;</button></div>
+<div class="document-row"><button id="adjustCorners" class="secondary">Поправить углы</button><button id="originalView" class="secondary">Сбросить</button></div>
+<label class="device-field">Формат<select id="pageFormat"><option value="auto">Авто (приблизительно)</option><option value="a4">A4 / A5</option><option value="square">Квадрат</option></select></label>
+
+<p id="cropWarning" class="crop-warning" role="status" hidden>Угол листа почти у края кадра. Отодвиньте телефон чуть дальше: нужен запас вокруг бумаги.</p>
+<p id="documentStatus" class="document-status" role="status"></p>
+<label class="device-field">Камера<select id="cameraDevice" disabled><option>Ждём телефон</option></select></label></section>
+<section class="quality-controls" aria-labelledby="qualityTitle">
+<span class="eyebrow">КАМЕРА И ПЕРЕДАЧА</span>
+<h2 id="qualityTitle">Резкость и качество</h2>
+<label class="device-field">Качество<select id="qualityMode" disabled><option value="detail">Детализация (до 1080p)</option><option value="balanced">Экономный (до 720p)</option></select></label>
+<div class="document-row"><button id="focusAuto" class="secondary" disabled>Автофокус</button><button id="focusLock" class="secondary" disabled>Зафиксировать</button></div>
+<label id="focusDistanceField" class="focus-distance" hidden>Ручной фокус<input id="focusDistance" type="range" min="0" max="1" step="0.01" aria-label="Ручной фокус" disabled></label>
+<p id="focusStatus" class="small" role="status"></p>
+<button id="compareSource" class="secondary wide" disabled aria-pressed="false">Сравнить с исходным</button>
+<p id="cameraMessage" class="small" role="status"></p>
+<dl class="quality-meters"><div><dt>Камера</dt><dd id="captureSize">·</dd></div><div><dt>Получено</dt><dd id="receiveSize">·</dd></div><div><dt>Результат</dt><dd id="renderSize">·</dd></div></dl>
+<p id="networkInfo" class="small"></p><p id="renderInfo" class="small"></p>
+<p class="quality-help">Если размыт уже исходный кадр, немного отодвиньте телефон, протрите объектив и добавьте света. Выравнивание не восстанавливает размытые детали.</p>
+</section>
+</aside>
+</main>
+</body></html>

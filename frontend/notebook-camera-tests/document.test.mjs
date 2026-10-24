@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {UNIT_QUAD,rawDocumentView,validQuad,orderQuad,makeDocumentMap,validateDocumentView,homography,project,detectDocument,outputSize} from '../public/notebook-camera/signal.mjs';
+const q=[{x:.22,y:.12},{x:.78,y:.18},{x:.92,y:.91},{x:.09,y:.86}];
+const near=(a,b)=>assert.ok(Math.hypot(a.x-b.x,a.y-b.y)<1e-8,`${JSON.stringify(a)} != ${JSON.stringify(b)}`);
+test('perspective corners and inverse roundtrip for every quarter-turn',()=>{for(let turn=0;turn<4;turn++){const map=makeDocumentMap({...rawDocumentView(16/9),corners:q,ratio:1/Math.sqrt(2),turn},1920,1080);for(let i=0;i<4;i++)near(map.outputToCamera(UNIT_QUAD[i]),q[(i-turn+4)%4]);for(const p of [{x:.4,y:.5},{x:.9,y:.04}])near(map.cameraToOutput(map.outputToCamera(p)),p);}});
+test('identity is identity and clockwise turn maps corners correctly',()=>{const raw=rawDocumentView(16/9);const map=makeDocumentMap(raw,1920,1080);near(map.outputToCamera({x:.12,y:.78}),{x:.12,y:.78});const clockwise=makeDocumentMap({...raw,turn:1},1920,1080);near(clockwise.cameraToOutput({x:0,y:0}),{x:1,y:0});assert.equal(clockwise.aspect,9/16);});
+test('upside-down view is non-mirrored and rounds back after four turns',()=>{for(let turn=0;turn<4;turn++){const m=makeDocumentMap({...rawDocumentView(),turn},100,100);assert.ok(validQuad(m.quad));}const m=makeDocumentMap({...rawDocumentView(),turn:2},100,100);near(m.cameraToOutput({x:.2,y:.3}),{x:.8,y:.7});});
+test('ordering is invariant to shuffled input and accepts rotated pages',()=>{const a=orderQuad(q),b=orderQuad([q[3],q[1],q[0],q[2]]);assert.deepEqual(a,b);assert.ok(validQuad(orderQuad([{x:.5,y:.05},{x:.95,y:.5},{x:.5,y:.95},{x:.05,y:.5}])));});
+test('reject invalid or malicious geometry payloads',()=>{for(const bad of [null,{}, {...rawDocumentView(),turn:4},{...rawDocumentView(),corners:[q[0],q[2],q[1],q[3]],ratio:1},{...rawDocumentView(),corners:q,ratio:0},{...rawDocumentView(),sourceAspect:Infinity}])assert.equal(validateDocumentView(bad),null);});
+test('degenerate perspective fails rather than producing NaN',()=>{assert.throws(()=>homography([{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0}],UNIT_QUAD));});
+test('aspect sizes are bounded',()=>{assert.deepEqual(outputSize(2,1600),{width:1600,height:800});assert.deepEqual(outputSize(.5,1600),{width:800,height:1600});});
+function raster(quad,w=240,h=180){const data=new Uint8ClampedArray(w*h*4);const m=homography(quad,UNIT_QUAD);for(let y=0;y<h;y++)for(let x=0;x<w;x++){const p=project(m,{x:x/(w-1),y:y/(h-1)}),inside=p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1;const i=(y*w+x)*4;const c=inside?[236,232,224]:[145,90,50];for(let k=0;k<3;k++)data[i+k]=c[k];data[i+3]=255;}return {data,width:w,height:h};}
+test('detect a trapezoid on wood at 0, 90, 180 and 270 degrees',()=>{for(let t=0;t<4;t++){const rotated=q.map(p=>{for(let i=0;i<t;i++)p={x:1-p.y,y:p.x};return p;});const expected=orderQuad(rotated),d=detectDocument(raster(rotated));assert.ok(d,`turn ${t}`);for(let i=0;i<4;i++)assert.ok(Math.hypot(d.corners[i].x-expected[i].x,d.corners[i].y-expected[i].y)<.025,`corner ${i}, turn ${t}`);}});
+test('ambiguous full white background is not accepted as a page',()=>{const w=180,h=180,data=new Uint8ClampedArray(w*h*4).fill(255);assert.equal(detectDocument({data,width:w,height:h}),null);});
+

@@ -54,6 +54,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/public/trial-leads", "/api/v1/public/site-visits").permitAll()
+                        // Only these two phone routes bypass account login. Each
+                        // validates a bounded hashed QR/session secret itself.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/public/notebook-cameras/*/claim",
+                                "/api/v1/public/notebook-cameras/*/connection").permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/public/trial-leads/**", "/api/v1/public/site-visits/**").permitAll()
                         // These two read-only routes validate expiry, file kind, revision and HMAC themselves.
                         .requestMatchers(HttpMethod.GET,
@@ -88,6 +93,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/online-classes/**")
                                 .access(onlineClassPilotAuthorizationManager)
                         .requestMatchers("/api/v1/lesson-board/**")
+                                .access(onlineClassPilotAuthorizationManager)
+                        .requestMatchers("/api/v1/notebook-cameras/**")
                                 .access(onlineClassPilotAuthorizationManager)
                         .requestMatchers("/actuator/health/**").permitAll()
                         .anyRequest().authenticated())

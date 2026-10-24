@@ -68,6 +68,21 @@ server {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     }
 
+    # The notebook processor is embedded only by this site's lesson page.
+    # It receives media through the parent; it never requests device access.
+    location ^~ /notebook-camera/ {
+        try_files $uri =404;
+        # ES modules must not fall back to application/octet-stream.
+        types { text/html html; text/css css; application/javascript js mjs; text/plain txt; }
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Permissions-Policy "geolocation=(), camera=(), microphone=(), display-capture=()" always;
+        add_header X-XSS-Protection "0" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'none'" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    }
+
     # Forward API calls to the configured backend while keeping the browser same-origin.
     location /api/ {
         proxy_pass ${API_PROXY_SCHEME}://${API_PROXY_HOST}:${API_PROXY_PORT};

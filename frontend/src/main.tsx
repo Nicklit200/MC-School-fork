@@ -5,6 +5,7 @@ import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
 import { I18nProvider } from './i18n/I18nContext';
 import { installLessonStartFlow } from './lesson-start-flow';
+import { phoneCameraEntryRoute } from './lib/phoneCameraRoute';
 import './index.css';
 import './teacher-groups.css';
 import './teacher-detail.css';
@@ -29,6 +30,8 @@ function restoreLessonReturnRoute() {
   window.history.replaceState({}, '', `/teacher/lessons${query ? `?${query}` : ''}`);
 }
 
+const cameraEntryRoute = phoneCameraEntryRoute(window.location.pathname, window.location.search, window.location.hash);
+if (cameraEntryRoute) window.history.replaceState({}, '', cameraEntryRoute);
 restoreLessonReturnRoute();
 installLessonStartFlow();
 

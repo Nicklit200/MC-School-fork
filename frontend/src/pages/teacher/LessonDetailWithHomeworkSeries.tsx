@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { lessonPreparationApi } from '../../api/lessonPreparation';
 import type { GroupLesson } from '../../api/types';
@@ -26,6 +26,7 @@ export function LessonDetailWithHomeworkSeries() {
   return (
     <div className="stack" style={{ gap: 14 }}>
       <LessonDetailPage />
+      <div style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}><Link className="btn btn--secondary" to={`/lesson-notebook/${encodeURIComponent(decodedEventId)}`}>Камера тетради</Link></div>
       <div style={{ maxWidth: 1320, width: '100%', margin: '0 auto' }}>
         <LessonHomeworkSeriesPanel
           lesson={lesson}

@@ -47,6 +47,61 @@ class LiveKitMediaProviderTest {
     }
 
     @Test
+    void notebookViewerCanPublishDataButNoMediaTrack() throws Exception {
+        ParticipantConnection connection = provider().createConnection(
+                ROOM, "notebook-viewer:example", "Teacher",
+                new MediaGrant(false, false, false, true, true), Duration.ofMinutes(2));
+        JsonNode video = claims(connection.token()).get("video");
+        assertThat(video.get("canPublish").asBoolean()).isFalse();
+        assertThat(video.get("canPublishData").asBoolean()).isTrue();
+        assertThat(video.get("canSubscribe").asBoolean()).isTrue();
+    }
+
+    @Test
+    void notebookPhoneMayPublishOnlyCameraAndData() throws Exception {
+        ParticipantConnection connection = provider().createConnection(
+                ROOM, "notebook-phone:example", "Student",
+                new MediaGrant(true, false, false, true, true), Duration.ofMinutes(2));
+        JsonNode video = claims(connection.token()).get("video");
+        assertThat(video.get("canPublish").asBoolean()).isTrue();
+        assertThat(video.get("canPublishSources").size()).isEqualTo(1);
+        assertThat(video.get("canPublishSources").get(0).asText()).isEqualTo("camera");
+        assertThat(video.hasNonNull("roomAdmin") && video.get("roomAdmin").asBoolean()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void roomCloseOutageIsReportedSoCameraCleanupCanRetry() throws Exception {
+        RoomServiceClient client = mock(RoomServiceClient.class);
+        Call operation = mock(Call.class);
+        when(client.deleteRoom(ROOM)).thenReturn(operation);
+        when(operation.execute()).thenThrow(new IOException("offline"));
+        OnlineClassProperties properties = new OnlineClassProperties(
+                true, "wss://example.livekit.cloud", API_KEY, API_SECRET,
+                false, false, null, null, Duration.ofMinutes(10), null, null, false);
+        assertThatThrownBy(() -> new LiveKitMediaProvider(properties, client).closeRoom(ROOM))
+                .isInstanceOf(MediaProviderException.class);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void roomCloseIgnoresOnlyExplicitNotFound() throws Exception {
+        RoomServiceClient client = mock(RoomServiceClient.class);
+        Call operation = mock(Call.class);
+        when(client.deleteRoom(ROOM)).thenReturn(operation);
+        when(operation.execute()).thenReturn(retrofit2.Response.error(404,
+                okhttp3.ResponseBody.create("{}", okhttp3.MediaType.get("application/json"))));
+        OnlineClassProperties properties = new OnlineClassProperties(
+                true, "wss://example.livekit.cloud", API_KEY, API_SECRET,
+                false, false, null, null, Duration.ofMinutes(10), null, null, false);
+        LiveKitMediaProvider provider = new LiveKitMediaProvider(properties, client);
+        provider.closeRoom(ROOM);
+        when(operation.execute()).thenReturn(retrofit2.Response.error(403,
+                okhttp3.ResponseBody.create("{}", okhttp3.MediaType.get("application/json"))));
+        assertThatThrownBy(() -> provider.closeRoom(ROOM)).isInstanceOf(MediaProviderException.class);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void networkFailureWhenCreatingRoomMustNeverBeMistakenForExistingRoom() throws Exception {
         RoomServiceClient client = mock(RoomServiceClient.class);

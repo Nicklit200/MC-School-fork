@@ -3,7 +3,7 @@ import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { LearningTimeAdminPage } from './pages/admin/LearningTimeAdminPage';
 import { LearningTimeStudentPage } from './pages/admin/LearningTimeStudentPage';
 import { SkillsPage } from './pages/SkillsPage';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { homePathForRole } from './auth/roleRoutes';
@@ -50,16 +50,21 @@ import { ParentPage } from './pages/parent/ParentPage';
 const UpcomingOnlineClassesPage = lazy(() => import('./pages/online-classes/UpcomingOnlineClassesPage').then(m => ({ default: m.UpcomingOnlineClassesPage })));
 const OnlineClassPage = lazy(() => import('./pages/online-classes/OnlineClassPage').then(m => ({ default: m.OnlineClassPage })));
 const LessonBoardPage = lazy(() => import('./pages/lesson-board/LessonBoardPage').then((m) => ({ default: m.LessonBoardPage })));
+const PhoneCameraPage = lazy(() => import('./features/notebook-camera/PhoneCameraPage').then(m => ({ default: m.PhoneCameraPage })));
+const NotebookCameraPage = lazy(() => import('./features/notebook-camera/NotebookCameraPage').then(m => ({ default: m.NotebookCameraPage })));
 
 export function App() {
   const { user, initializing } = useAuth();
-  if (initializing) return null;
+  const location = useLocation();
+  if (initializing && !location.pathname.startsWith('/phone-camera')) return null;
 
   return (
     <Routes>
       <Route path="/skills" element={<ProtectedRoute><Layout><SkillsPage /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivatePage />} />
+      <Route path="/phone-camera/:cameraId?" element={<Suspense fallback={<p>Открываем камеру…</p>}><PhoneCameraPage /></Suspense>} />
+      <Route path="/lesson-notebook/:eventId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={<p>Открываем тетрадь…</p>}><NotebookCameraPage /></Suspense></Layout></ProtectedRoute>} />
 
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/learning-time" element={<ProtectedRoute role="ADMIN"><Layout><LearningTimeAdminPage /></Layout></ProtectedRoute>} />

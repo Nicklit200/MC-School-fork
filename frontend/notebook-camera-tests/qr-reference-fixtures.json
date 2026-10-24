@@ -1,0 +1,60 @@
+{
+  "reference": {
+    "project": "Project Nayuki QR-Code-generator",
+    "url": "https://github.com/nayuki/QR-Code-generator/blob/master/typescript-javascript/qrcodegen.ts",
+    "blobSha": "c4191ac0b5f8a24d87fd9340ceaa2d3b07d0231a",
+    "options": "UTF-8 byte segment, error correction L, fixed version 6/11, mask 0, no ECC boost",
+    "hashFormat": "SHA-256 of newline-separated rows, each row 0/1 modules, no final newline"
+  },
+  "fixtures": [
+    {
+      "name": "short domain",
+      "payload": "https://mindcrafti.de/?mindcraftiCamera=1#cameraId=b7ae3ef4-95ea-4daa-8365-5c8c1c728e6f&token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "bytes": 137,
+      "version": 11,
+      "sha256": "9b947ffb489830f5110e20d18637ff184324a3129dca1e48632b83ad4da27f34"
+    },
+    {
+      "name": "Railway production",
+      "payload": "https://mindcrafti-school-production.up.railway.app/?mindcraftiCamera=1#cameraId=b7ae3ef4-95ea-4daa-8365-5c8c1c728e6f&token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "bytes": 167,
+      "version": 11,
+      "sha256": "f733146523e8a2b3ef621bf6b348b9bd22e03b2c6c766f7597375c9c71aa8468"
+    },
+    {
+      "name": "long valid hostname",
+      "payload": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccc.example/?mindcraftiCamera=1#cameraId=b7ae3ef4-95ea-4daa-8365-5c8c1c728e6f&token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "bytes": 301,
+      "version": 11,
+      "sha256": "e54f82a0a87d42ed39726edfe430bc8f4c1bf088dab25748c3d86f0106335d3b"
+    },
+    {
+      "name": "original version boundary",
+      "payload": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "bytes": 134,
+      "version": 6,
+      "sha256": "ef6619a67a1805fe97f9eeca35e457247f42b436293bfc59cc94432e752b3d11"
+    },
+    {
+      "name": "larger version boundary",
+      "payload": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "bytes": 135,
+      "version": 11,
+      "sha256": "cfa65c7cf1840029a2c853bfcb3064edebdabb64798cc5180a7d7b4026062b8b"
+    },
+    {
+      "name": "maximum payload",
+      "payload": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "bytes": 321,
+      "version": 11,
+      "sha256": "44705d501f59c94246ae3e8683c337d7a13a302adde0f359f30e948da0228702"
+    },
+    {
+      "name": "UTF-8 payload",
+      "payload": "тетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадьтетрадь",
+      "bytes": 210,
+      "version": 11,
+      "sha256": "d31d5644ec521b98658cbf1ce04066bab9fa3f6d0d5a7d3e3e13a352a0cc926c"
+    }
+  ]
+}

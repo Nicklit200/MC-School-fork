@@ -1,5 +1,6 @@
 import { lessonPreparationApi, completedLessonApi } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
+import { NotebookCameraButton } from '../notebook-camera/NotebookCameraPanel';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { buildPdf, dataUrlToBytes } from './pdfWriter';
 import {
@@ -488,6 +489,7 @@ function RoomBody({
       <ConnectionStateToast />
 
       <div className="online-class-room__controls">
+        {eventId && <NotebookCameraButton eventId={eventId} classId={classId} currentUserId={currentUserId} isTeacher={connection.host} students={connection.host ? students : undefined} />}
         {/* Leave is handled by our own button. LiveKit's built-in Leave
             would look like an unexpected network disconnect here. */}
         <ControlBar variation="verbose" controls={{ leave: false }} />

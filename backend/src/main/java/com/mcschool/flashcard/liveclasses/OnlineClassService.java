@@ -17,6 +17,7 @@ import com.mcschool.flashcard.liveclasses.provider.MediaProviderException;
 import com.mcschool.flashcard.liveclasses.provider.ParticipantConnection;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
+import com.mcschool.flashcard.notebookcamera.NotebookCameraService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +50,7 @@ public class OnlineClassService {
     private final OnlineClassProperties properties;
     private final OnlineClassMetrics metrics;
     private final Clock clock;
+    private final NotebookCameraService notebookCameras;
 
     public OnlineClassService(OnlineClassRepository classRepository,
                               OnlineClassParticipantRepository participantRepository,
@@ -60,7 +62,8 @@ public class OnlineClassService {
                               ClassTranscriptionProvider transcriptionProvider,
                               OnlineClassProperties properties,
                               OnlineClassMetrics metrics,
-                              Clock clock) {
+                              Clock clock,
+                              NotebookCameraService notebookCameras) {
         this.classRepository = classRepository;
         this.participantRepository = participantRepository;
         this.accessService = accessService;
@@ -72,6 +75,7 @@ public class OnlineClassService {
         this.properties = properties;
         this.metrics = metrics;
         this.clock = clock;
+        this.notebookCameras = notebookCameras;
     }
 
     // --- Materialization -----------------------------------------------------
@@ -302,6 +306,7 @@ public class OnlineClassService {
         OnlineClass onlineClass = requireHostForMutation(caller, classId);
         Instant endedAt = now();
         onlineClass.end(endedAt);
+        notebookCameras.revokeClass(classId);
         closeConnectionsFor(onlineClass, endedAt);
         // A provider outage must not block ending the class in our own records.
         try {
@@ -320,6 +325,7 @@ public class OnlineClassService {
     public OnlineClassResponse cancel(AuthenticatedUser caller, UUID classId) {
         OnlineClass onlineClass = accessService.requireHost(caller, classId);
         onlineClass.cancel();
+        notebookCameras.revokeClass(classId);
         return toResponse(onlineClass, caller);
     }
 

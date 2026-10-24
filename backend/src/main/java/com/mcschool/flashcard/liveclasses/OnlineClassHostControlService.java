@@ -8,6 +8,7 @@ import com.mcschool.flashcard.liveclasses.dto.ParticipantPermissionRequest;
 import com.mcschool.flashcard.liveclasses.provider.LiveClassMediaProvider;
 import com.mcschool.flashcard.liveclasses.provider.MediaGrant;
 import com.mcschool.flashcard.liveclasses.provider.MediaProviderException;
+import com.mcschool.flashcard.notebookcamera.NotebookCameraService;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
@@ -36,17 +37,20 @@ public class OnlineClassHostControlService {
     private final OnlineClassAccessService accessService;
     private final LiveClassMediaProvider mediaProvider;
     private final Clock clock;
+    private final NotebookCameraService notebookCameras;
 
     public OnlineClassHostControlService(OnlineClassRepository classRepository,
                                          OnlineClassParticipantRepository participantRepository,
                                          OnlineClassAccessService accessService,
                                          LiveClassMediaProvider mediaProvider,
-                                         Clock clock) {
+                                         Clock clock,
+                                         NotebookCameraService notebookCameras) {
         this.classRepository = classRepository;
         this.participantRepository = participantRepository;
         this.accessService = accessService;
         this.mediaProvider = mediaProvider;
         this.clock = clock;
+        this.notebookCameras = notebookCameras;
     }
 
     @Transactional(readOnly = true)
@@ -134,6 +138,7 @@ public class OnlineClassHostControlService {
         requireNotSelf(caller, userId, "remove");
 
         participant.remove();
+        notebookCameras.revokeClassOwner(classId, userId);
         if (participant.isConnected()) {
             participant.markLeft(clock.instant());
         }

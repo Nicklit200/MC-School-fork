@@ -26,6 +26,8 @@ public record MediaGrant(
     }
 
     public boolean canPublishAnything() {
-        return canPublishCamera || canPublishMicrophone || canPublishScreenShare || canPublishData;
+        // LiveKit's canPublish controls media tracks; data has its own grant.
+        // A data-only notebook viewer must never receive media publishing rights.
+        return canPublishCamera || canPublishMicrophone || canPublishScreenShare;
     }
 }

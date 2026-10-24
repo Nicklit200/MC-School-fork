@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { lessonBoardApi, type BoardAction, type BoardOperation, type BoardPoint } from '../../api/lessonBoard';
+import { NotebookCameraButton } from '../../features/notebook-camera/NotebookCameraPanel';
 
 const BOARD_WIDTH = 1400;
 const BOARD_HEIGHT = 900;
@@ -331,6 +332,7 @@ export function LessonBoardPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {user && ['TEACHER', 'STUDENT'].includes(user.role) && <NotebookCameraButton eventId={eventId} currentUserId={user.id} isTeacher={user.role === 'TEACHER'} />}
           {isTeacher && (
             <button type="button" className="btn btn--secondary" onClick={() => {
               void navigator.clipboard.writeText(window.location.href)

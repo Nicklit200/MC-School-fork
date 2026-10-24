@@ -196,6 +196,7 @@ export function StudentLessonsCalendarPage() {
               Mindcrafti Online - войти
             </Link>
           )}
+          <Link className="btn btn--secondary" to={`/lesson-notebook/${encodeURIComponent(lesson.eventId)}`}>Камера тетради</Link>
           {lesson.meetUrl ? (
             <a
               className="btn btn--secondary"
@@ -268,6 +269,7 @@ export function StudentLessonsCalendarPage() {
               Mindcrafti Online - войти
             </Link>
           )}
+          <Link className="btn btn--secondary" to={`/lesson-notebook/${encodeURIComponent(lesson.eventId)}`}>Камера тетради</Link>
           {lesson.meetUrl ? (
             <a
               className="btn"

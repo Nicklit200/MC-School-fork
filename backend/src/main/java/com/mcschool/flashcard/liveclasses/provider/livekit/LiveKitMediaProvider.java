@@ -133,7 +133,13 @@ public class LiveKitMediaProvider implements LiveClassMediaProvider {
         try {
             execute(roomServiceClient.deleteRoom(roomName));
         } catch (MediaProviderException e) {
-            log.debug("closeRoom: room {} already gone", safe(roomName));
+            if ("LiveKit request failed with HTTP 404".equals(e.getMessage())) {
+                log.debug("closeRoom: room {} already gone", safe(roomName));
+                return;
+            }
+            // An outage is not confirmation that a camera stopped. The caller
+            // keeps pending cleanup and retries after the provider recovers.
+            throw e;
         }
     }
 

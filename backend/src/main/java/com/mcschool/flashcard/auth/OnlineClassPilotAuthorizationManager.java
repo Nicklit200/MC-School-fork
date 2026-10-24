@@ -70,4 +70,9 @@ public class OnlineClassPilotAuthorizationManager
         // Do not open classroom APIs to administrators or parents by role alone.
         return false;
     }
+
+    /** Also checked by credential-scoped phone endpoints, which have no account JWT. */
+    public boolean isEnabledForTeacher(UUID teacherId) {
+        return enabled && pilotOwnerId != null && pilotOwnerId.equals(teacherId);
+    }
 }
