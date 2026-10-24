@@ -1,0 +1,21 @@
+name: Lesson entry validation
+on:
+  push:
+    branches: ['verify/lesson-day-access-20261024']
+permissions:
+  contents: read
+jobs:
+  source-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package tracked source only
+        run: git archive --format=tar.gz HEAD > /tmp/lesson-entry-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lesson-entry-source
+          path: /tmp/lesson-entry-source.tar.gz
+          retention-days: 1
