@@ -185,7 +185,7 @@ describe('BoardToolbar', () => {
       primaryActions={<><button onClick={answers}>Ответы</button><button onClick={save}>Сохранить документы урока</button></>} />);
     const island = screen.getByRole('toolbar').querySelector('.board-toolbar__island') as HTMLElement;
     expect(within(island).getAllByRole('button').map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
-      'Отменить', 'Вернуть', 'Перемещение', 'Перо', 'Ластик', 'Маркер', 'Добавить PDF / фото', 'Другие инструменты', 'Ответы', 'Сохранить документы урока',
+      'Отменить', 'Вернуть', 'Перемещение', 'Перо', 'Ластик', 'Маркер', 'Добавить PDF / фото', 'Ответы', 'Сохранить документы урока', 'Другие инструменты',
     ]);
     for (const name of ['Отменить', 'Вернуть', 'Добавить PDF / фото', 'Ответы', 'Сохранить документы урока']) await user.click(screen.getByRole('button', { name }));
     for (const callback of [undo, redo, upload, answers, save]) expect(callback).toHaveBeenCalledOnce();

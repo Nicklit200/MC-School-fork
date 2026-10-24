@@ -125,6 +125,7 @@ export function BoardToolbar({ tool, onToolChange, settings, onSettingsChange, e
       <span className="board-toolbar__divider" aria-hidden="true" />
       {MAIN_TOOLS.map(renderTool)}
       {fileAction && <span className="board-toolbar__file-action">{fileAction}</span>}
+      {primaryActions && <span className="board-toolbar__primary-actions">{primaryActions}</span>}
       <div className="board-toolbar__more">
         <button ref={moreRef} className={`board-toolbar__tool${MORE_TOOLS.includes(tool) ? ' is-active' : ''}`} type="button"
           aria-label={moreLabel} title={moreLabel} aria-expanded={moreOpen} aria-controls={moreId}
@@ -145,7 +146,6 @@ export function BoardToolbar({ tool, onToolChange, settings, onSettingsChange, e
           </div>
         </div>}
       </div>
-      {primaryActions && <span className="board-toolbar__primary-actions">{primaryActions}</span>}
     </div>
 
     {menuOpen && definition && hasSettings(tool) && <div id={settingsId} className="board-toolbar__settings board-toolbar__menu"
