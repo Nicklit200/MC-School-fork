@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CreateLessonPanel } from './CreateLessonPanel';
 import { Link } from 'react-router-dom';
-import { isNativeLesson, lessonDurationLabel } from '../../lib/lessonSchedule';
+import { isNativeLesson } from '../../lib/lessonSchedule';
 import { api } from '../../api/client';
 import { ApiRequestError } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
