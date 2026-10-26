@@ -87,6 +87,28 @@ class LessonSeriesServiceTest {
     }
 
     @Test
+    void selectedClockTimeStaysFixedAcrossWinterTimeChange() {
+        var request = new CreateLessonSeriesRequest("Math", LocalDate.of(2026, 10, 24),
+                60, Period.TWO_WEEKS, Set.of(6), null, null, LocalTime.of(16, 30));
+        var lessons = service.createSeries(caller, request);
+        assertThat(lessons).hasSize(2);
+        assertThat(lessons.get(0).startsAt()).isEqualTo(Instant.parse("2026-10-24T14:30:00Z"));
+        assertThat(lessons.get(1).startsAt()).isEqualTo(Instant.parse("2026-10-31T15:30:00Z"));
+        assertThat(lessons).allSatisfy(item ->
+                assertThat(item.startsAt().atZone(SCHOOL_ZONE).toLocalTime()).isEqualTo(LocalTime.of(16, 30)));
+    }
+
+    @Test
+    void rejectsNonexistentOrRepeatedBerlinStartTime() {
+        var missing = new CreateLessonSeriesRequest("Math", LocalDate.of(2026, 3, 29),
+                60, Period.TWO_WEEKS, Set.of(7), null, null, LocalTime.of(2, 30));
+        var repeated = new CreateLessonSeriesRequest("Math", LocalDate.of(2026, 10, 25),
+                60, Period.TWO_WEEKS, Set.of(7), null, null, LocalTime.of(2, 30));
+        assertThatThrownBy(() -> service.createSeries(caller, missing)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.createSeries(caller, repeated)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void rejectsEmptyOrInvalidWeekdaysAndInvalidDurationBeforeSaving() {
         for (Set<Integer> days : List.of(Set.<Integer>of(), Set.of(0), Set.of(8))) {
             assertThatThrownBy(() -> service.createSeries(caller, request(Period.MONTH, days))).isInstanceOf(ResponseStatusException.class);
