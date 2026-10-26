@@ -1,5 +1,10 @@
 import { getStroke } from 'perfect-freehand';
-import { type Shape, type Viewport, toPixels } from './annotations';
+import { type Shape, type Viewport, letterbox, toPixels } from './annotations';
+
+/** Match ink thickness to the actual sheet, not a viewer's surrounding letterbox. */
+export function strokeWidthPixels(width: number | undefined, viewport: Viewport, aspect: number | null): number {
+  return Math.max(1, (width ?? 0.004) * letterbox(viewport, aspect).width);
+}
 
 /** Same pressure-aware ink geometry for whiteboard, previews and PDF export. */
 export function penOutline(
@@ -16,7 +21,7 @@ export function penOutline(
     const pixel = toPixels({ x, y }, viewport, aspect);
     return hasPressure ? [pixel.x, pixel.y, pressure![index]] : [pixel.x, pixel.y];
   }), {
-    size: Math.max(1, (shape.width ?? 0.004) * viewport.width),
+    size: strokeWidthPixels(shape.width, viewport, aspect),
     thinning: 0.55,
     smoothing: 0.6,
     streamline: 0.5,
