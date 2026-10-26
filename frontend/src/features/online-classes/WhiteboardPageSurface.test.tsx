@@ -271,7 +271,7 @@ describe('WhiteboardPageSurface', () => {
     expect(canvas(1).readOnly).toBe(false); expect(canvas(1).sourceAspect).toBe(210 / 297);
     act(() => FakeResizeObserver.resize(720));
     await waitFor(() => expect(canvas(0).background).toBe(rendered));
-    expect(pdf.renderPage).toHaveBeenCalledExactlyOnceWith(0, 720);
+    expect(pdf.renderPage).toHaveBeenCalledExactlyOnceWith(0, 800);
     expect(canvas(0).sourceAspect).toBe(1.6); expect(canvas(0).readOnly).toBe(false);
     expect(onAspectChange).toHaveBeenLastCalledWith(0, 1.6);
     expect(canvas(1).sourceAspect).toBe(210 / 297); expect(canvas(1).background).toBeNull();
