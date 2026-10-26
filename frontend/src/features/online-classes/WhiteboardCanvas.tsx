@@ -1063,12 +1063,11 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         ref={stageRef}
         width={sceneViewport.width}
         height={sceneViewport.height}
-        style={documentStageStyle}
         x={projection ? 0 : view.panX}
         y={projection ? 0 : view.panY}
         scaleX={projection ? 1 : view.zoom}
         scaleY={projection ? 1 : view.zoom}
-        style={projection ? notebookPresentation ?? { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' } : undefined}
+        style={projection ? notebookPresentation ?? { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' } : documentStageStyle}
         listening={false}
       >
         {/* The page sits on its own layer: partial-erase marks cut through the
