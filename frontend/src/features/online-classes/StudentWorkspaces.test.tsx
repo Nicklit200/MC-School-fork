@@ -62,6 +62,19 @@ describe('pupil board and camera surfaces', () => {
     expect(screen.getByTestId('board-p4').parentElement).not.toHaveAttribute('hidden');
   });
 
+  it('sizes the overview for one, two or four actual pupils rather than reserving empty rows', () => {
+    const { container, rerender } = render(surface({ students: pupils.slice(0, 2), camerasByOwner: new Map() }));
+    const overview = () => container.querySelector('.student-workspaces--overview');
+    expect(overview()).toHaveAttribute('data-overview-count', '2');
+    expect(screen.getAllByRole('region', { name: /Работа ученика:/ })).toHaveLength(2);
+    rerender(surface({ students: pupils.slice(0, 1), camerasByOwner: new Map() }));
+    expect(overview()).toHaveAttribute('data-overview-count', '1');
+    expect(screen.getAllByRole('region', { name: /Работа ученика:/ })).toHaveLength(1);
+    rerender(surface({ students: pupils.slice(0, 4), camerasByOwner: new Map() }));
+    expect(overview()).toHaveAttribute('data-overview-count', '4');
+    expect(screen.getAllByRole('region', { name: /Работа ученика:/ })).toHaveLength(4);
+  });
+
   it('keeps the same video, camera annotation board and ordinary board between overview and pupil views', async () => {
     const onSelect = vi.fn(); const onOverview = vi.fn();
     const view = render(surface({ onSelect, onOverview }));
