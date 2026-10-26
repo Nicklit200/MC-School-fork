@@ -1214,7 +1214,7 @@
           (card.custom||card.invalid?'<button data-action="delete" data-id="'+esc(card.id)+'" type="button">Удалить</button>':"")+
           '</div></div>';
       }).join(""):'<div class="quiz-empty">В этом списке пока нет карточек.</div>')+
-      '</div><p class="quiz-storage-note">Пометки и удаления сохраняются в этом браузере. Исходные карточки на сервере не изменяются.</p>';
+      '</div><p class="quiz-storage-note">Пометки и удаления автоматически сохраняются в общем аккаунте. Исходные учебные карточки не изменяются.</p>';
   }
 
   function selectSkillOptions(selected="") {
@@ -1417,7 +1417,7 @@
   function removeCard(id) {
     const c=allCards({includeHidden:true,includeInvalid:true}).find(card=>card.id===id);
     if (!c || (!c.custom && !c.invalid)) return;
-    if (!window.confirm("Удалить карточку из своей карты? Для исходных вопросов удаление действует только в этом браузере.")) return;
+    if (!window.confirm("Удалить карточку из своей карты на всех устройствах? Исходный учебный набор не изменится.")) return;
     if (c.custom) {
       persistCustomCards(getCustomCards().filter(card=>card.id!==id));
     } else {
