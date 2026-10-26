@@ -69,7 +69,7 @@ public class ManualLessonService {
     public List<GroupLessonResponse> createSeries(AuthenticatedUser caller, CreateLessonSeriesRequest request) {
         requireTeacher(caller);
         if (request.title() == null || request.title().isBlank() || request.title().length() > 500
-                || request.startDate() == null || request.period() == null
+                || request.startDate() == null || request.period() == null || request.startTime() == null
                 || request.durationMinutes() == null || request.durationMinutes() < 1 || request.durationMinutes() > 1440
                 || request.weekdays() == null || request.weekdays().isEmpty()
                 || request.weekdays().stream().anyMatch(day -> day == null || day < 1 || day > 7)
@@ -84,7 +84,12 @@ public class ManualLessonService {
         List<GroupLessonResponse> created = new ArrayList<>();
         for (LocalDate date = request.startDate(); date.isBefore(endExclusive); date = date.plusDays(1)) {
             if (!request.weekdays().contains(date.getDayOfWeek().getValue())) continue;
-            var startsAt = date.atStartOfDay(ZoneId.of("Europe/Berlin")).toInstant();
+            var localStart = date.atTime(request.startTime());
+            var offsets = ZoneId.of("Europe/Berlin").getRules().getValidOffsets(localStart);
+            if (offsets.size() != 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or ambiguous Berlin lesson time");
+            }
+            var startsAt = localStart.atOffset(offsets.get(0)).toInstant();
             created.add(create(caller, new CreateLessonRequest(request.title(), startsAt,
                     startsAt.plusSeconds(request.durationMinutes() * 60L), request.groupId(), request.studentId())));
         }
