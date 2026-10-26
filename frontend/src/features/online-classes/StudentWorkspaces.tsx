@@ -88,6 +88,7 @@ export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overv
   if (newVisits.length) setVisited(previous => new Set([...previous, ...newVisits]));
 
   return <div className={`student-workspaces${overview ? ' student-workspaces--overview' : ''}`}
+    data-overview-count={overview ? Math.min(students.length, 4) : undefined}
     hidden={!visible} aria-label={overview ? 'Доски и тетради всех учеников' : 'Работа выбранного ученика'}>
     {students.filter(student => visited.has(student.userId) || shown.has(student.userId) || camerasByOwner.has(student.userId)).map(student =>
       <StudentSurface key={student.userId}
