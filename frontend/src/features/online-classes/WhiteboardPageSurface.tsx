@@ -145,7 +145,8 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
     targetType,
     targetId,
     page: pageIndex,
-    enabled: !camera || Boolean(ownerId),
+    // Retained pages still replay durable ink via REST; only visible pages need live previews.
+    enabled: active && (!camera || Boolean(ownerId)),
     personalOwnerId: ownerId,
     hostUserId,
     currentUserId: actorId,
