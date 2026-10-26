@@ -13,7 +13,7 @@ import { useClassEvents } from './useClassEvents';
 import { personalBoardId } from './boards';
 
 /** Matches the protocol's ≤ 20 Hz cap for lossy traffic. */
-const SEND_INTERVAL_MS = 33;
+const SEND_INTERVAL_MS = 50;
 /** A preview with no update for this long is dropped (the sender vanished). */
 const STALE_AFTER_MS = 15_000;
 /**
@@ -146,8 +146,9 @@ export function useLiveStrokes({
   const confirmedStrokes = useRef(new Set<string>());
   const notebook = targetType === 'NOTEBOOK_CAMERA';
   const topic = notebook ? NOTEBOOK_STROKE_TOPIC : STROKE_TOPIC;
-  const canAccess = (!notebook || Boolean(enabled && personalOwnerId && targetId === personalBoardId(personalOwnerId))) && (!personalOwnerId || Boolean(currentUserId &&
+  const canAccess = (!notebook || Boolean(personalOwnerId && targetId === personalBoardId(personalOwnerId))) && (!personalOwnerId || Boolean(currentUserId &&
     (currentUserId === personalOwnerId || currentUserId === hostUserId)));
+  const receiving = enabled && canAccess;
 
   useEffect(() => {
     setEntries({});
@@ -160,7 +161,7 @@ export function useLiveStrokes({
   }, [classId, targetId, targetType]);
 
   const { publish } = useClassEvents(classId, topic, ({ event, senderIdentity }) => {
-    if (!enabled || !canAccess || event.type !== 'stroke' || event.targetId !== targetId || !senderIdentity) return;
+    if (!receiving || event.type !== 'stroke' || event.targetId !== targetId || event.page !== page || !senderIdentity) return;
     const now = Date.now();
     // Personal board previews must only originate from its owner or teacher,
     // and must never be visible to other students.
@@ -206,7 +207,7 @@ export function useLiveStrokes({
           removeAt: now + LINGER_AFTER_END_MS } };
       });
     }
-  });
+  }, receiving);
 
   // Drop previews that finished or went quiet.
   useEffect(() => {
@@ -269,7 +270,7 @@ export function useLiveStrokes({
    */
   const sendDraft = useCallback(
     (shape: LiveShape | null, strokeId?: string, finished = false) => {
-      if (!enabled || !canAccess) return;
+      if (!receiving) return;
       // Personal boards are private, including interim pencil coordinates.
       const destinations = personalOwnerId
         ? [personalOwnerId, hostUserId].filter((id): id is string => Boolean(id))
@@ -300,11 +301,11 @@ export function useLiveStrokes({
         lastSent.current = 0;
       }
     },
-    [canAccess, classId, enabled, hostUserId, page, personalOwnerId, publish, targetId],
+    [receiving, classId, hostUserId, page, personalOwnerId, publish, targetId],
   );
 
   const drafts: LiveDraft[] = Object.entries(entries)
-    .filter(([, entry]) => canAccess && entry.page === page)
+    .filter(([, entry]) => receiving && entry.page === page)
     .map(([id, entry]) => ({ id, shape: entry.shape }));
 
   return { drafts, sendDraft, settle, acknowledgeRendered };
