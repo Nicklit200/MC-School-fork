@@ -218,9 +218,21 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
     return () => observer.disconnect();
   }, []);
 
-  // DOM sheets may become five times wider during document zoom. Keep their
-  // PDF texture bounded independently; drawing still uses the full CSS size.
-  const renderedPage = usePdfPage(pdfDocument, pageIndex, Math.min(stageWidth, continuous && !active ? 512 : 4096));
+  // Keep the previous PDF texture visible throughout a pinch. The browser
+  // transforms the already composited PDF and ink together; a sharper PDF
+  // raster is requested only after the sheet stops changing size. Without
+  // this, every 200px raster bucket can interrupt a tablet zoom gesture.
+  const [textureWidth, setTextureWidth] = useState(0);
+  useEffect(() => {
+    if (!continuous || !active || textureWidth <= 0) {
+      setTextureWidth(current => current === stageWidth ? current : stageWidth);
+      return;
+    }
+    const timer = window.setTimeout(() => setTextureWidth(stageWidth), 180);
+    return () => window.clearTimeout(timer);
+  }, [stageWidth, continuous, active]);
+  const requestedWidth = continuous && !active ? 512 : continuous && textureWidth > 0 ? textureWidth : stageWidth;
+  const renderedPage = usePdfPage(pdfDocument, pageIndex, Math.min(requestedWidth, 4096));
   const hasPdfPage = Boolean(pdfDocument && pageIndex < pdfDocument.pageCount);
   const loadingPdfPage = hasPdfPage && !renderedPage;
   const validSourceAspect = sourceAspect !== null && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : null;
