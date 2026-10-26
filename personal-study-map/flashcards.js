@@ -166,7 +166,7 @@
   async function checkAccountSetup(){
     if(accountToken)return;
     try{
-      const response=await fetch(ACCOUNT_API+"/setup-status",{cache:"no-store",
+      const response=await fetch(ACCOUNT_API+"/setup-status",{method:"GET",cache:"no-store",
         headers:{"Authorization":"Bearer "+owner()}});
       if(!response.ok)throw Error("HTTP "+response.status);
       accountSetupInfo=await response.json();
@@ -1582,6 +1582,8 @@
     ui.session=readActiveSession();
     ui.view="home";ui.feedback=null;ui.notice="";
     render();
+    // Defer the read-only status probe until the panel is actually opened.
+    if(!accountToken)setTimeout(()=>void checkAccountSetup(),150);
   };
   document.getElementById("close-flashcards").onclick=()=>{
     cleanupTimers();panel.classList.add("closed");panel.classList.remove("quiz-fullscreen","quiz-chat-open");document.body.classList.remove("quiz-learning-active");
@@ -1610,6 +1612,5 @@
   window.addEventListener("hashchange",openCardsFromLink);
   updateBadge();
   void (accountMode?(accountToken?updateAccount():Promise.resolve(false)):pullSync());
-  if(!accountToken)void checkAccountSetup();
   openCardsFromLink();
 })();
