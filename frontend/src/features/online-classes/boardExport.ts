@@ -11,7 +11,7 @@ import {
 } from './annotations';
 import { buildPdf, dataUrlToBytes, type JpegPage } from './pdfWriter';
 import type { PdfDoc } from './pdfDocument';
-import { penOutline, tracePenOutline } from './freehand';
+import { penOutline, strokeWidthPixels, tracePenOutline } from './freehand';
 import { shapeTextSizePx, textStyleFor } from './textStyles';
 import { A4_PORTRAIT_ASPECT } from './boardPaper';
 
@@ -72,7 +72,7 @@ function renderPage(
 /** Mirrors how the live canvas draws each kind, so the PDF matches the screen. */
 function shapeNode(shape: Shape, viewport: { width: number; height: number }, aspect: number): KonvaShape | null {
   const stroke = shape.color ?? '#111111';
-  const width = Math.max(1, (shape.width ?? 0.004) * viewport.width);
+  const width = strokeWidthPixels(shape.width, viewport, aspect);
   const opacity = shape.kind === 'highlighter' ? 0.35 : 1;
   const box = letterbox(viewport, aspect);
 
