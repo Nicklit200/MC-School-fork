@@ -170,7 +170,7 @@ export function LessonDetailPage() {
     if (!lesson) return '';
     if (isNativeLesson(lesson)) {
       return new Intl.DateTimeFormat('ru-RU', {
-        weekday: 'long', day: '2-digit', month: 'long', timeZone: 'Europe/Berlin',
+        weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin',
       }).format(new Date(lesson.startsAt)) + ' · ' + lessonDurationLabel(lesson, 'RU');
     }
     return new Intl.DateTimeFormat('ru-RU', {
