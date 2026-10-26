@@ -351,8 +351,8 @@ export function GroupLessonsPage() {
       <article key={lesson.eventId} className="lesson-agenda-card">
         <div className="lesson-agenda-card__row">
           <div className="lesson-agenda-card__when">
-            <strong>{native ? lessonDurationLabel(lesson, language) : formatStartTime(lesson.startsAt, language)}</strong>
-            <span>{native ? (language === 'DE' ? 'Dauer' : 'Длительность') : (language === 'DE' ? 'bis ' : 'до ') + formatStartTime(lesson.endsAt, language)}</span>
+            <strong>{formatStartTime(lesson.startsAt, language)}</strong>
+            <span>{(language === 'DE' ? 'bis ' : 'до ') + formatStartTime(lesson.endsAt, language)}</span>
           </div>
           <div className="lesson-agenda-card__info">
             <h3>{lesson.title}</h3><p>{kind}{lesson.meetUrl ? ' · Google Meet' : ''}</p>
