@@ -177,6 +177,45 @@ describe('WhiteboardCanvas canonical notebook projection', () => {
   });
 });
 
+describe('WhiteboardCanvas live-ink performance', () => {
+  const saved = {
+    operationId: 'saved-1', layerOwnerId: 'teacher', sequence: 1,
+    shape: { kind: 'pen' as const, color: '#111111', width: .004,
+      points: [[.2, .2], [.3, .3]] as [number, number][] },
+  };
+
+  it('renders the saved sheet apart from changing remote handwriting', () => {
+    const remote = { id: 'student:live-1', shape: {
+      kind: 'pen' as const, color: '#111111', width: .004,
+      points: [[.5, .5], [.55, .6]] as [number, number][],
+    } };
+    const { getAllByTestId, rerender } = render(<WhiteboardCanvas {...props}
+      shapes={[saved]} remoteDrafts={[remote]} />);
+    // Background is separate already; saved ink, live ink and controls must
+    // be three independent non-background layers on a normal PDF board.
+    const marks = getAllByTestId('marks-layer');
+    expect(marks).toHaveLength(3);
+    expect(marks[0].childElementCount).toBe(1);
+    expect(marks[1].childElementCount).toBe(1);
+    rerender(<WhiteboardCanvas {...props} shapes={[saved]} remoteDrafts={[{
+      ...remote, shape: { ...remote.shape, points: [...remote.shape.points, [.6, .6]] },
+    }]} />);
+    expect(getAllByTestId('marks-layer')[0].childElementCount).toBe(1);
+    expect(getAllByTestId('marks-layer')[1].childElementCount).toBe(1);
+  });
+
+  it('keeps partial eraser compositing in the saved marks layer', () => {
+    const { container, getAllByTestId } = render(<WhiteboardCanvas {...props}
+      shapes={[saved]} tool="erase" eraserMode="partial" />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'pen', clientX: 350, clientY: 200 });
+    const marks = getAllByTestId('marks-layer');
+    expect(marks).toHaveLength(3);
+    expect(marks[0].childElementCount).toBe(2);
+    expect(marks[1].childElementCount).toBe(0);
+  });
+});
+
 describe('WhiteboardCanvas live background', () => {
 
   it('renders video and normalized ink under the same stage zoom and pan in separate layers', () => {
