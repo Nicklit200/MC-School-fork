@@ -55,7 +55,7 @@
   const ACCOUNT_API="https://personal-life-api-production.up.railway.app/api/quiz-v2";
   let accountToken=localStorage.getItem(ACCOUNT_KEY)||"";
   let accountMode=!!accountToken || localStorage.getItem(ACCOUNT_MODE_KEY)==="true";
-  let accountOnline=false,accountFlight=null;
+  let accountOnline=false,accountFlight=null,accountSetupInfo=null;
   let serverQueue=readJson(QUEUE_KEY,null);
   const outbox=()=>readJson(OUTBOX_KEY,[]);
   const metadata=()=>({invalid:getInvalidCards(),deleted:getDeletedCards(),
@@ -162,6 +162,69 @@
     localStorage.setItem(ACCOUNT_MODE_KEY,"true");
     if(!await updateAccount())throw Error("Вход выполнен, но данные пока не подтверждены сервером");
   }
+
+  async function checkAccountSetup(){
+    if(accountToken)return;
+    try{
+      const response=await fetch(ACCOUNT_API+"/setup-status",{cache:"no-store",
+        headers:{"Authorization":"Bearer "+owner()}});
+      if(!response.ok)throw Error("HTTP "+response.status);
+      accountSetupInfo=await response.json();
+    }catch(error){
+      console.warn("Account status could not be loaded",error);
+      accountSetupInfo={error:true};
+    }
+    if(ui.view==="home"&&!panel.classList.contains("closed"))renderHome();
+  }
+  function accountStatusMarkup(){
+    if(accountToken)return "";
+    const configured=accountSetupInfo?.configured;
+    const maySetup=accountSetupInfo?.maySetup;
+    const status=configured===true
+      ?"Единый аккаунт уже существует. Введи пароль для входа, общий прогресс загрузится из PostgreSQL."
+      :configured===false
+      ?(maySetup?"Единый аккаунт ещё не создан. Создай его с паролем длиной не менее 12 символов."
+        :"Единый аккаунт ещё не создан. Создай его на компьютере, который раньше подключал коннектор «Мои навыки».")
+      :"Проверяем, создан ли единый аккаунт. История этого браузера пока не означает успешный перенос.";
+    const actions=configured===true
+      ?'<button type="submit" value="login" class="primary">Войти и загрузить историю</button>'
+      :configured===false
+        ?(maySetup?'<button type="submit" value="setup" class="primary">Создать единый аккаунт</button>':"")
+        :'<button type="submit" value="login" class="primary">Войти</button> <button type="submit" value="setup">Создать аккаунт</button>';
+    return '<section class="quiz-note" id="quiz-account-status" aria-label="Серверный аккаунт">'+
+      '<strong>Нет подтверждённого входа в единый аккаунт</strong><p>'+esc(status)+'</p>'+
+      (actions?'<form id="quiz-account-form" class="quiz-form">'+
+        '<label>Пароль (не менее 12 символов)<input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="180" required placeholder="12+ символов"></label>'+
+        '<div class="quiz-actions">'+actions+'</div></form>':"")+
+      '<p class="quiz-warning" id="quiz-account-error" role="alert" hidden></p>'+
+      '</section>';
+  }
+  async function handleAccountForm(event){
+    event.preventDefault();
+    const form=event.target, password=String(form.elements.namedItem("password")?.value||"");
+    const action=event.submitter?.value||"login";
+    const errorNode=form.parentElement?.querySelector("#quiz-account-error");
+    const showError=message=>{
+      if(errorNode){errorNode.textContent=message;errorNode.hidden=false;}
+      ui.notice=message;
+    };
+    if(password.length<12||password.length>180){
+      showError("Вход не выполнен: пароль должен содержать минимум 12 символов.");
+      return;
+    }
+    const buttons=[...form.querySelectorAll("button")];
+    buttons.forEach(x=>x.disabled=true);
+    try{
+      if(action==="setup")await setupAccount(password);
+      else await loginAccount(password);
+      ui.notice="Вход подтверждён сервером. История получена из PostgreSQL.";
+      renderHome();
+    }catch(error){
+      showError("Вход не выполнен: "+String(error.message||error));
+      buttons.forEach(x=>x.disabled=false);
+    }
+  }
+
   async function loginAccount(password){
     const response=await fetch(ACCOUNT_API+"/login",{method:"POST",
       headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});
@@ -683,6 +746,7 @@
     const globalSession = ui.session;
     const unrelated = globalSession && !sessionForCurrentContext();
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
+      accountStatusMarkup()+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
       countBox("Нужно повторить",due.length)+countBox("К повторению завтра",accountMode?(serverQueue?.upcomingTomorrow?.length??"…"):allCards({disregardTopic:true}).filter(c=>progress[c.id]&&cardState(c,progress).dueDate===engine.plusDays(engine.isoDay(),1)).length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
       countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+countBox("Подтверждено сервером",lastVerifiedAt?lastVerifiedCount:"Не проверено")+
@@ -702,7 +766,7 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
-      '<div class="quiz-note"><strong>Единый аккаунт</strong><p>'+(accountToken?(accountOnline?"Прогресс подтверждён PostgreSQL.":"Проверяем сервер. Неотправленные ответы сохраняются."):"Создай пароль на устройстве, ранее подключённом к коннектору «Мои навыки». Затем войди с ним на любом устройстве.")+'</p>'+(accountToken?'<button data-action="account-refresh" type="button">Обновить</button> <button data-action="account-password" type="button">Сменить пароль</button>':'<button data-action="account-login" type="button">Войти</button> <button data-action="account-setup" type="button">Создать аккаунт</button>')+'</div>'+
+      (accountToken?'<div class="quiz-note"><strong>Единый аккаунт подключён</strong><p>'+(accountOnline?"Серверная синхронизация подтверждена.":"Связь с сервером не подтверждена, ожидаем повторной отправки.")+'</p><button data-action="account-refresh" type="button">Обновить с сервера</button></div>':"")+
       '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(accountMode?(accountOnline?"Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Нет подтверждения сервера")+(outbox().length?" · Неотправленных ответов: "+outbox().length:"")+(readJson(META_KEY,null)?" · Есть изменения для отправки":""):(lastSyncError?"Нет связи с сервером":lastSyncAt?"Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение"))+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На всех устройствах используется один аккаунт и общая база PostgreSQL. Старые данные сохраняются до успешного переноса.</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
@@ -1497,6 +1561,7 @@
 
   host.addEventListener("click",handleClick);
   host.addEventListener("submit",event=>{
+    if(event.target?.id==="quiz-account-form"){void handleAccountForm(event);return;}
     if(event.target?.id!=="quiz-card-form")return;
     event.preventDefault();saveEditor(event.target);
   });
@@ -1540,5 +1605,6 @@
   window.addEventListener("hashchange",openCardsFromLink);
   updateBadge();
   void (accountMode?(accountToken?updateAccount():Promise.resolve(false)):pullSync());
+  if(!accountToken)void checkAccountSetup();
   openCardsFromLink();
 })();
