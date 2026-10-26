@@ -145,8 +145,9 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
     targetType,
     targetId,
     page: pageIndex,
-    // Retained pages still replay durable ink via REST; only visible pages need live previews.
-    enabled: active && (!camera || Boolean(ownerId)),
+    // Only visible shared PDF pages need previews. A notebook-camera page may
+    // still relay private pencil packets while its parent panel is hidden.
+    enabled: camera ? Boolean(ownerId) : active,
     personalOwnerId: ownerId,
     hostUserId,
     currentUserId: actorId,
