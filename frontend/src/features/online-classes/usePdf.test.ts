@@ -77,6 +77,20 @@ describe('usePdfPage', () => {
     expect(doc.renderPage).toHaveBeenCalledWith(1, 800);
   });
 
+  it('reuses one texture while a pinch changes the width inside the same 200px bucket', async () => {
+    const doc = fakeDoc();
+    const { result, rerender } = renderHook(({ width }) => usePdfPage(doc, 0, width),
+      { initialProps: { width: 720 } });
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(doc.renderPage).toHaveBeenCalledExactlyOnceWith(0, 800);
+    rerender({ width: 760 });
+    rerender({ width: 790 });
+    expect(doc.renderPage).toHaveBeenCalledTimes(1);
+    rerender({ width: 810 });
+    await waitFor(() => expect(doc.renderPage).toHaveBeenCalledTimes(2));
+    expect(doc.renderPage).toHaveBeenLastCalledWith(0, 1000);
+  });
+
   it('never shows the previous page while the next one renders', async () => {
     const doc = fakeDoc();
     const { result, rerender } = renderHook(({ index }) => usePdfPage(doc, index, 800), {
