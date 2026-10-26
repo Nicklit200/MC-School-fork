@@ -30,7 +30,7 @@ export function lessonDayInstant(date: string, hour = 0): Date {
  * On clock-change days, reject missing or duplicated times instead of silently moving a lesson.
  */
 export function lessonTimeInstant(date: string, time: string): Date {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return new Date(NaN);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return new Date(NaN);
   const localAsUtc = new Date(`${date}T${time}:00.000Z`);
   if (!Number.isFinite(localAsUtc.getTime()) || localAsUtc.toISOString().slice(0, 10) !== date) return new Date(NaN);
   const formatter = new Intl.DateTimeFormat('en-GB', {
