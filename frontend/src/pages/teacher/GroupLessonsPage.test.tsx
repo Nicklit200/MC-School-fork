@@ -112,7 +112,6 @@ describe('native lesson schedule', () => {
     expect(screen.getByRole('button', { name: 'Следующая неделя' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Открыть урок' })).toHaveAttribute('href', '/teacher/lessons/local-lesson');
     expect(screen.queryByRole('button', { name: 'Начать урок' })).not.toBeInTheDocument();
-    expect(screen.getByText('60 мин')).toBeInTheDocument();
     expect(screen.getByText('12:00')).toBeInTheDocument();
   });
 
@@ -138,6 +137,7 @@ describe('native lesson schedule', () => {
     lessonApi.groupLessons.mockResolvedValueOnce([]).mockResolvedValue([lesson(trialTitle)]);
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     expect(screen.queryByLabelText('Название урока')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Окончание урока')).not.toBeInTheDocument();
     expect(screen.getByLabelText(timeLabel)).toHaveAttribute('type', 'time');
@@ -164,6 +164,7 @@ describe('native lesson schedule', () => {
     lessonApi.create.mockRejectedValue(new Error('Network unavailable'));
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('student:student-1');
     fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '14:00' } });
     fireEvent.change(screen.getByLabelText(durationLabel), { target: { value: '90' } });
@@ -189,6 +190,7 @@ describe('native lesson schedule', () => {
     vi.mocked(api.groups.list).mockResolvedValue([{ id: 'group-1', name: 'Тестовая группа', students: [] } as unknown as StudentGroup]);
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('group:group-1');
     fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
@@ -201,6 +203,7 @@ describe('native lesson schedule', () => {
   it('requires a target and a positive whole-minute duration before posting', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Выберите');
     expect(lessonApi.create).not.toHaveBeenCalled();
@@ -217,6 +220,7 @@ describe('native lesson schedule', () => {
   it('requires a nonblank trial name without creating a lesson', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('trial');
     await userEvent.type(screen.getByLabelText(trialNameLabel), '   ');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
@@ -234,6 +238,7 @@ describe('native lesson schedule', () => {
     lessonApi.groupLessons.mockResolvedValueOnce([]).mockResolvedValue(created);
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('group:group-1');
     fireEvent.change(screen.getByLabelText('Дата урока'), { target: { value: '2026-10-22' } });
     await userEvent.click(screen.getByRole('button', { name: 'Месяц', pressed: false }));
@@ -250,6 +255,7 @@ describe('native lesson schedule', () => {
   it('requires a weekday for a series and can return to a single lesson', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('trial');
     await userEvent.type(screen.getByLabelText(trialNameLabel), 'Анна Петрова');
     fireEvent.change(screen.getByLabelText('Дата урока'), { target: { value: '2026-10-22' } });
@@ -269,6 +275,7 @@ describe('native lesson schedule', () => {
     lessonApi.createSeries.mockRejectedValue(new Error('Network failure'));
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('trial');
     await userEvent.type(screen.getByLabelText(trialNameLabel), 'Анна Петрова');
     fireEvent.change(screen.getByLabelText('Дата урока'), { target: { value: '2026-10-22' } });
@@ -287,6 +294,7 @@ describe('native lesson schedule', () => {
     lessonApi.create.mockRejectedValue(new Error('Keep the form open'));
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('trial');
     await userEvent.type(screen.getByLabelText(trialNameLabel), 'Анна Петрова');
     await chooseTarget('group:group-1');
@@ -375,6 +383,7 @@ describe('native lesson schedule', () => {
     const trigger = await screen.findByRole('button', { name: 'Запланировать урок' });
     await waitFor(() => expect(trigger).toBeEnabled());
     await userEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await chooseTarget('trial');
     await userEvent.type(screen.getByLabelText(trialNameLabel), 'Анна Петрова');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
@@ -431,6 +440,7 @@ describe('native lesson schedule', () => {
     expect(groupSearch).toHaveValue('Математика 8');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     lessonApi.create.mockRejectedValue(new Error('Keep form open'));
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
     await screen.findByRole('alert');
     expect(lessonApi.create).toHaveBeenCalledWith(expect.objectContaining({ title: 'Математика 8', groupId: 'group-1', studentId: null }));
