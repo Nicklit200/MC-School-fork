@@ -30,7 +30,7 @@ import { GestureController, type Intent } from './gestureController';
 import { shapeAt } from './hitTest';
 import { type InputMode, isPalmContact, normalizePointerKind } from './inputPolicy';
 import { shapeBounds, translateShape } from './shapeTransform';
-import { penOutline, tracePenOutline } from './freehand';
+import { penOutline, strokeWidthPixels, tracePenOutline } from './freehand';
 import { attachTabletInkInput, detectTabletInkBackend, getTabletInkPlatform } from '../../lib/tabletInkInput';
 import { normalizedTextSize, shapeTextSizePx, textStyleFor } from './textStyles';
 import { TabletBoardNavigation } from './tabletBoardNavigation';
@@ -891,7 +891,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const renderShape = (key: string, shape: Shape, dim = false) => {
     const stroke = shape.color ?? '#111111';
     // Stroke width is normalized to the surface, so it scales with the view.
-    const width = Math.max(1, (shape.width ?? 0.004) * sceneViewport.width);
+    const width = strokeWidthPixels(shape.width, sceneViewport, sceneAspect);
     const opacity = (shape.kind === 'highlighter' ? 0.35 : 1) * (dim ? 0.7 : 1);
 
     switch (shape.kind) {
