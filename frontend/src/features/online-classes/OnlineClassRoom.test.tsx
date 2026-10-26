@@ -407,6 +407,7 @@ describe('OnlineClassRoom', () => {
     expect(screen.queryByTestId('notebook-session')).not.toBeInTheDocument();
     await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
     expect(screen.getByTestId('board-personal-u1')).toHaveAttribute('data-active', 'true');
+    expect(boardProps.filter(p => p.targetId === 'personal-u1').at(-1)).toMatchObject({ compactPreview: false });
     expect(screen.queryByRole('region', { name: 'Встроенная тетрадь' })).not.toBeInTheDocument();
   });
 
@@ -436,7 +437,7 @@ describe('OnlineClassRoom', () => {
     expect(await within(camera).findByRole('button', { name: 'Ответы' })).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByRole('combobox'), 'all-student-boards');
     expect(screen.getByTestId('board-personal-u1-camera')).toBe(camera);
-    expect(boardProps.filter(p => p.targetType === 'NOTEBOOK_CAMERA').at(-1)).toMatchObject({ canAnnotate: false, active: true });
+    expect(boardProps.filter(p => p.targetType === 'NOTEBOOK_CAMERA').at(-1)).toMatchObject({ canAnnotate: false, active: true, compactPreview: true });
   });
 
   it('automatically opens the pupil’s private ordinary drawing surface on its first live camera frame', async () => {
