@@ -21,6 +21,7 @@ vi.mock('../../api/client', async (importOriginal) => {
 const lessonApi = vi.mocked(api.lessons);
 const trialNameLabel = 'Имя ученика';
 const durationLabel = 'Длительность урока, минут';
+const timeLabel = 'Время начала (Берлин)';
 
 function lesson(title = 'Математика без Google'): GroupLesson {
   const start = lessonDayInstant(schoolDateKey(new Date()), 12);
@@ -112,7 +113,7 @@ describe('native lesson schedule', () => {
     expect(screen.getByRole('link', { name: 'Открыть урок' })).toHaveAttribute('href', '/teacher/lessons/local-lesson');
     expect(screen.queryByRole('button', { name: 'Начать урок' })).not.toBeInTheDocument();
     expect(screen.getByText('60 мин')).toBeInTheDocument();
-    expect(screen.queryByText('12:00')).not.toBeInTheDocument();
+    expect(screen.getByText('12:00')).toBeInTheDocument();
   });
 
   it('keeps the scheduled time visible for imported Google lessons', async () => {
@@ -139,18 +140,20 @@ describe('native lesson schedule', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
     expect(screen.queryByLabelText('Название урока')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Окончание урока')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Начало урока')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(timeLabel)).toHaveAttribute('type', 'time');
     expect(screen.getByLabelText('Дата урока')).toHaveAttribute('type', 'date');
     await chooseTarget('trial');
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '13:00' } });
     await userEvent.type(screen.getByLabelText(trialNameLabel), 'Анна Петрова');
     fireEvent.change(screen.getByLabelText('Дата урока'), { target: { value: '2026-11-10' } });
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '16:30' } });
     fireEvent.change(screen.getByLabelText(durationLabel), { target: { value: '45' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
     await waitFor(() => expect(lessonApi.create).toHaveBeenCalledOnce());
     const payload = lessonApi.create.mock.calls[0][0];
     expect(payload).toMatchObject({ title: trialTitle, groupId: null, studentId: null });
-    expect(payload.startsAt).toBe('2026-11-09T23:00:00.000Z');
-    expect(payload.endsAt).toBe('2026-11-09T23:45:00.000Z');
+    expect(payload.startsAt).toBe('2026-11-10T15:30:00.000Z');
+    expect(payload.endsAt).toBe('2026-11-10T16:15:00.000Z');
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Урок создан: ' + trialTitle));
     expect(lessonApi.groupLessons).toHaveBeenCalledTimes(2);
     expect(screen.getAllByRole('link', { name: 'Открыть урок' })).toHaveLength(2);
@@ -162,6 +165,7 @@ describe('native lesson schedule', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
     await chooseTarget('student:student-1');
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '14:00' } });
     fireEvent.change(screen.getByLabelText(durationLabel), { target: { value: '90' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
@@ -169,6 +173,7 @@ describe('native lesson schedule', () => {
     expect(screen.getByRole('combobox', { name: 'Найти ученика' })).toHaveValue('Локальный ученик');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(screen.getByLabelText(durationLabel)).toHaveValue(90);
+    expect(screen.getByLabelText(timeLabel)).toHaveValue('14:00');
     expect(screen.getByRole('button', { name: 'Сохранить урок' })).toBeEnabled();
     expect(screen.queryByLabelText(trialNameLabel)).not.toBeInTheDocument();
   });
@@ -185,6 +190,7 @@ describe('native lesson schedule', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Запланировать урок' }));
     await chooseTarget('group:group-1');
+    fireEvent.change(screen.getByLabelText(timeLabel), { target: { value: '15:00' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить урок' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Урок создан: Тестовая группа'));
     expect(lessonApi.create).toHaveBeenCalledWith(expect.objectContaining({ title: 'Тестовая группа', groupId: 'group-1', studentId: null }));
@@ -236,7 +242,7 @@ describe('native lesson schedule', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Период: 22.10.2026 — 21.11.2026');
     await userEvent.click(screen.getByRole('button', { name: 'Создать серию (5)' }));
     await waitFor(() => expect(lessonApi.createSeries).toHaveBeenCalledOnce());
-    expect(lessonApi.createSeries).toHaveBeenCalledWith({ title: 'Группа 1', startDate: '2026-10-22', durationMinutes: 60, period: 'MONTH', weekdays: [4], groupId: 'group-1', studentId: null });
+    expect(lessonApi.createSeries).toHaveBeenCalledWith({ title: 'Группа 1', startDate: '2026-10-22', startTime: '15:00', durationMinutes: 60, period: 'MONTH', weekdays: [4], groupId: 'group-1', studentId: null });
     expect(lessonApi.create).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Создано уроков: 5'));
   });
