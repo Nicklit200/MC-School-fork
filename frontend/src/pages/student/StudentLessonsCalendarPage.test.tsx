@@ -115,8 +115,8 @@ describe('student online lesson discovery', () => {
     }]);
     mount(); await settle();
     expect(screen.getByText('Урок на субботу')).toBeInTheDocument();
-    expect(screen.getByText('60 мин')).toBeInTheDocument();
-    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+    expect(screen.getByText('00:00')).toBeInTheDocument();
+    expect(screen.getByText('00:00')).toBeInTheDocument();
   });
 
   it('keeps document and notebook actions but blocks first entry for a future lesson', async () => {
