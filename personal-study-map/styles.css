@@ -2222,9 +2222,6 @@ body.quiz-learning-active{overflow:hidden}
  .quiz-fullscreen .quiz-session-buttons button{font-size:12px;padding:8px}
 }
 
-/* Always-visible reopen control for the study AI drawer */
-.flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{position:fixed!important;right:22px!important;top:84px!important;z-index:2100!important;display:block!important;min-width:104px!important;padding:12px 17px!important;border-radius:12px!important;border:1px solid #a9c9f5!important;background:#256ac0!important;color:#fff!important;font-size:14px!important;font-weight:800!important;box-shadow:0 5px 18px #1a488133!important;cursor:pointer!important}
-@media(max-width:760px){.flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{top:auto!important;bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;right:16px!important}}
 
 /* Unified personal study prompt settings */
 .study-settings-open{position:fixed;bottom:20px;right:20px;z-index:700;border:1px solid #b8cee8;border-radius:12px;background:#fff;color:#24527c;padding:11px 16px;font:600 14px inherit;cursor:pointer;box-shadow:0 4px 18px #16385a22}
@@ -2248,8 +2245,6 @@ body.quiz-learning-active{overflow:hidden}
  .flashcard-panel.quiz-fullscreen #flashcard-app{position:absolute!important;top:82px;bottom:0;left:50%!important;transform:translateX(-50%)!important;width:min(860px,calc(100vw - 440px))!important;max-width:860px!important;margin:0!important;overflow-y:auto!important;overflow-x:visible!important;padding:0 8px 32px!important;box-sizing:border-box}
  .flashcard-panel.quiz-fullscreen .quiz-learning-chat{position:absolute!important;top:82px;right:16px;bottom:16px;width:min(360px,calc((100vw - 900px)/2 - 24px));min-width:250px;max-width:360px;box-sizing:border-box;z-index:5;box-shadow:0 10px 36px #24456720}
  .flashcard-panel.quiz-fullscreen:not(.quiz-chat-open) .quiz-learning-chat{display:none!important}
- .flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{top:24px!important;right:58px!important;z-index:8!important;font-size:13px!important;min-width:92px!important;padding:9px 12px!important}
- .flashcard-panel.quiz-fullscreen.quiz-chat-open .quiz-floating-chat-toggle{display:none!important}
  .flashcard-panel.quiz-fullscreen .quiz-session-buttons #quiz-chat-toggle{display:none!important}
  .flashcard-panel.quiz-fullscreen .quiz-quick-grade{top:230px;left:max(12px,calc(50% - 620px));width:155px}
 }
@@ -2264,8 +2259,6 @@ body.quiz-learning-active{overflow:hidden}
  .flashcard-panel.quiz-fullscreen .quiz-quick-grade{position:static;width:auto}
 }
 @media(max-width:760px){
- .flashcard-panel.quiz-fullscreen .quiz-floating-chat-toggle{right:16px!important;bottom:16px!important;top:auto!important}
- .flashcard-panel.quiz-fullscreen.quiz-chat-open .quiz-floating-chat-toggle{display:none!important}
  .flashcard-panel.quiz-fullscreen .quiz-session-buttons #quiz-chat-toggle{display:none!important}
 }
 
@@ -2310,4 +2303,29 @@ body.quiz-learning-active{overflow:hidden}
 @media(max-width:760px){
  .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
  .flashcard-panel.quiz-fullscreen #flashcard-app .quiz-question-actions.quiz-four-actions button{font-size:13px!important;min-height:64px!important}
+}
+
+/* Contextual AI chat stays in document flow, underneath "Дальше". */
+#flashcard-app .quiz-chat-inline-toggle{
+  display:block;
+  width:100%;
+  min-height:46px;
+  margin:0 0 14px;
+  padding:11px 14px;
+  border-radius:10px;
+  border:1px solid #a9c9f5;
+  background:#edf5ff;
+  color:#185eac;
+  font-size:14px;
+  font-weight:800;
+  cursor:pointer;
+}
+#flashcard-app .quiz-chat-inline-toggle[aria-expanded="true"]{
+  background:#d9eaff;
+  border-color:#7caee9;
+}
+.flashcard-panel.quiz-fullscreen #flashcard-app .quiz-next{
+  position:static;
+  box-shadow:none;
+  margin-bottom:8px;
 }

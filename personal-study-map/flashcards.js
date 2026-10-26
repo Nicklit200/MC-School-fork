@@ -625,14 +625,10 @@
     panel.classList.toggle("quiz-fullscreen",active);
     document.body.classList.toggle("quiz-learning-active",active && !panel.classList.contains("closed"));
     let chat=panel.querySelector("#quiz-learning-chat");
-    let floating=panel.querySelector("#quiz-floating-chat-toggle");
-    if(!active){chat?.remove();floating?.remove();return;}
-    if(!floating){
-      floating=document.createElement("button");
-      floating.type="button";floating.id="quiz-floating-chat-toggle";
-      floating.className="quiz-floating-chat-toggle";
-      floating.onclick=()=>{panel.classList.toggle("quiz-chat-open");updateChatToggle();};
-      panel.appendChild(floating);
+    if(!active){
+      chat?.remove();
+      panel.classList.remove("quiz-chat-open");
+      return;
     }
     updateChatToggle();
     if(chat)return;
@@ -662,13 +658,15 @@
       finally{button.disabled=false;messages.scrollTop=messages.scrollHeight;}
     };
   }
+  function chatToggleMarkup(){
+    return '<button id="quiz-chat-toggle" class="quiz-chat-inline-toggle" '+
+      'data-action="toggle-study-chat" type="button" aria-expanded="false">ИИ-чат</button>';
+  }
   function updateChatToggle(){
-    const floating=panel.querySelector("#quiz-floating-chat-toggle");
-    if(floating){const open=panel.classList.contains("quiz-chat-open");floating.textContent=open?"Скрыть чат":"ИИ-чат";floating.setAttribute("aria-expanded",String(open));}
     const button=panel.querySelector("#quiz-chat-toggle");
     if(button){
       const open=panel.classList.contains("quiz-chat-open");
-      button.textContent=open?"Скрыть ИИ-чат":"Открыть ИИ-чат";
+      button.textContent=open?"Скрыть ИИ-чат":"ИИ-чат";
       button.setAttribute("aria-expanded",String(open));
     }
   }
@@ -738,13 +736,13 @@
     host.innerHTML = '<div class="quiz-session-head">'+
       '<div><span class="panel-label">'+(session.mode==="PRACTICE"?"СВОБОДНАЯ ТРЕНИРОВКА":"ПОВТОРЕНИЕ ПО РАСПИСАНИЮ")+
       '</span><h2>'+esc(card.skillTitle||"Карточка")+'</h2></div>'+
-      '<div class="quiz-session-buttons"><button id="quiz-chat-toggle" data-action="toggle-study-chat" type="button">Открыть ИИ-чат</button><button data-action="home" type="button">Пауза</button></div></div>'+
+      '<button data-action="home" type="button">Пауза</button></div>'+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
       '<div class="quiz-progress-row"><span>Завершено '+answered+' из '+total+'</span>'+
       (question.expiresAt!=null?'<strong id="quiz-timer" class="quiz-timer"></strong>':"")+
       '</div><div class="quiz-progress-track"><div style="width:'+
       Math.round((answered/total)*100)+'%"></div></div>'+
-      '<div class="quiz-question"><small>Карточка № '+esc(card.id)+'</small><div>'+esc(card.question)+'</div></div>'+
+      '<div class="quiz-question"><div>'+esc(card.question)+'</div></div>'+
       '<div class="quiz-options">'+controls+'</div>'+
       (!feedback?'<div class="quiz-question-actions quiz-four-actions">'+
         '<button type="button" data-action="quick-known" class="quiz-quick-known"><span>✓ Знаю</span><small>По расписанию</small></button>'+
@@ -759,8 +757,8 @@
         '. Карточка повторится в этом занятии.')+
         '</div>'+explanationMarkup(card)+
         '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
-        '<button class="quiz-next" data-action="next" type="button">Дальше →</button>':
-        '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>')+
+        '<button class="quiz-next" data-action="next" type="button">Дальше →</button>'+chatToggleMarkup():
+        '<div class="quiz-note">Выбери один ответ. Проверка происходит сразу после нажатия.</div>'+chatToggleMarkup())+
       '<p class="quiz-storage-note">Ошибки с первой попытки учитываются отдельно от окончательного ответа.</p>';
     updateChatToggle();
     if (!feedback) startCountdown();
@@ -822,7 +820,7 @@
       '<button data-action="home" type="button">Пауза</button></div>'+
       '<div class="quiz-progress-row"><span>Завершено '+answered+' из '+total+'</span></div>'+
       '<div class="quiz-progress-track"><div style="width:'+Math.round(answered/total*100)+'%"></div></div>'+
-      '<div class="quiz-question"><small>Карточка № '+esc(last.id)+'</small><div>'+esc(last.question)+'</div></div><div class="quiz-options">'+
+      '<div class="quiz-question"><div>'+esc(last.question)+'</div></div><div class="quiz-options">'+
       options.map((option,i)=>'<button class="quiz-option'+
         (option===feedback.correctAnswer?' correct':!feedback.correct&&option===selected?' wrong':'')+
         '" disabled type="button"><span class="quiz-option-letter">'+String.fromCharCode(65+i)+
@@ -833,8 +831,9 @@
       '. Вопрос появится ещё раз в этом занятии.':"")+
       '</div>'+explanationMarkup(last)+
       '<p class="quiz-manual-hint">Прочитай объяснение. Переход только по кнопке «Дальше».</p>'+
-      '<button class="quiz-next" data-action="next" type="button">Дальше →</button>'+
+      '<button class="quiz-next" data-action="next" type="button">Дальше →</button>'+chatToggleMarkup()+
       '<button class="quiz-invalid-after" data-action="invalid" type="button">Некорректный вопрос · не учитывать</button>';
+    updateChatToggle();
     // No automatic transition: even a correct answer deserves time to read the rationale.
     host.querySelector?.(".quiz-explanation")?.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
@@ -894,7 +893,7 @@
         (explanationForCard({id:item.cardId})?
           '<details class="quiz-result-explanation"><summary>Почему этот ответ правильный</summary><p>'+
           esc(explanationForCard({id:item.cardId}))+'</p></details>':"")+
-        '<small>Карточка № '+esc(item.cardId)+' · Попыток: '+Number(item.attempts||1)+'</small></div>').join("")+
+        '<small>Попыток: '+Number(item.attempts||1)+'</small></div>').join("")+
       '</div><div class="quiz-actions"><button data-action="home" class="primary" type="button">Готово</button>'+
       '<button data-action="practice" type="button">Потренироваться ещё</button></div>';
   }
@@ -1229,8 +1228,12 @@
     } else if (action==="quick-unknown") {
       quickGrade(false);
     } else if (action==="toggle-study-chat") {
-      panel.classList.toggle("quiz-chat-open");
+      const open=panel.classList.toggle("quiz-chat-open");
       updateChatToggle();
+      if(open && window.innerWidth<=760){
+        requestAnimationFrame(()=>panel.querySelector("#quiz-learning-chat")
+          ?.scrollIntoView?.({behavior:"smooth",block:"start"}));
+      }
     } else if (action==="ask-coach") {
       const card=ui.feedback && ui.lastCard?ui.lastCard:currentCard();
       if(!card)return;

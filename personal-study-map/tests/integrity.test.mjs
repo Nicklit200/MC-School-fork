@@ -30,4 +30,10 @@ function walk(value){if(!value||typeof value!=='object')return;if(Array.isArray(
 walk(JSON.parse(readFileSync(root+'data/study.json','utf8')));
 assert.ok(ids.length>0);
 assert.equal(new Set(ids).size,ids.length,'Card IDs must be globally unique');
-console.log('PASS syntax, Berlin midnight, DST, year rollover, first-attempt scoring, stable unique IDs: '+ids.length);
+const quizSource=readFileSync(root+'flashcards.js','utf8');
+assert.doesNotMatch(quizSource,/Карточка №/,'Card IDs must remain internal');
+assert.doesNotMatch(quizSource,/quiz-floating-chat-toggle/,'Chat must not overlay card text');
+const belowNextMarker="Дальше →</button>'"+"+chatToggleMarkup()";
+assert.equal(quizSource.split(belowNextMarker).length-1,2,
+  'Both feedback paths must put AI chat directly below Next');
+console.log('PASS syntax, Berlin midnight, DST, year rollover, first-attempt scoring, stable unique IDs, inline chat: '+ids.length);
