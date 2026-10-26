@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Николай",
-  "updatedAt": "2026-10-15",
+  "updatedAt": "2026-10-25",
   "semesters": [
     {
       "id": "ws-2026-27",
@@ -5252,6 +5252,15 @@
                   "wrongAnswer2": "Das Verschieben ohne Drehung.",
                   "wrongAnswer3": "Das Verändern der Bildauflösung.",
                   "explanation": "Rotation = Drehung; Skalierung = Größenänderung; Translation = Verschiebung."
+                },
+                {
+                  "id": "cg-20261025-review-07",
+                  "question": "Was ist die Hauptaufgabe des Vertex Shaders?",
+                  "answer": "Die Position der Vertices transformieren.",
+                  "wrongAnswer1": "Alle fertigen Pixel im Framebuffer speichern.",
+                  "wrongAnswer2": "Die endgültige Farbe jedes Fragments berechnen.",
+                  "wrongAnswer3": "Die Eingabegeräte der Anwendung abfragen.",
+                  "explanation": "Vertex Shader обрабатывает вершины; Fragment Shader работает с фрагментами."
                 }
               ]
             },
@@ -5369,10 +5378,16 @@
               "description": "Объяснять входы и выходы двух демонстрационных шейдеров, uniform-переменные и преобразование projectionMatrix * modelViewMatrix * vertexPosition.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 610,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5387,10 +5402,16 @@
               "description": "Объяснять отличие положения точки от направления вектора и почему вектор инвариантен относительно переноса начала координат.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 965,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5405,10 +5426,16 @@
               "description": "Представлять вектор координатами, вычислять его длину и нормировать.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 965,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5423,10 +5450,16 @@
               "description": "Считать скалярное произведение, находить угол через cos и распознавать перпендикулярные векторы.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 965,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5441,10 +5474,16 @@
               "description": "Вычислять векторное произведение трёхмерных векторов и объяснять перпендикулярность, длину и ориентацию правой тройки.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 1220,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5459,10 +5498,16 @@
               "description": "Проверять, что базисные векторы попарно ортогональны и имеют единичную длину.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 1220,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5477,10 +5522,16 @@
               "description": "Выполнять умножение матрицы на вектор и объяснять его применение для геометрических преобразований.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 1220,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5495,10 +5546,16 @@
               "description": "Объяснять действие переноса, поворота, масштабирования, сдвига (shear) и проекции на трёхмерную геометрию.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 1575,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5513,15 +5570,32 @@
               "description": "Объяснять дополнительную координату w, отличие точек и векторов и необходимость однородных координат в 3D-графике.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 1575,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-01",
+                  "question": "Was bedeutet w in homogenen Koordinaten?",
+                  "answer": "Punkt: w=1; Richtungsvektor: w=0.",
+                  "wrongAnswer1": "Beide haben w=1, wenn sie im selben Raum liegen.",
+                  "wrongAnswer2": "Punkt: w=0; Richtungsvektor: w=1.",
+                  "wrongAnswer3": "w gibt ausschließlich die Entfernung zur Kamera an.",
+                  "explanation": "При w=0 перенос не влияет на вектор направления; для обычной точки w=1."
+                }
+              ]
             },
             {
               "id": "cg-transform-03",
@@ -5531,15 +5605,32 @@
               "description": "Составлять матрицу переноса и применять её к точке; объяснять, почему вектор направления не сдвигается.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 1575,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-02",
+                  "question": "Was ergibt T(5,-2,1) für den Punkt (1,2,3)?",
+                  "answer": "(6,0,4)",
+                  "wrongAnswer1": "(6,4,4)",
+                  "wrongAnswer2": "(5,-2,1)",
+                  "wrongAnswer3": "(1,0,3)",
+                  "explanation": "Translation складывает координаты точки со смещением: (1+5,2-2,3+1)."
+                }
+              ]
             },
             {
               "id": "cg-transform-04",
@@ -5549,15 +5640,32 @@
               "description": "Составлять матрицу масштабирования и различать равномерное и неравномерное масштабирование.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 1830,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-03",
+                  "question": "Welche Wirkung hat S(2,0.5,1)?",
+                  "answer": "X wird verdoppelt, Y halbiert, Z bleibt gleich.",
+                  "wrongAnswer1": "X wird halbiert, Y verdoppelt, Z bleibt gleich.",
+                  "wrongAnswer2": "Alle drei Achsen werden verdoppelt.",
+                  "wrongAnswer3": "Der Körper wird nur verschoben, nicht skaliert.",
+                  "explanation": "Масштабирование действует независимо по каждой оси."
+                }
+              ]
             },
             {
               "id": "cg-transform-05",
@@ -5567,15 +5675,32 @@
               "description": "Читать и применять матрицы поворота вокруг осей x, y и z; объяснять ортогональность матрицы.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 1830,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-04",
+                  "question": "Welche Koordinate bleibt bei einer Rotation um Z unverändert?",
+                  "answer": "Die Z-Koordinate.",
+                  "wrongAnswer1": "Die X-Koordinate.",
+                  "wrongAnswer2": "Die Y-Koordinate.",
+                  "wrongAnswer3": "Alle drei Koordinaten.",
+                  "explanation": "При вращении вокруг оси Z изменяются X и Y, а Z остаётся прежней."
+                }
+              ]
             },
             {
               "id": "cg-transform-06",
@@ -5583,17 +5708,39 @@
               "title": "Transformationsreihenfolge beachten",
               "subtitle": "Konkatenation · Nichtkommutativität · Folie 48",
               "description": "Вычислять последовательные преобразования в правильном порядке и показывать, почему умножение матриц некоммутативно.",
-              "mastery": 0,
+              "mastery": 25,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 1830,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                },
+                {
+                  "date": "2026-10-25",
+                  "type": "verified-answer",
+                  "note": "Верный ответ C: при T·R·S·P первой применяется Skalierung."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-05",
+                  "question": "Welche Transformation wirkt bei T · R · S · P zuerst?",
+                  "answer": "Skalierung S, danach Rotation R, zuletzt Translation T.",
+                  "wrongAnswer1": "Translation T, danach Rotation R, zuletzt Skalierung S.",
+                  "wrongAnswer2": "Rotation R, danach Skalierung S, zuletzt Translation T.",
+                  "wrongAnswer3": "Skalierung S, danach Translation T, zuletzt Rotation R.",
+                  "explanation": "Для вектора-столбца преобразования читаются справа налево."
+                }
+              ]
             },
             {
               "id": "cg-transform-07",
@@ -5603,15 +5750,32 @@
               "description": "Отличать преобразования, сохраняющие форму и расстояния, от масштабирования и сдвига.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 2085,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-09",
+                  "question": "Welche Transformation ist eine Starrkörpertransformation?",
+                  "answer": "Translation und Rotation ohne Änderung der Form.",
+                  "wrongAnswer1": "Rotation und unterschiedliche Skalierung der Achsen.",
+                  "wrongAnswer2": "Scherung und Skalierung eines Modells.",
+                  "wrongAnswer3": "Eine Projektion auf die Bildebene.",
+                  "explanation": "Жёсткое преобразование сохраняет расстояния между точками объекта."
+                }
+              ]
             },
             {
               "id": "cg-scene-01",
@@ -5621,10 +5785,16 @@
               "description": "Объяснять, как дочерние объекты наследуют преобразования родителей на примере велосипеда и робота.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 2440,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5639,10 +5809,16 @@
               "description": "Планировать отношения объектов для обращения планеты вокруг Солнца и Луны вокруг планеты с собственным вращением.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 2440,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5657,15 +5833,32 @@
               "description": "Применять обновление общей матрицы G при обходе и учитывать, что последняя записанная трансформация действует на объект первой.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 2440,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-06",
+                  "question": "Wie berechnet sich die Gesamtmatrix eines Kindknotens?",
+                  "answer": "G_kind = G_parent · T_lokal",
+                  "wrongAnswer1": "G_kind = T_lokal · G_parent",
+                  "wrongAnswer2": "G_kind = G_parent + T_lokal",
+                  "wrongAnswer3": "G_kind = G_parent − T_lokal",
+                  "explanation": "Локальное преобразование дочернего узла умножают справа на матрицу родителя."
+                }
+              ]
             },
             {
               "id": "cg-scene-04",
@@ -5675,15 +5868,32 @@
               "description": "Понимать, зачем GPU выполняет сходные операции над большим числом пикселей параллельно.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 2695,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-08",
+                  "question": "Was bedeutet SIMD bei der GPU-Verarbeitung?",
+                  "answer": "Eine Instruktion arbeitet auf mehreren Datenelementen.",
+                  "wrongAnswer1": "Viele Instruktionen werden zwingend auf einem einzigen Pixel seriell ausgeführt.",
+                  "wrongAnswer2": "Jeder Pixel erhält ein eigenes vollständig unabhängiges Programm.",
+                  "wrongAnswer3": "Die GPU verarbeitet grundsätzlich nur ein Pixel pro Takt.",
+                  "explanation": "SIMD означает Single Instruction, Multiple Data; современные GPU используют близкую модель SIMT."
+                }
+              ]
             },
             {
               "id": "cg-rotation-01",
@@ -5691,17 +5901,39 @@
               "title": "Numerische Probleme verketteter Rotationen erklären",
               "subtitle": "Rundungsfehler · Drift · Scherung · Folie 57–64",
               "description": "Сравнивать три варианта многократного вращения и объяснять накопление погрешностей и пересчёт матрицы из угла.",
-              "mastery": 0,
+              "mastery": 25,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 3050,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                },
+                {
+                  "date": "2026-10-25",
+                  "type": "verified-answer",
+                  "note": "Верный ответ B: положение лучше считать по общему углу от исходных данных."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-10",
+                  "question": "Warum kann fortgesetztes Multiplizieren von Rotationsmatrizen problematisch sein?",
+                  "answer": "Rundungsfehler können die Orthogonalität der Matrix stören.",
+                  "wrongAnswer1": "Jede Rotation vergrößert den Körper zwangsläufig um Faktor zwei.",
+                  "wrongAnswer2": "Rotationsmatrizen können grundsätzlich nicht multipliziert werden.",
+                  "wrongAnswer3": "Die Matrix verliert bei jeder Rotation sofort ihre vierte Zeile.",
+                  "explanation": "Численные ошибки могут накапливаться и приводить к небольшой деформации."
+                }
+              ]
             },
             {
               "id": "cg-rotation-02",
@@ -5711,15 +5943,32 @@
               "description": "Объяснять на примере +90° и -90°, почему поэлементная интерполяция матриц ориентации не подходит.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 3050,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-11",
+                  "question": "Was kann bei linearer Interpolation zweier Rotationsmatrizen passieren?",
+                  "answer": "Das Ergebnis kann skalieren oder scheren statt nur zu rotieren.",
+                  "wrongAnswer1": "Die resultierende Matrix ist immer eine perfekte Rotation.",
+                  "wrongAnswer2": "Die Z-Koordinate wird bei jeder Interpolation automatisch null.",
+                  "wrongAnswer3": "Die Ausgangsorientierung wird unabhängig vom Interpolationsfaktor beibehalten.",
+                  "explanation": "Средняя матрица не обязана быть ортогональной, поэтому может искажать объект."
+                }
+              ]
             },
             {
               "id": "cg-rotation-03",
@@ -5729,10 +5978,16 @@
               "description": "Уметь описывать ориентацию последовательностью поворотов вокруг фиксированных главных осей.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 3050,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
@@ -5747,15 +6002,32 @@
               "description": "Объяснять совпадение двух осей при особых углах и потерю одной степени свободы.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 3305,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-12",
+                  "question": "Was ist die Ursache eines Gimbal Locks?",
+                  "answer": "Zwei Rotationsparameter werden abhängig; ein Freiheitsgrad geht verloren.",
+                  "wrongAnswer1": "Der Körper kann sich physikalisch nicht mehr bewegen.",
+                  "wrongAnswer2": "Die Translation löscht alle Rotationswinkel.",
+                  "wrongAnswer3": "Die Matrix wird bei jedem Winkel von 45° singulär.",
+                  "explanation": "Проблема возникает в представлении ориентации тремя углами при особой конфигурации осей."
+                }
+              ]
             },
             {
               "id": "cg-rotation-05",
@@ -5763,17 +6035,39 @@
               "title": "Achse-Winkel-Darstellung verstehen",
               "subtitle": "Euler · Rotationsachse · Winkel · Folie 71–73",
               "description": "Представлять поворот как ось и угол, объяснять преимущества и ограничения такой формы записи.",
-              "mastery": 0,
+              "mastery": 25,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 3305,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                },
+                {
+                  "date": "2026-10-25",
+                  "type": "verified-answer",
+                  "note": "Верный ответ B: одно вращение представляется осью и углом."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-13",
+                  "question": "Womit beschreibt die Achse-Winkel-Darstellung eine Rotation?",
+                  "answer": "Mit einer Einheitsachse und einem Drehwinkel.",
+                  "wrongAnswer1": "Nur mit drei Positionskoordinaten.",
+                  "wrongAnswer2": "Mit der Skalierung entlang X, Y und Z.",
+                  "wrongAnswer3": "Mit genau drei aufeinanderfolgenden Translationen.",
+                  "explanation": "Одно 3D-вращение задаётся направлением оси и углом вокруг неё."
+                }
+              ]
             },
             {
               "id": "cg-quaternion-01",
@@ -5783,15 +6077,32 @@
               "description": "Объяснять структуру кватерниона и связь с представлением поворота через ось и угол.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 3660,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-16",
+                  "question": "Wann ist ein Quaternion ein Einheitsquaternion?",
+                  "answer": "Wenn seine Norm gleich 1 ist.",
+                  "wrongAnswer1": "Wenn die skalare Komponente stets 1 ist.",
+                  "wrongAnswer2": "Wenn alle vier Komponenten jeweils 1 sind.",
+                  "wrongAnswer3": "Wenn die Vektorkomponente zwingend 0 ist.",
+                  "explanation": "Норма: √(s²+x²+y²+z²). Для вращений используют норму 1."
+                }
+              ]
             },
             {
               "id": "cg-quaternion-02",
@@ -5799,17 +6110,48 @@
               "title": "Quaternionen multiplizieren und invertieren",
               "subtitle": "Nichtkommutativität · Inverse · Folie 76",
               "description": "Выполнять основные операции с кватернионами и понимать порядок композиции поворотов.",
-              "mastery": 0,
+              "mastery": 25,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 310,
               "y": 3660,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                },
+                {
+                  "date": "2026-10-25",
+                  "type": "verified-answer",
+                  "note": "Верный ответ B: при вращениях сначала p, потом q, произведение q·p."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-17",
+                  "question": "Wie lautet q⁻¹ für ein Einheitsquaternion q=[s,v]?",
+                  "answer": "q⁻¹=[s,-v]",
+                  "wrongAnswer1": "q⁻¹=[-s,v]",
+                  "wrongAnswer2": "q⁻¹=[s,v] für jedes Quaternion.",
+                  "wrongAnswer3": "q⁻¹=[1/s,1/v] komponentenweise.",
+                  "explanation": "Обратный единичный кватернион получается сменой знака векторной части."
+                },
+                {
+                  "id": "cg-20261025-review-20",
+                  "question": "Zuerst Rotation p, dann Rotation q: Welches Gesamtquaternion?",
+                  "answer": "q · p",
+                  "wrongAnswer1": "p · q",
+                  "wrongAnswer2": "p + q",
+                  "wrongAnswer3": "q − p",
+                  "explanation": "Объединение кватернионов учитывает порядок: сначала действует правый множитель."
+                }
+              ]
             },
             {
               "id": "cg-quaternion-03",
@@ -5819,15 +6161,32 @@
               "description": "Применять правило представления вектора чисто мнимым кватернионом и формулу вращения.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 620,
               "y": 3660,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-19",
+                  "question": "Welche Formel dreht den Vektor v mit Quaternion q?",
+                  "answer": "v' = q · [0,v] · q⁻¹",
+                  "wrongAnswer1": "v' = q + [0,v] + q⁻¹",
+                  "wrongAnswer2": "v' = q⁻¹ · [0,v] · q für dasselbe q",
+                  "wrongAnswer3": "v' = q · [1,v] · q",
+                  "explanation": "Вектор записывают как чистый кватернион со скалярной частью 0."
+                }
+              ]
             },
             {
               "id": "cg-quaternion-04",
@@ -5837,15 +6196,41 @@
               "description": "Записывать единичный кватернион для заданных оси и угла; понимать, что q и -q задают одинаковое вращение.",
               "mastery": 0,
               "weight": 1,
-              "lastUpdated": null,
+              "lastUpdated": "2026-10-25",
               "x": 0,
               "y": 3915,
-              "evidence": [],
+              "evidence": [
+                {
+                  "date": "2026-10-25",
+                  "type": "lesson",
+                  "note": "Разбор и повторение Computergrafik по 1Pipeline.pdf, страницы до 79 включительно; без автоматического зачёта мастерства."
+                }
+              ],
               "review": {
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-15",
+                  "question": "Welches Quaternion beschreibt Winkel θ um die Einheitsachse a?",
+                  "answer": "q=[cos(θ/2), a·sin(θ/2)]",
+                  "wrongAnswer1": "q=[cos(θ), a·sin(θ)]",
+                  "wrongAnswer2": "q=[sin(θ/2), a·cos(θ/2)]",
+                  "wrongAnswer3": "q=[θ, a·θ]",
+                  "explanation": "В кватернионе вращения используется половинный угол θ/2."
+                },
+                {
+                  "id": "cg-20261025-review-18",
+                  "question": "Was gilt für die Quaternionen q und −q als Rotationen?",
+                  "answer": "Sie beschreiben dieselbe Orientierung.",
+                  "wrongAnswer1": "Sie beschreiben zwingend entgegengesetzte Drehungen.",
+                  "wrongAnswer2": "−q dreht nur mit halber Winkelgeschwindigkeit.",
+                  "wrongAnswer3": "Nur q kann ein Einheitsquaternion sein.",
+                  "explanation": "q и −q задают одно и то же пространственное вращение."
+                }
+              ]
             },
             {
               "id": "cg-quaternion-05",
@@ -5881,7 +6266,18 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261025-review-14",
+                  "question": "Wofür verwendet man SLERP bei Quaternionen?",
+                  "answer": "Zur sphärischen Interpolation von Orientierungen.",
+                  "wrongAnswer1": "Um zwei Punktkoordinaten komponentenweise zu addieren.",
+                  "wrongAnswer2": "Zur Berechnung der Polygonanzahl einer Szene.",
+                  "wrongAnswer3": "Für eine gleichmäßige Skalierung ohne Rotation.",
+                  "explanation": "SLERP задаёт плавный переход между единичными кватернионами."
+                }
+              ]
             },
             {
               "id": "cg-camera-01",
@@ -6279,6 +6675,60 @@
     }
   ],
   "sessions": [
+    {
+      "id": "session-2026-10-25-computergrafik-to-79",
+      "semesterId": "ws-2026-27",
+      "examId": "exam-computergrafik",
+      "date": "2026-10-25",
+      "title": "Computergrafik: Transformationen, Szenengraphen und Quaternionen (bis S. 79)",
+      "summary": "Изучены и повторены Punkte/Vektoren, Skalar- und Kreuzprodukt, homogene Koordinaten, Matrix-Transformationen (T/R/S), порядок умножения, Szenengraph und GPU, численные ошибки вращений, Interpolation, Gimbal Lock, Axis-Angle и Quaternionen (умножение, обратный кватернион, q·v·q⁻¹, q и −q). Правильные ответы в чате отмечены как проверенные только для 4 соответствующих навыков; остальные отмечены как разобранные без повышения мастерства. Создано 20 новых тестовых карточек с 4 вариантами ответа.",
+      "checkpoint": {
+        "document": "1Pipeline.pdf",
+        "course": "Computergrafik",
+        "date": "2026-10-25",
+        "slidesCovered": "до страницы 79 из 107",
+        "lastExplainedPage": 79,
+        "nextPage": 80,
+        "totalPages": 107,
+        "note": "После слайда 79 (Einige Rechnungen) продолжить со слайда 80. Проверены 4 коротких ответа; полноценный тест по карточкам ещё не проходился."
+      },
+      "changes": [
+        {
+          "skillId": "cg-transform-06",
+          "skillTitle": "Transformationsreihenfolge beachten",
+          "from": 0,
+          "to": 25
+        },
+        {
+          "skillId": "cg-rotation-01",
+          "skillTitle": "Numerische Probleme verketteter Rotationen erklären",
+          "from": 0,
+          "to": 25
+        },
+        {
+          "skillId": "cg-rotation-05",
+          "skillTitle": "Achse-Winkel-Darstellung verstehen",
+          "from": 0,
+          "to": 25
+        },
+        {
+          "skillId": "cg-quaternion-02",
+          "skillTitle": "Quaternionen multiplizieren und invertieren",
+          "from": 0,
+          "to": 25
+        }
+      ],
+      "verification": {
+        "checkedSkills": [
+          "cg-transform-06",
+          "cg-rotation-01",
+          "cg-rotation-05",
+          "cg-quaternion-02"
+        ],
+        "type": "chat-first-attempt",
+        "masteryPolicy": "Only verified answers increased; lecture exposure alone does not increase mastery."
+      }
+    },
     {
       "id": "session-2026-10-15-analyse-anwendungsfaelle",
       "semesterId": "ws-2026-27",
