@@ -107,7 +107,7 @@ describe('student online lesson discovery', () => {
     expect(screen.queryByRole('link', { name: /Mindcrafti Online.*подключиться/ })).not.toBeInTheDocument();
   });
 
-  it('places native date-only lessons on their Berlin date and shows their duration', async () => {
+  it('places native lessons on their Berlin date and shows their actual start time', async () => {
     vi.mocked(api.studentLessons.list).mockResolvedValue([{
       eventId: 'local-oct24', title: 'Урок на субботу', groupName: null,
       startsAt: '2026-10-23T22:00:00Z', endsAt: '2026-10-23T23:00:00Z', meetUrl: null,
@@ -116,7 +116,7 @@ describe('student online lesson discovery', () => {
     mount(); await settle();
     expect(screen.getByText('Урок на субботу')).toBeInTheDocument();
     expect(screen.getByText('00:00')).toBeInTheDocument();
-    expect(screen.getByText('00:00')).toBeInTheDocument();
+    expect(screen.getByText('00:00–01:00')).toBeInTheDocument();
   });
 
   it('keeps document and notebook actions but blocks first entry for a future lesson', async () => {
@@ -171,8 +171,8 @@ describe('student online lesson discovery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Месяц' }));
     const month = screen.getByRole('group', { name: 'Выбери день' });
     expect(within(month).getByRole('button', { name: /24 октября/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('45 мин')).toBeInTheDocument();
-    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+    expect(screen.getByText('00:00')).toBeInTheDocument();
+    expect(screen.getByText('00:00–00:45')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }));
     expect(screen.getByRole('heading', { name: /Ноябрь 2026/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Урок на субботу' })).not.toBeInTheDocument();
