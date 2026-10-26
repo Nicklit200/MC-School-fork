@@ -160,6 +160,12 @@ export function useLiveStrokes({
     confirmedStrokes.current.clear();
   }, [classId, targetId, targetType]);
 
+  useEffect(() => {
+    // A page kept mounted while scrolling must never revive stale unfinished
+    // handwriting when it becomes visible again.
+    if (!receiving) setEntries((current) => Object.keys(current).length ? {} : current);
+  }, [receiving]);
+
   const { publish } = useClassEvents(classId, topic, ({ event, senderIdentity }) => {
     if (!receiving || event.type !== 'stroke' || event.targetId !== targetId || event.page !== page || !senderIdentity) return;
     const now = Date.now();
