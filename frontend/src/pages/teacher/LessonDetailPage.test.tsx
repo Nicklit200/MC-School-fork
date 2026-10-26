@@ -56,7 +56,7 @@ async function uploadInput(): Promise<HTMLInputElement> {
 describe('native lesson details preserve completed documents', () => {
   it('shows native duration and opens the saved classroom archive', async () => {
     mount();
-    expect(await screen.findByText(/00:00/)).toBeInTheDocument();
+    expect(await screen.findByText(/02:00/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Открыть PDF ↗' }));
     expect(completedLessonApi.open).toHaveBeenCalledWith('local-trial', 'board-pdf');
     expect(screen.getAllByText(/Записи общей доски\.pdf/).length).toBeGreaterThan(0);
