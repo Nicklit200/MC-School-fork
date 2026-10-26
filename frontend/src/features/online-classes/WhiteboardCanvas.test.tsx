@@ -426,7 +426,35 @@ describe('WhiteboardCanvas continuous scrolling', () => {
     expect(onCommit.mock.calls[0][0].points[0].slice(0, 2)).toEqual([0.3, 0.4]);
     expect(onCommit.mock.calls[0][0].points.at(-1).slice(0, 2)).toEqual([0.4, 0.5]);
     expect(onViewChange).not.toHaveBeenCalled();
-    expect(mock.stageProps).toMatchObject({ width: 2000, height: 1000, scaleX: 1, scaleY: 1 });
+    // During a pinch the DOM page doubles in size, but Konva must not
+    // reallocate its canvas; CSS scales the PDF and normalized ink together.
+    expect(mock.stageProps).toMatchObject({ width: 1000, height: 500, scaleX: 1, scaleY: 1 });
+    expect(mock.stageProps.style.transform).toBe('scale(2, 2)');
+  });
+
+  it('keeps a stable Konva backing and continuous GPU zoom over repeated tablet pinch frames', () => {
+    let resize!: ResizeObserverCallback;
+    class MovingPageObserver {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() { resize([{ contentRect: { width: 1000, height: 500 } } as ResizeObserverEntry], {} as ResizeObserver); }
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', MovingPageObserver);
+    const pixels = { getPixelRatio: () => 1, setPixelRatio: vi.fn() };
+    const layer = { getCanvas: () => pixels, getHitCanvas: () => pixels, batchDraw: vi.fn() };
+    mock.stage.getLayers.mockReturnValue([layer]);
+    render(<WhiteboardCanvas {...props} onDocumentGesture={vi.fn()} />);
+    expect(mock.stageProps).toMatchObject({ width: 1000, height: 500 });
+    pixels.setPixelRatio.mockClear(); layer.batchDraw.mockClear();
+
+    for (const scale of [1.06, 1.13, 1.22, 1.37, 1.5, 1.79, 2]) {
+      act(() => resize([{ contentRect: { width: 1000 * scale, height: 500 * scale } } as ResizeObserverEntry], {} as ResizeObserver));
+      expect(mock.stageProps).toMatchObject({ width: 1000, height: 500 });
+      expect(mock.stageProps.style.transform).toBe(`scale(${scale}, ${scale})`);
+    }
+    // None of the intermediate frames may clear and recreate the ink layer.
+    expect(pixels.setPixelRatio).not.toHaveBeenCalled();
+    expect(layer.batchDraw).not.toHaveBeenCalled();
   });
 
   it('forwards plain wheel once, prevents native duplicate scroll and keeps Ctrl/meta wheel as page zoom', () => {
