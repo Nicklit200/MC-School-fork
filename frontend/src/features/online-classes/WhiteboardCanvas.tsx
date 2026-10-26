@@ -205,8 +205,26 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     [notebookView?.renderer, notebookView?.rawWidth, notebookView?.rawHeight, projectionKey]);
   const projectionRef = useRef(projection);
   projectionRef.current = projection;
-  const sceneViewport = projection?.rawSize ?? viewport;
+  // A document pinch changes the surrounding DOM sheet size on every frame.
+  // Keep Konva's backing canvases at a stable logical resolution while the
+  // browser scales their common composited stage (PDF + ink) on the GPU.
+  // Resizing Konva itself on every move clears its backing buffers and flashes.
+  const documentCanvas = Boolean(onDocumentGesture) && !projection;
+  const fixedDocumentViewport = useRef<{ width: number; height: number } | null>(null);
+  if (!documentCanvas) {
+    fixedDocumentViewport.current = null;
+  } else if (viewport.width > 0 && viewport.height > 0) {
+    const before = fixedDocumentViewport.current;
+    // A different document aspect means a genuinely new sheet, not a pinch.
+    if (!before || Math.abs(viewport.width / viewport.height - before.width / before.height) > .015) {
+      fixedDocumentViewport.current = viewport;
+    }
+  }
+  const sceneViewport = projection?.rawSize ?? (documentCanvas ? fixedDocumentViewport.current ?? viewport : viewport);
   const sceneAspect = projection ? notebookView!.rawWidth / notebookView!.rawHeight : sourceAspect;
+  const documentStageStyle = documentCanvas && sceneViewport.width > 0 && sceneViewport.height > 0
+    ? { transformOrigin: 'top left', transform: `scale(${viewport.width / sceneViewport.width}, ${viewport.height / sceneViewport.height})` }
+    : undefined;
   const notebookPresentation = useMemo(() => notebookStagePresentation(projection, viewport, view, sceneAspect ?? 1),
     [projection, sceneAspect, viewport.width, viewport.height, view.zoom, view.panX, view.panY]);
   const boundLayerBacking = (size: { width: number; height: number }, onlyReduce = false) => {
@@ -386,7 +404,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         }
       }
       previousViewport.current = next;
-      boundLayerBacking(projectionRef.current?.rawSize ?? next, true);
+      // Use the stable sheet size when pinching. Changing a Konva canvas pixel
+      // ratio during a gesture clears its pixels before Konva can repaint.
+      boundLayerBacking(projectionRef.current?.rawSize ?? (onDocumentGestureRef.current
+        ? fixedDocumentViewport.current ?? next : next), true);
       setViewport(current =>
         current.width === next.width && current.height === next.height ? current : next,
       );
@@ -1042,6 +1063,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
         ref={stageRef}
         width={sceneViewport.width}
         height={sceneViewport.height}
+        style={documentStageStyle}
         x={projection ? 0 : view.panX}
         y={projection ? 0 : view.panY}
         scaleX={projection ? 1 : view.zoom}
