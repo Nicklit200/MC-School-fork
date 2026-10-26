@@ -39,7 +39,10 @@ assert.equal(typeof element('flashcard-toggle').onclick,'function','Card button 
 element('flashcard-toggle').click();
 assert.equal(element('flashcard-panel').classList.contains('closed'),false);
 assert.match(element('flashcard-app').innerHTML,/data-action="new-cards"/);
-assert.match(element('flashcard-app').innerHTML,/data-action="sync-now"/);
+assert.doesNotMatch(element('flashcard-app').innerHTML,/data-action="(?:sync-now|pair-export|pair-import|account-refresh|account-password)"/,
+  'Synchronization and pairing must run automatically without manual controls');
+assert.doesNotMatch(element('flashcard-app').innerHTML,/Синхронизировать сейчас|Ключ синхронизации|Подключить устройство/,
+  'No legacy pairing or manual synchronization copy is visible');
 assert.equal(element('flashcard-count').textContent,'0','New cards are not falsely classified as due');
 assert.deepEqual(requests,['GET'],'Read-only startup must not trigger upload feedback loops');
 element('close-flashcards').click();
