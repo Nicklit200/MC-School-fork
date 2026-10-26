@@ -333,11 +333,6 @@ function dateFromKey(key: string) {
   return new Date(year, month - 1, day);
 }
 
-function nativeLessonDuration(lesson: StudentLesson, language: 'DE' | 'RU') {
-  const minutes = Math.round((new Date(lesson.endsAt).getTime() - new Date(lesson.startsAt).getTime()) / 60_000);
-  return `${minutes} ${language === 'DE' ? 'Min.' : 'мин'}`;
-}
-
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
