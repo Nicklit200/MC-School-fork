@@ -7,9 +7,11 @@ import type { AnnotationTargetType } from '../../api/onlineClasses';
 const publish = vi.fn().mockResolvedValue(undefined);
 let handler: (received: { event: ClassEvent; senderIdentity: string | undefined }) => void = () => {};
 const topicHandlers = new Map<string, typeof handler>();
+let listening = true;
 
 vi.mock('./useClassEvents', () => ({
-  useClassEvents: (_c: string, topic: string, onEvent: typeof handler) => {
+  useClassEvents: (_c: string, topic: string, onEvent: typeof handler, enabled = true) => {
+    listening = enabled;
     handler = onEvent;
     topicHandlers.set(topic, onEvent);
     return { publish };
@@ -93,6 +95,7 @@ describe('useLiveStrokes', () => {
     vi.useFakeTimers();
     publish.mockClear();
     topicHandlers.clear();
+    listening = true;
   });
   afterEach(() => vi.useRealTimers());
 
@@ -122,6 +125,29 @@ describe('useLiveStrokes', () => {
     const off = mount(0, false);
     act(() => handler({ event: strokeEvent('c1', 'board-1', 0, true, line), senderIdentity: 'a|1' }));
     expect(off.result.current.drafts).toHaveLength(0);
+  });
+
+  it('does not rerender when another page receives handwriting', () => {
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders++;
+      return useLiveStrokes({ classId: 'c1', targetId: 'board-1', page: 0, enabled: true });
+    });
+    const before = renders;
+    act(() => handler({ event: strokeEvent('c1', 'board-1', 5, true, line), senderIdentity: 'student|ipad' }));
+    expect(result.current.drafts).toHaveLength(0);
+    expect(renders).toBe(before);
+  });
+
+  it('only listens to live ink while a page is visible', () => {
+    const { rerender } = renderHook(({ active }) => useLiveStrokes({
+      classId: 'c1', targetId: 'board-1', page: 0, enabled: active,
+    }), { initialProps: { active: false } });
+    expect(listening).toBe(false);
+    rerender({ active: true });
+    expect(listening).toBe(true);
+    rerender({ active: false });
+    expect(listening).toBe(false);
   });
 
   it('lets the preview linger after pen-up, then removes it', () => {
