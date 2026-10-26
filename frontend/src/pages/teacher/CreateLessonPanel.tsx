@@ -5,7 +5,7 @@ import type { GroupLesson, StudentGroup, StudentListItem } from '../../api/types
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { lessonOccurrenceDates, lessonPeriodEnd, lessonWeekday, localLessonDate, type LessonRepeatPeriod } from '../../lib/lessonRecurrence';
-import { lessonDayInstant, SCHOOL_TIME_ZONE } from '../../lib/lessonSchedule';
+import { lessonTimeInstant, SCHOOL_TIME_ZONE } from '../../lib/lessonSchedule';
 import './create-lesson.css';
 import { LessonTargetPicker, type LessonTargetKind } from './LessonTargetPicker';
 
@@ -26,6 +26,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
   const [trialName, setTrialName] = useState('');
   const [lessonDate, setLessonDate] = useState(initialDate);
   const [durationMinutes, setDurationMinutes] = useState('60');
+  const [lessonTime, setLessonTime] = useState('');
   const [period, setPeriod] = useState<LessonRepeatPeriod>('ONCE');
   const [weekdays, setWeekdays] = useState<number[]>(() => [lessonWeekday(initialDate())]);
   const [customWeekdays, setCustomWeekdays] = useState(false);
@@ -72,7 +73,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
     ? (trialName.trim() ? (de ? 'Probeunterricht · ' : 'Пробный урок · ') + trialName.trim() : '')
     : group?.name ?? student?.fullName ?? '';
   const duration = Number(durationMinutes);
-  const start = lessonDayInstant(lessonDate);
+  const start = lessonTimeInstant(lessonDate, lessonTime);
   const validDuration = Number.isInteger(duration) && duration > 0 && duration <= 1440;
   const endsAt = Number.isFinite(start.getTime()) && validDuration
     ? new Date(start.getTime() + duration * 60_000) : null;
@@ -96,7 +97,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
       return;
     }
     if (!target || !title || !Number.isFinite(start.getTime()) || !endsAt || !validDuration) {
-      setError(de ? 'Wähle einen Unterricht, das Datum und eine Dauer von 1 bis 1440 Minuten.' : 'Выберите группу, ученика или пробный урок, укажите дату и длительность от 1 до 1440 минут.');
+      setError(de ? 'Wähle Teilnehmende, Datum, Uhrzeit und eine Dauer von 1 bis 1440 Minuten.' : 'Выберите группу, ученика или пробный урок, укажите дату, время начала и длительность от 1 до 1440 минут.');
       return;
     }
     if (occurrenceDates.length === 0) {
@@ -108,7 +109,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
     try {
       const created = period === 'ONCE'
         ? [await api.lessons.create({ title, startsAt: start.toISOString(), endsAt: endsAt.toISOString(), groupId: group?.id ?? null, studentId: student?.id ?? null })]
-        : await api.lessons.createSeries({ title, startDate: lessonDate, durationMinutes: duration, period, weekdays: [...weekdays].sort((a, b) => a - b), groupId: group?.id ?? null, studentId: student?.id ?? null });
+        : await api.lessons.createSeries({ title, startDate: lessonDate, startTime: lessonTime, durationMinutes: duration, period, weekdays: [...weekdays].sort((a, b) => a - b), groupId: group?.id ?? null, studentId: student?.id ?? null });
       await onCreated(created);
       setTarget('');
       setTargetKind('student');
@@ -138,7 +139,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
             </div>
             <button type="button" className="teacher-icon-button" aria-label={de ? 'Planung schließen' : 'Закрыть планирование'} disabled={saving} onClick={close}>×</button>
           </header>
-          <p className="muted lesson-drawer__description" id="create-lesson-description">{de ? 'Wähle die Teilnehmer, das Datum und die Dauer. Du kannst auch eine Terminserie erstellen.' : 'Выберите участников, дату и длительность. Можно запланировать один урок или серию занятий.'}</p>
+          <p className="muted lesson-drawer__description" id="create-lesson-description">{de ? 'Wähle Teilnehmende, Datum, Startzeit und Dauer. Du kannst auch eine Terminserie erstellen.' : 'Выберите участников, дату, время начала и длительность. Можно запланировать один урок или серию занятий.'}</p>
         <form id="create-lesson-form" className="lesson-create__form" onSubmit={(event) => void submit(event)} aria-busy={saving}>
           <fieldset disabled={saving}>
             <div className="lesson-create__fields">
@@ -153,6 +154,11 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
               <label className="field">
                 <span className="field__label">{de ? 'Unterrichtsdatum' : 'Дата урока'}</span>
                 <input className="input" type="date" required value={lessonDate} onChange={(event) => { setLessonDate(event.target.value); if (!customWeekdays) setWeekdays([lessonWeekday(event.target.value)]); }} />
+              </label>
+              <label className="field">
+                <span className="field__label">{de ? 'Beginn (Berlin)' : 'Время начала (Берлин)'}</span>
+                <input className="input" type="time" required step={300} value={lessonTime}
+                  onChange={(event) => { setLessonTime(event.target.value); setError(null); }} />
               </label>
               <label className="field">
                 <span className="field__label">{de ? 'Dauer in Minuten' : 'Длительность урока, минут'}</span>
@@ -186,7 +192,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
             </div>
             {(title || endsAt) && <div className="lesson-create__preview" role="status">
               {title && <div>{de ? 'Unterrichtstitel: ' : 'Название урока: '}<strong>{title}</strong></div>}
-              {endsAt && <div className="muted">{de ? 'Dauer: ' : 'Длительность: '}{duration} {de ? 'Min.' : 'мин'}</div>}
+              {endsAt && <div className="muted">{de ? 'Beginn: ' : 'Начало: '}{lessonTime} · {de ? 'Dauer: ' : 'Длительность: '}{duration} {de ? 'Min.' : 'мин'}</div>}
               {series && periodEnd && <>
                 <div>{de ? 'Zeitraum: ' : 'Период: '}{formatDate(lessonDate)} — {formatDate(periodEnd)}</div>
                 <div><strong>{de ? 'Unterrichtstermine: ' : 'Уроков в расписании: '}{occurrenceDates.length}</strong></div>
@@ -197,7 +203,7 @@ export function CreateLessonPanel({ students, groups, onCreated, selectedDate, d
             </div>}
             {error && <div className="banner banner--error" role="alert" id="lesson-create-error">{error}</div>}
             <div className="lesson-create__actions">
-              <span className="muted">{de ? 'Wähle den Tag und die Dauer des Unterrichts.' : 'Укажите день занятия и его длительность.'}</span>
+              <span className="muted">{de ? 'Wähle Datum, Startzeit und Dauer.' : 'Укажите дату, время начала и длительность.'}</span>
               <button className="btn" type="submit">{saving ? (de ? 'Wird gespeichert…' : 'Сохраняем…') : (series ? (de ? 'Serie erstellen (' : 'Создать серию (') + occurrenceDates.length + ')' : (de ? 'Unterricht speichern' : 'Сохранить урок'))}</button>
             </div>
           </fieldset>
