@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { type PdfDoc, type RenderedPage, openPdf } from './pdfDocument';
+import { type PdfDoc, type RenderedPage, openPdf, widthBucket } from './pdfDocument';
 
 export type PdfState =
   | { status: 'idle' }
@@ -60,12 +60,15 @@ export function usePdf(
 /** Renders one page of a loaded PDF whenever the page or width changes. */
 export function usePdfPage(doc: PdfDoc | null, index: number, width: number): RenderedPage | null {
   const [rendered, setRendered] = useState<{ doc: PdfDoc; index: number; page: RenderedPage } | null>(null);
+  // A pinch updates page width every frame. Render one PDF texture per
+  // resolution bucket, instead of re-running this effect on every CSS pixel.
+  const renderWidth = width > 0 ? Math.min(widthBucket(width), 4096) : 0;
 
   useEffect(() => {
-    if (!doc || index < 0 || index >= doc.pageCount || width <= 0) return;
+    if (!doc || index < 0 || index >= doc.pageCount || renderWidth <= 0) return;
     let active = true;
     doc
-      .renderPage(index, width)
+      .renderPage(index, renderWidth)
       .then((page) => {
         if (active) setRendered({ doc, index, page });
       })
@@ -73,7 +76,7 @@ export function usePdfPage(doc: PdfDoc | null, index: number, width: number): Re
     return () => {
       active = false;
     };
-  }, [doc, index, width]);
+  }, [doc, index, renderWidth]);
 
   // Never show the previous page's pixels as the new page's content.
   return rendered && rendered.doc === doc && rendered.index === index ? rendered.page : null;
