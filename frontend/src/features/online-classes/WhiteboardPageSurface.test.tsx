@@ -260,6 +260,41 @@ describe('WhiteboardPageSurface', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('preserves the last visible PDF frame throughout pinch and rerenders once after zoom settles', async () => {
+    const oldCanvas = document.createElement('canvas');
+    const sharpCanvas = document.createElement('canvas');
+    const pdf: PdfDoc = {
+      pageCount: 1,
+      renderPage: vi.fn().mockResolvedValueOnce({ canvas: oldCanvas, aspect: 210 / 297 })
+        .mockResolvedValueOnce({ canvas: sharpCanvas, aspect: 210 / 297 }),
+      destroy: vi.fn(),
+    };
+    render(<WhiteboardPageSurface {...baseProps} pdfDocument={pdf} />);
+    await ready(0);
+    act(() => FakeResizeObserver.resize(720));
+    await waitFor(() => expect(canvas().background).toBe(oldCanvas));
+    expect(pdf.renderPage).toHaveBeenCalledExactlyOnceWith(0, 800);
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      for (const width of [920, 1050, 1190, 1350]) {
+        act(() => FakeResizeObserver.resize(width));
+        // Scaling the page must not replace the texture or block drawing.
+        expect(canvas().background).toBe(oldCanvas);
+        expect(canvas().readOnly).toBe(false);
+      }
+      expect(pdf.renderPage).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+      expect(pdf.renderPage).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+      expect(pdf.renderPage).toHaveBeenCalledTimes(2);
+      expect(pdf.renderPage).toHaveBeenLastCalledWith(0, 1400);
+      expect(canvas().background).toBe(sharpCanvas);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('loads the correct PDF page using its own width, blocks placeholder ink, and keeps added blank pages A4', async () => {
     const rendered = document.createElement('canvas');
     const pdf: PdfDoc = { pageCount: 1, renderPage: vi.fn().mockResolvedValue({ canvas: rendered, aspect: 1.6 }), destroy: vi.fn() };
