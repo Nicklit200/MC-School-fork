@@ -21,6 +21,7 @@ export function useClassEvents(
   classId: string,
   topic: string,
   onEvent: (received: ReceivedEvent) => void,
+  listen = true,
 ) {
   const room = useRoomContext();
   // The latest handler without re-subscribing on every render.
@@ -28,6 +29,8 @@ export function useClassEvents(
   handler.current = onEvent;
 
   useEffect(() => {
+    // Retained/offscreen PDF pages must not parse every other page's pen packet.
+    if (!listen) return;
     const listener = (
       payload: Uint8Array,
       participant?: RemoteParticipant,
@@ -42,7 +45,7 @@ export function useClassEvents(
     return () => {
       room.off(RoomEvent.DataReceived, listener);
     };
-  }, [room, classId, topic]);
+  }, [room, classId, topic, listen]);
 
   const publish = useCallback(
     async (event: ClassEvent, reliable = true, destinationUserIds?: string[]) => {
