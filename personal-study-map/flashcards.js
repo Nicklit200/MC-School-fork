@@ -742,14 +742,16 @@
     const known = cards.filter(card => cardState(card,progress).repetitionNumber >= 1).length;
     const knownPercent = cards.length ? Math.round(known * 100 / cards.length) : 0;
     const past = latestHistory().filter(item => item.examId === context.exam?.id);
+    const reviewsToday=latestHistory().filter(item=>item.date===engine.isoDay()&&item.type==="SCHEDULED");
+    const reviewedToday=reviewsToday.reduce((sum,item)=>sum+(item.review?.length||0),0);
     const lesson = past[0];
     const globalSession = ui.session;
     const unrelated = globalSession && !sessionForCurrentContext();
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       accountStatusMarkup()+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
-      countBox("Нужно повторить",due.length)+countBox("К повторению завтра",accountMode?(serverQueue?.upcomingTomorrow?.length??"…"):allCards({disregardTopic:true}).filter(c=>progress[c.id]&&cardState(c,progress).dueDate===engine.plusDays(engine.isoDay(),1)).length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
-      countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+countBox("Подтверждено сервером",lastVerifiedAt?lastVerifiedCount:"Не проверено")+
+      countBox("Нужно повторить",due.length)+countBox("К повторению завтра",accountMode?(serverQueue?.upcomingTomorrow?.length??"…"):allCards({disregardTopic:true}).filter(c=>progress[c.id]&&cardState(c,progress).dueDate===engine.plusDays(engine.isoDay(),1)).length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+countBox("Повторено сегодня, все предметы",accountToken&&accountOnline?reviewedToday:"Не подтверждено")+
+      countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+countBox("Подтверждено сервером",accountToken&&accountOnline?lastVerifiedCount:"Не подключено")+
       '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
       '<div class="quiz-actions">'+
@@ -767,7 +769,7 @@
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
       (accountToken?'<div class="quiz-note"><strong>Единый аккаунт подключён</strong><p>'+(accountOnline?"Серверная синхронизация подтверждена.":"Связь с сервером не подтверждена, ожидаем повторной отправки.")+'</p><button data-action="account-refresh" type="button">Обновить с сервера</button></div>':"")+
-      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(accountMode?(accountOnline?"Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Нет подтверждения сервера")+(outbox().length?" · Неотправленных ответов: "+outbox().length:"")+(readJson(META_KEY,null)?" · Есть изменения для отправки":""):(lastSyncError?"Нет связи с сервером":lastSyncAt?"Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение"))+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На всех устройствах используется один аккаунт и общая база PostgreSQL. Старые данные сохраняются до успешного переноса.</small></div>'+
+      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(accountMode?(accountOnline?"Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Нет подтверждения сервера")+(outbox().length?" · Неотправленных ответов: "+outbox().length:"")+(readJson(META_KEY,null)?" · Есть изменения для отправки":""):"История ещё хранится в старом режиме, телефон и компьютер не объединены")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На всех устройствах используется один аккаунт и общая база PostgreSQL. Старые данные сохраняются до успешного переноса.</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
       '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 7 → 14 → 30 дней</div>'+
@@ -1117,7 +1119,9 @@
 
   function renderHistory() {
     const ctx=getContext();
-    const rows=latestHistory().filter(item=>item.examId===ctx.exam?.id);
+    const rows=latestHistory().sort((a,b)=>
+      String(b.completedAt||b.startedAt||b.date||"").localeCompare(String(a.completedAt||a.startedAt||a.date||"")));
+    const examTitles=new Map((window.studyBoardCards?.allExams?.()||[]).map(exam=>[exam.id,exam.title]));
     const lessons=(window.studyBoardCards?.learningSessions?.()||[])
       .filter(item=>item.examId===ctx.exam?.id)
       .slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
@@ -1137,11 +1141,12 @@
       '<div class="quiz-history">'+rows.map(item=>
         '<button class="quiz-history-item" data-action="history-item" data-id="'+esc(item.id)+'" type="button">'+
         '<strong>'+esc(labelDate(item.date))+' · '+esc(item.type==="PRACTICE"?"Тренировка":"Повторение")+'</strong>'+
+        '<small>'+esc(examTitles.get(item.examId)||item.examId||"Без предмета")+'</small>'+
         '<span>С первой попытки: '+item.correctFirstTry+'/'+item.totalCards+'</span></button>').join("")+'</div>':
       '<div class="quiz-empty">Пока нет завершённых тренировок. Результат появится после первого теста с карточками.</div>';
     host.innerHTML=titleBar("История занятий",ctx.exam?.title||"")+
       '<h3>Изученные темы ('+lessons.length+')</h3>'+lessonHtml+
-      '<h3>Тренировки с карточками ('+rows.length+')</h3>'+trainingHtml;
+      '<h3>Тренировки с карточками, все предметы ('+rows.length+')</h3>'+trainingHtml;
   }
 
   function renderManage() {
