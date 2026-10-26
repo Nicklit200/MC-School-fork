@@ -228,6 +228,29 @@ describe('WhiteboardPanel', () => {
     expect(screen.getByRole('button', { name: 'Другие инструменты' })).toHaveFocus();
   });
 
+  it('fits a personal page in the read-only overview without changing its focused zoom', async () => {
+    chooseLayout('teacher', 'continuous');
+    const pdf = { pageCount: 2 } as never;
+    const content = (compactPreview: boolean) => <I18nProvider>
+      <WhiteboardPanel classId="c1" actorId="teacher" isHost targetId="personal-student"
+        document={pdf} compactPreview={compactPreview} canAnnotate={!compactPreview} />
+    </I18nProvider>;
+    const { rerender, container } = render(content(false));
+    await screen.findByRole('region', { name: 'Страницы доски' });
+    await userEvent.click(screen.getByRole('button', { name: 'Увеличить' }));
+    expect(screen.getByText('125%')).toBeInTheDocument();
+
+    rerender(content(true));
+    expect(container.querySelector('.whiteboard--compact-preview')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Страницы доски' })).not.toBeInTheDocument();
+    expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.view).toBe(DEFAULT_VIEW);
+    expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.navigationLocked).toBe(true);
+
+    rerender(content(false));
+    expect(await screen.findByRole('region', { name: 'Страницы доски' })).toBeInTheDocument();
+    expect(screen.getByText('125%')).toBeInTheDocument();
+  });
+
   it('keeps ink and undo bound to each page while switching layouts', async () => {
     chooseLayout('teacher', 'continuous');
     const user = userEvent.setup();
