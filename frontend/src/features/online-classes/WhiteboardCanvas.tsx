@@ -237,7 +237,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const [pendingInk, setPendingInk] = useState<PendingInk[]>([]);
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
-  const pendingOnPage = pendingInk.filter((entry) => entry.page === pageKey);
+  const pendingOnPage = useMemo(() => pendingInk.filter((entry) => entry.page === pageKey), [pendingInk, pageKey]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragDelta, setDragDelta] = useState<{ dx: number; dy: number } | null>(null);
   const [textEdit, setTextEdit] = useState<{ px: Point; nx: number; ny: number } | null>(null);
@@ -985,16 +985,33 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     }
   };
 
-  const pendingIds = new Set(pendingOnPage.map((entry) => entry.id));
+  const pendingIds = useMemo(() => new Set(pendingOnPage.map((entry) => entry.id)), [pendingOnPage]);
+  const savedStrokeIds = useMemo(() => new Set(shapes.map((saved) => saved.operationId)), [shapes]);
   const visibleRemoteDrafts = remoteDrafts.filter((entry) => {
     // Avoid double-thick ink while the old preview and saved line overlap.
     const id = entry.id.slice(entry.id.lastIndexOf(':') + 1);
-    return !shapes.some((saved) => saved.operationId === id);
+    return !savedStrokeIds.has(id);
   });
   const selectedShape = selectedId ? shapes.find((entry) => entry.operationId === selectedId) : undefined;
   const movedShape =
     selectedShape && dragDelta ? translateShape(selectedShape.shape, dragDelta.dx, dragDelta.dy) : null;
   const selectionBounds = (movedShape ?? selectedShape?.shape) && shapeBounds(movedShape ?? selectedShape!.shape);
+
+  // The saved sheet does not need a complete Perfect Freehand repaint for
+  // every 16-ms local Pencil sample or incoming live preview. Reuse the
+  // stable Konva nodes until the durable operations or page geometry change.
+  const pendingKey = pendingOnPage.map((entry) => entry.id).join(',');
+  const savedInkNodes = useMemo(() => shapes.filter((entry) => !pendingIds.has(entry.operationId)).map((entry) =>
+    entry.operationId === selectedId && movedShape
+      ? renderShape(entry.operationId, movedShape, true)
+      : renderShape(entry.operationId, entry.shape),
+  ), [shapes, pendingKey, selectedId, movedShape, sceneViewport.width, sceneViewport.height, sceneAspect]);
+  const pendingInkNodes = useMemo(() => pendingOnPage.map((entry) =>
+    renderShape(`pending-${entry.id}`, entry.shape),
+  ), [pendingOnPage, sceneViewport.width, sceneViewport.height, sceneAspect]);
+  // Only the ordinary shared/document board uses a separate transient layer.
+  // Camera projection keeps its original three-layer compositing pipeline.
+  const separateInkPreviews = !backgroundLive && !projection;
 
   const backgroundBox = letterbox(sceneViewport, sceneAspect);
   const textPosition = textEdit && projection ? notebookRawToScreen({ x: textEdit.nx, y: textEdit.ny }, projection, viewport, view) : textEdit?.px;
@@ -1047,15 +1064,18 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
           )}
         </Layer>
         <Layer listening={false}>
-          {shapes.filter((entry) => !pendingIds.has(entry.operationId)).map((entry) =>
-            entry.operationId === selectedId && movedShape
-              ? renderShape(entry.operationId, movedShape, true)
-              : renderShape(entry.operationId, entry.shape),
-          )}
-          {pendingOnPage.map((entry) => renderShape(`pending-${entry.id}`, entry.shape))}
-          {draft && renderShape('draft', draft)}
-          {visibleRemoteDrafts.map((entry) => renderShape(`live-${entry.id}`, entry.shape))}
+          {savedInkNodes}
+          {pendingInkNodes}
+          {/* Destination-out has to touch the saved marks layer to erase ink. */}
+          {draft && (!separateInkPreviews || draft.kind === 'erase') && renderShape('draft', draft)}
+          {!separateInkPreviews && visibleRemoteDrafts.map((entry) => renderShape(`live-${entry.id}`, entry.shape))}
         </Layer>
+        {separateInkPreviews && (
+          <Layer listening={false}>
+            {draft && draft.kind !== 'erase' && renderShape('draft', draft)}
+            {visibleRemoteDrafts.map((entry) => renderShape(`live-${entry.id}`, entry.shape))}
+          </Layer>
+        )}
         <Layer listening={false}>
           {selectionBounds && (
             <Rect
