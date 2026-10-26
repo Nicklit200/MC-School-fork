@@ -1,7 +1,7 @@
 /* Personal Study Map — interactive four-choice study sessions.
  * Session rules ported from Mindcrafti School (StudyService/Sm2Scheduler).
  * PostgreSQL is the shared durable store. Local storage retains unsent answers
- * across reloads; synchronization requires the same private owner key.
+ * across reloads; devices use the same authenticated server account.
  */
 (() => {
   "use strict";
@@ -395,15 +395,35 @@
   function sendSync(){return synchronize();}
   function pullSync(){return synchronize();}
   window.addEventListener("study-reviews-updated",queueSync);
+  // No user action is required: retry after reconnect, on focus and periodically.
   window.addEventListener("online",()=>void synchronize());
-  window.addEventListener("pagehide",()=>{if(localStorage.getItem(PENDING_KEY))void synchronize();});
+  window.addEventListener("focus",()=>{if(!document.hidden)void synchronize();});
+  window.addEventListener("pagehide",()=>{
+    if(accountMode){
+      if(accountToken&&(outbox().length||readJson(META_KEY,null)||readJson(IMPORT_KEY,null)))
+        void updateAccount();
+    }else if(localStorage.getItem(PENDING_KEY))void synchronize();
+  });
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)void synchronize();});
   window.addEventListener("storage",event=>{
+    if(event.key===ACCOUNT_KEY){
+      accountToken=localStorage.getItem(ACCOUNT_KEY)||"";
+      accountMode=!!accountToken||localStorage.getItem(ACCOUNT_MODE_KEY)==="true";
+      accountOnline=false;
+      if(accountToken)void updateAccount();
+      else syncView();
+      return;
+    }
+    if(accountMode&&event.key===QUEUE_KEY){
+      serverQueue=readJson(QUEUE_KEY,null);syncView();return;
+    }
     if([KEY_PROGRESS,KEY_HISTORY,KEY_CUSTOM,KEY_OVERRIDES,KEY_INVALID,KEY_DELETED].includes(event.key)){
-      queueSync();syncView();
+      // A second tab may be hydrating server data. Do not upload it again.
+      if(!accountMode)queueSync();
+      syncView();
     }
   });
-  // Synchronize even during a long session; never rerender the current question.
+  // Refresh automatically while the page remains visible.
   setInterval(()=>{if(!document.hidden&&!busy)void synchronize();},30000);
 
   function getContext() {
@@ -729,6 +749,22 @@
           ).join("")+'</div></details>';
       }).join("")+'</section>';
   }
+  function autoSaveStatusMarkup(){
+    if(!accountToken)return "";
+    const pending=outbox().length;
+    const unsent=Boolean(pending||readJson(META_KEY,null)||readJson(IMPORT_KEY,null));
+    let message;
+    if(!navigator.onLine){
+      message="Нет интернета. Ответы сохраняются на устройстве и будут отправлены автоматически.";
+    }else if(unsent){
+      message="Сохраняем изменения на сервере автоматически…";
+    }else if(!accountOnline){
+      message="Проверяем соединение с сервером. Повторная отправка произойдёт автоматически.";
+    }else{
+      message="Автосохранение включено. Все данные подтверждены сервером.";
+    }
+    return '<p class="quiz-storage-note" role="status" aria-live="polite">'+esc(message)+'</p>';
+  }
   function renderHome() {
     studyLayout();
     const context = getContext();
@@ -737,7 +773,6 @@
     // A card counts as known after a successful scheduled review (stage >= 1).
     // Free practice does not affect this metric, consistent with scheduling.
     const progress = getProgress();
-    const globallyTracked=Object.keys(progress).length;
     const unseen = accountMode&&serverQueue ? cards.filter(c=>serverQueue.newCards.includes(c.id)) : cards.filter(card=>!progress[card.id]);
     const known = cards.filter(card => cardState(card,progress).repetitionNumber >= 1).length;
     const knownPercent = cards.length ? Math.round(known * 100 / cards.length) : 0;
@@ -751,7 +786,7 @@
       accountStatusMarkup()+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
       countBox("Нужно повторить",due.length)+countBox("К повторению завтра",accountMode?(serverQueue?.upcomingTomorrow?.length??"…"):allCards({disregardTopic:true}).filter(c=>progress[c.id]&&cardState(c,progress).dueDate===engine.plusDays(engine.isoDay(),1)).length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+countBox("Повторено сегодня, все предметы",accountToken&&accountOnline?reviewedToday:"Не подтверждено")+
-      countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+countBox("Подтверждено сервером",accountToken&&accountOnline?lastVerifiedCount:"Не подключено")+
+      countBox("Знаю карточек",knownPercent+"%")+
       '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
       '<div class="quiz-actions">'+
@@ -768,8 +803,7 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
-      (accountToken?'<div class="quiz-note"><strong>Единый аккаунт подключён</strong><p>'+(accountOnline?"Серверная синхронизация подтверждена.":"Связь с сервером не подтверждена, ожидаем повторной отправки.")+'</p><button data-action="account-refresh" type="button">Обновить с сервера</button></div>':"")+
-      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(accountMode?(accountOnline?"Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Нет подтверждения сервера")+(outbox().length?" · Неотправленных ответов: "+outbox().length:"")+(readJson(META_KEY,null)?" · Есть изменения для отправки":""):"История ещё хранится в старом режиме, телефон и компьютер не объединены")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На всех устройствах используется один аккаунт и общая база PostgreSQL. Старые данные сохраняются до успешного переноса.</small></div>'+
+      autoSaveStatusMarkup()+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
       '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 7 → 14 → 30 дней</div>'+
@@ -777,7 +811,7 @@
       (lesson?'<div class="quiz-last"><strong>Последний результат</strong><span>'+labelDate(lesson.date)+
         ' · '+lesson.correctFirstTry+' из '+lesson.totalCards+' с первой попытки</span></div>':"")+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
-      '<p class="quiz-storage-note">Расписание и история хранятся в PostgreSQL Railway. Браузер сохраняет только временную копию и очередь при потере связи.</p>'+
+
       '<div id="study-reminder-settings" class="study-reminder-settings"></div>';
     window.dispatchEvent(new Event("study-home-rendered"));
   }
@@ -1419,52 +1453,7 @@
     if (!button || !host.contains(button) || button.disabled) return;
     const action=button.dataset.action;
     const id=button.dataset.id;
-    if(action==="account-login"||action==="account-setup"){
-      const password=window.prompt(action==="account-setup"?
-        "Придумай пароль единого аккаунта (не менее 12 символов):":"Пароль единого аккаунта «Мои навыки»:");
-      if(!password)return;
-      try{
-        if(action==="account-setup")await setupAccount(password);
-        else await loginAccount(password);
-        ui.notice="Аккаунт подключён. Прогресс получен из PostgreSQL.";
-      }catch(error){ui.notice="Ошибка входа: "+error.message;}
-      renderHome();return;
-    }
-    if(action==="account-password"){
-      const password=window.prompt("Новый пароль (не менее 12 символов):");
-      if(!password)return;
-      try{await accountRequest("/change-password","POST",{password});ui.notice="Пароль изменён.";}
-      catch(error){ui.notice="Ошибка: "+error.message;}
-      renderHome();return;
-    }
-    if(action==="account-refresh"){
-      ui.notice=await updateAccount()?"Данные загружены с сервера.":"Сервер недоступен.";
-      renderHome();return;
-    }
-    if (action==="pair-export") {
-      // A bearer token grants access to all quiz history: show only on explicit request.
-      const key=owner();
-      window.prompt("Секретный ключ для другого устройства. Сохрани его в надёжном месте, никому не отправляй:",key);
-      return;
-    } else if (action==="pair-import") {
-      if(ui.session){ui.notice="Сначала заверши занятие.";renderHome();return;}
-      const key=window.prompt("Вставь секретный ключ с первого устройства (64 символа):");
-      if(key===null)return;
-      if(!/^[a-f0-9]{64}$/.test(key.trim())){ui.notice="Неверный формат ключа.";renderHome();return;}
-      if(key.trim()===owner()){ui.notice="Это устройство уже подключено.";renderHome();return;}
-      if(!window.confirm("Объединить историю этого устройства с историей другого? Текущие локальные данные сохранятся."))return;
-      // Preserve the old account key for recovery, then merge from the new account.
-      localStorage.setItem("personal-study-map:previous-owner-token:v1",owner());
-      localStorage.setItem(OWNER_KEY,key.trim());
-      localStorage.removeItem(PENDING_KEY);
-      lastSyncAt=null;
-      void pullSync().then(()=>{
-        queueSync();
-        ui.notice=lastSyncError?"Не удалось подключиться к серверу. Локальная история сохранена.":"Истории объединены. Отправляем на сервер.";
-        renderHome();
-      });
-      return;
-    } else if (action==="home") {
+    if (action==="home") {
       cleanupTimers();ui.view="home";panel.classList.remove("quiz-fullscreen");document.body.classList.remove("quiz-learning-active");ui.feedback=null;ui.notice="";
       renderHome();
     } else if (action==="quick-known") {
@@ -1501,8 +1490,6 @@
         if(status)status.textContent="Скопируй выделенный текст вручную.";
       }
       window.open("https://chatgpt.com/","_blank","noopener,noreferrer");
-    } else if (action==="sync-now") {
-      await sendSync();await pullSync();ui.notice=lastSyncError?"Синхронизация не удалась. Попробуй снова при наличии интернета.":"Данные проверены и отправлены на сервер.";renderHome();
     } else if (action==="scheduled") startSession("SCHEDULED");
     else if (action==="new-cards") startSession("SCHEDULED","new");
     else if (action==="practice") {
