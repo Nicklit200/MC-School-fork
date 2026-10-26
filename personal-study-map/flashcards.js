@@ -42,6 +42,67 @@
   }
 
 
+
+  const ACCOUNT_KEY="personal-study-map:account-session:v2";
+  const OUTBOX_KEY="personal-study-map:account-outbox:v2";
+  const ACCOUNT_API="https://personal-life-api-production.up.railway.app/api/quiz-v2";
+  let accountToken=localStorage.getItem(ACCOUNT_KEY)||"";
+  let accountOnline=false;
+  let serverQueue=null;
+  const outbox=()=>readJson(OUTBOX_KEY,[]);
+  async function accountRequest(path,method="GET",body){
+    const response=await fetch(ACCOUNT_API+path,{method,cache:"no-store",
+      headers:{"Authorization":"Bearer "+accountToken,"Content-Type":"application/json"},
+      body:body===undefined?undefined:JSON.stringify(body)});
+    if(!response.ok)throw Error("Server "+response.status);
+    return response.json();
+  }
+  function hydrateAccount(result){
+    applyingRemote=true;
+    try{
+      const s=result.snapshot||{};
+      for(const [key,name] of [[KEY_PROGRESS,"progress"],[KEY_OVERRIDES,"overrides"],[KEY_INVALID,"invalid"],[KEY_DELETED,"deleted"]])
+        writeJson(key,s[name]||{});
+      writeJson(KEY_CUSTOM,s.custom||[]);
+      writeJson(KEY_HISTORY,result.sessions||[]);
+      lastSyncAt=lastVerifiedAt=new Date().toISOString();
+      lastVerifiedCount=Object.keys(s.progress||{}).length;
+    }finally{applyingRemote=false;}
+    updateBadge();
+    if(ui.view==="home"&&!panel.classList.contains("closed"))renderHome();
+  }
+  async function updateAccount(){
+    if(!accountToken)return false;
+    try{
+      for(const job of outbox()){
+        await accountRequest("/answer","POST",job);
+        writeJson(OUTBOX_KEY,outbox().filter(j=>j.eventId!==job.eventId));
+      }
+      const result=await accountRequest("/state");
+      hydrateAccount(result);
+      const cards=allCards({disregardTopic:true});
+      serverQueue=await accountRequest("/queue","POST",{cardIds:cards.map(x=>x.id)});
+      accountOnline=true;lastSyncError=false;
+      return true;
+    }catch(error){accountOnline=false;lastSyncError=true;console.warn("Account sync",error);return false;}
+  }
+  async function loginAccount(password){
+    const response=await fetch(ACCOUNT_API+"/login",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});
+    const data=await response.json();
+    if(!response.ok)throw Error(data.error||"Login failed");
+    accountToken=data.token;localStorage.setItem(ACCOUNT_KEY,accountToken);
+    await accountRequest("/import","POST",{legacyToken:owner(),snapshot:localSnapshot(),sessions:storedHistory()});
+    if(!await updateAccount())throw Error("Не удалось получить данные с сервера");
+  }
+  function sendAccountAnswer(session,card,correct){
+    if(!accountToken)return;
+    const job={eventId:crypto.randomUUID(),sessionId:session.id,
+      cardId:card.id,correct,occurredAt:new Date().toISOString()};
+    writeJson(OUTBOX_KEY,[...outbox(),job]);
+    void updateAccount();
+  }
+
   const SYNC_URL="https://personal-life-api-production.up.railway.app/api/quiz-sync";
   const OWNER_KEY="personal-study-map:owner-token:v1",PENDING_KEY="personal-study-map:pending-sync:v1";
   let busy=false,timer=null,inFlight=null,applyingRemote=false,retryDelay=3000;
@@ -146,6 +207,7 @@
       data.sessions.filter(validSession).some(s=>!response.sessions.some(r=>r.id===s.id&&stable(r)===stable(s)));
   }
   function synchronize(){
+    if(accountToken)return updateAccount();
     if(inFlight)return inFlight;
     if(!navigator.onLine){lastSyncError=true;syncView();return Promise.resolve(false);}
     busy=true;
@@ -450,7 +512,8 @@
     const states=getProgress();
     states[card.id]={...engine.afterReview(states[card.id],!item.hadWrongAttempt),lastCorrect:!item.hadWrongAttempt,updatedAt:new Date().toISOString()};
     writeJson(KEY_PROGRESS,states);
-    queueSync();
+    if(accountToken)sendAccountAnswer(session,card,!item.hadWrongAttempt);
+    else queueSync();
     window.dispatchEvent(new Event("study-reviews-updated"));
   }
   function storedHistory() {
@@ -557,6 +620,7 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
+      '<div class="quiz-note"><strong>Серверный аккаунт</strong><p>'+(accountToken?(accountOnline?"Данные из PostgreSQL":"Проверка связи с сервером"):'Войди с одним паролем на телефоне и компьютере. Локальная история будет перенесена на сервер.')+'</p>'+(accountToken?'<button data-action="account-refresh" type="button">Обновить</button>':'<button data-action="account-login" type="button">Войти</button>')+'</div>'+
       '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(lastSyncError?"Нет связи с сервером. Результаты пока только на устройстве.":lastSyncAt?"Связь с сервером есть. Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение…")+(localStorage.getItem(PENDING_KEY)?" · Есть данные для отправки":"")+(lastVerifiedAt?" · Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):" · Сохранение ещё не подтверждено чтением из PostgreSQL")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button> <button data-action="pair-export" type="button">Ключ синхронизации</button> <button data-action="pair-import" type="button">Подключить устройство</button><small>Ответы отправляются автоматически и проверяются обратным чтением. Два устройства должны использовать один секретный ключ. Для доступа из ChatGPT потребуется отдельно подключить коннектор «Мои навыки».</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
@@ -570,7 +634,10 @@
     window.dispatchEvent(new Event("study-home-rendered"));
   }
 
-  function startSession(mode,group="due") {
+  async function startSession(mode,group="due") {
+    if(accountToken && !await updateAccount()){
+      ui.notice="Не удалось подтвердить очередь на сервере. Проверь интернет.";renderHome();return;
+    }
     const context = getContext();
     if (ui.session || (mode!=="SCHEDULED" && !context.exam)) return;
     // Scheduled reviews are global, not limited to the currently selected exam.
@@ -578,6 +645,7 @@
       allCards({disregardTopic:true}) : visibleCards();
     const today=engine.isoDay(),states=getProgress();
     const cards=mode==="SCHEDULED" ? source.filter(card =>
+      accountToken && serverQueue ? (group==="new"?serverQueue.newCards:serverQueue.due).includes(card.id) :
       group==="new" ? !states[card.id] :
         Boolean(states[card.id]) && cardState(card,states).dueDate<=today
     ) : source;
@@ -695,7 +763,8 @@
       const scheduled=engine.afterReview(prior,firstTryCorrect);
       states[card.id]={...scheduled,lastCorrect:firstTryCorrect,updatedAt:new Date().toISOString()};
       writeJson(KEY_PROGRESS,states);
-      queueSync();
+      if(accountToken)sendAccountAnswer(session,card,firstTryCorrect);
+      else queueSync();
       window.dispatchEvent(new Event("study-reviews-updated"));
     }
     ui.notice=item.hadWrongAttempt
@@ -864,8 +933,8 @@
     const history=storedHistory();
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
-    queueSync();
-    void sendSync();
+    if(accountToken)void accountRequest("/sync","POST",{sessions:[completed.result]}).then(updateAccount).catch(console.warn);
+    else {queueSync();void sendSync();}
     window.dispatchEvent(new Event("study-reviews-updated"));
     localStorage.removeItem(KEY_SESSION);
     ui.session=null;ui.feedback=null;ui.result=completed.result;ui.view="result";
@@ -1197,6 +1266,17 @@
     if (!button || !host.contains(button) || button.disabled) return;
     const action=button.dataset.action;
     const id=button.dataset.id;
+    if(action==="account-login"){
+      const password=window.prompt("Пароль единого аккаунта «Мои навыки»:");
+      if(!password)return;
+      try{await loginAccount(password);ui.notice="Аккаунт подключён. Данные сохранены на сервере.";}
+      catch(error){ui.notice="Не удалось войти: "+error.message;}
+      renderHome();return;
+    }
+    if(action==="account-refresh"){
+      ui.notice=await updateAccount()?"Данные загружены с сервера.":"Сервер недоступен.";
+      renderHome();return;
+    }
     if (action==="pair-export") {
       // A bearer token grants access to all quiz history: show only on explicit request.
       const key=owner();
@@ -1364,6 +1444,6 @@
   };
   window.addEventListener("hashchange",openCardsFromLink);
   updateBadge();
-  void pullSync();
+  void (accountToken?updateAccount():pullSync());
   openCardsFromLink();
 })();
