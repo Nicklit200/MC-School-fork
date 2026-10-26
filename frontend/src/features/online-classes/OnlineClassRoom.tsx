@@ -510,6 +510,7 @@ function RoomBody({
                 actorId={currentUserId}
                 isHost
                 targetId={personalBoardId(studentId)}
+                compactPreview={compact}
                 observedPage={studentPages[personalBoardId(studentId)]}
                 canAnnotate={!compact}
                 active={active}
@@ -529,6 +530,7 @@ function RoomBody({
                 isHost
                 targetType="NOTEBOOK_CAMERA"
                 targetId={personalBoardId(studentId)}
+                compactPreview={compact}
                 canAnnotate={!compact}
                 active={active}
                 fileAction={active && !compact ? fileAction : undefined}
