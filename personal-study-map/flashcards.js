@@ -43,64 +43,145 @@
 
 
 
+
+  // PostgreSQL owns review schedules; browser data is only an offline cache/outbox.
   const ACCOUNT_KEY="personal-study-map:account-session:v2";
+  const ACCOUNT_MODE_KEY="personal-study-map:account-enabled:v2";
   const OUTBOX_KEY="personal-study-map:account-outbox:v2";
+  const META_KEY="personal-study-map:account-meta-outbox:v2";
+  const IMPORT_KEY="personal-study-map:legacy-import-outbox:v2";
+  const IMPORT_DONE_KEY="personal-study-map:legacy-imported-owner:v2";
+  const QUEUE_KEY="personal-study-map:server-queue:v2";
   const ACCOUNT_API="https://personal-life-api-production.up.railway.app/api/quiz-v2";
   let accountToken=localStorage.getItem(ACCOUNT_KEY)||"";
-  let accountOnline=false;
-  let serverQueue=null;
+  let accountMode=!!accountToken || localStorage.getItem(ACCOUNT_MODE_KEY)==="true";
+  let accountOnline=false,accountFlight=null;
+  let serverQueue=readJson(QUEUE_KEY,null);
   const outbox=()=>readJson(OUTBOX_KEY,[]);
+  const metadata=()=>({invalid:getInvalidCards(),deleted:getDeletedCards(),
+    overrides:getOverrides(),custom:getCustomCards(),sessions:storedHistory().slice(0,100)});
   async function accountRequest(path,method="GET",body){
-    const response=await fetch(ACCOUNT_API+path,{method,cache:"no-store",
-      headers:{"Authorization":"Bearer "+accountToken,"Content-Type":"application/json"},
-      body:body===undefined?undefined:JSON.stringify(body)});
-    if(!response.ok)throw Error("Server "+response.status);
-    return response.json();
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
+    try{
+      const response=await fetch(ACCOUNT_API+path,{method,cache:"no-store",signal:controller.signal,
+        headers:{"Authorization":"Bearer "+accountToken,"Content-Type":"application/json"},
+        body:body===undefined?undefined:JSON.stringify(body)});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok){const error=Error(result.error||"Сервер: "+response.status);error.status=response.status;throw error;}
+      return result;
+    }finally{clearTimeout(timeout);}
   }
   function hydrateAccount(result){
+    const s=result.snapshot||{};
     applyingRemote=true;
     try{
-      const s=result.snapshot||{};
-      for(const [key,name] of [[KEY_PROGRESS,"progress"],[KEY_OVERRIDES,"overrides"],[KEY_INVALID,"invalid"],[KEY_DELETED,"deleted"]])
-        writeJson(key,s[name]||{});
-      writeJson(KEY_CUSTOM,s.custom||[]);
-      writeJson(KEY_HISTORY,result.sessions||[]);
-      lastSyncAt=lastVerifiedAt=new Date().toISOString();
-      lastVerifiedCount=Object.keys(s.progress||{}).length;
+      for(const [key,name] of [[KEY_PROGRESS,"progress"],[KEY_OVERRIDES,"overrides"],
+        [KEY_INVALID,"invalid"],[KEY_DELETED,"deleted"]])writeJson(key,s[name]||{});
+      writeJson(KEY_CUSTOM,Array.isArray(s.custom)?s.custom:[]);
+      writeJson(KEY_HISTORY,Array.isArray(result.sessions)?result.sessions:[]);
+      window.dispatchEvent(new Event("study-reviews-updated"));
     }finally{applyingRemote=false;}
-    updateBadge();
-    if(ui.view==="home"&&!panel.classList.contains("closed"))renderHome();
+  }
+  async function waitForCards(){
+    for(let i=0;i<50;i++){
+      if(window.studyBoardCards?.allExams?.()?.length)return;
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    throw Error("Карта ещё загружается");
+  }
+  function markAccountMeta(){
+    writeJson(META_KEY,metadata());
+    clearTimeout(timer);
+    timer=setTimeout(()=>void updateAccount(),1200);
   }
   async function updateAccount(){
     if(!accountToken)return false;
-    try{
-      for(const job of outbox()){
-        await accountRequest("/answer","POST",job);
-        writeJson(OUTBOX_KEY,outbox().filter(j=>j.eventId!==job.eventId));
+    if(accountFlight)return accountFlight;
+    accountFlight=(async()=>{
+      try{
+        const migration=readJson(IMPORT_KEY,null);
+        if(migration){
+          const ack=await accountRequest("/import","POST",migration);
+          if(ack.ok!==true)throw Error("Перенос старой истории не подтверждён");
+          localStorage.setItem(IMPORT_DONE_KEY,migration.legacyToken);
+          localStorage.removeItem(IMPORT_KEY);
+        }
+        for(const item of outbox()){
+          const ack=await accountRequest("/answer","POST",item);
+          if(ack.accepted!==true && ack.duplicate!==true &&
+             ack.reason!=="not-due-or-already-reviewed")throw Error("Ответ не подтверждён");
+          writeJson(OUTBOX_KEY,outbox().filter(x=>x.eventId!==item.eventId));
+        }
+        const meta=readJson(META_KEY,null);
+        if(meta){
+          const ack=await accountRequest("/sync","POST",meta);
+          if(ack.ok!==true)throw Error("История не подтверждена");
+          if(stable(meta)===stable(readJson(META_KEY,null)))localStorage.removeItem(META_KEY);
+        }
+        await waitForCards();
+        const snapshot=await accountRequest("/state");
+        hydrateAccount(snapshot);
+        serverQueue=await accountRequest("/queue","POST",{
+          cardIds:allCards({disregardTopic:true}).map(card=>card.id)});
+        writeJson(QUEUE_KEY,serverQueue);
+        lastSyncAt=lastVerifiedAt=new Date().toISOString();
+        lastVerifiedCount=Object.keys(snapshot.snapshot?.progress||{}).length;
+        accountOnline=true;lastSyncError=false;
+        updateBadge();
+        if(ui.view==="home"&&!panel.classList.contains("closed"))renderHome();
+        return true;
+      }catch(error){
+        accountOnline=false;lastSyncError=true;
+        console.warn("Server sync failed; unsent data retained",error);
+        if(error.status===401){
+          accountToken="";localStorage.removeItem(ACCOUNT_KEY);
+          ui.notice="Время входа истекло. Войди повторно, сохранённые ответы останутся.";
+        }
+        if(ui.view==="home"&&!panel.classList.contains("closed"))renderHome();
+        return false;
+      }finally{
+        accountFlight=null;
+        if(accountToken&&navigator.onLine&&
+          (outbox().length||readJson(META_KEY,null)||readJson(IMPORT_KEY,null)))
+          setTimeout(()=>void updateAccount(),5000);
       }
-      const result=await accountRequest("/state");
-      hydrateAccount(result);
-      const cards=allCards({disregardTopic:true});
-      serverQueue=await accountRequest("/queue","POST",{cardIds:cards.map(x=>x.id)});
-      accountOnline=true;lastSyncError=false;
-      return true;
-    }catch(error){accountOnline=false;lastSyncError=true;console.warn("Account sync",error);return false;}
+    })();
+    return accountFlight;
+  }
+  function queueInitialImport(){
+    const legacy=owner();
+    if(localStorage.getItem(IMPORT_DONE_KEY)===legacy)return;
+    if(!readJson(IMPORT_KEY,null))
+      writeJson(IMPORT_KEY,{legacyToken:legacy,snapshot:localSnapshot(),sessions:storedHistory()});
+  }
+  async function acceptAccountLogin(result){
+    if(!/^[a-f0-9]{64}$/.test(result?.token||""))throw Error("Недопустимый ответ сервера");
+    queueInitialImport();
+    accountToken=result.token;accountMode=true;
+    localStorage.setItem(ACCOUNT_KEY,accountToken);
+    localStorage.setItem(ACCOUNT_MODE_KEY,"true");
+    if(!await updateAccount())throw Error("Вход выполнен, но данные пока не подтверждены сервером");
   }
   async function loginAccount(password){
     const response=await fetch(ACCOUNT_API+"/login",{method:"POST",
       headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});
-    const data=await response.json();
-    if(!response.ok)throw Error(data.error||"Login failed");
-    accountToken=data.token;localStorage.setItem(ACCOUNT_KEY,accountToken);
-    await accountRequest("/import","POST",{legacyToken:owner(),snapshot:localSnapshot(),sessions:storedHistory()});
-    if(!await updateAccount())throw Error("Не удалось получить данные с сервера");
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(result.error||"Вход не удался");
+    await acceptAccountLogin(result);
+  }
+  async function setupAccount(password){
+    const response=await fetch(ACCOUNT_API+"/setup",{method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+owner()},
+      body:JSON.stringify({password})});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(result.error||"Не удалось создать аккаунт");
+    await acceptAccountLogin(result);
   }
   function sendAccountAnswer(session,card,correct){
-    if(!accountToken)return;
-    const job={eventId:crypto.randomUUID(),sessionId:session.id,
-      cardId:card.id,correct,occurredAt:new Date().toISOString()};
-    writeJson(OUTBOX_KEY,[...outbox(),job]);
-    void updateAccount();
+    const item={eventId:crypto.randomUUID(),sessionId:session.id,cardId:card.id,
+      correct,occurredAt:new Date().toISOString()};
+    writeJson(OUTBOX_KEY,[...outbox(),item]);
+    if(accountToken)void updateAccount();
   }
 
   const SYNC_URL="https://personal-life-api-production.up.railway.app/api/quiz-sync";
@@ -140,6 +221,7 @@
   }
   function queueSync(){
     if(applyingRemote)return;
+    if(accountMode){markAccountMeta();return;}
     localStorage.setItem(PENDING_KEY,Date.now()+":"+crypto.randomUUID());
     clearTimeout(timer);
     timer=setTimeout(()=>void sendSync(),1200);
@@ -207,7 +289,7 @@
       data.sessions.filter(validSession).some(s=>!response.sessions.some(r=>r.id===s.id&&stable(r)===stable(s)));
   }
   function synchronize(){
-    if(accountToken)return updateAccount();
+    if(accountMode)return accountToken?updateAccount():Promise.resolve(false);
     if(inFlight)return inFlight;
     if(!navigator.onLine){lastSyncError=true;syncView();return Promise.resolve(false);}
     busy=true;
@@ -441,13 +523,13 @@
   function dueCards() {
     const today = engine.isoDay();
     const states = getProgress();
-    // Newly imported and never-studied cards must not enter reviews.
-    return allCards({disregardTopic:true}).filter(card =>
-      Boolean(states[card.id]) && cardState(card,states).dueDate <= today);
+    const cards=allCards({disregardTopic:true});
+    if(accountMode){const due=new Set(serverQueue?.due||[]);return cards.filter(c=>due.has(c.id));}
+    return cards.filter(c=>Boolean(states[c.id])&&cardState(c,states).dueDate<=today);
   }
 
   function updateBadge() {
-    const count = dueCards().length;
+    const count = accountMode&&!serverQueue?"…":dueCards().length;
     for (const id of ["flashcard-count","flashcard-top-count","flashcard-sidebar-count"]) {
       const counter = document.getElementById(id);
       if (!counter) continue;
@@ -512,7 +594,7 @@
     const states=getProgress();
     states[card.id]={...engine.afterReview(states[card.id],!item.hadWrongAttempt),lastCorrect:!item.hadWrongAttempt,updatedAt:new Date().toISOString()};
     writeJson(KEY_PROGRESS,states);
-    if(accountToken)sendAccountAnswer(session,card,!item.hadWrongAttempt);
+    if(accountMode)sendAccountAnswer(session,card,!item.hadWrongAttempt);
     else queueSync();
     window.dispatchEvent(new Event("study-reviews-updated"));
   }
@@ -593,7 +675,7 @@
     // Free practice does not affect this metric, consistent with scheduling.
     const progress = getProgress();
     const globallyTracked=Object.keys(progress).length;
-    const unseen = cards.filter(card => !progress[card.id]);
+    const unseen = accountMode&&serverQueue ? cards.filter(c=>serverQueue.newCards.includes(c.id)) : cards.filter(card=>!progress[card.id]);
     const known = cards.filter(card => cardState(card,progress).repetitionNumber >= 1).length;
     const knownPercent = cards.length ? Math.round(known * 100 / cards.length) : 0;
     const past = latestHistory().filter(item => item.examId === context.exam?.id);
@@ -602,7 +684,7 @@
     const unrelated = globalSession && !sessionForCurrentContext();
     host.innerHTML = titleBar("Тренировка и повторение",context.exam?.title || "Выбери экзамен")+
       '<div class="quiz-stat-grid">'+countBox("Всего в разделе",cards.length)+
-      countBox("Нужно повторить",due.length)+countBox("К повторению завтра",allCards({disregardTopic:true}).filter(c=>progress[c.id]&&cardState(c,progress).dueDate<=engine.plusDays(engine.isoDay(),1)).length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
+      countBox("Нужно повторить",due.length)+countBox("К повторению завтра",accountMode?(serverQueue?.upcomingTomorrow?.length??"…"):allCards({disregardTopic:true}).filter(c=>progress[c.id]&&cardState(c,progress).dueDate===engine.plusDays(engine.isoDay(),1)).length)+countBox("Новые карточки",unseen.length)+countBox("Тренировок",past.length)+
       countBox("Знаю карточек",knownPercent+"%")+countBox("Записей прогресса",globallyTracked)+countBox("Подтверждено сервером",lastVerifiedAt?lastVerifiedCount:"Не проверено")+
       '<div class="quiz-note" style="grid-column:1/-1;margin:0">Освоено: '+known+' из '+cards.length+'. Засчитывается после правильного ответа с первой попытки в повторении по расписанию. Ошибка сбрасывает прогресс карточки.</div>'+'</div>'+
       (unrelated?'<div class="quiz-warning">Есть незавершённое занятие другого предмета. Продолжи его или отмени, прежде чем начинать новое.</div>':"")+
@@ -635,8 +717,9 @@
   }
 
   async function startSession(mode,group="due") {
-    if(accountToken && !await updateAccount()){
-      ui.notice="Не удалось подтвердить очередь на сервере. Проверь интернет.";renderHome();return;
+    if(!accountToken){ui.notice="Войди в аккаунт, чтобы заниматься и сохранять прогресс в PostgreSQL.";renderHome();return;}
+    if(!await updateAccount()){
+      ui.notice="Не удалось подтвердить очередь на сервере. История сохранена.";renderHome();return;
     }
     const context = getContext();
     if (ui.session || (mode!=="SCHEDULED" && !context.exam)) return;
@@ -645,7 +728,7 @@
       allCards({disregardTopic:true}) : visibleCards();
     const today=engine.isoDay(),states=getProgress();
     const cards=mode==="SCHEDULED" ? source.filter(card =>
-      accountToken && serverQueue ? (group==="new"?serverQueue.newCards:serverQueue.due).includes(card.id) :
+      accountMode && serverQueue ? (group==="new"?serverQueue.newCards:serverQueue.due).includes(card.id) :
       group==="new" ? !states[card.id] :
         Boolean(states[card.id]) && cardState(card,states).dueDate<=today
     ) : source;
@@ -763,7 +846,7 @@
       const scheduled=engine.afterReview(prior,firstTryCorrect);
       states[card.id]={...scheduled,lastCorrect:firstTryCorrect,updatedAt:new Date().toISOString()};
       writeJson(KEY_PROGRESS,states);
-      if(accountToken)sendAccountAnswer(session,card,firstTryCorrect);
+      if(accountMode)sendAccountAnswer(session,card,firstTryCorrect);
       else queueSync();
       window.dispatchEvent(new Event("study-reviews-updated"));
     }
@@ -933,8 +1016,9 @@
     const history=storedHistory();
     history.unshift(completed.result);
     writeJson(KEY_HISTORY,history.slice(0,MAX_HISTORY));
-    if(accountToken)void accountRequest("/sync","POST",{sessions:[completed.result]}).then(updateAccount).catch(console.warn);
-    else {queueSync();void sendSync();}
+    queueSync();
+    if(accountMode)void updateAccount();
+    else void sendSync();
     window.dispatchEvent(new Event("study-reviews-updated"));
     localStorage.removeItem(KEY_SESSION);
     ui.session=null;ui.feedback=null;ui.result=completed.result;ui.view="result";
@@ -1444,6 +1528,6 @@
   };
   window.addEventListener("hashchange",openCardsFromLink);
   updateBadge();
-  void (accountToken?updateAccount():pullSync());
+  void (accountMode?(accountToken?updateAccount():Promise.resolve(false)):pullSync());
   openCardsFromLink();
 })();
