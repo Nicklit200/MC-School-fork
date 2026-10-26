@@ -702,8 +702,8 @@
       '<button data-action="manage" type="button">Все карточки</button>'+
       '<button data-action="history" type="button">История занятий</button>'+
       '</div>'+
-      '<div class="quiz-note"><strong>Серверный аккаунт</strong><p>'+(accountToken?(accountOnline?"Данные из PostgreSQL":"Проверка связи с сервером"):'Войди с одним паролем на телефоне и компьютере. Локальная история будет перенесена на сервер.')+'</p>'+(accountToken?'<button data-action="account-refresh" type="button">Обновить</button>':'<button data-action="account-login" type="button">Войти</button>')+'</div>'+
-      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(lastSyncError?"Нет связи с сервером. Результаты пока только на устройстве.":lastSyncAt?"Связь с сервером есть. Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение…")+(localStorage.getItem(PENDING_KEY)?" · Есть данные для отправки":"")+(lastVerifiedAt?" · Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):" · Сохранение ещё не подтверждено чтением из PostgreSQL")+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button> <button data-action="pair-export" type="button">Ключ синхронизации</button> <button data-action="pair-import" type="button">Подключить устройство</button><small>Ответы отправляются автоматически и проверяются обратным чтением. Два устройства должны использовать один секретный ключ. Для доступа из ChatGPT потребуется отдельно подключить коннектор «Мои навыки».</small></div>'+
+      '<div class="quiz-note"><strong>Единый аккаунт</strong><p>'+(accountToken?(accountOnline?"Прогресс подтверждён PostgreSQL.":"Проверяем сервер. Неотправленные ответы сохраняются."):"Создай пароль на устройстве, ранее подключённом к коннектору «Мои навыки». Затем войди с ним на любом устройстве.")+'</p>'+(accountToken?'<button data-action="account-refresh" type="button">Обновить</button> <button data-action="account-password" type="button">Сменить пароль</button>':'<button data-action="account-login" type="button">Войти</button> <button data-action="account-setup" type="button">Создать аккаунт</button>')+'</div>'+
+      '<div class="quiz-note" role="status"><strong>Синхронизация тренировок</strong><div>'+(accountMode?(accountOnline?"Проверено чтением из PostgreSQL: "+esc(new Date(lastVerifiedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Нет подтверждения сервера")+(outbox().length?" · Неотправленных ответов: "+outbox().length:"")+(readJson(META_KEY,null)?" · Есть изменения для отправки":""):(lastSyncError?"Нет связи с сервером":lastSyncAt?"Последняя проверка: "+esc(new Date(lastSyncAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})):"Проверяем подключение"))+'.</div><button data-action="sync-now" type="button">Синхронизировать сейчас</button><small>На всех устройствах используется один аккаунт и общая база PostgreSQL. Старые данные сохраняются до успешного переноса.</small></div>'+
       packagesMarkup()+
       '<div class="quiz-note">Один правильный вариант и до трёх неправильных. Ошибочная карточка возвращается в очередь, а результат засчитывается по первой попытке.</div>'+
       '<div class="quiz-schedule"><strong>Интервалы Mindcrafti School</strong><div>1 → 2 → 3 → 7 → 14 → 30 дней</div>'+
@@ -711,7 +711,7 @@
       (lesson?'<div class="quiz-last"><strong>Последний результат</strong><span>'+labelDate(lesson.date)+
         ' · '+lesson.correctFirstTry+' из '+lesson.totalCards+' с первой попытки</span></div>':"")+
       (ui.notice?'<div class="quiz-notice" role="status">'+esc(ui.notice)+'</div>':"")+
-      '<p class="quiz-storage-note">Прогресс сохраняется в PostgreSQL Railway, а локальная копия нужна для работы без интернета. Чтобы история совпадала на компьютере и телефоне, подключи оба устройства одним секретным ключом. Не передавай его посторонним.</p>'+
+      '<p class="quiz-storage-note">Расписание и история хранятся в PostgreSQL Railway. Браузер сохраняет только временную копию и очередь при потере связи.</p>'+
       '<div id="study-reminder-settings" class="study-reminder-settings"></div>';
     window.dispatchEvent(new Event("study-home-rendered"));
   }
@@ -1350,11 +1350,22 @@
     if (!button || !host.contains(button) || button.disabled) return;
     const action=button.dataset.action;
     const id=button.dataset.id;
-    if(action==="account-login"){
-      const password=window.prompt("Пароль единого аккаунта «Мои навыки»:");
+    if(action==="account-login"||action==="account-setup"){
+      const password=window.prompt(action==="account-setup"?
+        "Придумай пароль единого аккаунта (не менее 12 символов):":"Пароль единого аккаунта «Мои навыки»:");
       if(!password)return;
-      try{await loginAccount(password);ui.notice="Аккаунт подключён. Данные сохранены на сервере.";}
-      catch(error){ui.notice="Не удалось войти: "+error.message;}
+      try{
+        if(action==="account-setup")await setupAccount(password);
+        else await loginAccount(password);
+        ui.notice="Аккаунт подключён. Прогресс получен из PostgreSQL.";
+      }catch(error){ui.notice="Ошибка входа: "+error.message;}
+      renderHome();return;
+    }
+    if(action==="account-password"){
+      const password=window.prompt("Новый пароль (не менее 12 символов):");
+      if(!password)return;
+      try{await accountRequest("/change-password","POST",{password});ui.notice="Пароль изменён.";}
+      catch(error){ui.notice="Ошибка: "+error.message;}
       renderHome();return;
     }
     if(action==="account-refresh"){
