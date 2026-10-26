@@ -103,6 +103,7 @@ export function WhiteboardPanel({
   hostActions,
   overlay,
   active = true,
+  compactPreview = false,
   observedPage,
   onSaveLessonDocuments,
   savingLessonDocuments = false,
@@ -128,6 +129,8 @@ export function WhiteboardPanel({
   overlay?: ReactNode;
   /** False while another board is on screen: pauses polling, keeps state. */
   active?: boolean;
+  /** A fixed, full-page, read-only overview. Does not change the pupil's zoom or pan. */
+  compactPreview?: boolean;
   /** Page currently being viewed by the student who owns this board. */
   observedPage?: number;
   onSaveLessonDocuments?: () => void;
@@ -219,7 +222,9 @@ export function WhiteboardPanel({
     onDocumentView: receiveDocumentView,
   });
   const locked = navigationLocked(isHost, follow.following);
-  const continuous = targetType === 'WHITEBOARD' && (canAnnotate || follow.followLayout === 'continuous') && (follow.followLayout ?? layout) === 'continuous';
+  // Overview tiles always fit one complete page, irrespective of the teacher's
+  // previously opened (and potentially zoomed or scrolled) workspace.
+  const continuous = !compactPreview && targetType === 'WHITEBOARD' && (canAnnotate || follow.followLayout === 'continuous') && (follow.followLayout ?? layout) === 'continuous';
 
   const [pageStatuses, setPageStatuses] = useState<Record<number, PageSurfaceStatus>>({});
   const reportPageStatus = useCallback((index: number, status: PageSurfaceStatus) => {
@@ -649,7 +654,7 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}${continuous ? ' whiteboard--continuous' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
+    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}${continuous ? ' whiteboard--continuous' : ''}${compactPreview ? ' whiteboard--compact-preview' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
       <div className="whiteboard__topline">
       {canAnnotate && (
         <BoardToolbar
@@ -737,10 +742,10 @@ export function WhiteboardPanel({
               classId={classId} actorId={actorId} isHost={isHost} targetType={targetType} targetId={targetId} pageIndex={index}
               pdfDocument={pdfDocument} sourceAspect={sourceAspect} liveBackground={cameraBackground}
               tool={tool} settings={settingsOf} textSettings={toolSettings.text} eraserMode={eraserMode} inputMode={inputMode}
-              view={continuous ? DEFAULT_VIEW : viewOf(pages, index)} onViewChange={next => setPages(current => withView(current, next, index))}
+              view={compactPreview || continuous ? DEFAULT_VIEW : viewOf(pages, index)} onViewChange={next => setPages(current => withView(current, next, index))}
               onDocumentGesture={continuous ? applyDocumentGesture : undefined}
               onDocumentPenContact={continuous ? pressed => noteDocumentPenContact(index, pressed) : undefined}
-              canAnnotate={canAnnotate} navigationLocked={locked} continuous={continuous}
+              canAnnotate={canAnnotate} navigationLocked={locked || compactPreview} continuous={continuous}
               active={active && (index === pages.current || (continuous && visiblePages.has(index)))} selected={index === pages.current}
               lasers={index === pages.current && !camera ? lasers : []} onLaser={sendLaser}
               onActivate={activatePage} onStatusChange={reportPageStatus} onAspectChange={reportPageAspect} onScrollGesture={scrollPages}
