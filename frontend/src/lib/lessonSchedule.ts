@@ -26,6 +26,26 @@ export function lessonDayInstant(date: string, hour = 0): Date {
   return new Date(instant);
 }
 
+/** Convert Berlin wall-clock date and HH:mm to UTC for newly scheduled lessons.
+ * On clock-change days, reject missing or duplicated times instead of silently moving a lesson.
+ */
+export function lessonTimeInstant(date: string, time: string): Date {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || !/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return new Date(NaN);
+  const localAsUtc = new Date(`${date}T${time}:00.000Z`);
+  if (!Number.isFinite(localAsUtc.getTime()) || localAsUtc.toISOString().slice(0, 10) !== date) return new Date(NaN);
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: SCHOOL_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  // Modern Berlin standard/daylight offsets. Testing both also detects the repeated autumn hour.
+  const matching = [1, 2].map(hours => new Date(localAsUtc.getTime() - hours * 3_600_000))
+    .filter(candidate => {
+      const parts = Object.fromEntries(formatter.formatToParts(candidate).map(part => [part.type, part.value]));
+      return `${parts.year}-${parts.month}-${parts.day}` === date && `${parts.hour}:${parts.minute}` === time;
+    });
+  return matching.length === 1 ? matching[0] : new Date(NaN);
+}
+
 export function isNativeLesson(lesson: GroupLesson): boolean {
   return lesson.eventId.startsWith('local-');
 }
