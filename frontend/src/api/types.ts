@@ -10,6 +10,9 @@ export type SessionStatus = 'IN_PROGRESS' | 'COMPLETED';
 export type DailyReviewStatus = 'COMPLETED' | 'PARTIAL' | 'MISSED';
 
 export interface User { id: string; fullName: string; email: string | null; username: string | null; role: Role; status: UserStatus; preferredLanguage: Language; googleDriveTrialTranscriptFolderId: string | null; }
+export interface AdminAccount extends User { teacherId: string | null; teacherFullName: string | null; }
+export interface StudentLessonHistoryItem { sourceTeacherId: string; sourceTeacherName: string; eventId: string; title: string; groupName: string | null; startsAt: string; endsAt: string; hasWorkbook: boolean; hasAnswers: boolean; hasTranscript: boolean; }
+export interface StudentLessonHistoryDetail extends StudentLessonHistoryItem { homeworkNotes: string | null; difficulties: string | null; lessonPlan: string | null; coveredMaterial: string | null; transcriptText: string | null; transcriptFilename: string | null; workbookFilename: string | null; answersFilename: string | null; }
 export type SchoolType = 'GYMNASIUM' | 'REALSCHULE' | 'MITTELSCHULE' | 'WIRTSCHAFTSSCHULE' | 'FACHOBERSCHULE' | 'GESAMTSCHULE' | 'WERKREALSCHULE' | 'OTHER';
 export type LearningPace = 'SLOW' | 'NORMAL' | 'FAST';
 export interface StudentListItem extends User { invitationToken: string | null; googleDriveFolderUrl: string | null; googleDriveHomeworkFolderId: string | null; googleDriveTranscriptFolderId: string | null; chatGptProjectUrl: string | null; grade: number | null; schoolType: SchoolType | null; learningPace: LearningPace | null; learningStrengths: string | null; learningDifficulties: string | null; explanationStyle: string | null; learningNotes: string | null; parentId: string | null; parentFullName: string | null; parentEmail: string | null; parentStatus: UserStatus | null; parentInvitationToken: string | null; }

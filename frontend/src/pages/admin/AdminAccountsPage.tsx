@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, getPersistentAccessToken, setSessionAccessToken } from '../../api/client';
-import type { User } from '../../api/types';
+import type { AdminAccount, User } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { homePathForRole } from '../../auth/roleRoutes';
 import { saveAdminImpersonation } from '../../auth/adminImpersonation';
@@ -16,8 +16,12 @@ export function AdminAccountsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeRole: ManagedRole = searchParams.get('role') === 'PARENT' ? 'PARENT' : 'STUDENT';
-  const [students, setStudents] = useState<User[]>([]);
-  const [parents, setParents] = useState<User[]>([]);
+  const [students, setStudents] = useState<AdminAccount[]>([]);
+  const [parents, setParents] = useState<AdminAccount[]>([]);
+  const [teachers, setTeachers] = useState<User[]>([]);
+  const [teacherSelections, setTeacherSelections] = useState<Record<string, string>>({});
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,11 +30,13 @@ export function AdminAccountsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([api.adminAccounts.list('STUDENT'), api.adminAccounts.list('PARENT')])
-      .then(([studentAccounts, parentAccounts]) => {
+    Promise.all([api.adminAccounts.list('STUDENT'), api.adminAccounts.list('PARENT'), api.teachers.list()])
+      .then(([studentAccounts, parentAccounts, teacherAccounts]) => {
         if (!cancelled) {
           setStudents(studentAccounts);
           setParents(parentAccounts);
+          setTeachers(teacherAccounts.filter((teacher) => teacher.role === 'TEACHER'));
+          setTeacherSelections(Object.fromEntries(studentAccounts.map((student) => [student.id, student.teacherId ?? ''])));
         }
       })
       .catch((e) => { if (!cancelled) setError(toErrorMessage(e, t)); })
@@ -43,11 +49,26 @@ export function AdminAccountsPage() {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return accounts;
     return accounts.filter((account) =>
-      [account.fullName, account.username, account.email]
+      [account.fullName, account.username, account.email, account.teacherFullName]
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase().includes(query)),
     );
   }, [accounts, search]);
+
+  async function assignTeacher(account: AdminAccount) {
+    const teacherId = teacherSelections[account.id] ?? '';
+    if (!teacherId || teacherId === account.teacherId || assigningId) return;
+    const teacherName = teachers.find((teacher) => teacher.id === teacherId)?.fullName ?? 'выбранному учителю';
+    if (!window.confirm(`Передать ученика «${account.fullName}» учителю «${teacherName}»? История прошлых уроков сохранится.`)) return;
+    setAssigningId(account.id); setError(null); setSuccess(null);
+    try {
+      const updated = await api.adminAccounts.assignTeacher(account.id, teacherId);
+      setStudents((current) => current.map((student) => student.id === updated.id ? updated : student));
+      setTeacherSelections((current) => ({ ...current, [updated.id]: updated.teacherId ?? '' }));
+      setSuccess(`Ученик «${updated.fullName}» передан учителю «${updated.teacherFullName ?? teacherName}».`);
+    } catch (e) { setError(toErrorMessage(e, t)); }
+    finally { setAssigningId(null); }
+  }
 
   async function enterAs(account: User) {
     if (enteringId) return;
@@ -96,6 +117,7 @@ export function AdminAccountsPage() {
       </div>
 
       {error && <div className="banner banner--error" style={{ marginTop: 16 }}>{error}</div>}
+      {success && <div className="banner banner--success" style={{ marginTop: 16 }}>{success}</div>}
 
       <div className="panel" style={{ marginTop: 18 }}>
         <label className="field" style={{ maxWidth: 520 }}>
@@ -126,6 +148,15 @@ export function AdminAccountsPage() {
               {account.username && account.email && <div className="muted">{account.email}</div>}
             </div>
             <span className={`pill ${account.status === 'ACTIVE' ? 'pill--learned' : 'pill--active'}`}>{account.status}</span>
+            {activeRole === 'STUDENT' && <div style={{display:'flex',alignItems:'end',gap:8,flex:'1 1 340px',flexWrap:'wrap'}}>
+              <label className="field" style={{margin:0,minWidth:210,flex:'1 1 210px'}}>
+                <span className="field__label">Назначенный учитель</span>
+                <select className="input" value={teacherSelections[account.id] ?? account.teacherId ?? ''} onChange={event => setTeacherSelections(current => ({...current,[account.id]:event.target.value}))} disabled={Boolean(assigningId)}>
+                  <option value="">Выберите учителя</option>{teachers.map(teacher => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
+                </select>
+              </label>
+              <button type="button" className="btn btn--ghost" disabled={Boolean(assigningId) || !(teacherSelections[account.id] ?? account.teacherId) || (teacherSelections[account.id] ?? account.teacherId) === account.teacherId} onClick={() => void assignTeacher(account)}>{assigningId === account.id ? 'Передаём…' : 'Передать ученика'}</button>
+            </div>}
             <button type="button" className="btn" disabled={Boolean(enteringId)} onClick={() => void enterAs(account)}>
               {enteringId === account.id ? 'Входим…' : account.role === 'STUDENT' ? 'Войти как ученик' : 'Войти как родитель'}
             </button>
