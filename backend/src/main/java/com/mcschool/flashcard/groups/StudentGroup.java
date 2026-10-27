@@ -58,6 +58,14 @@ public class StudentGroup {
         return new StudentGroup(teacher, name);
     }
 
+    public void reassignTeacher(User teacher) {
+        if (teacher == null || teacher.getRole() != com.mcschool.flashcard.users.Role.TEACHER
+                || teacher.isArchived() || teacher.getStatus() != com.mcschool.flashcard.users.UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("An active teacher account is required");
+        }
+        this.teacher = teacher;
+    }
+
     public void updateTranscriptFolder(String folderId) {
         this.googleDriveTranscriptFolderId = folderId == null || folderId.isBlank() ? null : folderId.strip();
     }
