@@ -1,22 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { GroupLesson, StudentListItem } from '../../api/types';
+import type { GroupLesson, StudentLessonHistoryItem, StudentListItem } from '../../api/types';
+
+type LessonRow = {
+  eventId: string;
+  title: string;
+  groupName: string | null;
+  startsAt: string;
+  endsAt: string;
+  sourceTeacherId: string | null;
+  sourceTeacherName: string | null;
+  historical: boolean;
+};
 
 export function StudentLessonsPage() {
   const { studentId = '' } = useParams();
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
+  const [historyLessons, setHistoryLessons] = useState<StudentLessonHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.students.get(studentId), api.lessons.groupLessons()])
-      .then(([studentPayload, allLessons]) => {
+    Promise.all([
+      api.students.get(studentId),
+      api.lessons.groupLessons(),
+      api.students.lessonHistory(studentId),
+    ])
+      .then(([studentPayload, allLessons, oldLessons]) => {
         if (cancelled) return;
         setStudent(studentPayload);
         setLessons(allLessons);
+        setHistoryLessons(oldLessons);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -27,12 +44,38 @@ export function StudentLessonsPage() {
     return () => { cancelled = true; };
   }, [studentId]);
 
-  const studentLessons = useMemo(
-    () => lessons
+  const studentLessons = useMemo(() => {
+    const current: LessonRow[] = lessons
       .filter((lesson) => lesson.studentId === studentId || (lesson.participantStudentIds ?? []).includes(studentId))
-      .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()),
-    [lessons, studentId],
-  );
+      .map((lesson) => ({
+        eventId: lesson.eventId,
+        title: lesson.title,
+        groupName: lesson.groupName,
+        startsAt: lesson.startsAt,
+        endsAt: lesson.endsAt,
+        sourceTeacherId: null,
+        sourceTeacherName: null,
+        historical: false,
+      }));
+
+    const currentScheduleKeys = new Set(current.map(scheduleKey));
+    const previous: LessonRow[] = historyLessons
+      .map((lesson) => ({
+        eventId: lesson.eventId,
+        title: lesson.title,
+        groupName: lesson.groupName,
+        startsAt: lesson.startsAt,
+        endsAt: lesson.endsAt,
+        sourceTeacherId: lesson.sourceTeacherId,
+        sourceTeacherName: lesson.sourceTeacherName,
+        historical: true,
+      }))
+      // Future lessons copied to the replacement teacher's schedule should not appear twice.
+      .filter((lesson) => new Date(lesson.startsAt).getTime() <= Date.now() || !currentScheduleKeys.has(scheduleKey(lesson)));
+
+    return [...current, ...previous]
+      .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
+  }, [lessons, historyLessons, studentId]);
 
   if (loading) return <p className="muted">Загружаем историю уроков…</p>;
 
@@ -42,7 +85,7 @@ export function StudentLessonsPage() {
       <div style={{ margin: '12px 0 22px' }}>
         <h1 style={{ marginBottom: 6 }}>{student?.fullName ?? 'Ученик'} · уроки</h1>
         <p className="muted" style={{ margin: 0 }}>
-          Вся история индивидуальных и групповых занятий. Откройте урок, чтобы увидеть рабочий лист, ответы, домашку, заметки и транскрипцию.
+          История занятий, в том числе у предыдущих преподавателей. Прошлые уроки доступны только для просмотра.
         </p>
       </div>
 
@@ -56,8 +99,10 @@ export function StudentLessonsPage() {
             const isFuture = new Date(lesson.startsAt).getTime() > Date.now();
             return (
               <Link
-                key={lesson.eventId}
-                to={`/teacher/lessons/${encodeURIComponent(lesson.eventId)}`}
+                key={`${lesson.sourceTeacherId ?? 'current'}:${lesson.eventId}`}
+                to={lesson.historical
+                  ? `/teacher/students/${encodeURIComponent(studentId)}/lesson-history/${encodeURIComponent(lesson.sourceTeacherId ?? '')}/${encodeURIComponent(lesson.eventId)}`
+                  : `/teacher/lessons/${encodeURIComponent(lesson.eventId)}`}
                 style={{
                   textDecoration: 'none',
                   color: 'inherit',
@@ -73,15 +118,22 @@ export function StudentLessonsPage() {
               >
                 <div>
                   <strong>{formatLessonDate(lesson.startsAt)}</strong>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{formatLessonTime(lesson.startsAt, lesson.endsAt)}</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {formatLessonTime(lesson.startsAt, lesson.endsAt)}
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontWeight: 800 }}>{lesson.title}</div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                     {lesson.groupName ? `Группа: ${lesson.groupName}` : 'Индивидуальное занятие'}
+                    {lesson.historical && lesson.sourceTeacherName && <span> · Преподаватель: {lesson.sourceTeacherName}</span>}
                   </div>
                 </div>
-                <span className={`pill ${isFuture ? 'pill--pending' : 'pill--learned'}`}>{isFuture ? 'запланирован' : 'проведён'}</span>
+                <span className={`pill ${isFuture ? 'pill--pending' : 'pill--learned'}`}>
+                  {lesson.historical
+                    ? (isFuture ? 'не перенесён' : 'история прежнего учителя')
+                    : (isFuture ? 'запланирован' : 'проведён')}
+                </span>
               </Link>
             );
           })}
@@ -89,6 +141,10 @@ export function StudentLessonsPage() {
       )}
     </div>
   );
+}
+
+function scheduleKey(lesson: Pick<LessonRow, 'title' | 'groupName' | 'startsAt' | 'endsAt'>) {
+  return [lesson.title, lesson.groupName ?? '', lesson.startsAt, lesson.endsAt].join('|');
 }
 
 function formatLessonDate(value: string) {
@@ -102,6 +158,10 @@ function formatLessonDate(value: string) {
 }
 
 function formatLessonTime(start: string, end: string) {
-  const format = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
+  const format = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Berlin',
+  });
   return `${format.format(new Date(start))}–${format.format(new Date(end))}`;
 }

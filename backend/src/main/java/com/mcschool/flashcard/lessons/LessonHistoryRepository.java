@@ -18,4 +18,11 @@ public interface LessonHistoryRepository extends JpaRepository<LessonHistoryEntr
             @Param("teacherId") UUID teacherId, @Param("eventId") String eventId);
     List<LessonHistoryEntry> findAllByTeacherIdOrderByStartsAtAsc(UUID teacherId);
     List<LessonHistoryEntry> findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(UUID teacherId);
+
+    List<LessonHistoryEntry> findAllByStudentIdAndDeletedAtIsNullOrderByStartsAtDesc(UUID studentId);
+
+    List<LessonHistoryEntry> findAllByParticipantStudentIdsContainingAndDeletedAtIsNullOrderByStartsAtDesc(
+            String studentId);
+
+    List<LessonHistoryEntry> findAllByGroupIdAndDeletedAtIsNullOrderByStartsAtDesc(UUID groupId);
 }

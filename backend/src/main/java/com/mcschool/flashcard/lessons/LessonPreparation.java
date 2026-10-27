@@ -107,6 +107,24 @@ public class LessonPreparation {
         this.coveredMaterial = normalize(coveredMaterial);
     }
 
+    /** Copy a scheduled lesson's saved preparation into a new teacher-owned lesson record. */
+    public LessonPreparation copyFor(User targetTeacher, String targetEventId) {
+        LessonPreparation copy = new LessonPreparation(targetTeacher, targetEventId);
+        copy.homeworkNotes = this.homeworkNotes;
+        copy.difficulties = this.difficulties;
+        copy.lessonPlan = this.lessonPlan;
+        copy.coveredMaterial = this.coveredMaterial;
+        copy.transcriptText = this.transcriptText;
+        copy.transcriptPdf = this.transcriptPdf == null ? null : this.transcriptPdf.clone();
+        copy.transcriptFilename = this.transcriptFilename;
+        copy.workbookPdf = this.workbookPdf == null ? null : this.workbookPdf.clone();
+        copy.workbookFilename = this.workbookFilename;
+        copy.answersPdf = this.answersPdf == null ? null : this.answersPdf.clone();
+        copy.answersFilename = this.answersFilename;
+        copy.siteOpenedAt = this.siteOpenedAt;
+        return copy;
+    }
+
     public void attachWorkbook(String filename, byte[] pdf) {
         this.workbookFilename = filename;
         this.workbookPdf = pdf;
