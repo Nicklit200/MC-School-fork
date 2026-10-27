@@ -3,12 +3,14 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { StudentLessonHistoryDetail, StudentLessonHistoryDocument } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
+import { useI18n } from '../../i18n/I18nContext';
 
 type DocumentKind = 'workbook' | 'answers' | 'transcript';
 type CompletedDocumentLink = StudentLessonHistoryDocument & { url: string };
 
 export function StudentLessonHistoryDetailPage() {
   const { studentId = '', sourceTeacherId = '', eventId = '' } = useParams();
+  const { t } = useI18n();
   const [detail, setDetail] = useState<StudentLessonHistoryDetail | null>(null);
   const [files, setFiles] = useState<Partial<Record<DocumentKind, string>>>({});
   const [completedFiles, setCompletedFiles] = useState<CompletedDocumentLink[]>([]);
@@ -56,7 +58,7 @@ export function StudentLessonHistoryDetailPage() {
           setCompletedFiles(completedEntries);
         }
       } catch (e) {
-        if (!cancelled) setError(toErrorMessage(e));
+        if (!cancelled) setError(toErrorMessage(e, t));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -67,7 +69,7 @@ export function StudentLessonHistoryDetailPage() {
       cancelled = true;
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [studentId, sourceTeacherId, eventId]);
+  }, [studentId, sourceTeacherId, eventId, t]);
 
   const date = detail ? new Intl.DateTimeFormat('ru-RU', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Europe/Berlin',

@@ -82,7 +82,7 @@ public class TeacherTransferService {
         User fromTeacher = requireTeacherIncludingArchived(fromTeacherId);
         User toTeacher = requireActiveTeacher(toTeacherId);
 
-        List<User> students = users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(fromTeacherId);
+        List<User> students = users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(fromTeacherId, Role.STUDENT);
         Set<UUID> studentIds = new LinkedHashSet<>();
         for (User student : students) {
             student.reassignTeacher(toTeacher);
