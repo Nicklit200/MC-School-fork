@@ -3,6 +3,7 @@ package com.mcschool.flashcard.lessons;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDetail;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryItem;
+import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDocument;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +43,37 @@ public class StudentLessonHistoryController {
             @PathVariable UUID sourceTeacherId,
             @PathVariable String eventId) {
         return service.detail(teacher, studentId, sourceTeacherId, eventId);
+    }
+
+    @GetMapping("/{sourceTeacherId}/{eventId}/completed-documents/list")
+    public List<StudentLessonHistoryDocument> completedDocuments(
+            @AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable UUID studentId,
+            @PathVariable UUID sourceTeacherId,
+            @PathVariable String eventId) {
+        return service.completedDocuments(teacher, studentId, sourceTeacherId, eventId);
+    }
+
+    @GetMapping("/{sourceTeacherId}/{eventId}/completed-documents/{documentId}")
+    public ResponseEntity<byte[]> completedDocument(
+            @AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable UUID studentId,
+            @PathVariable UUID sourceTeacherId,
+            @PathVariable String eventId,
+            @PathVariable UUID documentId) {
+        StudentLessonHistoryService.PdfFile file =
+                service.completedDocument(teacher, studentId, sourceTeacherId, eventId, documentId);
+        if (file == null) return ResponseEntity.notFound().build();
+        String filename = file.filename()
+                .replaceAll("[\\r\\n\\x00-\\x1F\\x7F]", "_")
+                .replace('/', '_')
+                .replace('\\', '_')
+                .replace('"', '_');
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline().filename(filename, StandardCharsets.UTF_8).build().toString())
+                .body(file.bytes());
     }
 
     @GetMapping("/{sourceTeacherId}/{eventId}/{documentKind}")

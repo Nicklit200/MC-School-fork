@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -28,16 +29,19 @@ public class StudentLessonHistoryService {
     private final LessonHistoryRepository historyRepository;
     private final LessonPreparationRepository preparationRepository;
     private final StudentGroupMemberRepository groupMemberRepository;
+    private final JdbcTemplate jdbc;
 
     public StudentLessonHistoryService(
             UserRepository userRepository,
             LessonHistoryRepository historyRepository,
             LessonPreparationRepository preparationRepository,
-            StudentGroupMemberRepository groupMemberRepository) {
+            StudentGroupMemberRepository groupMemberRepository,
+            JdbcTemplate jdbc) {
         this.userRepository = userRepository;
         this.historyRepository = historyRepository;
         this.preparationRepository = preparationRepository;
         this.groupMemberRepository = groupMemberRepository;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -119,6 +123,44 @@ public class StudentLessonHistoryService {
                     : null;
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown lesson document type");
         };
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDocument> completedDocuments(
+            AuthenticatedUser caller, UUID studentId, UUID sourceTeacherId, String eventId) {
+        requireAssignedStudent(caller, studentId);
+        requireAccessibleEntry(studentId, sourceTeacherId, eventId);
+        String personalBoard = "personal-" + studentId;
+        String manualPersonalBoard = "manual-personal-" + studentId;
+        return jdbc.query("""
+                SELECT id, board_id, filename, updated_at
+                FROM completed_lesson_documents
+                WHERE teacher_id = ? AND event_id = ?
+                  AND (board_id IN ('board-1', 'manual-shared') OR board_id IN (?, ?))
+                ORDER BY updated_at DESC
+                """,
+                (rs, rowNum) -> new com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDocument(
+                        rs.getObject("id", UUID.class), rs.getString("board_id"), rs.getString("filename"),
+                        rs.getTimestamp("updated_at").toInstant().toString()),
+                sourceTeacherId, eventId, personalBoard, manualPersonalBoard);
+    }
+
+    @Transactional(readOnly = true)
+    public PdfFile completedDocument(
+            AuthenticatedUser caller, UUID studentId, UUID sourceTeacherId, String eventId, UUID documentId) {
+        requireAssignedStudent(caller, studentId);
+        requireAccessibleEntry(studentId, sourceTeacherId, eventId);
+        String personalBoard = "personal-" + studentId;
+        String manualPersonalBoard = "manual-personal-" + studentId;
+        return jdbc.query("""
+                SELECT filename, pdf
+                FROM completed_lesson_documents
+                WHERE id = ? AND teacher_id = ? AND event_id = ?
+                  AND (board_id IN ('board-1', 'manual-shared') OR board_id IN (?, ?))
+                """, rs -> {
+                    if (!rs.next()) return null;
+                    return new PdfFile(safeDefault(rs.getString("filename"), "completed-lesson.pdf"), rs.getBytes("pdf"));
+                }, documentId, sourceTeacherId, eventId, personalBoard, manualPersonalBoard);
     }
 
     private StudentLessonHistoryItem toItem(LessonHistoryEntry entry) {
