@@ -1,15 +1,19 @@
 package com.mcschool.flashcard.users;
 
-import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.users.dto.AssignStudentTeacherRequest;
+import com.mcschool.flashcard.users.dto.TransferStudentsRequest;
+import com.mcschool.flashcard.users.dto.TransferStudentsResponse;
+import com.mcschool.flashcard.users.dto.StudentTransferResponse;
+import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.lessons.TeacherTransferService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,9 +27,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class AdminAccountController {
 
     private final UserRepository userRepository;
+    private final TeacherTransferService transferService;
 
-    public AdminAccountController(UserRepository userRepository) {
+    public AdminAccountController(UserRepository userRepository, TeacherTransferService transferService) {
         this.userRepository = userRepository;
+        this.transferService = transferService;
     }
 
     @GetMapping
@@ -40,22 +46,23 @@ public class AdminAccountController {
                 .toList();
     }
 
+    @GetMapping("/teacher-options")
+    public List<TeacherAssignmentOption> teacherOptions() {
+        return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER).stream()
+                .map(TeacherAssignmentOption::from)
+                .toList();
+    }
+
     @PutMapping("/{studentId}/teacher")
-    @Transactional
-    public AdminAccountResponse assignStudentTeacher(
+    public StudentTransferResponse assignStudentTeacher(
             @PathVariable UUID studentId,
             @Valid @RequestBody AssignStudentTeacherRequest request) {
-        User student = userRepository.findById(studentId)
-                .filter(user -> user.getRole() == Role.STUDENT)
-                .filter(user -> !user.isArchived())
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
-        User teacher = userRepository.findById(request.teacherId())
-                .filter(user -> user.getRole() == Role.TEACHER)
-                .filter(user -> !user.isArchived())
-                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("Active teacher not found"));
+        return transferService.transferStudent(studentId, request.teacherId());
+    }
 
-        student.reassignTeacher(teacher);
-        return AdminAccountResponse.from(student);
+    @PostMapping("/transfer-students")
+    public TransferStudentsResponse transferStudents(
+            @Valid @RequestBody TransferStudentsRequest request) {
+        return transferService.transferAllStudents(request.fromTeacherId(), request.toTeacherId());
     }
 }

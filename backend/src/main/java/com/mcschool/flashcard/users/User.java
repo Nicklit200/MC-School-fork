@@ -188,6 +188,15 @@ public class User {
         this.invitationExpiresAt = null;
     }
 
+    public void reassignParentOwner(User teacher) {
+        if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can have a managing teacher");
+        if (teacher == null || teacher.getRole() != Role.TEACHER || teacher.isArchived()
+                || teacher.getStatus() != UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("An active teacher account is required");
+        }
+        this.teacher = teacher;
+    }
+
     public void assignParentOwner(User teacher) {
         if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can have a managing teacher");
         if (teacher == null || teacher.getRole() != Role.TEACHER) throw new IllegalArgumentException("Teacher account is required");
