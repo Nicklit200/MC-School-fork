@@ -197,6 +197,15 @@ public class User {
         this.teacher = teacher;
     }
 
+    public void reassignTeacher(User teacher) {
+        if (this.role != Role.STUDENT) throw new IllegalStateException("Only students can be reassigned");
+        if (teacher == null || teacher.getRole() != Role.TEACHER || teacher.isArchived()
+                || teacher.getStatus() != UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("An active teacher account is required");
+        }
+        this.teacher = teacher;
+    }
+
     public void setParentSchoolCredentials(String username, String passwordHash) {
         if (this.role != Role.PARENT) throw new IllegalStateException("Only parent accounts can receive parent credentials");
         if (username == null || username.isBlank()) throw new IllegalArgumentException("Username is required");
