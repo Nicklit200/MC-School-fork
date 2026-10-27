@@ -24,6 +24,7 @@ import { StudentProfilePage } from './pages/teacher/StudentProfilePage';
 import { StudentDetailPage } from './pages/teacher/StudentDetailPage';
 import { StudentHomeworksPage } from './pages/teacher/StudentHomeworksPage';
 import { StudentLessonsPage } from './pages/teacher/StudentLessonsPage';
+import { StudentLessonHistoryDetailPage } from './pages/teacher/StudentLessonHistoryDetailPage';
 import { StudentDrivePage } from './pages/teacher/StudentDrivePage';
 import { HomeworkDetailPage } from './pages/teacher/HomeworkDetailPage';
 import { TeacherCardsDetailPage } from './pages/teacher/TeacherCardsDetailPage';
@@ -90,6 +91,7 @@ export function App() {
       </Route>
       <Route path="/teacher/students/:studentId/cards/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><TeacherCardsDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/teacher/students/:studentId/homeworks/:homeworkId" element={<ProtectedRoute role="TEACHER"><Layout><HomeworkDetailPage /></Layout></ProtectedRoute>} />
+      <Route path="/teacher/students/:studentId/lesson-history/:sourceTeacherId/:eventId" element={<ProtectedRoute role="TEACHER"><Layout><StudentLessonHistoryDetailPage /></Layout></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute role="TEACHER"><Layout><GroupsPage /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId" element={<ProtectedRoute role="TEACHER"><Layout><GroupDetailWithHomeworkLinks /></Layout></ProtectedRoute>} />
       <Route path="/groups/:groupId/month-plan" element={<ProtectedRoute role="TEACHER"><Layout><MonthlyPlanPage targetType="GROUP" /></Layout></ProtectedRoute>} />
