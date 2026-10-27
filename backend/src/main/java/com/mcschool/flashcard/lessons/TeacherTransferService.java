@@ -148,14 +148,21 @@ public class TeacherTransferService {
             boolean group = entry.getGroupId() != null && groupIds.contains(entry.getGroupId());
             if (!individual && !group) continue;
 
-            List<UUID> participants = entry.toResponse().participantStudentIds() == null
+            GroupLessonResponse source = entry.toResponse();
+            List<UUID> participants = source.participantStudentIds() == null
                     ? List.of()
-                    : entry.toResponse().participantStudentIds().stream()
+                    : source.participantStudentIds().stream()
                             .filter(studentIds::contains).distinct().toList();
+            if (group && participants.isEmpty()) {
+                participants = members.findAllByGroupIdOrderByCreatedAtAsc(entry.getGroupId()).stream()
+                        .map(membership -> membership.getStudent().getId())
+                        .filter(studentIds::contains)
+                        .distinct()
+                        .toList();
+            }
             if (group && participants.isEmpty()) continue;
 
             String newEventId = ManualLessonService.EVENT_PREFIX + UUID.randomUUID();
-            GroupLessonResponse source = entry.toResponse();
             GroupLessonResponse transferred = new GroupLessonResponse(
                     newEventId,
                     newEventId,

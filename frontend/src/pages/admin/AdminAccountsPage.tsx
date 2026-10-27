@@ -156,7 +156,7 @@ export function AdminAccountsPage() {
         <div className="panel stack" style={{ marginTop: 18 }}>
           <h2 style={{ margin: 0 }}>Массовая передача учеников</h2>
           <p className="muted" style={{ margin: 0 }}>
-            Для ухода преподавателя можно перенести всех его учеников и группы одним действием. Будущие уроки копируются в расписание Mindcrafti; события Google Calendar автоматически не создаются.
+            Для ухода преподавателя можно перенести всех его учеников и группы одним действием. Будущие уроки, уже сохранённые в истории Mindcrafti, копируются в расписание сайта; события Google Calendar автоматически не создаются.
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
