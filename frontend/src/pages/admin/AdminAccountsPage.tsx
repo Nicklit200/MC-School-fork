@@ -169,7 +169,7 @@ export function AdminAccountsPage() {
             </label>
             <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
               <span className="field__label">Кому передаём</span>
-              <select className="input" value={bulkToTeacherId} onChange={(event) => setBulkToTeacherId(event.target.value)} disabled={bulkBusy}>
+              <select className="input" value={bulkToTeacherId} onChange={(event) => setBulkToTeacherId(event.target.value)} disabled={bulkBusy || Boolean(assigningId)}>
                 <option value="">Выберите нового учителя</option>
                 {teacherOptions.filter((teacher) => !teacher.archived && teacher.status === 'ACTIVE').map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
               </select>
@@ -217,7 +217,7 @@ export function AdminAccountsPage() {
                   <option value="">Выберите учителя</option>{teachers.map(teacher => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
                 </select>
               </label>
-              <button type="button" className="btn btn--ghost" disabled={Boolean(assigningId) || !(teacherSelections[account.id] ?? account.teacherId) || (teacherSelections[account.id] ?? account.teacherId) === account.teacherId} onClick={() => void assignTeacher(account)}>{assigningId === account.id ? 'Передаём…' : 'Передать ученика'}</button>
+              <button type="button" className="btn btn--ghost" disabled={Boolean(assigningId) || bulkBusy || !(teacherSelections[account.id] ?? account.teacherId) || (teacherSelections[account.id] ?? account.teacherId) === account.teacherId} onClick={() => void assignTeacher(account)}>{assigningId === account.id ? 'Передаём…' : 'Передать ученика'}</button>
             </div>}
             <button type="button" className="btn" disabled={Boolean(enteringId)} onClick={() => void enterAs(account)}>
               {enteringId === account.id ? 'Входим…' : account.role === 'STUDENT' ? 'Войти как ученик' : 'Войти как родитель'}
