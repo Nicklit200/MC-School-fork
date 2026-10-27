@@ -95,7 +95,7 @@ class TeacherTransferServiceTest {
 
         when(users.findById(oldTeacher.getId())).thenReturn(Optional.of(oldTeacher));
         when(users.findById(newTeacher.getId())).thenReturn(Optional.of(newTeacher));
-        when(users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(oldTeacher.getId()))
+        when(users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(oldTeacher.getId(), com.mcschool.flashcard.users.Role.STUDENT))
                 .thenReturn(List.of(student));
         when(groups.findAllByTeacherIdOrderByNameAsc(oldTeacher.getId())).thenReturn(List.of(group));
         when(members.findAllByGroupIdOrderByCreatedAtAsc(group.getId())).thenReturn(List.of(membership));
