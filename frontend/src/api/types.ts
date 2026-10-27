@@ -11,6 +11,10 @@ export type DailyReviewStatus = 'COMPLETED' | 'PARTIAL' | 'MISSED';
 
 export interface User { id: string; fullName: string; email: string | null; username: string | null; role: Role; status: UserStatus; preferredLanguage: Language; googleDriveTrialTranscriptFolderId: string | null; }
 export interface AdminAccount extends User { teacherId: string | null; teacherFullName: string | null; }
+export interface TeacherAssignmentOption { id: string; fullName: string; status: UserStatus; archived: boolean; }
+export interface StudentTransferResponse { student: AdminAccount; copiedFutureLessons: number; transferredGroups: number; futureGroupLessonsNotTransferred: number; }
+export interface TransferStudentsResponse { fromTeacherId: string; fromTeacherName: string; toTeacherId: string; toTeacherName: string; transferredStudents: number; transferredGroups: number; copiedFutureLessons: number; groupsWithLessonsNotTransferred: number; }
+export interface StudentLessonHistoryDocument { id: string; boardId: string; filename: string; savedAt: string; }
 export interface StudentLessonHistoryItem { sourceTeacherId: string; sourceTeacherName: string; eventId: string; title: string; groupName: string | null; startsAt: string; endsAt: string; hasWorkbook: boolean; hasAnswers: boolean; hasTranscript: boolean; }
 export interface StudentLessonHistoryDetail extends StudentLessonHistoryItem { homeworkNotes: string | null; difficulties: string | null; lessonPlan: string | null; coveredMaterial: string | null; transcriptText: string | null; transcriptFilename: string | null; workbookFilename: string | null; answersFilename: string | null; }
 export type SchoolType = 'GYMNASIUM' | 'REALSCHULE' | 'MITTELSCHULE' | 'WIRTSCHAFTSSCHULE' | 'FACHOBERSCHULE' | 'GESAMTSCHULE' | 'WERKREALSCHULE' | 'OTHER';
