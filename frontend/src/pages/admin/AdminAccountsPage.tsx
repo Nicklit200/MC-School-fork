@@ -39,7 +39,7 @@ export function AdminAccountsPage() {
         if (!cancelled) {
           setStudents(studentAccounts);
           setParents(parentAccounts);
-          setTeachers(teacherAccounts.filter((teacher) => teacher.role === 'TEACHER'));
+          setTeachers(teacherAccounts.filter((teacher) => teacher.role === 'TEACHER' && teacher.status === 'ACTIVE'));
           setTeacherOptions(allTeacherOptions);
           setTeacherSelections(Object.fromEntries(studentAccounts.map((student) => [student.id, student.teacherId ?? ''])));
           const activeTeachers = allTeacherOptions.filter((teacher) => !teacher.archived && teacher.status === 'ACTIVE');
@@ -77,6 +77,7 @@ export function AdminAccountsPage() {
         ? ` Групповых будущих уроков не перенесено: ${result.futureGroupLessonsNotTransferred}. Перенесите всю группу, чтобы сохранить её расписание.`
         : '';
       setSuccess(`Ученик «${updated.fullName}» передан учителю «${updated.teacherFullName ?? teacherName}». Будущих уроков в расписание Mindcrafti перенесено: ${result.copiedFutureLessons}. Google Calendar не изменялся.${groupWarning}`);
+      void api.adminAccounts.list('PARENT').then(setParents).catch(() => undefined);
     } catch (e) { setError(toErrorMessage(e, t)); }
     finally { setAssigningId(null); }
   }
@@ -161,7 +162,7 @@ export function AdminAccountsPage() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
               <span className="field__label">От кого передаём</span>
-              <select className="input" value={bulkFromTeacherId} onChange={(event) => setBulkFromTeacherId(event.target.value)} disabled={bulkBusy}>
+              <select className="input" value={bulkFromTeacherId} onChange={(event) => setBulkFromTeacherId(event.target.value)} disabled={bulkBusy || Boolean(assigningId)}>
                 <option value="">Выберите прежнего учителя</option>
                 {teacherOptions.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}{teacher.archived ? ' (архивный)' : ''}</option>)}
               </select>
@@ -173,7 +174,7 @@ export function AdminAccountsPage() {
                 {teacherOptions.filter((teacher) => !teacher.archived && teacher.status === 'ACTIVE').map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
               </select>
             </label>
-            <button type="button" className="btn" disabled={bulkBusy || !bulkFromTeacherId || !bulkToTeacherId || bulkFromTeacherId === bulkToTeacherId} onClick={() => void transferAllStudents()}>
+            <button type="button" className="btn" disabled={bulkBusy || Boolean(assigningId) || !bulkFromTeacherId || !bulkToTeacherId || bulkFromTeacherId === bulkToTeacherId} onClick={() => void transferAllStudents()}>
               {bulkBusy ? 'Передаём учеников…' : `Передать ${students.filter((student) => student.teacherId === bulkFromTeacherId).length} учеников`}
             </button>
           </div>
@@ -212,7 +213,7 @@ export function AdminAccountsPage() {
             {activeRole === 'STUDENT' && <div style={{display:'flex',alignItems:'end',gap:8,flex:'1 1 340px',flexWrap:'wrap'}}>
               <label className="field" style={{margin:0,minWidth:210,flex:'1 1 210px'}}>
                 <span className="field__label">Назначенный учитель</span>
-                <select className="input" value={teacherSelections[account.id] ?? account.teacherId ?? ''} onChange={event => setTeacherSelections(current => ({...current,[account.id]:event.target.value}))} disabled={Boolean(assigningId)}>
+                <select className="input" value={teacherSelections[account.id] ?? account.teacherId ?? ''} onChange={event => setTeacherSelections(current => ({...current,[account.id]:event.target.value}))} disabled={Boolean(assigningId) || bulkBusy}>
                   <option value="">Выберите учителя</option>{teachers.map(teacher => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
                 </select>
               </label>
