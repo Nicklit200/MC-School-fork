@@ -58,15 +58,24 @@ public class TeacherTransferService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Student is already assigned to this teacher");
         }
 
+        List<LessonHistoryEntry> oldLessons = oldTeacher == null
+                ? List.of()
+                : lessonHistory.findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(oldTeacher.getId());
+        Set<UUID> originalGroupIds = oldTeacher == null
+                ? Set.of()
+                : members.findAllByStudentIdOrderByCreatedAtAsc(studentId).stream()
+                        .map(membership -> membership.getGroup().getId())
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
         student.reassignTeacher(newTeacher);
         Set<UUID> studentIds = Set.of(studentId);
         Set<UUID> movedGroupIds = oldTeacher == null
                 ? Set.of()
-                : moveEligibleGroupsForStudent(student, oldTeacher, newTeacher);
+                : moveEligibleGroupsForStudent(student, oldTeacher, newTeacher, oldLessons);
         int copiedLessons = oldTeacher == null ? 0
-                : copyFutureLessons(oldTeacher, newTeacher, studentIds, movedGroupIds);
+                : copyFutureLessons(oldTeacher, newTeacher, studentIds, movedGroupIds, oldLessons);
         int futureGroupLessonsNotTransferred = oldTeacher == null ? 0
-                : countFutureGroupLessonsNotTransferred(oldTeacher, studentId, movedGroupIds);
+                : countFutureGroupLessonsNotTransferred(oldLessons, originalGroupIds, movedGroupIds);
 
         reassignParentIfAllChildrenMoved(student.getParent(), newTeacher);
         return new StudentTransferResponse(
@@ -81,8 +90,11 @@ public class TeacherTransferService {
         }
         User fromTeacher = requireTeacherIncludingArchived(fromTeacherId);
         User toTeacher = requireActiveTeacher(toTeacherId);
+        List<LessonHistoryEntry> oldLessons =
+                lessonHistory.findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(fromTeacherId);
 
-        List<User> students = users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(fromTeacherId, Role.STUDENT);
+        List<User> students = users.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(
+                fromTeacherId, Role.STUDENT);
         Set<UUID> studentIds = new LinkedHashSet<>();
         for (User student : students) {
             student.reassignTeacher(toTeacher);
@@ -94,11 +106,20 @@ public class TeacherTransferService {
             if (allNonArchivedMembersAssignedTo(group, toTeacherId)) {
                 group.reassignTeacher(toTeacher);
                 movedGroupIds.add(group.getId());
+            } else {
+                // A mixed group stays with its current owner. Remove transferred students from its
+                // active roster, but snapshot the historical membership first.
+                for (StudentGroupMember membership : new ArrayList<>(
+                        members.findAllByGroupIdOrderByCreatedAtAsc(group.getId()))) {
+                    if (studentIds.contains(membership.getStudent().getId())) {
+                        detachMembershipPreservingHistory(group, membership, oldLessons);
+                    }
+                }
             }
         }
 
-        int copiedLessons = copyFutureLessons(fromTeacher, toTeacher, studentIds, movedGroupIds);
-        int groupsNotTransferred = countGroupsWithFutureLessonsNotTransferred(fromTeacher, movedGroupIds);
+        int copiedLessons = copyFutureLessons(fromTeacher, toTeacher, studentIds, movedGroupIds, oldLessons);
+        int groupsNotTransferred = countGroupsWithFutureLessonsNotTransferred(oldLessons, movedGroupIds);
         reassignParentsIfAllChildrenMoved(students, toTeacher);
 
         return new TransferStudentsResponse(
@@ -107,39 +128,77 @@ public class TeacherTransferService {
                 students.size(), movedGroupIds.size(), copiedLessons, groupsNotTransferred);
     }
 
-    private Set<UUID> moveEligibleGroupsForStudent(User student, User oldTeacher, User newTeacher) {
+    private Set<UUID> moveEligibleGroupsForStudent(
+            User student, User oldTeacher, User newTeacher, List<LessonHistoryEntry> oldLessons) {
         Set<UUID> moved = new LinkedHashSet<>();
-        for (StudentGroupMember membership : members.findAllByStudentIdOrderByCreatedAtAsc(student.getId())) {
+        for (StudentGroupMember membership : new ArrayList<>(
+                members.findAllByStudentIdOrderByCreatedAtAsc(student.getId()))) {
             StudentGroup group = membership.getGroup();
             if (!group.getTeacher().getId().equals(oldTeacher.getId())) continue;
-            if (!allNonArchivedMembersAssignedTo(group, newTeacher.getId())) continue;
-            group.reassignTeacher(newTeacher);
-            moved.add(group.getId());
+            if (allNonArchivedMembersAssignedTo(group, newTeacher.getId())) {
+                group.reassignTeacher(newTeacher);
+                moved.add(group.getId());
+            } else {
+                detachMembershipPreservingHistory(group, membership, oldLessons);
+            }
         }
         return moved;
     }
 
+    private void detachMembershipPreservingHistory(
+            StudentGroup group, StudentGroupMember membership, List<LessonHistoryEntry> oldLessons) {
+        Instant joinedAt = membership.getCreatedAt();
+        if (joinedAt == null) return;
+
+        for (LessonHistoryEntry entry : oldLessons) {
+            if (!group.getId().equals(entry.getGroupId()) || entry.getStartsAt() == null
+                    || entry.getStartsAt().isBefore(joinedAt)) {
+                continue;
+            }
+            String existingSnapshot = entry.getParticipantStudentIds();
+            // A non-empty participant snapshot is authoritative. Legacy lessons without one
+            // need a one-time backfill before the membership record is removed.
+            if (existingSnapshot != null && !existingSnapshot.isBlank()) continue;
+
+            List<UUID> participants = members.findAllByGroupIdOrderByCreatedAtAsc(group.getId()).stream()
+                    .filter(item -> !item.getStudent().isArchived())
+                    .filter(item -> item.getCreatedAt() != null && !item.getCreatedAt().isAfter(entry.getStartsAt()))
+                    .map(item -> item.getStudent().getId())
+                    .distinct()
+                    .toList();
+            if (participants.isEmpty()) continue;
+
+            GroupLessonResponse lesson = entry.toResponse();
+            entry.reassign(new GroupLessonResponse(
+                    lesson.eventId(), lesson.bindingKey(), lesson.groupId(), lesson.groupName(),
+                    lesson.studentId(), lesson.studentName(), participants, lesson.title(),
+                    lesson.startsAt(), lesson.endsAt(), lesson.meetUrl(), lesson.calendarUrl()));
+            lessonHistory.save(entry);
+        }
+        members.delete(membership);
+    }
+
     private boolean allNonArchivedMembersAssignedTo(StudentGroup group, UUID teacherId) {
         List<StudentGroupMember> groupMembers = members.findAllByGroupIdOrderByCreatedAtAsc(group.getId());
-        boolean hasActiveAccount = false;
+        boolean hasCurrentStudent = false;
         for (StudentGroupMember membership : groupMembers) {
             User student = membership.getStudent();
             if (student.isArchived()) continue;
-            hasActiveAccount = true;
+            hasCurrentStudent = true;
             if (student.getRole() != Role.STUDENT || student.getTeacher() == null
                     || !student.getTeacher().getId().equals(teacherId)) {
                 return false;
             }
         }
-        return hasActiveAccount;
+        return hasCurrentStudent;
     }
 
-    private int copyFutureLessons(User fromTeacher, User toTeacher, Set<UUID> studentIds, Set<UUID> groupIds) {
+    private int copyFutureLessons(
+            User fromTeacher, User toTeacher, Set<UUID> studentIds, Set<UUID> groupIds,
+            List<LessonHistoryEntry> entries) {
         if (studentIds.isEmpty() && groupIds.isEmpty()) return 0;
         Instant now = Instant.now();
         int copied = 0;
-        List<LessonHistoryEntry> entries =
-                lessonHistory.findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(fromTeacher.getId());
         for (LessonHistoryEntry entry : entries) {
             if (entry.getStartsAt() == null || !entry.getStartsAt().isAfter(now)) continue;
 
@@ -151,8 +210,7 @@ public class TeacherTransferService {
             GroupLessonResponse source = entry.toResponse();
             List<UUID> participants = source.participantStudentIds() == null
                     ? List.of()
-                    : source.participantStudentIds().stream()
-                            .filter(studentIds::contains).distinct().toList();
+                    : source.participantStudentIds().stream().filter(studentIds::contains).distinct().toList();
             if (group && participants.isEmpty()) {
                 participants = members.findAllByGroupIdOrderByCreatedAtAsc(entry.getGroupId()).stream()
                         .map(membership -> membership.getStudent().getId())
@@ -185,24 +243,21 @@ public class TeacherTransferService {
         return copied;
     }
 
-    private int countFutureGroupLessonsNotTransferred(User oldTeacher, UUID studentId, Set<UUID> movedGroupIds) {
-        Set<UUID> groupIds = new HashSet<>();
-        for (StudentGroupMember membership : members.findAllByStudentIdOrderByCreatedAtAsc(studentId)) {
-            groupIds.add(membership.getGroup().getId());
-        }
-        if (groupIds.isEmpty()) return 0;
+    private int countFutureGroupLessonsNotTransferred(
+            List<LessonHistoryEntry> entries, Set<UUID> originalGroupIds, Set<UUID> movedGroupIds) {
         Instant now = Instant.now();
-        return (int) lessonHistory.findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(oldTeacher.getId()).stream()
+        return (int) entries.stream()
                 .filter(entry -> entry.getStartsAt() != null && entry.getStartsAt().isAfter(now))
-                .filter(entry -> entry.getGroupId() != null && groupIds.contains(entry.getGroupId()))
+                .filter(entry -> entry.getGroupId() != null && originalGroupIds.contains(entry.getGroupId()))
                 .filter(entry -> !movedGroupIds.contains(entry.getGroupId()))
                 .count();
     }
 
-    private int countGroupsWithFutureLessonsNotTransferred(User oldTeacher, Set<UUID> movedGroupIds) {
+    private int countGroupsWithFutureLessonsNotTransferred(
+            List<LessonHistoryEntry> entries, Set<UUID> movedGroupIds) {
         Instant now = Instant.now();
         Set<UUID> groupsWithFutureLessons = new HashSet<>();
-        for (LessonHistoryEntry entry : lessonHistory.findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(oldTeacher.getId())) {
+        for (LessonHistoryEntry entry : entries) {
             if (entry.getStartsAt() != null && entry.getStartsAt().isAfter(now)
                     && entry.getGroupId() != null && !movedGroupIds.contains(entry.getGroupId())) {
                 groupsWithFutureLessons.add(entry.getGroupId());
