@@ -1,0 +1,18 @@
+# Allowlist only deployable source; never send business data or credentials to a builder.
+**
+!Dockerfile
+!.dockerignore
+!data-package.py
+!app/
+!app/package.json
+!app/package-lock.json
+!app/server.mjs
+!app/app.html
+!app/online-auth.mjs
+!app/login.html
+!app/trans-order-key.mjs
+!app/online-start.mjs
+!app/cloud-migration.mjs
+!app/migration.html
+!tools/
+!tools/prepare-cloud.py

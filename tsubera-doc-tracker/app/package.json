@@ -1,0 +1,11 @@
+{
+  "name": "tsubera-doc-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0"
+  }
+}
