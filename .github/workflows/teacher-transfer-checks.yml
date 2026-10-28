@@ -6,6 +6,9 @@ on:
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/TeacherTransferService.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/StudentLessonHistory*.java'
       - 'backend/src/main/java/com/mcschool/flashcard/users/AdminAccountController.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/users/AdminAccountResponse.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/users/UserRepository.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/users/AdminAccountLoadingIntegrationTest.java'
       - 'backend/src/main/java/com/mcschool/flashcard/users/TeacherAssignmentOption.java'
       - 'backend/src/main/java/com/mcschool/flashcard/users/dto/StudentTransferResponse.java'
       - 'backend/src/main/java/com/mcschool/flashcard/users/dto/TransferStudents*.java'
@@ -43,9 +46,18 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      - name: Test student and group transfer behavior
+      - name: Test account loading and student and group transfer against PostgreSQL
         working-directory: backend
-        run: ./mvnw -B -ntp -Dtest=TeacherTransferServiceTest test
+        run: ./mvnw -B -ntp -Dtest=TeacherTransferServiceTest,AdminAccountLoadingIntegrationTest test
+      - name: Require executed account loading regressions without skips
+        run: |
+          python3 - <<'PY'
+          from xml.etree import ElementTree
+          suite = ElementTree.parse('backend/target/surefire-reports/TEST-com.mcschool.flashcard.users.AdminAccountLoadingIntegrationTest.xml').getroot()
+          assert int(suite.get('tests', '0')) >= 5
+          for count in ('skipped', 'failures', 'errors'):
+              assert int(suite.get(count, '0')) == 0, f'Account loading: {count} must be zero'
+          PY
 
   frontend:
     runs-on: ubuntu-latest

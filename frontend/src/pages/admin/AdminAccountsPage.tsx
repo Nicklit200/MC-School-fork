@@ -9,6 +9,14 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
 type ManagedRole = 'STUDENT' | 'PARENT';
+type LoadState = 'loading' | 'ready' | 'failed';
+type AccountResources = 'students' | 'parents' | 'teachers' | 'teacherOptions';
+const resourceLabels: Record<AccountResources, string> = {
+  students: 'ученики', parents: 'родители', teachers: 'действующие учителя', teacherOptions: 'учителя для передачи',
+};
+const loadingResources: Record<AccountResources, LoadState> = {
+  students: 'loading', parents: 'loading', teachers: 'loading', teacherOptions: 'loading',
+};
 
 export function AdminAccountsPage() {
   const { t } = useI18n();
@@ -27,34 +35,52 @@ export function AdminAccountsPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState(loadingResources);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [enteringId, setEnteringId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    Promise.all([
+    setLoadState(loadingResources);
+    Promise.allSettled([
       api.adminAccounts.list('STUDENT'),
       api.adminAccounts.list('PARENT'),
       api.teachers.list(),
       api.adminAccounts.teacherOptions(),
     ])
       .then(([studentAccounts, parentAccounts, teacherAccounts, allTeacherOptions]) => {
-        if (!cancelled) {
-          setStudents(studentAccounts);
-          setParents(parentAccounts);
-          setTeachers(teacherAccounts.filter((teacher) => teacher.role === 'TEACHER' && teacher.status === 'ACTIVE'));
-          setTeacherOptions(allTeacherOptions);
-          setTeacherSelections(Object.fromEntries(studentAccounts.map((student) => [student.id, student.teacherId ?? ''])));
-          const activeTeachers = allTeacherOptions.filter((teacher) => !teacher.archived && teacher.status === 'ACTIVE');
-          if (!bulkToTeacherId && activeTeachers.length) setBulkToTeacherId(activeTeachers[0].id);
+        if (cancelled) return;
+        if (studentAccounts.status === 'fulfilled') {
+          setStudents(studentAccounts.value);
+          setTeacherSelections((current) => Object.fromEntries(studentAccounts.value.map((student) =>
+            [student.id, current[student.id] ?? student.teacherId ?? ''])));
         }
-      })
-      .catch((e) => { if (!cancelled) setError(toErrorMessage(e, t)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+        if (parentAccounts.status === 'fulfilled') setParents(parentAccounts.value);
+        if (teacherAccounts.status === 'fulfilled') {
+          setTeachers(teacherAccounts.value.filter((teacher) => teacher.role === 'TEACHER' && teacher.status === 'ACTIVE'));
+        }
+        if (allTeacherOptions.status === 'fulfilled') {
+          setTeacherOptions(allTeacherOptions.value);
+          const activeTeachers = allTeacherOptions.value.filter((teacher) => !teacher.archived && teacher.status === 'ACTIVE');
+          setBulkToTeacherId((current) => current || activeTeachers[0]?.id || '');
+        }
+        setLoadState({
+          students: studentAccounts.status === 'fulfilled' ? 'ready' : 'failed',
+          parents: parentAccounts.status === 'fulfilled' ? 'ready' : 'failed',
+          teachers: teacherAccounts.status === 'fulfilled' ? 'ready' : 'failed',
+          teacherOptions: allTeacherOptions.status === 'fulfilled' ? 'ready' : 'failed',
+        });
+      });
     return () => { cancelled = true; };
-  }, [t]);
+  }, [t, loadAttempt]);
+
+  const failedResources = (Object.keys(resourceLabels) as AccountResources[])
+    .filter((resource) => loadState[resource] === 'failed');
+  const accountLoadState = activeRole === 'STUDENT' ? loadState.students : loadState.parents;
+  const singleTransferReady = loadState.students === 'ready' && loadState.teachers === 'ready';
+  const bulkTransferReady = loadState.students === 'ready' && loadState.teacherOptions === 'ready';
+  const transferBusy = bulkBusy || Boolean(assigningId);
 
   const accounts = activeRole === 'STUDENT' ? students : parents;
   const visibleAccounts = useMemo(() => {
@@ -69,7 +95,7 @@ export function AdminAccountsPage() {
 
   async function assignTeacher(account: AdminAccount) {
     const teacherId = teacherSelections[account.id] ?? '';
-    if (!teacherId || teacherId === account.teacherId || assigningId || bulkBusy) return;
+    if (!singleTransferReady || !teacherId || teacherId === account.teacherId || assigningId || bulkBusy) return;
     const teacherName = teachers.find((teacher) => teacher.id === teacherId)?.fullName ?? 'выбранному учителю';
     if (!window.confirm(`Передать ученика «${account.fullName}» учителю «${teacherName}»? История прошлых уроков сохранится.`)) return;
     setAssigningId(account.id); setError(null); setSuccess(null);
@@ -88,7 +114,7 @@ export function AdminAccountsPage() {
   }
 
   async function transferAllStudents() {
-    if (!bulkFromTeacherId || !bulkToTeacherId || bulkFromTeacherId === bulkToTeacherId || bulkBusy || assigningId) return;
+    if (!bulkTransferReady || !bulkFromTeacherId || !bulkToTeacherId || bulkFromTeacherId === bulkToTeacherId || bulkBusy || assigningId) return;
     const from = teacherOptions.find((teacher) => teacher.id === bulkFromTeacherId);
     const to = teacherOptions.find((teacher) => teacher.id === bulkToTeacherId);
     const count = students.filter((student) => student.teacherId === bulkFromTeacherId).length;
@@ -147,15 +173,19 @@ export function AdminAccountsPage() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" className={activeRole === 'STUDENT' ? 'btn' : 'btn btn--ghost'} onClick={() => selectRole('STUDENT')}>
-            Ученики ({students.length})
+            Ученики ({loadState.students === 'ready' ? students.length : loadState.students === 'loading' ? '…' : '—'})
           </button>
           <button type="button" className={activeRole === 'PARENT' ? 'btn' : 'btn btn--ghost'} onClick={() => selectRole('PARENT')}>
-            Родители ({parents.length})
+            Родители ({loadState.parents === 'ready' ? parents.length : loadState.parents === 'loading' ? '…' : '—'})
           </button>
         </div>
       </div>
 
       {error && <div className="banner banner--error" style={{ marginTop: 16 }}>{error}</div>}
+      {failedResources.length > 0 && <div className="banner banner--error" role="alert" style={{ marginTop: 16 }}>
+        <div>Не удалось загрузить: {failedResources.map((resource) => resourceLabels[resource]).join(', ')}. Проверьте соединение и повторите загрузку.</div>
+        <button type="button" className="btn btn--ghost" style={{ marginTop: 8 }} disabled={transferBusy} onClick={() => setLoadAttempt((current) => current + 1)}>Повторить загрузку</button>
+      </div>}
       {success && <div className="banner banner--success" style={{ marginTop: 16 }}>{success}</div>}
 
       {activeRole === 'STUDENT' && (
@@ -167,20 +197,20 @@ export function AdminAccountsPage() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
               <span className="field__label">От кого передаём</span>
-              <select className="input" value={bulkFromTeacherId} onChange={(event) => setBulkFromTeacherId(event.target.value)} disabled={bulkBusy || Boolean(assigningId)}>
+              <select className="input" value={bulkFromTeacherId} onChange={(event) => setBulkFromTeacherId(event.target.value)} disabled={!bulkTransferReady || transferBusy}>
                 <option value="">Выберите прежнего учителя</option>
                 {teacherOptions.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}{teacher.archived ? ' (архивный)' : ''}</option>)}
               </select>
             </label>
             <label className="field" style={{ margin: 0, flex: '1 1 240px' }}>
               <span className="field__label">Кому передаём</span>
-              <select className="input" value={bulkToTeacherId} onChange={(event) => setBulkToTeacherId(event.target.value)} disabled={bulkBusy || Boolean(assigningId)}>
+              <select className="input" value={bulkToTeacherId} onChange={(event) => setBulkToTeacherId(event.target.value)} disabled={!bulkTransferReady || transferBusy}>
                 <option value="">Выберите нового учителя</option>
                 {teacherOptions.filter((teacher) => !teacher.archived && teacher.status === 'ACTIVE').map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
               </select>
             </label>
-            <button type="button" className="btn" disabled={bulkBusy || Boolean(assigningId) || !bulkFromTeacherId || !bulkToTeacherId || bulkFromTeacherId === bulkToTeacherId} onClick={() => void transferAllStudents()}>
-              {bulkBusy ? 'Передаём учеников…' : `Передать ${students.filter((student) => student.teacherId === bulkFromTeacherId).length} учеников`}
+            <button type="button" className="btn" disabled={!bulkTransferReady || transferBusy || !bulkFromTeacherId || !bulkToTeacherId || bulkFromTeacherId === bulkToTeacherId} onClick={() => void transferAllStudents()}>
+              {bulkBusy ? 'Передаём учеников…' : loadState.students !== 'ready' ? 'Передать учеников' : `Передать ${students.filter((student) => student.teacherId === bulkFromTeacherId).length} учеников`}
             </button>
           </div>
         </div>
@@ -198,8 +228,10 @@ export function AdminAccountsPage() {
         </label>
       </div>
 
-      {loading ? (
+      {accountLoadState === 'loading' ? (
         <p className="muted">{t('common.loading')}</p>
+      ) : accountLoadState === 'failed' ? (
+        <div className="panel"><p className="muted" style={{ margin: 0 }}>{activeRole === 'STUDENT' ? 'Список учеников не загружен.' : 'Список родителей не загружен.'}</p></div>
       ) : visibleAccounts.length === 0 ? (
         <div className="panel">
           <p className="muted" style={{ margin: 0 }}>
@@ -219,12 +251,12 @@ export function AdminAccountsPage() {
             {activeRole === 'STUDENT' && <div style={{ display: 'flex', alignItems: 'end', gap: 8, flex: '1 1 340px', flexWrap: 'wrap' }}>
               <label className="field" style={{ margin: 0, minWidth: 210, flex: '1 1 210px' }}>
                 <span className="field__label">Назначенный учитель</span>
-                <select className="input" value={teacherSelections[account.id] ?? account.teacherId ?? ''} onChange={(event) => setTeacherSelections((current) => ({ ...current, [account.id]: event.target.value }))} disabled={Boolean(assigningId) || bulkBusy}>
+                <select className="input" value={teacherSelections[account.id] ?? account.teacherId ?? ''} onChange={(event) => setTeacherSelections((current) => ({ ...current, [account.id]: event.target.value }))} disabled={!singleTransferReady || transferBusy}>
                   <option value="">Выберите учителя</option>
                   {teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}
                 </select>
               </label>
-              <button type="button" className="btn btn--ghost" disabled={Boolean(assigningId) || bulkBusy || !(teacherSelections[account.id] ?? account.teacherId) || (teacherSelections[account.id] ?? account.teacherId) === account.teacherId} onClick={() => void assignTeacher(account)}>
+              <button type="button" className="btn btn--ghost" disabled={!singleTransferReady || transferBusy || !(teacherSelections[account.id] ?? account.teacherId) || (teacherSelections[account.id] ?? account.teacherId) === account.teacherId} onClick={() => void assignTeacher(account)}>
                 {assigningId === account.id ? 'Передаём…' : 'Передать ученика'}
               </button>
             </div>}

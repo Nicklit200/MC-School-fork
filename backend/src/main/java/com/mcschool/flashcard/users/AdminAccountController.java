@@ -1,6 +1,5 @@
 package com.mcschool.flashcard.users;
 
-import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.lessons.TeacherTransferService;
 import com.mcschool.flashcard.users.dto.AssignStudentTeacherRequest;
 import com.mcschool.flashcard.users.dto.StudentTransferResponse;
@@ -40,8 +39,7 @@ public class AdminAccountController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Only STUDENT and PARENT accounts are available here");
         }
-        return userRepository.findAllByRoleOrderByFullNameAsc(role).stream()
-                .filter(user -> !user.isArchived())
+        return userRepository.findAdminAccountsByRole(role).stream()
                 .map(AdminAccountResponse::from)
                 .toList();
     }
