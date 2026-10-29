@@ -105,7 +105,7 @@ final class McpSiteFunctionRegistry {
         add(functions, "admin_lessons", AdminLessonManagementController.class, Scope.ADMIN,
                 "lessons preparation workbook answers transcript");
         add(functions, "trial_lessons", AdminTrialLessonController.class, Scope.ADMIN, "list");
-        add(functions, "trial_leads", TrialLeadController.class, Scope.ADMIN, "list");
+        add(functions, "trial_leads", TrialLeadController.class, Scope.ADMIN, "list setStatus delete");
         add(functions, "site_visits", SiteVisitController.class, Scope.ADMIN, "analytics list deleteVisit");
         add(functions, "learning_time", LearningTimeController.class, Scope.ADMIN, "schoolSummary");
         add(functions, "learning_time", LearningTimeController.class, Scope.CALLER, "studentReport");
