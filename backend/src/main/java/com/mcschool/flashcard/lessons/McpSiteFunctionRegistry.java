@@ -16,6 +16,7 @@ import com.mcschool.flashcard.parents.TeacherParentController;
 import com.mcschool.flashcard.settings.SchoolBrandGuideController;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsController;
 import com.mcschool.flashcard.settings.StoryTemplateMasterController;
+import com.mcschool.flashcard.settings.StoryStudioProjectController;
 import com.mcschool.flashcard.skills.SkillBoardController;
 import com.mcschool.flashcard.skills.SkillMasteryController;
 import com.mcschool.flashcard.students.StudentChatGptProjectController;
@@ -104,7 +105,7 @@ final class McpSiteFunctionRegistry {
         add(functions, "admin_lessons", AdminLessonManagementController.class, Scope.ADMIN,
                 "lessons preparation workbook answers transcript");
         add(functions, "trial_lessons", AdminTrialLessonController.class, Scope.ADMIN, "list");
-        add(functions, "trial_leads", TrialLeadController.class, Scope.ADMIN, "list setStatus delete");
+        add(functions, "trial_leads", TrialLeadController.class, Scope.ADMIN, "list");
         add(functions, "site_visits", SiteVisitController.class, Scope.ADMIN, "analytics list deleteVisit");
         add(functions, "learning_time", LearningTimeController.class, Scope.ADMIN, "schoolSummary");
         add(functions, "learning_time", LearningTimeController.class, Scope.CALLER, "studentReport");
@@ -116,6 +117,9 @@ final class McpSiteFunctionRegistry {
         add(functions, "brand_guide", SchoolBrandGuideController.class, Scope.CALLER, "get pdf");
         add(functions, "brand_guide", SchoolBrandGuideController.class, Scope.ADMIN, "update");
         add(functions, "stories_template", StoryTemplateMasterController.class, Scope.ADMIN, "info upload download");
+        // Studio reads contain the real HTML/CSS/JSON project and embedded logo, not the legacy PPTX.
+        // Full-document writes are deliberately not exposed through the general MCP adapter.
+        add(functions, "stories_studio", StoryStudioProjectController.class, Scope.ADMIN, "info chunk download");
         add(functions, "skill_boards", SkillBoardController.class, Scope.CALLER, "get");
         add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save");
         add(functions, "skill_mastery", SkillMasteryController.class, Scope.CALLER,
