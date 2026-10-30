@@ -117,6 +117,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         <div class="status-filter-options" id="statusFilterOptions" role="group" aria-label="Показать статусы" hidden>
           <label class="status-filter-option"><input type="checkbox" value="" checked> Все статусы</label>
           <label class="status-filter-option"><input type="checkbox" value="no_price"> Нет цены</label>
+          <label class="status-filter-option"><input type="checkbox" value="missing_auftrag"> Не хватает Auftrag</label>
           <label class="status-filter-option"><input type="checkbox" value="ready_for_rechnung"> Готов к Rechnung</label>
           <label class="status-filter-option"><input type="checkbox" value="has_invoice"> Rechnung erstellt</label>
           <label class="status-filter-option"><input type="checkbox" value="invoice_sent"> Счёт отправлен</label>
@@ -329,6 +330,7 @@ const excelReadyRefs=new Set([
 const $=id=>document.getElementById(id);
 const selectedStatuses=new Set();
 const pendingTripStatuses=new Map();
+let tripsExcelBusy=false;
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(r.status===401){location.assign('/login');throw new Error('Войдите в Tsubera')}if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 document.getElementById('logout').addEventListener('click',async()=>{try{const result=await fetch('/auth/logout',{method:'POST'});if(!result.ok)throw new Error('Не удалось выйти');location.replace('/login')}catch(error){alert(error.message)}});
@@ -381,12 +383,14 @@ function inlineStatusControl(t){
   return '<select class="status inline-status-select '+s.tone+'" data-trip-id="'+esc(t.id)+'" aria-label="Изменить статус рейса '+esc(reference)+'" title="'+esc(s.label)+' · выбрать статус" '+(pending?'disabled aria-busy="true"':'')+' onchange="saveInlineStatus(this.dataset.tripId,this)">'+tripStatusOptions(shown,true)+'</select>';
 }
 function matchesStatusFilter(t,filter){
+  if(!filter)return true;
   if(filter==='no_price')return t.priceEur==null||t.statusOverride==='no_price';
+  if(filter==='missing_auftrag')return !t.auftrag||t.statusOverride==='missing_auftrag'||t.statusOverride==='missing_both';
   if(filter==='ready_for_rechnung')return isReadyQueueTrip(t);
   if(filter==='has_invoice')return invoiceStage(t)==='rechnung_created';
   if(filter==='invoice_sent'||filter==='payment_received')return invoiceStage(t)===filter;
   if(filter==='no_invoice')return !isInvoiceCreated(t);
-  return true;
+  return false;
 }
 function isValidRechnungUrl(value){
   try{
@@ -497,12 +501,18 @@ function filteredTripsForTable(){
     .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
 }
+function syncExcelExportButton(count=filteredTripsForTable().length){
+  const button=$('exportTripsExcel');
+  button.disabled=tripsExcelBusy||!count;
+  button.textContent=tripsExcelBusy?'Готовлю Excel…':'↓ Скачать Excel ('+count+')';
+  button.title='В Excel попадут только показанные рейсы: '+count+'. Все выбранные фильтры учтены.';
+}
 async function downloadTripsExcel(){
+  if(tripsExcelBusy)return;
   const list=filteredTripsForTable();
   if(!list.length)return alert('По выбранным фильтрам нет рейсов для Excel');
-  const button=$('exportTripsExcel'),label=button.textContent;
-  button.disabled=true;
-  button.textContent='Готовлю Excel…';
+  tripsExcelBusy=true;
+  syncExcelExportButton(list.length);
   try{
     const response=await fetch('/api/trips/export.xlsx',{
       method:'POST',
@@ -525,12 +535,13 @@ async function downloadTripsExcel(){
   }catch(error){
     alert('Не удалось скачать Excel: '+error.message);
   }finally{
-    button.disabled=false;
-    button.textContent=label;
+    tripsExcelBusy=false;
+    syncExcelExportButton();
   }
 }
 function render(){
   const list=filteredTripsForTable();
+  syncExcelExportButton(list.length);
   $('total').textContent=list.length;
   $('unloaded').textContent=list.filter(t=>t.cmrUnloaded).length;
   $('ready').textContent=trips.filter(isReadyQueueTrip).length;
