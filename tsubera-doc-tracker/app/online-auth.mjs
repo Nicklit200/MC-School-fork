@@ -7,6 +7,10 @@ function equal(a, b) {
   const aa = Buffer.from(String(a || '')), bb = Buffer.from(String(b || ''));
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
 }
+export function documentReturnPath(value) {
+  // Accept only the permanent document route, never a URL, query or fragment.
+  return typeof value === 'string' && /^\/documents\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) ? value : '';
+}
 export function createOnlineAuth({ password, captureToken = '', publicBaseUrl = '' }) {
   if (!password || password.length < 12) throw new Error('Online Tsubera requires SITE_PASSWORD of at least 12 characters.');
   const salt = crypto.randomBytes(16);
@@ -84,8 +88,12 @@ export function createOnlineAuth({ password, captureToken = '', publicBaseUrl = 
         if (size > 4096) { reply(res, 413, { error: 'Запрос слишком большой' }); return true; }
         chunks.push(chunk);
       }
-      let supplied;
-      try { supplied = JSON.parse(Buffer.concat(chunks).toString('utf8')).password; } catch { reply(res, 400, { error: 'Некорректный запрос' }); return true; }
+      let supplied, returnTo;
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        supplied = body.password;
+        returnTo = documentReturnPath(body.returnTo);
+      } catch { reply(res, 400, { error: 'Некорректный запрос' }); return true; }
       if (typeof supplied !== 'string' || supplied.length > 1024) { reply(res, 400, { error: 'Введите пароль' }); return true; }
       if (!crypto.timingSafeEqual(crypto.scryptSync(supplied, salt, 32), expected)) {
         failures.set(address, { count: (blocked?.count || 0) + 1, until: Date.now() + 15 * 60 * 1000 });
@@ -94,7 +102,7 @@ export function createOnlineAuth({ password, captureToken = '', publicBaseUrl = 
       failures.delete(address);
       const token = crypto.randomBytes(32).toString('base64url');
       sessions.set(hash(token), Date.now() + SESSION_SECONDS * 1000);
-      reply(res, 200, { ok: true }, { 'set-cookie': cookie(req, token, SESSION_SECONDS) }); return true;
+      reply(res, 200, { ok: true, redirectTo: returnTo || '/' }, { 'set-cookie': cookie(req, token, SESSION_SECONDS) }); return true;
     }
     if (pathname === '/auth/logout' && req.method === 'POST') {
       if (!originAllowed(req)) { reply(res, 403, { error: 'Недопустимый источник запроса' }); return true; }
@@ -109,7 +117,10 @@ export function createOnlineAuth({ password, captureToken = '', publicBaseUrl = 
     if(scopedConnectorResource)return false;
     if (!authorized(req)) {
       if (pathname.startsWith('/api/') || pathname.startsWith('/file/') || pathname === '/direct-upload' || pathname.startsWith('/fakturownia/')) reply(res, 401, { error: 'Войдите в Tsubera' });
-      else { res.writeHead(303, { location: '/login', 'cache-control': 'no-store' }); res.end(); }
+      else {
+        const returnTo = req.method === 'GET' ? documentReturnPath(pathname) : '';
+        res.writeHead(303, { location: '/login' + (returnTo ? '?returnTo=' + encodeURIComponent(returnTo) : ''), 'cache-control': 'no-store' }); res.end();
+      }
       return true;
     }
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !originAllowed(req)) { reply(res, 403, { error: 'Недопустимый источник запроса' }); return true; }

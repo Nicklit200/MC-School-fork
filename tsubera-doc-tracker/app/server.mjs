@@ -687,6 +687,19 @@ function tripStatusForExcel(t){
   return 'Не хватает документов';
 }
 const excelText=value=>String(value??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,' ').slice(0,32767);
+const documentBrowserPath=/^\/documents\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function stableDocumentUrl(id){
+  const localPath='/documents/'+String(id||'');
+  if(!documentBrowserPath.test(localPath))return '';
+  let base;try{base=new URL(process.env.PUBLIC_BASE_URL||'');}catch{return '';}
+  if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash||!base.hostname)return '';
+  return base.origin+localPath;
+}
+function setExcelDocumentLink(cell,doc,text){
+  if(!doc)return;const url=stableDocumentUrl(doc.id);if(!url)return;
+  cell.value={text:text===undefined?url:excelText(text),hyperlink:url,tooltip:excelText(doc.name).slice(0,255)};
+  cell.font={name:'Aptos',size:10,underline:true,color:{argb:'FF1D4ED8'}};
+}
 async function generateTripsExcel(trips){
   const workbook=new ExcelJS.Workbook();
   workbook.creator='Tsubera';
@@ -722,7 +735,8 @@ async function generateTripsExcel(trips){
       ['Email фирмы для Rechnung','companyEmail',45],['Почтовый адрес фирмы','postalAddress',65],['Требуемые документы','requiredDocuments',65],
       ['Срок отправки документов','submissionDeadline',65],['Особые правила фирмы','specialRules',65],['Источник правил','rulesSource',65],
       ['Фирма показывается','companyActive',23],['Примечание фирмы','companyNote',60],
-      ['Ручной статус (код)','manualStatus',27],['Статус по документам (код)','derivedStatus',30],['ID рейса','tripDatabaseId',40],['Тема email по правилам фирмы','companyEmailSubject',65]
+      ['Ручной статус (код)','manualStatus',27],['Статус по документам (код)','derivedStatus',30],['ID рейса','tripDatabaseId',40],['Тема email по правилам фирмы','companyEmailSubject',65],
+      ['Ссылка на Auftrag','auftragFileUrl',70],['Ссылка на CMR загрузки','cmrLoadingFileUrl',70],['Ссылка на CMR выгрузки / POD','cmrUnloadingFileUrl',70]
     ].map(([header,key,width])=>({header,key,width}))
   ];
   const header=sheet.getRow(1);
@@ -736,6 +750,7 @@ async function generateTripsExcel(trips){
   trips.forEach((trip,index)=>{
     const company=companyOut(db.prepare('SELECT * FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1').get(trip.customer));
     const documents=listDocsForTrip(trip.id);
+    const mainAuftrag=documents.find(doc=>doc.docType==='auftrag'),mainLoading=documents.find(doc=>['cmr_loading','cmr'].includes(doc.docType)),mainUnloading=documents.find(doc=>['cmr_unloading','pod'].includes(doc.docType));
     const dateCell=value=>value?new Date(value+'T00:00:00.000Z'):null;
     const date=String(trip.date||'');
     const dateValue=/^\d{4}-\d{2}-\d{2}$/.test(date)?new Date(date+'T00:00:00.000Z'):date;
@@ -795,6 +810,9 @@ async function generateTripsExcel(trips){
       if(!value)continue;let url;try{url=normalizeDispatchUrl(value);}catch{continue;}
       const cell=row.getCell(key);cell.value={text:url,hyperlink:url};cell.font={name:'Aptos',size:10,underline:true,color:{argb:'FF1D4ED8'}};
     }
+    if(trip.auftrag)setExcelDocumentLink(row.getCell('auftrag'),mainAuftrag,'Есть');
+    if(trip.cmrUnloaded)setExcelDocumentLink(row.getCell('cmr'),mainUnloading,'Есть');
+    for(const [key,doc]of [['auftragFileUrl',mainAuftrag],['cmrLoadingFileUrl',mainLoading],['cmrUnloadingFileUrl',mainUnloading]])setExcelDocumentLink(row.getCell(key),doc);
     const statusCell=row.getCell('status');
     const billingColors={'Rechnung erstellt':'FF2447A3','Счёт отправлен':'FF0369A1','Документы получены фирмой':'FF0369A1','Оплата получена':'FF15803D'};
     const billingColor=billingColors[tripStatusForExcel(trip)];
@@ -807,10 +825,13 @@ async function generateTripsExcel(trips){
   const historySheet=workbook.addWorksheet('История статусов',{views:[{state:'frozen',ySplit:1}]});
   historySheet.columns=[['Tsubera Tour-ID','tour',23],['№ заказчика','order',25],['Фирма','company',40],['Статус','status',35],['Дата статуса','date',19],['Зафиксировано (UTC)','recordedAt',27],['Источник','source',18]].map(([header,key,width])=>({header,key,width}));
   const documentSheet=workbook.addWorksheet('Документы',{views:[{state:'frozen',ySplit:1}]});
-  documentSheet.columns=[['Tsubera Tour-ID','tour',23],['№ заказчика','order',25],['Фирма','company',40],['ID документа','id',40],['Тип','type',25],['Имя файла','name',65],['Размер, байт','size',20],['Загружен (UTC)','createdAt',27],['Бумажный экземпляр у меня','paper',28],['Примечание о бумаге','note',60],['Бумага обновлена (UTC)','paperUpdatedAt',28]].map(([header,key,width])=>({header,key,width}));
+  documentSheet.columns=[['Tsubera Tour-ID','tour',23],['№ заказчика','order',25],['Фирма','company',40],['ID документа','id',40],['Тип','type',25],['Имя файла','name',65],['Размер, байт','size',20],['Загружен (UTC)','createdAt',27],['Бумажный экземпляр у меня','paper',28],['Примечание о бумаге','note',60],['Бумага обновлена (UTC)','paperUpdatedAt',28],['Ссылка на файл','fileUrl',75]].map(([header,key,width])=>({header,key,width}));
   for(const trip of trips){
     for(const item of statusHistory(trip.id)){const row=historySheet.addRow({tour:excelText(trip.internalTripId),order:excelText(trip.trip),company:excelText(trip.customer),status:item.status?tripStatusForExcel({...trip,statusOverride:item.status}):'Автоматически (по документам)',date:item.statusDate?new Date(item.statusDate+'T00:00:00.000Z'):null,recordedAt:excelText(item.recordedAt),source:item.source});row.getCell('date').numFmt='dd.mm.yyyy';}
-    for(const doc of listDocsForTrip(trip.id))documentSheet.addRow({tour:excelText(trip.internalTripId),order:excelText(trip.trip),company:excelText(trip.customer),id:doc.id,type:doc.docType,name:excelText(doc.name),size:doc.size,createdAt:doc.createdAt,paper:doc.paperAvailable?'Подтверждено':'Не подтверждено',note:excelText(doc.paperNote),paperUpdatedAt:doc.paperUpdatedAt});
+    for(const doc of listDocsForTrip(trip.id)){
+      const row=documentSheet.addRow({tour:excelText(trip.internalTripId),order:excelText(trip.trip),company:excelText(trip.customer),id:doc.id,type:doc.docType,name:excelText(doc.name),size:doc.size,createdAt:doc.createdAt,paper:doc.paperAvailable?'Подтверждено':'Не подтверждено',note:excelText(doc.paperNote),paperUpdatedAt:doc.paperUpdatedAt});
+      setExcelDocumentLink(row.getCell('name'),doc,doc.name);setExcelDocumentLink(row.getCell('fileUrl'),doc);
+    }
   }
   for(const extra of [historySheet,documentSheet]){
     extra.getRow(1).height=32;extra.getRow(1).eachCell(cell=>{cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF17233D'}};cell.font={name:'Aptos',bold:true,color:{argb:'FFFFFFFF'}};cell.alignment={wrapText:true,vertical:'middle'};});
@@ -2744,6 +2765,15 @@ const mimeMap = {
   ".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",
   ".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".pdf":"application/pdf"
 };
+function serveStoredDocument(req,res,row,{download=false}={}){
+  const fp=path.join(DOCS_DIR,row.stored_name);
+  if(!fs.existsSync(fp))return text(res,404,'File missing');
+  const inlineTypes=new Set(['application/pdf','image/png','image/jpeg','image/gif','image/webp','text/plain']);
+  const forceDownload=download||!inlineTypes.has(String(row.mime||'').split(';')[0].trim().toLowerCase());
+  res.writeHead(200,{'content-type':row.mime||'application/octet-stream','content-length':row.size,
+    'content-disposition':(forceDownload?'attachment':'inline')+"; filename*=UTF-8''"+encodeURIComponent(row.original_name)});
+  return fs.createReadStream(fp).pipe(res);
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -2792,6 +2822,10 @@ const server = http.createServer(async (req, res) => {
       return res.end(buffer);
     }
 
+    if(documentBrowserPath.test(p)&&req.method==='GET'){
+      const row=docRow(p.slice('/documents/'.length));if(!row)return text(res,404,'Not found');
+      return serveStoredDocument(req,res,row);
+    }
     if (p.startsWith("/file/") && req.method === "GET") {
       const id = p.slice("/file/".length);
       const exp = Number(url.searchParams.get("exp"));
@@ -2801,16 +2835,7 @@ const server = http.createServer(async (req, res) => {
       }
       const row = docRow(id);
       if (!row) return text(res, 404, "Not found");
-      const fp = path.join(DOCS_DIR, row.stored_name);
-      if (!fs.existsSync(fp)) return text(res, 404, "File missing");
-      const inlineTypes=new Set(['application/pdf','image/png','image/jpeg','image/gif','image/webp','text/plain']);
-      const forceDownload=url.searchParams.get('download')==='1'||!inlineTypes.has(String(row.mime||'').split(';')[0].trim().toLowerCase());
-      res.writeHead(200, {
-        "content-type": row.mime || "application/octet-stream",
-        "content-length": row.size,
-        "content-disposition": (forceDownload ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(row.original_name)
-      });
-      return fs.createReadStream(fp).pipe(res);
+      return serveStoredDocument(req,res,row,{download:url.searchParams.get('download')==='1'});
     }
 
     if (p === "/direct-upload" && req.method === "POST") {
