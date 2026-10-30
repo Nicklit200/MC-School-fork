@@ -55,6 +55,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .field input,.field select{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .docs{display:flex;flex-direction:column;gap:8px;margin-top:16px}.doc{display:grid;grid-template-columns:165px 1fr auto;gap:8px;align-items:center;border:1px solid #eee;border-radius:10px;padding:9px}
 .paper-choice{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}.paper-choice input{width:17px;height:17px;flex-shrink:0;margin:0;accent-color:#111827}.doc-paper{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-top:8px;border-top:1px solid #f3f4f6}.paper-summary{margin:-5px 0 12px}.paper-state.confirmed{color:#087443}
+.documents-panel{padding:16px}.documents-toolbar{padding:12px 0}.documents-toolbar input{flex:1;min-width:220px}.documents-toolbar select{max-width:280px}.documents-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}.catalog-document{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(220px,1fr) auto;gap:12px;border:1px solid #e5e7eb;border-radius:12px;padding:13px;align-items:start}.catalog-document>div{min-width:0;overflow-wrap:anywhere}.catalog-document-name{font-weight:700;margin:5px 0}.catalog-document-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.documents-notice{margin-top:10px;line-height:1.5}.documents-notice.error{color:#b91c1c}.document-upload-dialog{max-width:700px}.document-upload-target{white-space:pre-wrap;line-height:1.5;padding:10px;background:#f5f7fb;border-radius:9px}#documentUploadModal{z-index:30}@media(max-width:760px){.catalog-document{grid-template-columns:1fr}.catalog-document-actions{justify-content:flex-start}.documents-toolbar input,.documents-toolbar select{min-width:0;max-width:none;width:100%}.documents-panel{padding:12px}}
 .legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.tid{font-weight:800;letter-spacing:.2px;color:#111827;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:3px}.customer-ref{color:#4b5563;font-size:12px}.detailbox{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}.detailrow{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #eee}.detailrow:last-child{border-bottom:0}.detailrow b{font-size:12px;color:#6b7280}.vehicle-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.vehicle-chip{padding:7px 9px;border-radius:999px;background:#e9f2ff;color:#1857a4;font-weight:700;font-size:12px}.vehicle-select-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}.vehicle-choice{display:flex;align-items:center;gap:9px;border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fff}.vehicle-choice input{width:18px;height:18px}.vehicle-choice strong{display:block}.vehicle-choice small{display:block;color:#6b7280;margin-top:2px}.vehicle-panel{padding:16px}.vehicle-form{display:grid;grid-template-columns:220px 1fr auto;gap:10px;margin-bottom:16px}.vehicle-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.vehicle-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.vehicle-card{border:1px solid #e5e7eb;border-radius:12px;padding:13px;background:#fff}.vehicle-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.vehicle-plate{font-size:18px;font-weight:850;letter-spacing:.4px}.vehicle-meta{font-size:12px;color:#6b7280;margin-top:5px}
 .company-panel{padding:16px}.company-form{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,2fr) auto;gap:10px;margin-bottom:16px}.company-form input{padding:10px;border:1px solid #dfe3ea;border-radius:9px}.company-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.company-card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff}.company-card.inactive{background:#f9fafb;opacity:.78}.company-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.company-name{font-size:17px;font-weight:800}.company-meta{font-size:12px;color:#6b7280;margin-top:5px}.company-state{margin-top:9px}
 .company-link{border:0;background:transparent;padding:0;color:#111827;font:inherit;text-align:left;cursor:pointer;font-weight:650}
@@ -98,7 +99,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="add">+ Добавить рейс</button><button class="btn alt" id="logout" type="button">Выйти</button></div>
   </div>
 
-  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabReady">Готовы к Rechnung <span id="readyTabCount"></span></button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button><button class="tab" id="tabReconciliation">Сверка <span id="reconciliationCount"></span></button></div>
+  <div class="tabs"><button class="tab active" id="tabTrips">Рейсы</button><button class="tab" id="tabReady">Готовы к Rechnung <span id="readyTabCount"></span></button><button class="tab" id="tabDocuments">Документы <span id="documentCount"></span></button><button class="tab" id="tabCompanies">Фирмы <span id="companyCount"></span></button><button class="tab" id="tabVehicles">Машины <span id="vehicleCount"></span></button><button class="tab" id="tabActiveTransports">В пути <span id="activeTransportCount"></span></button><button class="tab" id="tabReconciliation">Сверка <span id="reconciliationCount"></span></button></div>
   <div class="inline-status-notice muted" id="inlineStatusNotice" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <section id="tripsView">
@@ -162,6 +163,21 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         </div>
         <div id="readyRows"></div>
       </div>
+    </div>
+  </section>
+
+  <section id="documentsView" class="hidden">
+    <div class="panel documents-panel">
+      <div class="docs-head"><div><h2 style="margin-bottom:5px">Все документы</h2><div class="muted">Все файлы, включая документы скрытых фирм. Отметка бумаги подтверждает наличие копии у тебя, но не оригинал и не отправку почтой.</div></div><div class="catalog-document-actions"><button class="btn alt small" type="button" id="refreshDocuments">Обновить</button><button class="btn small" type="button" id="addDocument">+ Загрузить документ</button></div></div>
+      <div class="toolbar documents-toolbar">
+        <input id="documentsQ" aria-label="Поиск документов" placeholder="Название файла, фирма, номер рейса, дата или машина...">
+        <select id="documentsCompanyFilter" aria-label="Фирма документов"><option value="">Все фирмы</option></select>
+        <select id="documentsTypeFilter" aria-label="Тип документов"><option value="">Все типы</option></select>
+        <select id="documentsPaperFilter" aria-label="Наличие бумажной копии"><option value="">Вся бумага</option><option value="confirmed">Бумажная копия у меня</option><option value="unconfirmed">Бумага не подтверждена</option></select>
+      </div>
+      <div class="muted" id="documentsSummary" role="status" aria-live="polite"></div>
+      <div class="muted documents-notice" id="documentsNotice" role="status" aria-live="polite"></div>
+      <div class="documents-list" id="documentsRows"></div>
     </div>
   </section>
 
@@ -358,6 +374,22 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   </form>
 </div>
 
+<div class="modal" id="documentUploadModal" role="dialog" aria-modal="true" aria-labelledby="documentUploadTitle">
+  <form class="dialog document-upload-dialog" id="documentUploadForm">
+    <h2 id="documentUploadTitle">Загрузить документ</h2>
+    <p class="muted receipt-help">Выбери существующий рейс и тип документа. Новые файлы появятся в его свойствах и в общем списке документов.</p>
+    <div class="grid">
+      <div class="field full"><label for="documentUploadCompany">Фирма · сузить список рейсов</label><select id="documentUploadCompany"><option value="">Все фирмы</option></select></div>
+      <div class="field full"><label for="documentUploadTrip">Рейс</label><select id="documentUploadTrip" required><option value="">Выбери рейс явно</option></select><div class="muted document-upload-target" id="documentUploadTarget">Рейс ещё не выбран</div></div>
+      <div class="field"><label for="documentUploadType">Тип документа</label><select id="documentUploadType" required><option value="">Выбери тип документа</option><option value="auftrag">Transportauftrag</option><option value="cmr_loading">CMR после загрузки</option><option value="cmr_unloading">CMR после выгрузки / POD</option><option value="pod">POD</option><option value="rechnung">Rechnung</option><option value="other">Другое</option></select></div>
+      <div class="field"><label for="documentUploadFiles">Файлы · до 20 МБ каждый</label><input id="documentUploadFiles" type="file" multiple required></div>
+      <div class="full"><label class="paper-choice"><input id="documentUploadPaper" type="checkbox" aria-describedby="documentUploadPaperHint"> Бумажный экземпляр у меня</label><div class="muted" id="documentUploadPaperHint" style="margin-top:5px">Ставь галочку, только если бумажная копия каждого выбранного файла есть у тебя. Без галочки бумага не подтверждена. Это не подтверждает оригиналы или отправку фирме.</div></div>
+    </div>
+    <div id="documentUploadNotice" class="muted documents-notice" role="status" aria-live="polite"></div>
+    <div class="actions"><button class="btn alt" type="button" id="cancelDocumentUpload">Отмена</button><button class="btn" type="submit" id="saveDocumentUpload">Загрузить</button></div>
+  </form>
+</div>
+
 <script>
 let trips=[],vehicles=[],companies=[],activeTransports=[],reconciliation=null,activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
 const excelReadyRefs=new Set([
@@ -376,6 +408,8 @@ const pendingTripStatuses=new Map();
 let tripsExcelBusy=false;
 let receiptTripId=null,receiptSetsStatus=false;
 let dispatchTripId=null,dispatchOriginal={},tripStatusDateEdited=false;
+let allDocuments=[],documentsLoaded=false,documentsLoadSequence=0,documentUploadBusy=false,documentUploadCompleted=new Set();
+const pendingCatalogPaper=new Map();
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(r.status===401){location.assign('/login');throw new Error('Войдите в Tsubera')}if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 document.getElementById('logout').addEventListener('click',async()=>{try{const result=await fetch('/auth/logout',{method:'POST'});if(!result.ok)throw new Error('Не удалось выйти');location.replace('/login')}catch(error){alert(error.message)}});
@@ -640,6 +674,7 @@ async function load(){
   $('vehicleCount').textContent=vehicles.length?'('+vehicles.length+')':'';
   $('companyCount').textContent=companies.length?'('+companies.length+')':'';
   $('activeTransportCount').textContent=activeTransports.length?'('+activeTransports.length+')':'';
+  if(currentTab==='documents')await loadAllDocuments();
 }
 function displayCompanyName(v){return String(v||'').replace(/\s*\(Stuttgart\)\s*$/i,'').trim()}
 function normCompany(v){return String(v||'').trim().replace(/\s+/g,' ').toLowerCase()}
@@ -1135,6 +1170,134 @@ function renderDocVehicleOptions(t){
 }
 function hasPaperCopy(document){return document.paperAvailable===true||document.paperAvailable===1||document.paper_available===1}
 function paperStateLabel(available){return available?'Наличие бумаги подтверждено':'Наличие бумаги не подтверждено'}
+function catalogTrip(doc){return doc.trip||trips.find(t=>t.id===doc.tripId)||{}}
+function catalogCompanyName(doc){return doc.company?.name||catalogTrip(doc).customer||''}
+function catalogDocType(type){return type==='cmr'?'cmr_loading':type}
+function catalogTypeLabel(type){return type==='pod'?'POD':type==='cmr_unloading'?'CMR · выгрузка / POD':docLabel(type)}
+function catalogCompanyOptions(items){
+  const names=new Map();
+  for(const item of items){const name=String(item||'').trim();if(name&&!names.has(normCompany(name)))names.set(normCompany(name),name)}
+  return [...names.entries()].sort((a,b)=>a[1].localeCompare(b[1],'de')).map(([key,name])=>'<option value="'+esc(key)+'">'+esc(displayCompanyName(name))+'</option>').join('');
+}
+function renderDocumentsFilters(){
+  const company=$('documentsCompanyFilter').value,type=$('documentsTypeFilter').value;
+  $('documentsCompanyFilter').innerHTML='<option value="">Все фирмы</option>'+catalogCompanyOptions(allDocuments.map(catalogCompanyName))+(allDocuments.some(doc=>!catalogCompanyName(doc))?'<option value="__no_company__">Без фирмы</option>':'');
+  $('documentsCompanyFilter').value=company;
+  const types=[...new Set(allDocuments.map(doc=>catalogDocType(doc.docType)))].sort((a,b)=>catalogTypeLabel(a).localeCompare(catalogTypeLabel(b),'ru'));
+  $('documentsTypeFilter').innerHTML='<option value="">Все типы</option>'+types.map(value=>'<option value="'+esc(value)+'">'+esc(catalogTypeLabel(value))+'</option>').join('');
+  $('documentsTypeFilter').value=type;
+}
+function filteredDocuments(){
+  const query=$('documentsQ').value.trim().toLocaleLowerCase(),company=$('documentsCompanyFilter').value,type=$('documentsTypeFilter').value,paper=$('documentsPaperFilter').value;
+  return allDocuments.filter(doc=>{
+    const trip=catalogTrip(doc),name=catalogCompanyName(doc);
+    if(company&&(company==='__no_company__'?!!name:normCompany(name)!==company))return false;
+    if(type&&catalogDocType(doc.docType)!==type)return false;
+    if(paper==='confirmed'&&!hasPaperCopy(doc)||paper==='unconfirmed'&&hasPaperCopy(doc))return false;
+    return !query||[doc.name,catalogTypeLabel(doc.docType),doc.paperNote,name,trip.id,trip.internalTripId,trip.trip,trip.date,...(trip.vehiclePlates||[])].join(' ').toLocaleLowerCase().includes(query);
+  });
+}
+function renderDocuments(){
+  if(!documentsLoaded)return;
+  const visible=filteredDocuments(),paper=visible.filter(hasPaperCopy).length;
+  $('documentCount').textContent='('+allDocuments.length+')';
+  $('documentsSummary').textContent='Показано: '+visible.length+' из '+allDocuments.length+' · Бумажная копия подтверждена: '+paper+' · Не подтверждена: '+(visible.length-paper);
+  $('documentsRows').innerHTML=visible.map(doc=>{
+    const trip=catalogTrip(doc),company=catalogCompanyName(doc),available=pendingCatalogPaper.has(doc.id)?pendingCatalogPaper.get(doc.id):hasPaperCopy(doc),tripId=trip.id||doc.tripId;
+    const reference=[trip.internalTripId,trip.trip].filter(Boolean).join(' · ')||'Рейс';
+    return '<article class="catalog-document"><div><span class="status '+(doc.docType==='rechnung'?'done':'route')+'">'+esc(catalogTypeLabel(doc.docType))+'</span><div class="catalog-document-name">'+esc(doc.name)+'</div><div class="muted">'+Math.round((doc.size||0)/1024)+' КБ'+(doc.createdAt?' · Добавлен '+esc(whenFull(doc.createdAt)):'')+'</div></div><div><div><b>'+esc(displayCompanyName(company)||'Фирма не указана')+'</b>'+(doc.company?.active===false?'<span class="muted"> · скрыта</span>':'')+'</div><div style="margin-top:6px">'+(tripId?'<button type="button" class="company-link" data-document-action="trip" data-trip-id="'+esc(tripId)+'">'+esc(reference)+' ↗</button>':esc(reference))+'</div><div class="muted" style="margin-top:4px">'+esc([trip.date,...(trip.vehiclePlates||[])].filter(Boolean).join(' · '))+'</div></div><div class="catalog-document-actions"><button type="button" class="btn alt small" data-document-action="open" data-document-id="'+esc(doc.id)+'">Открыть</button><button type="button" class="btn alt small" data-document-action="download" data-document-id="'+esc(doc.id)+'">Скачать</button></div><div class="doc-paper"><label class="paper-choice"><input type="checkbox" data-catalog-paper="'+esc(doc.id)+'" data-paper-confirmed="'+(hasPaperCopy(doc)?'1':'0')+'" '+(available?'checked ':'')+(pendingCatalogPaper.has(doc.id)?'disabled':'')+'> Бумажный экземпляр у меня</label><span class="muted paper-state '+(available?'confirmed':'')+'" role="status" aria-live="polite">'+(pendingCatalogPaper.has(doc.id)?'Сохраняю…':paperStateLabel(available))+'</span>'+(doc.paperNote?'<div class="muted" style="width:100%">'+esc(doc.paperNote)+'</div>':'')+'</div></article>';
+  }).join('')||'<div class="muted" style="padding:20px 0">'+(allDocuments.length?'По этим фильтрам документов нет':'Документов пока нет')+'</div>';
+}
+async function loadAllDocuments(){
+  const sequence=++documentsLoadSequence;
+  $('refreshDocuments').disabled=true;
+  $('documentsNotice').textContent='Загружаю все документы…';$('documentsNotice').classList.remove('error');
+  try{
+    const data=await api('/api/documents');
+    if(sequence!==documentsLoadSequence)return;
+    if(!Array.isArray(data.documents)||data.count!=null&&data.count!==data.documents.length)throw new Error('Сервер вернул неполный список документов');
+    allDocuments=data.documents;documentsLoaded=true;
+    renderDocumentsFilters();renderDocuments();$('documentsNotice').textContent='';
+  }catch(error){if(sequence===documentsLoadSequence){$('documentsNotice').textContent='Не удалось обновить документы: '+error.message;$('documentsNotice').classList.add('error')}}
+  finally{if(sequence===documentsLoadSequence)$('refreshDocuments').disabled=false}
+}
+function mergeCatalogDocument(id,values){
+  const doc=allDocuments.find(item=>item.id===id);if(doc)Object.assign(doc,values);renderDocuments();
+}
+async function setCatalogPaperAvailable(id,input){
+  if(pendingCatalogPaper.has(id))return;
+  const previous=input.dataset.paperConfirmed==='1',next=input.checked;
+  const state=input.closest('.doc-paper').querySelector('.paper-state');
+  pendingCatalogPaper.set(id,next);input.disabled=true;state.textContent='Сохраняю…';$('documentsNotice').textContent='';$('documentsNotice').classList.remove('error');
+  try{
+    const result=await api('/api/documents/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({paperAvailable:next})});
+    input.dataset.paperConfirmed=next?'1':'0';
+    mergeCatalogDocument(id,{...result.document,paperAvailable:next});
+  }catch(error){input.checked=previous;$('documentsNotice').textContent='Не удалось сохранить отметку: '+error.message;$('documentsNotice').classList.add('error')}
+  finally{pendingCatalogPaper.delete(id);input.disabled=false;state.textContent=paperStateLabel(input.dataset.paperConfirmed==='1');state.classList.toggle('confirmed',input.dataset.paperConfirmed==='1');renderDocuments()}
+}
+function documentUploadTripOptions(){
+  const company=$('documentUploadCompany').value;
+  const available=trips.filter(trip=>!company||normCompany(trip.customer)===company);
+  $('documentUploadTrip').innerHTML='<option value="">Выбери рейс явно</option>'+available.map(trip=>'<option value="'+esc(trip.id)+'">'+esc([trip.date,trip.internalTripId,trip.trip,displayCompanyName(trip.customer)].filter(Boolean).join(' · '))+'</option>').join('');
+  $('documentUploadTrip').value='';updateDocumentUploadTarget();
+}
+function updateDocumentUploadTarget(){
+  const trip=trips.find(item=>item.id===$('documentUploadTrip').value);
+  $('documentUploadTarget').textContent=trip?[displayCompanyName(trip.customer),[trip.date,trip.internalTripId,trip.trip].filter(Boolean).join(' · '),[trip.loadingPlace||'—',trip.unloadingPlace||'—'].join(' → ')].join('\n'):'Рейс ещё не выбран';
+}
+function resetDocumentUploadProgress(){documentUploadCompleted.clear();$('documentUploadNotice').textContent='';$('documentUploadNotice').classList.remove('error');if(!documentUploadBusy)for(const id of ['documentUploadCompany','documentUploadTrip','documentUploadType','documentUploadPaper'])$(id).disabled=false}
+function openDocumentUpload(){
+  if(documentUploadBusy)return;
+  $('documentUploadCompany').innerHTML='<option value="">Все фирмы</option>'+catalogCompanyOptions(trips.map(trip=>trip.customer));
+  $('documentUploadCompany').value='';$('documentUploadType').value='';$('documentUploadFiles').value='';$('documentUploadPaper').checked=false;
+  resetDocumentUploadProgress();documentUploadTripOptions();$('documentUploadModal').classList.add('open');$('documentUploadCompany').focus();
+}
+function closeDocumentUpload(){if(!documentUploadBusy)$('documentUploadModal').classList.remove('open')}
+function readDocumentUploadFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Не удалось прочитать '+file.name));reader.readAsDataURL(file)})}
+async function saveDocumentUpload(event){
+  event.preventDefault();if(documentUploadBusy)return;
+  const tripId=$('documentUploadTrip').value,trip=trips.find(item=>item.id===tripId),docType=$('documentUploadType').value,files=[...($('documentUploadFiles').files||[])],paperAvailable=$('documentUploadPaper').checked;
+  const notice=$('documentUploadNotice');notice.classList.remove('error');
+  if(!trip){notice.textContent='Выбери существующий рейс';$('documentUploadTrip').focus();return}
+  if($('documentUploadCompany').value&&normCompany(trip.customer)!==$('documentUploadCompany').value){notice.textContent='Выбери рейс выбранной фирмы';return}
+  if(!['auftrag','cmr_loading','cmr_unloading','pod','rechnung','other'].includes(docType)){notice.textContent='Выбери тип документа';$('documentUploadType').focus();return}
+  if(!files.length){notice.textContent='Выбери файл';$('documentUploadFiles').focus();return}
+  if(files.some(file=>file.size>20*1024*1024)){notice.textContent='Каждый файл должен быть не больше 20 МБ';return}
+  documentUploadBusy=true;
+  const controls=['documentUploadCompany','documentUploadTrip','documentUploadType','documentUploadFiles','documentUploadPaper','cancelDocumentUpload','saveDocumentUpload'];controls.forEach(id=>$(id).disabled=true);
+  let failed=null;
+  try{
+    for(const file of files){
+      if(documentUploadCompleted.has(file))continue;
+      notice.textContent='Загружаю '+file.name+' · '+(documentUploadCompleted.size+1)+' из '+files.length;
+      const dataBase64=await readDocumentUploadFile(file);
+      await api('/api/trips/'+encodeURIComponent(tripId)+'/documents',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({docType,name:file.name,mime:file.type||'application/octet-stream',dataBase64,paperAvailable})});
+      documentUploadCompleted.add(file);
+    }
+  }catch(error){failed=error;notice.textContent='Загружено '+documentUploadCompleted.size+' из '+files.length+'. '+error.message+'. Повторное нажатие загрузит только оставшиеся файлы.';notice.classList.add('error')}
+  if(documentUploadCompleted.size){
+    try{await load();if(currentTab!=='documents')await loadAllDocuments();if(activeTrip===tripId&&$('tripModal').classList.contains('open'))await loadDocs()}
+    catch(error){$('documentsNotice').textContent='Файлы сохранены, но список не обновился: '+error.message;$('documentsNotice').classList.add('error')}
+  }
+  documentUploadBusy=false;controls.forEach(id=>$(id).disabled=false);
+  if(failed&&documentUploadCompleted.size)for(const id of ['documentUploadCompany','documentUploadTrip','documentUploadType','documentUploadPaper'])$(id).disabled=true;
+  if(!failed){$('documentUploadFiles').value='';$('documentUploadPaper').checked=false;closeDocumentUpload();if(!$('documentsNotice').classList.contains('error'))$('documentsNotice').textContent='Загружено файлов: '+files.length+' · '+(trip.internalTripId||trip.trip||tripId)}
+}
+$('documentsQ').oninput=renderDocuments;
+for(const id of ['documentsCompanyFilter','documentsTypeFilter','documentsPaperFilter'])$(id).onchange=renderDocuments;
+$('refreshDocuments').onclick=loadAllDocuments;$('addDocument').onclick=openDocumentUpload;
+$('documentsRows').onclick=async event=>{
+  const button=event.target.closest('[data-document-action]');if(!button)return;
+  try{if(button.dataset.documentAction==='trip')await openTrip(button.dataset.tripId);else if(button.dataset.documentAction==='open')await openDoc(button.dataset.documentId);else if(button.dataset.documentAction==='download')await downloadDoc(button.dataset.documentId)}
+  catch(error){$('documentsNotice').textContent=error.message;$('documentsNotice').classList.add('error')}
+};
+$('documentsRows').onchange=event=>{const input=event.target;if(input.dataset.catalogPaper)setCatalogPaperAvailable(input.dataset.catalogPaper,input)};
+$('documentUploadCompany').onchange=()=>{resetDocumentUploadProgress();documentUploadTripOptions()};
+$('documentUploadTrip').onchange=()=>{resetDocumentUploadProgress();updateDocumentUploadTarget()};
+$('documentUploadType').onchange=resetDocumentUploadProgress;$('documentUploadFiles').onchange=resetDocumentUploadProgress;
+$('documentUploadForm').onsubmit=saveDocumentUpload;$('cancelDocumentUpload').onclick=closeDocumentUpload;
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('documentUploadModal').classList.contains('open'))closeDocumentUpload()});
 function updatePaperSummary(){
   const inputs=[...$('docList').querySelectorAll('input[data-paper-document]')];
   $('paperSummary').textContent=inputs.length?'Бумажные экземпляры: '+inputs.filter(input=>input.dataset.paperConfirmed==='1').length+' из '+inputs.length:'';
@@ -1156,8 +1319,9 @@ window.setDocPaperAvailable=async(id,input)=>{
   input.disabled=true;
   state.textContent='Сохраняю…';
   try{
-    await api('/api/documents/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({paperAvailable:next})});
+    const result=await api('/api/documents/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({paperAvailable:next})});
     input.dataset.paperConfirmed=next?'1':'0';
+    mergeCatalogDocument(id,{...result.document,paperAvailable:next});
   }catch(e){
     input.checked=previous;
     alert('Не удалось сохранить отметку о бумажном экземпляре: '+e.message);
@@ -1185,22 +1349,26 @@ function setTab(tab){
   currentTab=tab;
   $('tripsView').classList.toggle('hidden',tab!=='trips');
   $('readyView').classList.toggle('hidden',tab!=='ready');
+  $('documentsView').classList.toggle('hidden',tab!=='documents');
   $('companiesView').classList.toggle('hidden',tab!=='companies');
   $('vehiclesView').classList.toggle('hidden',tab!=='vehicles');
   $('activeTransportsView').classList.toggle('hidden',tab!=='active');
   $('reconciliationView').classList.toggle('hidden',tab!=='reconciliation');
   $('tabTrips').classList.toggle('active',tab==='trips');
   $('tabReady').classList.toggle('active',tab==='ready');
+  $('tabDocuments').classList.toggle('active',tab==='documents');
   $('tabCompanies').classList.toggle('active',tab==='companies');
   $('tabVehicles').classList.toggle('active',tab==='vehicles');
   $('tabActiveTransports').classList.toggle('active',tab==='active');
   $('tabReconciliation').classList.toggle('active',tab==='reconciliation');
   $('add').classList.toggle('hidden',tab!=='trips');
   if(tab==='ready')renderReady();
+  if(tab==='documents')loadAllDocuments();
   if(tab==='reconciliation'&&!reconciliation)loadReconciliation();
 }
 $('tabTrips').onclick=()=>setTab('trips');
 $('tabReady').onclick=()=>setTab('ready');
+$('tabDocuments').onclick=()=>setTab('documents');
 $('tabCompanies').onclick=()=>setTab('companies');
 $('tabVehicles').onclick=()=>setTab('vehicles');
 $('tabActiveTransports').onclick=()=>setTab('active');

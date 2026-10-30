@@ -1131,6 +1131,18 @@ function docRow(id) {
 function listDocsForTrip(tripId) {
   return db.prepare("SELECT * FROM documents WHERE trip_id = ? ORDER BY created_at DESC").all(tripId).map(docOut);
 }
+function listDocumentsWithTrips(){
+  const rows=db.prepare(`SELECT d.*,t.id AS linked_trip_id,t.internal_trip_id,t.date AS trip_date,t.trip_number,t.customer,t.vehicle_plates,
+    c.id AS company_id,c.name AS company_name,c.active AS company_active
+    FROM documents d
+    LEFT JOIN trips t ON t.id=d.trip_id
+    LEFT JOIN companies c ON c.id=(SELECT id FROM companies WHERE LOWER(name)=LOWER(t.customer) LIMIT 1)
+    ORDER BY d.created_at DESC,d.original_name COLLATE NOCASE,d.id`).all();
+  return rows.map(row=>({...docOut(row),
+    trip:row.linked_trip_id?{id:row.linked_trip_id,internalTripId:row.internal_trip_id||'',date:row.trip_date||'',trip:row.trip_number||'',customer:row.customer||'',vehiclePlates:platesToArray(row.vehicle_plates)}:null,
+    company:row.company_id?{id:row.company_id,name:row.company_name,active:!!row.company_active}:null
+  }));
+}
 function mainDocumentsForTrip(tripId) {
   const rows = db.prepare("SELECT * FROM documents WHERE trip_id = ? ORDER BY created_at DESC").all(tripId);
   const pick = types => {
@@ -3096,6 +3108,10 @@ const server = http.createServer(async (req, res) => {
         return json(res, 201, { document: docOut(docRow(id)), trip: getTripByAny(t.id) });
       }
 
+      if(p==='/api/documents'&&req.method==='GET'){
+        const documents=listDocumentsWithTrips();
+        return json(res,200,{documents,count:documents.length});
+      }
       const docLink = p.match(/^\/api\/documents\/([^/]+)\/link$/);
       if (docLink && req.method === "GET") {
         const row = docRow(docLink[1]);
