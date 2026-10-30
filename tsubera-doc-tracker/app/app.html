@@ -44,6 +44,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .docs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.docs-head h2{margin-top:0}.docs-updated{padding-top:4px;text-align:right;white-space:nowrap}
 .dt{width:100%;border:1px solid #dfe3ea;border-radius:8px;padding:7px;font-size:12px;background:#fff}
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
+.payment-deadline{font-size:11px;line-height:1.45;color:#64748b;margin-top:5px}.payment-deadline.overdue{color:#b91c1c}.payment-deadline.paid{color:#087443}.payment-edit{border:0;background:none;padding:1px 0;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;font:inherit}.receipt-dialog{max-width:520px}.receipt-error{color:#b91c1c}.receipt-help{line-height:1.5;margin:0 0 14px}
 .inline-status-select{max-width:100%;width:100%;min-width:0;border:1px solid transparent;font-family:inherit;cursor:pointer;appearance:auto;padding-right:5px;text-overflow:ellipsis}.inline-status-select option{background:#fff;color:#111827}.inline-status-select:hover{border-color:#cbd5e1}.inline-status-select:focus-visible{outline:2px solid #a5b4fc;outline-offset:2px}.inline-status-select:disabled{cursor:wait;opacity:.65}.inline-status-notice:not(:empty){margin:10px 0}.inline-status-notice.error{color:#b91c1c}
 .rechnung-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px}.rechnung-open{display:inline-flex;align-items:center;padding:3px 6px;background:#eff6ff;border-radius:6px;color:#1d4ed8;font-weight:700;font-size:12px;text-decoration:none}.rechnung-open:hover{text-decoration:underline}.rechnung-edit{background:none;border:0;padding:3px 0;color:#64748b;font-size:11px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}.rechnung-edit:hover{color:#111827}
 .ok{background:#e8f7ef;color:#087443}.route{background:#e9f2ff;color:#1857a4}.wait{background:#fff4d6;color:#925f00}.done{background:#eef0ff;color:#4338ca}
@@ -89,6 +90,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
         <span class="status ok">Entladen</span>
         <span class="status done">Rechnung erstellt</span>
         <span class="status route">Счёт отправлен</span>
+        <span class="status route">Документы получены фирмой</span>
         <span class="status ok">Оплата получена</span>
       </div>
     </div>
@@ -121,6 +123,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
           <label class="status-filter-option"><input type="checkbox" value="ready_for_rechnung"> Готов к Rechnung</label>
           <label class="status-filter-option"><input type="checkbox" value="has_invoice"> Rechnung erstellt</label>
           <label class="status-filter-option"><input type="checkbox" value="invoice_sent"> Счёт отправлен</label>
+          <label class="status-filter-option"><input type="checkbox" value="documents_received"> Документы получены фирмой</label>
           <label class="status-filter-option"><input type="checkbox" value="payment_received"> Оплата получена</label>
           <label class="status-filter-option"><input type="checkbox" value="no_invoice"> Без Rechnung</label>
         </div>
@@ -256,10 +259,11 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="field full"><label>Почтовый адрес для оригиналов</label><textarea id="companyPostalAddress" placeholder="Если оригиналы надо отправлять почтой"></textarea></div>
       <div class="field full"><label>Какие документы приложить</label><textarea id="companyRequiredDocuments" placeholder="CMR, POD, Lieferschein, подписанный Auftrag и т.д."></textarea></div>
       <div class="field full"><label>Срок отправки</label><textarea id="companySubmissionDeadline" placeholder="Например: в течение 10 дней после разгрузки"></textarea></div>
+      <div class="field full"><label for="companyPaymentTermDays">Срок оплаты, календарных дней после получения документов</label><input id="companyPaymentTermDays" type="number" min="0" max="3650" step="1" inputmode="numeric" placeholder="Например: 60"><div class="muted">Пусто — срок не задан. Используется для рейсов без отдельного срока.</div></div>
       <div class="field full"><label>Особые требования</label><textarea id="companySpecialRules" placeholder="ZUGFeRD, лимит размера, имя файла, оригиналы и т.д."></textarea></div>
       <div class="field full"><label>Источник правил</label><input id="companyRulesSource" placeholder="Какой Auftrag / инструкция подтверждает правила"></div>
     </div>
-    <div class="actions"><button class="btn" id="saveCompanyRules">Сохранить правила</button><button class="btn alt" id="closeCompanyRules">Закрыть</button></div>
+    <div class="actions"><span class="muted" id="companyRulesSaveNotice" role="status" aria-live="polite"></span><button class="btn" id="saveCompanyRules">Сохранить правила</button><button class="btn alt" id="closeCompanyRules">Закрыть</button></div>
   </div>
 </div>
 
@@ -275,6 +279,21 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
       <div class="field"><label>Выгрузка</label><input name="unloadingPlace" placeholder="например PL 60-101 Poznań"></div>
     </div>
     <div class="actions"><button class="btn alt" type="button" id="cancelAdd">Отмена</button><button class="btn">Сохранить</button></div>
+  </form>
+</div>
+
+<div class="modal" id="receiptModal" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+  <form class="dialog receipt-dialog" id="receiptForm">
+    <h2 id="receiptTitle">Документы получены фирмой</h2>
+    <p class="muted receipt-help" id="receiptReference"></p>
+    <div class="grid">
+      <div class="field full"><label for="receiptDate">Дата, когда фирма получила документы</label><input id="receiptDate" type="date" required><div class="muted">Укажи фактическую дату получения. Отсчёт начнётся после сохранения.</div></div>
+      <div class="field full"><label for="receiptTermMode">Срок оплаты</label><select id="receiptTermMode"><option value="company">По правилам фирмы</option><option value="trip">Отдельно для этого рейса</option></select></div>
+      <div class="field full"><label for="receiptTermDays">Календарных дней после получения</label><input id="receiptTermDays" type="number" min="0" max="3650" step="1" inputmode="numeric"><div class="muted" id="receiptCompanyTerm"></div></div>
+      <div class="field full"><div id="receiptDuePreview" class="muted" role="status" aria-live="polite"></div></div>
+    </div>
+    <div id="receiptNotice" class="muted receipt-error" role="status" aria-live="polite"></div>
+    <div class="actions"><button class="btn alt" type="button" id="cancelReceipt">Отмена</button><button class="btn" type="submit" id="saveReceipt">Сохранить получение</button></div>
   </form>
 </div>
 
@@ -331,12 +350,13 @@ const $=id=>document.getElementById(id);
 const selectedStatuses=new Set();
 const pendingTripStatuses=new Map();
 let tripsExcelBusy=false;
+let receiptTripId=null,receiptSetsStatus=false;
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(r.status===401){location.assign('/login');throw new Error('Войдите в Tsubera')}if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 document.getElementById('logout').addEventListener('click',async()=>{try{const result=await fetch('/auth/logout',{method:'POST'});if(!result.ok)throw new Error('Не удалось выйти');location.replace('/login')}catch(error){alert(error.message)}});
 function docLabel(t){return ({auftrag:'Transportauftrag',cmr_loading:'CMR · загрузка',cmr_unloading:'CMR · выгрузка / POD',cmr:'CMR · загрузка',pod:'CMR · выгрузка / POD',rechnung:'Rechnung',other:'Другое'})[t]||t}
 function invoiceStage(t){
-  if(t?.statusOverride)return ['rechnung_created','invoice_sent','payment_received'].includes(t.statusOverride)?t.statusOverride:'';
+  if(t?.statusOverride)return ['rechnung_created','invoice_sent','documents_received','payment_received'].includes(t.statusOverride)?t.statusOverride:'';
   return String(t?.rechnungCode||'').trim()?'rechnung_created':'';
 }
 function isInvoiceCreated(t){return !!invoiceStage(t)}
@@ -354,6 +374,7 @@ function statusPresentation(t){
   const custom={
     rechnung_created:['done','Rechnung erstellt'],
     invoice_sent:['route','Счёт отправлен'],
+    documents_received:['route','Документы получены фирмой'],
     payment_received:['ok','Оплата получена'],
     ready_for_rechnung:['ok','Готов к Rechnung'],
     not_invoiced:['wait','Rechnung ещё не выставлен'],
@@ -380,7 +401,44 @@ function inlineStatusControl(t){
   const pending=pendingTripStatuses.has(t.id);
   const shown=pending?{...t,statusOverride:pendingTripStatuses.get(t.id)}:t;
   const s=statusPresentation(shown),reference=t.internalTripId||t.trip||t.id;
-  return '<select class="status inline-status-select '+s.tone+'" data-trip-id="'+esc(t.id)+'" aria-label="Изменить статус рейса '+esc(reference)+'" title="'+esc(s.label)+' · выбрать статус" '+(pending?'disabled aria-busy="true"':'')+' onchange="saveInlineStatus(this.dataset.tripId,this)">'+tripStatusOptions(shown,true)+'</select>';
+  return '<select class="status inline-status-select '+s.tone+'" data-trip-id="'+esc(t.id)+'" aria-label="Изменить статус рейса '+esc(reference)+'" title="'+esc(s.label)+' · выбрать статус" '+(pending?'disabled aria-busy="true"':'')+' onchange="saveInlineStatus(this.dataset.tripId,this)">'+tripStatusOptions(shown,true)+'</select>'+paymentCountdown(t);
+}
+function berlinTodayDate(){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const get=type=>parts.find(part=>part.type===type).value;
+  return get('year')+'-'+get('month')+'-'+get('day');
+}
+function paymentDateValue(value){
+  const date=String(value||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
+  const time=Date.parse(date+'T00:00:00.000Z');
+  return Number.isFinite(time)&&new Date(time).toISOString().slice(0,10)===date?time:null;
+}
+function formatPaymentDate(date){return String(date||'').split('-').reverse().join('.')}
+function paymentTermValue(value){
+  const raw=String(value??'').trim();
+  if(raw==='')return null;
+  const days=Number(raw);
+  if(!Number.isInteger(days)||days<0||days>3650)throw new Error('Срок оплаты: целое число от 0 до 3650 дней');
+  return days;
+}
+function paymentDuePreview(date,days){
+  const time=paymentDateValue(date);
+  if(time===null)return 'Укажи фактическую дату получения документов';
+  if(days==null)return 'Срок оплаты не задан — отсчёт пока не начнётся';
+  return 'Оплата до '+formatPaymentDate(new Date(time+days*86400000).toISOString().slice(0,10))+' · '+days+' календарных дней';
+}
+function paymentCountdown(t){
+  if(!t.documentsReceivedDate&&invoiceStage(t)!=='documents_received')return '';
+  const edit='<button class="payment-edit" type="button" onclick="openReceiptModal(\''+esc(t.id)+'\')">Дата получения / срок</button>';
+  if(invoiceStage(t)==='payment_received')return '<div class="payment-deadline paid">Оплачено'+(t.documentsReceivedDate?' · получено '+esc(formatPaymentDate(t.documentsReceivedDate)):'')+'<br>'+edit+'</div>';
+  if(!t.documentsReceivedDate)return '<div class="payment-deadline">Укажи дату получения<br>'+edit+'</div>';
+  const received='Получено '+esc(formatPaymentDate(t.documentsReceivedDate));
+  const due=paymentDateValue(t.paymentDueDate),today=paymentDateValue(berlinTodayDate());
+  if(due===null||t.effectivePaymentTermDays==null)return '<div class="payment-deadline">'+received+'<br>Срок оплаты не задан<br>'+edit+'</div>';
+  const remaining=Math.round((due-today)/86400000);
+  const label=remaining<0?'Просрочено на '+Math.abs(remaining)+' дн.':remaining===0?'Оплата сегодня':'Осталось '+remaining+' дн.';
+  return '<div class="payment-deadline'+(remaining<0?' overdue':'')+'">'+received+'<br>Оплата до '+esc(formatPaymentDate(t.paymentDueDate))+'<br><strong>'+label+'</strong><br>'+edit+'</div>';
 }
 function matchesStatusFilter(t,filter){
   if(!filter)return true;
@@ -388,7 +446,7 @@ function matchesStatusFilter(t,filter){
   if(filter==='missing_auftrag')return !t.auftrag||t.statusOverride==='missing_auftrag'||t.statusOverride==='missing_both';
   if(filter==='ready_for_rechnung')return isReadyQueueTrip(t);
   if(filter==='has_invoice')return invoiceStage(t)==='rechnung_created';
-  if(filter==='invoice_sent'||filter==='payment_received')return invoiceStage(t)===filter;
+  if(filter==='invoice_sent'||filter==='documents_received'||filter==='payment_received')return invoiceStage(t)===filter;
   if(filter==='no_invoice')return !isInvoiceCreated(t);
   return false;
 }
@@ -457,6 +515,75 @@ async function load(){
 function displayCompanyName(v){return String(v||'').replace(/\s*\(Stuttgart\)\s*$/i,'').trim()}
 function normCompany(v){return String(v||'').trim().replace(/\s+/g,' ').toLowerCase()}
 function companyForTrip(t){const n=normCompany(t?.customer);return companies.find(c=>normCompany(c.name)===n)||null}
+function openReceiptModal(id,setStatus=false){
+  const t=trips.find(trip=>trip.id===id);if(!t)return;
+  receiptTripId=id;receiptSetsStatus=setStatus;
+  $('receiptTitle').textContent=setStatus?'Документы получены фирмой':'Дата получения и срок оплаты';
+  $('receiptReference').textContent=(t.internalTripId||t.trip||id)+' · '+displayCompanyName(t.customer);
+  $('receiptDate').value=t.documentsReceivedDate||berlinTodayDate();
+  $('receiptTermMode').value=t.paymentTermDays==null?'company':'trip';
+  $('receiptTermDays').value=t.paymentTermDays??companyForTrip(t)?.paymentTermDays??'';
+  $('receiptNotice').textContent='';
+  $('saveReceipt').textContent=setStatus?'Сохранить получение':'Сохранить дату и срок';
+  updateReceiptTermMode();
+  $('receiptModal').classList.add('open');
+  $('receiptDate').focus();
+}
+function closeReceiptModal(){
+  $('receiptModal').classList.remove('open');receiptTripId=null;receiptSetsStatus=false;
+}
+function updateReceiptTermMode(){
+  const t=trips.find(trip=>trip.id===receiptTripId),days=companyForTrip(t)?.paymentTermDays??null;
+  const inherit=$('receiptTermMode').value==='company';
+  $('receiptTermDays').disabled=inherit;
+  if(inherit)$('receiptTermDays').value=days??'';
+  $('receiptCompanyTerm').textContent=days==null?'В правилах фирмы срок не задан':'В правилах фирмы: '+days+' календарных дней';
+  updateReceiptPreview();
+}
+function updateReceiptPreview(){
+  const t=trips.find(trip=>trip.id===receiptTripId);
+  try{
+    const days=$('receiptTermMode').value==='company'?(companyForTrip(t)?.paymentTermDays??null):paymentTermValue($('receiptTermDays').value);
+    $('receiptDuePreview').textContent=paymentDuePreview($('receiptDate').value,days);
+  }catch(error){$('receiptDuePreview').textContent=error.message;}
+}
+async function saveReceipt(event){
+  event.preventDefault();
+  const id=receiptTripId,t=trips.find(trip=>trip.id===id);if(!t)return;
+  const documentsReceivedDate=$('receiptDate').value;
+  if(paymentDateValue(documentsReceivedDate)===null){$('receiptNotice').textContent='Укажи корректную дату получения документов';return;}
+  let paymentTermDays;
+  try{
+    paymentTermDays=$('receiptTermMode').value==='company'?null:paymentTermValue($('receiptTermDays').value);
+    if($('receiptTermMode').value==='trip'&&paymentTermDays==null)throw new Error('Укажи отдельный срок оплаты или выбери срок фирмы');
+  }catch(error){$('receiptNotice').textContent=error.message;return;}
+  const body={documentsReceivedDate,paymentTermDays};
+  if(receiptSetsStatus)body.statusOverride='documents_received';
+  $('saveReceipt').disabled=true;$('cancelReceipt').disabled=true;
+  $('receiptNotice').textContent='Сохраняю…';
+  try{
+    const saved=await api('/api/trips/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    Object.assign(t,saved.trip||{});
+    closeReceiptModal();renderInlineStatusTables();
+    showInlineStatusNotice('Получение документов сохранено · '+(t.internalTripId||t.trip||id));
+  }catch(error){$('receiptNotice').textContent='Не удалось сохранить: '+error.message;}
+  finally{$('saveReceipt').disabled=false;$('cancelReceipt').disabled=false;}
+}
+function updateTripPaymentPreview(){
+  const c=companies.find(company=>normCompany(company.name)===normCompany($('tripCustomer').value));
+  const inherited=c?.paymentTermDays??null;
+  $('tripCompanyPaymentTerm').textContent='Пусто — брать срок фирмы'+(inherited==null?' (пока не задан)':': '+inherited+' календарных дней');
+  try{
+    const override=paymentTermValue($('tripPaymentTermDays').value);
+    const preview=paymentDuePreview($('tripDocumentsReceivedDate').value,override??inherited);
+    $('tripPaymentPreview').textContent=$('tripStatusOverride').value==='payment_received'?'Оплата получена — отсчёт завершён':preview;
+  }catch(error){$('tripPaymentPreview').textContent=error.message;}
+}
+$('receiptForm').onsubmit=saveReceipt;
+$('cancelReceipt').onclick=closeReceiptModal;
+$('receiptTermMode').onchange=updateReceiptTermMode;
+$('receiptDate').oninput=updateReceiptPreview;
+$('receiptTermDays').oninput=updateReceiptPreview;
 function companyHasRules(c){return !![c?.billingChannel,c?.invoiceEmail,c?.invoiceSubject,c?.postalAddress,c?.requiredDocuments,c?.submissionDeadline,c?.specialRules].some(v=>String(v||'').trim())}
 window.openCompanyRulesFromTrip=id=>{
   const t=trips.find(x=>x.id===id),c=companyForTrip(t);
@@ -476,6 +603,8 @@ window.openCompanyRules=id=>{
   $('companyPostalAddress').value=c.postalAddress||'';
   $('companyRequiredDocuments').value=c.requiredDocuments||'';
   $('companySubmissionDeadline').value=c.submissionDeadline||'';
+  $('companyPaymentTermDays').value=c.paymentTermDays??'';
+  $('companyRulesSaveNotice').textContent='';
   $('companySpecialRules').value=c.specialRules||'';
   $('companyRulesSource').value=c.rulesSource||'';
   $('companyRulesModal').classList.add('open');
@@ -689,6 +818,11 @@ window.saveInlineStatus=async(id,control)=>{
   const previous=trip.statusOverride||'',next=control.value;
   if(pendingTripStatuses.has(id)){control.value=pendingTripStatuses.get(id);return;}
   if(next===previous)return;
+  if(next==='documents_received'){
+    control.value=previous;
+    openReceiptModal(id,true);
+    return;
+  }
   pendingTripStatuses.set(id,next);
   const reference=trip.internalTripId||trip.trip||id;
   const presentation=statusPresentation({...trip,statusOverride:next,readiness:undefined});
@@ -740,6 +874,7 @@ function tripStatusOptions(t,inline=false){
     ['', inline?statusPresentation({...t,statusOverride:'',readiness:undefined}).label+' · авто':'Автоматически (по документам)'],
     ['rechnung_created', 'Rechnung erstellt'],
     ['invoice_sent', 'Счёт отправлен'],
+    ['documents_received', 'Документы получены фирмой'],
     ['payment_received', 'Оплата получена'],
     ['ready_for_rechnung', 'Готов к Rechnung'],
     ['not_invoiced', 'Rechnung ещё не выставлен'],
@@ -768,7 +903,15 @@ window.openTrip=async id=>{
     '<div class="detailrow"><b>Выгрузка</b><div><input id="tripUnloadingPlace" class="dt" value="'+esc(t.unloadingPlace||'')+'" placeholder="PL 60-101 Poznań"></div></div>'+
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
     '<div class="detailrow"><b>Ссылка Rechnung</b><div><input id="tripRechnungUrl" class="dt" type="url" value="'+esc(t.rechnungUrl||'')+'" placeholder="https://obersztdawid.fakturownia.pl/invoices/..."><div class="muted">Вставь прямую ссылку на счёт из Fakturownia</div></div></div>'+
-    '<div class="detailrow"><b>Статус</b><div><select id="tripStatusOverride" class="dt">'+tripStatusOptions(t)+'</select><div class="muted" style="margin-top:5px">Ручной статус меняет отметку рейса, но не добавляет и не удаляет документы</div></div></div>';
+    '<div class="detailrow"><b>Статус</b><div><select id="tripStatusOverride" class="dt">'+tripStatusOptions(t)+'</select><div class="muted" style="margin-top:5px">Ручной статус меняет отметку рейса, но не добавляет и не удаляет документы</div></div></div>'+
+    '<div class="detailrow"><b>Документы получены фирмой</b><div><input id="tripDocumentsReceivedDate" class="dt" type="date" aria-label="Дата получения документов фирмой" value="'+esc(t.documentsReceivedDate||'')+'"><div class="muted">Фактическая дата получения, от которой считаются календарные дни оплаты</div></div></div>'+
+    '<div class="detailrow"><b>Срок оплаты, дней</b><div><input id="tripPaymentTermDays" class="dt" type="number" min="0" max="3650" step="1" inputmode="numeric" aria-label="Отдельный срок оплаты для рейса" value="'+esc(t.paymentTermDays??'')+'"><div class="muted" id="tripCompanyPaymentTerm"></div></div></div>'+
+    '<div class="detailrow"><b>Оплата до</b><div id="tripPaymentPreview" class="muted" role="status" aria-live="polite"></div></div>';
+  $('tripDocumentsReceivedDate').oninput=updateTripPaymentPreview;
+  $('tripPaymentTermDays').oninput=updateTripPaymentPreview;
+  $('tripCustomer').oninput=updateTripPaymentPreview;
+  $('tripStatusOverride').onchange=updateTripPaymentPreview;
+  updateTripPaymentPreview();
   renderTripVehicleChoices(t);
   renderDocVehicleOptions(t);
   $('uploadPaperAvailable').checked=false;
@@ -790,6 +933,12 @@ async function saveTripProperties(){
   const trip=$('tripCustomerRef').value.trim();
   const customer=$('tripCustomer').value.trim();
   const statusOverride=$('tripStatusOverride').value;
+  const documentsReceivedDate=$('tripDocumentsReceivedDate').value;
+  let paymentTermDays;
+  try{paymentTermDays=paymentTermValue($('tripPaymentTermDays').value)}
+  catch(error){$('tripSaveNotice').textContent=error.message;return;}
+  if(documentsReceivedDate&&paymentDateValue(documentsReceivedDate)===null){$('tripSaveNotice').textContent='Укажи корректную дату получения документов';return;}
+  if(statusOverride==='documents_received'&&!documentsReceivedDate){$('tripSaveNotice').textContent='Для этого статуса укажи дату получения документов фирмой';$('tripDocumentsReceivedDate').focus();return;}
   if(!date)return alert('Укажи дату рейса');
   if(!internalTripId)return alert('Укажи Tsubera Tour-ID');
   if(!customer)return alert('Укажи заказчика');
@@ -807,7 +956,7 @@ async function saveTripProperties(){
   try{
     await api('/api/trips/'+encodeURIComponent(id),{
       method:'PATCH',headers:{'content-type':'application/json'},
-      body:JSON.stringify({date,internalTripId,trip,customer,loadingPlace,unloadingPlace,priceEur,rechnungUrl,statusOverride,vehiclePlates})
+      body:JSON.stringify({date,internalTripId,trip,customer,loadingPlace,unloadingPlace,priceEur,rechnungUrl,statusOverride,vehiclePlates,documentsReceivedDate,paymentTermDays})
     });
     await load();
     await openTrip(id);
@@ -904,7 +1053,7 @@ $('tabActiveTransports').onclick=()=>setTab('active');
 $('tabReconciliation').onclick=()=>setTab('reconciliation');
 function renderCompanies(){
   $('companyRows').innerHTML=companies.length?companies.map(c=>
-    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(displayCompanyName(c.name))+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
+    '<div class="company-card '+(c.active?'':'inactive')+'"><div class="company-card-top"><div><button type="button" class="company-name company-link" onclick="openCompanyRules(\''+c.id+'\')">'+esc(displayCompanyName(c.name))+'</button><div class="company-meta">Рейсов: '+Number(c.tripCount||0)+'</div><div class="company-meta">Срок оплаты: '+(c.paymentTermDays==null?'не задан':Number(c.paymentTermDays)+' календарных дней')+'</div><div class="company-meta">'+(companyHasRules(c)?'Правила Rechnung сохранены':'Правила Rechnung не подтверждены')+'</div><div class="company-state"><span class="status '+(c.active?'ok':'wait')+'">'+(c.active?'Показывается в рейсах':'Скрыта из рейсов')+'</span></div></div><button class="btn alt small" onclick="toggleCompany(\''+c.id+'\','+(!c.active)+')">'+(c.active?'Скрыть':'Показывать')+'</button></div></div>'
   ).join(''):'<div class="muted">Фирм пока нет.</div>';
 }
 window.toggleCompany=async(id,active)=>{
@@ -913,6 +1062,11 @@ window.toggleCompany=async(id,active)=>{
 }
 $('saveCompanyRules').onclick=async()=>{
   if(!activeCompanyId)return;
+  let paymentTermDays;
+  try{paymentTermDays=paymentTermValue($('companyPaymentTermDays').value)}
+  catch(error){$('companyRulesSaveNotice').textContent=error.message;return;}
+  $('saveCompanyRules').disabled=true;$('companyRulesSaveNotice').textContent='Сохраняю…';
+  try{
   await api('/api/companies/'+activeCompanyId,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({
     billingChannel:$('companyBillingChannel').value.trim(),
     invoiceEmail:$('companyInvoiceEmail').value.trim(),
@@ -921,10 +1075,14 @@ $('saveCompanyRules').onclick=async()=>{
     requiredDocuments:$('companyRequiredDocuments').value.trim(),
     submissionDeadline:$('companySubmissionDeadline').value.trim(),
     specialRules:$('companySpecialRules').value.trim(),
-    rulesSource:$('companyRulesSource').value.trim()
+    rulesSource:$('companyRulesSource').value.trim(),
+    paymentTermDays
   })});
   await load();
   const c=companies.find(x=>x.id===activeCompanyId); if(c)openCompanyRules(c.id);
+  $('companyRulesSaveNotice').textContent='Правила и срок оплаты сохранены';
+  }catch(error){$('companyRulesSaveNotice').textContent='Не удалось сохранить: '+error.message;}
+  finally{$('saveCompanyRules').disabled=false;}
 }
 $('closeCompanyRules').onclick=()=>$('companyRulesModal').classList.remove('open');
 $('companyForm').onsubmit=async e=>{
@@ -1153,6 +1311,8 @@ $('addForm').onsubmit=async e=>{
   e.target.reset();$('addModal').classList.remove('open');await load()
 };
 $('reconDateTo').value=new Date().toISOString().slice(0,10);
+let lastPaymentCalendarDay=berlinTodayDate();
+setInterval(()=>{const day=berlinTodayDate();if(day!==lastPaymentCalendarDay){lastPaymentCalendarDay=day;renderInlineStatusTables();}},60000);
 setTab('trips');load().catch(e=>alert(e.message));
 </script>
 </body>

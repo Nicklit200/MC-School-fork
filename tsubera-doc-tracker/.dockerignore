@@ -11,6 +11,8 @@
 !app/online-auth.mjs
 !app/login.html
 !app/trans-order-key.mjs
+!app/payment-deadline.mjs
+!app/receipt-schema-backup.mjs
 !app/online-start.mjs
 !app/cloud-migration.mjs
 !app/migration.html

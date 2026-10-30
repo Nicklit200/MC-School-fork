@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import ExcelJS from "exceljs";
 import { transOrderKey, migrateTransOrderIdentity } from "./trans-order-key.mjs";
 import { createOnlineAuth } from "./online-auth.mjs";
+import { normalizePaymentTermDays, normalizeDocumentsReceivedDate, paymentDeadline } from "./payment-deadline.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,8 @@ CREATE TABLE IF NOT EXISTS trips (
   rechnung_code TEXT NOT NULL DEFAULT '',
   rechnung_url TEXT NOT NULL DEFAULT '',
   status_override TEXT NOT NULL DEFAULT '',
+  documents_received_date TEXT NOT NULL DEFAULT '',
+  payment_term_days INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -88,6 +91,7 @@ CREATE TABLE IF NOT EXISTS companies (
   special_rules TEXT NOT NULL DEFAULT '',
   rules_source TEXT NOT NULL DEFAULT '',
   rules_seeded INTEGER NOT NULL DEFAULT 0,
+  payment_term_days INTEGER DEFAULT 60,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -210,6 +214,8 @@ if (!tripColumns.has("vehicle_plates")) db.exec("ALTER TABLE trips ADD COLUMN ve
 if (!tripColumns.has("price_cents")) db.exec("ALTER TABLE trips ADD COLUMN price_cents INTEGER");
 if (!tripColumns.has("rechnung_url")) db.exec("ALTER TABLE trips ADD COLUMN rechnung_url TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("status_override")) db.exec("ALTER TABLE trips ADD COLUMN status_override TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("documents_received_date")) db.exec("ALTER TABLE trips ADD COLUMN documents_received_date TEXT NOT NULL DEFAULT ''");
+if (!tripColumns.has("payment_term_days")) db.exec("ALTER TABLE trips ADD COLUMN payment_term_days INTEGER");
 
 const documentColumns = new Set(db.prepare("PRAGMA table_info(documents)").all().map(r => r.name));
 for (const [name, ddl] of [
@@ -230,7 +236,8 @@ for (const [name, ddl] of [
   ["submission_deadline","TEXT NOT NULL DEFAULT ''"],
   ["special_rules","TEXT NOT NULL DEFAULT ''"],
   ["rules_source","TEXT NOT NULL DEFAULT ''"],
-  ["rules_seeded","INTEGER NOT NULL DEFAULT 0"]
+  ["rules_seeded","INTEGER NOT NULL DEFAULT 0"],
+  ["payment_term_days","INTEGER DEFAULT 60"]
 ]) {
   if (!companyColumns.has(name)) db.exec(`ALTER TABLE companies ADD COLUMN ${name} ${ddl}`);
 }
@@ -282,10 +289,10 @@ function normalizeTripInternalId(value){
   return id;
 }
 const editableTripStatuses=new Set([
-  '', 'rechnung_created', 'invoice_sent', 'payment_received', 'ready_for_rechnung', 'not_invoiced',
+  '', 'rechnung_created', 'invoice_sent', 'documents_received', 'payment_received', 'ready_for_rechnung', 'not_invoiced',
   'no_price', 'loaded', 'missing_auftrag', 'missing_cmr', 'missing_both', 'missing_documents'
 ]);
-const invoicedTripStatuses=new Set(['rechnung_created', 'invoice_sent', 'payment_received']);
+const invoicedTripStatuses=new Set(['rechnung_created', 'invoice_sent', 'documents_received', 'payment_received']);
 function normalizeTripStatus(value){
   const status=String(value??'').trim();
   if(!editableTripStatuses.has(status)){
@@ -301,6 +308,19 @@ function normalizeTripCustomer(value){
     error.status=400;throw error;
   }
   return customer;
+}
+function tripPaymentInput(old={},changes={}){
+  const documentsReceivedDate=changes.documentsReceivedDate===undefined?(old.documentsReceivedDate||''):normalizeDocumentsReceivedDate(changes.documentsReceivedDate);
+  const paymentTermDays=changes.paymentTermDays===undefined?(old.paymentTermDays??null):normalizePaymentTermDays(changes.paymentTermDays);
+  const statusOverride=changes.statusOverride===undefined?(old.statusOverride||''):normalizeTripStatus(changes.statusOverride);
+  if(statusOverride==='documents_received'&&!documentsReceivedDate){
+    const error=new Error('Укажи дату, когда фирма получила документы');error.status=400;throw error;
+  }
+  const customer=normalizeCompanyName(changes.customer??old.customer??'');
+  const company=db.prepare("SELECT payment_term_days FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(customer);
+  // Validate the combined receipt and inherited/overridden term before any database write.
+  paymentDeadline({documentsReceivedDate,paymentTermDays,companyPaymentTermDays:company?company.payment_term_days:60,statusOverride});
+  return {documentsReceivedDate,paymentTermDays,statusOverride};
 }
 function normalizeCustomerOrder(value){
   const ref=String(value??'').trim();
@@ -324,6 +344,7 @@ const companyOut = row => row ? ({
   submissionDeadline: row.submission_deadline || "",
   specialRules: row.special_rules || "",
   rulesSource: row.rules_source || "",
+  paymentTermDays: row.payment_term_days === null ? null : Number(row.payment_term_days),
   createdAt: row.created_at,
   updatedAt: row.updated_at
 }) : null;
@@ -364,10 +385,15 @@ function updateCompany(id, changes = {}) {
   const nextSubmissionDeadline = changes.submissionDeadline === undefined ? row.submission_deadline : String(changes.submissionDeadline || "").trim();
   const nextSpecialRules = changes.specialRules === undefined ? row.special_rules : String(changes.specialRules || "").trim();
   const nextRulesSource = changes.rulesSource === undefined ? row.rules_source : String(changes.rulesSource || "").trim();
+  const nextPaymentTermDays = changes.paymentTermDays === undefined ? row.payment_term_days : normalizePaymentTermDays(changes.paymentTermDays);
+  if(changes.paymentTermDays!==undefined){
+    const inherited=db.prepare("SELECT documents_received_date FROM trips WHERE LOWER(customer)=LOWER(?) AND payment_term_days IS NULL AND documents_received_date<>''").all(row.name);
+    for(const trip of inherited)paymentDeadline({documentsReceivedDate:trip.documents_received_date,companyPaymentTermDays:nextPaymentTermDays});
+  }
   const duplicate = db.prepare("SELECT id FROM companies WHERE LOWER(name)=LOWER(?) AND id<>? LIMIT 1").get(nextName,id);
   if (duplicate) throw new Error("A company with this name already exists");
-  db.prepare("UPDATE companies SET name=?,active=?,note=?,billing_channel=?,invoice_email=?,invoice_subject=?,postal_address=?,required_documents=?,submission_deadline=?,special_rules=?,rules_source=?,updated_at=? WHERE id=?")
-    .run(nextName,bool(nextActive),nextNote,nextBillingChannel,nextInvoiceEmail,nextInvoiceSubject,nextPostalAddress,nextRequiredDocuments,nextSubmissionDeadline,nextSpecialRules,nextRulesSource,now(),id);
+  db.prepare("UPDATE companies SET name=?,active=?,note=?,billing_channel=?,invoice_email=?,invoice_subject=?,postal_address=?,required_documents=?,submission_deadline=?,special_rules=?,rules_source=?,payment_term_days=?,updated_at=? WHERE id=?")
+    .run(nextName,bool(nextActive),nextNote,nextBillingChannel,nextInvoiceEmail,nextInvoiceSubject,nextPostalAddress,nextRequiredDocuments,nextSubmissionDeadline,nextSpecialRules,nextRulesSource,nextPaymentTermDays,now(),id);
   if (nextName !== oldName) db.prepare("UPDATE trips SET customer=?,updated_at=? WHERE LOWER(customer)=LOWER(?)").run(nextName,now(),oldName);
   return listCompanies().find(c => c.id === id) || companyOut(db.prepare("SELECT * FROM companies WHERE id=?").get(id));
 }
@@ -552,6 +578,8 @@ const tripOut = row => {
   const hasAuftrag = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type='auftrag' LIMIT 1").get(row.id);
   const hasLoadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_loading','cmr') LIMIT 1").get(row.id);
   const hasUnloadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_unloading','pod') LIMIT 1").get(row.id);
+  const company=db.prepare("SELECT payment_term_days FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(row.customer);
+  const payment={documentsReceivedDate:row.documents_received_date||'',paymentTermDays:row.payment_term_days??null};
   return {
     id: row.id,
     internalTripId: row.internal_trip_id || "",
@@ -572,6 +600,8 @@ const tripOut = row => {
     rechnungCode: row.rechnung_code || "",
     rechnungUrl: row.rechnung_url || "",
     statusOverride: row.status_override || "",
+    ...payment,
+    ...paymentDeadline({...payment,companyPaymentTermDays:company?.payment_term_days??null,statusOverride:row.status_override||''}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -592,12 +622,14 @@ const docOut = row => row ? ({
 
 const EXCEL_EXPORT_HEADERS=[
   'Дата', '№ заказчика', 'Фирма', 'Ссылка на Rechnung',
-  'Маршрут', 'Цена (€)', 'Auftrag', 'CMR выгрузка / POD', 'Статус'
+  'Маршрут', 'Цена (€)', 'Auftrag', 'CMR выгрузка / POD', 'Статус',
+  'Документы получены фирмой', 'Срок оплаты, календарных дней', 'Оплатить до'
 ];
 function tripStatusForExcel(t){
   const manual={
     rechnung_created:'Rechnung erstellt',
     invoice_sent:'Счёт отправлен',
+    documents_received:'Документы получены фирмой',
     payment_received:'Оплата получена',
     ready_for_rechnung:'Готов к Rechnung',
     not_invoiced:'Rechnung ещё не выставлен',
@@ -637,7 +669,10 @@ async function generateTripsExcel(trips){
     {header:EXCEL_EXPORT_HEADERS[5],key:'price',width:17},
     {header:EXCEL_EXPORT_HEADERS[6],key:'auftrag',width:15},
     {header:EXCEL_EXPORT_HEADERS[7],key:'cmr',width:24},
-    {header:EXCEL_EXPORT_HEADERS[8],key:'status',width:37}
+    {header:EXCEL_EXPORT_HEADERS[8],key:'status',width:37},
+    {header:EXCEL_EXPORT_HEADERS[9],key:'receivedDate',width:27},
+    {header:EXCEL_EXPORT_HEADERS[10],key:'paymentDays',width:30},
+    {header:EXCEL_EXPORT_HEADERS[11],key:'dueDate',width:18}
   ];
   const header=sheet.getRow(1);
   header.height=32;
@@ -660,7 +695,10 @@ async function generateTripsExcel(trips){
       price:trip.priceEur===null?null:Number(trip.priceEur),
       auftrag:trip.auftrag?'Есть':'Нет',
       cmr:trip.cmrUnloaded?'Есть':'Нет',
-      status:tripStatusForExcel(trip)
+      status:tripStatusForExcel(trip),
+      receivedDate:trip.documentsReceivedDate?new Date(trip.documentsReceivedDate+'T00:00:00.000Z'):null,
+      paymentDays:trip.effectivePaymentTermDays,
+      dueDate:trip.paymentDueDate?new Date(trip.paymentDueDate+'T00:00:00.000Z'):null
     });
     row.height=27;
     row.eachCell({includeEmpty:true},cell=>{
@@ -669,6 +707,9 @@ async function generateTripsExcel(trips){
       if(index%2===1)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF4F7FB'}};
     });
     row.getCell('date').numFmt='dd.mm.yyyy';
+    row.getCell('receivedDate').numFmt='dd.mm.yyyy';
+    row.getCell('dueDate').numFmt='dd.mm.yyyy';
+    row.getCell('paymentDays').numFmt='0';
     row.getCell('price').numFmt='#,##0.00 "€";[Red](#,##0.00 "€");"–"';
     row.getCell('price').alignment={vertical:'middle',horizontal:'right'};
     let invoiceUrl='';
@@ -683,13 +724,13 @@ async function generateTripsExcel(trips){
       cell.alignment={vertical:'middle',horizontal:'left'};
     }
     const statusCell=row.getCell('status');
-    const billingColors={'Rechnung erstellt':'FF2447A3','Счёт отправлен':'FF0369A1','Оплата получена':'FF15803D'};
+    const billingColors={'Rechnung erstellt':'FF2447A3','Счёт отправлен':'FF0369A1','Документы получены фирмой':'FF0369A1','Оплата получена':'FF15803D'};
     const billingColor=billingColors[tripStatusForExcel(trip)];
     if(billingColor){
       statusCell.font={name:'Aptos',size:11,bold:true,color:{argb:billingColor}};
     }
   });
-  sheet.autoFilter={from:'A1',to:'I'+(trips.length+1)};
+  sheet.autoFilter={from:'A1',to:'L'+(trips.length+1)};
   sheet.pageSetup={fitToPage:true,fitToWidth:1,orientation:'landscape'};
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
@@ -1038,6 +1079,7 @@ function systemOverview() {
     missingDocuments: rows.filter(t => readiness(t) === "missing_documents").length,
     rechnungenCreated: rows.filter(t => invoicedTripStatuses.has(readiness(t))).length,
     rechnungenSent: rows.filter(t => readiness(t) === "invoice_sent").length,
+    documentsReceived: rows.filter(t => readiness(t) === "documents_received").length,
     paymentsReceived: rows.filter(t => readiness(t) === "payment_received").length,
     totalVehicles: db.prepare("SELECT COUNT(*) c FROM vehicles").get().c,
     totalCompanies: db.prepare("SELECT COUNT(*) c FROM companies").get().c,
@@ -1911,7 +1953,7 @@ const toolDefs = [
         date_to: { type: "string", description: "YYYY-MM-DD" },
         customer: { type: "string" },
         vehicle: { type: "string", description: "Vehicle registration / Kennzeichen filter." },
-        readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created","invoice_sent","payment_received"] }
+        readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created","invoice_sent","documents_received","payment_received"] }
       },
       additionalProperties: false
     },
@@ -1964,7 +2006,8 @@ const toolDefs = [
         required_documents: { type: "string" },
         submission_deadline: { type: "string" },
         special_rules: { type: "string" },
-        rules_source: { type: "string" }
+        rules_source: { type: "string" },
+        payment_term_days: { type: ["integer","null"], minimum: 0, maximum: 3650, description: "Calendar days from document receipt; null leaves the company term unset." }
       },
       required: ["name"],
       additionalProperties: false
@@ -1988,7 +2031,8 @@ const toolDefs = [
         required_documents: { type: "string" },
         submission_deadline: { type: "string" },
         special_rules: { type: "string" },
-        rules_source: { type: "string" }
+        rules_source: { type: "string" },
+        payment_term_days: { type: ["integer","null"], minimum: 0, maximum: 3650, description: "Calendar days from document receipt; null clears the company term." }
       },
       required: ["company_id"],
       additionalProperties: false
@@ -2049,7 +2093,10 @@ const toolDefs = [
         price_eur: { type: ["number","null"], description: "Trip price in EUR. Use null to leave price empty." },
         cmr: { type: "boolean", description: "Legacy alias for cmr_loaded." },
         pod: { type: "boolean", description: "Legacy alias for cmr_unloaded." },
-        rechnung_number: { type: "string", description: "Rechnung number if already created." }
+        rechnung_number: { type: "string", description: "Rechnung number if already created." },
+        status_override: { type: "string", enum: [...editableTripStatuses] },
+        documents_received_date: { type: "string", description: "Confirmed document receipt date YYYY-MM-DD, or empty to clear." },
+        payment_term_days: { type: ["integer","null"], minimum: 0, maximum: 3650, description: "Trip override in calendar days; null inherits the company term." }
       },
       required: ["date","customer"],
       additionalProperties: false
@@ -2077,7 +2124,10 @@ const toolDefs = [
         price_eur: { type: ["number","null"], description: "Trip price in EUR. Pass null to clear it." },
         cmr: { type: "boolean" },
         pod: { type: "boolean" },
-        rechnung_number: { type: "string" }
+        rechnung_number: { type: "string" },
+        status_override: { type: "string", enum: [...editableTripStatuses] },
+        documents_received_date: { type: "string", description: "Confirmed document receipt date YYYY-MM-DD, or empty to clear." },
+        payment_term_days: { type: ["integer","null"], minimum: 0, maximum: 3650, description: "Trip override in calendar days; null inherits the company term." }
       },
       required: ["trip_id_or_number"],
       additionalProperties: false
@@ -2246,9 +2296,10 @@ async function callTool(name, args, req) {
   }
   if (name === "list_companies") return { companies: listCompanies(), count: listCompanies().length };
   if (name === "create_company") {
+    if(args.payment_term_days!==undefined)normalizePaymentTermDays(args.payment_term_days);
     const company = ensureCompany(args.name, args.note || "", args.active);
     if (!company) throw new Error("name is required");
-    if ([args.billing_channel,args.invoice_email,args.invoice_subject,args.postal_address,args.required_documents,args.submission_deadline,args.special_rules,args.rules_source].some(v => v !== undefined)) {
+    if ([args.billing_channel,args.invoice_email,args.invoice_subject,args.postal_address,args.required_documents,args.submission_deadline,args.special_rules,args.rules_source,args.payment_term_days].some(v => v !== undefined)) {
       updateCompany(company.id, {
         billingChannel: args.billing_channel,
         invoiceEmail: args.invoice_email,
@@ -2257,7 +2308,8 @@ async function callTool(name, args, req) {
         requiredDocuments: args.required_documents,
         submissionDeadline: args.submission_deadline,
         specialRules: args.special_rules,
-        rulesSource: args.rules_source
+        rulesSource: args.rules_source,
+        paymentTermDays: args.payment_term_days
       });
     }
     return { created: true, company: listCompanies().find(c => c.id === company.id) || company };
@@ -2274,7 +2326,8 @@ async function callTool(name, args, req) {
       requiredDocuments: args.required_documents,
       submissionDeadline: args.submission_deadline,
       specialRules: args.special_rules,
-      rulesSource: args.rules_source
+      rulesSource: args.rules_source,
+      paymentTermDays: args.payment_term_days
     });
     if (!company) return { updated: false, error: "Company not found" };
     return { updated: true, company };
@@ -2295,14 +2348,15 @@ async function callTool(name, args, req) {
   }
   if (name === "create_trip") {
     if (!args.date || !args.customer) throw new Error("date and customer are required");
+    const payment=tripPaymentInput({}, {customer:args.customer,documentsReceivedDate:args.documents_received_date,paymentTermDays:args.payment_term_days,statusOverride:args.status_override});
     const company = ensureCompany(args.customer);
     const id = crypto.randomUUID();
     const ts = now();
     const internalTripId = nextInternalTripId(args.date);
     const cmrLoaded = args.cmr_loaded ?? args.cmr ?? false;
     const cmrUnloaded = args.cmr_unloaded ?? args.pod ?? false;
-    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,status_override,documents_received_date,payment_term_days,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
         internalTripId,
@@ -2321,6 +2375,9 @@ async function callTool(name, args, req) {
         platesToText(args.vehicle_plates || []),
         priceEurToCents(args.price_eur),
         args.rechnung_number || "",
+        payment.statusOverride,
+        payment.documentsReceivedDate,
+        payment.paymentTermDays,
         ts,
         ts
       );
@@ -2343,11 +2400,12 @@ async function callTool(name, args, req) {
       unloadingPlace: args.unloading_place ?? old.unloadingPlace,
       vehiclePlates: args.vehicle_plates ?? old.vehiclePlates,
       priceEur: args.price_eur === undefined ? old.priceEur : args.price_eur,
-      rechnungCode: args.rechnung_number ?? old.rechnungCode
+      rechnungCode: args.rechnung_number ?? old.rechnungCode,
+      ...tripPaymentInput(old,{customer:args.customer,documentsReceivedDate:args.documents_received_date,paymentTermDays:args.payment_term_days,statusOverride:args.status_override})
     };
     next.customer = ensureCompany(next.customer)?.name || next.customer;
-    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,updated_at=? WHERE id=?")
-      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,now(),old.id);
+    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,status_override=?,documents_received_date=?,payment_term_days=?,updated_at=? WHERE id=?")
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,next.statusOverride,next.documentsReceivedDate,next.paymentTermDays,now(),old.id);
     const t = getTripByAny(old.id);
     return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
@@ -2679,8 +2737,10 @@ const server = http.createServer(async (req, res) => {
       if (p === "/api/companies" && req.method === "GET") return json(res, 200, { companies: listCompanies() });
       if (p === "/api/companies" && req.method === "POST") {
         const b = await readJson(req);
+        if(b.paymentTermDays!==undefined)normalizePaymentTermDays(b.paymentTermDays);
         const company = ensureCompany(b.name, b.note || "", b.active);
         if (!company) return json(res, 400, { error: "name is required" });
+        if(b.paymentTermDays!==undefined)updateCompany(company.id,{paymentTermDays:b.paymentTermDays});
         return json(res, 201, { company: listCompanies().find(c => c.id === company.id) || company });
       }
       const companyMatch = p.match(/^\/api\/companies\/([^/]+)$/);
@@ -2743,15 +2803,16 @@ const server = http.createServer(async (req, res) => {
       if (p === "/api/trips" && req.method === "POST") {
         const b = await readJson(req);
         if (!b.date || !b.customer) return json(res, 400, { error: "date and customer are required" });
+        const payment=tripPaymentInput({},b);
         const company = ensureCompany(b.customer);
         const id = crypto.randomUUID();
         const ts = now();
         const internalTripId = nextInternalTripId(b.date);
         const cmrLoaded = b.cmrLoaded ?? b.cmr ?? false;
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
-        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", String(b.loadingPlace || "").trim(), String(b.unloadingPlace || "").trim(), platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", ts, ts);
+        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,status_override,documents_received_date,payment_term_days,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", String(b.loadingPlace || "").trim(), String(b.unloadingPlace || "").trim(), platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", payment.statusOverride,payment.documentsReceivedDate,payment.paymentTermDays,ts, ts);
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
@@ -2776,7 +2837,7 @@ const server = http.createServer(async (req, res) => {
           priceEur:b.priceEur===undefined?old.priceEur:b.priceEur,
           rechnungCode:b.rechnungCode??old.rechnungCode,
           rechnungUrl:b.rechnungUrl===undefined?old.rechnungUrl:normalizeFakturowniaUrl(b.rechnungUrl),
-          statusOverride:b.statusOverride===undefined?old.statusOverride:normalizeTripStatus(b.statusOverride)
+          ...tripPaymentInput(old,b)
         };
         if(next.internalTripId!==old.internalTripId){
           const clash=db.prepare("SELECT id FROM trips WHERE internal_trip_id=? AND id<>? LIMIT 1").get(next.internalTripId,id);
@@ -2784,8 +2845,8 @@ const server = http.createServer(async (req, res) => {
         }
         const priceCents=priceEurToCents(next.priceEur);
         next.customer=ensureCompany(next.customer)?.name||next.customer;
-        db.prepare("UPDATE trips SET internal_trip_id=?,date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,status_override=?,updated_at=? WHERE id=?")
-          .run(next.internalTripId,next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceCents,next.rechnungCode,next.rechnungUrl,next.statusOverride,now(),id);
+        db.prepare("UPDATE trips SET internal_trip_id=?,date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,status_override=?,documents_received_date=?,payment_term_days=?,updated_at=? WHERE id=?")
+          .run(next.internalTripId,next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceCents,next.rechnungCode,next.rechnungUrl,next.statusOverride,next.documentsReceivedDate,next.paymentTermDays,now(),id);
         return json(res,200,{trip:getTripByAny(id)});
       }
       if (tripMatch && req.method === "DELETE") {
