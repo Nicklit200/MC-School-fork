@@ -293,6 +293,7 @@ const editableTripStatuses=new Set([
   'no_price', 'loaded', 'missing_auftrag', 'missing_cmr', 'missing_both', 'missing_documents'
 ]);
 const invoicedTripStatuses=new Set(['rechnung_created', 'invoice_sent', 'documents_received', 'payment_received']);
+const receiptHistoryStatuses=new Set(['documents_received','payment_received']);
 function normalizeTripStatus(value){
   const status=String(value??'').trim();
   if(!editableTripStatuses.has(status)){
@@ -310,9 +311,11 @@ function normalizeTripCustomer(value){
   return customer;
 }
 function tripPaymentInput(old={},changes={}){
-  const documentsReceivedDate=changes.documentsReceivedDate===undefined?(old.documentsReceivedDate||''):normalizeDocumentsReceivedDate(changes.documentsReceivedDate);
+  let documentsReceivedDate=changes.documentsReceivedDate===undefined?(old.documentsReceivedDate||''):normalizeDocumentsReceivedDate(changes.documentsReceivedDate);
   const paymentTermDays=changes.paymentTermDays===undefined?(old.paymentTermDays??null):normalizePaymentTermDays(changes.paymentTermDays);
   const statusOverride=changes.statusOverride===undefined?(old.statusOverride||''):normalizeTripStatus(changes.statusOverride);
+  // Rolling back receipt confirmation also resets its date, including stale properties payloads.
+  if(!receiptHistoryStatuses.has(statusOverride))documentsReceivedDate='';
   if(statusOverride==='documents_received'&&!documentsReceivedDate){
     const error=new Error('Укажи дату, когда фирма получила документы');error.status=400;throw error;
   }
@@ -387,7 +390,7 @@ function updateCompany(id, changes = {}) {
   const nextRulesSource = changes.rulesSource === undefined ? row.rules_source : String(changes.rulesSource || "").trim();
   const nextPaymentTermDays = changes.paymentTermDays === undefined ? row.payment_term_days : normalizePaymentTermDays(changes.paymentTermDays);
   if(changes.paymentTermDays!==undefined){
-    const inherited=db.prepare("SELECT documents_received_date FROM trips WHERE LOWER(customer)=LOWER(?) AND payment_term_days IS NULL AND documents_received_date<>''").all(row.name);
+    const inherited=db.prepare("SELECT documents_received_date FROM trips WHERE LOWER(customer)=LOWER(?) AND payment_term_days IS NULL AND documents_received_date<>'' AND status_override IN ('documents_received','payment_received')").all(row.name);
     for(const trip of inherited)paymentDeadline({documentsReceivedDate:trip.documents_received_date,companyPaymentTermDays:nextPaymentTermDays});
   }
   const duplicate = db.prepare("SELECT id FROM companies WHERE LOWER(name)=LOWER(?) AND id<>? LIMIT 1").get(nextName,id);
@@ -579,7 +582,8 @@ const tripOut = row => {
   const hasLoadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_loading','cmr') LIMIT 1").get(row.id);
   const hasUnloadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_unloading','pod') LIMIT 1").get(row.id);
   const company=db.prepare("SELECT payment_term_days FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(row.customer);
-  const payment={documentsReceivedDate:row.documents_received_date||'',paymentTermDays:row.payment_term_days??null};
+  // Older versions retained dates after receipt rollback; never reactivate or prefill those dates.
+  const payment={documentsReceivedDate:receiptHistoryStatuses.has(row.status_override)?row.documents_received_date||'':'',paymentTermDays:row.payment_term_days??null};
   return {
     id: row.id,
     internalTripId: row.internal_trip_id || "",

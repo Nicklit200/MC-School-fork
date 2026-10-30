@@ -429,7 +429,8 @@ function paymentDuePreview(date,days){
   return 'Оплата до '+formatPaymentDate(new Date(time+days*86400000).toISOString().slice(0,10))+' · '+days+' календарных дней';
 }
 function paymentCountdown(t){
-  if(!t.documentsReceivedDate&&invoiceStage(t)!=='documents_received')return '';
+  const stage=invoiceStage(t);
+  if(stage!=='documents_received'&&stage!=='payment_received')return '';
   const edit='<button class="payment-edit" type="button" onclick="openReceiptModal(\''+esc(t.id)+'\')">Дата получения / срок</button>';
   if(invoiceStage(t)==='payment_received')return '<div class="payment-deadline paid">Оплачено'+(t.documentsReceivedDate?' · получено '+esc(formatPaymentDate(t.documentsReceivedDate)):'')+'<br>'+edit+'</div>';
   if(!t.documentsReceivedDate)return '<div class="payment-deadline">Укажи дату получения<br>'+edit+'</div>';
@@ -520,7 +521,8 @@ function openReceiptModal(id,setStatus=false){
   receiptTripId=id;receiptSetsStatus=setStatus;
   $('receiptTitle').textContent=setStatus?'Документы получены фирмой':'Дата получения и срок оплаты';
   $('receiptReference').textContent=(t.internalTripId||t.trip||id)+' · '+displayCompanyName(t.customer);
-  $('receiptDate').value=t.documentsReceivedDate||berlinTodayDate();
+  const confirmedDate=['documents_received','payment_received'].includes(invoiceStage(t))?t.documentsReceivedDate:'';
+  $('receiptDate').value=confirmedDate||berlinTodayDate();
   $('receiptTermMode').value=t.paymentTermDays==null?'company':'trip';
   $('receiptTermDays').value=t.paymentTermDays??companyForTrip(t)?.paymentTermDays??'';
   $('receiptNotice').textContent='';
@@ -573,11 +575,18 @@ function updateTripPaymentPreview(){
   const c=companies.find(company=>normCompany(company.name)===normCompany($('tripCustomer').value));
   const inherited=c?.paymentTermDays??null;
   $('tripCompanyPaymentTerm').textContent='Пусто — брать срок фирмы'+(inherited==null?' (пока не задан)':': '+inherited+' календарных дней');
+  const receiptStage=['documents_received','payment_received'].includes($('tripStatusOverride').value);
+  $('tripDocumentsReceivedDate').disabled=!receiptStage;
+  if(!receiptStage){$('tripPaymentPreview').textContent='Отсчёт не начат — документы ещё не отмечены полученными фирмой';return;}
   try{
     const override=paymentTermValue($('tripPaymentTermDays').value);
     const preview=paymentDuePreview($('tripDocumentsReceivedDate').value,override??inherited);
     $('tripPaymentPreview').textContent=$('tripStatusOverride').value==='payment_received'?'Оплата получена — отсчёт завершён':preview;
   }catch(error){$('tripPaymentPreview').textContent=error.message;}
+}
+function handleTripPaymentStatusChange(){
+  if(!['documents_received','payment_received'].includes($('tripStatusOverride').value))$('tripDocumentsReceivedDate').value='';
+  updateTripPaymentPreview();
 }
 $('receiptForm').onsubmit=saveReceipt;
 $('cancelReceipt').onclick=closeReceiptModal;
@@ -817,7 +826,8 @@ window.saveInlineStatus=async(id,control)=>{
   if(!trip)return;
   const previous=trip.statusOverride||'',next=control.value;
   if(pendingTripStatuses.has(id)){control.value=pendingTripStatuses.get(id);return;}
-  if(next===previous)return;
+  const staleReceipt=(trip.documentsReceivedDate||trip.paymentDueDate)&&!['documents_received','payment_received'].includes(next);
+  if(next===previous&&!staleReceipt)return;
   if(next==='documents_received'){
     control.value=previous;
     openReceiptModal(id,true);
@@ -904,13 +914,13 @@ window.openTrip=async id=>{
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
     '<div class="detailrow"><b>Ссылка Rechnung</b><div><input id="tripRechnungUrl" class="dt" type="url" value="'+esc(t.rechnungUrl||'')+'" placeholder="https://obersztdawid.fakturownia.pl/invoices/..."><div class="muted">Вставь прямую ссылку на счёт из Fakturownia</div></div></div>'+
     '<div class="detailrow"><b>Статус</b><div><select id="tripStatusOverride" class="dt">'+tripStatusOptions(t)+'</select><div class="muted" style="margin-top:5px">Ручной статус меняет отметку рейса, но не добавляет и не удаляет документы</div></div></div>'+
-    '<div class="detailrow"><b>Документы получены фирмой</b><div><input id="tripDocumentsReceivedDate" class="dt" type="date" aria-label="Дата получения документов фирмой" value="'+esc(t.documentsReceivedDate||'')+'"><div class="muted">Фактическая дата получения, от которой считаются календарные дни оплаты</div></div></div>'+
+    '<div class="detailrow"><b>Документы получены фирмой</b><div><input id="tripDocumentsReceivedDate" class="dt" type="date" aria-label="Дата получения документов фирмой" value="'+esc(['documents_received','payment_received'].includes(invoiceStage(t))?t.documentsReceivedDate||'':'')+'"><div class="muted">Фактическая дата получения, от которой считаются календарные дни оплаты</div></div></div>'+
     '<div class="detailrow"><b>Срок оплаты, дней</b><div><input id="tripPaymentTermDays" class="dt" type="number" min="0" max="3650" step="1" inputmode="numeric" aria-label="Отдельный срок оплаты для рейса" value="'+esc(t.paymentTermDays??'')+'"><div class="muted" id="tripCompanyPaymentTerm"></div></div></div>'+
     '<div class="detailrow"><b>Оплата до</b><div id="tripPaymentPreview" class="muted" role="status" aria-live="polite"></div></div>';
   $('tripDocumentsReceivedDate').oninput=updateTripPaymentPreview;
   $('tripPaymentTermDays').oninput=updateTripPaymentPreview;
   $('tripCustomer').oninput=updateTripPaymentPreview;
-  $('tripStatusOverride').onchange=updateTripPaymentPreview;
+  $('tripStatusOverride').onchange=handleTripPaymentStatusChange;
   updateTripPaymentPreview();
   renderTripVehicleChoices(t);
   renderDocVehicleOptions(t);
