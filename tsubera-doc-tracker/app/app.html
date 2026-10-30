@@ -20,7 +20,7 @@ h1{margin:0 0 5px;font-size:29px}.muted{color:#6b7280;font-size:12px}
 .ready-action-empty{color:#cbd5e1;text-align:center;width:100%}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
 .card,.panel{background:white;border:1px solid #e5e7eb;border-radius:16px}.card{padding:15px}.card b{display:block;font-size:27px;margin-top:5px}
-.toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.toolbar #statusFilter{width:190px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
+.toolbar{display:flex;gap:10px;padding:12px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid #dfe3ea;border-radius:10px;padding:11px;background:#fff}.toolbar #q{flex:1;min-width:260px}.toolbar #vehicleFilter{width:240px}.toolbar #companyFilter{width:235px}.toolbar #statusFilter{width:190px}.toolbar #paperFilter{width:205px}.filter-check{display:flex;align-items:center;gap:7px;font-size:12px;color:#4b5563;white-space:nowrap;padding:0 4px}.filter-check input{width:17px;height:17px;padding:0}
 .status-filter{position:relative;flex-shrink:0}.status-filter-toggle{width:100%;border:1px solid #dfe3ea;border-radius:10px;padding:11px 12px;background:#fff;color:#111827;font:inherit;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left}.status-filter-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status-filter-arrow{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin:0 2px 4px 4px;flex-shrink:0}.status-filter-toggle[aria-expanded="true"] .status-filter-arrow{transform:rotate(225deg);margin-bottom:0}.status-filter-options{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;width:max-content;max-width:calc(100vw - 44px);padding:6px;border:1px solid #dfe3ea;border-radius:12px;background:#fff;box-shadow:0 14px 32px #11182724;z-index:16}.status-filter-option{display:flex;align-items:center;gap:9px;padding:9px 8px;border-radius:7px;font-size:13px;cursor:pointer;white-space:nowrap}.status-filter-option:hover,.status-filter-option:focus-within{background:#f3f4f6}.toolbar .status-filter-option input{width:16px;height:16px;padding:0;margin:0;flex-shrink:0;accent-color:#111827}.status-filter-toggle:focus-visible,.status-filter-option input:focus-visible{outline:2px solid #a5b4fc;outline-offset:2px}
 .table{overflow-x:auto}.head,.row{width:100%;min-width:1320px;display:grid;grid-template-columns:100px 140px 135px minmax(210px,1.45fr) minmax(220px,1.45fr) 105px 90px 125px minmax(175px,1.05fr) 44px;align-items:center}
 .head{padding:11px 12px;font-size:12px;color:#6b7280;background:#fafafa;border-top:1px solid #eee;border-bottom:1px solid #eee}
@@ -67,7 +67,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .recon-banner{padding:11px 13px;border-radius:11px;margin:0 0 14px;font-size:13px}.recon-banner.ok{background:#e8f7ef;color:#087443}.recon-banner.warn{background:#fff4d6;color:#925f00}.recon-banner.bad{background:#fff1f2;color:#be123c}
 .recon-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 14px}.recon-stat{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}.recon-stat b{display:block;font-size:23px;margin-top:4px}.recon-stat span{font-size:12px;color:#6b7280}
 .recon-table{overflow-x:auto;border-top:1px solid #eee}.recon-head,.recon-row{min-width:1180px;display:grid;grid-template-columns:95px 155px minmax(220px,1.35fr) 105px 110px 165px 135px minmax(190px,1fr);gap:0;align-items:center}.recon-head{padding:10px 12px;background:#fafafa;color:#6b7280;font-size:12px;border-bottom:1px solid #eee}.recon-row{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.recon-row:last-child{border-bottom:0}.recon-ref{font-weight:700}.recon-sub{font-size:11px;color:#6b7280;margin-top:3px}.recon-price{font-weight:700}.recon-empty{padding:24px;color:#6b7280;text-align:center}
-@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter,.toolbar #statusFilter{width:100%}.filter-check{padding:4px 0}}
+@media(max-width:760px){main{padding:18px 10px}.top{align-items:flex-start}.top h1{font-size:22px}.stats{grid-template-columns:1fr 1fr}.grid,.company-rule-grid{grid-template-columns:1fr}.full,.company-rule-grid .full{grid-column:auto}.vehicle-select-list{grid-template-columns:1fr}.vehicle-form,.company-form{grid-template-columns:1fr}.vehicle-grid,.company-grid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.toolbar #vehicleFilter,.toolbar #companyFilter,.toolbar #statusFilter,.toolbar #paperFilter{width:100%}.filter-check{padding:4px 0}}
 @media(max-width:760px){
   .top,.tabs,.docs-head,.actions{flex-wrap:wrap}
   .top>div{min-width:0;max-width:100%}
@@ -130,6 +130,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
           <label class="status-filter-option"><input type="checkbox" value="no_invoice"> Без Rechnung</label>
         </div>
       </div>
+      <select id="paperFilter" aria-label="Наличие бумаги по рейсу" title="Есть бумага — подтверждена копия хотя бы одного документа рейса, любого типа"><option value="">Вся бумага</option><option value="confirmed">Есть бумага</option><option value="unconfirmed">Бумага не подтверждена</option></select>
       <label class="filter-check"><input id="showHiddenCompanies" type="checkbox"> Показать скрытые фирмы</label>
       <button class="btn alt small" id="exportTripsExcel" type="button" title="Выгрузить показанные рейсы с ссылками на Rechnung">↓ Скачать Excel</button>
     </div>
@@ -802,10 +803,12 @@ function filteredTripsForTable(){
   const vf=$('vehicleFilter').value.toLowerCase().trim();
   const showHidden=$('showHiddenCompanies').checked;
   const selectedCompany=companies.find(c=>c.id===$('companyFilter').value)||null;
+  const paper=$('paperFilter').value;
   return trips
     .filter(t=>!selectedStatuses.size||[...selectedStatuses].some(status=>matchesStatusFilter(t,status)))
     .filter(t=>showHidden||(companyForTrip(t)?.active!==false))
     .filter(t=>!selectedCompany||normCompany(t.customer)===normCompany(selectedCompany.name))
+    .filter(t=>!paper||(paper==='confirmed'?Number(t.paperDocumentCount||0)>0:paper==='unconfirmed'?!(Number(t.paperDocumentCount||0)>0):false))
     .filter(t=>[t.date,t.internalTripId,t.trip,t.customer,t.loadingPlace,t.unloadingPlace,t.rechnungCode,(t.vehiclePlates||[]).join(' ')].join(' ').toLowerCase().includes(q))
     .filter(t=>!vf||(t.vehiclePlates||[]).join(' ').toLowerCase().includes(vf));
 }
@@ -1221,8 +1224,10 @@ async function loadAllDocuments(){
   }catch(error){if(sequence===documentsLoadSequence){$('documentsNotice').textContent='Не удалось обновить документы: '+error.message;$('documentsNotice').classList.add('error')}}
   finally{if(sequence===documentsLoadSequence)$('refreshDocuments').disabled=false}
 }
-function mergeCatalogDocument(id,values){
-  const doc=allDocuments.find(item=>item.id===id);if(doc)Object.assign(doc,values);renderDocuments();
+function mergeCatalogDocument(id,values,previousPaper){
+  const doc=allDocuments.find(item=>item.id===id),trip=trips.find(item=>item.id===(values.tripId||doc?.tripId||activeTrip));
+  if(trip&&typeof previousPaper==='boolean'&&Number.isInteger(trip.paperDocumentCount))trip.paperDocumentCount=Math.max(0,trip.paperDocumentCount+Number(hasPaperCopy(values))-Number(previousPaper));
+  if(doc)Object.assign(doc,values);renderDocuments();renderInlineStatusTables();
 }
 async function setCatalogPaperAvailable(id,input){
   if(pendingCatalogPaper.has(id))return;
@@ -1232,7 +1237,7 @@ async function setCatalogPaperAvailable(id,input){
   try{
     const result=await api('/api/documents/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({paperAvailable:next})});
     input.dataset.paperConfirmed=next?'1':'0';
-    mergeCatalogDocument(id,{...result.document,paperAvailable:next});
+    mergeCatalogDocument(id,{...result.document,paperAvailable:next},previous);
   }catch(error){input.checked=previous;$('documentsNotice').textContent='Не удалось сохранить отметку: '+error.message;$('documentsNotice').classList.add('error')}
   finally{pendingCatalogPaper.delete(id);input.disabled=false;state.textContent=paperStateLabel(input.dataset.paperConfirmed==='1');state.classList.toggle('confirmed',input.dataset.paperConfirmed==='1');renderDocuments()}
 }
@@ -1321,7 +1326,7 @@ window.setDocPaperAvailable=async(id,input)=>{
   try{
     const result=await api('/api/documents/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({paperAvailable:next})});
     input.dataset.paperConfirmed=next?'1':'0';
-    mergeCatalogDocument(id,{...result.document,paperAvailable:next});
+    mergeCatalogDocument(id,{...result.document,paperAvailable:next},previous);
   }catch(e){
     input.checked=previous;
     alert('Не удалось сохранить отметку о бумажном экземпляре: '+e.message);
@@ -1581,7 +1586,7 @@ $('reconSearch').oninput=renderReconciliation;
 $('add').onclick=()=>$('addModal').classList.add('open');
 $('cancelAdd').onclick=()=>$('addModal').classList.remove('open');
 $('exportTripsExcel').onclick=downloadTripsExcel;
-$('q').oninput=render;$('readyQ').oninput=renderReady;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;
+$('q').oninput=render;$('readyQ').oninput=renderReady;$('vehicleFilter').oninput=render;$('companyFilter').onchange=render;$('paperFilter').onchange=render;
 function setStatusFilterOpen(open){
   $('statusFilterOptions').hidden=!open;
   $('statusFilterToggle').setAttribute('aria-expanded',String(open));

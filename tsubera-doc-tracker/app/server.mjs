@@ -608,6 +608,7 @@ const tripOut = row => {
   const hasAuftrag = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type='auftrag' LIMIT 1").get(row.id);
   const hasLoadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_loading','cmr') LIMIT 1").get(row.id);
   const hasUnloadingCmr = !!db.prepare("SELECT 1 FROM documents WHERE trip_id=? AND doc_type IN ('cmr_unloading','pod') LIMIT 1").get(row.id);
+  const documentCounts=db.prepare('SELECT COUNT(*) AS documentCount,COUNT(CASE WHEN paper_available=1 THEN 1 END) AS paperDocumentCount FROM documents WHERE trip_id=?').get(row.id);
   const company=db.prepare("SELECT payment_term_days FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(row.customer);
   // Older versions retained dates after receipt rollback; never reactivate or prefill those dates.
   const payment={documentsReceivedDate:receiptHistoryStatuses.has(row.status_override)?row.documents_received_date||'':'',paymentTermDays:row.payment_term_days??null};
@@ -620,6 +621,8 @@ const tripOut = row => {
     auftrag: hasAuftrag,
     cmrLoaded: hasLoadingCmr,
     cmrUnloaded: hasUnloadingCmr,
+    documentCount:documentCounts.documentCount,
+    paperDocumentCount:documentCounts.paperDocumentCount,
     loadedAt: row.loaded_at || "",
     unloadedAt: row.unloaded_at || "",
     loadingPlace: row.loading_place || "",
@@ -1181,6 +1184,7 @@ function systemOverview() {
 }
 
 function queryTrips(args = {}) {
+  if(args.paper_available!==undefined&&typeof args.paper_available!=='boolean')throw Object.assign(new Error('paper_available must be a boolean'),{status:400});
   let sql = "SELECT * FROM trips WHERE 1=1";
   const vals = [];
   if (args.query) {
@@ -1194,6 +1198,7 @@ function queryTrips(args = {}) {
   if (args.vehicle) { sql += " AND LOWER(COALESCE(vehicle_plates,'')) LIKE ?"; vals.push("%" + String(args.vehicle).toLowerCase() + "%"); }
   sql += " ORDER BY date DESC, created_at DESC LIMIT 500";
   let rows = db.prepare(sql).all(...vals).map(tripOut);
+  if(args.paper_available!==undefined)rows=rows.filter(trip=>(trip.paperDocumentCount>0)===args.paper_available);
   if (args.readiness) rows = rows.filter(t => readiness(t) === args.readiness);
   if(args.include_hidden_companies===false)rows=rows.filter(t=>db.prepare('SELECT active FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1').get(t.customer)?.active!==0);
   if(args.statuses!==undefined){
@@ -1907,7 +1912,8 @@ const toolDefs = [
     inputSchema:{type:'object',properties:{
       trip_ids:{type:'array',items:{type:'string'},minItems:1,maxItems:500,description:'Ordered unique trip IDs or Tsubera Tour-IDs. Do not combine with filters.'},
       query:{type:'string'},date_from:{type:'string'},date_to:{type:'string'},customer:{type:'string'},vehicle:{type:'string'},
-      statuses:{type:'array',items:{type:'string',enum:tripFilterStatuses}},include_hidden_companies:{type:'boolean',description:'For filtered exports defaults to false, matching the default website view.'}
+      statuses:{type:'array',items:{type:'string',enum:tripFilterStatuses}},include_hidden_companies:{type:'boolean',description:'For filtered exports defaults to false, matching the default website view.'},
+      paper_available:{type:'boolean',description:'True: at least one uploaded document has confirmed paper-copy possession, including other files. False: no confirmed paper copy. Combines with the other filters using AND.'}
     },additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
   },
   {
@@ -2083,7 +2089,8 @@ const toolDefs = [
         vehicle: { type: "string", description: "Vehicle registration / Kennzeichen filter." },
         readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created","invoice_sent","documents_received","payment_received"] },
         statuses:{type:"array",items:{type:"string",enum:tripFilterStatuses},description:"Multiple selected statuses use OR."},
-        include_hidden_companies:{type:"boolean",description:"Defaults to true for all records; false limits to current companies."}
+        include_hidden_companies:{type:"boolean",description:"Defaults to true for all records; false limits to current companies."},
+        paper_available:{type:'boolean',description:'True: at least one uploaded document has confirmed paper-copy possession, including other files. False: no confirmed paper copy. Combines with other filters using AND.'}
       },
       additionalProperties: false
     },
