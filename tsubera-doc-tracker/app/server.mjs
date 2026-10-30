@@ -8,6 +8,8 @@ import ExcelJS from "exceljs";
 import { transOrderKey, migrateTransOrderIdentity } from "./trans-order-key.mjs";
 import { createOnlineAuth } from "./online-auth.mjs";
 import { normalizePaymentTermDays, normalizeDocumentsReceivedDate, paymentDeadline } from "./payment-deadline.mjs";
+import {dispatchFields,normalizeInvoiceDispatch,normalizeDispatchUrl,dispatchFromMcp,dispatchMcpProperties} from './invoice-dispatch.mjs';
+import {downloadUrlToBuffer} from './safe-download.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -216,6 +218,11 @@ if (!tripColumns.has("rechnung_url")) db.exec("ALTER TABLE trips ADD COLUMN rech
 if (!tripColumns.has("status_override")) db.exec("ALTER TABLE trips ADD COLUMN status_override TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("documents_received_date")) db.exec("ALTER TABLE trips ADD COLUMN documents_received_date TEXT NOT NULL DEFAULT ''");
 if (!tripColumns.has("payment_term_days")) db.exec("ALTER TABLE trips ADD COLUMN payment_term_days INTEGER");
+for(const column of Object.values(dispatchFields))if(!tripColumns.has(column))db.exec(`ALTER TABLE trips ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
+db.exec(`CREATE TABLE IF NOT EXISTS trip_status_history (
+  id TEXT PRIMARY KEY, trip_id TEXT NOT NULL, status TEXT NOT NULL, status_date TEXT NOT NULL DEFAULT '',
+  recorded_at TEXT NOT NULL, source TEXT NOT NULL, FOREIGN KEY(trip_id) REFERENCES trips(id) ON DELETE CASCADE
+); CREATE INDEX IF NOT EXISTS idx_trip_status_history_trip ON trip_status_history(trip_id,recorded_at);`);
 
 const documentColumns = new Set(db.prepare("PRAGMA table_info(documents)").all().map(r => r.name));
 for (const [name, ddl] of [
@@ -258,15 +265,17 @@ const priceEurToCents = v => {
 };
 const priceCentsToEur = v => v === null || v === undefined ? null : Number((Number(v) / 100).toFixed(2));
 function normalizeFakturowniaUrl(value){
+  const invalid=message=>Object.assign(new Error(message),{status:400});
+  if(value!=null&&typeof value!=='string')throw invalid('Неверная ссылка на Rechnung');
   const raw=String(value??'').trim();
   if(!raw)return '';
-  if(raw.length>2048)throw new Error('Ссылка на Rechnung слишком длинная');
+  if(raw.length>2048||/[\u0000-\u001f\u007f]/.test(raw))throw invalid('Ссылка на Rechnung слишком длинная или содержит недопустимые символы');
   let url;
-  try{url=new URL(raw);}catch{throw new Error('Неверная ссылка на Rechnung');}
+  try{url=new URL(raw);}catch{throw invalid('Неверная ссылка на Rechnung');}
   const host=url.hostname.toLowerCase();
   const allowed=host==='fakturownia.pl'||host.endsWith('.fakturownia.pl')||host==='fakturownia.net'||host.endsWith('.fakturownia.net');
   if(url.protocol!=='https:'||url.username||url.password||!allowed||url.pathname.length<=1){
-    throw new Error('Укажи HTTPS-ссылку на счет Fakturownia');
+    throw invalid('Укажи HTTPS-ссылку на счет Fakturownia');
   }
   return url.toString();
 }
@@ -323,7 +332,25 @@ function tripPaymentInput(old={},changes={}){
   const company=db.prepare("SELECT payment_term_days FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1").get(customer);
   // Validate the combined receipt and inherited/overridden term before any database write.
   paymentDeadline({documentsReceivedDate,paymentTermDays,companyPaymentTermDays:company?company.payment_term_days:60,statusOverride});
-  return {documentsReceivedDate,paymentTermDays,statusOverride};
+  return {documentsReceivedDate,paymentTermDays,statusOverride,...normalizeInvoiceDispatch(old,{...changes,statusOverride:changes.statusOverride===undefined?undefined:statusOverride,documentsReceivedDate}),...(changes.rechnungUrl===undefined?{}:{rechnungUrl:normalizeFakturowniaUrl(changes.rechnungUrl)})};
+}
+function persistTripDispatch(id,old,next,source){
+  const keys=Object.keys(dispatchFields);
+  db.prepare('UPDATE trips SET '+keys.map(key=>dispatchFields[key]+'=?').join(',')+' WHERE id=?').run(...keys.map(key=>next[key]||''),id);
+  if(next.rechnungUrl!==undefined)db.prepare('UPDATE trips SET rechnung_url=? WHERE id=?').run(next.rechnungUrl,id);
+  if((next.statusOverride||'')!==(old.statusOverride||'')||(next.statusDate||'')!==(old.statusDate||'')){
+    db.prepare('INSERT INTO trip_status_history(id,trip_id,status,status_date,recorded_at,source) VALUES(?,?,?,?,?,?)')
+      .run(crypto.randomUUID(),id,next.statusOverride||'',next.statusDate||'',next.statusUpdatedAt||now(),source);
+  }
+}
+function saveTrackedTrip(id,old,next,source,write){
+  db.exec('BEGIN');
+  try{write();persistTripDispatch(id,old,next,source);db.exec('COMMIT');}
+  catch(error){db.exec('ROLLBACK');throw error;}
+}
+function statusHistory(tripId){
+  return db.prepare('SELECT id,status,status_date,recorded_at,source FROM trip_status_history WHERE trip_id=? ORDER BY recorded_at,id').all(tripId)
+    .map(row=>({id:row.id,status:row.status,statusDate:row.status_date,recordedAt:row.recorded_at,source:row.source}));
 }
 function normalizeCustomerOrder(value){
   const ref=String(value??'').trim();
@@ -604,6 +631,8 @@ const tripOut = row => {
     rechnungCode: row.rechnung_code || "",
     rechnungUrl: row.rechnung_url || "",
     statusOverride: row.status_override || "",
+    ...Object.fromEntries(Object.entries(dispatchFields).map(([camel,snake])=>[camel,row[snake]||''])),
+    companyPaymentTermDays:company?.payment_term_days??null,
     ...payment,
     ...paymentDeadline({...payment,companyPaymentTermDays:company?.payment_term_days??null,statusOverride:row.status_override||''}),
     createdAt: row.created_at,
@@ -676,7 +705,22 @@ async function generateTripsExcel(trips){
     {header:EXCEL_EXPORT_HEADERS[8],key:'status',width:37},
     {header:EXCEL_EXPORT_HEADERS[9],key:'receivedDate',width:27},
     {header:EXCEL_EXPORT_HEADERS[10],key:'paymentDays',width:30},
-    {header:EXCEL_EXPORT_HEADERS[11],key:'dueDate',width:18}
+    {header:EXCEL_EXPORT_HEADERS[11],key:'dueDate',width:18},
+    ...[
+      ['Tsubera Tour-ID','tourId',22],['Машины / Kennzeichen','vehicles',27],['Номер Rechnung','invoiceNumber',24],
+      ['Код текущего статуса','statusCode',27],['Дата статуса','statusDate',18],['Статус записан (UTC)','statusUpdatedAt',25],
+      ['Как отправлен счёт','sentVia',27],['Отправлен email','emailSentDate',19],['Отправлен бумажной почтой','postSentDate',25],
+      ['Email получателя','recipient',42],['Ссылка на email','emailUrl',65],['Почтовое отправление / трек','tracking',33],
+      ['Ссылка отслеживания','trackingUrl',65],['Примечание об отправке','dispatchNote',60],['Отдельный срок рейса, дней','tripDays',26],
+      ['Срок фирмы, дней','companyDays',22],['Осталось дней до оплаты','daysRemaining',24],['Просрочено','overdue',17],
+      ['Дата / время загрузки','loadedAt',25],['Дата / время выгрузки','unloadedAt',25],['CMR загрузки','cmrLoading',20],
+      ['Документов','documentCount',16],['Бумажных копий подтверждено','paperCount',28],['Названия документов','documentNames',70],
+      ['Рейс создан (UTC)','createdAt',26],['Рейс обновлён (UTC)','updatedAt',26],['Как фирма требует Rechnung','billingChannel',65],
+      ['Email фирмы для Rechnung','companyEmail',45],['Почтовый адрес фирмы','postalAddress',65],['Требуемые документы','requiredDocuments',65],
+      ['Срок отправки документов','submissionDeadline',65],['Особые правила фирмы','specialRules',65],['Источник правил','rulesSource',65],
+      ['Фирма показывается','companyActive',23],['Примечание фирмы','companyNote',60],
+      ['Ручной статус (код)','manualStatus',27],['Статус по документам (код)','derivedStatus',30],['ID рейса','tripDatabaseId',40],['Тема email по правилам фирмы','companyEmailSubject',65]
+    ].map(([header,key,width])=>({header,key,width}))
   ];
   const header=sheet.getRow(1);
   header.height=32;
@@ -687,6 +731,9 @@ async function generateTripsExcel(trips){
     cell.border={bottom:{style:'thin',color:{argb:'FF0B1225'}}};
   });
   trips.forEach((trip,index)=>{
+    const company=companyOut(db.prepare('SELECT * FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1').get(trip.customer));
+    const documents=listDocsForTrip(trip.id);
+    const dateCell=value=>value?new Date(value+'T00:00:00.000Z'):null;
     const date=String(trip.date||'');
     const dateValue=/^\d{4}-\d{2}-\d{2}$/.test(date)?new Date(date+'T00:00:00.000Z'):date;
     const route=[excelText(trip.loadingPlace||'—'),excelText(trip.unloadingPlace||'—')].join(' → ');
@@ -702,7 +749,19 @@ async function generateTripsExcel(trips){
       status:tripStatusForExcel(trip),
       receivedDate:trip.documentsReceivedDate?new Date(trip.documentsReceivedDate+'T00:00:00.000Z'):null,
       paymentDays:trip.effectivePaymentTermDays,
-      dueDate:trip.paymentDueDate?new Date(trip.paymentDueDate+'T00:00:00.000Z'):null
+      dueDate:dateCell(trip.paymentDueDate),
+      tourId:excelText(trip.internalTripId),vehicles:excelText((trip.vehiclePlates||[]).join(', ')),invoiceNumber:excelText(trip.rechnungCode),
+      statusCode:trip.statusOverride||readiness(trip),statusDate:dateCell(trip.statusDate),statusUpdatedAt:excelText(trip.statusUpdatedAt),
+      sentVia:({'email':'Email','post':'Бумажная почта','email_and_post':'Email и бумажная почта'})[trip.invoiceSentVia]||'',
+      emailSentDate:dateCell(trip.invoiceEmailSentDate),postSentDate:dateCell(trip.invoicePostSentDate),recipient:excelText(trip.invoiceRecipientEmail),
+      emailUrl:'',tracking:excelText(trip.invoicePostalTracking),trackingUrl:'',dispatchNote:excelText(trip.invoiceDispatchNote),
+      tripDays:trip.paymentTermDays,companyDays:company?.paymentTermDays??null,daysRemaining:trip.paymentDaysRemaining,overdue:trip.paymentOverdue?'Да':'Нет',
+      loadedAt:excelText(trip.loadedAt),unloadedAt:excelText(trip.unloadedAt),cmrLoading:trip.cmrLoaded?'Есть':'Нет',documentCount:documents.length,
+      paperCount:documents.filter(doc=>doc.paperAvailable).length,documentNames:excelText(documents.map(doc=>doc.name).join('\n')),
+      createdAt:excelText(trip.createdAt),updatedAt:excelText(trip.updatedAt),billingChannel:excelText(company?.billingChannel),companyEmail:excelText(company?.invoiceEmail),
+      postalAddress:excelText(company?.postalAddress),requiredDocuments:excelText(company?.requiredDocuments),submissionDeadline:excelText(company?.submissionDeadline),
+      specialRules:excelText(company?.specialRules),rulesSource:excelText(company?.rulesSource),companyActive:company?.active?'Да':'Нет',companyNote:excelText(company?.note),
+      manualStatus:excelText(trip.statusOverride),derivedStatus:readiness({...trip,statusOverride:''}),tripDatabaseId:trip.id,companyEmailSubject:excelText(company?.invoiceSubject)
     });
     row.height=27;
     row.eachCell({includeEmpty:true},cell=>{
@@ -714,6 +773,8 @@ async function generateTripsExcel(trips){
     row.getCell('receivedDate').numFmt='dd.mm.yyyy';
     row.getCell('dueDate').numFmt='dd.mm.yyyy';
     row.getCell('paymentDays').numFmt='0';
+    for(const key of ['statusDate','emailSentDate','postSentDate'])row.getCell(key).numFmt='dd.mm.yyyy';
+    for(const key of ['tripDays','companyDays','daysRemaining','documentCount','paperCount'])row.getCell(key).numFmt='0';
     row.getCell('price').numFmt='#,##0.00 "€";[Red](#,##0.00 "€");"–"';
     row.getCell('price').alignment={vertical:'middle',horizontal:'right'};
     let invoiceUrl='';
@@ -727,6 +788,10 @@ async function generateTripsExcel(trips){
       cell.font={name:'Aptos',size:10,underline:true,color:{argb:'FF1D4ED8'}};
       cell.alignment={vertical:'middle',horizontal:'left'};
     }
+    for(const [key,value] of [['emailUrl',trip.invoiceEmailUrl],['trackingUrl',trip.invoicePostalTrackingUrl]]){
+      if(!value)continue;let url;try{url=normalizeDispatchUrl(value);}catch{continue;}
+      const cell=row.getCell(key);cell.value={text:url,hyperlink:url};cell.font={name:'Aptos',size:10,underline:true,color:{argb:'FF1D4ED8'}};
+    }
     const statusCell=row.getCell('status');
     const billingColors={'Rechnung erstellt':'FF2447A3','Счёт отправлен':'FF0369A1','Документы получены фирмой':'FF0369A1','Оплата получена':'FF15803D'};
     const billingColor=billingColors[tripStatusForExcel(trip)];
@@ -734,8 +799,20 @@ async function generateTripsExcel(trips){
       statusCell.font={name:'Aptos',size:11,bold:true,color:{argb:billingColor}};
     }
   });
-  sheet.autoFilter={from:'A1',to:'L'+(trips.length+1)};
+  sheet.autoFilter={from:{row:1,column:1},to:{row:trips.length+1,column:sheet.columnCount}};
   sheet.pageSetup={fitToPage:true,fitToWidth:1,orientation:'landscape'};
+  const historySheet=workbook.addWorksheet('История статусов',{views:[{state:'frozen',ySplit:1}]});
+  historySheet.columns=[['Tsubera Tour-ID','tour',23],['№ заказчика','order',25],['Фирма','company',40],['Статус','status',35],['Дата статуса','date',19],['Зафиксировано (UTC)','recordedAt',27],['Источник','source',18]].map(([header,key,width])=>({header,key,width}));
+  const documentSheet=workbook.addWorksheet('Документы',{views:[{state:'frozen',ySplit:1}]});
+  documentSheet.columns=[['Tsubera Tour-ID','tour',23],['№ заказчика','order',25],['Фирма','company',40],['ID документа','id',40],['Тип','type',25],['Имя файла','name',65],['Размер, байт','size',20],['Загружен (UTC)','createdAt',27],['Бумажный экземпляр у меня','paper',28],['Примечание о бумаге','note',60],['Бумага обновлена (UTC)','paperUpdatedAt',28]].map(([header,key,width])=>({header,key,width}));
+  for(const trip of trips){
+    for(const item of statusHistory(trip.id)){const row=historySheet.addRow({tour:excelText(trip.internalTripId),order:excelText(trip.trip),company:excelText(trip.customer),status:item.status?tripStatusForExcel({...trip,statusOverride:item.status}):'Автоматически (по документам)',date:item.statusDate?new Date(item.statusDate+'T00:00:00.000Z'):null,recordedAt:excelText(item.recordedAt),source:item.source});row.getCell('date').numFmt='dd.mm.yyyy';}
+    for(const doc of listDocsForTrip(trip.id))documentSheet.addRow({tour:excelText(trip.internalTripId),order:excelText(trip.trip),company:excelText(trip.customer),id:doc.id,type:doc.docType,name:excelText(doc.name),size:doc.size,createdAt:doc.createdAt,paper:doc.paperAvailable?'Подтверждено':'Не подтверждено',note:excelText(doc.paperNote),paperUpdatedAt:doc.paperUpdatedAt});
+  }
+  for(const extra of [historySheet,documentSheet]){
+    extra.getRow(1).height=32;extra.getRow(1).eachCell(cell=>{cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF17233D'}};cell.font={name:'Aptos',bold:true,color:{argb:'FFFFFFFF'}};cell.alignment={wrapText:true,vertical:'middle'};});
+    extra.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,extra.rowCount),column:extra.columnCount}};
+  }
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
@@ -776,56 +853,23 @@ function readPaperInput(body, { requireAvailable = false, strict = false } = {})
     ...(hasNote ? { paperNote: body.paperNote.trim() } : {})
   };
 }
-function assertSafeHttpsUrl(value) {
-  let u;
-  try { u = new URL(String(value || "")); } catch { throw new Error("Invalid source URL"); }
-  if (u.protocol !== "https:") throw new Error("Only HTTPS source URLs are allowed");
-  const h = u.hostname.toLowerCase();
-  if (
-    h === "localhost" || h === "::1" || h === "[::1]" ||
-    /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) ||
-    /^169\.254\./.test(h) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(h)
-  ) throw new Error("Private/internal source URLs are not allowed");
-  return u;
-}
-async function downloadUrlToBuffer(sourceUrl, maxBytes = 20 * 1024 * 1024) {
-  let current = assertSafeHttpsUrl(sourceUrl);
-  for (let i = 0; i < 5; i++) {
-    const rr = await fetch(current, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(20000),
-      headers: { "user-agent": "Tsubera-Document-Importer/1.0" }
-    });
-    if (rr.status >= 300 && rr.status < 400) {
-      const location = rr.headers.get("location");
-      if (!location) throw new Error("Source URL redirected without a Location header");
-      current = assertSafeHttpsUrl(new URL(location, current).toString());
-      continue;
-    }
-    if (!rr.ok) throw new Error("Could not fetch source file: HTTP " + rr.status);
-    const len = Number(rr.headers.get("content-length") || 0);
-    if (len && len > maxBytes) throw new Error("Source file exceeds " + Math.floor(maxBytes / 1024 / 1024) + " MB limit");
-    const buf = Buffer.from(await rr.arrayBuffer());
-    if (!buf.length) throw new Error("Source file is empty");
-    if (buf.length > maxBytes) throw new Error("Source file exceeds " + Math.floor(maxBytes / 1024 / 1024) + " MB limit");
-    return { buffer: buf, mime: rr.headers.get("content-type") || "application/octet-stream", finalUrl: current.toString() };
-  }
-  throw new Error("Too many redirects while fetching source file");
-}
-function storeTripDocument(t, { documentType, filename, mimeType, buffer, vehiclePlate }) {
+function storeTripDocument(t, { documentType, filename, mimeType, buffer, vehiclePlate, paperAvailable=false,paperNote='' }) {
+  if(!['auftrag','cmr_loading','cmr_unloading','cmr','pod','rechnung','other'].includes(documentType))throw Object.assign(new Error('Unsupported document type'),{status:400});
+  const paper=readPaperInput({paperAvailable,paperNote});
+  if(typeof filename!=='string'||!filename.trim()||filename.length>500||/[\u0000-\u001f]/.test(filename))throw Object.assign(new Error('Invalid filename'),{status:400});
   const id = crypto.randomUUID();
   const ext = path.extname(filename).replace(/[^.a-zA-Z0-9]/g,"").slice(0,10);
   const stored = id + ext;
   fs.writeFileSync(path.join(DOCS_DIR, stored), buffer);
-  db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .run(id,t.id,documentType,filename,stored,mimeType || "application/octet-stream",buffer.length,now());
+  const createdAt=now();
+  db.prepare("INSERT INTO documents (id,trip_id,doc_type,original_name,stored_name,mime,size,created_at,paper_available,paper_note,paper_updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id,t.id,documentType,filename,stored,mimeType || "application/octet-stream",buffer.length,createdAt,paper.paperAvailable?1:0,paper.paperNote||'',paper.paperAvailable||paper.paperNote?createdAt:'');
   const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
   const flag = flagMap[documentType];
   if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
   else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
   else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
-  else if (documentType === "rechnung") db.prepare("UPDATE trips SET rechnung_code=?, updated_at=? WHERE id=?").run(filename, now(), t.id);
+  else if (documentType === "rechnung") db.prepare("UPDATE trips SET rechnung_code=CASE WHEN TRIM(COALESCE(rechnung_code,''))='' THEN ? ELSE rechnung_code END, updated_at=? WHERE id=?").run(filename, now(), t.id);
   if (vehiclePlate) appendVehicleToTrip(t.id, vehiclePlate);
   const trip = getTripByAny(t.id);
   return {
@@ -857,28 +901,56 @@ function tempFileUrl(req, id, seconds = 900, download = false) {
 }
 function uploadTicketSig(ticket, exp) {
   return crypto.createHmac("sha256", CONNECTOR_TOKEN || SITE_PASSWORD || "tsubera")
-    .update(ticket + ":" + exp).digest("hex");
+    .update('mcp-upload-v1\n'+ticket + "\n" + exp).digest("hex");
 }
 function safeHexEqual(a, b) {
   const aa = Buffer.from(String(a || ""), "utf8");
   const bb = Buffer.from(String(b || ""), "utf8");
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
 }
+const connectorExports=new Map();
+function connectorBase(req){return (process.env.PUBLIC_BASE_URL||((req.headers['x-forwarded-proto']||'http')+'://'+req.headers.host)).replace(/\/+$/,'');}
+function connectorResourceSig(kind,id,exp){return crypto.createHmac('sha256',CONNECTOR_TOKEN).update(['mcp-resource-v1',kind,id,String(exp)].join('\n')).digest('hex');}
+function connectorFileUrl(req,id,seconds=900){const exp=Math.floor(Date.now()/1000)+Math.min(900,seconds);return connectorBase(req)+'/file/'+encodeURIComponent(id)+'?access=mcp&exp='+exp+'&sig='+connectorResourceSig('file',id,exp);}
+function validConnectorResource(req,url,p){
+  if(!CONNECTOR_TOKEN)return false;
+  const exp=Number(url.searchParams.get('exp')),current=Math.floor(Date.now()/1000),sig=url.searchParams.get('sig')||'';
+  if(!Number.isInteger(exp)||exp<current||exp>current+900)return false;
+  if(p==='/direct-upload'&&req.method==='POST'){
+    const ticket=url.searchParams.get('ticket')||'';
+    return !!ticket&&ticket.length<=10000&&safeHexEqual(sig,uploadTicketSig(ticket,exp));
+  }
+  if(req.method!=='GET'||url.searchParams.get('access')!=='mcp')return false;
+  if(p.startsWith('/file/'))return safeHexEqual(sig,connectorResourceSig('file',p.slice(6),exp));
+  if(p.startsWith('/connector-export/'))return safeHexEqual(sig,connectorResourceSig('excel',p.slice('/connector-export/'.length),exp));
+  if(p.startsWith('/fakturownia/invoices/')&&p.endsWith('.pdf'))return safeHexEqual(sig,connectorResourceSig('fakturownia',p.slice('/fakturownia/invoices/'.length,-4),exp));
+  return false;
+}
+function createConnectorExport(req,buffer){
+  const current=Date.now();for(const [id,item] of connectorExports)if(item.exp*1000<current)connectorExports.delete(id);
+  if(connectorExports.size>=20)connectorExports.delete(connectorExports.keys().next().value);
+  const id=crypto.randomBytes(20).toString('hex')+'.xlsx',exp=Math.floor(current/1000)+900;
+  connectorExports.set(id,{buffer,exp});
+  return {downloadUrl:connectorBase(req)+'/connector-export/'+id+'?access=mcp&exp='+exp+'&sig='+connectorResourceSig('excel',id,exp),expiresAt:new Date(exp*1000).toISOString()};
+}
 function createDirectUploadUrl(req, args, seconds = 900) {
+  readPaperInput({paperAvailable:args.paper_available??false,paperNote:args.paper_note??''});
+  if(typeof args.filename!=='string'||!args.filename.trim()||args.filename.length>500||/[\u0000-\u001f]/.test(args.filename))throw Object.assign(new Error('Invalid filename'),{status:400});
   const exp = Math.floor(Date.now() / 1000) + seconds;
   const payload = {
     trip: String(args.trip_id_or_number || ""),
     documentType: String(args.document_type || ""),
     filename: String(args.filename || ""),
     mimeType: String(args.mime_type || ""),
-    vehiclePlate: String(args.vehicle_plate || "")
+    vehiclePlate: String(args.vehicle_plate || ""),
+    paperAvailable:args.paper_available??false,paperNote:args.paper_note??''
   };
   const ticket = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   const sig = uploadTicketSig(ticket, exp);
   const proto = req.headers["x-forwarded-proto"] || "http";
   const host = req.headers.host;
   return {
-    uploadUrl: proto + "://" + host + "/direct-upload?ticket=" + encodeURIComponent(ticket) + "&exp=" + exp + "&sig=" + sig,
+    uploadUrl: connectorBase(req) + "/direct-upload?ticket=" + encodeURIComponent(ticket) + "&exp=" + exp + "&sig=" + sig,
     expiresAt: new Date(exp * 1000).toISOString()
   };
 }
@@ -1027,7 +1099,7 @@ function tempFakturowniaPdfUrl(req, id, seconds = 900) {
   const proto = req.headers["x-forwarded-proto"] || "http";
   const host = req.headers.host;
   return {
-    downloadUrl: proto + "://" + host + "/fakturownia/invoices/" + encodeURIComponent(id) + ".pdf?exp=" + exp + "&sig=" + fakturowniaPdfSig(id, exp),
+    downloadUrl: connectorBase(req) + "/fakturownia/invoices/" + encodeURIComponent(id) + ".pdf?access=mcp&exp=" + exp + "&sig=" + connectorResourceSig('fakturownia',id,exp),
     expiresAt: new Date(exp * 1000).toISOString()
   };
 }
@@ -1090,7 +1162,9 @@ function systemOverview() {
     activeCompanies: db.prepare("SELECT COUNT(*) c FROM companies WHERE active=1").get().c,
     database: "Local Windows SQLite",
     files: "Local documents in DATA_DIR",
-    connector: "Disabled in local launcher"
+    connector: CONNECTOR_TOKEN ? "Enabled" : "Disabled",
+    serverVersion:'2.0.0',
+    capabilities:{invoiceDispatch:true,statusDates:true,statusHistory:true,completeExcel:true,paperTracking:true,signedConnectorResources:true}
   };
 }
 
@@ -1109,12 +1183,33 @@ function queryTrips(args = {}) {
   sql += " ORDER BY date DESC, created_at DESC LIMIT 500";
   let rows = db.prepare(sql).all(...vals).map(tripOut);
   if (args.readiness) rows = rows.filter(t => readiness(t) === args.readiness);
+  if(args.include_hidden_companies===false)rows=rows.filter(t=>db.prepare('SELECT active FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1').get(t.customer)?.active!==0);
+  if(args.statuses!==undefined){
+    if(!Array.isArray(args.statuses)||args.statuses.some(status=>!tripFilterStatuses.includes(status)))throw Object.assign(new Error('Недопустимый фильтр статуса'),{status:400});
+    if(args.statuses.length)rows=rows.filter(t=>args.statuses.some(status=>matchesTripFilter(t,status)));
+  }
   return rows.map(t => ({
     ...t,
     readiness: readiness(t),
     missing: missingForTrip(t),
     mainDocuments: mainDocumentsForTrip(t.id)
   }));
+}
+const tripFilterStatuses=[...editableTripStatuses].filter(Boolean).concat(['has_invoice','no_invoice']);
+const excelReadyRefs=new Set(['2026/10/06/63','2026/10/06/149','2026/10/06/11','2026/10/06/291','2026/10/01/27','2026/10/01/11','2026/09/25/1456','2026/09/24/137']);
+function isReadyQueueTrip(t){
+  const invoiced=t.statusOverride?invoicedTripStatuses.has(t.statusOverride):!!String(t.rechnungCode||'').trim();
+  if(invoiced||(t.statusOverride&&!['ready_for_rechnung','not_invoiced'].includes(t.statusOverride)))return false;
+  const ready=t.statusOverride?(t.statusOverride==='ready_for_rechnung'||(t.statusOverride==='not_invoiced'&&t.auftrag&&t.cmrUnloaded&&t.priceEur!=null)):(readiness(t)==='ready_for_rechnung'||(!t.rechnungCode&&t.auftrag&&t.cmrUnloaded&&t.priceEur!=null));
+  return !!ready||excelReadyRefs.has(String(t.trip||''));
+}
+function matchesTripFilter(t,status){
+  if(status==='no_price')return t.priceEur===null||t.statusOverride==='no_price';
+  if(status==='missing_auftrag')return !t.auftrag||['missing_auftrag','missing_both'].includes(t.statusOverride);
+  if(status==='ready_for_rechnung')return isReadyQueueTrip(t);
+  if(status==='has_invoice')return readiness(t)==='rechnung_created';
+  if(status==='no_invoice')return !invoicedTripStatuses.has(readiness(t));
+  return t.statusOverride===status||readiness(t)===status;
 }
 
 function transClean(value, max = 4000) {
@@ -1792,6 +1887,23 @@ async function buildReconciliation(args={}) {
 
 const toolDefs = [
   {
+    name:'get_capabilities',description:'Read the live server version, supported fields and tools. Refresh the app connection if cached schemas are older.',
+    inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
+  },
+  {
+    name:'export_trips_excel',description:'Export complete trip, status/date, dispatch, invoice/email/tracking links, company rules, history and document-paper details. Supply ordered trip_ids for an exact visible selection, or filters. Returns a scoped 15-minute XLSX download link; never sends any invoice or email.',
+    inputSchema:{type:'object',properties:{
+      trip_ids:{type:'array',items:{type:'string'},minItems:1,maxItems:500,description:'Ordered unique trip IDs or Tsubera Tour-IDs. Do not combine with filters.'},
+      query:{type:'string'},date_from:{type:'string'},date_to:{type:'string'},customer:{type:'string'},vehicle:{type:'string'},
+      statuses:{type:'array',items:{type:'string',enum:tripFilterStatuses}},include_hidden_companies:{type:'boolean',description:'For filtered exports defaults to false, matching the default website view.'}
+    },additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
+  },
+  {
+    name:'update_document_paper',description:'Update possession of a paper COPY only when the user confirms it. This does not prove originals, number of originals or postal dispatch. Unchecked means unconfirmed.',
+    inputSchema:{type:'object',properties:{document_id:{type:'string'},paper_available:{type:'boolean'},paper_note:{type:'string',maxLength:2000}},required:['document_id'],additionalProperties:false},
+    annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}
+  },
+  {
     name: "get_trans_order_status",
     description: "Check how many Trans.eu Aufträge were captured from the user's logged-in browser, including archive scans.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -1957,7 +2069,9 @@ const toolDefs = [
         date_to: { type: "string", description: "YYYY-MM-DD" },
         customer: { type: "string" },
         vehicle: { type: "string", description: "Vehicle registration / Kennzeichen filter." },
-        readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created","invoice_sent","documents_received","payment_received"] }
+        readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created","invoice_sent","documents_received","payment_received"] },
+        statuses:{type:"array",items:{type:"string",enum:tripFilterStatuses},description:"Multiple selected statuses use OR."},
+        include_hidden_companies:{type:"boolean",description:"Defaults to true for all records; false limits to current companies."}
       },
       additionalProperties: false
     },
@@ -2064,6 +2178,11 @@ const toolDefs = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   {
+    name:'update_vehicle',description:'Update a vehicle plate or note. Renaming replaces this plate in all linked tours and leaves other assigned vehicles intact.',
+    inputSchema:{type:'object',properties:{vehicle_id:{type:'string'},plate:{type:'string'},note:{type:'string',maxLength:4000}},required:['vehicle_id'],additionalProperties:false},
+    annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}
+  },
+  {
     name: "assign_vehicle_to_trip",
     description: "Assign a vehicle from the registry to an existing tour. The vehicle is added without removing other vehicles already assigned to the tour.",
     inputSchema: {
@@ -2098,6 +2217,8 @@ const toolDefs = [
         cmr: { type: "boolean", description: "Legacy alias for cmr_loaded." },
         pod: { type: "boolean", description: "Legacy alias for cmr_unloaded." },
         rechnung_number: { type: "string", description: "Rechnung number if already created." },
+        rechnung_url: {type:"string",description:"HTTPS Fakturownia invoice link, or empty."},
+        ...dispatchMcpProperties,
         status_override: { type: "string", enum: [...editableTripStatuses] },
         documents_received_date: { type: "string", description: "Confirmed document receipt date YYYY-MM-DD, or empty to clear." },
         payment_term_days: { type: ["integer","null"], minimum: 0, maximum: 3650, description: "Trip override in calendar days; null inherits the company term." }
@@ -2114,6 +2235,7 @@ const toolDefs = [
       type: "object",
       properties: {
         trip_id_or_number: { type: "string" },
+        internal_trip_id:{type:'string',minLength:3,maxLength:80,description:'Optional replacement Tsubera Tour-ID; must be unique.'},
         date: { type: "string" },
         trip_number: { type: "string" },
         customer: { type: "string" },
@@ -2129,6 +2251,8 @@ const toolDefs = [
         cmr: { type: "boolean" },
         pod: { type: "boolean" },
         rechnung_number: { type: "string" },
+        rechnung_url: {type:"string",description:"HTTPS Fakturownia invoice link, or empty."},
+        ...dispatchMcpProperties,
         status_override: { type: "string", enum: [...editableTripStatuses] },
         documents_received_date: { type: "string", description: "Confirmed document receipt date YYYY-MM-DD, or empty to clear." },
         payment_term_days: { type: ["integer","null"], minimum: 0, maximum: 3650, description: "Trip override in calendar days; null inherits the company term." }
@@ -2147,6 +2271,8 @@ const toolDefs = [
         trip_id_or_number: { type: "string", description: "Existing trip internal id or tour number." },
         document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
         filename: { type: "string" },
+        paper_available:{type:"boolean",description:"True only when the user confirms possession of a paper copy; otherwise false."},
+        paper_note:{type:"string",maxLength:2000},
         mime_type: { type: "string" },
         vehicle_plate: { type: "string", description: "Optional vehicle plate detected/selected from this document. It will be assigned to the tour." },
         content_base64: { type: "string", description: "Base64 encoded raw file content, without data: prefix." }
@@ -2165,6 +2291,8 @@ const toolDefs = [
         trip_id_or_number: { type: "string", description: "Existing Tsubera Tour-ID, customer tour/order number, or trip database id." },
         document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
         filename: { type: "string" },
+        paper_available:{type:"boolean",description:"True only when the user confirms possession of a paper copy; otherwise false."},
+        paper_note:{type:"string",maxLength:2000},
         mime_type: { type: "string", description: "Optional MIME override; if omitted the source response Content-Type is used." },
         vehicle_plate: { type: "string", description: "Optional vehicle plate detected/selected from this document. It will be assigned to the tour." },
         source_url: { type: "string", description: "Temporary or signed HTTPS download URL for the original file." }
@@ -2183,6 +2311,8 @@ const toolDefs = [
         trip_id_or_number: { type: "string", description: "Existing Tsubera Tour-ID, customer tour/order number, or trip database id." },
         document_type: { type: "string", enum: ["auftrag","cmr_loading","cmr_unloading","cmr","pod","rechnung","other"] },
         filename: { type: "string" },
+        paper_available:{type:"boolean",description:"True only when the user confirms possession of a paper copy; otherwise false."},
+        paper_note:{type:"string",maxLength:2000},
         mime_type: { type: "string", description: "MIME type of the original file, for example application/pdf or image/jpeg." },
         vehicle_plate: { type: "string", description: "Optional vehicle plate to assign to the trip together with the document." }
       },
@@ -2214,6 +2344,26 @@ const toolDefs = [
 ];
 
 async function callTool(name, args, req) {
+  if(name==='get_capabilities')return {serverVersion:'2.0.0',overview:systemOverview(),tripFields:Object.keys(tripOut(db.prepare('SELECT * FROM trips LIMIT 1').get())||dispatchFields),tools:toolDefs.map(tool=>({name:tool.name,inputSchema:tool.inputSchema,annotations:tool.annotations})),notes:['Dates not supplied for historical events remain unknown.','Dispatch tracking records facts; it never sends email or paper post.','Receipt rollback clears its date/countdown; configured payment terms remain.','MCP signed resources expire after 15 minutes.']};
+  if(name==='export_trips_excel'){
+    let trips;
+    if(args.trip_ids!==undefined){
+      if(!Array.isArray(args.trip_ids)||!args.trip_ids.length||args.trip_ids.length>500||args.trip_ids.some(id=>typeof id!=='string'||id.length>160)||Object.keys(args).some(key=>key!=='trip_ids'))throw Object.assign(new Error('Supply only1–500 ordered trip_ids, or use filters separately'),{status:400});
+      trips=args.trip_ids.map(id=>getTripByAny(id));
+      if(trips.some(trip=>!trip)||new Set(trips.map(trip=>trip.id)).size!==trips.length)throw Object.assign(new Error('Trips must exist and be unique'),{status:400});
+    }else trips=queryTrips({...args,include_hidden_companies:args.include_hidden_companies??false});
+    if(!trips.length)throw Object.assign(new Error('No trips match these filters'),{status:400});
+    const buffer=await generateTripsExcel(trips),link=createConnectorExport(req,buffer);
+    return {...link,filename:'Tsubera-trips-'+new Date().toISOString().slice(0,10)+'.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',size:buffer.length,count:trips.length,tripIds:trips.map(trip=>trip.id)};
+  }
+  if(name==='update_document_paper'){
+    const row=docRow(args.document_id);if(!row)return {updated:false,error:'Document not found'};
+    if(args.paper_available===undefined&&args.paper_note===undefined)throw Object.assign(new Error('Provide paper_available or paper_note'),{status:400});
+    const input={};if(args.paper_available!==undefined)input.paperAvailable=args.paper_available;if(args.paper_note!==undefined)input.paperNote=args.paper_note;
+    const paper=readPaperInput(input),available=paper.paperAvailable===undefined?row.paper_available:paper.paperAvailable?1:0,note=paper.paperNote===undefined?row.paper_note:paper.paperNote;
+    if(available!==row.paper_available||note!==row.paper_note)db.prepare('UPDATE documents SET paper_available=?,paper_note=?,paper_updated_at=? WHERE id=?').run(available,note,now(),row.id);
+    return {updated:true,document:docOut(docRow(row.id))};
+  }
   if (name === "get_system_overview") return { ...systemOverview(), transFreightCapture: transFreightStatus(), transFreightDetailCapture: transFreightDetailStatus(), transActiveCapture: transActiveStatus(), transOrderCapture: transOrderStatus(), fakturowniaConfigured: fakturowniaConfigured() };
   if (name === "get_trans_order_status") return transOrderStatus();
   if (name === "search_trans_orders") { const orders = queryTransOrders(args); return { orders, count: orders.length, ...transOrderStatus() }; }
@@ -2278,7 +2428,7 @@ async function callTool(name, args, req) {
   if (name === "get_trip") {
     const t = getTripByAny(args.trip_id_or_number);
     if (!t) return { found: false };
-    return { found: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t), documents: listDocsForTrip(t.id) } };
+    return { found: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t), documents: listDocsForTrip(t.id), statusHistory:statusHistory(t.id) } };
   }
   if (name === "list_documents") {
     let rows;
@@ -2296,7 +2446,7 @@ async function callTool(name, args, req) {
     const row = docRow(args.document_id);
     if (!row) return { found: false };
     const t = tripOut(db.prepare("SELECT * FROM trips WHERE id = ?").get(row.trip_id));
-    return { found: true, document: docOut(row), trip: t, downloadUrl: tempFileUrl(req, row.id) };
+    return { found: true, document: docOut(row), trip: t, downloadUrl: connectorFileUrl(req, row.id) };
   }
   if (name === "list_companies") return { companies: listCompanies(), count: listCompanies().length };
   if (name === "create_company") {
@@ -2342,6 +2492,23 @@ async function callTool(name, args, req) {
     if (!vehicle) throw new Error("plate is required");
     return { created: true, vehicle };
   }
+  if(name==='update_vehicle'){
+    const old=db.prepare('SELECT * FROM vehicles WHERE id=?').get(args.vehicle_id);
+    if(!old)return {updated:false,error:'Vehicle not found'};
+    const plate=args.plate===undefined?old.plate:normalizePlate(args.plate),note=args.note===undefined?old.note:String(args.note).trim();
+    if(!plate||plate.length>100||/[\u0000-\u001f\u007f]/.test(plate)||note.length>4000)throw Object.assign(new Error('Invalid vehicle plate or note'),{status:400});
+    if(db.prepare('SELECT id FROM vehicles WHERE UPPER(plate)=UPPER(?) AND id<>?').get(plate,old.id))throw Object.assign(new Error('Vehicle plate already exists'),{status:400});
+    db.exec('BEGIN');
+    try{
+      db.prepare('UPDATE vehicles SET plate=?,note=?,updated_at=? WHERE id=?').run(plate,note,now(),old.id);
+      if(plate!==old.plate)for(const row of db.prepare('SELECT id,vehicle_plates FROM trips').all()){
+        const plates=platesToArray(row.vehicle_plates);
+        if(plates.includes(normalizePlate(old.plate)))db.prepare('UPDATE trips SET vehicle_plates=?,updated_at=? WHERE id=?').run([...new Set(plates.map(value=>value===normalizePlate(old.plate)?plate:value))].join('\n'),now(),row.id);
+      }
+      db.exec('COMMIT');
+    }catch(error){db.exec('ROLLBACK');throw error;}
+    return {updated:true,vehicle:vehicleOut(db.prepare('SELECT * FROM vehicles WHERE id=?').get(old.id))};
+  }
   if (name === "assign_vehicle_to_trip") {
     const t = getTripByAny(args.trip_id_or_number);
     if (!t) return { assigned: false, error: "Trip not found" };
@@ -2352,14 +2519,14 @@ async function callTool(name, args, req) {
   }
   if (name === "create_trip") {
     if (!args.date || !args.customer) throw new Error("date and customer are required");
-    const payment=tripPaymentInput({}, {customer:args.customer,documentsReceivedDate:args.documents_received_date,paymentTermDays:args.payment_term_days,statusOverride:args.status_override});
+    const payment=tripPaymentInput({}, {customer:args.customer,documentsReceivedDate:args.documents_received_date,paymentTermDays:args.payment_term_days,statusOverride:args.status_override,rechnungUrl:args.rechnung_url,...dispatchFromMcp(args)});
     const company = ensureCompany(args.customer);
     const id = crypto.randomUUID();
     const ts = now();
     const internalTripId = nextInternalTripId(args.date);
     const cmrLoaded = args.cmr_loaded ?? args.cmr ?? false;
     const cmrUnloaded = args.cmr_unloaded ?? args.pod ?? false;
-    db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,status_override,documents_received_date,payment_term_days,created_at,updated_at)
+    saveTrackedTrip(id,{},payment,'mcp',()=>{db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,status_override,documents_received_date,payment_term_days,created_at,updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id,
@@ -2384,13 +2551,15 @@ async function callTool(name, args, req) {
         payment.paymentTermDays,
         ts,
         ts
-      );
+      );});
     const t = getTripByAny(id);
     return { created: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
   if (name === "update_trip") {
     const old = getTripByAny(args.trip_id_or_number);
     if (!old) return { updated: false, error: "Trip not found" };
+    const internalTripId=args.internal_trip_id===undefined?old.internalTripId:normalizeTripInternalId(args.internal_trip_id);
+    if(db.prepare('SELECT id FROM trips WHERE internal_trip_id=? AND id<>? LIMIT 1').get(internalTripId,old.id))throw Object.assign(new Error('Tsubera Tour-ID already exists'),{status:400});
     const next = {
       date: args.date ?? old.date,
       trip: args.trip_number ?? old.trip,
@@ -2405,11 +2574,11 @@ async function callTool(name, args, req) {
       vehiclePlates: args.vehicle_plates ?? old.vehiclePlates,
       priceEur: args.price_eur === undefined ? old.priceEur : args.price_eur,
       rechnungCode: args.rechnung_number ?? old.rechnungCode,
-      ...tripPaymentInput(old,{customer:args.customer,documentsReceivedDate:args.documents_received_date,paymentTermDays:args.payment_term_days,statusOverride:args.status_override})
+      ...tripPaymentInput(old,{customer:args.customer,documentsReceivedDate:args.documents_received_date,paymentTermDays:args.payment_term_days,statusOverride:args.status_override,rechnungUrl:args.rechnung_url,...dispatchFromMcp(args)})
     };
     next.customer = ensureCompany(next.customer)?.name || next.customer;
-    db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,status_override=?,documents_received_date=?,payment_term_days=?,updated_at=? WHERE id=?")
-      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,next.statusOverride,next.documentsReceivedDate,next.paymentTermDays,now(),old.id);
+    saveTrackedTrip(old.id,old,next,'mcp',()=>{db.prepare('UPDATE trips SET internal_trip_id=? WHERE id=?').run(internalTripId,old.id);db.prepare("UPDATE trips SET date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,status_override=?,documents_received_date=?,payment_term_days=?,updated_at=? WHERE id=?")
+      .run(next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceEurToCents(next.priceEur),next.rechnungCode,next.statusOverride,next.documentsReceivedDate,next.paymentTermDays,now(),old.id);});
     const t = getTripByAny(old.id);
     return { updated: true, trip: { ...t, readiness: readiness(t), missing: missingForTrip(t) } };
   }
@@ -2431,7 +2600,8 @@ async function callTool(name, args, req) {
       filename: args.filename,
       mimeType: args.mime_type || "application/octet-stream",
       buffer: buf,
-      vehiclePlate: args.vehicle_plate
+      vehiclePlate: args.vehicle_plate,
+      paperAvailable:args.paper_available??false,paperNote:args.paper_note??''
     });
   }
   if (name === "upload_document_from_url") {
@@ -2444,7 +2614,8 @@ async function callTool(name, args, req) {
       filename: args.filename,
       mimeType: args.mime_type || downloaded.mime || "application/octet-stream",
       buffer: downloaded.buffer,
-      vehiclePlate: args.vehicle_plate
+      vehiclePlate: args.vehicle_plate,
+      paperAvailable:args.paper_available??false,paperNote:args.paper_note??''
     });
   }
   if (name === "create_document_upload_url") {
@@ -2467,6 +2638,7 @@ async function callTool(name, args, req) {
   if (name === "update_document_type") {
     const row = docRow(args.document_id);
     if (!row) return { updated: false, error: "Document not found" };
+    if(!['auftrag','cmr_loading','cmr_unloading','cmr','pod','rechnung','other'].includes(args.document_type))throw Object.assign(new Error('Unsupported document_type'),{status:400});
     db.prepare("UPDATE documents SET doc_type=? WHERE id=?").run(args.document_type,row.id);
     const flagMap = { auftrag: "auftrag", cmr_loading: "cmr_loaded", cmr_unloading: "cmr_unloaded", cmr: "cmr_loaded", pod: "cmr_unloaded" };
     const flag = flagMap[args.document_type];
@@ -2477,9 +2649,9 @@ async function callTool(name, args, req) {
   }
   if (name === "fetch") {
     const t = getTripByAny(args.id);
-    if (t) return { id: t.id, type: "trip", data: { ...t, readiness: readiness(t), missing: missingForTrip(t), documents: listDocsForTrip(t.id) } };
+    if (t) return { id: t.id, type: "trip", data: { ...t, readiness: readiness(t), missing: missingForTrip(t), documents: listDocsForTrip(t.id), statusHistory:statusHistory(t.id) } };
     const row = docRow(args.id);
-    if (row) return { id: row.id, type: "document", data: docOut(row), downloadUrl: tempFileUrl(req, row.id) };
+    if (row) return { id: row.id, type: "document", data: docOut(row), downloadUrl: connectorFileUrl(req, row.id) };
     return { id: args.id, found: false };
   }
   throw new Error("Unknown tool: " + name);
@@ -2501,8 +2673,8 @@ async function handleMcp(req, res, token) {
       return json(res, 200, { ...base, result: {
         protocolVersion: requested,
         capabilities: { tools: {} },
-        serverInfo: { name: "tsubera-transport-documents", version: "1.0.0" },
-        instructions: "Access to Tsubera transport trips and uploaded transport documents, plus read-only access to Fakturownia invoices, expenses, clients and invoice PDFs when configured. Fakturownia tools never expose the API token. Tsubera write tools can create/update trips, upload files, and correct document types. Use search/list before modifying when the target trip is ambiguous. For a file already uploaded in ChatGPT or available on the local working filesystem, prefer create_document_upload_url and POST the raw file bytes to the returned signed URL; this avoids base64 and Google Drive staging."
+        serverInfo: { name: "tsubera-transport-documents", version: "2.0.0" },
+        instructions: "Tsubera live transport tracker. Read get_capabilities for current schemas. Read/search trips, companies, vehicles, document metadata, dates, status history and invoice dispatch details; update them only as requested. Dispatch fields record how an invoice was sent; tools do not send email or paper post. Never invent historical dates. Receipt rollback clears its date/countdown but preserves configured payment days. Mark paper possession only on explicit user confirmation; a copy does not prove originals or mailing. For a file already in ChatGPT/local working files, prefer create_document_upload_url and POST raw bytes to its scoped expiring URL. get_document returns a scoped expiring download. export_trips_excel preserves requested IDs/order or supplied filters. Normal web APIs remain authenticated. Fakturownia is optional read-only and API credentials never appear in results."
       }});
     }
     if (msg.method === "ping") return json(res, 200, { ...base, result: {} });
@@ -2512,7 +2684,9 @@ async function handleMcp(req, res, token) {
       const args = msg.params?.arguments || {};
       const data = await callTool(name, args, req);
       const content = [{ type: "text", text: JSON.stringify(data) }];
-      const linkedDocument = (
+      const linkedDocument = name==='export_trips_excel'&&data?.downloadUrl ? {
+        downloadUrl:data.downloadUrl,document:{name:data.filename,mime:data.mimeType,size:data.size}
+      } : (
         name === "get_document" && data?.found && data?.document?.id
       ) ? data : (
         name === "fetch" && data?.type === "document" && data?.downloadUrl
@@ -2557,7 +2731,8 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     const p = decodeURIComponent(url.pathname);
 
-    if (await onlineAuth.handle(req, res, p)) return;
+    const scopedConnectorResource=validConnectorResource(req,url,p);
+    if (await onlineAuth.handle(req, res, p,{scopedConnectorResource})) return;
     if (p === "/login" && req.method === "GET") {
       const body = fs.readFileSync(path.join(__dirname, "login.html"));
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": body.length });
@@ -2568,13 +2743,20 @@ const server = http.createServer(async (req, res) => {
       const token = p.slice("/mcp/".length);
       return await handleMcp(req, res, token);
     }
+    if(p.startsWith('/connector-export/')&&req.method==='GET'){
+      if(!scopedConnectorResource)return json(res,403,{error:'Expired or invalid export link'});
+      const id=p.slice('/connector-export/'.length),entry=connectorExports.get(id);
+      if(!entry||entry.exp!==Number(url.searchParams.get('exp'))||entry.exp*1000<Date.now()){connectorExports.delete(id);return json(res,404,{error:'Export expired; create a new export'});}
+      res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-length':entry.buffer.length,'content-disposition':'attachment; filename="Tsubera-trips.xlsx"','cache-control':'private, no-store'});
+      return res.end(entry.buffer);
+    }
 
     if (p.startsWith("/fakturownia/invoices/") && p.endsWith(".pdf") && req.method === "GET") {
       const rawId = p.slice("/fakturownia/invoices/".length, -4);
       const id = decodeURIComponent(rawId);
       const exp = Number(url.searchParams.get("exp"));
       const sig = url.searchParams.get("sig") || "";
-      if (!/^\d+$/.test(id) || !exp || exp < Math.floor(Date.now()/1000) || !safeHexEqual(sig, fakturowniaPdfSig(id, exp))) {
+      if (!/^\d+$/.test(id) || !exp || exp < Math.floor(Date.now()/1000) || !(url.searchParams.get('access')==='mcp'?scopedConnectorResource:safeHexEqual(sig, fakturowniaPdfSig(id, exp)))) {
         return json(res, 403, { error: "Expired or invalid link" });
       }
       const upstream = await fakturowniaFetch("/invoices/" + encodeURIComponent(id) + ".pdf", {}, { accept: "application/pdf" });
@@ -2595,17 +2777,19 @@ const server = http.createServer(async (req, res) => {
       const id = p.slice("/file/".length);
       const exp = Number(url.searchParams.get("exp"));
       const sig = url.searchParams.get("sig") || "";
-      if (!exp || exp < Math.floor(Date.now()/1000) || !safeHexEqual(sig, fileSig(id, exp))) {
+      if (!exp || exp < Math.floor(Date.now()/1000) || !(url.searchParams.get('access')==='mcp'?scopedConnectorResource:safeHexEqual(sig, fileSig(id, exp)))) {
         return text(res, 403, "Expired or invalid link");
       }
       const row = docRow(id);
       if (!row) return text(res, 404, "Not found");
       const fp = path.join(DOCS_DIR, row.stored_name);
       if (!fs.existsSync(fp)) return text(res, 404, "File missing");
+      const inlineTypes=new Set(['application/pdf','image/png','image/jpeg','image/gif','image/webp','text/plain']);
+      const forceDownload=url.searchParams.get('download')==='1'||!inlineTypes.has(String(row.mime||'').split(';')[0].trim().toLowerCase());
       res.writeHead(200, {
         "content-type": row.mime || "application/octet-stream",
         "content-length": row.size,
-        "content-disposition": (url.searchParams.get("download") === "1" ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(row.original_name)
+        "content-disposition": (forceDownload ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(row.original_name)
       });
       return fs.createReadStream(fp).pipe(res);
     }
@@ -2615,7 +2799,7 @@ const server = http.createServer(async (req, res) => {
       const ticket = url.searchParams.get("ticket") || "";
       const sig = url.searchParams.get("sig") || "";
       const current = Math.floor(Date.now() / 1000);
-      if (!exp || exp < current || !ticket || !safeHexEqual(sig, uploadTicketSig(ticket, exp))) {
+      if (!exp || exp < current || exp>current+900 || !ticket || !safeHexEqual(sig, uploadTicketSig(ticket, exp))) {
         return json(res, 403, { error: "Expired or invalid upload link" });
       }
       let meta;
@@ -2645,7 +2829,8 @@ const server = http.createServer(async (req, res) => {
         filename: meta.filename,
         mimeType: meta.mimeType || req.headers["content-type"] || "application/octet-stream",
         buffer,
-        vehiclePlate: meta.vehiclePlate || ""
+        vehiclePlate: meta.vehiclePlate || "",
+        paperAvailable:meta.paperAvailable??false,paperNote:meta.paperNote??''
       });
       return json(res, 201, result);
     }
@@ -2744,7 +2929,9 @@ const server = http.createServer(async (req, res) => {
         if(b.paymentTermDays!==undefined)normalizePaymentTermDays(b.paymentTermDays);
         const company = ensureCompany(b.name, b.note || "", b.active);
         if (!company) return json(res, 400, { error: "name is required" });
-        if(b.paymentTermDays!==undefined)updateCompany(company.id,{paymentTermDays:b.paymentTermDays});
+        const rules={};
+        for(const field of ['billingChannel','invoiceEmail','invoiceSubject','postalAddress','requiredDocuments','submissionDeadline','specialRules','rulesSource','paymentTermDays'])if(b[field]!==undefined)rules[field]=b[field];
+        if(Object.keys(rules).length)updateCompany(company.id,rules);
         return json(res, 201, { company: listCompanies().find(c => c.id === company.id) || company });
       }
       const companyMatch = p.match(/^\/api\/companies\/([^/]+)$/);
@@ -2814,13 +3001,17 @@ const server = http.createServer(async (req, res) => {
         const internalTripId = nextInternalTripId(b.date);
         const cmrLoaded = b.cmrLoaded ?? b.cmr ?? false;
         const cmrUnloaded = b.cmrUnloaded ?? b.pod ?? false;
-        db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,status_override,documents_received_date,payment_term_days,created_at,updated_at)
+        saveTrackedTrip(id,{},payment,'site',()=>{db.prepare(`INSERT INTO trips (id,internal_trip_id,date,trip_number,customer,auftrag,cmr,pod,cmr_loaded,cmr_unloaded,loaded_at,unloaded_at,loading_place,unloading_place,vehicle_plates,price_cents,rechnung_code,status_override,documents_received_date,payment_term_days,created_at,updated_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", String(b.loadingPlace || "").trim(), String(b.unloadingPlace || "").trim(), platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", payment.statusOverride,payment.documentsReceivedDate,payment.paymentTermDays,ts, ts);
+          .run(id, internalTripId, b.date, b.trip || "", company.name, bool(b.auftrag), bool(cmrLoaded), bool(cmrUnloaded), bool(cmrLoaded), bool(cmrUnloaded), b.loadedAt || "", b.unloadedAt || "", String(b.loadingPlace || "").trim(), String(b.unloadingPlace || "").trim(), platesToText(b.vehiclePlates || []), priceEurToCents(b.priceEur), b.rechnungCode || "", payment.statusOverride,payment.documentsReceivedDate,payment.paymentTermDays,ts, ts);});
         return json(res, 201, { trip: getTripByAny(id) });
       }
 
       const tripMatch = p.match(/^\/api\/trips\/([^/]+)$/);
+      if(tripMatch&&req.method==='GET'){
+        const trip=getTripByAny(tripMatch[1]);if(!trip)return json(res,404,{error:'Trip not found'});
+        return json(res,200,{trip:{...trip,readiness:readiness(trip),missing:missingForTrip(trip),documents:listDocsForTrip(trip.id),statusHistory:statusHistory(trip.id)}});
+      }
       if (tripMatch && req.method === "PATCH") {
         const id = tripMatch[1], old = getTripByAny(id);
         if (!old) return json(res, 404, { error: "Trip not found" });
@@ -2849,8 +3040,8 @@ const server = http.createServer(async (req, res) => {
         }
         const priceCents=priceEurToCents(next.priceEur);
         next.customer=ensureCompany(next.customer)?.name||next.customer;
-        db.prepare("UPDATE trips SET internal_trip_id=?,date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,status_override=?,documents_received_date=?,payment_term_days=?,updated_at=? WHERE id=?")
-          .run(next.internalTripId,next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceCents,next.rechnungCode,next.rechnungUrl,next.statusOverride,next.documentsReceivedDate,next.paymentTermDays,now(),id);
+        saveTrackedTrip(id,old,next,'site',()=>{db.prepare("UPDATE trips SET internal_trip_id=?,date=?,trip_number=?,customer=?,auftrag=?,cmr=?,pod=?,cmr_loaded=?,cmr_unloaded=?,loaded_at=?,unloaded_at=?,loading_place=?,unloading_place=?,vehicle_plates=?,price_cents=?,rechnung_code=?,rechnung_url=?,status_override=?,documents_received_date=?,payment_term_days=?,updated_at=? WHERE id=?")
+          .run(next.internalTripId,next.date,next.trip,next.customer,bool(next.auftrag),bool(next.cmrLoaded),bool(next.cmrUnloaded),bool(next.cmrLoaded),bool(next.cmrUnloaded),next.loadedAt,next.unloadedAt,String(next.loadingPlace||"").trim(),String(next.unloadingPlace||"").trim(),platesToText(next.vehiclePlates),priceCents,next.rechnungCode,next.rechnungUrl,next.statusOverride,next.documentsReceivedDate,next.paymentTermDays,now(),id);});
         return json(res,200,{trip:getTripByAny(id)});
       }
       if (tripMatch && req.method === "DELETE") {
@@ -2865,7 +3056,7 @@ const server = http.createServer(async (req, res) => {
       if (docsMatch && req.method === "GET") {
         const t = getTripByAny(docsMatch[1]);
         if (!t) return json(res, 404, { error: "Trip not found" });
-        return json(res, 200, { documents: listDocsForTrip(t.id) });
+        return json(res, 200, { documents: listDocsForTrip(t.id), statusHistory:statusHistory(t.id) });
       }
       if (docsMatch && req.method === "POST") {
         const t = getTripByAny(docsMatch[1]);
@@ -2900,7 +3091,7 @@ const server = http.createServer(async (req, res) => {
         if (flag === "cmr_loaded") db.prepare("UPDATE trips SET cmr_loaded=1, cmr=1, updated_at=? WHERE id=?").run(now(), t.id);
         else if (flag === "cmr_unloaded") db.prepare("UPDATE trips SET cmr_unloaded=1, pod=1, updated_at=? WHERE id=?").run(now(), t.id);
         else if (flag === "auftrag") db.prepare("UPDATE trips SET auftrag=1, updated_at=? WHERE id=?").run(now(), t.id);
-        else if (b.docType === "rechnung") db.prepare("UPDATE trips SET rechnung_code=?, updated_at=? WHERE id=?").run(b.name, now(), t.id);
+        else if (b.docType === "rechnung") db.prepare("UPDATE trips SET rechnung_code=CASE WHEN TRIM(COALESCE(rechnung_code,''))='' THEN ? ELSE rechnung_code END, updated_at=? WHERE id=?").run(b.name, now(), t.id);
         if (b.vehiclePlate) appendVehicleToTrip(t.id, b.vehiclePlate);
         return json(res, 201, { document: docOut(docRow(id)), trip: getTripByAny(t.id) });
       }

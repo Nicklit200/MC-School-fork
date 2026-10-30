@@ -45,6 +45,7 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
 .dt{width:100%;border:1px solid #dfe3ea;border-radius:8px;padding:7px;font-size:12px;background:#fff}
 .status{font-size:12px;padding:6px 9px;border-radius:999px;display:inline-block;line-height:1.25}
 .payment-deadline{font-size:11px;line-height:1.45;color:#64748b;margin-top:5px}.payment-deadline.overdue{color:#b91c1c}.payment-deadline.paid{color:#087443}.payment-edit{border:0;background:none;padding:1px 0;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;font:inherit}.receipt-dialog{max-width:520px}.receipt-error{color:#b91c1c}.receipt-help{line-height:1.5;margin:0 0 14px}
+.dispatch-summary{font-size:11px;line-height:1.45;color:#64748b;margin-top:5px;overflow-wrap:anywhere}.dispatch-links{display:flex;gap:8px;flex-wrap:wrap}.dispatch-links a{color:#1857a4;text-decoration:underline;text-underline-offset:2px}.dispatch-dialog{max-width:700px}.dispatch-dialog textarea{min-height:74px;resize:vertical;padding:10px;border:1px solid #dfe3ea;border-radius:9px;font:inherit}.dispatch-company{font-size:12px;line-height:1.5;color:#6b7280;margin-top:12px}.dispatch-company p{white-space:pre-wrap;margin-bottom:0}.dispatch-current{padding:10px 12px;background:#f5f7fb;border-radius:10px;margin-bottom:14px}.dispatch-dialog .field{min-width:0}#dispatchModal{z-index:30}
 .inline-status-select{max-width:100%;width:100%;min-width:0;border:1px solid transparent;font-family:inherit;cursor:pointer;appearance:auto;padding-right:5px;text-overflow:ellipsis}.inline-status-select option{background:#fff;color:#111827}.inline-status-select:hover{border-color:#cbd5e1}.inline-status-select:focus-visible{outline:2px solid #a5b4fc;outline-offset:2px}.inline-status-select:disabled{cursor:wait;opacity:.65}.inline-status-notice:not(:empty){margin:10px 0}.inline-status-notice.error{color:#b91c1c}
 .rechnung-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px}.rechnung-open{display:inline-flex;align-items:center;padding:3px 6px;background:#eff6ff;border-radius:6px;color:#1d4ed8;font-weight:700;font-size:12px;text-decoration:none}.rechnung-open:hover{text-decoration:underline}.rechnung-edit{background:none;border:0;padding:3px 0;color:#64748b;font-size:11px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}.rechnung-edit:hover{color:#111827}
 .ok{background:#e8f7ef;color:#087443}.route{background:#e9f2ff;color:#1857a4}.wait{background:#fff4d6;color:#925f00}.done{background:#eef0ff;color:#4338ca}
@@ -334,6 +335,29 @@ button.cmr-check.loaded:hover{background:#dcf3e7;border-color:#93d5ad}.cmr-check
   </div>
 </div>
 
+<div class="modal" id="dispatchModal" role="dialog" aria-modal="true" aria-labelledby="dispatchTitle">
+  <form class="dialog dispatch-dialog" id="dispatchForm">
+    <h2 id="dispatchTitle">Отправка и даты</h2>
+    <p id="dispatchReference" class="muted receipt-help"></p>
+    <div class="dispatch-current"><div id="dispatchCurrentStatus"></div><div id="dispatchStatusUpdated" class="muted"></div></div>
+    <div class="grid">
+      <div class="field"><label for="dispatchStatusDate">Дата текущего статуса</label><input id="dispatchStatusDate" type="date"><div class="muted">Оставь пустым, если дата неизвестна.</div></div>
+      <div class="field"><label for="dispatchSentVia">Как фактически отправлен счёт</label><select id="dispatchSentVia"><option value="">Не указано</option><option value="email">Email</option><option value="post">Бумажной почтой</option><option value="email_and_post">Email и бумажной почтой</option></select></div>
+      <div class="field" id="dispatchEmailDateField"><label for="dispatchEmailSentDate">Дата отправки по email</label><input id="dispatchEmailSentDate" type="date"></div>
+      <div class="field" id="dispatchPostDateField"><label for="dispatchPostSentDate">Дата отправки бумажной почтой</label><input id="dispatchPostSentDate" type="date"></div>
+      <div class="field full" id="dispatchRecipientField"><label for="dispatchRecipientEmail">Кому отправлен email</label><input id="dispatchRecipientEmail" maxlength="500" placeholder="Адрес или несколько получателей"></div>
+      <div class="field full"><label for="dispatchEmailUrl">Ссылка на письмо / переписку</label><input id="dispatchEmailUrl" type="url" maxlength="2048" placeholder="https://mail.google.com/... или ссылка Outlook"></div>
+      <div class="field" id="dispatchTrackingField"><label for="dispatchPostalTracking">Почтовое отправление / трек-номер</label><input id="dispatchPostalTracking" maxlength="500" placeholder="Например: DHL, номер отправления"></div>
+      <div class="field" id="dispatchTrackingUrlField"><label for="dispatchPostalTrackingUrl">Ссылка на отслеживание</label><input id="dispatchPostalTrackingUrl" type="url" maxlength="2048" placeholder="https://..."></div>
+      <div class="field full"><label for="dispatchRechnungUrl">Ссылка на Rechnung в Fakturownia</label><input id="dispatchRechnungUrl" type="url" maxlength="2048" placeholder="https://obersztdawid.fakturownia.pl/invoices/..."></div>
+      <div class="field full"><label for="dispatchNote">Примечание к отправке</label><textarea id="dispatchNote" maxlength="4000" placeholder="Что отправлено, подтверждение, особенности отправки"></textarea></div>
+    </div>
+    <details class="dispatch-company"><summary>Как требует отправлять фирма</summary><p id="dispatchCompanyRule"></p></details>
+    <div id="dispatchNotice" class="muted receipt-error" role="status" aria-live="polite"></div>
+    <div class="actions"><button class="btn alt" type="button" id="cancelDispatch">Отмена</button><button class="btn" type="submit" id="saveDispatch">Сохранить сведения</button></div>
+  </form>
+</div>
+
 <script>
 let trips=[],vehicles=[],companies=[],activeTransports=[],reconciliation=null,activeTrip=null,activeDetailTrip=null,activeCompanyId=null,currentTab='trips';
 const excelReadyRefs=new Set([
@@ -351,6 +375,7 @@ const selectedStatuses=new Set();
 const pendingTripStatuses=new Map();
 let tripsExcelBusy=false;
 let receiptTripId=null,receiptSetsStatus=false;
+let dispatchTripId=null,dispatchOriginal={},tripStatusDateEdited=false;
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(p,o={}){let r=await fetch(p,o);let j=await r.json().catch(()=>({}));if(r.status===401){location.assign('/login');throw new Error('Войдите в Tsubera')}if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 document.getElementById('logout').addEventListener('click',async()=>{try{const result=await fetch('/auth/logout',{method:'POST'});if(!result.ok)throw new Error('Не удалось выйти');location.replace('/login')}catch(error){alert(error.message)}});
@@ -401,7 +426,7 @@ function inlineStatusControl(t){
   const pending=pendingTripStatuses.has(t.id);
   const shown=pending?{...t,statusOverride:pendingTripStatuses.get(t.id)}:t;
   const s=statusPresentation(shown),reference=t.internalTripId||t.trip||t.id;
-  return '<select class="status inline-status-select '+s.tone+'" data-trip-id="'+esc(t.id)+'" aria-label="Изменить статус рейса '+esc(reference)+'" title="'+esc(s.label)+' · выбрать статус" '+(pending?'disabled aria-busy="true"':'')+' onchange="saveInlineStatus(this.dataset.tripId,this)">'+tripStatusOptions(shown,true)+'</select>'+paymentCountdown(t);
+  return '<select class="status inline-status-select '+s.tone+'" data-trip-id="'+esc(t.id)+'" aria-label="Изменить статус рейса '+esc(reference)+'" title="'+esc(s.label)+' · выбрать статус" '+(pending?'disabled aria-busy="true"':'')+' onchange="saveInlineStatus(this.dataset.tripId,this)">'+tripStatusOptions(shown,true)+'</select>'+invoiceDispatchSummary(t)+paymentCountdown(t);
 }
 function berlinTodayDate(){
   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
@@ -460,6 +485,109 @@ function isValidRechnungUrl(value){
       &&url.pathname.length>1;
   }catch{return false;}
 }
+function dispatchHttpsUrl(value,label='Ссылка'){
+  const text=String(value??'').trim();
+  if(!text)return '';
+  if(text.length>2048||/[\u0000-\u0020\u007f]/.test(text))throw new Error(label+': нужна HTTPS-ссылка до 2048 символов без пробелов');
+  try{
+    const url=new URL(text);
+    if(url.protocol!=='https:'||url.username||url.password||!url.hostname)throw new Error();
+  }catch{throw new Error(label+': нужна полная HTTPS-ссылка');}
+  return text;
+}
+function isValidDispatchUrl(value){try{return !!dispatchHttpsUrl(value)}catch{return false}}
+function dispatchDate(value,label){
+  const date=String(value??'').trim();
+  if(date&&(date<'1000-01-01'||paymentDateValue(date)===null))throw new Error(label+': укажи корректную дату');
+  return date;
+}
+function dispatchText(value,max,label){
+  const text=String(value??'').trim();
+  if(text.length>max||text.includes('\u0000'))throw new Error(label+': не более '+max+' символов');
+  return text;
+}
+function invoiceDispatchSummary(t,showStatusDate=true){
+  const method=({email:'Email',post:'Бумажной почтой',email_and_post:'Email и бумажной почтой'})[t.invoiceSentVia];
+  const lines=[];
+  if(showStatusDate&&t.statusDate)lines.push('<div>Дата статуса: '+esc(formatPaymentDate(t.statusDate))+'</div>');
+  if(method)lines.push('<div>Отправлено: '+esc(method)+'</div>');
+  if(['email','email_and_post'].includes(t.invoiceSentVia)&&t.invoiceEmailSentDate)lines.push('<div>Email: '+esc(formatPaymentDate(t.invoiceEmailSentDate))+'</div>');
+  if(['post','email_and_post'].includes(t.invoiceSentVia)&&t.invoicePostSentDate)lines.push('<div>Почта: '+esc(formatPaymentDate(t.invoicePostSentDate))+'</div>');
+  const links=[];
+  if(isValidDispatchUrl(t.invoiceEmailUrl))links.push('<a href="'+esc(t.invoiceEmailUrl)+'" target="_blank" rel="noopener noreferrer">↗ Письмо</a>');
+  if(isValidDispatchUrl(t.invoicePostalTrackingUrl))links.push('<a href="'+esc(t.invoicePostalTrackingUrl)+'" target="_blank" rel="noopener noreferrer">↗ Отслеживание</a>');
+  if(links.length)lines.push('<div class="dispatch-links">'+links.join('')+'</div>');
+  lines.push('<button class="payment-edit" type="button" onclick="openInvoiceDispatch(\''+esc(t.id)+'\')">Отправка / даты</button>');
+  return '<div class="dispatch-summary">'+lines.join('')+'</div>';
+}
+function invoiceDispatchValues(t){
+  return {statusDate:t.statusDate||'',invoiceSentVia:t.invoiceSentVia||'',invoiceEmailSentDate:t.invoiceEmailSentDate||'',invoicePostSentDate:t.invoicePostSentDate||'',invoiceEmailUrl:t.invoiceEmailUrl||'',invoiceRecipientEmail:t.invoiceRecipientEmail||'',invoicePostalTracking:t.invoicePostalTracking||'',invoicePostalTrackingUrl:t.invoicePostalTrackingUrl||'',invoiceDispatchNote:t.invoiceDispatchNote||'',rechnungUrl:t.rechnungUrl||''};
+}
+function openInvoiceDispatch(id){
+  const t=trips.find(trip=>trip.id===id);if(!t)return;
+  dispatchTripId=id;dispatchOriginal=invoiceDispatchValues(t);
+  $('dispatchReference').textContent=(t.internalTripId||t.trip||id)+' · '+displayCompanyName(t.customer);
+  $('dispatchCurrentStatus').textContent='Текущий статус: '+statusPresentation(t).label;
+  $('dispatchStatusUpdated').textContent=t.statusUpdatedAt?'Сведения о статусе обновлены: '+whenFull(t.statusUpdatedAt):'';
+  const controls={statusDate:'dispatchStatusDate',invoiceSentVia:'dispatchSentVia',invoiceEmailSentDate:'dispatchEmailSentDate',invoicePostSentDate:'dispatchPostSentDate',invoiceEmailUrl:'dispatchEmailUrl',invoiceRecipientEmail:'dispatchRecipientEmail',invoicePostalTracking:'dispatchPostalTracking',invoicePostalTrackingUrl:'dispatchPostalTrackingUrl',invoiceDispatchNote:'dispatchNote',rechnungUrl:'dispatchRechnungUrl'};
+  for(const [key,id] of Object.entries(controls))$(id).value=dispatchOriginal[key];
+  $('dispatchCompanyRule').textContent=companyForTrip(t)?.billingChannel||'Требования к отправке пока не заполнены в правилах фирмы.';
+  $('dispatchNotice').textContent='';
+  updateDispatchMethod(false);
+  $('dispatchModal').classList.add('open');
+  $('dispatchSentVia').focus();
+}
+function closeInvoiceDispatch(){
+  $('dispatchModal').classList.remove('open');dispatchTripId=null;dispatchOriginal={};
+}
+function updateDispatchMethod(clearInactive=true){
+  const method=$('dispatchSentVia').value,email=['email','email_and_post'].includes(method),post=['post','email_and_post'].includes(method);
+  $('dispatchEmailDateField').classList.toggle('hidden',!email);
+  $('dispatchRecipientField').classList.toggle('hidden',!email);
+  for(const id of ['dispatchPostDateField','dispatchTrackingField','dispatchTrackingUrlField'])$(id).classList.toggle('hidden',!post);
+  if(clearInactive){if(!email)$('dispatchEmailSentDate').value='';if(!post)$('dispatchPostSentDate').value='';}
+}
+function readInvoiceDispatchForm(){
+  const invoiceSentVia=$('dispatchSentVia').value;
+  if(!['','email','post','email_and_post'].includes(invoiceSentVia))throw new Error('Выбери способ отправки');
+  const values={
+    statusDate:dispatchDate($('dispatchStatusDate').value,'Дата статуса'),invoiceSentVia,
+    invoiceEmailSentDate:['email','email_and_post'].includes(invoiceSentVia)?dispatchDate($('dispatchEmailSentDate').value,'Дата email'):'',
+    invoicePostSentDate:['post','email_and_post'].includes(invoiceSentVia)?dispatchDate($('dispatchPostSentDate').value,'Дата почтовой отправки'):'',
+    invoiceEmailUrl:dispatchHttpsUrl($('dispatchEmailUrl').value,'Ссылка на письмо'),
+    invoiceRecipientEmail:dispatchText($('dispatchRecipientEmail').value,500,'Получатель'),
+    invoicePostalTracking:dispatchText($('dispatchPostalTracking').value,500,'Почтовое отправление'),
+    invoicePostalTrackingUrl:dispatchHttpsUrl($('dispatchPostalTrackingUrl').value,'Ссылка на отслеживание'),
+    invoiceDispatchNote:dispatchText($('dispatchNote').value,4000,'Примечание'),
+    rechnungUrl:String($('dispatchRechnungUrl').value||'').trim()
+  };
+  if(values.rechnungUrl&&!isValidRechnungUrl(values.rechnungUrl))throw new Error('Ссылка на Rechnung: нужна HTTPS-ссылка на Fakturownia');
+  return values;
+}
+async function saveInvoiceDispatch(event){
+  event.preventDefault();
+  const id=dispatchTripId,t=trips.find(trip=>trip.id===id);if(!t)return;
+  let values;
+  try{values=readInvoiceDispatchForm()}catch(error){$('dispatchNotice').textContent=error.message;return;}
+  const body=Object.fromEntries(Object.entries(values).filter(([key,value])=>value!==dispatchOriginal[key]));
+  if(!Object.keys(body).length){closeInvoiceDispatch();return;}
+  $('saveDispatch').disabled=true;$('cancelDispatch').disabled=true;$('dispatchNotice').textContent='Сохраняю…';
+  try{
+    const saved=await api('/api/trips/'+encodeURIComponent(id),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    Object.assign(t,saved.trip||{});
+    if(activeDetailTrip===id&&$('tripModal').classList.contains('open')){
+      if(Object.hasOwn(body,'statusDate'))$('tripStatusDate').value=t.statusDate||'';
+      if(Object.hasOwn(body,'rechnungUrl'))$('tripRechnungUrl').value=t.rechnungUrl||'';
+      $('tripDispatchDetails').innerHTML=invoiceDispatchSummary(t,false);
+    }
+    closeInvoiceDispatch();renderInlineStatusTables();
+    showInlineStatusNotice('Сведения об отправке сохранены · '+(t.internalTripId||t.trip||id));
+  }catch(error){$('dispatchNotice').textContent='Не удалось сохранить: '+error.message;}
+  finally{$('saveDispatch').disabled=false;$('cancelDispatch').disabled=false;}
+}
+$('dispatchForm').onsubmit=saveInvoiceDispatch;
+$('cancelDispatch').onclick=closeInvoiceDispatch;
+$('dispatchSentVia').onchange=()=>updateDispatchMethod();
 function invoiceLinkControls(t){
   const edit='<button type="button" class="rechnung-edit" onclick="editRechnungLink(\''+esc(t.id)+'\')">'+(t.rechnungUrl?'Изменить':'+ Добавить ссылку')+'</button>';
   if(!t.rechnungUrl)return '<div class="rechnung-actions">'+edit+'</div>';
@@ -586,6 +714,13 @@ function updateTripPaymentPreview(){
 }
 function handleTripPaymentStatusChange(){
   if(!['documents_received','payment_received'].includes($('tripStatusOverride').value))$('tripDocumentsReceivedDate').value='';
+  tripStatusDateEdited=false;
+  const t=trips.find(trip=>trip.id===activeDetailTrip),next=$('tripStatusOverride').value;
+  $('tripStatusDate').value=next===(t?.statusOverride||'')?t?.statusDate||'':!next?'':next==='documents_received'?$('tripDocumentsReceivedDate').value:berlinTodayDate();
+  updateTripPaymentPreview();
+}
+function handleTripReceiptDateChange(){
+  if($('tripStatusOverride').value==='documents_received'&&!tripStatusDateEdited)$('tripStatusDate').value=$('tripDocumentsReceivedDate').value;
   updateTripPaymentPreview();
 }
 $('receiptForm').onsubmit=saveReceipt;
@@ -902,6 +1037,7 @@ window.openTrip=async id=>{
   activeTrip=id;
   const t=trips.find(x=>x.id===id);
   if(!t)return;
+  tripStatusDateEdited=false;
   $('tripTitle').textContent='Свойства · '+(t.internalTripId||'Тур')+(t.trip?' · '+t.trip:'');
   $('docsUpdated').textContent=t?.updatedAt?'Обновлено: '+whenFull(t.updatedAt):'';
   $('tripInfo').innerHTML=
@@ -914,10 +1050,13 @@ window.openTrip=async id=>{
     '<div class="detailrow"><b>Цена</b><div><input id="tripPrice" class="dt" type="number" min="0" step="0.01" inputmode="decimal" value="'+(t.priceEur==null?'':esc(t.priceEur))+'" placeholder="Цена в EUR"></div></div>'+
     '<div class="detailrow"><b>Ссылка Rechnung</b><div><input id="tripRechnungUrl" class="dt" type="url" value="'+esc(t.rechnungUrl||'')+'" placeholder="https://obersztdawid.fakturownia.pl/invoices/..."><div class="muted">Вставь прямую ссылку на счёт из Fakturownia</div></div></div>'+
     '<div class="detailrow"><b>Статус</b><div><select id="tripStatusOverride" class="dt">'+tripStatusOptions(t)+'</select><div class="muted" style="margin-top:5px">Ручной статус меняет отметку рейса, но не добавляет и не удаляет документы</div></div></div>'+
+    '<div class="detailrow"><b>Дата текущего статуса</b><div><input id="tripStatusDate" class="dt" type="date" aria-label="Дата текущего статуса рейса" value="'+esc(t.statusDate||'')+'"><div class="muted">Пусто — дата неизвестна</div></div></div>'+
+    '<div class="detailrow"><b>Отправка счёта</b><div id="tripDispatchDetails">'+invoiceDispatchSummary(t,false)+'</div></div>'+
     '<div class="detailrow"><b>Документы получены фирмой</b><div><input id="tripDocumentsReceivedDate" class="dt" type="date" aria-label="Дата получения документов фирмой" value="'+esc(['documents_received','payment_received'].includes(invoiceStage(t))?t.documentsReceivedDate||'':'')+'"><div class="muted">Фактическая дата получения, от которой считаются календарные дни оплаты</div></div></div>'+
     '<div class="detailrow"><b>Срок оплаты, дней</b><div><input id="tripPaymentTermDays" class="dt" type="number" min="0" max="3650" step="1" inputmode="numeric" aria-label="Отдельный срок оплаты для рейса" value="'+esc(t.paymentTermDays??'')+'"><div class="muted" id="tripCompanyPaymentTerm"></div></div></div>'+
     '<div class="detailrow"><b>Оплата до</b><div id="tripPaymentPreview" class="muted" role="status" aria-live="polite"></div></div>';
-  $('tripDocumentsReceivedDate').oninput=updateTripPaymentPreview;
+  $('tripDocumentsReceivedDate').oninput=handleTripReceiptDateChange;
+  $('tripStatusDate').oninput=()=>{tripStatusDateEdited=true};
   $('tripPaymentTermDays').oninput=updateTripPaymentPreview;
   $('tripCustomer').oninput=updateTripPaymentPreview;
   $('tripStatusOverride').onchange=handleTripPaymentStatusChange;
@@ -943,6 +1082,9 @@ async function saveTripProperties(){
   const trip=$('tripCustomerRef').value.trim();
   const customer=$('tripCustomer').value.trim();
   const statusOverride=$('tripStatusOverride').value;
+  let statusDate;
+  try{statusDate=dispatchDate($('tripStatusDate').value,'Дата статуса')}
+  catch(error){$('tripSaveNotice').textContent=error.message;return;}
   const documentsReceivedDate=$('tripDocumentsReceivedDate').value;
   let paymentTermDays;
   try{paymentTermDays=paymentTermValue($('tripPaymentTermDays').value)}
@@ -964,9 +1106,11 @@ async function saveTripProperties(){
   saveButtons.forEach(b=>b.disabled=true);
   $('tripSaveNotice').textContent='Сохраняю…';
   try{
+    const original=trips.find(trip=>trip.id===id);
+    const statusDateChange=statusOverride!==(original?.statusOverride||'')||statusDate!==(original?.statusDate||'')?{statusDate}:{};
     await api('/api/trips/'+encodeURIComponent(id),{
       method:'PATCH',headers:{'content-type':'application/json'},
-      body:JSON.stringify({date,internalTripId,trip,customer,loadingPlace,unloadingPlace,priceEur,rechnungUrl,statusOverride,vehiclePlates,documentsReceivedDate,paymentTermDays})
+      body:JSON.stringify({date,internalTripId,trip,customer,loadingPlace,unloadingPlace,priceEur,rechnungUrl,statusOverride,vehiclePlates,documentsReceivedDate,paymentTermDays,...statusDateChange})
     });
     await load();
     await openTrip(id);

@@ -66,7 +66,7 @@ export function createOnlineAuth({ password, captureToken = '', publicBaseUrl = 
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
     if (secure(req)) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   }
-  async function handle(req, res, pathname) {
+  async function handle(req, res, pathname, {scopedConnectorResource=false}={}) {
     securityHeaders(req, res);
     if (pathname === '/health') { reply(res, 200, { ok: true }); return true; }
     if (pathname === '/auth/login' && req.method === 'POST') {
@@ -105,6 +105,8 @@ export function createOnlineAuth({ password, captureToken = '', publicBaseUrl = 
     // Optional external integrations are unavailable unless their separate secrets are configured.
     if (pathname.startsWith('/mcp/')) return false;
     if (captureRoutes.has(pathname) && (req.method === 'OPTIONS' || (req.method === 'POST' && captureAuthorized(req)))) return false;
+    // Only server-validated, resource-specific MCP tickets may bypass the UI session.
+    if(scopedConnectorResource)return false;
     if (!authorized(req)) {
       if (pathname.startsWith('/api/') || pathname.startsWith('/file/') || pathname === '/direct-upload' || pathname.startsWith('/fakturownia/')) reply(res, 401, { error: 'Войдите в Tsubera' });
       else { res.writeHead(303, { location: '/login', 'cache-control': 'no-store' }); res.end(); }

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureReceiptSchemaBackup } from './receipt-schema-backup.mjs';
+import { ensureReceiptSchemaBackup, ensureInvoiceDispatchSchemaBackup } from './receipt-schema-backup.mjs';
 
 if (process.env.TSUBERA_MIGRATION === '1') {
   const { startCloudMigration } = await import('./cloud-migration.mjs');
@@ -24,5 +24,6 @@ try {
   process.exit(1);
 }
 ensureReceiptSchemaBackup({dataDirectory:data,toolsDirectory:path.join(path.dirname(fileURLToPath(import.meta.url)),'tools')});
+ensureInvoiceDispatchSchemaBackup({dataDirectory:data,toolsDirectory:path.join(path.dirname(fileURLToPath(import.meta.url)),'tools')});
 await import('./server.mjs');
 }

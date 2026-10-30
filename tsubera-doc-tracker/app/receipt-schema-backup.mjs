@@ -14,12 +14,29 @@ export function ensureReceiptSchemaBackup({dataDirectory,toolsDirectory,python=p
     needed=!trips.has('documents_received_date')||!trips.has('payment_term_days')||!companies.has('payment_term_days');
   }finally{database.close();}
   if(!needed)return {needed:false};
-  const state=path.join(path.dirname(data),'receipt-tracking-backup-v1');
+  return createVerifiedSchemaBackup({dataDirectory:data,toolsDirectory,python,stateName:'receipt-tracking-backup-v1',event:'receipt-tracking-pre-migration-backup'});
+}
+
+export function ensureInvoiceDispatchSchemaBackup({dataDirectory,toolsDirectory,python=process.env.TSUBERA_PYTHON||'python3'}){
+  const data=path.resolve(dataDirectory);
+  const database=new DatabaseSync(path.join(data,'tsubera.sqlite'),{readOnly:true});
+  let needed;
+  try{
+    const columns=new Set(database.prepare('PRAGMA table_info(trips)').all().map(row=>row.name));
+    const required=['status_date','status_updated_at','invoice_sent_via','invoice_email_sent_date','invoice_post_sent_date','invoice_email_url','invoice_recipient_email','invoice_postal_tracking','invoice_postal_tracking_url','invoice_dispatch_note'];
+    needed=required.some(column=>!columns.has(column))||!database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='trip_status_history'").get();
+  }finally{database.close();}
+  if(!needed)return {needed:false};
+  return createVerifiedSchemaBackup({dataDirectory:data,toolsDirectory,python,stateName:'invoice-dispatch-backup-v1',event:'invoice-dispatch-pre-migration-backup'});
+}
+
+function createVerifiedSchemaBackup({dataDirectory:data,toolsDirectory,python,stateName,event}){
+  const state=path.join(path.dirname(data),stateName);
   const result=spawnSync(python,[path.join(toolsDirectory,'prepare-cloud.py'),'backup','--source',data,'--state',state],{encoding:'utf8',windowsHide:true,maxBuffer:4*1024*1024,timeout:120000});
   if(result.error||result.status!==0)throw new Error('Pre-migration backup failed; existing data was preserved. '+(result.error?.message||result.stderr||'Python exited '+result.status));
   const saved=JSON.parse(result.stdout);
   const archive=path.join(state,saved.backupDirectory,'Tsubera-data.zip');
   if(!saved.verification?.ok||!saved.archiveSha256||!fs.statSync(archive).isFile())throw new Error('Pre-migration backup was not verified');
-  console.log(JSON.stringify({event:'receipt-tracking-pre-migration-backup',archive,sha256:saved.archiveSha256,counts:saved.verification.rows,documents:saved.verification.documents,integrity:saved.verification.integrity}));
+  console.log(JSON.stringify({event,archive,sha256:saved.archiveSha256,counts:saved.verification.rows,documents:saved.verification.documents,integrity:saved.verification.integrity}));
   return {needed:true,archive,sha256:saved.archiveSha256,verification:saved.verification};
 }
