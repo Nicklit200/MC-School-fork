@@ -17,6 +17,7 @@ import com.mcschool.flashcard.settings.SchoolBrandGuideController;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsController;
 import com.mcschool.flashcard.settings.StoryTemplateMasterController;
 import com.mcschool.flashcard.settings.StoryStudioProjectController;
+import com.mcschool.flashcard.settings.StoryStudioMediaController;
 import com.mcschool.flashcard.skills.SkillBoardController;
 import com.mcschool.flashcard.skills.SkillMasteryController;
 import com.mcschool.flashcard.students.StudentChatGptProjectController;
@@ -57,7 +58,7 @@ final class McpSiteFunctionRegistry {
             "online_classes.mediaDiagnostics", "online_classes.mute", "online_classes.requestUnmute", "online_classes.removeParticipant",
             "online_classes.updatePermissions", "online_classes.muteAll", "online_classes.setStudentScreenShare",
             "online_classes.startRecording", "online_classes.stopRecording", "online_classes.startTranscription", "online_classes.stopTranscription",
-            "online_classes.saveAnnotationSnapshot");
+            "online_classes.saveAnnotationSnapshot", "stories_media.upload");
     private static final List<Function> FUNCTIONS = build();
 
     private McpSiteFunctionRegistry() {}
@@ -120,6 +121,7 @@ final class McpSiteFunctionRegistry {
         // Studio reads contain the real HTML/CSS/JSON project and embedded logo, not the legacy PPTX.
         // Full-document writes are deliberately not exposed through the general MCP adapter.
         add(functions, "stories_studio", StoryStudioProjectController.class, Scope.ADMIN, "info chunk download");
+        add(functions, "stories_media", StoryStudioMediaController.class, Scope.ADMIN, "upload list");
         add(functions, "skill_boards", SkillBoardController.class, Scope.CALLER, "get");
         add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save");
         add(functions, "skill_mastery", SkillMasteryController.class, Scope.CALLER,
