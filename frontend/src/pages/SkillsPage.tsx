@@ -19,7 +19,7 @@ export function SkillsPage() {
       <iframe
         ref={frame}
         title="Карта навыков"
-        src={user.role === 'TEACHER' ? '/skills-board/index.html?v=20261023-1&theme=teacher' : '/skills-board/index.html?v=20261006-3'}
+        src={user.role === 'TEACHER' ? '/skills-board/index.html?v=20261102-2&theme=teacher' : '/skills-board/index.html?v=20261102-2'}
         allow="fullscreen"
         allowFullScreen
         style={{
