@@ -78,37 +78,43 @@ public class SkillProgressShareService {
         boards.get(boardId);
 
         ShareRow row = jdbc.query("""
-            SELECT version, enabled
+            SELECT id, version, enabled
             FROM skill_progress_shares
             WHERE student_id = ? AND board_id = ?
             FOR UPDATE
-            """, rs -> rs.next() ? new ShareRow(rs.getLong("version"), rs.getBoolean("enabled")) : null,
+            """, rs -> rs.next()
+                ? new ShareRow(rs.getObject("id", UUID.class), rs.getLong("version"), rs.getBoolean("enabled"))
+                : null,
             studentId, boardId);
 
+        UUID shareId;
         long version;
         if (row == null) {
+            shareId = UUID.randomUUID();
             version = 1;
             jdbc.update("""
                 INSERT INTO skill_progress_shares(
-                    student_id, board_id, version, enabled, created_at, updated_at, created_by
-                ) VALUES (?, ?, ?, TRUE, now(), now(), ?)
-                """, studentId, boardId, version, caller.id());
+                    id, student_id, board_id, version, enabled, created_at, updated_at, created_by
+                ) VALUES (?, ?, ?, ?, TRUE, now(), now(), ?)
+                """, shareId, studentId, boardId, version, caller.id());
         } else if (row.enabled()) {
+            shareId = row.id();
             version = row.version();
             jdbc.update("""
                 UPDATE skill_progress_shares
                 SET updated_at = now(), created_by = ?
-                WHERE student_id = ? AND board_id = ?
-                """, caller.id(), studentId, boardId);
+                WHERE id = ?
+                """, caller.id(), shareId);
         } else {
+            shareId = row.id();
             version = row.version() + 1;
             jdbc.update("""
                 UPDATE skill_progress_shares
                 SET version = ?, enabled = TRUE, updated_at = now(), created_by = ?
-                WHERE student_id = ? AND board_id = ?
-                """, version, caller.id(), studentId, boardId);
+                WHERE id = ?
+                """, version, caller.id(), shareId);
         }
-        return new ShareToken(token(boardId, studentId, version));
+        return new ShareToken(token(shareId, version));
     }
 
     @Transactional
@@ -126,19 +132,21 @@ public class SkillProgressShareService {
     public PublicProgress read(String token) {
         requireSigning();
         Decoded decoded = decode(token);
-        boolean enabled = Boolean.TRUE.equals(jdbc.query("""
-            SELECT enabled
+        ShareTarget target = jdbc.query("""
+            SELECT student_id, board_id, enabled
             FROM skill_progress_shares
-            WHERE student_id = ? AND board_id = ? AND version = ?
-            """, rs -> rs.next() ? rs.getBoolean("enabled") : null,
-            decoded.studentId(), decoded.boardId(), decoded.version()));
-        if (!enabled) throw notFound();
+            WHERE id = ? AND version = ?
+            """, rs -> rs.next()
+                ? new ShareTarget(rs.getObject("student_id", UUID.class), rs.getString("board_id"), rs.getBoolean("enabled"))
+                : null,
+            decoded.shareId(), decoded.version());
+        if (target == null || !target.enabled()) throw notFound();
 
-        User student = users.findById(decoded.studentId()).orElseThrow(SkillProgressShareService::notFound);
+        User student = users.findById(target.studentId()).orElseThrow(SkillProgressShareService::notFound);
         if (student.getRole() != Role.STUDENT || student.isArchived() || student.getStatus() != UserStatus.ACTIVE)
             throw notFound();
 
-        SkillBoardService.Snapshot board = boards.get(decoded.boardId());
+        SkillBoardService.Snapshot board = boards.get(target.boardId());
         LinkedHashMap<String, Integer> mastery = new LinkedHashMap<>();
         jdbc.query("""
             SELECT skill_id, mastery
@@ -146,7 +154,7 @@ public class SkillProgressShareService {
             WHERE student_id = ? AND board_id = ?
             ORDER BY skill_id
             """, (rs, rowNum) -> Map.entry(rs.getString("skill_id"), rs.getInt("mastery")),
-            decoded.studentId(), decoded.boardId()).forEach(entry -> mastery.put(entry.getKey(), entry.getValue()));
+            target.studentId(), target.boardId()).forEach(entry -> mastery.put(entry.getKey(), entry.getValue()));
 
         List<PublicHistoryEntry> history = jdbc.query("""
             SELECT skill_id, previous_mastery, mastery, updated_at
@@ -159,14 +167,14 @@ public class SkillProgressShareService {
                 rs.getInt("previous_mastery"),
                 rs.getInt("mastery"),
                 rs.getTimestamp("updated_at").toInstant()),
-            decoded.studentId(), decoded.boardId());
+            target.studentId(), target.boardId());
 
         Instant updatedAt = jdbc.query("""
             SELECT max(updated_at)
             FROM student_skill_mastery
             WHERE student_id = ? AND board_id = ?
             """, rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant() : null,
-            decoded.studentId(), decoded.boardId());
+            target.studentId(), target.boardId());
 
         List<SkillBoardService.Node> relevant = relevantSkills(board.data(), student.getSchoolType());
         int totalSkills = relevant.size();
@@ -222,8 +230,8 @@ public class SkillProgressShareService {
         return student;
     }
 
-    private String token(String boardId, UUID studentId, long version) {
-        String payload = boardId + "\n" + studentId + "\n" + version;
+    private String token(UUID shareId, long version) {
+        String payload = shareId + "\n" + version;
         String encoded = Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         String signature = Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(signingKey, payload));
@@ -245,12 +253,12 @@ public class SkillProgressShareService {
         if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII),
                 parts[1].getBytes(StandardCharsets.US_ASCII))) throw notFound();
         String[] fields = payload.split("\\n", -1);
-        if (fields.length != 3 || !fields[0].matches("[A-Za-z0-9][A-Za-z0-9_-]{0,63}")) throw notFound();
+        if (fields.length != 2) throw notFound();
         try {
-            UUID studentId = UUID.fromString(fields[1]);
-            long version = Long.parseLong(fields[2]);
+            UUID shareId = UUID.fromString(fields[0]);
+            long version = Long.parseLong(fields[1]);
             if (version < 1) throw notFound();
-            return new Decoded(fields[0], studentId, version);
+            return new Decoded(shareId, version);
         } catch (IllegalArgumentException ex) {
             throw notFound();
         }
@@ -280,6 +288,7 @@ public class SkillProgressShareService {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Ссылка на прогресс недействительна");
     }
 
-    private record ShareRow(long version, boolean enabled) {}
-    private record Decoded(String boardId, UUID studentId, long version) {}
+    private record ShareRow(UUID id, long version, boolean enabled) {}
+    private record ShareTarget(UUID studentId, String boardId, boolean enabled) {}
+    private record Decoded(UUID shareId, long version) {}
 }
