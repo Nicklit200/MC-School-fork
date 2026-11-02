@@ -379,9 +379,15 @@ async function copyParentShare(){
   try{
     const result=await request("POST",`${boardPath()}/students/${selectedStudentId}/parent-share`);
     if(!result?.token)throw Error("Сервер не вернул ссылку.");
-    const url=`${location.origin}/?skillProgress=${encodeURIComponent(result.token)}`;
-    await navigator.clipboard.writeText(url);
-    notice("Ссылка для родителя скопирована. Она доступна только для чтения.");
+    const url=`${location.origin}/#skillProgress=${encodeURIComponent(result.token)}`;
+    try{
+      if(!navigator.clipboard?.writeText)throw Error("clipboard unavailable");
+      await navigator.clipboard.writeText(url);
+      notice("Ссылка для родителя скопирована. Она доступна только для чтения.");
+    }catch{
+      window.prompt("Скопируйте ссылку для родителя:",url);
+      notice("Ссылка готова. Она доступна только для чтения.");
+    }
   }catch(error){notice(error.message||"Не удалось создать ссылку.",true);}
   finally{if(shareButton)shareButton.disabled=false;}
 }
