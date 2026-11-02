@@ -16,6 +16,13 @@ public class SkillBoardController {
     public SkillBoardController(SkillBoardService service) { this.service=service; }
     @GetMapping("/{id}")
     public SkillBoardService.Snapshot get(@PathVariable String id) { return service.get(id); }
+    @PostMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public SkillBoardService.Snapshot create(@PathVariable String id,
+            @RequestBody SkillBoardService.Board data,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return service.create(id, data, caller.id());
+    }
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public SkillBoardService.Snapshot save(@PathVariable String id,
