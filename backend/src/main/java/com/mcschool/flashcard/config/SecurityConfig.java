@@ -67,6 +67,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.HEAD,
                                 "/api/v1/public/homework-files/*/submission.pdf",
                                 "/api/v1/public/homework-files/*/worksheet.pdf").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/public/skill-progress").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/push/config").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/public/story-template/download").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/google-calendar/oauth/callback").permitAll()
