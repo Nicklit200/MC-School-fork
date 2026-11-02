@@ -12,7 +12,7 @@ import static com.mcschool.flashcard.skills.SkillBoardService.*;
 /** Narrow, revision-checked curriculum edits. Never changes pupil results. */
 @Service
 public class SkillBoardMcpService {
-    public static final Set<String> TOOL_NAMES = Set.of("list_skill_boards", "get_skill_board", "edit_skill_board");
+    public static final Set<String> TOOL_NAMES = Set.of("list_skill_boards", "get_skill_board", "edit_skill_board", "create_skill_board");
     private static final Set<String> NODE_FIELDS = Set.of("kind", "title", "de", "description", "example", "source", "color", "x", "y", "archived", "core", "schoolTypes");
     private final SkillBoardService boards;
     private final ObjectMapper mapper;
@@ -38,7 +38,12 @@ public class SkillBoardMcpService {
         var edit = definition("edit_skill_board",
             "Save explicitly requested changes to the live Mindcrafti skills board. OAuth ADMIN only; preserves existing node IDs, unrelated content, audit snapshots and database revision-conflict protection. Use only for the user's requested curriculum/board edits, not to infer or record pupil mastery. Read with get_skill_board first. No change is saved on error. Read back after success. Editing updates the same board visible at /skills; an already open browser must reload after saving its own draft.",
             editProperties, List.of("expectedRevision", "operationsJson"), false);
-        return List.of(list, read, edit);
+        var create = definition("create_skill_board",
+            "Create one brand-new curriculum board. Administrator only. Never overwrites an existing board; accepts complete board JSON (schemaVersion, title, grade, source, nodes, edges). Read list_skill_boards first to choose an unused boardId. Percentages belong in student mastery, not the board.",
+            Map.of("boardId", Map.of("type", "string", "description", "Unused stable board ID, e.g. grade-9"),
+                   "dataJson", Map.of("type", "string", "description", "Complete JSON curriculum board")),
+            List.of("boardId", "dataJson"), false);
+        return List.of(list, read, edit, create);
     }
 
     private static Map<String, Object> definition(String name, String description, Map<String, ?> properties, List<String> required, boolean readOnly) {
@@ -52,12 +57,21 @@ public class SkillBoardMcpService {
         try {
             if (!TOOL_NAMES.contains(name)) throw bad("Unknown skills tool");
             requireReader(caller);
-            if (name.equals("edit_skill_board") && caller.getRole() != Role.ADMIN)
+            if ((name.equals("edit_skill_board") || name.equals("create_skill_board")) && caller.getRole() != Role.ADMIN)
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a signed-in administrator can edit the shared curriculum");
-            keys(args, name.equals("list_skill_boards") ? Set.of() : name.equals("get_skill_board") ? Set.of("boardId") : Set.of("boardId", "expectedRevision", "operationsJson"));
+            keys(args, name.equals("list_skill_boards") ? Set.of() : name.equals("get_skill_board") ? Set.of("boardId") : name.equals("create_skill_board") ? Set.of("boardId", "dataJson") : Set.of("boardId", "expectedRevision", "operationsJson"));
             if (name.equals("list_skill_boards")) return result(Map.of("boards", boards.list(), "source", "mindcrafti_database", "pagePath", "/skills"), false);
             String boardId = text(args, "boardId", "grade-6");
             if (name.equals("get_skill_board")) return result(Map.of("board", boards.get(boardId), "canEdit", caller.getRole() == Role.ADMIN, "source", "mindcrafti_database", "pagePath", "/skills"), false);
+            if (name.equals("create_skill_board")) {
+                String json = text(args, "dataJson", null);
+                if (json == null || json.isBlank() || json.length() > 300_000) throw bad("Provide complete board JSON");
+                Board newBoard;
+                try { newBoard = mapper.readValue(json, Board.class); }
+                catch (RuntimeException ex) { throw bad("dataJson is not a valid curriculum board"); }
+                return result(Map.of("saved", true, "board", boards.create(boardId, newBoard, caller.getId()),
+                    "pagePath", "/skills", "source", "mindcrafti_database"), false);
+            }
             return result(edit(boardId, args, caller), false);
         } catch (ResponseStatusException ex) {
             int status = ex.getStatusCode().value();
