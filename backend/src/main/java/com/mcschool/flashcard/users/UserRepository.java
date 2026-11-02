@@ -25,6 +25,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByIdAndRoleAndStatusAndArchivedFalse(UUID id, Role role, UserStatus status);
 
+    /** Scalar predicate stays current even when the User is already managed by a waiting transaction. */
+    boolean existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(
+            UUID id, UUID teacherId, Role role, UserStatus status);
+
     // Check both accounts in the database without dereferencing a detached teacher proxy.
     @Query("""
             select count(s) > 0 from User s join s.teacher t

@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Serves the lesson's workbook PDF to the people in the class. */
@@ -35,22 +36,24 @@ public class OnlineClassDocumentController {
 
     @GetMapping("/{classId}/document/version")
     public ResponseEntity<java.util.Map<String, Long>> documentVersion(
-            @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable UUID classId) {
+            @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable UUID classId,
+            @RequestParam(required = false) String boardId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(java.util.Map.of("version", documentService.workbookVersion(caller, classId)));
+                .body(java.util.Map.of("version", documentService.workbookVersion(caller, classId, boardId)));
     }
 
     /** 404 when the lesson has no workbook; the board then simply stays blank. */
     @GetMapping("/{classId}/document")
     public ResponseEntity<byte[]> document(@AuthenticationPrincipal AuthenticatedUser caller,
-                                           @PathVariable UUID classId) {
-        return documentService.workbook(caller, classId)
+                                           @PathVariable UUID classId,
+                                           @RequestParam(required = false) String boardId) {
+        return documentService.workbook(caller, classId, boardId)
                 .map(bytes -> ResponseEntity.ok()
                         .contentType(MediaType.APPLICATION_PDF)
                         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"lesson-workbook.pdf\"")
                         // A lesson document is not for shared caches or the back button.
                         .cacheControl(CacheControl.noStore())
                         .body(bytes))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.notFound().cacheControl(CacheControl.noStore()).build());
     }
 }

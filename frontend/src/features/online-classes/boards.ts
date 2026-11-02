@@ -2,6 +2,7 @@
 export const SHARED_BOARD_ID = 'board-1';
 
 const PERSONAL_PREFIX = 'personal-';
+const PERSONAL_WORKBOOK_PREFIX = 'personal-workbook-';
 
 /**
  * Target id of a student's personal board. The server derives access from
@@ -12,11 +13,21 @@ export function personalBoardId(userId: string): string {
   return `${PERSONAL_PREFIX}${userId}`;
 }
 
+/** A separate private surface so worksheet ink never replaces a pupil's board. */
+export function personalWorkbookBoardId(userId: string): string {
+  return `${PERSONAL_WORKBOOK_PREFIX}${userId}`;
+}
+
+export function isPersonalWorkbookBoard(targetId: string): boolean {
+  return targetId.startsWith(PERSONAL_WORKBOOK_PREFIX);
+}
+
 export function isPersonalBoard(targetId: string): boolean {
   return targetId.startsWith(PERSONAL_PREFIX);
 }
 
 /** The student who owns a personal board, or null for any other board. */
 export function personalBoardOwner(targetId: string): string | null {
-  return isPersonalBoard(targetId) ? targetId.slice(PERSONAL_PREFIX.length) : null;
+  return isPersonalWorkbookBoard(targetId) ? targetId.slice(PERSONAL_WORKBOOK_PREFIX.length)
+    : isPersonalBoard(targetId) ? targetId.slice(PERSONAL_PREFIX.length) : null;
 }

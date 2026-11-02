@@ -1,4 +1,4 @@
-import { lessonPreparationApi, completedLessonApi } from '../../api/lessonPreparation';
+import { lessonPreparationApi, completedLessonApi, type PersonalWorkbooks } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
 import { NotebookCameraPanel } from '../notebook-camera/NotebookCameraPanel';
 import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
@@ -23,7 +23,7 @@ import { ChatPanel } from './ChatPanel';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { categorizeLiveKitError, type LiveKitErrorCategory } from './livekitDiagnostics';
 import { ALL_STUDENT_BOARDS_ID, BoardSwitcher } from './BoardSwitcher';
-import { SHARED_BOARD_ID, personalBoardId } from './boards';
+import { SHARED_BOARD_ID, personalBoardId, personalBoardOwner, personalWorkbookBoardId, isPersonalWorkbookBoard } from './boards';
 import { useStudentRoster } from './useStudentRoster';
 import { StudentWorkspaces } from './StudentWorkspaces';
 import { BoardToolbarIcon } from './BoardToolbar';
@@ -37,6 +37,8 @@ import { TranscriptionControls } from './TranscriptionControls';
 import { ParticipantListPanel } from './ParticipantListPanel';
 import { WaitingRoomPanel } from './WaitingRoomPanel';
 import { useAnswersPanel } from './useAnswersPanel';
+import { DocumentWhiteboardPanel } from './DocumentWhiteboardPanel';
+import { openPdf, type PdfDoc } from './pdfDocument';
 import { useBoardDocument } from './useBoardDocument';
 import { useHostUserId } from './useHostUserId';
 import { useClassEvents } from './useClassEvents';
@@ -221,6 +223,40 @@ function RoomBody({
   const [panelsOpen, setPanelsOpen] = useState(false);
   const [videosOpen, setVideosOpen] = useState(false);
   const materialInput = useRef<HTMLInputElement>(null);
+  const [activeBoard, setActiveBoard] = useState(SHARED_BOARD_ID);
+  const materialTarget = useRef(SHARED_BOARD_ID);
+  const [personalWorkbooks, setPersonalWorkbooks] = useState<{ eventId: string; data: PersonalWorkbooks } | null>(null);
+  const personalWorkbookData = personalWorkbooks && personalWorkbooks.eventId === eventId ? personalWorkbooks.data : null;
+  const personalUploadStudent = personalWorkbookData?.enabled && isPersonalWorkbookBoard(activeBoard) ? personalBoardOwner(activeBoard) : null;
+  const [ownWorksheet, setOwnWorksheet] = useState<{ classId: string; userId: string; available: boolean } | null>(null);
+  const worksheetAvailable = ownWorksheet?.classId === classId && ownWorksheet.userId === currentUserId && ownWorksheet.available;
+  useEffect(() => {
+    if (!connection.host && ownWorksheet?.classId === classId && ownWorksheet.userId === currentUserId
+      && !ownWorksheet.available && isPersonalWorkbookBoard(activeBoard)) setActiveBoard(SHARED_BOARD_ID);
+  }, [connection.host, ownWorksheet, classId, currentUserId, activeBoard]);
+  useEffect(() => {
+    if (connection.host) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const revision = await onlineClassesApi.documentVersion(classId, personalWorkbookBoardId(currentUserId));
+        if (!cancelled) setOwnWorksheet({ classId, userId: currentUserId, available: revision.version > 0 });
+      } catch {
+        // A non-pilot lesson or lost connection cannot grant worksheet access.
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 4000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [classId, currentUserId, connection.host]);
+  useEffect(() => {
+    if (!connection.host || !eventId) return;
+    let cancelled = false;
+    void lessonPreparationApi.personalWorkbooks(eventId).then(data => {
+      if (!cancelled) setPersonalWorkbooks({ eventId, data });
+    }).catch(() => { /* Keep shared uploads available if the optional pilot is unavailable. */ });
+    return () => { cancelled = true; };
+  }, [connection.host, eventId]);
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
   useEffect(() => {
@@ -228,8 +264,17 @@ function RoomBody({
     window.addEventListener('mc-workbook-render-error', report);
     return () => window.removeEventListener('mc-workbook-render-error', report);
   }, []);
-  const uploadMaterial = async (files: File[]) => {
+  const uploadMaterial = async (files: File[], targetId: string) => {
     if (!eventId) { setMaterialError('Урок не связан с календарём. Загрузка недоступна.'); return; }
+    const studentId = personalWorkbookData?.enabled && isPersonalWorkbookBoard(targetId) ? personalBoardOwner(targetId) : null;
+    if (isPersonalWorkbookBoard(targetId) && !studentId) {
+      setMaterialError('Не удалось проверить доступ к персональным листам. Загрузите лист из подготовки урока.');
+      return;
+    }
+    if (studentId && files.length !== 1) {
+      setMaterialError('Для персонального листа выберите один PDF.');
+      return;
+    }
     setMaterialBusy(true);
     setMaterialError(null);
     try {
@@ -261,17 +306,22 @@ function RoomBody({
       if (!pdfFile.size) {
         throw new Error('Выбранный файл пустой. Откройте его в «Файлах» и сохраните PDF на iPad перед загрузкой.');
       }
-      const saved = await lessonPreparationApi.appendWorkbook(eventId, pdfFile);
+      const personalSaved = studentId ? await lessonPreparationApi.uploadPersonalWorkbook(eventId, studentId, pdfFile) : null;
+      const saved = personalSaved ?? await lessonPreparationApi.appendWorkbook(eventId, pdfFile);
       if (!saved.hasWorkbook) {
         throw new Error('Сервер принял файл, но не сохранил его как рабочую тетрадь. Попробуйте ещё раз.');
       }
+      if (personalSaved) setPersonalWorkbooks(current => current?.eventId === eventId ? {
+        eventId, data: { ...current.data, students: current.data.students.map(student => student.studentId === personalSaved.studentId ? personalSaved : student) },
+      } : current);
       // The classroom reads a different, student-authorized API. Verify that
       // endpoint too before saying the upload is complete. A transient delay
       // gets one short retry; do not silently tell teachers their PDF is gone.
-      let bytes = await onlineClassesApi.documentBytes(classId);
+      const readDocument = () => studentId ? onlineClassesApi.documentBytes(classId, targetId) : onlineClassesApi.documentBytes(classId);
+      let bytes = await readDocument();
       if (!bytes || bytes.byteLength === 0) {
         await new Promise((resolve) => window.setTimeout(resolve, 350));
-        bytes = await onlineClassesApi.documentBytes(classId);
+        bytes = await readDocument();
       }
       if (!bytes || bytes.byteLength === 0) {
         throw new Error('PDF сохранён, но пока недоступен на доске. Обновите урок или попробуйте снова.');
@@ -280,8 +330,10 @@ function RoomBody({
       // LiveKit. Each PDF is an atomic append, so earlier files survive if
       // a later file fails.
       window.dispatchEvent(new Event('mc-workbook-updated'));
-      const revision = await onlineClassesApi.documentVersion(classId);
-      void publishDocument(documentEvent(classId, revision.version), true);
+      if (!studentId) {
+        const revision = await onlineClassesApi.documentVersion(classId);
+        void publishDocument(documentEvent(classId, revision.version), true);
+      }
       }
     } catch (error) {
       setMaterialError(error instanceof Error ? error.message : 'Не удалось загрузить файл.');
@@ -346,13 +398,21 @@ function RoomBody({
     setArchiving(true);
     setArchiveError(false);
     setArchiveNotice('Подготавливаем документы досок…');
+    let sharedArchiveDocument: PdfDoc | null = null;
     try {
       const documents = await onlineClassesApi.listAnnotationDocuments(classId);
+      // Another tab or the connector may have assigned a sheet after entry.
+      const latestWorkbooks = personalWorkbookData?.enabled ? await lessonPreparationApi.personalWorkbooks(eventId) : null;
+      const sharedBytes = await onlineClassesApi.documentBytes(classId);
+      if (sharedBytes?.byteLength) sharedArchiveDocument = await openPdf(sharedBytes);
       // A student can leave the call before the teacher saves the boards.
       const boardNames = new Map<string, string>([[SHARED_BOARD_ID, 'Общая доска']]);
       for (const student of students) boardNames.set(personalBoardId(student.userId), student.displayName);
+      for (const student of latestWorkbooks?.students ?? []) {
+        if (student.hasWorkbook) boardNames.set(personalWorkbookBoardId(student.studentId), `Персональный лист: ${student.studentName}`);
+      }
       for (const document of documents) {
-        if (document.targetType === 'WHITEBOARD' && /^personal-[0-9a-fA-F-]{36}$/.test(document.targetId)) {
+        if (document.targetType === 'WHITEBOARD' && /^personal-(?:workbook-)?[0-9a-fA-F-]{36}$/.test(document.targetId)) {
           if (!boardNames.has(document.targetId)) boardNames.set(document.targetId, 'Личная доска ученика');
         }
       }
@@ -361,12 +421,18 @@ function RoomBody({
       const failures: string[] = [];
       for (const [index, item] of boards.entries()) {
         setArchiveNotice(`Сохраняем ${item.name} (${index + 1}/${boards.length})…`);
+        const worksheet = isPersonalWorkbookBoard(item.id);
+        let exportDocument: PdfDoc | null = worksheet ? null : sharedArchiveDocument;
         try {
-          const count = Math.max(1, boardDocument?.pageCount ?? 1, ...documents
+          if (worksheet) {
+            const bytes = await onlineClassesApi.documentBytes(classId, item.id);
+            exportDocument = bytes?.byteLength ? await openPdf(bytes) : null;
+          }
+          const count = Math.max(1, exportDocument?.pageCount ?? 1, ...documents
             .filter(document => document.targetType === 'WHITEBOARD' && document.targetId === item.id)
             .map(document => document.pageIndex + 1));
           const pdf = await exportBoardPdf({
-            classId, targetType: 'WHITEBOARD', targetId: item.id, pageCount: count, pdfDocument: boardDocument,
+            classId, targetType: 'WHITEBOARD', targetId: item.id, pageCount: count, pdfDocument: exportDocument,
           });
           if (pdf.size < 5 || pdf.size > 25 * 1024 * 1024) throw new Error('PDF пустой или больше 25 МБ');
           const result = await completedLessonApi.save(eventId, classId, item.id, pdf);
@@ -376,6 +442,8 @@ function RoomBody({
           saved.push({ id: result.id, classId, boardId: item.id, name: item.name });
         } catch (error) {
           failures.push(`${item.name}: ${error instanceof Error ? error.message : 'ошибка загрузки'}`);
+        } finally {
+          if (worksheet) exportDocument?.destroy();
         }
       }
       setArchiveNotice('Проверяем сохранённые PDF на сервере…');
@@ -394,10 +462,10 @@ function RoomBody({
       setArchiveError(true);
       setArchiveNotice(`Не удалось подтвердить сохранение: ${error instanceof Error ? error.message : 'ошибка сервера'}. Попробуйте снова, оставаясь в уроке.`);
     } finally {
+      sharedArchiveDocument?.destroy();
       setArchiving(false);
     }
   };
-  const [activeBoard, setActiveBoard] = useState(SHARED_BOARD_ID);
   useEffect(() => {
     if (!ownNotebook) return;
     setCameraBoardScope(notebookScope);
@@ -411,7 +479,7 @@ function RoomBody({
   useClassEvents(classId, VIEW_TOPIC, ({ event, senderIdentity }) => {
     if (!connection.host || event.type !== 'view' || !event.boardId.startsWith('personal-')) return;
     // A student may announce only their own page; never trust an arbitrary data packet.
-    if (event.boardId !== personalBoardId(senderIdentity?.split('|')[0] ?? '')) return;
+    if (personalBoardOwner(event.boardId) !== senderIdentity?.split('|')[0]) return;
     setStudentPages((current) => current[event.boardId] === event.page ? current : { ...current, [event.boardId]: event.page });
   });
   // Only the shared board and the one in view are mounted: the shared board
@@ -419,7 +487,10 @@ function RoomBody({
   // walking through a whole group does not pile up one canvas per student
   // (their marks live on the server, so reopening one loses nothing).
   const showingAllStudents = connection.host && activeBoard === ALL_STUDENT_BOARDS_ID;
-  const boardsToShow = connection.host || activeBoard === SHARED_BOARD_ID ? [SHARED_BOARD_ID] : [SHARED_BOARD_ID, activeBoard];
+  const selectedWorksheet = isPersonalWorkbookBoard(activeBoard);
+  const boardsToShow = connection.host
+    ? [SHARED_BOARD_ID, ...(selectedWorksheet ? [activeBoard] : [])]
+    : [SHARED_BOARD_ID, personalBoardId(currentUserId), ...(worksheetAvailable ? [personalWorkbookBoardId(currentUserId)] : [])];
 
   // A new screen share takes the main area; the user can switch back to the
   // board at any time, and the board keeps its marks while it is not shown.
@@ -430,7 +501,7 @@ function RoomBody({
   }, [sharing]);
 
   const showScreen = sharing && mainView === 'screen';
-  const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !showScreen;
+  const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !selectedWorksheet && !showScreen;
   const selectBoard = (boardId: string) => {
     setActiveBoard(boardId);
     setMainView('board');
@@ -438,8 +509,13 @@ function RoomBody({
   };
 
   const fileAction = connection.host ? <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
-    disabled={materialBusy} onClick={() => materialInput.current?.click()}>
-    <BoardToolbarIcon name="file" />{materialBusy ? 'Загрузка…' : language === 'DE' ? 'Dokument hinzufügen' : 'Добавить документ'}
+    disabled={materialBusy || Boolean(selectedWorksheet && !personalWorkbookData?.enabled)} onClick={() => {
+      materialTarget.current = activeBoard;
+      materialInput.current?.click();
+    }}>
+    <BoardToolbarIcon name="file" />{materialBusy ? 'Загрузка…' : personalUploadStudent
+      ? (language === 'DE' ? 'Persönliches Arbeitsblatt hochladen' : 'Загрузить персональный лист')
+      : language === 'DE' ? 'Dokument hinzufügen' : 'Добавить документ'}
   </button> : undefined;
 
   return (
@@ -478,12 +554,14 @@ function RoomBody({
           students={students}
           activeId={activeBoard}
           onChange={selectBoard}
+          worksheetAvailable={worksheetAvailable}
+          worksheetStudents={personalWorkbookData?.enabled ? personalWorkbookData.students.map(student => ({ userId: student.studentId, displayName: student.studentName })) : []}
         />
         </div>
       </div>
-      {connection.host && <input ref={materialInput} type="file" multiple accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
+      {connection.host && <input ref={materialInput} type="file" multiple={!personalUploadStudent} accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
         disabled={materialBusy} hidden
-        onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files); event.target.value = ''; }} />}
+        onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files, materialTarget.current); event.target.value = ''; }} />}
 
       <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
@@ -509,14 +587,14 @@ function RoomBody({
             return (
               <div key={boardId} className="online-class-room__board" hidden={!visible}>
                 <Suspense fallback={null}>
-                  <WhiteboardPanel
+                  <DocumentWhiteboardPanel
+                    sharedDocument={boardDocument}
                     classId={classId}
                     actorId={currentUserId}
                     isHost={connection.host}
                     targetId={boardId}
                     // Everyone in the class may draw, on the shared board and on their own.
                     canAnnotate
-                    document={boardDocument}
                     fileAction={visible ? fileAction : undefined}
                     active={visible}
                     observedPage={studentPages[boardId]}
@@ -555,7 +633,8 @@ function RoomBody({
             onSelect={selectBoard}
             onOverview={() => selectBoard(ALL_STUDENT_BOARDS_ID)}
             renderBoard={(studentId, active, compact, following) => <Suspense fallback={null}>
-              <WhiteboardPanel
+              <DocumentWhiteboardPanel
+                sharedDocument={boardDocument}
                 classId={classId}
                 actorId={currentUserId}
                 isHost
@@ -565,7 +644,6 @@ function RoomBody({
                 observedPage={studentPages[personalBoardId(studentId)]}
                 canAnnotate={!compact}
                 active={active}
-                document={boardDocument}
                 fileAction={active && !compact ? fileAction : undefined}
                 onSaveLessonDocuments={!compact ? archiveBoards : undefined}
                 savingLessonDocuments={archiving}

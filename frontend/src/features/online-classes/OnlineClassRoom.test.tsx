@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../api/client';
-import { lessonPreparationApi } from '../../api/lessonPreparation';
+import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPreparation';
+import { exportBoardPdf } from './boardExport';
+import { openPdf } from './pdfDocument';
 import { onlineClassesApi, type OnlineClass, type OnlineClassConnection } from '../../api/onlineClasses';
 import { I18nProvider } from '../../i18n/I18nContext';
 import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
@@ -85,6 +87,7 @@ vi.mock('./useClassEvents', () => ({ useClassEvents: () => ({ publish: vi.fn() }
 vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
 vi.mock('./usePdf', () => ({ usePdf: () => ({ status: 'idle' }), usePdfPage: () => null }));
 vi.mock('./pdfDocument', () => ({ openPdf: vi.fn(async () => ({ pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() })) }));
+vi.mock('./boardExport', () => ({ exportBoardPdf: vi.fn() }));
 
 const boardProps: Record<string, any>[] = [];
 vi.mock('./WhiteboardPanel', () => ({
@@ -100,11 +103,12 @@ vi.mock('./WhiteboardPanel', () => ({
 }));
 
 vi.mock('../../api/lessonPreparation', () => ({
-  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn() },
+  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn(), personalWorkbooks: vi.fn(), uploadPersonalWorkbook: vi.fn() },
+  completedLessonApi: { list: vi.fn(), save: vi.fn() },
 }));
 vi.mock('../../api/onlineClasses', async () => {
   const actual = await vi.importActual<typeof import('../../api/onlineClasses')>('../../api/onlineClasses');
-  return { ...actual, onlineClassesApi: { listParticipants: vi.fn(), documentBytes: vi.fn(), documentVersion: vi.fn(), startTranscription: vi.fn(), get: vi.fn(), connect: vi.fn() } };
+  return { ...actual, onlineClassesApi: { listParticipants: vi.fn(), documentBytes: vi.fn(), documentVersion: vi.fn(), startTranscription: vi.fn(), get: vi.fn(), connect: vi.fn(), listAnnotationDocuments: vi.fn() } };
 });
 
 import { OnlineClassRoom } from './OnlineClassRoom';
@@ -112,6 +116,7 @@ import { OnlineClassRoom } from './OnlineClassRoom';
 beforeEach(() => {
   livekitFixture.connectionState = 'connected';
   vi.mocked(onlineClassesApi.startTranscription).mockReset().mockResolvedValue(undefined);
+  vi.mocked(lessonPreparationApi.personalWorkbooks).mockReset().mockResolvedValue({ enabled: false, students: [] });
 });
 
 const connection = (host: boolean): OnlineClassConnection => ({
@@ -231,6 +236,92 @@ describe('PDF upload contract', () => {
     await userEvent.upload(input, new File(['pdf'], 'large.pdf', { type: 'application/pdf' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 413');
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Добавить документ' })).toBeEnabled());
+  });
+
+  it('uploads a pilot personal worksheet to that student without changing the shared PDF', async () => {
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [
+      { studentId: 'alice', studentName: 'Анна', hasWorkbook: false, filename: null, version: 0 },
+    ] });
+    vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
+      { userId: 'alice', displayName: 'Анна', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+    ]);
+    vi.mocked(lessonPreparationApi.uploadPersonalWorkbook).mockResolvedValue({ studentId: 'alice', studentName: 'Анна', hasWorkbook: true, filename: 'anna.pdf', version: 1 });
+    vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(new ArrayBuffer(8));
+    const view = mount(true);
+    await screen.findByRole('option', { name: 'Персональный лист: Анна' });
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-alice');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Загрузить персональный лист' }));
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.multiple).toBe(false);
+    const file = new File(['%PDF-1.7'], 'anna.pdf', { type: 'application/pdf' });
+    await userEvent.upload(input, file);
+    await waitFor(() => expect(lessonPreparationApi.uploadPersonalWorkbook).toHaveBeenCalledWith('e1', 'alice', file));
+    expect(lessonPreparationApi.appendWorkbook).not.toHaveBeenCalled();
+    await waitFor(() => expect(onlineClassesApi.documentBytes).toHaveBeenCalledWith('c1', 'personal-workbook-alice'));
+  });
+
+  it('archives each board using its own PDF background', async () => {
+    const sharedBytes = new ArrayBuffer(8);
+    const sharedDocument = { pageCount: 3, renderPage: vi.fn(), destroy: vi.fn() };
+    vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
+      { userId: 'alice', displayName: 'Анна', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+    ]);
+    vi.mocked(onlineClassesApi.listAnnotationDocuments).mockResolvedValue([]);
+    vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(sharedBytes);
+    vi.mocked(openPdf).mockResolvedValue(sharedDocument);
+    vi.mocked(exportBoardPdf).mockResolvedValue(new Blob(['%PDF-1.7']));
+    vi.mocked(completedLessonApi.save).mockImplementation(async (_eventId, classId, boardId) => ({
+      id: boardId, classId, boardId, filename: 'board.pdf', savedAt: '',
+    }));
+    vi.mocked(completedLessonApi.list).mockResolvedValue(['board-1', 'personal-alice'].map(boardId => ({
+      id: boardId, classId: 'c1', boardId, filename: 'board.pdf', savedAt: '',
+    })));
+    mount(true);
+    await screen.findByRole('option', { name: /Анна/ });
+    await act(async () => boardProps.filter(props => props.targetId === 'board-1').at(-1)!.onSaveLessonDocuments());
+    expect(exportBoardPdf).toHaveBeenCalledWith(expect.objectContaining({ targetId: 'board-1', pageCount: 3, pdfDocument: sharedDocument }));
+    expect(exportBoardPdf).toHaveBeenCalledWith(expect.objectContaining({ targetId: 'personal-alice', pageCount: 3, pdfDocument: sharedDocument }));
+    expect(sharedDocument.destroy).toHaveBeenCalledOnce();
+    expect(onlineClassesApi.documentBytes).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes a connector-uploaded worksheet without annotations and exports its own PDF', async () => {
+    const student = { studentId: 'bob', studentName: 'Борис', hasWorkbook: false, filename: null, version: 0 };
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValueOnce({ enabled: true, students: [student] });
+    const sharedBytes = new ArrayBuffer(8), personalBytes = new ArrayBuffer(16);
+    const sharedDocument = { pageCount: 3, renderPage: vi.fn(), destroy: vi.fn() };
+    const personalDocument = { pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() };
+    vi.mocked(onlineClassesApi.listAnnotationDocuments).mockResolvedValue([]);
+    vi.mocked(onlineClassesApi.documentBytes).mockImplementation(async (_classId, boardId) => boardId ? personalBytes : sharedBytes);
+    vi.mocked(openPdf).mockImplementation(async bytes => bytes === sharedBytes ? sharedDocument : personalDocument);
+    vi.mocked(exportBoardPdf).mockResolvedValue(new Blob(['%PDF-1.7']));
+    vi.mocked(completedLessonApi.save).mockImplementation(async (_eventId, classId, boardId) => ({ id: boardId, classId, boardId, filename: 'board.pdf', savedAt: '' }));
+    vi.mocked(completedLessonApi.list).mockResolvedValue(['board-1', 'personal-workbook-bob'].map(boardId => ({ id: boardId, classId: 'c1', boardId, filename: 'board.pdf', savedAt: '' })));
+    mount(true);
+    await screen.findByRole('option', { name: 'Персональный лист: Борис' });
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [{ ...student, hasWorkbook: true, filename: 'bob.pdf', version: 1 }] });
+    await act(async () => boardProps.filter(props => props.targetId === 'board-1').at(-1)!.onSaveLessonDocuments());
+    expect(exportBoardPdf).toHaveBeenCalledWith(expect.objectContaining({ targetId: 'personal-workbook-bob', pageCount: 1, pdfDocument: personalDocument }));
+    expect(lessonPreparationApi.personalWorkbooks).toHaveBeenCalledTimes(2);
+    expect(sharedDocument.destroy).toHaveBeenCalledOnce();
+    expect(personalDocument.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('shows a third pupil button only after a personal worksheet is available', async () => {
+    vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 0 });
+    mount(false);
+    await screen.findByRole('button', { name: 'Моя доска' });
+    expect(screen.queryByRole('button', { name: 'Персональный лист' })).not.toBeInTheDocument();
+    vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 1 });
+    // Remount represents the pupil entering again after a connector upload.
+    cleanup();
+    mount(false);
+    await userEvent.click(await screen.findByRole('button', { name: 'Персональный лист' }));
+    expect(screen.getByTestId('board-personal-workbook-me')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('board-personal-me')).toHaveAttribute('data-active', 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'Моя доска' }));
+    expect(screen.getByTestId('board-personal-me')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('board-personal-workbook-me')).toHaveAttribute('data-active', 'false');
   });
 });
 

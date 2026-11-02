@@ -21,7 +21,7 @@ vi.mock('../../api/client', async importOriginal => {
 });
 vi.mock('../../api/lessonPreparation', async importOriginal => {
   const actual = await importOriginal<typeof import('../../api/lessonPreparation')>();
-  return { ...actual, lessonPreparationApi: { ...actual.lessonPreparationApi, get: vi.fn(), update: vi.fn(), transcriptUrl: vi.fn() },
+  return { ...actual, lessonPreparationApi: { ...actual.lessonPreparationApi, get: vi.fn(), update: vi.fn(), transcriptUrl: vi.fn(), personalWorkbooks: vi.fn() },
     completedLessonApi: { ...actual.completedLessonApi, list: vi.fn(), uploadManual: vi.fn(), open: vi.fn() } };
 });
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: { id: currentUser.id, role: 'TEACHER' } }) }));
@@ -42,6 +42,7 @@ beforeEach(() => {
   vi.mocked(api.students.list).mockResolvedValue([]);
   vi.mocked(api.homeworks.listForStudent).mockResolvedValue([]);
   vi.mocked(lessonPreparationApi.get).mockResolvedValue({ eventId: 'local-trial', hasWorkbook: false, hasAnswers: false, hasTranscript: false } as LessonPreparation);
+  vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: false, students: [] });
   vi.mocked(completedLessonApi.list).mockResolvedValue([archived]);
   vi.mocked(completedLessonApi.uploadManual).mockResolvedValue(uploaded);
   vi.mocked(completedLessonApi.open).mockResolvedValue(undefined);

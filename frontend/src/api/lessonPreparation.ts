@@ -3,6 +3,16 @@ import type { LessonPreparation } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
+export type PersonalWorkbook = {
+  studentId: string;
+  studentName: string;
+  hasWorkbook: boolean;
+  filename: string | null;
+  version: number;
+};
+
+export type PersonalWorkbooks = { enabled: boolean; students: PersonalWorkbook[] };
+
 export type HomeworkSeriesResult = {
   targetType: 'student' | 'group';
   targetId: string;
@@ -68,6 +78,25 @@ function uploadHomeworkSeries(eventId: string, startDate: string, days: number, 
 }
 
 export const lessonPreparationApi = {
+  personalWorkbooks(eventId: string) {
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-workbooks`, {
+      headers: authHeaders(),
+    }).then(parse<PersonalWorkbooks>);
+  },
+  uploadPersonalWorkbook(eventId: string, studentId: string, file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-workbooks/${encodeURIComponent(studentId)}`, {
+      method: 'POST', headers: authHeaders(), body: form,
+    }).then(parse<PersonalWorkbook>);
+  },
+  async personalWorkbookUrl(eventId: string, studentId: string) {
+    const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-workbooks/${encodeURIComponent(studentId)}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) throw new ApiRequestError(response.status, 'PERSONAL_WORKBOOK', response.statusText);
+    return URL.createObjectURL(await response.blob());
+  },
   get(eventId: string) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}`, { headers: authHeaders() }).then(parse<LessonPreparation>);
   },

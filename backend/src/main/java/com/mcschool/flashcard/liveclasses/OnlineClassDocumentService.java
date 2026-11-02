@@ -3,6 +3,9 @@ package com.mcschool.flashcard.liveclasses;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.LessonPreparation;
 import com.mcschool.flashcard.lessons.LessonPreparationRepository;
+import com.mcschool.flashcard.lessons.PersonalLessonWorkbook;
+import com.mcschool.flashcard.lessons.PersonalLessonWorkbookService;
+import com.mcschool.flashcard.common.ResourceNotFoundException;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -23,11 +26,14 @@ public class OnlineClassDocumentService {
 
     private final OnlineClassAccessService accessService;
     private final LessonPreparationRepository preparations;
+    private final PersonalLessonWorkbookService personalWorkbooks;
 
     public OnlineClassDocumentService(OnlineClassAccessService accessService,
-                                      LessonPreparationRepository preparations) {
+                                      LessonPreparationRepository preparations,
+                                      PersonalLessonWorkbookService personalWorkbooks) {
         this.accessService = accessService;
         this.preparations = preparations;
+        this.personalWorkbooks = personalWorkbooks;
     }
 
     /**
@@ -36,7 +42,18 @@ public class OnlineClassDocumentService {
      */
     @Transactional(readOnly = true)
     public Optional<byte[]> workbook(AuthenticatedUser caller, UUID classId) {
+        return workbook(caller, classId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<byte[]> workbook(AuthenticatedUser caller, UUID classId, String boardId) {
         OnlineClass onlineClass = accessService.requireAdmitted(caller, classId);
+        UUID studentId = personalBoardOwner(caller, onlineClass, boardId);
+        if (PersonalBoard.isWorkbook(boardId)) {
+            requireWorkbookPilot(onlineClass);
+            return personalWorkbooks.workbookForClass(onlineClass, studentId)
+                    .map(PersonalLessonWorkbook::getWorkbookPdf);
+        }
         return preparations
                 .findByTeacherIdAndEventId(onlineClass.getTeacher().getId(), onlineClass.getEventId())
                 .filter(LessonPreparation::hasWorkbook)
@@ -46,12 +63,39 @@ public class OnlineClassDocumentService {
     /** Cheap revision probe: no PDF bytes are sent during polling. */
     @Transactional(readOnly = true)
     public long workbookVersion(AuthenticatedUser caller, UUID classId) {
+        return workbookVersion(caller, classId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public long workbookVersion(AuthenticatedUser caller, UUID classId, String boardId) {
         OnlineClass onlineClass = accessService.requireAdmitted(caller, classId);
+        UUID studentId = personalBoardOwner(caller, onlineClass, boardId);
+        if (PersonalBoard.isWorkbook(boardId)) {
+            requireWorkbookPilot(onlineClass);
+            return personalWorkbooks.workbookVersionForClass(onlineClass, studentId);
+        }
         return preparations.findByTeacherIdAndEventId(
                         onlineClass.getTeacher().getId(), onlineClass.getEventId())
                 .filter(LessonPreparation::hasWorkbook)
                 .map(p -> p.getVersion() == null ? 1L : p.getVersion() + 1L)
                 .orElse(0L);
+    }
+
+    private UUID personalBoardOwner(AuthenticatedUser caller, OnlineClass lesson, String boardId) {
+        if (boardId == null || boardId.isBlank() || "board-1".equals(boardId)) return null;
+        UUID owner = PersonalBoard.ownerOf(boardId)
+                .orElseThrow(() -> new ResourceNotFoundException("Board document not found"));
+        if (!accessService.isHost(caller, lesson) && !owner.equals(caller.id())) {
+            throw new ResourceNotFoundException("Board document not found");
+        }
+        personalWorkbooks.requireClassStudent(lesson, owner);
+        return owner;
+    }
+
+    private void requireWorkbookPilot(OnlineClass lesson) {
+        if (!PersonalLessonWorkbookService.PILOT_TEACHER_ID.equals(lesson.getTeacher().getId())) {
+            throw new ResourceNotFoundException("Board document not found");
+        }
     }
 
     /** Assignment-only details: no private lesson plan, transcript or answer key. */

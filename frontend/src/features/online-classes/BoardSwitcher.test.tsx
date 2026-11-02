@@ -43,4 +43,23 @@ describe('BoardSwitcher', () => {
     expect(screen.getByRole('option', { name: 'Доска ученика: Alice' })).toBeInTheDocument();
     expect(screen.getByRole('combobox')).toHaveValue('personal-u1');
   });
+
+  it('adds a third pupil button without changing the existing personal board', async () => {
+    const onChange = vi.fn();
+    render(<I18nProvider><BoardSwitcher isHost={false} currentUserId="me" students={students}
+      activeId="personal-me" onChange={onChange} worksheetAvailable /></I18nProvider>);
+    expect(screen.getByRole('button', { name: 'Моя доска' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByRole('button', { name: 'Персональный лист' }));
+    expect(onChange).toHaveBeenCalledWith('personal-workbook-me');
+    expect(screen.getByRole('button', { name: 'Общая доска' })).toBeInTheDocument();
+  });
+
+  it('lets a pilot teacher select a worksheet before that pupil joins', async () => {
+    const onChange = vi.fn();
+    render(<I18nProvider><BoardSwitcher isHost currentUserId="teacher" students={[]}
+      activeId="board-1" onChange={onChange} worksheetStudents={students} /></I18nProvider>);
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-u2');
+    expect(onChange).toHaveBeenCalledWith('personal-workbook-u2');
+    expect(screen.getByRole('option', { name: 'Персональный лист: Bob' })).toBeInTheDocument();
+  });
 });

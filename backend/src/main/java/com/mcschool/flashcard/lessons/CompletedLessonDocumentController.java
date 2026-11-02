@@ -1,6 +1,8 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import com.mcschool.flashcard.liveclasses.OnlineClassAccessService;
+import com.mcschool.flashcard.liveclasses.PersonalBoard;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,10 +22,15 @@ import org.springframework.web.multipart.MultipartFile;
 public class CompletedLessonDocumentController {
     private final JdbcTemplate jdbc;
     private final LessonPreparationService lessons;
+    private final OnlineClassAccessService classAccess;
+    private final PersonalLessonWorkbookService personalWorkbooks;
 
-    public CompletedLessonDocumentController(JdbcTemplate jdbc, LessonPreparationService lessons) {
+    public CompletedLessonDocumentController(JdbcTemplate jdbc, LessonPreparationService lessons,
+            OnlineClassAccessService classAccess, PersonalLessonWorkbookService personalWorkbooks) {
         this.jdbc = jdbc;
         this.lessons = lessons;
+        this.classAccess = classAccess;
+        this.personalWorkbooks = personalWorkbooks;
     }
 
     public record DocumentInfo(UUID id, UUID classId, String boardId, String filename, String savedAt) {}
@@ -49,9 +56,15 @@ public class CompletedLessonDocumentController {
                              @RequestParam String boardId,
                              @RequestParam("file") MultipartFile file) throws Exception {
         lessons.require(teacher, eventId);
-        if (!boardId.equals("board-1") && !boardId.matches("personal-[0-9a-fA-F-]{36}"))
+        if (!boardId.equals("board-1") && PersonalBoard.ownerOf(boardId).isEmpty())
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "Invalid board");
+        if (PersonalBoard.isWorkbook(boardId)) {
+            var onlineClass = classAccess.requireHost(teacher, classId);
+            if (!eventId.equals(onlineClass.getEventId()) || !personalWorkbooks.enabled(teacher))
+                throw new com.mcschool.flashcard.common.ResourceNotFoundException("Personal workbook not found");
+            personalWorkbooks.requireClassStudent(onlineClass, PersonalBoard.ownerOf(boardId).orElseThrow());
+        }
         if (file.getSize() < 5 || file.getSize() > 25 * 1024 * 1024)
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "PDF size out of range");
@@ -66,7 +79,9 @@ public class CompletedLessonDocumentController {
         if (owned == null || owned == 0)
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN, "Class does not belong to this lesson");
-        String filename = boardId.equals("board-1") ? "Общая-доска.pdf" : "Ученик-" + boardId.substring(9) + ".pdf";
+        String filename = boardId.equals("board-1") ? "Общая-доска.pdf"
+                : (PersonalBoard.isWorkbook(boardId) ? "Персональный-лист-" : "Ученик-")
+                    + PersonalBoard.ownerOf(boardId).orElseThrow() + ".pdf";
         UUID id = UUID.randomUUID();
         jdbc.update("""
             INSERT INTO completed_lesson_documents(id,teacher_id,event_id,class_id,board_id,filename,pdf)

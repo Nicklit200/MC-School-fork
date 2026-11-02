@@ -3,6 +3,10 @@
 The connector keeps its dedicated preparation, homework, analytics, skills, BrandGuide,
 Stories and owner-only tools. Scheduling has dedicated `create_lesson`,
 `create_lesson_series`, `update_lesson`, `delete_lesson` and `assign_lesson` tools.
+The owner-lesson personal worksheet pilot has dedicated
+`list_personal_lesson_workbooks` and `upload_personal_lesson_workbook` tools;
+see [Personal lesson worksheets](personal-lesson-workbooks.md) for access,
+upload and retry rules. The shared workbook remains a separate common material.
 The finite website catalog adds 167 explicitly reviewed administrative and teacher operations below.
 It does not claim to reproduce device interaction, credentials or student study sessions.
 

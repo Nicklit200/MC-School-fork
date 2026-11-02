@@ -14,6 +14,7 @@ import java.util.UUID;
 public final class PersonalBoard {
 
     static final String PREFIX = "personal-";
+    private static final String WORKBOOK_PREFIX = "personal-workbook-";
 
     private PersonalBoard() {
     }
@@ -26,13 +27,25 @@ public final class PersonalBoard {
         return PREFIX + ownerId;
     }
 
+    /** A student's assigned worksheet has its own document and annotation scope. */
+    public static String workbookTargetIdFor(UUID ownerId) {
+        return WORKBOOK_PREFIX + ownerId;
+    }
+
+    public static boolean isWorkbook(String targetId) {
+        return targetId != null && targetId.startsWith(WORKBOOK_PREFIX);
+    }
+
     /** The owner, or empty when the id merely looks personal but is malformed. */
     public static Optional<UUID> ownerOf(String targetId) {
         if (!isPersonal(targetId)) {
             return Optional.empty();
         }
         try {
-            return Optional.of(UUID.fromString(targetId.substring(PREFIX.length())));
+            String prefix = isWorkbook(targetId) ? WORKBOOK_PREFIX : PREFIX;
+            String suffix = targetId.substring(prefix.length());
+            UUID owner = UUID.fromString(suffix);
+            return owner.toString().equals(suffix) ? Optional.of(owner) : Optional.empty();
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }

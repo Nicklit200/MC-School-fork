@@ -50,7 +50,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.23.0";
+    private static final String SERVER_VERSION = "1.24.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -124,6 +124,24 @@ public class MindcraftiMcpController {
     private SkillMasteryMcpService skillMasteryMcpService;
     private McpLessonScheduleService lessonScheduleService;
     private McpSiteFunctionsService siteFunctionsService;
+    private PersonalLessonWorkbookService personalLessonWorkbookService;
+    private McpAccessService personalWorkbookAccess;
+    private McpOperationReceiptService personalWorkbookReceipts;
+
+    @Autowired
+    public void setPersonalLessonWorkbookService(PersonalLessonWorkbookService service) {
+        this.personalLessonWorkbookService = service;
+    }
+
+    @Autowired
+    public void setPersonalWorkbookAccess(McpAccessService service) {
+        this.personalWorkbookAccess = service;
+    }
+
+    @Autowired
+    public void setPersonalWorkbookReceipts(McpOperationReceiptService service) {
+        this.personalWorkbookReceipts = service;
+    }
 
     @Autowired
     public void setLessonScheduleService(McpLessonScheduleService service) {
@@ -213,7 +231,7 @@ public class MindcraftiMcpController {
     }
 
     private String schedulingInstructions() {
-        return " To schedule an actual appointment on the website, use create_lesson or create_lesson_series; prepare_lesson and create_lesson_draft only attach teaching materials. Lesson dates and times use Europe/Berlin. Use update_lesson for time changes, assign_lesson for the student or group, and delete_lesson only on explicit cancellation. For other website operations, discover list_site_functions, inspect get_site_function, then use read_site_function or execute_site_function. Writes require the user's concrete request and a stable idempotencyKey. Reuse that key on identical retries. If an external action has an unknown outcome, inspect current state; do not silently use a new key. ADMIN must select the verified teacherId for teacher-scoped operations. Browser camera, microphone, stylus, OAuth and credentials remain outside this catalog.";
+        return " To schedule an actual appointment on the website, use create_lesson or create_lesson_series; prepare_lesson and create_lesson_draft only attach teaching materials. Lesson dates and times use Europe/Berlin. Use update_lesson for time changes, assign_lesson for the student or group, and delete_lesson only on explicit cancellation. When personal worksheet tools are available, list_personal_lesson_workbooks identifies the exact pupil and upload_personal_lesson_workbook uploads to that pupil's separate Personal worksheet tab (Персональный лист), beside Shared board and My board; prepare_lesson continues to update the separate shared workbook. For other website operations, discover list_site_functions, inspect get_site_function, then use read_site_function or execute_site_function. Writes require the user's concrete request and a stable idempotencyKey. Reuse that key on identical retries. If an external action has an unknown outcome, inspect current state; do not silently use a new key. ADMIN must select the verified teacherId for teacher-scoped operations. Browser camera, microphone, stylus, OAuth and credentials remain outside this catalog.";
     }
 
     private Map<String, Object> discover(boolean authenticated) {
@@ -310,6 +328,24 @@ public class MindcraftiMcpController {
         prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for the workbook. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
         prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for teacher answers. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
         tools.add(tool("prepare_lesson", "Create or update lesson preparation for the selected teacher. Admins can write to any teacher lesson. PDFs may be uploaded directly as base64 or imported from Google Drive using the selected teacher's access.", schema(prepareProperties, List.of("teacherId", "eventId")), writeAnnotations()));
+
+        if (personalLessonWorkbookService != null && personalWorkbookActorAllowed(auth)) {
+            Map<String, Object> personalProperties = new LinkedHashMap<>();
+            personalProperties.put("teacherId", property("string", "Exact pilot teacher UUID returned by find_lessons. Personal worksheets are currently enabled only for Nick's lessons."));
+            personalProperties.put("eventId", property("string", "Exact eventId returned by find_lessons."));
+            tools.add(tool("list_personal_lesson_workbooks",
+                    "OWNER LESSON PILOT: List the lesson's current students and their individual worksheet metadata. The shared workbook stays available to everyone. OAuth Nick teacher or ADMIN only; import API keys cannot use this tool.",
+                    schema(personalProperties, List.of("teacherId", "eventId")), readOnlyAnnotations()));
+            Map<String, Object> personalUpload = new LinkedHashMap<>(personalProperties);
+            personalUpload.put("studentId", property("string", "Exact student UUID from list_personal_lesson_workbooks. Only a current participant of this exact lesson may receive the PDF."));
+            personalUpload.put("filename", property("string", "Personal worksheet PDF filename."));
+            personalUpload.put("pdfBase64", property("string", "PDF bytes encoded as base64, up to 15 MB. Provide exactly one of pdfBase64 or driveFileId."));
+            personalUpload.put("driveFileId", property("string", "Optional Google Drive PDF ID or URL readable by the selected teacher. Provide exactly one of pdfBase64 or driveFileId."));
+            personalUpload.put("idempotencyKey", property("string", "Stable key for this explicitly requested upload. Reuse the same key and arguments for identical retries; use a new key only for a new requested upload."));
+            tools.add(tool("upload_personal_lesson_workbook",
+                    "OWNER LESSON PILOT: Upload or replace one student's PDF under the separate Personal worksheet tab (Персональный лист), beside Shared board and My board. Its annotations use a separate personal-workbook-<studentUserId> target. Shared materials and the existing My board remain available. This does not assign homework. Only the owning teacher and that admitted student can read the worksheet in class. OAuth Nick teacher or ADMIN only, target teacher restricted to Nick. Retry with the same idempotencyKey.",
+                    schema(personalUpload, List.of("teacherId", "eventId", "studentId", "filename", "idempotencyKey")), writeAnnotations()));
+        }
 
         Map<String, Object> answerProperties = new LinkedHashMap<>();
         answerProperties.put("teacherId", property("string", "Teacher UUID returned by find_lessons."));
@@ -447,6 +483,13 @@ public class MindcraftiMcpController {
             return toolResult(status);
         }
         if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
+        if ("list_personal_lesson_workbooks".equals(name) || "upload_personal_lesson_workbook".equals(name)) {
+            try {
+                return toolResult(personalLessonWorkbooks(name, arguments, auth));
+            } catch (Exception failure) {
+                return siteToolFailure(failure);
+            }
+        }
         if (McpLessonScheduleService.handles(name) || McpSiteFunctionsService.handles(name)) {
             try {
                 if (auth.apiKey() || auth.user() == null)
@@ -1007,6 +1050,80 @@ public class MindcraftiMcpController {
         Map<String, Object> transcriptArguments = new LinkedHashMap<>(arguments);
         transcriptArguments.put("kind", "transcript");
         return downloadLessonPdf(transcriptArguments, auth);
+    }
+
+    private boolean personalWorkbookActorAllowed(AuthContext auth) {
+        User user = auth.user();
+        return !auth.apiKey() && user != null && !user.isArchived()
+                && user.getStatus() == com.mcschool.flashcard.users.UserStatus.ACTIVE
+                && (user.getRole() == Role.ADMIN || (user.getRole() == Role.TEACHER
+                && AiLessonPilotService.PILOT_TEACHER_ID.equals(user.getId())));
+    }
+
+    private AuthenticatedUser requirePersonalWorkbookActor(AuthContext auth) {
+        if (!personalWorkbookActorAllowed(auth) || personalWorkbookAccess == null
+                || personalLessonWorkbookService == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Personal worksheets require the owner teacher or administrator OAuth account");
+        }
+        AuthenticatedUser actor = personalWorkbookAccess.requireActor(auth.user());
+        if (actor.role() != Role.ADMIN && (actor.role() != Role.TEACHER
+                || !AiLessonPilotService.PILOT_TEACHER_ID.equals(actor.id()))) {
+            throw new org.springframework.security.access.AccessDeniedException("Personal worksheets are restricted to the owner lesson pilot");
+        }
+        return actor;
+    }
+
+    private Object personalLessonWorkbooks(String name, Map<String, Object> arguments, AuthContext auth) throws Exception {
+        AuthenticatedUser actor = requirePersonalWorkbookActor(auth);
+        UUID teacherId = uuid(required(arguments, "teacherId"), "teacherId");
+        if (!AiLessonPilotService.PILOT_TEACHER_ID.equals(teacherId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Personal worksheets are enabled only for the pilot teacher's lessons");
+        }
+        AuthenticatedUser teacher = personalWorkbookAccess.requireTeacher(actor, teacherId);
+        String eventId = required(arguments, "eventId");
+        if ("list_personal_lesson_workbooks".equals(name)) {
+            if (!java.util.Set.of("teacherId", "eventId").containsAll(arguments.keySet())) {
+                throw new IllegalArgumentException("Unsupported personal worksheet arguments");
+            }
+            return personalLessonWorkbookService.list(teacher, eventId);
+        }
+        if (!java.util.Set.of("teacherId", "eventId", "studentId", "filename", "pdfBase64", "driveFileId", "idempotencyKey").containsAll(arguments.keySet())) {
+            throw new IllegalArgumentException("Unsupported personal worksheet arguments");
+        }
+        if (personalWorkbookReceipts == null) throw new IllegalStateException("Personal worksheet uploads are unavailable");
+        UUID studentId = uuid(required(arguments, "studentId"), "studentId");
+        String key = required(arguments, "idempotencyKey");
+        String filename = normalizedPdfFilename(required(arguments, "filename"), "personal-workbook.pdf");
+        String direct = string(arguments.get("pdfBase64"));
+        String driveId = string(arguments.get("driveFileId"));
+        if (direct.isBlank() == driveId.isBlank()) {
+            throw new IllegalArgumentException("Provide exactly one PDF source: pdfBase64 or driveFileId");
+        }
+        // Check this exact lesson's current roster before fetching or decoding a file.
+        requirePersonalWorkbookStudent(teacher, eventId, studentId);
+        byte[] pdf = !direct.isBlank() ? decodePdfBase64(direct, "pdfBase64")
+                : teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveId, filename);
+        if (!looksLikePdf(pdf) || pdf.length > MAX_DIRECT_PDF_BYTES) {
+            throw new IllegalArgumentException("Personal worksheet must be a PDF of at most 15 MB");
+        }
+        Map<String, Object> normalized = Map.of("teacherId", teacherId.toString(), "eventId", eventId,
+                "studentId", studentId.toString(), "filename", filename,
+                "pdfBase64", Base64.getEncoder().encodeToString(pdf));
+        return personalWorkbookReceipts.execute(actor, teacherId, "upload_personal_lesson_workbook", key, normalized,
+                () -> {
+                    requirePersonalWorkbookActor(auth);
+                    AuthenticatedUser currentTeacher = personalWorkbookAccess.requireTeacher(actor, teacherId);
+                    requirePersonalWorkbookStudent(currentTeacher, eventId, studentId);
+                },
+                () -> personalWorkbookAccess.asTeacher(actor, teacher,
+                        () -> personalLessonWorkbookService.upload(teacher, eventId, studentId, filename, pdf)));
+    }
+
+    private void requirePersonalWorkbookStudent(AuthenticatedUser teacher, String eventId, UUID studentId) {
+        if (personalLessonWorkbookService.list(teacher, eventId).students().stream()
+                .noneMatch(student -> student.studentId().equals(studentId))) {
+            throw new com.mcschool.flashcard.common.ResourceNotFoundException("Lesson student not found");
+        }
     }
 
     private LessonPreparationResponse prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {

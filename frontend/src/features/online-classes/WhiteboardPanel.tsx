@@ -26,7 +26,7 @@ import {
   type BoardPages,
   type PageView,
 } from './boardView';
-import { isPersonalBoard, personalBoardOwner } from './boards';
+import { isPersonalBoard, personalBoardOwner, isPersonalWorkbookBoard } from './boards';
 import { VIEW_TOPIC, viewEvent, type DocumentViewport, type StudentViewSnapshot } from './events';
 import { documentPageSize, zoomDocumentScroll, type DocumentScroll } from './documentBoardView';
 import type { DocumentGesture } from './documentGesture';
@@ -749,7 +749,7 @@ export function WhiteboardPanel({
         pdfDocument,
       });
       const day = new Date().toISOString().slice(0, 10);
-      downloadBlob(blob, `${personal ? 'my-board' : 'class-board'}-${day}.pdf`);
+      downloadBlob(blob, `${isPersonalWorkbookBoard(targetId) ? 'personal-worksheet' : personal ? 'my-board' : 'class-board'}-${day}.pdf`);
     } catch {
       setExportFailed(true);
     } finally {

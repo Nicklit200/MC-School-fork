@@ -11,6 +11,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
 import { LessonClassArtifacts } from '../../features/online-classes/LessonClassArtifacts';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
+import { PersonalWorkbooksPanel } from './PersonalWorkbooksPanel';
 
 type HomeworkSummary = {
   assigned: number;
@@ -437,6 +438,8 @@ export function LessonDetailPage() {
         </section>
       )}
 
+      <PersonalWorkbooksPanel eventId={eventId} />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14, marginBottom: 18 }}>
         <MaterialPanel
           title="Рабочая тетрадь"
@@ -513,7 +516,7 @@ export function LessonDetailPage() {
         {completedDocuments.length === 0 ? <p className="muted">Документы ещё не сохранены. В онлайн-уроке нажми «Сохранить документы урока».</p> :
           <div className="stack" style={{gap:8}}>{completedDocuments.map(item => (
             <div key={item.id} style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
-              <strong>{item.boardId === 'board-1' || item.boardId === 'manual-shared' ? 'Общая доска' : item.boardId === 'imported-workbook' ? 'Материал урока' : 'Личная доска ученика'} · {item.filename}</strong>
+              <strong>{item.boardId === 'board-1' || item.boardId === 'manual-shared' ? 'Общая доска' : item.boardId === 'imported-workbook' ? 'Материал урока' : item.boardId.startsWith('personal-workbook-') ? 'Персональный лист' : 'Личная доска ученика'} · {item.filename}</strong>
               <button type="button" className="btn btn--secondary" onClick={() => void completedLessonApi.open(eventId!, item.id)}>Открыть PDF</button>
             </div>
           ))}</div>}

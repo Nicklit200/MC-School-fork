@@ -3,6 +3,7 @@ package com.mcschool.flashcard.liveclasses;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.lessons.PersonalLessonWorkbookService;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationDocumentResponse;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationResponse;
@@ -40,19 +41,22 @@ public class OnlineClassAnnotationService {
     private final AnnotationPayloadValidator validator;
     private final ClassArtifactStorage storage;
     private final java.time.Clock clock;
+    private final PersonalLessonWorkbookService personalWorkbooks;
 
     public OnlineClassAnnotationService(OnlineClassAnnotationDocumentRepository documentRepository,
                                         OnlineClassAnnotationEventRepository eventRepository,
                                         OnlineClassAccessService accessService,
                                         AnnotationPayloadValidator validator,
                                         ClassArtifactStorage storage,
-                                        java.time.Clock clock) {
+                                        java.time.Clock clock,
+                                        PersonalLessonWorkbookService personalWorkbooks) {
         this.documentRepository = documentRepository;
         this.eventRepository = eventRepository;
         this.accessService = accessService;
         this.validator = validator;
         this.storage = storage;
         this.clock = clock;
+        this.personalWorkbooks = personalWorkbooks;
     }
 
     /** Creates or returns the document for one surface and page. */
@@ -170,8 +174,9 @@ public class OnlineClassAnnotationService {
     @Transactional
     public AnnotationDocumentResponse saveSnapshot(AuthenticatedUser caller, UUID classId,
                                                    UUID documentId, String pngBase64) {
-        accessService.requireHost(caller, classId);
+        OnlineClass onlineClass = accessService.requireHost(caller, classId);
         OnlineClassAnnotationDocument document = requireDocument(classId, documentId);
+        requireBoardAccess(caller, onlineClass, document.getTargetId());
 
         if (!storage.isConfigured()) {
             throw new ConflictException("Artifact storage is not configured");
@@ -189,8 +194,10 @@ public class OnlineClassAnnotationService {
             throw new ConflictException("Snapshot size is out of range");
         }
 
-        String objectKey = storage.buildObjectKey(classId.toString(),
-                "whiteboard-" + document.getPageIndex() + ".png");
+        String snapshotFilename = PersonalBoard.isWorkbook(document.getTargetId())
+                ? "whiteboard-" + document.getId() + "-" + document.getPageIndex() + ".png"
+                : "whiteboard-" + document.getPageIndex() + ".png";
+        String objectKey = storage.buildObjectKey(classId.toString(), snapshotFilename);
         storage.put(objectKey, bytes, "image/png");
         document.recordSnapshot(objectKey, clock.instant());
         log.info("Whiteboard snapshot saved: classId={} page={}", classId, document.getPageIndex());
@@ -203,6 +210,22 @@ public class OnlineClassAnnotationService {
      * not-found as for a missing document.
      */
     private boolean canAccessBoard(AuthenticatedUser caller, OnlineClass onlineClass, String targetId) {
+        if (PersonalBoard.isWorkbook(targetId)) {
+            var owner = PersonalBoard.ownerOf(targetId);
+            if (owner.isEmpty() || !personalWorkbooks.enabledForTeacher(onlineClass.getTeacher().getId())) {
+                return false;
+            }
+            if (!owner.get().equals(caller.id()) && !accessService.isHost(caller, onlineClass)) {
+                return false;
+            }
+            try {
+                // Hosts also lose access when the pupil is removed or reassigned.
+                personalWorkbooks.requireClassStudent(onlineClass, owner.get());
+                return true;
+            } catch (ResourceNotFoundException removed) {
+                return false;
+            }
+        }
         if (!PersonalBoard.isPersonal(targetId)) {
             return true;
         }
