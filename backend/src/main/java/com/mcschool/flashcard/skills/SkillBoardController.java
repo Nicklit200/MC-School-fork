@@ -14,6 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class SkillBoardController {
     private final SkillBoardService service;
     public SkillBoardController(SkillBoardService service) { this.service=service; }
+    @GetMapping("/catalog")
+    public java.util.List<SkillBoardService.BoardSummary> catalog() { return service.list(); }
     @GetMapping("/{id}")
     public SkillBoardService.Snapshot get(@PathVariable String id) { return service.get(id); }
     @PostMapping("/{id}")
