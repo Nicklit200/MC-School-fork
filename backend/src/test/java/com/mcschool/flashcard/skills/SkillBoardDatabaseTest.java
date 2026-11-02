@@ -18,6 +18,20 @@ class SkillBoardDatabaseTest {
         jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V65__add_skill_boards.sql")));
         service=new SkillBoardService(jdbc,JsonMapper.builder().build());
     }
+    @Test void createsNewBoardWithRevisionHistoryAndRejectsDuplicate() {
+        var existing=service.get("grade-6").data();
+        var data=new Board(1,"Gymnasium 9",9,"LehrplanPLUS Bayern",existing.nodes(),existing.edges());
+        UUID admin=UUID.randomUUID();
+        var created=service.create("grade-9",data,admin);
+        assertEquals(1,created.revision());
+        assertEquals(9,service.get("grade-9").data().grade());
+        assertEquals(1,jdbc.queryForObject(
+            "SELECT count(*) FROM skill_board_revisions WHERE board_id='grade-9'", Integer.class));
+        var error=assertThrows(ResponseStatusException.class,()->service.create("grade-9",data,admin));
+        assertEquals(409,error.getStatusCode().value());
+        assertEquals(1,service.get("grade-9").revision());
+        assertEquals(1,service.get("grade-6").revision());
+    }
     @Test void persistsReloadsAuditsAndRejectsStaleRevision() {
         var first=service.get("grade-6");var b=first.data();
         var changed=new Board(1,"Edited curriculum",6,b.source(),b.nodes(),b.edges());
