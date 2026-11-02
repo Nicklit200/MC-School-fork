@@ -15,7 +15,6 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -27,9 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Persistent, revocable read-only links for a single pupil's skill map.
- * The database stores only a monotonically increasing version; bearer tokens
- * are deterministic HMACs and can therefore be copied again without storing
- * the credential itself.
+ * The bearer token contains only an opaque random share ID plus a version,
+ * protected by an HMAC. Student and board IDs stay server-side.
  */
 @Service
 public class SkillProgressShareService {
