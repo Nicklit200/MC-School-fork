@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 export function PublicSkillProgressPage() {
   const frame = useRef<HTMLIFrameElement>(null);
-  const token = new URLSearchParams(window.location.search).get('token') ?? '';
+  const token = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token') ?? '';
 
   useEffect(() => {
     document.title = 'Mindcrafti · Lernkarte';
