@@ -893,3 +893,13 @@ h1{
   .toolbar .separator{display:none}
   .zoom-value{display:none}
 }
+
+/* Parent read-only progress sharing */
+.public-overall{display:inline-flex;align-items:center;height:30px;padding:0 10px;border-radius:999px;background:#edf9ef;border:1px solid #bae1c2;color:#28763b;font-size:11px;font-weight:900;white-space:nowrap}
+body.public-progress .draft-badge{background:#edf4ff;color:#2e62aa}
+body.public-progress #save,body.public-progress #add,body.public-progress #add-topic,body.public-progress #connect,body.public-progress #undo,body.public-progress #export,body.public-progress #parent-share,body.public-progress #parent-share-revoke{display:none!important}
+body.public-progress .student-filter select{pointer-events:none;background:#f8fafc}
+body.public-progress .mastery-box input,body.public-progress .mastery-box button.primary{display:none}
+body.public-progress .mastery-box .mastery-editor-row{grid-template-columns:minmax(0,1fr) auto}
+body.public-progress .mastery-box .mastery-editor-value{display:inline-block}
+@media(max-width:850px){#parent-share-revoke{display:none!important}.public-overall{font-size:10px;padding:0 8px}}
