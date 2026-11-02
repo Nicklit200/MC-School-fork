@@ -30,6 +30,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -154,6 +155,7 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     }
 
     @Test
+    @WithMockUser(roles = "TEACHER")
     void detachedGroupClassCanValidateMembershipAndSaveCompletedWorksheetWithoutOpenSession() throws Exception {
         var group = groups.saveAndFlush(StudentGroup.create(teacher, "Group"));
         groupMembers.saveAndFlush(StudentGroupMember.create(group, student));
