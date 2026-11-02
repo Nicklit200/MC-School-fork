@@ -3,6 +3,7 @@ import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { LearningTimeAdminPage } from './pages/admin/LearningTimeAdminPage';
 import { LearningTimeStudentPage } from './pages/admin/LearningTimeStudentPage';
 import { SkillsPage } from './pages/SkillsPage';
+import { PublicSkillProgressPage } from './pages/PublicSkillProgressPage';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -65,11 +66,12 @@ const NotebookCameraPage = lazy(() => import('./features/notebook-camera/Noteboo
 export function App() {
   const { user, initializing } = useAuth();
   const location = useLocation();
-  if (initializing && !location.pathname.startsWith('/phone-camera')) return null;
+  if (initializing && !location.pathname.startsWith('/phone-camera') && !location.pathname.startsWith('/skill-progress')) return null;
 
   return (
     <Routes>
       <Route path="/skills" element={<ProtectedRoute><Layout><SkillsPage /></Layout></ProtectedRoute>} />
+      <Route path="/skill-progress" element={<PublicSkillProgressPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivatePage />} />
       <Route path="/phone-camera/:cameraId?" element={<Suspense fallback={<p>Открываем камеру…</p>}><PhoneCameraPage /></Suspense>} />
