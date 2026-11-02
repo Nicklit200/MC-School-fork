@@ -127,7 +127,10 @@ class SkillBoardParentShareTest {
         String reissued = shares.enable("grade-6", studentId, admin).token();
         assertNotEquals(first, reissued, "Reissuing after revoke must invalidate the old bearer URL");
         assertEquals("Test Pupil", shares.read(reissued).student().fullName());
-        assertThrows(ResponseStatusException.class,
-                () -> shares.read(reissued.substring(0, reissued.length() - 1) + "A"));
+        int dot = reissued.indexOf('.');
+        char original = reissued.charAt(dot + 1);
+        char replacement = original == 'A' ? 'B' : 'A';
+        String tampered = reissued.substring(0, dot + 1) + replacement + reissued.substring(dot + 2);
+        assertThrows(ResponseStatusException.class, () -> shares.read(tampered));
     }
 }
