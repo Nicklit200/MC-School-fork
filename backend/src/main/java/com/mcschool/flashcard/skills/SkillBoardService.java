@@ -51,6 +51,27 @@ public class SkillBoardService {
         if (found.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Карта не найдена");
         return found.get(0);
     }
+    /** Creates a new curriculum without overwriting existing boards or pupil progress. */
+    @Transactional
+    public Snapshot create(String id, Board data, UUID callerId) {
+        requireId(id);
+        validate(data);
+        String serialized = mapper.writeValueAsString(data);
+        if (serialized.length() > 2_000_000) throw bad("Карта слишком большая");
+        int inserted = jdbc.update("""
+            INSERT INTO skill_boards (id, revision, data, updated_at, updated_by)
+            VALUES (?, 1, CAST(? AS jsonb), now(), ?)
+            ON CONFLICT (id) DO NOTHING
+            """, id, serialized, callerId);
+        if (inserted != 1)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Карта с таким ID уже существует");
+        jdbc.update("""
+            INSERT INTO skill_board_revisions (board_id, revision, data, updated_at, updated_by)
+            SELECT id, revision, data, updated_at, updated_by FROM skill_boards WHERE id = ?
+            """, id);
+        return get(id);
+    }
+
     @Transactional
     public Snapshot save(String id, SaveRequest request, UUID callerId) {
         requireId(id);
