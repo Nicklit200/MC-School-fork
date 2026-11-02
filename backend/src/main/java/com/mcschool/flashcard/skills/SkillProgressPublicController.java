@@ -2,7 +2,6 @@ package com.mcschool.flashcard.skills;
 
 import java.util.Map;
 import org.springframework.http.CacheControl;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +24,7 @@ public class SkillProgressPublicController {
     public ResponseEntity<SkillProgressShareService.PublicProgress> read(@RequestParam String token) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .header(HttpHeaders.REFERRER_POLICY, "no-referrer")
+                .header("Referrer-Policy", "no-referrer")
                 .header("X-Robots-Tag", "noindex, noarchive, nosnippet")
                 .header("X-Content-Type-Options", "nosniff")
                 .body(shares.read(token));
@@ -35,7 +34,7 @@ public class SkillProgressPublicController {
     public ResponseEntity<Map<String, Object>> error(ResponseStatusException e) {
         return ResponseEntity.status(e.getStatusCode())
                 .cacheControl(CacheControl.noStore())
-                .header(HttpHeaders.REFERRER_POLICY, "no-referrer")
+                .header("Referrer-Policy", "no-referrer")
                 .body(Map.of(
                         "status", e.getStatusCode().value(),
                         "message", e.getReason() == null ? "Ссылка на прогресс недействительна" : e.getReason()));
