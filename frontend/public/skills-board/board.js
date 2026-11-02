@@ -2,7 +2,7 @@ import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null;
-const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"]]);let boardId="";
+const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"],[9,"grade-9"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
 try{
@@ -375,13 +375,15 @@ window.addEventListener("message",async event=>{
   config=incoming;
   try{
     const [availableBoards, loadedStudents, loadedGroups]=await Promise.all([
-      request("GET","/skill-boards/catalog"),
+      request("GET","/skill-boards/catalog").catch(()=>null),
       request("GET","/skill-boards/students"),
       request("GET","/skill-boards/groups")
     ]);
     students=loadedStudents;groups=loadedGroups;
-    boardIdByGrade.clear();
-    for(const board of availableBoards){if(Number.isInteger(board.grade)&&!boardIdByGrade.has(board.grade))boardIdByGrade.set(board.grade,board.id);}
+    if(Array.isArray(availableBoards)&&availableBoards.length){
+      boardIdByGrade.clear();
+      for(const board of availableBoards){if(Number.isInteger(board.grade)&&!boardIdByGrade.has(board.grade))boardIdByGrade.set(board.grade,board.id);}
+    }
     try{
       const remembered=localStorage.getItem("mindcrafti.skills.target")||"";
       if(remembered.startsWith("g:")&&groups.some(group=>group.id===remembered.slice(2)))selectedGroupId=remembered.slice(2);
