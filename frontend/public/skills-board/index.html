@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Mindcrafti · Навыки</title>
-  <link rel="stylesheet" href="./board.css?v=11">
+  <link rel="stylesheet" href="./board.css?v=12">
   <link rel="stylesheet" href="./teacher-theme.css?v=20261023-1">
   <script src="./teacher-theme.js?v=20261023-1"></script>
 </head>
@@ -47,6 +47,9 @@
     </label>
 
     <div class="top-actions">
+      <span id="public-overall" class="public-overall" hidden></span>
+      <button id="parent-share" type="button" hidden>Ссылка родителю</button>
+      <button id="parent-share-revoke" type="button" class="danger" hidden>Отозвать</button>
       <span id="save-state" role="status">Подключение…</span>
       <button id="save" class="primary" disabled>Сохранить</button>
     </div>
@@ -132,6 +135,6 @@
     <div id="inspector-body"></div>
   </aside>
 </div>
-<script type="module" src="./board.js?v=20261102-2"></script>
+<script type="module" src="./board.js?v=20261102-3"></script>
 </body>
 </html>
