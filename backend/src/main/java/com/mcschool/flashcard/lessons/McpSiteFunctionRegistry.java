@@ -121,7 +121,7 @@ final class McpSiteFunctionRegistry {
         // Full-document writes are deliberately not exposed through the general MCP adapter.
         add(functions, "stories_studio", StoryStudioProjectController.class, Scope.ADMIN, "info chunk download");
         add(functions, "skill_boards", SkillBoardController.class, Scope.CALLER, "get");
-        add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save");
+        add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save create");
         add(functions, "skill_mastery", SkillMasteryController.class, Scope.CALLER,
                 "students groups boardStudents mastery history update");
         add(functions, "account", UserController.class, Scope.CALLER, "updateSettings");
@@ -157,7 +157,7 @@ final class McpSiteFunctionRegistry {
             case "lesson_preparation" -> "get_lesson_preparation / prepare_lesson / attach_lesson_answers / attach_lesson_transcript";
             case "monthly_plans" -> "get_month_plan / update_month_plan";
             case "homework" -> "assign_homework_series / update_homework / delete_homework / find_student_homeworks / get_recent_homework_submissions";
-            case "skill_boards" -> "get_skill_board / edit_skill_board";
+            case "skill_boards" -> "list_skill_boards / get_skill_board / edit_skill_board / create_skill_board";
             case "skill_mastery" -> "get_skill_mastery / update_skill_mastery";
             case "brand_guide" -> "get_brand_guide / update_brand_guide";
             case "stories_template" -> "get_story_template_info / get_story_template_chunk / update_story_template_master";
