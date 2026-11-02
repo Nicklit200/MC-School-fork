@@ -1,7 +1,7 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
-let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null;
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
 const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"],[9,"grade-9"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
@@ -33,16 +33,21 @@ function flushForm(){
   return !form||form.dataset.changed!=="true"||applyForm(form);
 }
 function status(){
-  $("save-state").textContent=saving?"Сохраняем…":dirty?"Есть изменения":snapshot?`Сохранено · версия ${snapshot.revision}`:"Подключение…";
+  $("save-state").textContent=config?.publicMode
+    ? (snapshot?.updatedAt?`Обновлено ${formatHistoryDate(snapshot.updatedAt)}`:"Актуальная карта")
+    : saving?"Сохраняем…":dirty?"Есть изменения":snapshot?`Сохранено · версия ${snapshot.revision}`:"Подключение…";
   $("save").disabled=!canEdit()||(!dirty&&!pendingForm());
   $("inspector-body").inert=saving;
   for(const id of ["add","add-topic","connect"])$(id).disabled=!data||!canEdit();
   $("undo").disabled=!canEdit()||history.length===0;
   $("export").disabled=!data;$("connect").classList.toggle("active",connectMode);
   canvas.classList.toggle("connecting",connectMode);
+  const overall=$("public-overall");
+  if(overall){overall.hidden=!config?.publicMode;overall.textContent=config?.publicMode&&publicOverallPercent!=null?`Общий прогресс · ${publicOverallPercent}%`:"";}
 }
 async function request(method,path,body){
-  const response=await fetch(config.apiBase.replace(/\/$/,"")+path,{method,headers:{Authorization:`Bearer ${config.token}`,...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,cache:"no-store"});
+  const headers={...(config?.token?{Authorization:`Bearer ${config.token}`}:{}),...(body?{"Content-Type":"application/json"}:{})};
+  const response=await fetch(config.apiBase.replace(/\/$/,"")+path,{method,headers,body:body?JSON.stringify(body):undefined,cache:"no-store"});
   const text=await response.text();let result;
   try{result=text?JSON.parse(text):null;}catch{throw Error("Сервер вернул неожиданный ответ. Попробуйте позже");}
   if(!response.ok){const error=Error(response.status===401?"Вход истёк. Вернитесь в Mindcrafti и войдите заново.":result?.message||`Ошибка сервера ${response.status}`);error.status=response.status;throw error;}
@@ -368,6 +373,74 @@ async function saveSkillMastery(studentId,skillId,value){
   }catch(error){notice(error.message,true);}
   finally{masteryLoading=false;renderStudentFilter();render();showNode(skillId);}
 }
+async function copyParentShare(){
+  if(!selectedStudentId||selectedGroupId||!boardId||config?.publicMode)return;
+  const shareButton=$("parent-share");if(shareButton)shareButton.disabled=true;
+  try{
+    const result=await request("POST",`${boardPath()}/students/${selectedStudentId}/parent-share`);
+    if(!result?.token)throw Error("Сервер не вернул ссылку.");
+    const url=`${location.origin}/?skillProgress=${encodeURIComponent(result.token)}`;
+    await navigator.clipboard.writeText(url);
+    notice("Ссылка для родителя скопирована. Она доступна только для чтения.");
+  }catch(error){notice(error.message||"Не удалось создать ссылку.",true);}
+  finally{if(shareButton)shareButton.disabled=false;}
+}
+async function revokeParentShare(){
+  if(!selectedStudentId||selectedGroupId||!boardId||config?.publicMode)return;
+  if(!confirm("Отозвать родительскую ссылку? Ранее отправленная ссылка перестанет открываться."))return;
+  try{
+    await request("DELETE",`${boardPath()}/students/${selectedStudentId}/parent-share`);
+    notice("Родительская ссылка отозвана.");
+  }catch(error){notice(error.message||"Не удалось отозвать ссылку.",true);}
+}
+function updateParentShareControls(){
+  const show=Boolean(config)&&!config.publicMode&&Boolean(selectedStudentId)&&!selectedGroupId&&Boolean(boardId);
+  const share=$("parent-share"),revoke=$("parent-share-revoke");
+  if(share)share.hidden=!show;
+  if(revoke)revoke.hidden=!show;
+}
+async function loadPublicProgress(incoming){
+  if(config)return;
+  if(typeof incoming.apiBase!=="string"||typeof incoming.shareToken!=="string"||!incoming.shareToken){notice("Ссылка на прогресс недействительна.",true);return;}
+  config={apiBase:incoming.apiBase,token:null,canEdit:false,userId:"public",publicMode:true};
+  document.body.classList.add("public-progress");
+  $("parent-share").hidden=true;$("parent-share-revoke").hidden=true;$("save").hidden=true;
+  try{
+    const response=await fetch(config.apiBase.replace(/\/$/,"")+`/public/skill-progress?token=${encodeURIComponent(incoming.shareToken)}`,{cache:"no-store",headers:{Accept:"application/json"}});
+    const text=await response.text();let result;
+    try{result=text?JSON.parse(text):null;}catch{throw Error("Не удалось прочитать данные прогресса.");}
+    if(!response.ok)throw Error(result?.message||"Ссылка на прогресс недействительна.");
+    boardId=result.boardId;snapshot={id:result.boardId,revision:result.boardRevision,updatedAt:result.updatedAt||result.boardUpdatedAt,data:result.board};
+    validateBoard(snapshot.data);data=clone(snapshot.data);
+    const publicStudent={id:"public",fullName:result.student?.fullName||"Ученик",grade:result.student?.grade??snapshot.data.grade,schoolType:result.student?.schoolType||null};
+    students=[publicStudent];groups=[];selectedStudentId="public";selectedGroupId="";trackFilterState=null;
+    masteryByStudent={public:result.mastery&&typeof result.mastery==="object"?result.mastery:{}};
+    masteryHistoryByStudent={public:Array.isArray(result.history)?result.history.map((entry,index)=>({...entry,id:index+1,studentId:"public",studentName:publicStudent.fullName,updatedBy:"public"})):[]};
+    publicOverallPercent=Number(result.overallPercent)||0;
+    $("board-grade").textContent=`${publicStudent.grade||snapshot.data.grade} класс`;
+    const badge=document.querySelector(".draft-badge");if(badge)badge.textContent="Родительский просмотр";
+    const sourceNote=$("source-note");
+    sourceNote.replaceChildren(
+      element("strong","",publicStudent.fullName),
+      document.createElement("br"),
+      document.createTextNode(`Общий прогресс: ${publicOverallPercent}% · оценено навыков: ${Number(result.assessedSkills)||0} из ${Number(result.totalSkills)||0}.`),
+      document.createElement("br"),document.createElement("br"),
+      document.createTextNode("Нажмите на навык, чтобы увидеть его описание и текущий процент. В разделе «История» показано, как менялся прогресс.")
+    );
+    renderStudentFilter();$("student-filter").disabled=true;
+    $("empty").hidden=true;render();showHelp();fit();status();
+  }catch(error){
+    notice(error.message||"Ссылка на прогресс недействительна.",true);
+    $("empty").hidden=false;
+    $("empty").replaceChildren(element("strong","","Прогресс недоступен"),element("p","",error.message||"Попросите у Mindcrafti новую ссылку."));
+  }
+}
+$("parent-share")?.addEventListener("click",()=>void copyParentShare());
+$("parent-share-revoke")?.addEventListener("click",()=>void revokeParentShare());
+window.addEventListener("message",event=>{
+  if(event.origin!==location.origin||event.source!==window.parent||window.parent===window||event.data?.type!=="mindcrafti-skills-public-config"||config)return;
+  void loadPublicProgress(event.data);
+});
 window.addEventListener("message",async event=>{
   if(event.origin!==location.origin||event.source!==window.parent||window.parent===window||event.data?.type!=="mindcrafti-skills-config"||config)return;
   const incoming=event.data;
@@ -560,7 +633,7 @@ function render(){
   const items=visibleNodes();hierarchyPositions=viewMode==="hierarchy"?buildHierarchyLayout(items):new Map();
   canvas.classList.toggle("hierarchy-view",viewMode==="hierarchy");
   $("view-free").classList.toggle("active",viewMode==="free");$("view-hierarchy").classList.toggle("active",viewMode==="hierarchy");
-  status();renderCatalog();renderNodes();renderEdges();renderHistoryPanel();transform();
+  status();updateParentShareControls();renderCatalog();renderNodes();renderEdges();renderHistoryPanel();transform();
   $("count").textContent=data.nodes.filter(n=>n.kind==="skill"&&!n.archived).length;
   $("archive-count").textContent=data.nodes.filter(n=>n.archived).length;
   const activeHistory=selectedHistoryGroup(),label=boardTitle(),base=scope==="overview"?`${label} / Обзор программы`:`${label} / ${node(scope)?.title||"Раздел"}`;
@@ -747,13 +820,15 @@ function showNode(id){
     for(const student of chosen){
       const row=element("div","mastery-editor-row"),name=element("span","mastery-editor-name",student.fullName);
       row.append(name);
-      if(n.kind==="skill"){
+      if(n.kind==="skill"&&!config?.publicMode){
         const input=element("input");input.type="number";input.min="0";input.max="100";input.step="1";input.value=String(masteryPercent(n,student.id));input.setAttribute("aria-label",`Процент освоения: ${student.fullName}`);
         row.append(input,button("Сохранить",()=>void saveSkillMastery(student.id,n.id,input.value),"primary"));
       }else row.append(element("span",`mastery-editor-value ${masteryClass(masteryPercent(n,student.id))}`,`${masteryPercent(n,student.id)}%`));
       masteryBox.append(row);
     }
-    masteryBox.append(element("div","mastery-note",n.kind==="skill"?"Процент хранится отдельно для каждого ученика.":"Для раздела показано среднее по дочерним навыкам."));
+    masteryBox.append(element("div","mastery-note",config?.publicMode
+      ? (n.kind==="skill"?"Текущий уровень освоения по данным Mindcrafti.":"Для раздела показано среднее по дочерним навыкам.")
+      : (n.kind==="skill"?"Процент хранится отдельно для каждого ученика.":"Для раздела показано среднее по дочерним навыкам.")));
   }
   const form=element("form");form.id="node-form";form.dataset.id=id;form.dataset.changed="false";
   field(form,"НАЗВАНИЕ","title",n.title,"input",200);field(form,"НЕМЕЦКИЙ ТЕРМИН","de",n.de,"input",300);
