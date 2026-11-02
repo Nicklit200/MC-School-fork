@@ -23,10 +23,10 @@ import './teacher-theme.css';
 // move to the React route before BrowserRouter is mounted.
 function restorePublicSkillProgressRoute() {
   if (window.location.pathname !== '/') return;
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get('skillProgress');
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const token = new URLSearchParams(hash).get('skillProgress');
   if (!token) return;
-  window.history.replaceState({}, '', `/skill-progress?token=${encodeURIComponent(token)}`);
+  window.history.replaceState({}, '', `/skill-progress#token=${encodeURIComponent(token)}`);
 }
 
 function restoreLessonReturnRoute() {
