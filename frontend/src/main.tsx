@@ -21,6 +21,14 @@ import './teacher-theme.css';
 // not consistently fall back to index.html for direct client-side routes such
 // as /teacher/lessons. The Meet extension therefore returns through `/` and we
 // move to the React route before BrowserRouter is mounted.
+function restorePublicSkillProgressRoute() {
+  if (window.location.pathname !== '/') return;
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('skillProgress');
+  if (!token) return;
+  window.history.replaceState({}, '', `/skill-progress?token=${encodeURIComponent(token)}`);
+}
+
 function restoreLessonReturnRoute() {
   if (window.location.pathname !== '/') return;
   const params = new URLSearchParams(window.location.search);
@@ -34,6 +42,7 @@ function restoreLessonReturnRoute() {
 
 const cameraEntryRoute = phoneCameraEntryRoute(window.location.pathname, window.location.search, window.location.hash);
 if (cameraEntryRoute) window.history.replaceState({}, '', cameraEntryRoute);
+restorePublicSkillProgressRoute();
 restoreLessonReturnRoute();
 installLessonStartFlow();
 
