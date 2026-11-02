@@ -38,6 +38,18 @@ class SkillBoardMcpServiceTest {
     Map<String,Object> edit(long revision, String json, User caller) { return service.call("edit_skill_board", Map.of("expectedRevision", revision, "operationsJson", json), caller); }
     Map<?,?> structured(Map<String,Object> r) { return (Map<?,?>)r.get("structuredContent"); }
     void noSave() { verify(boards, never()).save(anyString(), any(), any()); }
+    @Test void createsNewBoardOnlyForAdmin() throws Exception {
+        var newBoard = initial.data();
+        when(boards.create(eq("grade-9"), any(Board.class), eq(adminId)))
+            .thenAnswer(inv -> new Snapshot("grade-9", 1, Instant.now(), inv.getArgument(1)));
+        String json = mapper.writeValueAsString(newBoard);
+        var args = Map.<String,Object>of("boardId", "grade-9", "dataJson", json);
+        assertEquals(true, structured(service.call("create_skill_board",args,admin)).get("saved"));
+        verify(boards).create(eq("grade-9"), any(Board.class),eq(adminId));
+        clearInvocations(boards);
+        assertEquals(true, service.call("create_skill_board",args,user(Role.TEACHER)).get("isError"));
+        verifyNoInteractions(boards);
+    }
     @Test void readReturnsLiveRevisionAndPermissions() {
         var r=service.call("get_skill_board", Map.of(), user(Role.TEACHER));
         assertEquals(false,r.get("isError")); assertEquals(initial,structured(r).get("board")); assertEquals(false,structured(r).get("canEdit")); noSave();
