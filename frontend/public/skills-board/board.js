@@ -374,10 +374,14 @@ window.addEventListener("message",async event=>{
   if(typeof incoming.apiBase!=="string"||!incoming.token){notice("Для открытия карты нужно войти в Mindcrafti.",true);return;}
   config=incoming;
   try{
-    [students,groups]=await Promise.all([
+    const [availableBoards, loadedStudents, loadedGroups]=await Promise.all([
+      request("GET","/skill-boards/catalog"),
       request("GET","/skill-boards/students"),
       request("GET","/skill-boards/groups")
     ]);
+    students=loadedStudents;groups=loadedGroups;
+    boardIdByGrade.clear();
+    for(const board of availableBoards){if(Number.isInteger(board.grade)&&!boardIdByGrade.has(board.grade))boardIdByGrade.set(board.grade,board.id);}
     try{
       const remembered=localStorage.getItem("mindcrafti.skills.target")||"";
       if(remembered.startsWith("g:")&&groups.some(group=>group.id===remembered.slice(2)))selectedGroupId=remembered.slice(2);
@@ -415,7 +419,7 @@ window.addEventListener("message",async event=>{
     }
     if(!boardId){
       $("board-grade").textContent=`${grades[0]} класс`;
-      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode("Сейчас доступны карты 5, 6 и 8 класса."));
+      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode(`Доступны карты: ${[...boardIdByGrade.keys()].sort((a,b)=>a-b).join(", ")} классов.`));
       $("empty").hidden=false;
       $("empty").replaceChildren(element("strong","",`Для ${grades[0]} класса карта пока не создана`));
       status();return;
