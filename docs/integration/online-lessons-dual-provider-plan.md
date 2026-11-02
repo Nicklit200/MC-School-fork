@@ -8,6 +8,13 @@
 - Teacher and pupil menus use the authenticated server response to determine classroom availability.
 - The legacy standalone board remains at `/lesson-board/:eventId`; its optional lesson-card link is controlled by `VITE_MINDCRAFTI_ONLINE_ENABLED`. This flag controls visibility, never authorization.
 
+## Student entry
+
+- A scheduled date describes the appointment. A pupil can enter an open lesson on another day when the owning teacher is actually connected.
+- `teacherPresent` comes from the owning teacher's identity in the media provider. Another pupil, a transcription agent, or issuing a teacher token alone does not open student entry.
+- Calendar discovery may cache presence for up to three seconds. Waiting-room admission and connection-token issuance check it afresh. Membership, admission, removal, rejection and explicit End/Cancel checks still apply.
+- Before the teacher joins, pupils see a waiting message. Native online lessons do not show a disabled Google Meet placeholder when they have no Meet URL.
+
 ## Lesson and camera isolation
 
 - JWT identity is verified against the active, non-archived database account. Parent and administrator roles do not acquire classroom/board access by role alone.

@@ -59,7 +59,7 @@ jobs:
       - name: Require Docker for real PostgreSQL verification
         run: docker info > /dev/null
       - name: Verify native lessons, atomic series, PDF compatibility and bounded student joining
-        run: ./mvnw -B -ntp '-Dtest=ManualLesson*,LessonSeriesServiceTest,CoveredMaterialServiceTest,DateOnlyLessonScheduleTest,NativeLessonPdfCompatibilityTest,OnlineClassServiceIntegrationTest,NotebookCameraPersistenceIntegrationTest' test
+        run: ./mvnw -B -ntp '-Dtest=ManualLesson*,LessonSeriesServiceTest,CoveredMaterialServiceTest,DateOnlyLessonScheduleTest,NativeLessonPdfCompatibilityTest,OnlineClassServiceIntegrationTest,TeacherPresentLessonEntryIntegrationTest,LessonEntryPolicyTest,TeacherPresenceServiceTest,NotebookCameraPersistenceIntegrationTest' test
       - name: Require executed PostgreSQL tests without skips
         run: |
           python3 - <<'PY'
@@ -69,6 +69,7 @@ jobs:
           suites = {
               'com.mcschool.flashcard.lessons.ManualLessonPersistenceIntegrationTest': 3,
               'com.mcschool.flashcard.liveclasses.OnlineClassServiceIntegrationTest': 1,
+              'com.mcschool.flashcard.liveclasses.TeacherPresentLessonEntryIntegrationTest': 1,
               'com.mcschool.flashcard.notebookcamera.NotebookCameraPersistenceIntegrationTest': 1,
           }
           for name, minimum in suites.items():
@@ -97,4 +98,4 @@ jobs:
       - name: Compile complete application and tests
         run: npm run build
       - name: Verify lesson planning, preserved document archives and student join refresh
-        run: npm test -- src/pages/teacher/GroupLessonsPage.test.tsx src/pages/teacher/LessonDetailPage.test.tsx src/pages/student/StudentLessonsCalendarPage.test.tsx src/lib/lessonRecurrence.test.ts src/lib/lessonSchedule.test.ts
+        run: npm test -- src/pages/teacher/GroupLessonsPage.test.tsx src/pages/teacher/LessonDetailPage.test.tsx src/pages/student/StudentLessonsCalendarPage.test.tsx src/features/online-classes/lessonEntry.test.ts src/features/online-classes/LessonEntryAction.test.tsx src/lib/lessonRecurrence.test.ts src/lib/lessonSchedule.test.ts

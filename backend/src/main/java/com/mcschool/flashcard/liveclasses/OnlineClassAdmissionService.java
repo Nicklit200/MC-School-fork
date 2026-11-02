@@ -30,15 +30,18 @@ public class OnlineClassAdmissionService {
     private final OnlineClassParticipantRepository participantRepository;
     private final OnlineClassAccessService accessService;
     private final Clock clock;
+    private final TeacherPresenceService teacherPresence;
 
     public OnlineClassAdmissionService(OnlineClassJoinRequestRepository joinRequestRepository,
                                        OnlineClassParticipantRepository participantRepository,
                                        OnlineClassAccessService accessService,
-                                       Clock clock) {
+                                       Clock clock,
+                                       TeacherPresenceService teacherPresence) {
         this.joinRequestRepository = joinRequestRepository;
         this.participantRepository = participantRepository;
         this.accessService = accessService;
         this.clock = clock;
+        this.teacherPresence = teacherPresence;
     }
 
     /**
@@ -161,8 +164,8 @@ public class OnlineClassAdmissionService {
     }
 
     private void requireEntry(OnlineClass room, OnlineClassParticipant participant) {
-        if (!LessonEntryPolicy.canEnter(room, participant, now())) {
-            throw new ConflictException("This class is not open for joining: lesson day or reconnect window is closed");
+        if (!LessonEntryPolicy.canEnter(room, participant, now(), false, teacherPresence.current(room))) {
+            throw new ConflictException("Waiting for the teacher to enter the classroom");
         }
     }
 

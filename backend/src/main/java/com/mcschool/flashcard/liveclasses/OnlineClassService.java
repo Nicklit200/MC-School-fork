@@ -52,6 +52,7 @@ public class OnlineClassService {
     private final OnlineClassMetrics metrics;
     private final Clock clock;
     private final NotebookCameraService notebookCameras;
+    private final TeacherPresenceService teacherPresence;
 
     public OnlineClassService(OnlineClassRepository classRepository,
                               OnlineClassParticipantRepository participantRepository,
@@ -64,7 +65,8 @@ public class OnlineClassService {
                               OnlineClassProperties properties,
                               OnlineClassMetrics metrics,
                               Clock clock,
-                              NotebookCameraService notebookCameras) {
+                              NotebookCameraService notebookCameras,
+                              TeacherPresenceService teacherPresence) {
         this.classRepository = classRepository;
         this.participantRepository = participantRepository;
         this.accessService = accessService;
@@ -77,6 +79,7 @@ public class OnlineClassService {
         this.metrics = metrics;
         this.clock = clock;
         this.notebookCameras = notebookCameras;
+        this.teacherPresence = teacherPresence;
     }
 
     // --- Materialization -----------------------------------------------------
@@ -488,21 +491,16 @@ public class OnlineClassService {
         if (participant.getAdmissionState() == AdmissionState.REJECTED) {
             throw new ConflictException("The teacher declined your request to join");
         }
-        // A returning attendee keeps access after midnight; admission alone
-        // never grants a first connection on a different calendar day.
-        if (!LessonEntryPolicy.canEnter(onlineClass, participant, now(), host)) {
-            throw new ConflictException("This class is not open for joining: lesson day or reconnect window is closed");
-        }
-
         if (!participant.isAdmitted()) {
             throw new ConflictException("Waiting for the teacher to admit you");
         }
 
+        boolean teacherPresent = false;
         try {
             List<String> present = mediaProvider.listParticipantIdentities(onlineClass.getRoomName());
-            if (!host && !hasHumanParticipants(present)) {
-                // A student token could otherwise auto-create an empty room
-                // before its teacher has entered, or after everyone has left.
+            teacherPresent = TeacherPresenceService.hasTeacher(onlineClass, present);
+            if (!LessonEntryPolicy.canEnter(onlineClass, participant, now(), host, teacherPresent)) {
+                // Another pupil or an agent cannot stand in for this room's owner.
                 throw new ConflictException("Waiting for the teacher to enter the classroom");
             }
             if (host && present.isEmpty()) {
@@ -527,7 +525,7 @@ public class OnlineClassService {
 
         String identity = ParticipantIdentity.of(caller.id(), deviceId);
         java.time.Duration ttl = LessonEntryPolicy.tokenTtl(
-                onlineClass, participant, now(), properties.tokenTtl(), host);
+                onlineClass, participant, now(), properties.tokenTtl(), host, teacherPresent);
         if (ttl.isNegative() || ttl.isZero()) throw new ConflictException("This class is not open for joining");
         ParticipantConnection connection = mediaProvider.createConnection(
                 onlineClass.getRoomName(), identity, user.getFullName(), grant, ttl);
@@ -703,12 +701,19 @@ public class OnlineClassService {
                 .findByOnlineClassIdAndUserId(onlineClass.getId(), caller.id()).orElse(null);
         Instant at = now();
         boolean host = accessService.isHost(caller, onlineClass);
+        // Host listings can contain years of resumable rooms. Do not probe media
+        // for every historical room; only student discovery needs this proof.
+        boolean connectedHostHint = !host && onlineClass.isConnectable()
+                && onlineClass.getEmptySince() != null && participantRepository
+                    .findByOnlineClassIdAndUserId(onlineClass.getId(), onlineClass.getTeacher().getId())
+                    .map(OnlineClassParticipant::isConnected).orElse(false);
+        boolean teacherPresent = !host && teacherPresence.discovery(onlineClass, connectedHostHint);
         return OnlineClassResponse.from(onlineClass,
                 host,
-                LessonEntryPolicy.canEnter(onlineClass, participant, at, host),
+                LessonEntryPolicy.canEnter(onlineClass, participant, at, host, teacherPresent),
                 recordingProvider.isConfigured(), transcriptionProvider.isConfigured(),
-                LessonEntryPolicy.state(onlineClass, participant, at, host),
-                LessonEntryPolicy.returning(onlineClass, participant), at);
+                LessonEntryPolicy.state(onlineClass, participant, at, host, teacherPresent),
+                LessonEntryPolicy.hasJoined(onlineClass, participant), at, teacherPresent);
     }
 
     private Instant now() {

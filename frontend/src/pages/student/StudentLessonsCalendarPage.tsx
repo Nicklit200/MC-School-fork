@@ -90,9 +90,12 @@ export function StudentLessonsCalendarPage() {
   }, [onlineRefresh]);
 
   function roomFor(lesson: StudentLesson): OnlineClass | undefined {
-    return onlineClasses.filter(item => item.eventId === lesson.eventId
-      && berlinDateKey(item.scheduledStartAt) === berlinDateKey(lesson.startsAt))
-      .sort((a, b) => Date.parse(b.scheduledStartAt) - Date.parse(a.scheduledStartAt))[0];
+    const occurrences = onlineClasses.filter(item => item.eventId === lesson.eventId);
+    const sameDay = occurrences.filter(item => berlinDateKey(item.scheduledStartAt) === berlinDateKey(lesson.startsAt))
+      .sort((a, b) => Date.parse(b.scheduledStartAt) - Date.parse(a.scheduledStartAt));
+    // A moved event can retain its existing room. Multiple occurrences must
+    // still match the selected date, so recurring lessons cannot cross-link.
+    return sameDay[0] ?? (occurrences.length === 1 ? occurrences[0] : undefined);
   }
 
   const scheduleDays = useMemo<ScheduleDay[]>(() => {
@@ -199,7 +202,9 @@ export function StudentLessonsCalendarPage() {
           {ended ? (language === 'DE' ? 'Meet-Link öffnen' : 'Открыть ссылку урока')
             : started ? (language === 'DE' ? 'Jetzt beitreten' : 'Подключиться сейчас')
               : (language === 'DE' ? 'Zum Unterricht' : 'Подключиться к уроку')}
-        </a> : <button className="btn" type="button" disabled>{language === 'DE' ? 'Meet-Link noch nicht bereit' : 'Ссылка на урок ещё не готова'}</button>}
+        </a> : !onlineClassesAvailable && !room
+          ? <button className="btn" type="button" disabled>{language === 'DE' ? 'Meet-Link noch nicht bereit' : 'Ссылка на урок ещё не готова'}</button>
+          : null}
       </div>
     </article>;
   }
@@ -234,7 +239,7 @@ export function StudentLessonsCalendarPage() {
         </div>
       </section>}
       {onlineClassesAvailable && !onlineError && liveOnlineClasses.length === 0 && <p className="muted" role="status">
-        {language === 'DE' ? 'Mindcrafti Online: Sobald deine Lehrkraft den Unterricht öffnet, erscheint hier die Schaltfläche zum Beitreten automatisch.' : 'Mindcrafti Online: когда преподаватель откроет урок, кнопка подключения появится здесь автоматически.'}
+        {language === 'DE' ? 'Mindcrafti Online: Sobald deine Lehrkraft den Unterricht betritt, erscheint hier automatisch die Schaltfläche zum Beitreten.' : 'Mindcrafti Online: когда преподаватель войдёт в урок, кнопка подключения появится здесь автоматически.'}
       </p>}
 
     {viewMode === 'week' ? <>

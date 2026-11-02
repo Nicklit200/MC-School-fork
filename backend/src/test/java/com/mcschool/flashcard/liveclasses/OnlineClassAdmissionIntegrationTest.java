@@ -83,7 +83,8 @@ class OnlineClassAdmissionIntegrationTest extends AbstractIntegrationTest {
 
         when(mediaProvider.isConfigured()).thenReturn(true);
         when(mediaProvider.listParticipantIdentities(anyString()))
-                .thenReturn(List.of(ParticipantIdentity.of(student.getId(), "tab-1")));
+                .thenReturn(List.of(ParticipantIdentity.of(teacher.getId(), "teacher-tab"),
+                        ParticipantIdentity.of(student.getId(), "tab-1")));
     }
 
     // --- Waiting room --------------------------------------------------------
@@ -206,6 +207,7 @@ class OnlineClassAdmissionIntegrationTest extends AbstractIntegrationTest {
     @Test
     void removingDisconnectsEveryTabOfThatUser() {
         when(mediaProvider.listParticipantIdentities(anyString())).thenReturn(List.of(
+                ParticipantIdentity.of(teacher.getId(), "teacher-tab"),
                 ParticipantIdentity.of(student.getId(), "tab-1"),
                 ParticipantIdentity.of(student.getId(), "tab-2")));
         admissionService.knock(studentPrincipal, onlineClass.getId());

@@ -64,6 +64,13 @@ public final class LessonEntryPolicy {
                 || (!now.isBefore(dayEnd(room.getScheduledStartAt())) && returning(room, participant));
     }
 
+    /** The current classroom flow admits pupils whenever their actual teacher is present. */
+    public static boolean canEnter(OnlineClass room, OnlineClassParticipant participant,
+                                   Instant now, boolean verifiedHost, boolean teacherPresent) {
+        if (!room.isConnectable() || room.isTerminal() || blocked(participant)) return false;
+        return verifiedHost || teacherPresent;
+    }
+
     public static String state(OnlineClass room, OnlineClassParticipant participant, Instant now) {
         return state(room, participant, now, isOwningHost(room, participant));
     }
@@ -87,6 +94,23 @@ public final class LessonEntryPolicy {
         return "CLOSED";
     }
 
+    public static String state(OnlineClass room, OnlineClassParticipant participant,
+                               Instant now, boolean verifiedHost, boolean teacherPresent) {
+        if (room.isTerminal()) return "ENDED";
+        if (blocked(participant)) return "CLOSED";
+        if (!room.isConnectable()) return "WAITING_FOR_TEACHER";
+        if (verifiedHost) return isLessonDay(room.getScheduledStartAt(), now) ? "OPEN" : "RECONNECT";
+        if (!teacherPresent) return "WAITING_FOR_TEACHER";
+        return hasJoined(room, participant) ? "RECONNECT" : "OPEN";
+    }
+
+    /** Actual authorized attendance also counts when the owner opened on a different day. */
+    public static boolean hasJoined(OnlineClass room, OnlineClassParticipant participant) {
+        return participant != null && participant.isAdmitted() && participant.getFirstJoinedAt() != null
+                && participant.getOnlineClass() != null
+                && room.getId().equals(participant.getOnlineClass().getId());
+    }
+
     public static Duration tokenTtl(OnlineClass room, OnlineClassParticipant participant,
                                     Instant now, Duration configured) {
         return tokenTtl(room, participant, now, configured, isOwningHost(room, participant));
@@ -102,6 +126,20 @@ public final class LessonEntryPolicy {
             if (remaining.compareTo(ttl) < 0) ttl = remaining;
         }
         return ttl;
+    }
+
+    public static Duration tokenTtl(OnlineClass room, OnlineClassParticipant participant,
+                                    Instant now, Duration configured, boolean verifiedHost, boolean teacherPresent) {
+        if (!canEnter(room, participant, now, verifiedHost, teacherPresent)
+                || configured == null || configured.isNegative() || configured.isZero()) return Duration.ZERO;
+        // Presence is checked afresh before issuing this short configured token;
+        // an unrelated scheduled date must not make its lifetime negative.
+        return configured;
+    }
+
+    private static boolean blocked(OnlineClassParticipant participant) {
+        return participant != null && (participant.getAdmissionState() == AdmissionState.REMOVED
+                || participant.getAdmissionState() == AdmissionState.REJECTED);
     }
 
     private static boolean isOwningHost(OnlineClass room, OnlineClassParticipant participant) {

@@ -115,7 +115,7 @@ describe('student online lesson discovery', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); window.dispatchEvent(new Event('focus')); });
     expect(list).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByText(/когда преподаватель откроет/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/когда преподаватель войдёт/)).not.toBeInTheDocument();
   });
 
   it('does not advertise expired rooms or rooms the teacher has not opened', async () => {
@@ -151,7 +151,7 @@ describe('student online lesson discovery', () => {
     expect(card.getByRole('button', { name: 'Общий документ' })).toBeEnabled();
     expect(card.getByRole('link', { name: 'Подключиться к уроку' })).toHaveAttribute('href', scheduledLessons[0].meetUrl);
     expect(card.queryByRole('link', { name: /Mindcrafti Online/ })).not.toBeInTheDocument();
-    expect(card.getByText(/Вход доступен только/)).toBeInTheDocument();
+    expect(card.getByText(/Кнопка появится, когда преподаватель войдёт/)).toBeInTheDocument();
     expect(card.getByRole('link', { name: 'Камера тетради' })).toHaveAttribute('href', '/lesson-notebook/available');
     // The older package used a client flag. The server remains authoritative.
     expect(list).toHaveBeenCalledTimes(1);
@@ -163,7 +163,7 @@ describe('student online lesson discovery', () => {
     fireEvent.click(within(screen.getByRole('group', { name: 'Выбери день недели' })).getByRole('button', { name: /27 октября/ }));
     const unavailable = screen.getByRole('button', { name: 'Документ ещё не готов' });
     expect(unavailable).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Ссылка на урок ещё не готова' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Ссылка на урок ещё не готова' })).not.toBeInTheDocument();
     fireEvent.click(unavailable);
     expect(api.studentLessons.sharedDocument).not.toHaveBeenCalled();
 
@@ -208,5 +208,61 @@ describe('student online lesson discovery', () => {
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
     expect(list).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('link', { name: /Mindcrafti Online.*подключиться/ })).toBeInTheDocument();
+  });
+
+  it('opens Mark’s November 3 lesson on November 2 as soon as the teacher enters', async () => {
+    vi.setSystemTime(new Date('2026-11-02T20:00:00Z'));
+    const tomorrow = { ...scheduledLessons[1], eventId: 'mark-nov3', title: 'Марк · математика',
+      startsAt: '2026-11-03T15:00:00Z', endsAt: '2026-11-03T16:00:00Z' };
+    const live = room({ id: 'mark-room', eventId: tomorrow.eventId, title: tomorrow.title,
+      scheduledStartAt: tomorrow.startsAt, scheduledEndAt: tomorrow.endsAt,
+      teacherPresent: true, mediaState: 'ACTIVE', entryState: 'OPEN', viewerHasJoined: false });
+    vi.mocked(api.studentLessons.list).mockResolvedValue([tomorrow]);
+    list.mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...live, teacherPresent: false, mediaState: 'IDLE', joinWindowOpen: false, entryState: 'WAITING_FOR_TEACHER' }]).mockResolvedValue([live]);
+    mount(); await settle();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Выбери день недели' })).getByRole('button', { name: /3 ноября/ }));
+    const card = within(screen.getByRole('heading', { name: tomorrow.title }).closest('article')!);
+    expect(card.getByRole('status')).toHaveTextContent('Ожидаем учителя');
+    expect(card.queryByText(/День входа|только в день|Ссылка на урок ещё не готова/)).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(card.getByRole('status')).toHaveTextContent('Комната в ожидании входа учителя');
+    expect(card.queryByRole('link', { name: /Mindcrafti Online/ })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(card.getByRole('link', { name: /Mindcrafti Online/ })).toHaveAttribute('href', '/online-classes/mark-room');
+    expect(card.getByText('По расписанию: 03.11.2026 (Берлин)')).toBeInTheDocument();
+  });
+
+  it('does not invent teacher presence after a discovery error', async () => {
+    const current = room({ scheduledStartAt: '2026-10-24T16:00:00Z', scheduledEndAt: '2026-10-24T17:00:00Z',
+      teacherPresent: true, mediaState: 'ACTIVE', entryState: 'OPEN' });
+    list.mockResolvedValueOnce([current]).mockRejectedValueOnce(new Error('presence lookup failed'));
+    mount(); await settle();
+    expect(screen.getByRole('link', { name: /Mindcrafti Online/ })).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Не удалось проверить открытые онлайн-уроки');
+    expect(screen.queryByRole('link', { name: /Mindcrafti Online/ })).not.toBeInTheDocument();
+  });
+
+  it('matches the single existing room after the appointment date moves', async () => {
+    const moved = { ...scheduledLessons[1], eventId: 'moved', startsAt: '2026-10-24T16:00:00Z', endsAt: '2026-10-24T17:00:00Z' };
+    vi.mocked(api.studentLessons.list).mockResolvedValue([moved]);
+    list.mockResolvedValue([room({ id: 'moved-room', eventId: moved.eventId,
+      scheduledStartAt: '2026-10-25T16:00:00Z', scheduledEndAt: '2026-10-25T17:00:00Z', teacherPresent: true, entryState: 'OPEN' })]);
+    mount(); await settle();
+    const card = within(screen.getByRole('heading', { name: moved.title }).closest('article')!);
+    expect(card.getByRole('link', { name: /Mindcrafti Online/ })).toHaveAttribute('href', '/online-classes/moved-room');
+  });
+
+  it('does not guess between multiple occurrences when none matches the selected date', async () => {
+    const selected = { ...scheduledLessons[1], eventId: 'repeated', startsAt: '2026-10-24T16:00:00Z', endsAt: '2026-10-24T17:00:00Z' };
+    vi.mocked(api.studentLessons.list).mockResolvedValue([selected]);
+    list.mockResolvedValue([
+      room({ id: 'one', eventId: selected.eventId, scheduledStartAt: '2026-10-25T16:00:00Z', teacherPresent: true }),
+      room({ id: 'two', eventId: selected.eventId, scheduledStartAt: '2026-10-26T16:00:00Z', teacherPresent: true }),
+    ]);
+    mount(); await settle();
+    const card = within(screen.getByRole('heading', { name: selected.title }).closest('article')!);
+    expect(card.queryByRole('link', { name: /Mindcrafti Online/ })).not.toBeInTheDocument();
+    expect(card.getByRole('status')).toHaveTextContent('Ожидаем учителя');
   });
 });

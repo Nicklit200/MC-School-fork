@@ -52,11 +52,16 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
     @Query("""
             SELECT c FROM OnlineClass c
             WHERE (c.scheduledStartAt >= :from OR (
-                    c.status IN :openStatuses AND EXISTS (
+                    c.status IN :openStatuses AND (c.emptySince IS NULL OR EXISTS (
                         SELECT p.id FROM OnlineClassParticipant p
-                        WHERE p.onlineClass.id = c.id AND p.user.id = :studentId
-                          AND p.firstJoinedAt IS NOT NULL
-                    )
+                        WHERE p.onlineClass.id = c.id AND (
+                            (p.user.id = :studentId AND p.firstJoinedAt IS NOT NULL)
+                            OR (p.user.id = c.teacher.id
+                                AND p.classRole = com.mcschool.flashcard.liveclasses.ClassRole.HOST
+                                AND p.lastJoinedAt IS NOT NULL
+                                AND (p.lastLeftAt IS NULL OR p.lastLeftAt < p.lastJoinedAt))
+                        )
+                    ))
                   ))
               AND c.status IN :statuses
               AND NOT EXISTS (

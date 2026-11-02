@@ -137,4 +137,59 @@ class LessonEntryPolicyTest {
         assertThat(LessonEntryPolicy.canEnter(cancelled,
                 OnlineClassParticipant.host(cancelled, cancelled.getTeacher()), DAY)).isFalse();
     }
+
+    @Test void aLiveRoomWithoutItsTeacherDoesNotAllowAnyStudentEntry() {
+        OnlineClass room = room(DAY);
+        OnlineClassParticipant participant = returning(room);
+        for (Instant at : new Instant[] {DAY, DAY.minusSeconds(86400), DAY.plusSeconds(30 * 86400)}) {
+            assertThat(LessonEntryPolicy.canEnter(room, null, at, false, false)).isFalse();
+            assertThat(LessonEntryPolicy.canEnter(room, participant, at, false, false)).isFalse();
+            assertThat(LessonEntryPolicy.state(room, participant, at, false, false))
+                    .isEqualTo("WAITING_FOR_TEACHER");
+        }
+        assertThat(room.getStatus()).isEqualTo(OnlineClassStatus.LIVE);
+    }
+
+    @Test void anActuallyPresentTeacherAllowsFirstStudentEntryOnAnyDate() {
+        OnlineClass room = room(DAY);
+        Duration configured = Duration.ofMinutes(10);
+        for (Instant at : new Instant[] {DAY.minusSeconds(86400), DAY, DAY.plusSeconds(30 * 86400)}) {
+            assertThat(LessonEntryPolicy.canEnter(room, null, at, false, true)).isTrue();
+            assertThat(LessonEntryPolicy.state(room, null, at, false, true)).isEqualTo("OPEN");
+            assertThat(LessonEntryPolicy.state(room, returning(room), at, false, true)).isEqualTo("RECONNECT");
+            assertThat(LessonEntryPolicy.tokenTtl(room, null, at, configured, false, true))
+                    .isEqualTo(configured).isPositive();
+        }
+    }
+
+    @Test void teacherPresenceCannotReviveATerminalRoomOrRemovedStudent() {
+        OnlineClass room = room(DAY);
+        OnlineClassParticipant removed = returning(room); removed.remove();
+        OnlineClassParticipant rejected = returning(room); rejected.reject();
+        for (OnlineClassParticipant blocked : new OnlineClassParticipant[] {removed, rejected}) {
+            for (boolean teacherPresent : new boolean[] {false, true}) {
+                assertThat(LessonEntryPolicy.canEnter(room, blocked, DAY, false, teacherPresent)).isFalse();
+                assertThat(LessonEntryPolicy.state(room, blocked, DAY, false, teacherPresent)).isEqualTo("CLOSED");
+            }
+        }
+        room.end(DAY.plusSeconds(3600));
+        assertThat(LessonEntryPolicy.canEnter(room, null, DAY, false, true)).isFalse();
+        assertThat(LessonEntryPolicy.state(room, null, DAY, false, true)).isEqualTo("ENDED");
+        OnlineClass cancelled = OnlineClass.forStudent(room.getTeacher(), "cancelled-presence", "cancelled-presence", "Maths",
+                DAY, DAY.plusSeconds(3600), mock(User.class));
+        cancelled.cancel();
+        assertThat(LessonEntryPolicy.canEnter(cancelled, null, DAY, false, true)).isFalse();
+        assertThat(LessonEntryPolicy.state(cancelled, null, DAY, false, true)).isEqualTo("ENDED");
+    }
+
+    @Test void teacherPresenceCannotOpenAnUnstartedRoomButHostDoesNotNeedSelfPresence() {
+        OnlineClass live = room(DAY);
+        OnlineClass scheduled = OnlineClass.forStudent(live.getTeacher(), "future", "future", "Maths",
+                DAY, DAY.plusSeconds(3600), mock(User.class));
+        assertThat(LessonEntryPolicy.canEnter(scheduled, null, DAY, false, true)).isFalse();
+        assertThat(LessonEntryPolicy.state(scheduled, null, DAY, false, true)).isEqualTo("WAITING_FOR_TEACHER");
+        assertThat(LessonEntryPolicy.canEnter(live, null, DAY.plusSeconds(30 * 86400), true, false)).isTrue();
+        assertThat(LessonEntryPolicy.tokenTtl(live, null, DAY.plusSeconds(30 * 86400),
+                Duration.ofMinutes(10), true, false)).isEqualTo(Duration.ofMinutes(10));
+    }
 }

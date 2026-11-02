@@ -487,18 +487,19 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void aStudentCannotMintATokenForAHistoricalLesson() {
+    void aStudentCannotMintATokenForAHistoricalLessonWithoutItsTeacher() {
         OnlineClass longOver = classRepository.save(OnlineClass.forStudent(teacher, "event-old",
                 "binding-1", "Maths", NOW.minus(1, ChronoUnit.DAYS), NOW.minus(23, ChronoUnit.HOURS), student));
         longOver.setWaitingRoomEnabled(false);
         longOver.start(NOW.minus(1, ChronoUnit.DAYS));
         classRepository.save(longOver);
+        when(mediaProvider.listParticipantIdentities(anyString())).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.connect(studentPrincipal, longOver.getId(), "tab-1"))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("not open for joining");
+                .hasMessageContaining("Waiting for the teacher");
         assertThat(service.get(studentPrincipal, longOver.getId()).joinWindowOpen()).isFalse();
-        assertThat(service.listUpcoming(studentPrincipal)).isEmpty();
+        assertThat(service.listUpcoming(studentPrincipal)).noneMatch(OnlineClassResponse::joinWindowOpen);
     }
 
     @Test
@@ -584,16 +585,17 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void aLegacyOpeningExtensionCannotGrantFirstEntryOnAnotherDay() {
+    void aLegacyOpeningExtensionCannotGrantFirstEntryWithoutTheTeacher() {
         OnlineClass expired = classRepository.save(OnlineClass.forStudent(teacher, "expired-open", "expired-open", "Maths",
                 NOW.minus(1, ChronoUnit.DAYS), NOW.minus(23, ChronoUnit.HOURS), student));
         expired.start(NOW.minus(1, ChronoUnit.DAYS));
         expired.allowStudentJoiningUntil(NOW.plus(1, ChronoUnit.DAYS));
         expired.setWaitingRoomEnabled(false); classRepository.save(expired);
-        assertThat(service.listUpcoming(studentPrincipal)).isEmpty();
+        when(mediaProvider.listParticipantIdentities(anyString())).thenReturn(List.of());
+        assertThat(service.listUpcoming(studentPrincipal)).noneMatch(OnlineClassResponse::joinWindowOpen);
         assertThat(service.get(studentPrincipal, expired.getId()).joinWindowOpen()).isFalse();
         assertThatThrownBy(() -> service.connect(studentPrincipal, expired.getId(), "tab"))
-                .isInstanceOf(ConflictException.class).hasMessageContaining("not open for joining");
+                .isInstanceOf(ConflictException.class).hasMessageContaining("Waiting for the teacher");
     }
 
     @Test
@@ -657,7 +659,7 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(service.connect(teacherPrincipal, original.id(), "prepare-tomorrow").host()).isTrue();
         assertThat(service.get(studentPrincipal, original.id()).joinWindowOpen()).isFalse();
         assertThatThrownBy(() -> service.connect(studentPrincipal, original.id(), "too-early-student"))
-                .isInstanceOf(ConflictException.class).hasMessageContaining("not open for joining");
+                .isInstanceOf(ConflictException.class).hasMessageContaining("teacher");
         verify(mediaProvider, never()).ensureRoom(anyString());
         verify(transcriptionProvider, never()).startTranscription(anyString(), anyString(), any(), any());
         service.end(teacherPrincipal, original.id());
@@ -783,15 +785,13 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void priorAuthorizedEntryMayReconnectAfterMidnightButAdmissionAloneMayNot() {
+    void admittedStudentsCanEnterAndReconnectAfterMidnightWhileTheirTeacherIsPresent() {
         Instant yesterday = NOW.minus(1, ChronoUnit.DAYS);
         OnlineClass room = classRepository.save(OnlineClass.forStudent(teacher, "overnight", "overnight", "Maths", yesterday, yesterday.plusSeconds(3600), student));
         room.start(yesterday); classRepository.save(room);
         OnlineClassParticipant participant = OnlineClassParticipant.student(room, student);
         participant.admit(); participantRepository.save(participant);
-        assertThatThrownBy(() -> service.connect(studentPrincipal, room.getId(), "first"))
-                .isInstanceOf(ConflictException.class).hasMessageContaining("not open for joining");
-        participant.markJoined(yesterday); participantRepository.save(participant);
+        assertThat(service.connect(studentPrincipal, room.getId(), "first").token()).isNotBlank();
         assertThat(service.get(studentPrincipal, room.getId()).entryState()).isEqualTo("RECONNECT");
         assertThat(service.listUpcoming(studentPrincipal)).extracting(OnlineClassResponse::id).contains(room.getId());
         assertThat(service.connect(studentPrincipal, room.getId(), "reconnect").token()).isNotBlank();
@@ -992,7 +992,8 @@ class OnlineClassServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(hostView.status()).isEqualTo(OnlineClassStatus.LIVE);
         assertThat(hostView.joinWindowOpen()).isTrue();
         assertThat(hostView.actualEndAt()).isNull();
-        assertThat(service.get(studentPrincipal, room.getId()).joinWindowOpen()).isFalse();
+        assertThat(service.get(studentPrincipal, room.getId()).joinWindowOpen()).isTrue();
+        assertThat(service.get(studentPrincipal, room.getId()).teacherPresent()).isTrue();
         verify(mediaProvider, never()).closeRoom(anyString());
     }
 

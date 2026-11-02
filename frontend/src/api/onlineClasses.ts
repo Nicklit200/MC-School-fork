@@ -38,6 +38,8 @@ export interface OnlineClass {
   entryOpensAt?: string;
   entryClosesAt?: string;
   viewerHasJoined?: boolean;
+  /** Actual owning-teacher presence verified by the server; omitted by older servers. */
+  teacherPresent?: boolean;
   serverNow?: string;
 }
 

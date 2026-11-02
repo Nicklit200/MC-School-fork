@@ -90,4 +90,36 @@ describe('lesson entry calendar policy', () => {
     expect(lessonEntry(current, scheduledStartAt, at(closes) - 1).canJoin).toBe(true);
     expect(lessonEntry(current, scheduledStartAt, at(closes)).canJoin).toBe(false);
   });
+
+  it.each(['2026-10-23T12:00:00Z', '2026-11-02T12:00:00Z'])('honours a verified teacher-presence grant independently of the scheduled day (%s)', now => {
+    const live = room({ teacherPresent: true, mediaState: 'ACTIVE', viewerHasJoined: false, entryState: 'OPEN' });
+    expect(lessonEntry(live, start, at(now))).toMatchObject({ state: 'OPEN', canJoin: true });
+    expect(lessonEntry({ ...live, status: 'LOBBY_OPEN', viewerHasJoined: true }, start, at(now)))
+      .toMatchObject({ state: 'RECONNECT', canJoin: true });
+  });
+
+  it.each(['ACTIVE', 'IDLE'] as const)('waits for the actual teacher instead of blaming the future scheduled day (media=%s)', mediaState => {
+    expect(lessonEntry(room({ teacherPresent: false, mediaState, entryState: 'WAITING_FOR_TEACHER', joinWindowOpen: false }),
+      start, at('2026-10-23T12:00:00Z')))
+      .toMatchObject({ state: mediaState === 'IDLE' ? 'IDLE' : 'WAITING_FOR_TEACHER', canJoin: false });
+  });
+
+  it.each([undefined, null])('waits for the teacher when there is no room for a future lesson (%s)', absent => {
+    expect(lessonEntry(absent, start, at('2026-10-23T12:00:00Z')))
+      .toMatchObject({ state: 'WAITING_FOR_TEACHER', canJoin: false });
+  });
+
+  it.each([
+    { joinWindowOpen: false }, { entryState: 'CLOSED' }, { entryState: 'DAY_CLOSED' },
+    { status: 'SCHEDULED' }, { status: 'ENDED' }, { status: 'CANCELLED' }, { entryState: 'ENDED' },
+  ] as Partial<OnlineClass>[])('never uses teacher presence to bypass a server denial or non-connectable room (%j)', denied => {
+    expect(lessonEntry(room({ teacherPresent: true, mediaState: 'ACTIVE', viewerHasJoined: true, ...denied }),
+      start, at('2026-10-23T12:00:00Z')).canJoin).toBe(false);
+  });
+
+  it('uses an actionable waiting message instead of claiming entry is restricted to one calendar day', () => {
+    expect(entryText('DAY_CLOSED', 'RU')).toBe('Сейчас вход в урок закрыт. Кнопка появится, когда преподаватель войдёт в урок.');
+    expect(entryText('DAY_CLOSED', 'DE')).toContain('sobald die Lehrkraft');
+    expect(entryText('DAY_CLOSED', 'DE')).not.toContain('nur am Unterrichtstag');
+  });
 });

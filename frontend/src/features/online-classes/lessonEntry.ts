@@ -37,15 +37,33 @@ export function lessonEntry(room: OnlineClass | undefined | null, scheduledStart
     } else {
       state = room.viewerHasJoined || room.entryState === 'RECONNECT' ? 'RECONNECT' : 'OPEN';
     }
+  } else if (!room) {
+    state = 'WAITING_FOR_TEACHER';
+  } else if (room.teacherPresent !== undefined) {
+    // The current server grants entry from verified teacher presence. The
+    // schedule describes the appointment; it must not veto that live grant.
+    if (room.entryState === 'CLOSED' || room.entryState === 'DAY_CLOSED') {
+      state = room.entryState;
+    } else if (room.status !== 'LIVE' && room.status !== 'LOBBY_OPEN') {
+      state = 'WAITING_FOR_TEACHER';
+    } else if (!room.teacherPresent) {
+      state = room.mediaState === 'IDLE' ? 'IDLE' : 'WAITING_FOR_TEACHER';
+    } else if (!room.joinWindowOpen) {
+      state = 'CLOSED';
+    } else {
+      state = room.viewerHasJoined || room.entryState === 'RECONNECT' ? 'RECONNECT' : 'OPEN';
+    }
   } else {
+    // Older servers did not report verified teacher presence. Retain their
+    // existing calendar restrictions rather than inventing a new permission.
     const today = berlinLessonDate(now);
     const openRoom = room?.status === 'LIVE' || room?.status === 'LOBBY_OPEN';
     const returning = Boolean(room?.viewerHasJoined || room?.entryState === 'RECONNECT');
     if ((openRoom && weekEnd !== '' && today >= weekEnd)
         || !date || today < date || (today > date && !(openRoom && returning && room?.joinWindowOpen))) {
       state = 'DAY_CLOSED';
-    } else if (room?.entryState === 'CLOSED') {
-      state = 'CLOSED';
+    } else if (room.entryState === 'CLOSED' || room.entryState === 'DAY_CLOSED') {
+      state = room.entryState;
     } else if (!room || !openRoom) {
       state = 'WAITING_FOR_TEACHER';
     } else if (!room.joinWindowOpen) {
@@ -62,11 +80,11 @@ export function lessonEntry(room: OnlineClass | undefined | null, scheduledStart
 
 export function entryText(state: LessonEntryState, language: string): string {
   const labels: Record<LessonEntryState, [string, string]> = {
-    WAITING_FOR_TEACHER: ['Ожидаем учителя: учитель ещё не открыл урок.', 'Wir warten auf die Lehrkraft. Der Unterricht ist noch nicht geöffnet.'],
+    WAITING_FOR_TEACHER: ['Ожидаем учителя: кнопка появится, когда преподаватель войдёт в урок.', 'Wir warten auf die Lehrkraft. Die Schaltfläche erscheint, sobald sie den Unterricht betritt.'],
     IDLE: ['Комната в ожидании входа учителя', 'Der Raum wartet auf den Beitritt der Lehrkraft'],
     OPEN: ['Урок открыт', 'Unterricht geöffnet'],
     RECONNECT: ['Урок продолжается: можно вернуться', 'Der Unterricht läuft weiter: Wiederbeitritt möglich'],
-    DAY_CLOSED: ['Вход доступен только в день урока по Берлину.', 'Beitritt nur am Unterrichtstag (Berliner Zeit).'],
+    DAY_CLOSED: ['Сейчас вход в урок закрыт. Кнопка появится, когда преподаватель войдёт в урок.', 'Der Beitritt ist derzeit geschlossen. Die Schaltfläche erscheint, sobald die Lehrkraft den Unterricht betritt.'],
     CLOSED: ['Вход в комнату закрыт.', 'Der Raum ist für den Beitritt geschlossen.'],
     ENDED: ['Урок завершён', 'Unterricht beendet'],
   };
