@@ -82,6 +82,7 @@ export function AnswersPanelResizer({ storageKey }: { storageKey: string }) {
   return <div ref={separator} className="answers-panel-resizer" role="separator" tabIndex={0}
     aria-orientation="vertical" aria-controls="answers-panel"
     aria-label={language === 'DE' ? 'Breite der Lösungen ändern' : 'Изменить ширину решений'}
+    title={language === 'DE' ? 'Nach links oder rechts ziehen, um die Lösungen zu vergrößern oder zu verkleinern' : 'Потяните влево или вправо, чтобы изменить ширину решений'}
     aria-valuemin={Math.round(size.min)} aria-valuemax={Math.round(size.max)} aria-valuenow={size.width}
     aria-valuetext={`${size.width} px`}
     onPointerDown={event => {
@@ -112,5 +113,5 @@ export function AnswersPanelResizer({ storageKey }: { storageKey: string }) {
       if (requested === null) return;
       event.preventDefault(); event.stopPropagation();
       apply(requested); preferred.current = current.current; persist();
-    }} />;
+    }}><span className="answers-panel-resizer__grip" aria-hidden="true">↔</span></div>;
 }
