@@ -153,7 +153,9 @@ public class PersonalLessonWorkbookService {
     }
 
     /** Validate current ownership and membership even when the viewer is the host. */
-    @Transactional(readOnly = true)
+    // A document list catches expected not-found results to filter revoked
+    // targets. This read guard must not mark its caller's transaction for rollback.
+    @Transactional(readOnly = true, noRollbackFor = ResourceNotFoundException.class)
     public void requireClassStudent(OnlineClass lesson, UUID studentId) {
         UUID teacherId = lesson.getTeacher().getId();
         List<User> roster = lesson.isGroupClass()
