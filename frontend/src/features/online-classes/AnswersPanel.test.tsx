@@ -1,11 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { useRef, useState } from 'react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
 import type { AnswersView } from './useAnswersPanel';
-import type { PdfState } from './usePdf';
+import { type PdfState, usePdfPage } from './usePdf';
 
 vi.mock('./usePdf', () => ({ usePdfPage: vi.fn(() => null), usePdf: vi.fn() }));
 
@@ -15,7 +16,9 @@ class FakeResizeObserver {
 }
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+  vi.mocked(usePdfPage).mockReturnValue(null);
 });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const ready = (pageCount = 12): PdfState => ({
   status: 'ready',
@@ -31,6 +34,53 @@ function renderPanel(pdf: PdfState, view: Partial<AnswersView> = {}, extra: Part
     </I18nProvider>,
   );
   return { ...handlers, ...rendered };
+}
+
+function gestureFixture() {
+  const frames = new Map<number, FrameRequestCallback>(); let sequence = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++sequence, callback); return sequence; });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+  const raster = document.createElement('canvas'); raster.width = 600; raster.height = 800;
+  vi.mocked(usePdfPage).mockReturnValue({ canvas: raster, aspect: .75 });
+  const saved = vi.fn();
+  function Viewer({ pdf, initial, tick: _tick = 0 }: { pdf: PdfState; initial: AnswersView; tick?: number }) {
+    const [view, setView] = useState(initial), live = useRef(view);
+    live.current = view;
+    return <I18nProvider><AnswersPanel pdf={pdf} view={view} getView={() => live.current}
+      onViewChange={patch => { live.current = { ...live.current, ...patch }; setView(live.current); saved(live.current); }}
+      onScroll={(scrollTop, scrollLeft) => { live.current = { ...live.current, scrollTop, scrollLeft }; }} onClose={vi.fn()} /></I18nProvider>;
+  }
+  const pdf = ready(4), initial = { page: 0, zoom: 2, scrollTop: 220, scrollLeft: 120 };
+  const view = render(<Viewer pdf={pdf} initial={initial} />);
+  const scroll = view.container.querySelector('.answers-panel__scroll') as HTMLDivElement;
+  const canvas = view.container.querySelector('.answers-panel__page') as HTMLCanvasElement;
+  let left = initial.scrollLeft, top = initial.scrollTop;
+  const size = () => ({ width: 300 * parseFloat(canvas.style.width) / 100, height: 300 * parseFloat(canvas.style.width) / 100 / Number(canvas.style.aspectRatio) });
+  Object.defineProperties(scroll, {
+    clientWidth: { value: 324 }, clientHeight: { value: 360 },
+    scrollLeft: { get: () => left, set: (value: number) => { left = Math.max(0, Math.min(size().width + 24 - 324, value)); }, configurable: true },
+    scrollTop: { get: () => top, set: (value: number) => { top = Math.max(0, Math.min(size().height + 36 - 360, value)); }, configurable: true },
+  });
+  vi.spyOn(canvas, 'getBoundingClientRect').mockImplementation(() => ({
+    left: 64 - left, top: 101 - top, ...size(), right: 64 - left + size().width, bottom: 101 - top + size().height,
+    x: 64 - left, y: 101 - top, toJSON: () => ({}),
+  }));
+  const point = (x: number, y: number) => {
+    const rect = canvas.getBoundingClientRect(); return { x: (x - rect.left) / rect.width, y: (y - rect.top) / rect.height };
+  };
+  const touch = (type: string, x: number, y: number, distance: number) => {
+    const points = [{ clientX: x - distance / 2, clientY: y }, { clientX: x + distance / 2, clientY: y }];
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'touches', { value: { length: type === 'touchend' ? 0 : 2, item: (index: number) => points[index] } });
+    fireEvent(scroll, event);
+  };
+  const frame = () => act(() => { const next = [...frames.values()]; frames.clear(); next.forEach(callback => callback(0)); });
+  return { ...view, scroll, canvas, saved, point, touch, frame, replaceRaster: () => {
+    const sharper = document.createElement('canvas'); sharper.width = 2401; sharper.height = 3202;
+    vi.mocked(usePdfPage).mockReturnValue({ canvas: sharper, aspect: .75 });
+    view.rerender(<Viewer pdf={pdf} initial={initial} tick={1} />);
+  } };
 }
 
 describe('AnswersButton', () => {
@@ -75,6 +125,37 @@ describe('AnswersButton', () => {
 });
 
 describe('AnswersPanel', () => {
+  it('keeps the off-centre page point under moving fingers with existing scroll and padding', () => {
+    const fixture = gestureFixture(), before = fixture.point(200, 230);
+    fixture.touch('touchstart', 200, 230, 100);
+    fixture.touch('touchmove', 200, 230, 125); fixture.frame();
+    expect(fixture.point(200, 230).x).toBeCloseTo(before.x, 8);
+    expect(fixture.point(200, 230).y).toBeCloseTo(before.y, 8);
+    expect(fixture.canvas.style.width).toBe('250%');
+    fixture.touch('touchmove', 224, 266, 125); fixture.frame();
+    expect(fixture.point(224, 266).x).toBeCloseTo(before.x, 8);
+    expect(fixture.point(224, 266).y).toBeCloseTo(before.y, 8);
+    expect(fixture.saved.mock.lastCall![0]).toMatchObject({ zoom: 2.5, scrollTop: fixture.scroll.scrollTop, scrollLeft: fixture.scroll.scrollLeft });
+    fixture.touch('touchend', 224, 266, 125);
+    const position = { left: fixture.scroll.scrollLeft, top: fixture.scroll.scrollTop };
+    fixture.replaceRaster();
+    expect(fixture.scroll.scrollLeft).toBe(position.left); expect(fixture.scroll.scrollTop).toBe(position.top);
+    expect(fixture.point(224, 266).x).toBeCloseTo(before.x, 8);
+    expect(fixture.point(224, 266).y).toBeCloseTo(before.y, 8);
+  });
+
+  it('anchors a trackpad pinch at its cursor and stores actual clamped offsets at fit', () => {
+    const fixture = gestureFixture(), before = fixture.point(210, 240);
+    fireEvent.wheel(fixture.scroll, { ctrlKey: true, deltaY: -80, clientX: 210, clientY: 240 }); fixture.frame();
+    expect(fixture.point(210, 240).x).toBeCloseTo(before.x, 8);
+    expect(fixture.point(210, 240).y).toBeCloseTo(before.y, 8);
+    for (let index = 0; index < 10; index++) fireEvent.wheel(fixture.scroll, { ctrlKey: true, deltaY: 100, clientX: 210, clientY: 240 });
+    fixture.frame();
+    expect(fixture.saved.mock.lastCall![0]).toMatchObject({ zoom: 1, scrollLeft: 0, scrollTop: fixture.scroll.scrollTop });
+    expect(fixture.scroll.scrollTop).toBeGreaterThanOrEqual(0);
+    expect(fixture.canvas.style.aspectRatio).toBe('0.75');
+  });
+
   it('names the selected pupil and makes missing personal solutions explicit', () => {
     renderPanel({ status: 'idle' }, {}, { personal: true, studentName: 'Анна' });
     expect(screen.getByText('Решения: Анна')).toBeInTheDocument();
