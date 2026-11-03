@@ -168,7 +168,7 @@ describe('PDF upload contract', () => {
 
   it('opens the real workbook picker from the compact board action', async () => {
     const view = mount(true, { lessonTitle: 'Алгебра' });
-    const action = await screen.findByRole('menuitem', { name: 'Добавить документ' });
+    const action = await screen.findByRole('menuitem', { name: 'Добавить общий документ для всех' });
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     const picker = vi.spyOn(input, 'click').mockImplementation(() => undefined);
     await userEvent.click(action);
@@ -239,7 +239,7 @@ describe('PDF upload contract', () => {
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(['pdf'], 'large.pdf', { type: 'application/pdf' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 413');
-    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Добавить документ' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Добавить общий документ для всех' })).toBeEnabled());
   });
 
   it('uploads a pilot personal worksheet to that student without changing the shared PDF', async () => {
@@ -254,7 +254,7 @@ describe('PDF upload contract', () => {
     const view = mount(true);
     await screen.findByRole('option', { name: 'Персональный лист: Анна' });
     await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-alice');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Загрузить персональный лист' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Загрузить персональный лист: Анна' }));
     const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input.multiple).toBe(false);
     const file = new File(['%PDF-1.7'], 'anna.pdf', { type: 'application/pdf' });

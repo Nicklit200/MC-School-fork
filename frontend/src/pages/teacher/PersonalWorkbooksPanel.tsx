@@ -100,8 +100,8 @@ export function PersonalWorkbooksPanel({ eventId }: { eventId: string }) {
   return <section className="panel" style={{ padding: 20, marginBottom: 18 }} aria-labelledby="personal-workbooks-title">
     <h2 id="personal-workbooks-title" style={{ marginTop: 0 }}>{de ? 'Persönliche Arbeitsblätter' : 'Персональные листы'}</h2>
     <p className="muted">{de
-      ? 'Das gemeinsame Material bleibt für alle auf der gemeinsamen Tafel. Ein persönliches PDF erscheint zusätzlich nur beim ausgewählten Schüler unter „Persönliches Arbeitsblatt“ und ist auch für dich sichtbar.'
-      : 'Общий материал остаётся у всех на общей доске. У выбранного ученика появится отдельная кнопка «Персональный лист». Его PDF и записи будут доступны только ему и тебе; «Моя доска» сохранится отдельно.'}</p>
+      ? 'Die gemeinsame PDF wird allen unter „Gemeinsames Whiteboard“ und „Mein Whiteboard“ angezeigt. Eine persönliche PDF erscheint zusätzlich nur beim ausgewählten Schüler unter „Persönliches Arbeitsblatt“. Diese PDF und die Notizen sind nur für ihn und dich sichtbar.'
+      : 'Общий PDF показывается всем в разделах «Общая доска» и «Моя доска». Персональный PDF появляется отдельно у выбранного ученика по кнопке «Персональный лист». Его PDF и записи доступны только ему и тебе.'}</p>
     <p className="muted">{de ? 'Persönliche Lösungen bleiben privat. Beim Wechsel zu diesem Schüler zeigt die Lösungsleiste dessen eigenes PDF.'
       : 'Решения каждого ученика видны только преподавателю. При переключении на ученика панель решений покажет его отдельный PDF.'}</p>
     {!value.students.length && <p className="muted">{de ? 'Diesem Unterricht sind noch keine Schüler zugeordnet.' : 'К этому уроку ещё не привязаны ученики.'}</p>}

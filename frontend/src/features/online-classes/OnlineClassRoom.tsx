@@ -229,6 +229,7 @@ function RoomBody({
   const [personalWorkbooks, setPersonalWorkbooks] = useState<{ eventId: string; data: PersonalWorkbooks } | null>(null);
   const personalWorkbookData = personalWorkbooks && personalWorkbooks.eventId === eventId ? personalWorkbooks.data : null;
   const personalUploadStudent = personalWorkbookData?.enabled && isPersonalWorkbookBoard(activeBoard) ? personalBoardOwner(activeBoard) : null;
+  const personalUploadStudentName = personalWorkbookData?.students.find(student => student.studentId === personalUploadStudent)?.studentName.trim();
   const [ownWorksheet, setOwnWorksheet] = useState<{ classId: string; userId: string; available: boolean } | null>(null);
   const worksheetAvailable = ownWorksheet?.classId === classId && ownWorksheet.userId === currentUserId && ownWorksheet.available;
   useEffect(() => {
@@ -525,8 +526,8 @@ function RoomBody({
       materialInput.current?.click();
     }}>
     <BoardToolbarIcon name="file" />{materialBusy ? 'Загрузка…' : personalUploadStudent
-      ? (language === 'DE' ? 'Persönliches Arbeitsblatt hochladen' : 'Загрузить персональный лист')
-      : language === 'DE' ? 'Dokument hinzufügen' : 'Добавить документ'}
+      ? `${language === 'DE' ? 'Persönliches Arbeitsblatt hochladen' : 'Загрузить персональный лист'}${personalUploadStudentName ? `: ${personalUploadStudentName}` : ''}`
+      : language === 'DE' ? 'Gemeinsames Dokument für alle hinzufügen' : 'Добавить общий документ для всех'}
   </button> : undefined;
 
   return (

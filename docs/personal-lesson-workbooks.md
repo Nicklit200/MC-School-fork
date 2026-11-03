@@ -14,6 +14,27 @@ page. Pupils see a third **Персональный лист** button beside **�
 worksheet tab; the existing **Моя доска** keeps its previous behavior. The teacher
 can inspect a pupil's personal worksheet independently of that pupil's board.
 
+Document routing follows the same rule throughout preparation, the classroom,
+and connector uploads:
+
+| Uploaded documents | Shared board | Every pupil's My board | Personal worksheet |
+|---|---|---|---|
+| No PDFs | Blank background | Blank background | Button absent |
+| Shared PDF only | Shared PDF | Shared PDF | Button absent |
+| Personal PDFs only | Blank background | Blank background | Each assigned pupil's own PDF |
+| Shared and personal PDFs | Shared PDF | Shared PDF | Each assigned pupil's own PDF |
+
+The personal worksheet button appears only for a pupil with an assigned PDF.
+My board always uses the shared document background; its annotations remain
+independent for each pupil. A personal worksheet has its own PDF and annotations.
+Uploading one does not create or replace a shared PDF. A blank background does
+not clear saved handwriting from the same lesson.
+
+The classroom upload action explicitly names a shared document for everyone,
+including when the teacher opens a pupil's My board. An upload from a personal
+worksheet explicitly names that pupil. The selected surface is captured when
+the file picker opens, so switching surfaces cannot silently change recipients.
+
 ## Connector tools (MCP 1.25.0)
 
 All personal worksheet and answer tools require a current active OAuth identity: the pilot teacher, or an
