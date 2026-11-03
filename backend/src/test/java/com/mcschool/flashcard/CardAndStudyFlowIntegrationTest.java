@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import com.mcschool.flashcard.cards.CardStatus;
 import com.mcschool.flashcard.cards.CardRepository;
+import com.mcschool.flashcard.drive.GoogleDriveStructureService;
 import com.mcschool.flashcard.reviewhistory.DailyReviewHistoryRepository;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -29,6 +30,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -53,6 +55,9 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
     private DailyReviewHistoryRepository historyRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    // Exercise real accounts and study persistence without provisioning external Drive folders.
+    @MockitoBean
+    private GoogleDriveStructureService driveStructureService;
 
     private String teacherToken;
     private String studentToken;
