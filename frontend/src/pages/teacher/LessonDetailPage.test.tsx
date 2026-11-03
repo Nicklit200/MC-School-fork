@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -112,8 +112,31 @@ describe('native lesson details preserve completed documents', () => {
     vi.mocked(lessonPreparationApi.get).mockResolvedValue(preparation);
     vi.mocked(lessonPreparationApi.update).mockResolvedValue(preparation);
     mount();
-    expect(await screen.findByRole('heading', { name: 'Автоматическая транскрипция Soniox' })).toBeInTheDocument();
-    expect(screen.getByText('[00:00:01] Student: Первая фраза')).toBeInTheDocument();
+    const card = (await screen.findByRole('heading', { name: 'Транскрипция урока' })).closest('section')!;
+    expect(within(card).getByText('готово')).toBeInTheDocument();
+    expect(within(card).getByText('TXT')).toBeInTheDocument();
+    expect(within(card).queryByText('PDF транскрипции ещё не добавлен')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Автоматическая транскрипция Soniox' })).not.toBeInTheDocument();
+    expect(screen.queryByText('[00:00:01] Student: Первая фраза')).not.toBeInTheDocument();
+    expect(lessonPreparationApi.transcriptUrl).not.toHaveBeenCalled();
+    const open = within(card).getByRole('button', { name: 'Открыть транскрипцию' });
+    expect(open).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(open);
+    const viewer = within(card).getByRole('region', { name: 'Текст транскрипции урока' });
+    expect(viewer).toHaveFocus();
+    expect(open).toHaveAttribute('aria-controls', viewer.id);
+    expect(open).toHaveAttribute('aria-expanded', 'true');
+    expect(within(viewer).getByText('[00:00:01] Student: Первая фраза')).toBeInTheDocument();
+    expect(within(viewer).getByRole('heading', { name: 'Автоматическая транскрипция Soniox' }).closest('section')).toBe(card);
+    await userEvent.click(within(viewer).getByRole('button', { name: 'Закрыть транскрипцию' }));
+    expect(open).toHaveFocus();
+    expect(open).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: 'Текст транскрипции урока' })).not.toBeInTheDocument();
+    await userEvent.click(open);
+    await userEvent.keyboard('{Escape}');
+    expect(open).toHaveFocus();
+    expect(open).toHaveAttribute('aria-expanded', 'false');
+    expect(lessonPreparationApi.update).not.toHaveBeenCalled();
     expect(screen.queryByRole('textbox', { name: 'Текст транскрипции преподавателя' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: 'Пройденный материал' }), { target: { value: 'Дроби' } });
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить информацию' }));
@@ -133,7 +156,14 @@ describe('native lesson details preserve completed documents', () => {
     vi.mocked(lessonPreparationApi.update).mockResolvedValue(preparation);
     mount();
     expect(await screen.findByText('Учитель.pdf')).toBeInTheDocument();
-    expect(screen.getByText('[00:00:02] Student: Автоматическая фраза')).toBeInTheDocument();
+    const card = screen.getByRole('heading', { name: 'Транскрипция урока' }).closest('section')!;
+    expect(within(card).getByRole('link', { name: 'Открыть PDF ↗' })).toHaveAttribute('href', 'blob:teacher-transcript');
+    expect(within(card).getByRole('button', { name: 'Редактировать в ChatGPT' })).toBeEnabled();
+    expect(within(card).getByText('Заменить PDF')).toBeInTheDocument();
+    expect(lessonPreparationApi.transcriptUrl).toHaveBeenCalledExactlyOnceWith('local-trial');
+    expect(screen.queryByText('[00:00:02] Student: Автоматическая фраза')).not.toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: 'Открыть транскрипцию' }));
+    expect(within(card).getByText('[00:00:02] Student: Автоматическая фраза')).toBeInTheDocument();
     const manual = screen.getByRole('textbox', { name: 'Текст транскрипции преподавателя' });
     expect(manual).toHaveValue('Заметки преподавателя');
     fireEvent.change(manual, { target: { value: 'Исправленные заметки' } });
@@ -141,6 +171,16 @@ describe('native lesson details preserve completed documents', () => {
     await waitFor(() => expect(lessonPreparationApi.update).toHaveBeenCalledWith('local-trial', expect.objectContaining({
       transcriptText: 'Исправленные заметки',
     })));
+  });
+  it('does not mark a whitespace-only automatic transcript as ready or offer an empty text viewer', async () => {
+    vi.mocked(lessonPreparationApi.get).mockResolvedValue({ eventId: 'local-trial', hasWorkbook: false, hasAnswers: false,
+      hasTranscript: true, sonioxTranscriptText: ' \n\t ' } as LessonPreparation);
+    mount();
+    const card = (await screen.findByRole('heading', { name: 'Транскрипция урока' })).closest('section')!;
+    expect(within(card).getByText('PDF транскрипции ещё не добавлен')).toBeInTheDocument();
+    expect(within(card).queryByText('готово')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Открыть транскрипцию' })).not.toBeInTheDocument();
+    expect(lessonPreparationApi.transcriptUrl).not.toHaveBeenCalled();
   });
   it('preserves legacy manual text when the older API omits the separate source fields', async () => {
     const preparation = {

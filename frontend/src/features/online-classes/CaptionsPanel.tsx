@@ -18,6 +18,7 @@ const VISIBLE_LINES = 4;
 export function CaptionsPanel({ enabled }: { enabled: boolean }) {
   const { t } = useI18n();
   const transcriptions = useTranscriptions();
+  const recent = transcriptions.filter(entry => entry.text.trim()).slice(-VISIBLE_LINES);
   const regionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -25,9 +26,7 @@ export function CaptionsPanel({ enabled }: { enabled: boolean }) {
     if (region) region.scrollTop = region.scrollHeight;
   }, [transcriptions]);
 
-  if (!enabled) return null;
-
-  const recent = transcriptions.slice(-VISIBLE_LINES);
+  if (!enabled || recent.length === 0) return null;
 
   return (
     <section className="captions" aria-labelledby="captions-title">
@@ -41,16 +40,12 @@ export function CaptionsPanel({ enabled }: { enabled: boolean }) {
         mid-sentence on every partial update.
       */}
       <div ref={regionRef} role="log" aria-live="polite" aria-atomic="false" className="captions__lines">
-        {recent.length === 0 ? (
-          <p className="captions__waiting">{t('onlineClass.captions.waiting')}</p>
-        ) : (
-          recent.map((entry) => (
-            <p key={entry.streamInfo.id} className="captions__line">
-              {/* Rendered as text: caption content is never treated as markup. */}
-              <span className="captions__text">{entry.text}</span>
-            </p>
-          ))
-        )}
+        {recent.map((entry) => (
+          <p key={entry.streamInfo.id} className="captions__line">
+            {/* Rendered as text: caption content is never treated as markup. */}
+            <span className="captions__text">{entry.text}</span>
+          </p>
+        ))}
       </div>
     </section>
   );

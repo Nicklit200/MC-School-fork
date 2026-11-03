@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { isNativeLesson, lessonDurationLabel } from '../../lib/lessonSchedule';
@@ -98,6 +98,7 @@ export function LessonDetailPage() {
     async function load() {
       setLoading(true);
       setError(null);
+      setTranscriptUrl(null);
       try {
         const [lessons, prep, allStudents] = await Promise.all([
           api.lessons.groupLessons(),
@@ -120,8 +121,12 @@ export function LessonDetailPage() {
         if (prep.hasAnswers) {
           try { if (!cancelled) setAnswersUrl(await lessonPreparationApi.answersUrl(eventId)); } catch { /* page still works */ }
         }
-        if (prep.hasTranscript) {
-          try { if (!cancelled) setTranscriptUrl(await lessonPreparationApi.transcriptUrl(eventId)); } catch { /* page still works */ }
+        if (prep.transcriptFilename) {
+          try {
+            const url = await lessonPreparationApi.transcriptUrl(eventId);
+            if (cancelled) URL.revokeObjectURL(url);
+            else setTranscriptUrl(url);
+          } catch { /* Automatic text remains available if the PDF cannot load. */ }
         }
         if (currentLesson) {
           const [summary, students, homeworkItems] = await Promise.all([
@@ -470,23 +475,16 @@ export function LessonDetailPage() {
         />
         <MaterialPanel
           title="Транскрипция урока"
-          subtitle="Оригинальный PDF Soniox хранится прямо внутри этого урока"
+          subtitle="Текст и PDF транскрипции этого урока"
           filename={preparation?.transcriptFilename}
           url={transcriptUrl}
+          automaticTranscript={preparation?.sonioxTranscriptText}
           emptyText="PDF транскрипции ещё не добавлен"
           uploading={uploadingTranscript}
           editingInChatGpt={openingChatGpt === 'transcript'}
           onUpload={(file) => void uploadPdf('transcript', file)}
           onEditInChatGpt={() => void editPdfInChatGpt('transcript', transcriptUrl, preparation?.transcriptFilename)}
         />
-        {preparation?.sonioxTranscriptText && (
-          <section className="panel" style={{ padding: 20, margin: 0 }} aria-labelledby="soniox-transcript-title">
-            <h2 id="soniox-transcript-title" style={{ margin: 0 }}>Автоматическая транскрипция Soniox</h2>
-            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 400, overflowY: 'auto', fontFamily: 'inherit', lineHeight: 1.6 }}>
-              {preparation.sonioxTranscriptText}
-            </pre>
-          </section>
-        )}
         <section className="panel" style={{padding:20,margin:0,border:'1px solid #ffdfca'}}>
           <div style={{display:'flex',gap:12,alignItems:'flex-start',justifyContent:'space-between'}}>
             <div style={{display:'flex',gap:12,alignItems:'center'}}>
@@ -654,11 +652,12 @@ export function LessonDetailPage() {
   );
 }
 
-function MaterialPanel({ title, subtitle, filename, url, emptyText, uploading, editingInChatGpt, onUpload, onEditInChatGpt }: {
+function MaterialPanel({ title, subtitle, filename, url, automaticTranscript, emptyText, uploading, editingInChatGpt, onUpload, onEditInChatGpt }: {
   title: string;
   subtitle: string;
   filename?: string | null;
   url: string | null;
+  automaticTranscript?: string | null;
   emptyText: string;
   uploading: boolean;
   editingInChatGpt: boolean;
@@ -666,29 +665,50 @@ function MaterialPanel({ title, subtitle, filename, url, emptyText, uploading, e
   onEditInChatGpt: () => void;
 }) {
   const hasPdf = Boolean(url);
+  const hasText = Boolean(automaticTranscript?.trim());
+  const [textOpen, setTextOpen] = useState(false);
+  const textId = useId();
+  const openButton = useRef<HTMLButtonElement>(null);
+  const textRegion = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (textOpen) textRegion.current?.focus(); }, [textOpen]);
+  const closeText = () => { setTextOpen(false); openButton.current?.focus(); };
   const uploadLabel = hasPdf ? 'Заменить PDF' : 'Загрузить PDF';
 
   return (
     <section className="panel" style={{ padding: 20, margin: 0, minHeight: 210 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--teacher-selected, #fff7ed)', fontSize: 22, flex: '0 0 auto' }}>PDF</div>
+        <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--teacher-selected, #fff7ed)', fontSize: 22, flex: '0 0 auto' }}>{hasText && !hasPdf ? 'TXT' : 'PDF'}</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
           <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>{subtitle}</div>
         </div>
-        {hasPdf && <span className="pill pill--learned">готово</span>}
+        {(hasPdf || hasText) && <span className="pill pill--learned">готово</span>}
       </div>
 
-      {hasPdf ? (
+      {hasPdf || hasText ? (
         <div style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'var(--teacher-surface, #fff)' }}>
-          <div style={{ fontWeight: 750, overflowWrap: 'anywhere' }}>{filename || 'PDF-файл'}</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Открывается отдельно — страница урока остаётся на месте.</div>
+          <div style={{ fontWeight: 750, overflowWrap: 'anywhere' }}>{hasPdf ? filename || 'PDF-файл' : 'Автоматическая транскрипция готова'}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{hasPdf
+            ? 'PDF открывается отдельно — страница урока остаётся на месте.'
+            : 'Текст сохранён в уроке и открывается здесь.'}</div>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-            <a className="btn" href={url ?? undefined} target="_blank" rel="noopener noreferrer">Открыть PDF ↗</a>
-            <button className="btn btn--secondary" type="button" onClick={onEditInChatGpt} disabled={editingInChatGpt}>
+            {hasText && <button ref={openButton} className="btn" type="button" aria-expanded={textOpen} aria-controls={textId}
+              onClick={() => textOpen ? closeText() : setTextOpen(true)}>{textOpen ? 'Свернуть транскрипцию' : 'Открыть транскрипцию'}</button>}
+            {hasPdf && <a className="btn" href={url ?? undefined} target="_blank" rel="noopener noreferrer">Открыть PDF ↗</a>}
+            {hasPdf && <button className="btn btn--secondary" type="button" onClick={onEditInChatGpt} disabled={editingInChatGpt}>
               {editingInChatGpt ? 'Открываем…' : 'Редактировать в ChatGPT'}
-            </button>
+            </button>}
           </div>
+          {hasText && <div id={textId} ref={textRegion} role="region" aria-label="Текст транскрипции урока" tabIndex={-1} hidden={!textOpen}
+            style={{ marginTop: 14 }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeText(); } }}>
+            {textOpen && <>
+              <div className="row" style={{ gap: 10, justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0, fontSize: 15 }}>Автоматическая транскрипция Soniox</h3>
+                <button className="btn btn--ghost" type="button" onClick={closeText}>Закрыть транскрипцию</button>
+              </div>
+              <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 400, overflowY: 'auto', fontFamily: 'inherit', lineHeight: 1.6 }}>{automaticTranscript}</pre>
+            </>}
+          </div>}
         </div>
       ) : (
         <div style={{ marginTop: 16, border: '2px dashed var(--teacher-selected-border, #f0c7ad)', borderRadius: 14, padding: 20, background: 'var(--teacher-selected, #fffaf7)' }}>
