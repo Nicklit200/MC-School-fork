@@ -935,10 +935,11 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
 
     private String createActivatedTeacher(String email, String password) throws Exception {
         String adminToken = login(ADMIN_EMAIL, ADMIN_PASSWORD);
-        String invitation = postAndReturn("/api/v1/teachers", adminToken,
-                "{\"fullName\": \"Teacher\", \"email\": \"" + email + "\"}", status().isCreated());
-        // Non-student accounts must confirm their e-mail to activate.
-        return activate(JsonPath.read(invitation, "$.invitationToken"), password, email);
+        String username = email.substring(0, email.indexOf('@'));
+        postAndReturn("/api/v1/teachers", adminToken,
+                "{\"fullName\": \"Teacher\", \"email\": \"" + email + "\", \"username\": \"" + username
+                        + "\", \"password\": \"" + password + "\"}", status().isCreated());
+        return login(email, password);
     }
 
     private String login(String email, String password) throws Exception {
