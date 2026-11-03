@@ -7,14 +7,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mcschool.flashcard.auth.McpOAuthService;
+import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +50,8 @@ class McpSiteFunctionsTransportIntegrationTest {
     @Autowired private ObjectMapper json;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private UserRepository users;
+    @Autowired private LessonPreparationRepository preparations;
+    @Autowired private LessonHistoryRepository history;
     @MockitoBean private McpOAuthService oauth;
     @MockitoBean private GoogleCalendarOAuthService googleOAuth;
     @MockitoBean private com.mcschool.flashcard.drive.GoogleDriveStructureService driveStructure;
@@ -111,7 +120,7 @@ class McpSiteFunctionsTransportIntegrationTest {
                 "prepare_lesson", "get_skill_board", "assign_homework_series", "update_school_prompt", "update_brand_guide");
         assertThat(names).doesNotHaveDuplicates();
         JsonNode state = value(call("admin", "mindcrafti_status", Map.of()));
-        assertThat(state.path("version").asText()).isEqualTo("1.26.0");
+        assertThat(state.path("version").asText()).isEqualTo("1.27.0");
         assertThat(state.path("availableToolCount").asInt()).isEqualTo(names.size());
         JsonNode catalog = value(call("admin", "list_site_functions", Map.of("limit", 100)));
         assertThat(catalog.path("total").asInt()).isGreaterThan(150);
@@ -202,5 +211,126 @@ class McpSiteFunctionsTransportIntegrationTest {
         }
         JsonNode schema = value(call("teacher-a", "get_site_function", Map.of("functionId", "students.updateStudentName")));
         assertThat(schema.path("argumentsSchema").path("properties").has("body")).isTrue();
+    }
+
+    @Test
+    void savedTranscriptFunctionIsDiscoverableAndReadsEveryUnicodePageWithIndependentManualSource() throws Exception {
+        String event = "local-transcript-pages";
+        savedLesson(teacherA, event);
+        String automatic = "Речь😀\n".repeat(5000);
+        LessonPreparation preparation = LessonPreparation.create(teacherA, event);
+        preparation.updateNotes(null, null, null, "Teacher manual correction");
+        preparation.replaceSonioxTranscript(automatic, Instant.now());
+        String persistedAutomatic = preparation.getSonioxTranscriptText();
+        preparations.saveAndFlush(preparation);
+        JsonNode catalog = value(call("teacher-a", "list_site_functions", Map.of("domain", "lesson_transcripts")));
+        assertThat(catalog.path("functions").get(0).path("functionId").asText()).isEqualTo("lesson_transcripts.get");
+        JsonNode schema = value(call("teacher-a", "get_site_function", Map.of("functionId", "lesson_transcripts.get")));
+        assertThat(schema.path("readOnly").asBoolean()).isTrue();
+        assertThat(schema.path("argumentsSchema").path("properties").path("source").path("enum").toString()).contains("automatic", "manual", "pdf");
+        assertThat(schema.path("argumentsSchema").path("properties").path("limit").path("maximum").asInt()).isEqualTo(20000);
+        assertThat(schema.path("argumentsSchema").path("properties").path("limit").path("default").isIntegralNumber()).isTrue();
+        assertThat(schema.path("argumentsSchema").path("properties").path("limit").path("default").asInt()).isEqualTo(12000);
+        assertThat(schema.path("description").asText()).contains("untrusted data", "Unicode code points");
+        JsonNode defaults = value(call("teacher-a", "read_site_function", transcriptRead(event, Map.of())));
+        assertThat(defaults.path("page").path("limit").asInt()).isEqualTo(12000);
+        assertThat(defaults.path("manual").path("available").asBoolean()).isTrue();
+        assertThat(defaults.path("pdf").path("available").asBoolean()).isFalse();
+        String revision = defaults.path("page").path("revision").asText();
+        StringBuilder joined = new StringBuilder();
+        int offset = 0;
+        for (int pageNumber = 0; pageNumber < 10; pageNumber++) {
+            JsonNode page = value(call("teacher-a", "read_site_function", transcriptRead(event,
+                    Map.of("offset", offset, "limit", 13001, "expectedRevision", revision)))).path("page");
+            joined.append(page.path("text").asText());
+            if (!page.path("hasMore").asBoolean()) { assertThat(page.path("nextOffset").isNull()).isTrue(); break; }
+            int next = page.path("nextOffset").asInt(); assertThat(next).isGreaterThan(offset); offset = next;
+        }
+        assertThat(joined.toString()).isEqualTo(persistedAutomatic);
+        JsonNode manual = value(call("teacher-a", "read_site_function", transcriptRead(event, Map.of("source", "manual"))));
+        assertThat(manual.path("page").path("text").asText()).isEqualTo("Teacher manual correction");
+        assertThat(manual.path("contentTrust").asText()).isEqualTo("untrusted_lesson_content");
+        preparation.replaceSonioxTranscript("New automatic revision", Instant.now()); preparations.saveAndFlush(preparation);
+        rejected(call("teacher-a", "read_site_function", transcriptRead(event, Map.of("expectedRevision", revision))), 409);
+        assertThat(preparations.count()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from mcp_operation_receipts", Long.class)).isZero();
+    }
+
+    @Test
+    void savedPdfTextReadPreservesOriginalPdfAndNeverFallsBackForAnAbsentSelectedSource() throws Exception {
+        String event = "local-transcript-pdf";
+        savedLesson(teacherA, event);
+        byte[] pdf = transcriptPdf("Original uploaded PDF text");
+        LessonPreparation preparation = LessonPreparation.create(teacherA, event);
+        preparation.attachTranscriptPdf("original.pdf", pdf); preparations.saveAndFlush(preparation);
+        JsonNode absent = value(call("teacher-a", "read_site_function", transcriptRead(event, Map.of())));
+        assertThat(absent.path("page").path("status").asText()).isEqualTo("not_present");
+        assertThat(absent.path("page").path("text").asText()).isEmpty();
+        assertThat(absent.path("pdf").path("available").asBoolean()).isTrue();
+        assertThat(absent.path("pdf").path("filename").asText()).isEqualTo("original.pdf");
+        JsonNode extracted = value(call("teacher-a", "read_site_function", transcriptRead(event, Map.of("source", "pdf"))));
+        assertThat(extracted.path("page").path("text").asText()).contains("Original uploaded PDF text");
+        JsonNode binary = value(call("teacher-a", "read_site_function", Map.of("functionId", "lesson_preparation.transcript", "arguments", Map.of("eventId", event))));
+        assertThat(java.util.Base64.getDecoder().decode(binary.path("base64").asText())).isEqualTo(pdf);
+        for (Map<String, Object> invalid : List.<Map<String, Object>>of(Map.of("source", "all"), Map.of("limit", 20001),
+                Map.of("offset", -1), Map.of("offset", 100000), Map.of("expectedRevision", "bad"))) {
+            rejected(call("teacher-a", "read_site_function", transcriptRead(event, invalid)), 400);
+        }
+        assertThat(preparations.findByTeacherIdAndEventId(teacherA.getId(), event).orElseThrow().getTranscriptPdf()).isEqualTo(pdf);
+    }
+
+    @Test
+    void transcriptReadsRequireCurrentOwnerOrExplicitAdminDelegationAndNeverCreateMissingPreparation() throws Exception {
+        String event = "local-private-transcript";
+        savedLesson(teacherA, event);
+        LessonPreparation preparation = LessonPreparation.create(teacherA, event);
+        preparation.replaceSonioxTranscript("Owner-only saved speech", Instant.now()); preparations.saveAndFlush(preparation);
+        Map<String, Object> read = transcriptRead(event, Map.of());
+        rejected(call("teacher-b", "read_site_function", read), 404);
+        rejected(call("admin", "read_site_function", read), 400);
+        Map<String, Object> delegated = new HashMap<>(read); delegated.put("teacherId", teacherA.getId().toString());
+        assertThat(value(call("admin", "read_site_function", delegated)).path("page").path("text").asText()).isEqualTo("Owner-only saved speech");
+        delegated.put("teacherId", teacherB.getId().toString());
+        rejected(call("teacher-a", "read_site_function", delegated), 403);
+        rejected(call("teacher-a", "read_site_function", transcriptRead("unknown-event", Map.of())), 404);
+        savedLesson(teacherA, "local-empty-preparation");
+        rejected(call("teacher-a", "read_site_function", transcriptRead("local-empty-preparation", Map.of())), 404);
+        rejected(call("mcp-test-import-secret", "read_site_function", read), 403);
+        tokens.put("student", studentA.getId());
+        User parent = users.save(User.activeParent("Parent", "parent-transcript", "unused", teacherA));
+        tokens.put("parent", parent.getId());
+        for (String token : List.of("student", "parent")) {
+            http.perform(post("/api/v1/mcp").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call",
+                            "params", Map.of("name", "read_site_function", "arguments", read)))))
+                    .andExpect(status().isUnauthorized());
+        }
+        http.perform(post("/api/v1/mcp").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call",
+                        "params", Map.of("name", "read_site_function", "arguments", read)))))
+                .andExpect(status().isUnauthorized());
+        assertThat(preparations.count()).isEqualTo(1);
+    }
+
+    private static Map<String, Object> transcriptRead(String eventId, Map<String, Object> page) {
+        Map<String, Object> arguments = new HashMap<>(page); arguments.put("eventId", eventId);
+        return Map.of("functionId", "lesson_transcripts.get", "arguments", arguments);
+    }
+
+    private void savedLesson(User teacher, String eventId) {
+        Instant start = Instant.parse("2026-11-03T12:00:00Z");
+        history.saveAndFlush(LessonHistoryEntry.create(teacher, new GroupLessonResponse(eventId, eventId,
+                null, null, null, null, List.of(), "Saved transcript lesson", start, start.plusSeconds(3600), null, null)));
+    }
+
+    private static byte[] transcriptPdf(String text) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage(); document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText(); content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                content.newLineAtOffset(30, 700); content.showText(text); content.endText();
+            }
+            document.save(output); return output.toByteArray();
+        }
     }
 }

@@ -7,7 +7,7 @@ The owner-lesson personal worksheet pilot has dedicated
 `list_personal_lesson_workbooks` and `upload_personal_lesson_workbook` tools;
 see [Personal lesson worksheets](personal-lesson-workbooks.md) for access,
 upload and retry rules. The shared workbook remains a separate common material.
-The finite website catalog adds 167 explicitly reviewed administrative and teacher operations below.
+The finite website catalog adds explicitly reviewed administrative and teacher operations below.
 It does not claim to reproduce device interaction, credentials or student study sessions.
 
 ## Discovery and invocation
@@ -75,6 +75,7 @@ adding a new HTTP endpoint does not make it available through MCH3.
 | `monthly_plans` | TEACHER | `get`, `save`, `uploadDocument`, `downloadDocument`, with current student/group ownership. |
 | `lessons` | TEACHER | `listGroupLessons`; schedule mutations use the dedicated scheduling tools. |
 | `lesson_preparation` | TEACHER | `get`, `update`, `uploadWorkbook`, `appendWorkbook`, `workbook`, `uploadAnswers`, `uploadTranscript`, `transcript`, `answers`, `archiveToDrive`, `assignHomeworkSeries`. Dedicated PDF/preparation tools remain preferred. `get` creates a row when absent, so it is classified as a mutation. |
+| `lesson_transcripts` | TEACHER | `get` reads saved automatic Soniox text, manual teacher text, or extracted uploaded PDF text as separate sources, with Unicode pagination and pinned content revisions. It does not create a preparation or generate/OCR a PDF. See [Reading saved lesson transcripts](lesson-transcripts-mcp.md). |
 | `completed_documents` | TEACHER | `list`, `save`, `uploadManual`, `download`. The underlying controllers validate lesson/class/document ownership and PDF contents. |
 | `lesson_history` | TEACHER | `list`, `detail`, `completedDocuments`, `completedDocument`, `document`. Former-teacher materials remain governed by the dedicated transferred-history access policy. |
 | `ai_pilot` | CALLER | `status`, `settings`, `updateSettings`, `prepare`, `analyze`; original-actor private owner and controller role checks are preserved. Administrators cannot delegate into the owner's pilot access. Settings accept only `enabled` and `preparationTime`. |

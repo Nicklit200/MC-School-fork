@@ -81,6 +81,7 @@ final class McpSiteFunctionRegistry {
         add(functions, "lessons", GroupLessonController.class, Scope.TEACHER, "listGroupLessons");
         add(functions, "lesson_preparation", LessonPreparationController.class, Scope.TEACHER,
                 "get update uploadWorkbook appendWorkbook workbook uploadAnswers uploadTranscript transcript answers archiveToDrive assignHomeworkSeries");
+        add(functions, "lesson_transcripts", LessonTranscriptController.class, Scope.TEACHER, "get");
         add(functions, "completed_documents", CompletedLessonDocumentController.class, Scope.TEACHER,
                 "list save uploadManual download");
         add(functions, "personal_workbooks", PersonalLessonWorkbookController.class, Scope.TEACHER,

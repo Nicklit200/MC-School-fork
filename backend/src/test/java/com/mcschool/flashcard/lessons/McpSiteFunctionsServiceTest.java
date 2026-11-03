@@ -40,6 +40,7 @@ class McpSiteFunctionsServiceTest {
     private final CardController cards = mock(CardController.class);
     private final LessonBoardController board = mock(LessonBoardController.class);
     private final AdminAccountController accounts = mock(AdminAccountController.class);
+    private final LessonTranscriptReadService transcripts = mock(LessonTranscriptReadService.class);
     private final AuthenticatedUser teacher = new AuthenticatedUser(UUID.randomUUID(), "teacher@example.test", Role.TEACHER);
     private final AuthenticatedUser admin = new AuthenticatedUser(UUID.randomUUID(), "admin@example.test", Role.ADMIN);
     private final User oauth = mock(User.class);
@@ -68,6 +69,7 @@ class McpSiteFunctionsServiceTest {
         when(context.getBean(CardController.class)).thenReturn(cards);
         when(context.getBean(LessonBoardController.class)).thenReturn(board);
         when(context.getBean(AdminAccountController.class)).thenReturn(accounts);
+        when(context.getBean(LessonTranscriptController.class)).thenReturn(new LessonTranscriptController(transcripts));
     }
 
     @Test
@@ -107,6 +109,22 @@ class McpSiteFunctionsServiceTest {
         service.call("read_site_function", Map.of("functionId", "students.listStudents", "teacherId", teacher.id().toString(), "arguments", Map.of()), oauth, false);
         verify(students).listStudents(teacher);
         verify(access).asTeacher(eq(admin), eq(teacher), any());
+    }
+
+    @Test
+    void savedTranscriptReadIsDiscoverableWithTypedBoundedDefaultsAndNoWriteReceipt() {
+        Map<?, ?> metadata = (Map<?, ?>) service.call("get_site_function", Map.of("functionId", "lesson_transcripts.get"), oauth, false);
+        assertThat(metadata.get("readOnly")).isEqualTo(true);
+        assertThat(metadata.toString()).contains("automatic", "manual", "pdf", "maximum=20000", "default=12000", "expectedRevision", "untrusted data");
+        when(transcripts.get(teacher, "saved-event", LessonTranscriptReadService.Source.automatic, 0, 12000, null))
+                .thenReturn(new LessonTranscriptReadService.Transcript("saved-event", null, null, null,
+                        new LessonTranscriptReadService.Page(LessonTranscriptReadService.Source.automatic, true, "available", "a".repeat(64), 4, 0, 12000, null, false, "text"), "untrusted_lesson_content"));
+        assertThat(read("lesson_transcripts.get", Map.of("eventId", "saved-event")).toString()).contains("text", "untrusted_lesson_content");
+        verify(transcripts).get(teacher, "saved-event", LessonTranscriptReadService.Source.automatic, 0, 12000, null);
+        verify(targets).check(argThat(function -> function.id().equals("lesson_transcripts.get")), eq(teacher), eq(Map.of("eventId", "saved-event")));
+        verifyNoInteractions(receipts);
+        assertThatThrownBy(() -> read("lesson_transcripts.get", Map.of("eventId", "saved-event", "source", "all"))).hasMessageContaining("400");
+        assertThatThrownBy(() -> read("lesson_transcripts.get", Map.of("eventId", "saved-event", "limit", 20001))).hasMessageContaining("400");
     }
 
     @Test
