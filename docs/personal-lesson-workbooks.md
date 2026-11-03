@@ -150,3 +150,19 @@ storage layer. Personal answer keys use a separate private table and authenticat
 teacher-only endpoints, keyed by the same teacher, event and pupil. No student
 classroom endpoint exposes their bytes or metadata. Shared answers and transcripts
 keep their existing teacher-only routes.
+
+## Completed lesson documents
+
+For a calendar-linked lesson, the teacher's Leave and End actions wait for local
+annotation writes, export every shared and personal source separately, save the
+PDFs, and verify their IDs in the lesson archive before leaving. Manual Save uses
+the same in-flight operation. Local board input pauses while this runs; failed
+writes or archive requests keep the room open with a retry message. Student exits
+and standalone test rooms do not trigger the teacher's archive.
+
+Export replays all operation batches, including appended blank pages and ink past
+the first 5,000 operations. A first archive may create lesson preparation only
+after validating the exact owned room/event and the PDF. Historical ended rooms
+retain their annotation rows, so a missing archive can be reconstructed from the
+stored background PDF and operations. Closing the browser does not run an awaited
+PDF export; use the lesson's Leave or End control to complete the archive.

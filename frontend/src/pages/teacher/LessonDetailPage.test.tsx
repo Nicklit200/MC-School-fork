@@ -58,6 +58,15 @@ async function uploadInput(): Promise<HTMLInputElement> {
   return headings[0].closest('section')!.querySelector<HTMLInputElement>('input[type=file]')!;
 }
 describe('native lesson details preserve completed documents', () => {
+  it('opens a recovered personal worksheet from the main archive card when it is the only PDF', async () => {
+    const personal = { ...archived, id: 'recovered-personal', boardId: 'personal-workbook-pupil', filename: 'Лист с записями.pdf' };
+    vi.mocked(completedLessonApi.list).mockResolvedValue([personal]);
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Открыть PDF ↗' }));
+    expect(completedLessonApi.open).toHaveBeenCalledWith('local-trial', 'recovered-personal');
+    expect(screen.queryByText('PDF ещё не загружен')).not.toBeInTheDocument();
+    expect(screen.getByText('ГОТОВО')).toBeInTheDocument();
+  });
   it('shows native duration and opens the saved classroom archive', async () => {
     mount();
     expect(await screen.findByText(/02:00/)).toBeInTheDocument();

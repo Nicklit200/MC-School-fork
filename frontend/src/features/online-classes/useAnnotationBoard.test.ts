@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { onlineClassesApi, type AnnotationDocument } from '../../api/onlineClasses';
 import { useAnnotationBoard } from './useAnnotationBoard';
+import { flushClassAnnotations } from './annotationSync';
 
 vi.mock('../../api/onlineClasses', async () => {
   const actual = await vi.importActual<typeof import('../../api/onlineClasses')>(
@@ -392,5 +393,138 @@ describe('useAnnotationBoard — pages, eraser and move', () => {
       await result.current.addShape(PEN);
     });
     expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ operationType: 'ADD' }), 'doc-0');
+  });
+});
+
+describe('useAnnotationBoard — archive persistence barrier', () => {
+  const saved = (operationId: string) => ({ id: `row-${operationId}`, operationId, sequence: 1,
+    actorId: 'teacher-1', layerOwnerId: 'teacher-1', operationType: 'ADD', payload: JSON.stringify(PEN), createdAt: '' });
+  function trackedBoard(classId: string) {
+    return renderHook(() => useAnnotationBoard({ classId, targetType: 'WHITEBOARD', targetId: 'personal-workbook-pupil',
+      pageIndex: 2, actorId: 'teacher-1', isHost: true }));
+  }
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.openAnnotationDocument.mockResolvedValue({ ...DOC, targetId: 'personal-workbook-pupil', pageIndex: 2 });
+    api.replayAnnotations.mockResolvedValue([]);
+    api.appendAnnotation.mockImplementation(async (_classId, _doc, operationId) => saved(operationId) as never);
+  });
+
+  it('awaits a stroke after its page unmounts without issuing a duplicate operation', async () => {
+    let release!: (value: never) => void;
+    api.appendAnnotation.mockImplementationOnce(() => new Promise<never>(resolve => { release = resolve; }));
+    const { result, unmount } = trackedBoard('unmounted-stroke');
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    let saving!: Promise<boolean>;
+    act(() => { saving = result.current.addShape(PEN, 'kept-stroke-id'); });
+    await waitFor(() => expect(api.appendAnnotation).toHaveBeenCalledOnce());
+    unmount();
+    const complete = vi.fn(), flushing = flushClassAnnotations('unmounted-stroke').then(complete);
+    await Promise.resolve();
+    expect(complete).not.toHaveBeenCalled();
+    release(saved('kept-stroke-id') as never);
+    await saving; await flushing;
+    expect(api.appendAnnotation).toHaveBeenCalledExactlyOnceWith('unmounted-stroke', 'doc-1', 'kept-stroke-id', 'ADD', JSON.stringify(PEN));
+  });
+
+  it('also waits for a newly appended blank page to acquire its durable document', async () => {
+    let release!: (document: AnnotationDocument) => void;
+    api.openAnnotationDocument.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const { unmount } = trackedBoard('unmounted-blank-page');
+    await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledOnce());
+    unmount();
+    const complete = vi.fn(), flushing = flushClassAnnotations('unmounted-blank-page').then(complete);
+    await Promise.resolve();
+    expect(complete).not.toHaveBeenCalled();
+    release({ ...DOC, pageIndex: 2 }); await flushing;
+    expect(complete).toHaveBeenCalledOnce();
+    expect(api.appendAnnotation).not.toHaveBeenCalled();
+  });
+
+  it('retries an unmounted failed ADD from its original closure and stable operation ID during save', async () => {
+    api.appendAnnotation.mockRejectedValueOnce(new Error('offline'));
+    const first = trackedBoard('failed-unmounted-stroke');
+    await waitFor(() => expect(first.result.current.document).not.toBeNull());
+    await act(async () => { expect(await first.result.current.addShape(PEN, 'retry-same-stroke')).toBe(false); });
+    first.unmount();
+    await expect(flushClassAnnotations('failed-unmounted-stroke')).resolves.toBeUndefined();
+    expect(api.appendAnnotation).toHaveBeenCalledTimes(2);
+    expect(api.appendAnnotation.mock.calls.every(call => call[2] === 'retry-same-stroke')).toBe(true);
+  });
+
+  it('unblocks when REST replay proves that a failed HTTP acknowledgement actually saved the stroke', async () => {
+    api.appendAnnotation.mockRejectedValue(new Error('lost response'));
+    const { result } = trackedBoard('replay-lost-ack');
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => { await result.current.addShape(PEN, 'stored-despite-error'); });
+    await expect(flushClassAnnotations('replay-lost-ack')).rejects.toThrow();
+    api.replayAnnotations.mockResolvedValue([saved('stored-despite-error')] as never);
+    await act(async () => { await result.current.refresh(); });
+    await expect(flushClassAnnotations('replay-lost-ack')).resolves.toBeUndefined();
+    expect(result.current.shapes).toHaveLength(1);
+    expect(api.appendAnnotation).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not silently archive a local stroke attempted before its page finished opening', async () => {
+    const { result } = trackedBoard('page-not-ready');
+    await act(async () => { expect(await result.current.addShape(PEN, 'early-stroke')).toBe(false); });
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    expect(api.appendAnnotation).not.toHaveBeenCalled();
+    await expect(flushClassAnnotations('page-not-ready')).resolves.toBeUndefined();
+    expect(api.appendAnnotation).toHaveBeenCalledExactlyOnceWith('page-not-ready', 'doc-1', 'early-stroke', 'ADD', JSON.stringify(PEN));
+  });
+
+  it.each(['CLEAR_LAYER', 'ADD-erase'])('does not retry a failed destructive %s after newer ink', async type => {
+    api.appendAnnotation.mockRejectedValueOnce(new Error('offline'));
+    const classId = `failed-destructive-${type}`;
+    const { result } = trackedBoard(classId);
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => {
+      if (type === 'CLEAR_LAYER') expect(await result.current.clearMine()).toBe(false);
+      else expect(await result.current.addShape({ ...PEN, kind: 'erase' }, 'failed-eraser')).toBe(false);
+      expect(await result.current.addShape(PEN, 'new-stroke')).toBe(true);
+    });
+    await expect(flushClassAnnotations(classId)).resolves.toBeUndefined();
+    expect(api.appendAnnotation).toHaveBeenCalledTimes(2);
+    expect(api.appendAnnotation.mock.calls[1][2]).toBe('new-stroke');
+  });
+
+  it('does not retry failed old ink after a successful clear acknowledged the same document and layer', async () => {
+    api.appendAnnotation.mockRejectedValueOnce(new Error('offline')).mockImplementation(async (_classId, _doc, operationId, operationType, payload) => ({
+      ...saved(operationId), operationType, payload,
+    }) as never);
+    const { result } = trackedBoard('hook-cleared-failed-add');
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => {
+      expect(await result.current.addShape(PEN, 'old-stroke')).toBe(false);
+      expect(await result.current.clearMine()).toBe(true);
+    });
+    await expect(flushClassAnnotations('hook-cleared-failed-add')).resolves.toBeUndefined();
+    expect(api.appendAnnotation).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a stable-ID collision acknowledged with another actor’s stored operation', async () => {
+    api.appendAnnotation.mockResolvedValue({ ...saved('collision'), actorId: 'pupil', layerOwnerId: 'pupil' } as never);
+    const { result } = trackedBoard('foreign-actor-ack');
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => { expect(await result.current.addShape(PEN, 'collision')).toBe(false); });
+    expect(result.current.confirmedStrokeIds).toEqual([]);
+    await expect(flushClassAnnotations('foreign-actor-ack')).rejects.toThrow('несохранённые');
+  });
+
+  it('reconciles a lost clear acknowledgement after unmount before any retained ADD can be retried', async () => {
+    api.appendAnnotation.mockRejectedValueOnce(new Error('lost add')).mockRejectedValueOnce(new Error('lost clear acknowledgement'));
+    const { result, unmount } = trackedBoard('hook-lost-clear');
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => {
+      expect(await result.current.addShape(PEN, 'old-ink')).toBe(false);
+      expect(await result.current.clearMine()).toBe(false);
+    });
+    const clearId = api.appendAnnotation.mock.calls[1][2];
+    api.replayAnnotations.mockResolvedValue([{ ...saved(clearId), operationType: 'CLEAR_LAYER', payload: '{}' }] as never);
+    unmount();
+    await expect(flushClassAnnotations('hook-lost-clear')).resolves.toBeUndefined();
+    expect(api.appendAnnotation).toHaveBeenCalledTimes(2);
+    expect(api.replayAnnotations).toHaveBeenLastCalledWith('hook-lost-clear', 'doc-1', 0);
   });
 });

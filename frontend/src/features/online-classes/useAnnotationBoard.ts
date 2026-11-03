@@ -10,10 +10,12 @@ import {
   foldOperations,
   undoableOperations,
 } from './annotations';
+import { confirmAnnotationWrite, trackAnnotationWrite } from './annotationSync';
 
 /** A board that fails to open is retried this many times, with a growing pause. */
 const OPEN_RETRIES = 3;
 const OPEN_RETRY_DELAY_MS = 500;
+const scopeOf = (type: AnnotationTargetType, target: string, page: number) => JSON.stringify([type, target, page]);
 
 function newId(): string {
   return typeof crypto?.randomUUID === 'function'
@@ -77,6 +79,7 @@ export function useAnnotationBoard({
   const optimisticSequence = useRef(-1);
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
+  const openedDocuments = useRef(new Map<string, AnnotationDocument>());
 
   const current = pages[pageIndex] ?? EMPTY_PAGE;
   const document = current.document;
@@ -95,6 +98,10 @@ export function useAnnotationBoard({
 
   const merge = useCallback(
     (page: number, incoming: Operation) => {
+      const scope = scopeOf(targetType, targetId, page);
+      const documentId = pagesRef.current[page]?.document?.id ?? openedDocuments.current.get(`${classId}:${scope}`)?.id;
+      if (incoming.sequence > 0 && incoming.layerOwnerId === incoming.actorId) confirmAnnotationWrite(classId, incoming.operationId,
+        { scope, actorId: incoming.actorId, documentId, operationType: incoming.operationType, payload: incoming.payload });
       update(page, (state) => {
         const index = state.operations.findIndex((item) => item.operationId === incoming.operationId);
         if (index >= 0) {
@@ -105,7 +112,7 @@ export function useAnnotationBoard({
         return { ...state, operations: [...state.operations, incoming] };
       });
     },
-    [update],
+    [classId, targetType, targetId, update],
   );
 
   useEffect(() => {
@@ -115,14 +122,22 @@ export function useAnnotationBoard({
     setRedoStack([]);
     const open = async (attempt: number): Promise<void> => {
       try {
-        const opened = await onlineClassesApi.openAnnotationDocument(
+        const scope = scopeOf(targetType, targetId, pageIndex);
+        const opened = await trackAnnotationWrite(classId,
+          `document:${targetType}:${targetId}:${pageIndex}`, async () => {
+          const opened = await onlineClassesApi.openAnnotationDocument(
           classId,
           targetType,
           targetId,
           pageIndex,
           sourceWidth,
           sourceHeight,
-        );
+          );
+          // Kept even after unmount: a retained early stroke can use the page
+          // identity when an explicit save retries its original write.
+          openedDocuments.current.set(`${classId}:${scope}`, opened);
+          return opened;
+        }, { scope, actorId });
         if (!active) return;
         update(pageIndex, (state) => ({ ...state, document: opened }));
         const known = lastSequence(pagesRef.current[pageIndex]?.operations ?? []);
@@ -132,6 +147,10 @@ export function useAnnotationBoard({
           known,
         )) as unknown as Operation[];
         if (!active) return;
+        for (const operation of replayed) {
+          if (operation.sequence > 0 && operation.layerOwnerId === operation.actorId) confirmAnnotationWrite(classId, operation.operationId,
+            { scope, actorId: operation.actorId, documentId: opened.id, operationType: operation.operationType, payload: operation.payload });
+        }
         update(pageIndex, (state) => {
           if (known === 0) return { ...state, operations: replayed };
           const byId = new Map(state.operations.map((item) => [item.operationId, item]));
@@ -150,7 +169,7 @@ export function useAnnotationBoard({
     return () => {
       active = false;
     };
-  }, [classId, targetType, targetId, pageIndex, sourceWidth, sourceHeight, update]);
+  }, [classId, targetType, targetId, pageIndex, sourceWidth, sourceHeight, actorId, update]);
 
   const shapes = useMemo(() => foldOperations(operations), [operations]);
   // A durable ADD can already be hidden by a following undo/clear in the same
@@ -162,10 +181,21 @@ export function useAnnotationBoard({
   const undoable = useMemo(() => undoableOperations(operations, actorId), [operations, actorId]);
 
   const submit = useCallback(
-    async (operationType: Operation['operationType'], payload: string, providedOperationId?: string) => {
-      if (!document) return false;
+    async (operationType: Operation['operationType'], payload: string, providedOperationId?: string, retain = false) => {
       const page = pageIndex;
       const operationId = providedOperationId ?? newId();
+      const scope = scopeOf(targetType, targetId, page);
+      const documentId = () => document?.id ?? openedDocuments.current.get(`${classId}:${scope}`)?.id ?? null;
+      const knownBeforeWrite = lastSequence(pagesRef.current[page]?.operations ?? []);
+      const verify = async () => {
+        const id = documentId();
+        if (!id) return;
+        const operations = (await onlineClassesApi.replayAnnotations(classId, id, knownBeforeWrite)) as unknown as Operation[];
+        for (const operation of operations) {
+          if (operation.sequence > 0 && operation.layerOwnerId === operation.actorId) confirmAnnotationWrite(classId, operation.operationId,
+            { scope, actorId: operation.actorId, documentId: id, operationType: operation.operationType, payload: operation.payload });
+        }
+      };
       const optimistic: Operation = {
         operationId,
         sequence: optimisticSequence.current--,
@@ -177,16 +207,22 @@ export function useAnnotationBoard({
       merge(page, optimistic);
 
       try {
-        const saved = (await onlineClassesApi.appendAnnotation(
-          classId,
-          document.id,
-          operationId,
-          operationType,
-          payload,
-        )) as unknown as Operation;
+        const saved = await trackAnnotationWrite(classId, operationId, async () => {
+          const id = documentId();
+          if (!id) throw new Error('Annotation page is not ready');
+          const saved = (await onlineClassesApi.appendAnnotation(classId, id, operationId, operationType, payload)) as unknown as Operation;
+          // The server's idempotency key belongs to a document, not an actor.
+          // A peer reusing an exposed stroke ID must never acknowledge ours.
+          if (saved.operationId !== operationId || saved.actorId !== actorId || saved.layerOwnerId !== actorId
+            || saved.operationType !== operationType || saved.payload !== payload || saved.sequence <= 0) {
+            throw new Error('Annotation acknowledgement does not match this write');
+          }
+          return saved;
+        }, { scope, actorId, documentId, operationType, payload, verify,
+          retainOnFailure: operationType === 'ADD' && retain });
         if (mounted.current) {
           merge(page, saved);
-          onSavedRef.current?.(saved, document.id);
+          onSavedRef.current?.(saved, documentId()!);
         }
         return true;
       } catch {
@@ -201,10 +237,10 @@ export function useAnnotationBoard({
         return false;
       }
     },
-    [actorId, classId, document, merge, pageIndex, update],
+    [actorId, classId, document, merge, pageIndex, targetType, targetId, update],
   );
 
-  const addShape = useCallback((shape: Shape, operationId?: string) => submit('ADD', JSON.stringify(shape), operationId), [submit]);
+  const addShape = useCallback((shape: Shape, operationId?: string) => submit('ADD', JSON.stringify(shape), operationId, shape.kind !== 'erase'), [submit]);
 
   const undo = useCallback(() => {
     const last = undoable[undoable.length - 1];

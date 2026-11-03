@@ -55,7 +55,6 @@ public class CompletedLessonDocumentController {
                              @RequestParam UUID classId,
                              @RequestParam String boardId,
                              @RequestParam("file") MultipartFile file) throws Exception {
-        lessons.require(teacher, eventId);
         if (!boardId.equals("board-1") && PersonalBoard.ownerOf(boardId).isEmpty())
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "Invalid board");
@@ -82,6 +81,10 @@ public class CompletedLessonDocumentController {
         String filename = boardId.equals("board-1") ? "Общая-доска.pdf"
                 : (PersonalBoard.isWorkbook(boardId) ? "Персональный-лист-" : "Ученик-")
                     + PersonalBoard.ownerOf(boardId).orElseThrow() + ".pdf";
+        // A lesson worked on blank boards may have no preparation yet. Create
+        // its metadata only after the file, board access and exact owned
+        // classroom/event binding have all been validated.
+        lessons.getOrCreate(teacher, eventId);
         UUID id = UUID.randomUUID();
         jdbc.update("""
             INSERT INTO completed_lesson_documents(id,teacher_id,event_id,class_id,board_id,filename,pdf)

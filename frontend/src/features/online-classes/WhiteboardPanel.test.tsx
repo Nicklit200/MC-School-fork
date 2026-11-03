@@ -1255,6 +1255,11 @@ describe('WhiteboardPanel', () => {
     });
 
     it('sends notebook ink privately on its own channel and ignores paper-board strokes and views', async () => {
+      // The backend derives both identities from the authenticated writer.
+      api.appendAnnotation.mockImplementation(async (_c, _d, operationId, operationType, payload) => ({
+        id: `r${++sequence}`, operationId, sequence, actorId: 'student', layerOwnerId: 'student',
+        operationType, payload, createdAt: '',
+      }));
       mount('student', { ...notebook, liveBackground: background() });
       await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalled());
       await act(async () => {

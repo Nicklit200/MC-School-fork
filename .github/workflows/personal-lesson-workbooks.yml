@@ -28,13 +28,13 @@ jobs:
           cache: maven
       - name: Verify pilot, student isolation, retries and PostgreSQL persistence
         working-directory: backend
-        run: ./mvnw -B -ntp '-Dtest=PersonalLessonWorkbook*,PersonalLessonAnswers*,PersonalLessonDocumentServiceTest,PersonalWorkbookAnnotationAccessTest,CompletedPersonalWorkbookDocumentTest,McpPersonalLessonWorkbookToolsTest,OnlineClassDocumentIntegrationTest,PersonalBoardAccessIntegrationTest,McpOperationReceiptIntegrationTest' test
+        run: ./mvnw -B -ntp '-Dtest=PersonalLessonWorkbook*,PersonalLessonAnswers*,PersonalLessonDocumentServiceTest,PersonalWorkbookAnnotationAccessTest,CompletedPersonalWorkbookDocumentTest,CompletedLessonArchivePreparationTest,CompletedLessonArchivePreparationIntegrationTest,McpPersonalLessonWorkbookToolsTest,OnlineClassDocumentIntegrationTest,PersonalBoardAccessIntegrationTest,McpOperationReceiptIntegrationTest' test
       - name: Require PostgreSQL persistence tests to execute
         run: |
           python3 - <<'PY'
           from pathlib import Path
           from xml.etree import ElementTree
-          for name, minimum in {'PersonalLessonWorkbookPersistenceIntegrationTest': 7, 'PersonalLessonAnswersPersistenceIntegrationTest': 5}.items():
+          for name, minimum in {'PersonalLessonWorkbookPersistenceIntegrationTest': 7, 'PersonalLessonAnswersPersistenceIntegrationTest': 5, 'CompletedLessonArchivePreparationIntegrationTest': 4}.items():
               report = Path('backend/target/surefire-reports') / f'TEST-com.mcschool.flashcard.lessons.{name}.xml'
               suite = ElementTree.parse(report).getroot()
               assert int(suite.get('tests', '0')) >= minimum, f'{name}: missing database coverage'

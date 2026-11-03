@@ -494,7 +494,8 @@ export function LessonDetailPage() {
             const boardId = 'manual-shared';
             const item = completedDocuments.find(doc=>doc.boardId===boardId)
               ?? completedDocuments.find(doc=>doc.boardId==='board-1')
-              ?? completedDocuments.find(doc=>doc.boardId==='imported-workbook');
+              ?? completedDocuments.find(doc=>doc.boardId==='imported-workbook')
+              ?? completedDocuments[0];
             return <div style={{border:'1px solid #e5e7eb',borderRadius:16,padding:16,marginBottom:12}}>
               <strong style={{overflowWrap:'anywhere'}}>{item?.filename ?? 'PDF ещё не загружен'}</strong>
               <div className="muted" style={{fontSize:13,marginTop:6}}>{item ? (item.boardId === 'board-1' ? 'Автоматически сохранённая общая доска. Открывается отдельно.' : 'Открывается отдельно — страница урока остаётся на месте.') : 'Загрузи PDF с результатами урока.'}</div>
@@ -513,7 +514,7 @@ export function LessonDetailPage() {
       <section className="panel" style={{padding:20,marginBottom:18}}>
         <h2 style={{marginTop:0}}>Пройденный урок</h2>
         <p className="muted">Архив общих и личных досок со всеми страницами и записями. Оригинальная рабочая тетрадь не меняется.</p>
-        {completedDocuments.length === 0 ? <p className="muted">Документы ещё не сохранены. В онлайн-уроке нажми «Сохранить документы урока».</p> :
+        {completedDocuments.length === 0 ? <p className="muted">PDF досок появятся здесь после выхода учителя или завершения урока. Во время занятия можно нажать «Сохранить документы урока».</p> :
           <div className="stack" style={{gap:8}}>{completedDocuments.map(item => (
             <div key={item.id} style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
               <strong>{item.boardId === 'board-1' || item.boardId === 'manual-shared' ? 'Общая доска' : item.boardId === 'imported-workbook' ? 'Материал урока' : item.boardId.startsWith('personal-workbook-') ? 'Персональный лист' : 'Личная доска ученика'} · {item.filename}</strong>

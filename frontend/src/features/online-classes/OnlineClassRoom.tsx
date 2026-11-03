@@ -1,5 +1,7 @@
 import { lessonPreparationApi, completedLessonApi, type PersonalWorkbooks } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
+import { annotationPageCount } from './annotationPages';
+import { flushClassAnnotations } from './annotationSync';
 import { NotebookCameraPanel } from '../notebook-camera/NotebookCameraPanel';
 import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import { useLessonNotebookCameras } from '../notebook-camera/useLessonNotebookCameras';
@@ -130,8 +132,8 @@ function RoomBody({
   transcriptionState: ClassFeatureState;
   recordingAvailable: boolean;
   transcriptionAvailable: boolean;
-  onLeave: () => void;
-  onEndForAll?: () => void;
+  onLeave: () => void | Promise<void>;
+  onEndForAll?: () => void | Promise<void>;
   onStateChanged?: () => void;
 }) {
   const { t, language } = useI18n();
@@ -392,25 +394,38 @@ function RoomBody({
   const [archiving, setArchiving] = useState(false);
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
   const [archiveError, setArchiveError] = useState(false);
+  const archiveFlight = useRef<{ scope: string; promise: Promise<boolean> } | null>(null);
+  const exitFlight = useRef<string | null>(null);
+  const [exitPending, setExitPending] = useState(false);
+  const boardsFrozen = connection.host && Boolean(eventId) && (archiving || exitPending);
+  const archiveScope = JSON.stringify([classId, eventId, currentUserId, connection.host]);
+  const currentArchiveScope = useRef(archiveScope);
+  currentArchiveScope.current = archiveScope;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  useEffect(() => {
+    setArchiving(false);
+    setExitPending(false);
+    setArchiveNotice(null);
+    setArchiveError(false);
+  }, [archiveScope]);
   useEffect(() => {
     // Keep progress and errors visible. A completed save only needs a brief
     // confirmation; starting another save cancels the previous dismissal.
-    if (!archiveNotice || archiving || archiveError) return;
+    if (!archiveNotice || archiving || exitPending || archiveError) return;
     const timer = window.setTimeout(() => setArchiveNotice(null), 5000);
     return () => window.clearTimeout(timer);
-  }, [archiveNotice, archiving, archiveError]);
-  const archiveBoards = async (): Promise<void> => {
-    if (archiving) return;
-    if (!eventId) {
-      setArchiveError(true);
-      setArchiveNotice('Нельзя сохранить: доска не связана с календарным уроком.');
-      return;
-    }
-    setArchiving(true);
-    setArchiveError(false);
-    setArchiveNotice('Подготавливаем документы досок…');
+  }, [archiveNotice, archiving, exitPending, archiveError]);
+  const saveBoards = async (eventId: string, scope: string): Promise<boolean> => {
+    const isCurrent = () => mounted.current && currentArchiveScope.current === scope;
+    const notice = (message: string) => { if (isCurrent()) setArchiveNotice(message); };
+    const fail = () => { if (isCurrent()) setArchiveError(true); };
     let sharedArchiveDocument: PdfDoc | null = null;
     try {
+      await flushClassAnnotations(classId);
       const documents = await onlineClassesApi.listAnnotationDocuments(classId);
       // Another tab or the connector may have assigned a sheet after entry.
       const latestWorkbooks = personalWorkbookData?.enabled ? await lessonPreparationApi.personalWorkbooks(eventId) : null;
@@ -431,7 +446,7 @@ function RoomBody({
       const saved: Array<{ id: string; boardId: string; classId: string; name: string }> = [];
       const failures: string[] = [];
       for (const [index, item] of boards.entries()) {
-        setArchiveNotice(`Сохраняем ${item.name} (${index + 1}/${boards.length})…`);
+        notice(`Сохраняем ${item.name} (${index + 1}/${boards.length})…`);
         const worksheet = isPersonalWorkbookBoard(item.id);
         let exportDocument: PdfDoc | null = worksheet ? null : sharedArchiveDocument;
         try {
@@ -439,9 +454,7 @@ function RoomBody({
             const bytes = await onlineClassesApi.documentBytes(classId, item.id);
             exportDocument = bytes?.byteLength ? await openPdf(bytes) : null;
           }
-          const count = Math.max(1, exportDocument?.pageCount ?? 1, ...documents
-            .filter(document => document.targetType === 'WHITEBOARD' && document.targetId === item.id)
-            .map(document => document.pageIndex + 1));
+          const count = annotationPageCount(documents, 'WHITEBOARD', item.id, exportDocument?.pageCount ?? 1);
           const pdf = await exportBoardPdf({
             classId, targetType: 'WHITEBOARD', targetId: item.id, pageCount: count, pdfDocument: exportDocument,
           });
@@ -457,24 +470,64 @@ function RoomBody({
           if (worksheet) exportDocument?.destroy();
         }
       }
-      setArchiveNotice('Проверяем сохранённые PDF на сервере…');
+      notice('Проверяем сохранённые PDF на сервере…');
       const verified = await completedLessonApi.list(eventId);
       const confirmed = saved.filter(item => verified.some(doc =>
         doc.id === item.id && doc.classId === item.classId && doc.boardId === item.boardId));
       const unconfirmed = saved.filter(item => !confirmed.includes(item));
       failures.push(...unconfirmed.map(item => `${item.name}: нет подтверждения на сервере`));
       if (failures.length) {
-        setArchiveError(true);
-        setArchiveNotice(`Подтверждено ${confirmed.length} из ${boards.length} PDF. Ошибки: ${failures.join('; ')}. Можно повторить без удаления других файлов.`);
+        fail();
+        notice(`Подтверждено ${confirmed.length} из ${boards.length} PDF. Ошибки: ${failures.join('; ')}. Можно повторить без удаления других файлов.`);
+        return false;
       } else {
-        setArchiveNotice(`PDF сохранены в разделе «Пройденный урок»: ${confirmed.length}.`);
+        notice(`PDF сохранены в разделе «Пройденный урок»: ${confirmed.length}.`);
+        return true;
       }
     } catch (error) {
-      setArchiveError(true);
-      setArchiveNotice(`Не удалось подтвердить сохранение: ${error instanceof Error ? error.message : 'ошибка сервера'}. Попробуйте снова, оставаясь в уроке.`);
+      fail();
+      notice(`Не удалось подтвердить сохранение: ${error instanceof Error ? error.message : 'ошибка сервера'}. Попробуйте снова, оставаясь в уроке.`);
+      return false;
     } finally {
       sharedArchiveDocument?.destroy();
-      setArchiving(false);
+      if (isCurrent()) setArchiving(false);
+    }
+  };
+  const archiveBoards = (): Promise<boolean> => {
+    if (archiveFlight.current?.scope === archiveScope) return archiveFlight.current.promise;
+    if (!eventId) {
+      setArchiveError(true);
+      setArchiveNotice('Нельзя сохранить: доска не связана с календарным уроком.');
+      return Promise.resolve(false);
+    }
+    setArchiving(true);
+    setArchiveError(false);
+    setArchiveNotice('Подготавливаем документы досок…');
+    const scope = archiveScope;
+    const promise = saveBoards(eventId, scope);
+    archiveFlight.current = { scope, promise };
+    const complete = () => { if (archiveFlight.current?.promise === promise) archiveFlight.current = null; };
+    void promise.then(complete, complete);
+    return promise;
+  };
+  const exitRoom = async (action: () => void | Promise<void>): Promise<void> => {
+    if (exitFlight.current === archiveScope) return;
+    exitFlight.current = archiveScope;
+    setExitPending(true);
+    const scope = archiveScope;
+    try {
+      const saved = !connection.host || !eventId || await archiveBoards();
+      if (!mounted.current || currentArchiveScope.current !== scope) return;
+      if (saved) await action();
+      else setArchiveNotice(current => `${current ?? 'Документы не сохранены.'} Выход отложен. Повторите сохранение или нажмите кнопку выхода ещё раз.`);
+    } catch (error) {
+      if (mounted.current && currentArchiveScope.current === scope) {
+        setArchiveError(true);
+        setArchiveNotice(`Выход отложен: ${error instanceof Error ? error.message : 'ошибка сохранения'}. Повторите попытку, оставаясь в уроке.`);
+      }
+    } finally {
+      if (exitFlight.current === scope) exitFlight.current = null;
+      if (mounted.current && currentArchiveScope.current === scope) setExitPending(false);
     }
   };
   useEffect(() => {
@@ -546,7 +599,7 @@ function RoomBody({
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
         {archiveNotice && <div className="online-class-room__archive-notice">
           <span role={archiveError ? 'alert' : 'status'} style={{color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>
-          {!archiving && <button type="button" onClick={() => setArchiveNotice(null)}
+          {!archiving && !exitPending && <button type="button" onClick={() => setArchiveNotice(null)}
             aria-label={language === 'DE' ? 'Speicherhinweis schließen' : 'Закрыть уведомление о сохранении'}>×</button>}
         </div>}
         <RecordingControls
@@ -605,7 +658,8 @@ function RoomBody({
             />
             {personalWorkbookData?.enabled && <AnswersPanelResizer storageKey={currentUserId} />}
           </>)}
-        <div className="online-class-room__main">
+        <div className="online-class-room__main" aria-busy={boardsFrozen}
+          ref={element => { if (element) element.inert = boardsFrozen; }}>
           {/* The board stays mounted while a screen is shown, so switching back
               returns to the same page, zoom, tool and marks. */}
           {boardsToShow.map((boardId) => {
@@ -621,12 +675,12 @@ function RoomBody({
                     isHost={connection.host}
                     targetId={boardId}
                     // Everyone in the class may draw, on the shared board and on their own.
-                    canAnnotate
+                    canAnnotate={!boardsFrozen}
                     fileAction={visible ? fileAction : undefined}
                     active={visible}
                     observedPages={studentPages}
                     onSaveLessonDocuments={connection.host ? archiveBoards : undefined}
-                    savingLessonDocuments={archiving}
+                    savingLessonDocuments={archiving || exitPending}
                     // Answers belong to whichever board the teacher is looking at.
                     hostActions={
                       connection.host && visible ? (
@@ -668,11 +722,11 @@ function RoomBody({
                 compactPreview={compact}
                 followStudent={following}
                 observedPages={studentPages}
-                canAnnotate={!compact}
+                canAnnotate={!compact && !boardsFrozen}
                 active={active}
                 fileAction={active && !compact ? fileAction : undefined}
                 onSaveLessonDocuments={!compact ? archiveBoards : undefined}
-                savingLessonDocuments={archiving}
+                savingLessonDocuments={archiving || exitPending}
                 hostActions={active && !compact ? <AnswersButton compact status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
               />
             </Suspense>}
@@ -685,7 +739,7 @@ function RoomBody({
                 targetId={personalBoardId(studentId)}
                 compactPreview={compact}
                 followStudent={following}
-                canAnnotate={!compact}
+                canAnnotate={!compact && !boardsFrozen}
                 active={active}
                 fileAction={active && !compact ? fileAction : undefined}
                 liveBackground={source ? { source: source.rawVideo, width: source.rawWidth, height: source.rawHeight,
@@ -791,16 +845,17 @@ function RoomBody({
         )}
         </div>
         <div className="online-class-room__control-island online-class-room__control-island--exit">
-        <button type="button" className="online-class-room__leave" onClick={onLeave}>
+        <button type="button" className="online-class-room__leave" disabled={exitPending} onClick={() => void exitRoom(onLeave)}>
           {t('onlineClass.leave')}
         </button>
         {onEndForAll && (
           <button
             type="button"
             className="online-class-room__end"
+            disabled={exitPending}
             onClick={() => {
               if (window.confirm(t('onlineClass.endConfirm'))) {
-                onEndForAll();
+                void exitRoom(onEndForAll);
               }
             }}
           >
@@ -849,11 +904,11 @@ export function OnlineClassRoom({
   /** What this server can do; the teacher is not offered buttons that cannot work. */
   recordingAvailable?: boolean;
   transcriptionAvailable?: boolean;
-  onLeave: () => void;
+  onLeave: () => void | Promise<void>;
   /** An involuntary LiveKit disconnect is not the user's Leave action. */
   onConnectionLost: (reason?: string, everConnected?: boolean) => void;
   onMediaError?: (category: LiveKitErrorCategory) => void;
-  onEndForAll?: () => void;
+  onEndForAll?: () => void | Promise<void>;
   onStateChanged?: () => void;
 }) {
   const connectedSinceMount = useRef(false);

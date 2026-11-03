@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnnotationDocument, AnnotationTargetType } from '../../api/onlineClasses';
 import type { PdfDoc } from './pdfDocument';
 import { exportBoardPdf } from './boardExport';
+import type { Operation } from './annotations';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), replay: vi.fn(), stages: [] as Record<string, any>[], images: [] as Record<string, any>[],
@@ -41,6 +42,12 @@ function readPdf(blob: Blob): Promise<string> {
     const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(blob);
   });
 }
+
+const replayOperation = (sequence: number, operationType: Operation['operationType'] = 'CLEAR_LAYER', payload = '{}', actorId = 'other'): Operation => ({
+  operationId: `operation-${sequence}`, sequence, actorId, layerOwnerId: actorId, operationType, payload,
+});
+const lateLine = (sequence: number) => replayOperation(sequence, 'ADD',
+  JSON.stringify({ kind: 'line', color: '#456abc', x1: .1, y1: .2, x2: .6, y2: .7 }), 'teacher');
 
 describe('board PDF page geometry', () => {
   it('exports an unopened blank WHITEBOARD page in portrait A4 proportions', async () => {
@@ -123,5 +130,60 @@ describe('board PDF page geometry', () => {
     mocks.list.mockResolvedValue([annotationDocument(targetType, 720, 1280)]);
     await exportBoardPdf({ ...options, targetType });
     expect(mocks.stages[1]).toMatchObject({ width: 1600, height: 2844 });
+  });
+});
+
+describe('complete annotation history in archived PDFs', () => {
+  it('reads beyond 5000 operations to include the final stroke on a private page', async () => {
+    const targetId = 'personal-workbook-alice';
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), targetId, revision: 5001 }]);
+    const first = Array.from({ length: 5000 }, (_, index) => replayOperation(index + 1));
+    mocks.replay.mockImplementation(async (_classId: string, _documentId: string, after: number) => after === 0 ? first : [lateLine(5001)]);
+    await exportBoardPdf({ ...options, targetId });
+    expect(mocks.replay.mock.calls.map(call => call[2])).toEqual([0, 5000]);
+    expect(mocks.lines).toEqual([{ page: 0, attributes: expect.objectContaining({ stroke: '#456abc' }) }]);
+  });
+
+  it('applies a clear in the second batch instead of resurrecting an erased stroke', async () => {
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), revision: 5001 }]);
+    const first = [lateLine(1), ...Array.from({ length: 4999 }, (_, index) => replayOperation(index + 2))];
+    mocks.replay.mockResolvedValueOnce(first).mockResolvedValueOnce([replayOperation(5001, 'CLEAR_ALL', '{}', 'teacher')]);
+    await exportBoardPdf(options);
+    expect(mocks.replay.mock.calls.map(call => call[2])).toEqual([0, 5000]);
+    expect(mocks.lines).toHaveLength(0);
+  });
+
+  it('reads the tail after a full batch even when metadata predates the last stroke', async () => {
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), revision: 1 }]);
+    mocks.replay.mockResolvedValueOnce(Array.from({ length: 5000 }, (_, index) => replayOperation(index + 1)))
+      .mockResolvedValueOnce([lateLine(5001)]);
+    await exportBoardPdf(options);
+    expect(mocks.replay).toHaveBeenCalledTimes(2);
+    expect(mocks.lines).toHaveLength(1);
+  });
+
+  it('finishes at an empty tail when a page contains exactly one full batch', async () => {
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), revision: 5000 }]);
+    mocks.replay.mockResolvedValueOnce(Array.from({ length: 5000 }, (_, index) => replayOperation(index + 1))).mockResolvedValueOnce([]);
+    await exportBoardPdf(options);
+    expect(mocks.replay.mock.calls.map(call => call[2])).toEqual([0, 5000]);
+    expect(mocks.stages).toHaveLength(1);
+  });
+
+  it('keeps reading a short response until the advertised revision is reached', async () => {
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), revision: 2 }]);
+    mocks.replay.mockResolvedValueOnce([replayOperation(1)]).mockResolvedValueOnce([lateLine(2)]);
+    await exportBoardPdf(options);
+    expect(mocks.replay.mock.calls.map(call => call[2])).toEqual([0, 1]);
+    expect(mocks.lines).toHaveLength(1);
+  });
+
+  it.each(['missing-tail', 'repeated-sequence'])('rejects incomplete replay (%s) instead of exporting a misleading partial PDF', async failure => {
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), revision: 2 }]);
+    mocks.replay.mockResolvedValueOnce([lateLine(1)])
+      .mockResolvedValueOnce(failure === 'missing-tail' ? [] : [lateLine(1)]);
+    await expect(exportBoardPdf(options)).rejects.toThrow('полностью прочитать');
+    expect(mocks.replay).toHaveBeenCalledTimes(2);
+    expect(mocks.stages).toHaveLength(0);
   });
 });

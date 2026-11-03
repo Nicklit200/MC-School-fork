@@ -28,6 +28,35 @@ const EXPORT_WIDTH = 1600;
 /** Used when a page has no recorded size (a board nobody has opened yet). */
 const DEFAULT_ASPECT = 16 / 9;
 const JPEG_QUALITY = 0.9;
+/** Mirrors OnlineClassAnnotationService.MAX_REPLAY_OPERATIONS. */
+const REPLAY_BATCH_SIZE = 5000;
+const MAX_REPLAY_REQUESTS = 200;
+
+/** An archive must include late ink/undo/clear, not just the first REST batch. */
+async function replayPage(classId: string, documentId: string, revision: number): Promise<Operation[]> {
+  const required = Number.isSafeInteger(revision) && revision > 0 ? revision : 0;
+  const operations: Operation[] = [];
+  let after = 0;
+  for (let request = 0; request < MAX_REPLAY_REQUESTS; request++) {
+    const batch = (await onlineClassesApi.replayAnnotations(classId, documentId, after)) as unknown as Operation[];
+    if (!batch.length) {
+      if (after < required) throw new Error('Не удалось полностью прочитать записи доски. Повторите сохранение урока.');
+      return operations;
+    }
+    for (const operation of batch) {
+      if (!Number.isSafeInteger(operation.sequence) || operation.sequence <= after) {
+        throw new Error('Не удалось полностью прочитать записи доски. Повторите сохранение урока.');
+      }
+      after = operation.sequence;
+      operations.push(operation);
+    }
+    // A full batch may hide newer operations even when the initial metadata is
+    // already satisfied. Read its tail; short responses can finish only once
+    // the server's advertised revision has actually been reached.
+    if (batch.length < REPLAY_BATCH_SIZE && after >= required) return operations;
+  }
+  throw new Error('На доске слишком много записей для одного сохранения. Повторите сохранение после остановки рисования.');
+}
 
 /** Marks of one page, drawn over white (or over the workbook page) as a JPEG. */
 function renderPage(
@@ -183,7 +212,7 @@ export async function exportBoardPdf({
   for (let index = 0; index < count; index += 1) {
     const document = documents.find((entry) => entry.pageIndex === index);
     const operations = document
-      ? ((await onlineClassesApi.replayAnnotations(classId, document.id, 0)) as unknown as Operation[])
+      ? await replayPage(classId, document.id, document.revision)
       : [];
 
     let background: CanvasImageSource | null = null;
