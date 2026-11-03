@@ -1,10 +1,10 @@
 import { act, fireEvent, render } from '@testing-library/react';
-import { createRef } from 'react';
+import { createRef, useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WhiteboardCanvas, type WhiteboardCanvasHandle } from './WhiteboardCanvas';
 import type { CameraModule, DocumentRendererOptions, NotebookDocumentView } from '../notebook-camera/cameraModules';
 import { createNotebookProjection, notebookRawToScreen, type NotebookCameraGeometry } from './notebookCameraGeometry';
-import { DEFAULT_VIEW } from './boardView';
+import { DEFAULT_VIEW, screenToBoard, zoomAbout } from './boardView';
 
 const mock = vi.hoisted(() => ({
   stageProps: {} as Record<string, any>, imageProps: {} as Record<string, any>, rectProps: {} as Record<string, any>,
@@ -98,6 +98,109 @@ function projectedNotebook(patch: Partial<NotebookDocumentView> = {}) {
   };
   return { geometry, instances, context, layers };
 }
+
+function animationFrames() {
+  let id = 0;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { callbacks.set(++id, callback); return id; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn((request: number) => callbacks.delete(request)));
+  return {
+    flush: () => act(() => {
+      const frame = [...callbacks.values()]; callbacks.clear();
+      frame.forEach(callback => callback(0));
+    }),
+    pending: () => callbacks.size,
+  };
+}
+
+describe('WhiteboardCanvas wheel navigation', () => {
+  it('accumulates rapid paged zoom once per frame and preserves the local cursor anchor', () => {
+    const frames = animationFrames(), onViewChange = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} onViewChange={onViewChange} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ left: 100, top: 50, width: 1000, height: 500 } as DOMRect);
+    for (let i = 0; i < 3; i++) fireEvent.wheel(surface, { deltaY: -20, ctrlKey: true, clientX: 400, clientY: 250 });
+    expect(onViewChange).not.toHaveBeenCalled(); expect(frames.pending()).toBe(1);
+    frames.flush();
+    expect(onViewChange).toHaveBeenCalledOnce();
+    const next = onViewChange.mock.calls[0][0];
+    expect(next.zoom).toBeCloseTo(Math.exp(.12));
+    const anchor = screenToBoard({ x: 300, y: 200 }, next);
+    expect(anchor.x).toBeCloseTo(300); expect(anchor.y).toBeCloseTo(200);
+  });
+
+  it('uses each event cursor and keeps later wheel input when an earlier frame is acknowledged', () => {
+    const frames = animationFrames(), onViewChange = vi.fn();
+    const { container, rerender } = render(<WhiteboardCanvas {...props} onViewChange={onViewChange} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    fireEvent.wheel(surface, { deltaY: -20, ctrlKey: true, clientX: 300, clientY: 200 }); frames.flush();
+    const first = onViewChange.mock.calls[0][0];
+    fireEvent.wheel(surface, { deltaY: -30, ctrlKey: true, clientX: 700, clientY: 300 });
+    // The controlled parent can still be committing the previous frame.
+    rerender(<WhiteboardCanvas {...props} onViewChange={onViewChange} view={first} />);
+    fireEvent.wheel(surface, { deltaY: -10, ctrlKey: true, clientX: 450, clientY: 250 }); frames.flush();
+    const intermediate = zoomAbout(first, first.zoom * Math.exp(.06), { x: 700, y: 300 }, { width: 1000, height: 500 });
+    const expected = zoomAbout(intermediate, intermediate.zoom * Math.exp(.02), { x: 450, y: 250 }, { width: 1000, height: 500 });
+    expect(onViewChange).toHaveBeenCalledTimes(2);
+    expect(onViewChange.mock.calls[1][0]).toEqual(expected);
+    expect(onViewChange.mock.calls[1][0].zoom).toBeCloseTo(Math.exp(.12));
+  });
+
+  it.each(['page', 'scope', 'lock', 'inactive', 'external view'])(
+    'cancels an unpublished wheel view on %s changes', change => {
+      const frames = animationFrames(), onViewChange = vi.fn();
+      const { container, rerender } = render(<WhiteboardCanvas {...props} onViewChange={onViewChange} />);
+      fireEvent.wheel(container.querySelector('.whiteboard__surface')!, { deltaY: -20, ctrlKey: true });
+      const nextProps = change === 'page' ? { pageKey: 'next' } : change === 'scope' ? { viewScope: 'remote' }
+        : change === 'lock' ? { navigationLocked: true } : change === 'inactive' ? { active: false }
+          : { view: { zoom: 2, panX: -100, panY: -100 } };
+      rerender(<WhiteboardCanvas {...props} onViewChange={onViewChange} {...nextProps} />);
+      frames.flush(); expect(onViewChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it('normalizes and accumulates paged wheel pan without scrolling its parent too', () => {
+    const frames = animationFrames(), onViewChange = vi.fn(), outerWheel = vi.fn();
+    const { container } = render(<div onWheel={outerWheel}><WhiteboardCanvas {...props}
+      view={{ zoom: 2, panX: -100, panY: -100 }} onViewChange={onViewChange} /></div>);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    const wheel = new WheelEvent('wheel', { deltaX: 1, deltaY: 2, deltaMode: 1, bubbles: true, cancelable: true });
+    act(() => { surface.dispatchEvent(wheel); });
+    fireEvent.wheel(surface, { deltaX: 8, deltaY: 4 }); frames.flush();
+    expect(onViewChange).toHaveBeenCalledExactlyOnceWith({ zoom: 2, panX: -124, panY: -136 });
+    expect(wheel.defaultPrevented).toBe(true); expect(outerWheel).not.toHaveBeenCalled();
+  });
+
+  it.each(['pointer pen', 'pointer mouse', 'native pen'])(
+    'cancels queued wheel zoom before %s ink starts and keeps its coordinates stable', async driver => {
+      const frames = animationFrames(), onViewChange = vi.fn(), onCommit = vi.fn().mockResolvedValue(true);
+      mock.backend = driver === 'native pen' ? 'ios-touch' : 'pointer';
+      function ControlledCanvas() {
+        const [view, setView] = useState(DEFAULT_VIEW);
+        return <WhiteboardCanvas {...props} onCommit={onCommit} view={view}
+          onViewChange={next => { onViewChange(next); setView(next); }} />;
+      }
+      const { container } = render(<ControlledCanvas />);
+      const surface = container.querySelector('.whiteboard__surface')!;
+      fireEvent.wheel(surface, { deltaY: -100, ctrlKey: true, clientX: 400, clientY: 200 });
+      expect(frames.pending()).toBe(1);
+      const contact = { source: 'touch', device: 'pen', inputId: 1 };
+      const point = (clientX: number, clientY: number) => ({ clientX, clientY, pressure: .5 });
+      act(() => {
+        if (driver === 'native pen') mock.nativeCallbacks.onStart(point(400, 200), contact);
+        else fireEvent.pointerDown(surface, { pointerId: 1, pointerType: driver === 'pointer pen' ? 'pen' : 'mouse', clientX: 400, clientY: 200 });
+      });
+      frames.flush();
+      expect(onViewChange).not.toHaveBeenCalled();
+      await act(async () => {
+        if (driver === 'native pen') mock.nativeCallbacks.onEnd(point(450, 250), contact, false);
+        else fireEvent.pointerUp(surface, { pointerId: 1, pointerType: driver === 'pointer pen' ? 'pen' : 'mouse', clientX: 450, clientY: 250 });
+      });
+      expect(onCommit).toHaveBeenCalledOnce();
+      expect(onCommit.mock.calls[0][0].points).toEqual([[.3, .4], [.4, .5]]);
+    },
+  );
+});
 
 describe('WhiteboardCanvas canonical notebook projection', () => {
   it.each([false, true])('commits pen input in raw coordinates through 180-degree or perspective projection (crop=%s)', async crop => {
@@ -428,7 +531,7 @@ describe('WhiteboardCanvas continuous scrolling', () => {
     const surface = container.querySelector('.whiteboard__surface')!;
     const wheel = new WheelEvent('wheel', { deltaY: -20, ctrlKey: true, clientX: 300, clientY: 200, bubbles: true, cancelable: true });
     act(() => { surface.dispatchEvent(wheel); });
-    expect(onDocumentGesture).toHaveBeenCalledExactlyOnceWith({ scale: Math.exp(0.2), anchor: { x: 300, y: 200 }, pan: { x: 0, y: 0 } });
+    expect(onDocumentGesture).toHaveBeenCalledExactlyOnceWith({ scale: Math.exp(0.04), anchor: { x: 300, y: 200 }, pan: { x: 0, y: 0 } });
     expect(wheel.defaultPrevented).toBe(true); expect(outerWheel).not.toHaveBeenCalled();
     expect(onViewChange).not.toHaveBeenCalled(); expect(onScrollGesture).not.toHaveBeenCalled();
     expect(mock.stageProps).toMatchObject({ scaleX: 1, scaleY: 1, x: 0, y: 0 });
@@ -595,6 +698,7 @@ describe('WhiteboardCanvas continuous scrolling', () => {
   });
 
   it('forwards plain wheel once, prevents native duplicate scroll and keeps Ctrl/meta wheel as page zoom', () => {
+    const frames = animationFrames();
     const onScrollGesture = vi.fn(), onViewChange = vi.fn(), outerWheel = vi.fn();
     const { container } = render(<div onWheel={outerWheel}><WhiteboardCanvas {...props} onScrollGesture={onScrollGesture} onViewChange={onViewChange} /></div>);
     const surface = container.querySelector('.whiteboard__surface')!;
@@ -603,8 +707,9 @@ describe('WhiteboardCanvas continuous scrolling', () => {
     expect(onScrollGesture).toHaveBeenCalledExactlyOnceWith(4, 60); expect(wheel.defaultPrevented).toBe(true); expect(outerWheel).not.toHaveBeenCalled();
     fireEvent.wheel(surface, { deltaY: -20, ctrlKey: true, clientX: 300, clientY: 200 });
     fireEvent.wheel(surface, { deltaY: -20, metaKey: true, clientX: 300, clientY: 200 });
-    expect(onScrollGesture).toHaveBeenCalledTimes(1); expect(onViewChange).toHaveBeenCalledTimes(2);
-    expect(onViewChange.mock.calls[0][0].zoom).toBeGreaterThan(1);
+    frames.flush();
+    expect(onScrollGesture).toHaveBeenCalledTimes(1); expect(onViewChange).toHaveBeenCalledOnce();
+    expect(onViewChange.mock.calls[0][0].zoom).toBeCloseTo(Math.exp(.08));
   });
 
   it.each(['hand', 'middle', 'space'])('scrolls with %s mouse dragging at fit size without drawing', (mode) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import '../../styles/floating-islands.css';
 import '../../styles/whiteboard-original-v3.css';
 import { ApiRequestError } from '../../api/client';
@@ -28,7 +28,8 @@ import {
 } from './boardView';
 import { isPersonalBoard, personalBoardOwner, isPersonalWorkbookBoard } from './boards';
 import { VIEW_TOPIC, viewEvent, type DocumentViewport, type StudentViewSnapshot } from './events';
-import { documentPageSize, zoomDocumentScroll, type DocumentScroll } from './documentBoardView';
+import { documentPageSize, documentRailWidth, documentScrollBounds, zoomDocumentScroll, type DocumentScroll } from './documentBoardView';
+import { wheelZoomScale } from './wheelGesture';
 import type { DocumentGesture } from './documentGesture';
 import { isPalmContact, type InputMode } from './inputPolicy';
 import { navigationLocked } from './followTeacher';
@@ -56,6 +57,7 @@ const INPUT_MODE_KEY = 'mc.board.inputMode';
 // Keep the teacher's pen settings while individual student boards mount/unmount.
 const boardToolPreferences = new Map<string, Record<Tool, ToolSettings>>();
 const ZOOM_BUTTON_FACTOR = 1.25;
+interface DocumentTransform { zoom: number; revision: number; scroll: DocumentScroll | null }
 
 /** The part of the page list left visible between floating control islands. */
 function readScrollViewport(element: HTMLElement) {
@@ -175,12 +177,25 @@ export function WhiteboardPanel({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLDivElement | null>(null);
-  const [documentZoom, setDocumentZoom] = useState(1);
+  const [documentTransform, setDocumentTransform] = useState<DocumentTransform>({ zoom: 1, revision: 0, scroll: null });
+  const documentZoom = documentTransform.zoom;
+  const setDocumentZoom = useCallback((zoom: number) => setDocumentTransform({ zoom, revision: 0, scroll: null }), []);
   const documentZoomRef = useRef(1);
+  const committedDocumentZoom = useRef(1);
+  useLayoutEffect(() => { committedDocumentZoom.current = documentZoom; }, [documentZoom]);
   const [documentView, setDocumentView] = useState<DocumentViewport>({ zoom: 1, x: .5, y: .5 });
   const documentViewRef = useRef(documentView);
   documentViewRef.current = documentView;
   const pendingDocumentScroll = useRef<DocumentScroll | null>(null);
+  const documentFrameRequest = useRef<number | null>(null);
+  const documentGestureRevision = useRef(0);
+  const appliedDocumentRevision = useRef(0);
+  const cancelDocumentFrame = useCallback(() => {
+    if (documentFrameRequest.current !== null) window.cancelAnimationFrame(documentFrameRequest.current);
+    documentFrameRequest.current = null;
+    pendingDocumentScroll.current = null;
+    documentZoomRef.current = committedDocumentZoom.current;
+  }, []);
   const remoteDocumentView = useRef<{ value: DocumentViewport; page: number } | null>(null);
   const lastRemoteDocumentView = useRef<{ value: DocumentViewport; page: number } | null>(null);
   const fitViewport = useRef({ width: 0, height: 0 });
@@ -198,12 +213,13 @@ export function WhiteboardPanel({
   }, []);
   const [pupilSnapshot, setPupilSnapshot] = useState<StudentViewSnapshot | null>(null);
   const receiveDocumentView = useCallback((value: DocumentViewport, page: number) => {
+    cancelDocumentFrame();
     remoteDocumentView.current = { value, page };
     lastRemoteDocumentView.current = { value, page };
     documentZoomRef.current = value.zoom;
     setDocumentZoom(value.zoom);
     setRemoteViewRevision(current => current + 1);
-  }, []);
+  }, [cancelDocumentFrame, setDocumentZoom]);
 
   const hostUserId = useHostUserId(classId);
   const pupilView = useStudentView({
@@ -267,6 +283,7 @@ export function WhiteboardPanel({
     pages,
     setPages,
     getBoardSize,
+    active,
     enabled: !personal && !camera,
     documentView: layout === 'continuous' && targetType === 'WHITEBOARD' ? { ...documentView, zoom: documentZoom } : undefined,
     onDocumentView: receiveDocumentView,
@@ -371,12 +388,14 @@ export function WhiteboardPanel({
     lastPenContact.current = Date.now();
     if (!pressed) { nativePenPages.current.delete(index); return; }
     nativePenPages.current.add(index);
+    cancelDocumentFrame();
     gapContacts.current.clear(); documentContacts.current.clear();
     documentNavigationActive.current = false;
     for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);
   };
-  useEffect(() => {
+  useLayoutEffect(() => {
     const release = () => {
+      cancelDocumentFrame();
       gapContacts.current.clear(); documentContacts.current.clear(); surfacePointers.current.clear(); penPointers.current.clear(); nativePenPages.current.clear();
       documentNavigationActive.current = false;
       for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);
@@ -384,26 +403,29 @@ export function WhiteboardPanel({
     if (!continuous || locked || !active) release();
     window.addEventListener('blur', release);
     return () => { window.removeEventListener('blur', release); release(); };
-  }, [continuous, locked, active]);
+  }, [continuous, locked, active, classId, targetType, targetId, cancelDocumentFrame]);
   const layoutWidth = studentView?.layout === 'continuous' ? studentView.viewport.width : pageWidth;
   const layoutHeight = studentView?.layout === 'continuous' ? Math.max(1, Math.round(studentView.viewport.height * .92)) : pageHeight;
-  const basePageSizes = Array.from({ length: pages.count }, (_, index) => documentPageSize(layoutWidth, layoutHeight,
-    pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT)));
+  const basePageSizes = useMemo(() => Array.from({ length: pages.count }, (_, index) => documentPageSize(layoutWidth, layoutHeight,
+    pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT))),
+  [pages.count, layoutWidth, layoutHeight, pageAspects, sourceAspect]);
   const baseRailWidth = Math.max(...basePageSizes.map(size => size.width));
+  const baseRailHeight = useMemo(() => basePageSizes.reduce((sum, size) => sum + size.height, 0)
+    + 24 * Math.max(0, basePageSizes.length - 1), [basePageSizes]);
   const displayedDocumentZoom = studentView?.layout === 'continuous'
     ? documentZoomForStudentRegion(studentView.region, studentView.viewport, basePageSizes[studentView.page] ?? basePageSizes[0]) ?? documentZoom
     : documentZoom;
-  const railWidth = Math.max(layoutWidth, baseRailWidth * displayedDocumentZoom);
+  const railWidth = documentRailWidth(baseRailWidth, layoutWidth, displayedDocumentZoom);
   const pageGap = studentView?.layout === 'continuous' && studentView.pageGap !== undefined
     ? studentView.pageGap * (basePageSizes[studentView.page] ?? basePageSizes[0]).width * displayedDocumentZoom
     : 24 * displayedDocumentZoom;
-  const rememberDocumentView = useCallback(() => {
+  const rememberDocumentView = useCallback((zoom = documentZoomRef.current) => {
     const root = scrollRef.current, element = pageElements.current.get(pagesRef.current.current);
     if (!root || !element || element.offsetWidth <= 0 || element.offsetHeight <= 0) return;
     const viewport = readScrollViewport(root), style = getComputedStyle(root);
     const left = parseFloat(style.paddingLeft) || 0;
     const value = {
-      zoom: documentZoomRef.current,
+      zoom,
       x: Math.max(-10, Math.min(10, (root.scrollLeft + left + viewport.width / 2 - element.offsetLeft) / element.offsetWidth)),
       y: Math.max(-10, Math.min(10, (root.scrollTop + viewport.top + viewport.height / 2 - element.offsetTop) / element.offsetHeight)),
     };
@@ -411,24 +433,34 @@ export function WhiteboardPanel({
   }, []);
   const applyDocumentGesture = useCallback(({ scale, anchor, pan }: DocumentGesture) => {
     const root = scrollRef.current;
-    if (!continuous || locked || !root || penPointers.current.size > 0 || nativePenPages.current.size > 0 || !Number.isFinite(scale) || scale <= 0) return;
+    if (!continuous || locked || !active || !root || penPointers.current.size > 0 || nativePenPages.current.size > 0 || !Number.isFinite(scale) || scale <= 0) return;
     const zoom = documentZoomRef.current, nextZoom = clampZoom(zoom * scale);
     const rect = root.getBoundingClientRect(), style = getComputedStyle(root);
     const origin = { x: parseFloat(style.paddingLeft) || 0, y: parseFloat(style.paddingTop) || 0 };
+    const viewport = readScrollViewport(root);
+    const nextRailWidth = documentRailWidth(baseRailWidth, viewport.width, nextZoom);
+    const nextRailHeight = baseRailHeight * nextZoom;
+    const previousScroll = pendingDocumentScroll.current ?? { left: root.scrollLeft, top: root.scrollTop };
     const scroll = zoomDocumentScroll({ zoom, nextZoom,
-      scroll: pendingDocumentScroll.current ?? { left: root.scrollLeft, top: root.scrollTop }, origin,
-      railWidth: Math.max(pageWidth, baseRailWidth * zoom), nextRailWidth: Math.max(pageWidth, baseRailWidth * nextZoom),
-      anchor: { x: anchor.x - rect.left, y: anchor.y - rect.top }, pan });
-    if (nextZoom === zoom) {
-      if (pendingDocumentScroll.current) { pendingDocumentScroll.current = scroll; return; }
-      root.scrollLeft = scroll.left; root.scrollTop = scroll.top;
-      rememberDocumentView();
-      return;
-    }
+      scroll: previousScroll, origin,
+      railWidth: documentRailWidth(baseRailWidth, viewport.width, zoom), nextRailWidth,
+      anchor: { x: anchor.x - rect.left, y: anchor.y - rect.top }, pan,
+      maxScroll: documentScrollBounds({ width: nextRailWidth, height: nextRailHeight }, viewport) });
+    if (nextZoom === zoom && scroll.left === previousScroll.left && scroll.top === previousScroll.top) return;
     pendingDocumentScroll.current = scroll;
     documentZoomRef.current = nextZoom;
-    setDocumentZoom(nextZoom);
-  }, [continuous, locked, pageWidth, baseRailWidth, rememberDocumentView]);
+    documentGestureRevision.current++;
+    if (documentFrameRequest.current !== null) return;
+    documentFrameRequest.current = window.requestAnimationFrame(() => {
+      documentFrameRequest.current = null;
+      if (!pendingDocumentScroll.current) return;
+      if (penPointers.current.size > 0 || nativePenPages.current.size > 0) { cancelDocumentFrame(); return; }
+      // A frame carries its own zoom and scroll. A later input packet must not
+      // apply its newer scroll to an older React layout that is still committing.
+      setDocumentTransform({ zoom: documentZoomRef.current, revision: documentGestureRevision.current,
+        scroll: { ...pendingDocumentScroll.current } });
+    });
+  }, [continuous, locked, active, baseRailWidth, baseRailHeight, cancelDocumentFrame]);
   useEffect(() => {
     const root = scrollRef.current;
     if (!continuous || !root) return;
@@ -436,7 +468,7 @@ export function WhiteboardPanel({
       if (!(event.ctrlKey || event.metaKey) || (event.target as Element).closest('.whiteboard__page')) return;
       event.preventDefault(); event.stopPropagation();
       if (drawingPage.current !== null || locked) return;
-      applyDocumentGesture({ scale: Math.exp(-event.deltaY * .01), anchor: { x: event.clientX, y: event.clientY }, pan: { x: 0, y: 0 } });
+      applyDocumentGesture({ scale: wheelZoomScale(event, readScrollViewport(root).height), anchor: { x: event.clientX, y: event.clientY }, pan: { x: 0, y: 0 } });
     };
     root.addEventListener('wheel', wheel, { passive: false });
     return () => root.removeEventListener('wheel', wheel);
@@ -535,14 +567,16 @@ export function WhiteboardPanel({
         root.scrollTop = Math.max(0, element.offsetTop + remote.value.y * element.offsetHeight - viewport.top - viewport.height / 2);
         remoteDocumentView.current = null;
       }
-    } else if (pendingDocumentScroll.current) {
-      root.scrollLeft = pendingDocumentScroll.current.left;
-      root.scrollTop = pendingDocumentScroll.current.top;
+    } else if (documentTransform.scroll && documentTransform.revision > appliedDocumentRevision.current) {
+      root.scrollLeft = documentTransform.scroll.left;
+      root.scrollTop = documentTransform.scroll.top;
+      appliedDocumentRevision.current = documentTransform.revision;
+      if (documentGestureRevision.current === documentTransform.revision) pendingDocumentScroll.current = null;
     }
-    pendingDocumentScroll.current = null;
-    rememberDocumentView();
+    if (remote) pendingDocumentScroll.current = null;
+    rememberDocumentView(documentZoom);
   }, [continuous, locked, follow.followLayout, documentZoom, remoteViewRevision, pages.current, pageAspects, pageHeight, pageWidth,
-    rememberDocumentView, studentView, displayedDocumentZoom]);
+    rememberDocumentView, studentView, displayedDocumentZoom, documentTransform]);
   const activatePage = useCallback((index: number) => {
     if (locked) return;
     scrollSelected.current = index;
@@ -629,6 +663,7 @@ export function WhiteboardPanel({
   const beginDocumentPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!continuous) return;
     if (event.pointerType === 'pen') {
+      cancelDocumentFrame();
       penPointers.current.add(event.pointerId);
       lastPenContact.current = Date.now(); gapContacts.current.clear(); documentContacts.current.clear();
       documentNavigationActive.current = false;

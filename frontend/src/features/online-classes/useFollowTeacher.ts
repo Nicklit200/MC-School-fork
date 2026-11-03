@@ -28,6 +28,7 @@ export function useFollowTeacher({
   setPages,
   getBoardSize,
   enabled = true,
+  active = true,
   documentView,
   onDocumentView,
 }: {
@@ -40,6 +41,8 @@ export function useFollowTeacher({
   getBoardSize: (pageIndex?: number) => BoardSize;
   /** Off for personal boards: follow mode only ever applies to the shared board. */
   enabled?: boolean;
+  /** Hidden boards retain their view without sending or applying navigation packets. */
+  active?: boolean;
   documentView?: DocumentViewport;
   onDocumentView?: (value: DocumentViewport, page: number) => void;
 }) {
@@ -52,7 +55,7 @@ export function useFollowTeacher({
   const pendingView = useRef<{ event: ViewEvent; hostUserId: string | null } | null>(null);
 
   const { publish } = useClassEvents(classId, VIEW_TOPIC, ({ event, senderIdentity }) => {
-    if (!enabled || isHost || event.type !== 'view' || event.classId !== classId || event.boardId !== boardId) return;
+    if (!enabled || !active || isHost || event.type !== 'view' || event.classId !== classId || event.boardId !== boardId) return;
     // Any participant can publish data, so only the host's packets count.
     if (!isFromHost(senderIdentity, hostUserId)) return;
     lastHostEvent.current = Date.now();
@@ -75,7 +78,7 @@ export function useFollowTeacher({
   useEffect(() => {
     const pending = pendingView.current;
     if (!pending) return;
-    if (!enabled || isHost || !following || pending.hostUserId !== hostUserId
+    if (!enabled || !active || isHost || !following || pending.hostUserId !== hostUserId
       || pending.event.boardId !== boardId || pending.event.classId !== classId) {
       pendingView.current = null;
       return;
@@ -86,44 +89,71 @@ export function useFollowTeacher({
     setPages((current) => applyHostView(current, pending.event, size));
   });
 
-  const latest = useRef({ pages, followEnabled, documentView });
-  latest.current = { pages, followEnabled, documentView };
+  const latest = useRef({ pages, followEnabled, documentView, getBoardSize, publish });
+  latest.current = { pages, followEnabled, documentView, getBoardSize, publish };
   const viewNow: PageView = viewOf(pages);
-  const viewRef = useRef(viewNow);
-  viewRef.current = viewNow;
+  const sendScope = JSON.stringify([classId, boardId, isHost, hostUserId, enabled, active]);
+  const currentScope = useRef(sendScope);
+  currentScope.current = sendScope;
+  const pendingSend = useRef<number | null>(null);
+  const cancelSend = useCallback(() => {
+    if (pendingSend.current !== null) window.clearTimeout(pendingSend.current);
+    pendingSend.current = null;
+  }, []);
 
   const send = useCallback(() => {
-    const { pages: current, followEnabled: follow, documentView: document } = latest.current;
+    // A timer from an earlier render must not publish another board's latest
+    // view, even if it fires before that render's passive cleanup.
+    if (currentScope.current !== sendScope || !isHost || !enabled || !active) return;
+    const { pages: current, followEnabled: follow, documentView: document,
+      getBoardSize: sizeNow, publish: publishNow } = latest.current;
     // A hidden board (a screen share is showing) has no size, so a view sent now
     // would be a bogus pan of zero. Students keep the last real one.
-    if (follow && getBoardSize().width <= 0) return;
+    const size = sizeNow();
+    if (follow && size.width <= 0) return;
     lastSentCount.current = current.count;
     lastSentFollow.current = follow;
-    void publish(
+    void publishNow(
       viewEvent(classId, {
-        ...describeView(current, viewRef.current, getBoardSize(), boardId, follow),
+        ...describeView(current, viewOf(current), size, boardId, follow),
         ...(isDocumentViewport(document) ? { documentView: { ...document } } : {}),
       }),
     );
-  }, [boardId, classId, getBoardSize, publish]);
+  }, [active, boardId, classId, enabled, isHost, sendScope]);
+
+  const scheduleSend = useCallback(() => {
+    if (currentScope.current !== sendScope || !isHost || !enabled || !active || pendingSend.current !== null) return;
+    // Keep the first deadline. Continuous wheel/pinch updates replace only
+    // latest.current, so pupils receive the moving view before the gesture ends.
+    pendingSend.current = window.setTimeout(() => {
+      pendingSend.current = null;
+      send();
+    }, SEND_DELAY_MS);
+  }, [active, enabled, isHost, send, sendScope]);
+
+  useEffect(() => {
+    cancelSend();
+    lastSentCount.current = 0;
+    lastSentFollow.current = false;
+    return cancelSend;
+  }, [sendScope, cancelSend]);
 
   // Teacher: announce changes (throttled), and always a new page count.
   useEffect(() => {
-    if (!isHost || !enabled) return;
+    if (!isHost || !enabled || !active) return;
     const countChanged = pages.count !== lastSentCount.current;
     // Turning follow off must be announced too, or students stay locked.
     const followChanged = followEnabled !== lastSentFollow.current;
     if (!followEnabled && !countChanged && !followChanged && lastSentCount.current !== 0) return;
-    const timer = window.setTimeout(send, SEND_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [isHost, enabled, followEnabled, pages, viewNow, documentView?.zoom, documentView?.x, documentView?.y, send]);
+    scheduleSend();
+  }, [isHost, enabled, active, followEnabled, pages, viewNow, documentView?.zoom, documentView?.x, documentView?.y, scheduleSend]);
 
   // Teacher: heartbeat while following.
   useEffect(() => {
-    if (!isHost || !enabled || !followEnabled) return;
-    const timer = window.setInterval(send, HEARTBEAT_MS);
+    if (!isHost || !enabled || !active || !followEnabled) return;
+    const timer = window.setInterval(scheduleSend, HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [isHost, enabled, followEnabled, send]);
+  }, [isHost, enabled, active, followEnabled, scheduleSend]);
 
   // Student: release the lock if the teacher stops talking.
   useEffect(() => {
@@ -138,8 +168,8 @@ export function useFollowTeacher({
     followEnabled,
     setFollowEnabled,
     /** True only for a student currently mirrored to the teacher. */
-    following: enabled && !isHost && following,
+    following: enabled && active && !isHost && following,
     /** A temporary host layout; the caller keeps its own saved preference. */
-    followLayout: enabled && !isHost && following ? followLayout : null,
+    followLayout: enabled && active && !isHost && following ? followLayout : null,
   };
 }

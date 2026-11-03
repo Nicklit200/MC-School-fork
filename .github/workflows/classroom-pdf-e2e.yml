@@ -26,11 +26,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run test -- src/features/online-classes/BoardToolbar.test.tsx src/features/online-classes/OnlineClassRoom.test.tsx src/features/online-classes/useBoardDocument.test.ts src/features/online-classes/usePdf.test.ts src/pages/student/PdfHomeworkPage.test.tsx src/lib/homeworkInk.test.ts
+      - run: npm run test -- src/features/online-classes/BoardToolbar.test.tsx src/features/online-classes/OnlineClassRoom.test.tsx src/features/online-classes/useBoardDocument.test.ts src/features/online-classes/usePdf.test.ts src/features/online-classes/WhiteboardPanel.test.tsx src/features/online-classes/WhiteboardCanvas.test.tsx src/features/online-classes/WhiteboardPageSurface.test.tsx src/features/online-classes/boardView.test.ts src/features/online-classes/documentBoardView.test.ts src/features/online-classes/wheelGesture.test.ts src/features/online-classes/useFollowTeacher.test.tsx src/pages/student/PdfHomeworkPage.test.tsx src/lib/homeworkInk.test.ts
       - run: npm run build
       - run: npm install --no-save @playwright/test
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --config=playwright.config.mjs
+      - run: npx playwright test --config=playwright.board-zoom.config.mjs
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

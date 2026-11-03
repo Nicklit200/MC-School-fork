@@ -18,11 +18,11 @@ vi.mock('./useClassEvents', () => ({
 
 let board = { width: 1000, height: 500 };
 
-type DocumentOptions = { documentView?: DocumentViewport; onDocumentView?: (value: DocumentViewport, page: number) => void };
+type DocumentOptions = { documentView?: DocumentViewport; onDocumentView?: (value: DocumentViewport, page: number) => void; active?: boolean };
 
 function mount(isHost: boolean, hostUserId: string | null = 'teacher', enabled = true, options: DocumentOptions = {}) {
   return renderHook(
-    ({ start, documentView, onDocumentView }: { start: BoardPages } & DocumentOptions) => {
+    ({ start, documentView, onDocumentView, active }: { start: BoardPages } & DocumentOptions) => {
       const [pages, setPages] = useState<BoardPages>(start);
       const follow = useFollowTeacher({
         classId: 'c1',
@@ -33,6 +33,7 @@ function mount(isHost: boolean, hostUserId: string | null = 'teacher', enabled =
         setPages,
         getBoardSize: () => board,
         enabled,
+        active,
         documentView,
         onDocumentView,
       });
@@ -40,6 +41,14 @@ function mount(isHost: boolean, hostUserId: string | null = 'teacher', enabled =
     },
     { initialProps: { start: initialPages(3), ...options } },
   );
+}
+
+const senderContext = { classId: 'c1', boardId: 'board-1', isHost: true, hostUserId: 'teacher', enabled: true, active: true };
+function mountSender() {
+  return renderHook((context: typeof senderContext) => {
+    const [pages, setPages] = useState(initialPages(3));
+    return useFollowTeacher({ ...context, pages, setPages, getBoardSize: () => board });
+  }, { initialProps: senderContext });
 }
 
 const hostView = (patch: Partial<Parameters<typeof viewEvent>[1]> = {}) =>
@@ -204,6 +213,20 @@ describe('useFollowTeacher — student', () => {
     expect(result.current.following).toBe(false);
   });
 
+  it('ignores trusted navigation while inactive and applies a fresh packet after reactivation', () => {
+    const onDocumentView = vi.fn();
+    const documentView = { zoom: 2, x: .5, y: .4 };
+    const { result, rerender } = mount(false, 'teacher', true, { active: false, onDocumentView });
+    act(() => handler({ event: hostView({ documentView }), senderIdentity: 'teacher|tab' }));
+    expect(result.current.following).toBe(false);
+    expect(result.current.pages.current).toBe(0);
+    expect(onDocumentView).not.toHaveBeenCalled();
+    rerender({ start: initialPages(3), active: true, onDocumentView });
+    act(() => handler({ event: hostView({ documentView }), senderIdentity: 'teacher|tab' }));
+    expect(result.current.following).toBe(true);
+    expect(onDocumentView).toHaveBeenCalledExactlyOnceWith(documentView, 2);
+  });
+
   it('keeps the student where they are when follow is off, but learns the page count', () => {
     const { result } = mount(false);
     act(() => result.current.setPages((p) => goToPage(p, 1)));
@@ -304,7 +327,7 @@ describe('useFollowTeacher — teacher', () => {
     rerender({ start: initialPages(3), documentView: { zoom: 2, x: .5, y: .4 } });
     act(() => vi.advanceTimersByTime(50));
     rerender({ start: initialPages(3), documentView: latest });
-    act(() => vi.advanceTimersByTime(99));
+    act(() => vi.advanceTimersByTime(49));
     expect(publish).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
     expect(publish).toHaveBeenCalledOnce();
@@ -312,6 +335,74 @@ describe('useFollowTeacher — teacher', () => {
     publish.mockClear();
     act(() => vi.advanceTimersByTime(HEARTBEAT_MS));
     expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ documentView: latest }));
+  });
+
+  it('sends during uninterrupted 16-ms zoom updates and flushes the final view without waiting for a heartbeat', () => {
+    const first = { zoom: 1, x: .5, y: .2 };
+    const sentAt: number[] = [];
+    publish.mockImplementation(() => { sentAt.push(Date.now()); return Promise.resolve(undefined); });
+    try {
+      const { result, rerender } = mount(true, 'teacher', true, { documentView: first });
+      act(() => result.current.setFollowEnabled(true));
+      act(() => vi.advanceTimersByTime(150));
+      publish.mockClear(); sentAt.length = 0;
+      for (let index = 1; index <= 20; index++) {
+        rerender({ start: initialPages(3), documentView: { zoom: 1 + index / 20, x: .5, y: index / 100 } });
+        act(() => vi.advanceTimersByTime(16));
+      }
+      // A debounce would send nothing until the continuous gesture stopped.
+      expect(publish.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(publish.mock.calls.length).toBeLessThanOrEqual(3);
+      for (let index = 1; index < sentAt.length; index++) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(100);
+      act(() => vi.advanceTimersByTime(100));
+      expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
+        follow: true, documentView: { zoom: 2, x: .5, y: .2 },
+      }));
+      expect(publish).toHaveBeenCalledTimes(3);
+    } finally { publish.mockResolvedValue(undefined); }
+  });
+
+  it.each(['isHost', 'enabled', 'active'] as const)('cancels pending and heartbeat packets when %s becomes false', guard => {
+    const { result, rerender } = mountSender();
+    act(() => result.current.setFollowEnabled(true));
+    act(() => vi.advanceTimersByTime(50));
+    rerender({ ...senderContext, [guard]: false });
+    act(() => vi.advanceTimersByTime(HEARTBEAT_MS * 3));
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { classId: 'c2', boardId: 'board-1' },
+    { classId: 'c1', boardId: 'board-2' },
+  ])('cancels the old scope before announcing the current class and board: %s', scope => {
+    const { result, rerender } = mountSender();
+    act(() => result.current.setFollowEnabled(true));
+    act(() => vi.advanceTimersByTime(50));
+    rerender({ ...senderContext, ...scope });
+    act(() => vi.advanceTimersByTime(51));
+    expect(publish).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(49));
+    expect(publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ ...scope, follow: true }));
+  });
+
+  it('cancels a pending view when the sender unmounts', () => {
+    const { result, unmount } = mountSender();
+    act(() => result.current.setFollowEnabled(true));
+    act(() => vi.advanceTimersByTime(50));
+    unmount();
+    act(() => vi.advanceTimersByTime(HEARTBEAT_MS * 3));
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('replaces a pending follow-on packet with the latest follow-off state', () => {
+    const { result } = mountSender();
+    act(() => result.current.setFollowEnabled(true));
+    act(() => vi.advanceTimersByTime(50));
+    act(() => result.current.setFollowEnabled(false));
+    act(() => vi.advanceTimersByTime(50));
+    expect(publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ follow: false }));
+    act(() => vi.advanceTimersByTime(HEARTBEAT_MS * 2));
+    expect(publish).toHaveBeenCalledOnce();
   });
 
   it('sends nothing for the view while the board is hidden', () => {

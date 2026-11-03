@@ -37,6 +37,7 @@ import { normalizedTextSize, shapeTextSizePx, textStyleFor } from './textStyles'
 import { TabletBoardNavigation } from './tabletBoardNavigation';
 import type { DocumentGesture } from './documentGesture';
 import { canvasBackingRatio } from './canvasBacking';
+import { wheelDeltaPixels, wheelZoomScale } from './wheelGesture';
 import { useDocumentCanvasViewport } from './useDocumentCanvasViewport';
 import type { DocumentRenderer } from '../notebook-camera/cameraModules';
 import {
@@ -70,6 +71,8 @@ const SAMPLE_INTERVAL_MS = 16;
 
 /** Hit tolerance for the eraser and selection, in normalized units. */
 const HIT_TOLERANCE = 0.015;
+
+const sameView = (a: PageView, b: PageView) => a.zoom === b.zoom && a.panX === b.panX && a.panY === b.panY;
 
 export interface WhiteboardCanvasHandle {
   /** PNG of the board as currently drawn, or null before it has a size. */
@@ -190,6 +193,59 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const tabletNavigation = useMemo(() => new TabletBoardNavigation(), []);
   const onViewChangeRef = useRef(onViewChange);
   onViewChangeRef.current = onViewChange;
+  // Wheel input can arrive several times before React commits its first view.
+  // Accumulate against the latest requested transform and publish once per frame.
+  const wheelView = useRef(view);
+  const controlledView = useRef(view);
+  const pendingWheelView = useRef<PageView | null>(null);
+  const publishedWheelViews = useRef<PageView[]>([]);
+  const wheelFrame = useRef<number | null>(null);
+  if (!sameView(controlledView.current, view)) {
+    controlledView.current = view;
+    const acknowledged = publishedWheelViews.current.findIndex(previous => sameView(previous, view));
+    if (acknowledged >= 0) {
+      publishedWheelViews.current.splice(0, acknowledged + 1);
+      if (!pendingWheelView.current && !publishedWheelViews.current.length) wheelView.current = view;
+    } else {
+      // Toolbar/follow updates supersede local wheel input.
+      wheelView.current = view;
+      pendingWheelView.current = null;
+      publishedWheelViews.current = [];
+    }
+  }
+  useLayoutEffect(() => {
+    if (wheelFrame.current !== null) window.cancelAnimationFrame(wheelFrame.current);
+    wheelFrame.current = null;
+    pendingWheelView.current = null;
+    publishedWheelViews.current = [];
+    wheelView.current = controlledView.current = view;
+    return () => {
+      if (wheelFrame.current !== null) window.cancelAnimationFrame(wheelFrame.current);
+      wheelFrame.current = null;
+      pendingWheelView.current = null;
+    };
+  }, [pageKey, viewScope, navigationLocked, active]);
+  const cancelWheelView = () => {
+    if (wheelFrame.current !== null) window.cancelAnimationFrame(wheelFrame.current);
+    wheelFrame.current = null;
+    pendingWheelView.current = null;
+    publishedWheelViews.current = [];
+    wheelView.current = controlledView.current;
+  };
+  const queueWheelView = (next: PageView) => {
+    if (sameView(wheelView.current, next)) return;
+    wheelView.current = next;
+    pendingWheelView.current = next;
+    if (wheelFrame.current !== null) return;
+    wheelFrame.current = window.requestAnimationFrame(() => {
+      wheelFrame.current = null;
+      const pending = pendingWheelView.current;
+      pendingWheelView.current = null;
+      if (!pending) return;
+      publishedWheelViews.current = [...publishedWheelViews.current.slice(-7), pending];
+      onViewChangeRef.current?.(pending);
+    });
+  };
   const onScrollGestureRef = useRef(onScrollGesture);
   onScrollGestureRef.current = onScrollGesture;
   const onDocumentGestureRef = useRef(onDocumentGesture);
@@ -681,6 +737,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     for (const intent of intents) {
       switch (intent.type) {
         case 'stroke-start':
+          // Both Pointer Events and native Pencil input enter here. Keep the
+          // transform fixed once ink begins, even if wheel input preceded it
+          // in the same animation frame.
+          cancelWheelView();
           if (!live.current.readOnly || live.current.tool === 'laser') startStroke(intent.point, intent.pointerKind === 'pen' ? intent.pressure : undefined);
           break;
         case 'stroke-move':
@@ -881,14 +941,20 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // a plain wheel scrolls the zoomed page.
     if (event.ctrlKey || event.metaKey) {
       event.stopPropagation();
+      const scale = wheelZoomScale(event, live.current.viewport.height);
       if (onDocumentGestureRef.current) {
-        onDocumentGestureRef.current({ scale: Math.exp(-event.deltaY * 0.01), anchor: { x: event.clientX, y: event.clientY }, pan: { x: 0, y: 0 } });
-      } else onViewChange?.(zoomAbout(view, view.zoom * Math.exp(-event.deltaY * 0.01), local, viewport));
+        onDocumentGestureRef.current({ scale, anchor: { x: event.clientX, y: event.clientY }, pan: { x: 0, y: 0 } });
+      } else if (onViewChangeRef.current) {
+        queueWheelView(zoomAbout(wheelView.current, wheelView.current.zoom * scale, local, live.current.viewport));
+      }
     } else if (onScrollGesture) {
       event.stopPropagation();
-      onScrollGesture(event.deltaX, event.deltaY);
-    } else if (view.zoom > 1) {
-      onViewChange?.(panBy(view, -event.deltaX, -event.deltaY, viewport));
+      const delta = wheelDeltaPixels(event, live.current.viewport.height);
+      onScrollGesture(delta.x, delta.y);
+    } else if (wheelView.current.zoom > 1 && onViewChangeRef.current) {
+      event.stopPropagation();
+      const delta = wheelDeltaPixels(event, live.current.viewport.height);
+      queueWheelView(panBy(wheelView.current, -delta.x, -delta.y, live.current.viewport));
     }
   };
   useEffect(() => {
@@ -897,7 +963,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // React's wheel listener is passive in browsers. Prevent native scrolling
     // separately, so one wheel event cannot move the document twice.
     const preventNativeWheel = (event: WheelEvent) => {
-      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey) && (onViewChangeRef.current || onDocumentGestureRef.current))) event.preventDefault();
+      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey) && (onViewChangeRef.current || onDocumentGestureRef.current))
+          || (wheelView.current.zoom > 1 && onViewChangeRef.current)) event.preventDefault();
     };
     surface.addEventListener('wheel', preventNativeWheel, { passive: false });
     return () => surface.removeEventListener('wheel', preventNativeWheel);

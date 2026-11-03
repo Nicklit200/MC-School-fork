@@ -129,6 +129,10 @@ function chooseLayout(actorId: string, layout: 'continuous' | 'paged') {
 function documentObservers() {
   let notify!: IntersectionObserverCallback;
   let resize = () => {};
+  let nextFrame = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame; });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
   vi.stubGlobal('IntersectionObserver', class {
     constructor(callback: IntersectionObserverCallback) { notify = callback; }
     observe() {} disconnect() {} unobserve() {}
@@ -141,6 +145,8 @@ function documentObservers() {
     disconnect() {}
   });
   return {
+    frame: () => { const queued = [...frames.values()]; frames.clear(); queued.forEach(callback => callback(performance.now())); },
+    queuedFrames: () => frames.size,
     resize: () => resize(),
     reveal: (list: HTMLElement) => notify(Array.from(list.querySelectorAll('article'), target => ({ target, isIntersecting: true })) as unknown as IntersectionObserverEntry[], {} as IntersectionObserver),
   };
@@ -241,7 +247,7 @@ describe('WhiteboardPanel', () => {
     const { rerender, container } = render(content(false));
     await screen.findByRole('region', { name: 'Страницы доски' });
     await userEvent.click(screen.getByRole('button', { name: 'Увеличить' }));
-    expect(screen.getByText('125%')).toBeInTheDocument();
+    expect(await screen.findByText('125%')).toBeInTheDocument();
 
     rerender(content(true));
     expect(container.querySelector('.whiteboard--compact-preview')).toBeInTheDocument();
@@ -330,6 +336,7 @@ describe('WhiteboardPanel', () => {
       const geometry = documentGeometry(list);
       act(() => observers.resize());
       await userEvent.click(screen.getByRole('button', { name: 'Увеличить' }));
+      act(() => observers.frame());
       list.scrollLeft = 15; list.scrollTop = 750;
       fireEvent.scroll(list);
       await waitFor(() => expect(publish.mock.calls.some(([event]) => event.type === 'student-view' && event.page === 1)).toBe(true));
@@ -421,6 +428,7 @@ describe('WhiteboardPanel', () => {
       const ink = pageCanvasProps.get('WHITEBOARD:board-1:0')!.shapes;
       const openCount = api.openAnnotationDocument.mock.calls.length;
       act(() => pageCanvasProps.get('WHITEBOARD:board-1:1')!.onDocumentGesture({ scale: 2, anchor: { x: 500, y: 350 }, pan: { x: 0, y: 0 } }));
+      act(() => observers.frame());
       pages.forEach((page, index) => {
         expect(page.offsetWidth).toBeCloseTo(sizes[index].width * 2);
         expect(page.offsetHeight).toBeCloseTo(sizes[index].height * 2);
@@ -428,6 +436,7 @@ describe('WhiteboardPanel', () => {
       });
       expect(parseFloat(rail.style.gap)).toBe(48);
       await userEvent.click(screen.getByRole('button', { name: 'Увеличить' }));
+      act(() => observers.frame());
       expect(screen.getByText('250%')).toBeInTheDocument();
       expect(parseFloat(rail.style.gap)).toBe(60);
       pages.forEach((page, index) => expect(page.offsetWidth).toBeCloseTo(sizes[index].width * 2.5));
@@ -454,12 +463,95 @@ describe('WhiteboardPanel', () => {
       const anchor = { x: 500, y: 350 };
       const before = { x: list.scrollLeft + 400 - 20 - parseFloat(rail.style.width) / 2, y: list.scrollTop + 300 - 100 };
       act(() => pageCanvasProps.get('WHITEBOARD:board-1:0')!.onDocumentGesture({ scale: 3, anchor, pan: { x: 0, y: 0 } }));
+      act(() => observers.frame());
       expect((list.scrollLeft + 400 - 20 - parseFloat(rail.style.width) / 2) / 3).toBeCloseTo(before.x);
       expect((list.scrollTop + 300 - 100) / 3).toBeCloseTo(before.y);
       const scroll = { left: list.scrollLeft, top: list.scrollTop };
       act(() => pageCanvasProps.get('WHITEBOARD:board-1:0')!.onDocumentGesture({ scale: 1, anchor, pan: { x: -75, y: -120 } }));
+      act(() => observers.frame());
       expect(list.scrollLeft).toBeCloseTo(scroll.left + 75); expect(list.scrollTop).toBeCloseTo(scroll.top + 120);
       expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.view).toBe(DEFAULT_VIEW);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('keeps the off-centre two-finger centroid fixed while a fit page still fits horizontally', async () => {
+    chooseLayout('teacher', 'continuous');
+    const observers = documentObservers();
+    try {
+      mount('host', { document: { pageCount: 2 } as never });
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      const { pages } = documentGeometry(list);
+      act(() => observers.resize());
+      const page = pages[0], canvas = screen.getAllByTestId('canvas')[0], width = page.offsetWidth;
+      const anchor = { x: 100 + page.offsetLeft + width * .7, y: 50 + page.offsetTop + page.offsetHeight * .4 };
+      documentPointer(canvas, 'pointerdown', { pointerId: 1, clientX: anchor.x - 50, clientY: anchor.y });
+      documentPointer(canvas, 'pointerdown', { pointerId: 2, clientX: anchor.x + 50, clientY: anchor.y });
+      documentPointer(canvas, 'pointermove', { pointerId: 1, clientX: anchor.x - 75, clientY: anchor.y });
+      documentPointer(canvas, 'pointermove', { pointerId: 2, clientX: anchor.x + 75, clientY: anchor.y });
+      expect(observers.queuedFrames()).toBe(1);
+      expect(page.offsetWidth).toBe(width);
+      act(() => observers.frame());
+      expect(page.offsetWidth).toBeCloseTo(width * 1.5);
+      expect((list.scrollLeft + anchor.x - 100 - page.offsetLeft) / page.offsetWidth).toBeCloseTo(.7);
+      expect((list.scrollTop + anchor.y - 50 - page.offsetTop) / page.offsetHeight).toBeCloseTo(.4);
+      expect(page.offsetWidth).toBeLessThan(800);
+      expect(api.appendAnnotation).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('applies each frame’s scroll to its own zoom when newer pinch packets arrive before React commits', async () => {
+    chooseLayout('teacher', 'continuous');
+    const observers = documentObservers();
+    try {
+      mount('host', { document: { pageCount: 3 } as never });
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      const { pages } = documentGeometry(list);
+      act(() => observers.resize());
+      const gesture = () => pageCanvasProps.get('WHITEBOARD:board-1:0')!.onDocumentGesture;
+      const anchor = { x: 550, y: 350 }, pan = { x: 0, y: 0 };
+      act(() => gesture()({ scale: 3, anchor, pan }));
+      act(() => observers.frame());
+      list.scrollLeft = 350; list.scrollTop = 800;
+      const page = pages[0], width = page.offsetWidth;
+      const point = () => ({ x: (list.scrollLeft + anchor.x - 100 - page.offsetLeft) / page.offsetWidth,
+        y: (list.scrollTop + anchor.y - 50 - page.offsetTop) / page.offsetHeight });
+      const before = point();
+      act(() => {
+        gesture()({ scale: 1.1, anchor, pan });
+        observers.frame();
+        // This packet targets the next frame while the first frame's React
+        // state is queued but its page dimensions have not committed yet.
+        gesture()({ scale: 1.1, anchor, pan });
+      });
+      expect(page.offsetWidth).toBeCloseTo(width * 1.1);
+      expect(point().x).toBeCloseTo(before.x); expect(point().y).toBeCloseTo(before.y);
+      expect(observers.queuedFrames()).toBe(1);
+      act(() => observers.frame());
+      expect(page.offsetWidth).toBeCloseTo(width * 1.21);
+      expect(point().x).toBeCloseTo(before.x); expect(point().y).toBeCloseTo(before.y);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('cancels an uncommitted pinch when the board becomes hidden and resumes from the visible zoom', async () => {
+    chooseLayout('teacher', 'continuous');
+    const observers = documentObservers();
+    try {
+      const content = (active: boolean) => <I18nProvider><WhiteboardPanel classId="c1" actorId="teacher" isHost active={active} /></I18nProvider>;
+      const mounted = render(content(true));
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      const { pages } = documentGeometry(list);
+      act(() => observers.resize());
+      const width = pages[0].offsetWidth;
+      act(() => canvasProps.onDocumentGesture({ scale: 2, anchor: { x: 500, y: 350 }, pan: { x: 0, y: 0 } }));
+      expect(observers.queuedFrames()).toBe(1);
+      mounted.rerender(content(false));
+      expect(observers.queuedFrames()).toBe(0);
+      act(() => observers.frame());
+      expect(pages[0].offsetWidth).toBe(width);
+      mounted.rerender(content(true));
+      act(() => canvasProps.onDocumentGesture({ scale: 1.5, anchor: { x: 500, y: 350 }, pan: { x: 0, y: 0 } }));
+      act(() => observers.frame());
+      expect(pages[0].offsetWidth).toBeCloseTo(width * 1.5);
     } finally { vi.unstubAllGlobals(); }
   });
 
@@ -481,11 +573,12 @@ describe('WhiteboardPanel', () => {
       fireEvent(screen.getAllByTestId('canvas')[0], pageWheel);
       expect(pageWheel.defaultPrevented).toBe(false);
       expect(pages[0].offsetWidth).toBe(width);
-      const gapWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -Math.log(1.25) / .01, clientX: 500, clientY: 350 });
+      const gapWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -50, clientX: 500, clientY: 350 });
       fireEvent(rail, gapWheel);
       expect(gapWheel.defaultPrevented).toBe(true);
-      expect(pages[0].offsetWidth).toBeCloseTo(width * (locked ? 1 : 1.25));
-      expect(parseFloat(rail.style.gap)).toBeCloseTo(locked ? 24 : 30);
+      act(() => observers.frame());
+      expect(pages[0].offsetWidth).toBeCloseTo(width * (locked ? 1 : Math.exp(.1)));
+      expect(parseFloat(rail.style.gap)).toBeCloseTo(24 * (locked ? 1 : Math.exp(.1)));
       expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.view).toBe(DEFAULT_VIEW);
     } finally { vi.unstubAllGlobals(); }
   });
@@ -507,9 +600,11 @@ describe('WhiteboardPanel', () => {
       expect(second.defaultPrevented).toBe(true);
       for (const navigate of canvasDocumentNavigation.values()) expect(navigate).toHaveBeenLastCalledWith(true);
       documentPointer(rail, 'pointermove', { pointerId: 2, clientX: 500, clientY: 300 });
+      act(() => observers.frame());
       pages.forEach(page => expect(page.offsetWidth).toBeCloseTo(width * 2));
       expect(parseFloat(rail.style.gap)).toBe(48);
       documentPointer(firstCanvas, 'pointermove', { pointerId: 1, clientX: 250, clientY: 300 });
+      act(() => observers.frame());
       pages.forEach(page => expect(page.offsetWidth).toBeCloseTo(width * 2.5));
       documentPointer(rail, 'pointerup', { pointerId: 2, clientX: 500, clientY: 300 });
       for (const navigate of canvasDocumentNavigation.values()) expect(navigate).toHaveBeenLastCalledWith(true);
@@ -576,6 +671,7 @@ describe('WhiteboardPanel', () => {
       expect(pages[0].offsetWidth).toBe(width);
       for (const navigate of canvasDocumentNavigation.values()) expect(navigate).not.toHaveBeenCalledWith(true);
       now += 2; pinch(5);
+      act(() => observers.frame());
       expect(pages[0].offsetWidth).toBeCloseTo(width * 2);
       expect(parseFloat(rail.style.gap)).toBe(48);
       for (const navigate of canvasDocumentNavigation.values()) {
@@ -597,6 +693,7 @@ describe('WhiteboardPanel', () => {
       await additionalAction(userEvent.setup(), 'Следовать за учителем');
       publish.mockClear();
       act(() => pageCanvasProps.get('WHITEBOARD:board-1:0')!.onDocumentGesture({ scale: 2, anchor: { x: 500, y: 350 }, pan: { x: 0, y: 0 } }));
+      act(() => observers.frame());
       fireEvent.scroll(list, { target: { scrollTop: pages[1].offsetTop + pages[1].offsetHeight / 2 - 100 - 250 } });
       await waitFor(() => expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'view', follow: true, page: 1,
         documentView: expect.objectContaining({ zoom: 2, y: expect.any(Number) }),

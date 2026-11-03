@@ -20,4 +20,6 @@
 # Build output
 backend/target/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 node_modules/
