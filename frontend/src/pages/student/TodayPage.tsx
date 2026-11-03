@@ -70,7 +70,8 @@ export function TodayPage() {
           <div className="student-today__actions">
             {today.inProgressSessionId && <button className="btn btn--block" type="button"
               onClick={() => navigate(`/session/${today.inProgressSessionId}`)}>{t('today.resume')}</button>}
-            {notEnoughCards ? <div className="banner banner--info">{t('today.needMoreCards', { min: today.minCardsToStart })}</div> : <>
+            {notEnoughCards ? <div className="banner banner--info">{today.minCardsToStart === 1
+              ? t('today.needFirstCard') : t('today.needMoreCards', { min: today.minCardsToStart })}</div> : <>
               {today.canStartScheduled ? <button className="btn btn--block" type="button" disabled={busy} onClick={() => start('SCHEDULED')}>{t('today.start')}</button>
                 : !today.inProgressSessionId && <div className="banner banner--success">{t('today.nothingDue')}</div>}
               {today.canPractice && <button className="btn btn--secondary btn--block" type="button" disabled={busy} onClick={() => start('PRACTICE')}>{t('today.practice')}</button>}

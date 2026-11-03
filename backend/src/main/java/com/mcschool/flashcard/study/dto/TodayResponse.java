@@ -8,9 +8,9 @@ import java.util.UUID;
  * any session already in progress so it can be resumed.
  *
  * @param dueCardCount        cards due for today's mandatory session
- * @param minCardsToStart     minimum cards required before any session can start (4)
- * @param canStartScheduled   there are due cards and enough cards to build options
- * @param canPractice         enough cards to run a voluntary practice session
+ * @param minCardsToStart     minimum cards required before any session can start (1)
+ * @param canStartScheduled   at least one card is available and due today
+ * @param canPractice         at least one card is available for voluntary practice
  * @param inProgressSessionId an unfinished session to resume, or {@code null}
  */
 public record TodayResponse(

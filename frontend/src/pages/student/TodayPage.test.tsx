@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../api/client';
+import { api, ApiRequestError } from '../../api/client';
 import type { Homework, Today } from '../../api/types';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { TodayPage } from './TodayPage';
@@ -45,5 +45,58 @@ describe('student today tasks', () => {
     expect(await screen.findByRole('link', { name: /today\.pdf/ })).toHaveAttribute('href', '/student/homeworks/today/worksheet');
     expect(screen.getByRole('link', { name: /overdue\.pdf/ })).toHaveAttribute('href', '/student/homeworks/overdue/worksheet');
     for (const name of ['submitted.pdf', 'future.pdf', 'cards.pdf']) expect(screen.queryByText(name)).not.toBeInTheDocument();
+  });
+
+  it('starts a scheduled session with one available card when the server permits it', async () => {
+    vi.mocked(api.study.today).mockResolvedValue({ ...today, totalCards: 1, dueCardCount: 1, learnedCount: 0, minCardsToStart: 1 });
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Начать' }));
+    expect(api.study.startSession).toHaveBeenCalledWith('SCHEDULED');
+    expect(screen.getByTestId('route')).toHaveTextContent('/session/new-session');
+    expect(screen.queryByText(/минимум 4/)).not.toBeInTheDocument();
+  });
+
+  it('offers practice with one card without inventing a scheduled review', async () => {
+    vi.mocked(api.study.today).mockResolvedValue({ ...today, totalCards: 1, dueCardCount: 0, learnedCount: 1,
+      minCardsToStart: 1, canStartScheduled: false, canPractice: true });
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Повторить сейчас' }));
+    expect(api.study.startSession).toHaveBeenCalledWith('PRACTICE');
+    expect(screen.queryByRole('button', { name: 'Начать' })).not.toBeInTheDocument();
+  });
+
+  it('retains the server-reported minimum and availability while an older server still denies entry', async () => {
+    vi.mocked(api.study.today).mockResolvedValue({ ...today, totalCards: 1, dueCardCount: 1, minCardsToStart: 4,
+      canStartScheduled: false, canPractice: false });
+    mount();
+    expect(await screen.findByText('Нужно минимум 4 карточек, чтобы начать')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Начать' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Повторить сейчас' })).not.toBeInTheDocument();
+    expect(api.study.startSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['RU', 'Для начала нужна хотя бы одна карточка.'],
+    ['DE', 'Zum Starten brauchst du mindestens eine Karte.'],
+  ])('explains the empty-card requirement correctly in %s', async (language, message) => {
+    localStorage.setItem('language', language);
+    vi.mocked(api.study.today).mockResolvedValue({ ...today, totalCards: 0, dueCardCount: 0, minCardsToStart: 1,
+      canStartScheduled: false, canPractice: false });
+    mount();
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(api.study.startSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['RU', 'Начать', 'Для начала нужна хотя бы одна карточка.'],
+    ['DE', 'Starten', 'Zum Starten brauchst du mindestens eine Karte.'],
+  ])('localizes NOT_ENOUGH_CARDS without the obsolete four-card requirement in %s', async (language, button, message) => {
+    localStorage.setItem('language', language);
+    vi.mocked(api.study.today).mockResolvedValue({ ...today, totalCards: 1, dueCardCount: 1, minCardsToStart: 1 });
+    vi.mocked(api.study.startSession).mockRejectedValue(new ApiRequestError(409, 'NOT_ENOUGH_CARDS', 'No active cards'));
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: button }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByTestId('route')).toHaveTextContent('/today');
   });
 });

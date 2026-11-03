@@ -6,7 +6,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import { formatBatchReviewStages, formatReviewStage, reviewScheduleLegend } from '../../lib/reviewStages';
 
-const MIN_CARDS_TO_START = 4;
+const MIN_CARDS_TO_START = 1;
 type ReviewHistoryDisplayStatus = DailyReviewStatus | 'EXPECTED';
 
 /** Teacher cards area. PDF homework is intentionally not shown or linked from here. */
@@ -157,7 +157,7 @@ export function StudentDetailPage() {
             <SummaryStat label={t('cards.summary.learned')} value={summary.learned} />
           </div>
           {summary.total < MIN_CARDS_TO_START && (
-            <div className="banner banner--info">{t('cards.tooFew', { min: MIN_CARDS_TO_START })}</div>
+            <div className="banner banner--info">{t('cards.tooFew')}</div>
           )}
         </>
       )}

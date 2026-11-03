@@ -1,0 +1,94 @@
+name: One-card study
+
+on:
+  pull_request:
+    branches: [integration/railway-and-ux]
+    paths:
+      - 'backend/src/main/java/com/mcschool/flashcard/study/**'
+      - 'backend/src/main/java/com/mcschool/flashcard/cards/**'
+      - 'backend/src/main/java/com/mcschool/flashcard/homeworks/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/study/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/cards/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/CardAndStudyFlowIntegrationTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/AbstractIntegrationTest.java'
+      - 'backend/pom.xml'
+      - 'frontend/src/pages/student/TodayPage*'
+      - 'frontend/src/pages/student/SessionPage*'
+      - 'frontend/src/pages/teacher/StudentDetailPage*'
+      - 'frontend/src/api/types.ts'
+      - 'frontend/src/i18n/**'
+      - 'frontend/package*.json'
+      - '.github/workflows/one-card-study.yml'
+  push:
+    branches: [integration/railway-and-ux]
+    paths:
+      - 'backend/src/main/java/com/mcschool/flashcard/study/**'
+      - 'backend/src/main/java/com/mcschool/flashcard/cards/**'
+      - 'backend/src/main/java/com/mcschool/flashcard/homeworks/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/study/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/cards/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/CardAndStudyFlowIntegrationTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/AbstractIntegrationTest.java'
+      - 'backend/pom.xml'
+      - 'frontend/src/pages/student/TodayPage*'
+      - 'frontend/src/pages/student/SessionPage*'
+      - 'frontend/src/pages/teacher/StudentDetailPage*'
+      - 'frontend/src/api/types.ts'
+      - 'frontend/src/i18n/**'
+      - 'frontend/package*.json'
+      - '.github/workflows/one-card-study.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: one-card-study-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Require Docker for real PostgreSQL study verification
+        run: docker info > /dev/null
+      - name: Verify small decks, answer options, scheduling and complete study flows
+        working-directory: backend
+        run: ./mvnw -B -ntp '-Dtest=StudyServiceSmallDeckTest,DistractorGeneratorTest,Sm2SchedulerTest,AnswerRequestValidationTest,CardImportParserTest,CardAndStudyFlowIntegrationTest' test
+      - name: Require the complete PostgreSQL study suite without skips
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+          report = Path('backend/target/surefire-reports/TEST-com.mcschool.flashcard.CardAndStudyFlowIntegrationTest.xml')
+          suite = ElementTree.parse(report).getroot()
+          # 25 ordinary tests + the three 1/2/3-card parameterized invocations.
+          assert int(suite.get('tests', '0')) >= 28, 'Missing PostgreSQL study integration tests'
+          for field in ('skipped', 'failures', 'errors'):
+              assert int(suite.get(field, '0')) == 0, f'Study integration: {field} must be zero'
+          PY
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Verify one-card entry, the question screen and teacher card status
+        run: npm test -- src/pages/student/TodayPage.test.tsx src/pages/student/SessionPage.test.tsx src/pages/teacher/StudentDetailPage.test.tsx
+      - run: npm run build

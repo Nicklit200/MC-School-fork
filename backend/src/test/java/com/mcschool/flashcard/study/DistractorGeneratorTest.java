@@ -87,4 +87,31 @@ class DistractorGeneratorTest {
 
         assertThat(options).filteredOn(option -> option.equals("42")).hasSize(1);
     }
+
+    @Test
+    void aSinglePlainCardHasOnlyItsCorrectAnswerWithoutFabricatedOptions() {
+        Card target = card("correct");
+        assertThat(generator.buildOptions(target, List.of(target))).containsExactly("correct");
+    }
+
+    @Test
+    void threePlainCardsUseTheirThreeRealDistinctAnswersWithoutPadding() {
+        Card target = card("correct");
+        assertThat(generator.buildOptions(target, List.of(target, card("other-one"), card("other-two"))))
+                .containsExactlyInAnyOrder("correct", "other-one", "other-two");
+    }
+
+    @Test
+    void aSmallDeckWithTheSameAnswerDoesNotRepeatItAsADistractor() {
+        Card target = card("same");
+        assertThat(generator.buildOptions(target, List.of(target, card("same"), card("same"))))
+                .containsExactly("same");
+    }
+
+    @Test
+    void aSingleImportedCardStillUsesItsThreeTeacherSuppliedWrongAnswers() {
+        Card target = importedCard();
+        assertThat(generator.buildOptions(target, List.of(target)))
+                .containsExactlyInAnyOrder("correct", "saved wrong 1", "saved wrong 2", "saved wrong 3");
+    }
 }

@@ -9,14 +9,14 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Builds the four answer options for a card during a session (PRD 4.1/4.3):
+ * Builds up to four answer options for a card during a session (PRD 4.1/4.3):
  * the correct answer plus up to three "distractors" — wrong options taken at
- * random from the correct answers of the student's <i>other</i> cards. This is
- * why a student needs at least four cards before a session can start.
+ * random from the correct answers of the session's <i>other</i> cards, unless
+ * the teacher supplied this card's own wrong answers.
  *
  * <p>If the other cards do not provide three <i>distinct</i> wrong answers (e.g.
  * several cards share an answer) the question is shown with fewer options rather
- * than failing; the four-card rule makes this rare in practice.
+ * than failing. A single plain card therefore has only its correct answer.
  */
 @Component
 public class DistractorGenerator {

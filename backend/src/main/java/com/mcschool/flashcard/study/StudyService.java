@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class StudyService {
 
-    public static final int MIN_CARDS_TO_START = 4;
+    public static final int MIN_CARDS_TO_START = 1;
     private static final Logger log = LoggerFactory.getLogger(StudyService.class);
     private static final DateTimeFormatter EXPORT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
 
@@ -117,7 +117,7 @@ public class StudyService {
         List<Card> cards = selectCardsForSession(studentId, request);
         if (availableCardsForSession(studentId, request, cards) < MIN_CARDS_TO_START) {
             throw new ConflictException("NOT_ENOUGH_CARDS",
-                    "At least " + MIN_CARDS_TO_START + " cards are needed to start a session");
+                    "At least one card is needed to start a session");
         }
 
         User studentEntity = userRepository.findById(studentId)

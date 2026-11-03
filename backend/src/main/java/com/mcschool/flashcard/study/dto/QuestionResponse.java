@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The current question in a session: the card's question and the four shuffled
- * answer options. {@code answeredCount}/{@code totalCards} feed the progress bar.
+ * The current question in a session: the card's question and up to four shuffled
+ * answer options, using only available answers. {@code answeredCount}/{@code totalCards} feed the progress bar.
  * The correct answer is not marked here — it is revealed only after the student answers.
  */
 public record QuestionResponse(

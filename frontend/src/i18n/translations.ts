@@ -84,7 +84,7 @@ const ru = {
   'cards.deleteConfirm': 'Удалить эту карточку?',
   'cards.deletePrompt': 'Удалить карточку?',
   'cards.deleted': 'Карточка удалена',
-  'cards.tooFew': 'Меньше {min} карточек — ученик пока не сможет начать сессию. Добавьте ещё карточки.',
+  'cards.tooFew': 'Добавьте хотя бы одну карточку, чтобы ученик мог начать сессию.',
   'cards.timeLimit': 'Лимит времени на ответ (сек)',
   'cards.noLimit': 'Без лимита',
   'cards.secondsShort': 'с',
@@ -126,6 +126,7 @@ const ru = {
   'today.resume': 'Продолжить сессию',
   'today.nothingDue': 'На сегодня заданий нет 🎉',
   'today.needMoreCards': 'Нужно минимум {min} карточек, чтобы начать',
+  'today.needFirstCard': 'Для начала нужна хотя бы одна карточка.',
   'today.learned': 'Выучено карточек',
 
   'session.progress': '{done} из {total}',
@@ -158,7 +159,7 @@ const ru = {
   'lang.RU': 'Русский',
 
   'error.generic': 'Что-то пошло не так',
-  'error.NOT_ENOUGH_CARDS': 'Нужно минимум 4 карточки',
+  'error.NOT_ENOUGH_CARDS': 'Для начала нужна хотя бы одна карточка.',
   'error.NO_CARDS_DUE': 'На сегодня карточек нет',
   'error.SESSION_IN_PROGRESS': 'Сначала завершите текущую сессию',
   'error.CONFLICT': 'Такая запись уже существует',
@@ -449,7 +450,7 @@ const de: Record<keyof typeof ru, string> = {
   'cards.deleteConfirm': 'Diese Karte löschen?',
   'cards.deletePrompt': 'Karte löschen?',
   'cards.deleted': 'Karte gelöscht',
-  'cards.tooFew': 'Weniger als {min} Karten — der Schüler kann noch keine Sitzung starten. Füge weitere Karten hinzu.',
+  'cards.tooFew': 'Füge mindestens eine Karte hinzu, damit der Schüler eine Sitzung starten kann.',
   'cards.timeLimit': 'Zeitlimit zum Antworten (Sek.)',
   'cards.noLimit': 'Kein Limit',
   'cards.secondsShort': 's',
@@ -491,6 +492,7 @@ const de: Record<keyof typeof ru, string> = {
   'today.resume': 'Sitzung fortsetzen',
   'today.nothingDue': 'Heute nichts zu tun 🎉',
   'today.needMoreCards': 'Mindestens {min} Karten nötig, um zu starten',
+  'today.needFirstCard': 'Zum Starten brauchst du mindestens eine Karte.',
   'today.learned': 'Gelernte Karten',
 
   'session.progress': '{done} von {total}',
@@ -523,7 +525,7 @@ const de: Record<keyof typeof ru, string> = {
   'lang.RU': 'Russisch',
 
   'error.generic': 'Etwas ist schiefgelaufen',
-  'error.NOT_ENOUGH_CARDS': 'Mindestens 4 Karten nötig',
+  'error.NOT_ENOUGH_CARDS': 'Zum Starten brauchst du mindestens eine Karte.',
   'error.NO_CARDS_DUE': 'Heute keine Karten fällig',
   'error.SESSION_IN_PROGRESS': 'Beende zuerst die laufende Sitzung',
   'error.CONFLICT': 'Dieser Eintrag existiert bereits',
