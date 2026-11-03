@@ -44,22 +44,25 @@ describe('BoardSwitcher', () => {
     expect(screen.getByRole('combobox')).toHaveValue('personal-u1');
   });
 
-  it('adds a third pupil button without changing the existing personal board', async () => {
+  it('always exposes exactly the shared board and My board to a pupil', async () => {
     const onChange = vi.fn();
     render(<I18nProvider><BoardSwitcher isHost={false} currentUserId="me" students={students}
-      activeId="personal-me" onChange={onChange} worksheetAvailable /></I18nProvider>);
+      activeId="personal-me" onChange={onChange} /></I18nProvider>);
     expect(screen.getByRole('button', { name: 'Моя доска' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(screen.getByRole('button', { name: 'Персональный лист' }));
-    expect(onChange).toHaveBeenCalledWith('personal-workbook-me');
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Персональный лист' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Моя доска' }));
+    expect(onChange).toHaveBeenCalledWith('personal-me');
     expect(screen.getByRole('button', { name: 'Общая доска' })).toBeInTheDocument();
   });
 
-  it('lets a pilot teacher select a worksheet before that pupil joins', async () => {
+  it('uses one canonical board option for each assigned pupil before they join', async () => {
     const onChange = vi.fn();
-    render(<I18nProvider><BoardSwitcher isHost currentUserId="teacher" students={[]}
-      activeId="board-1" onChange={onChange} worksheetStudents={students} /></I18nProvider>);
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-u2');
-    expect(onChange).toHaveBeenCalledWith('personal-workbook-u2');
-    expect(screen.getByRole('option', { name: 'Персональный лист: Bob' })).toBeInTheDocument();
+    render(<I18nProvider><BoardSwitcher isHost currentUserId="teacher"
+      activeId="board-1" onChange={onChange} students={students} /></I18nProvider>);
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u2');
+    expect(onChange).toHaveBeenCalledWith('personal-u2');
+    expect(screen.getByRole('option', { name: 'Доска ученика: Bob' })).toBeInTheDocument();
+    expect(screen.getAllByRole('option')).toHaveLength(4);
   });
 });

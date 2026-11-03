@@ -224,40 +224,35 @@ function RoomBody({
   const [panelsOpen, setPanelsOpen] = useState(false);
   const [videosOpen, setVideosOpen] = useState(false);
   const materialInput = useRef<HTMLInputElement>(null);
+  const personalMaterialInput = useRef<HTMLInputElement>(null);
   const [activeBoard, setActiveBoard] = useState(SHARED_BOARD_ID);
   const materialTarget = useRef(SHARED_BOARD_ID);
   const [personalWorkbooks, setPersonalWorkbooks] = useState<{ eventId: string; data: PersonalWorkbooks } | null>(null);
   const personalWorkbookData = personalWorkbooks && personalWorkbooks.eventId === eventId ? personalWorkbooks.data : null;
-  const personalUploadStudent = personalWorkbookData?.enabled && isPersonalWorkbookBoard(activeBoard) ? personalBoardOwner(activeBoard) : null;
+  const personalUploadStudent = personalWorkbookData?.enabled ? personalBoardOwner(activeBoard) : null;
   const personalUploadStudentName = personalWorkbookData?.students.find(student => student.studentId === personalUploadStudent)?.studentName.trim();
-  const [ownWorksheet, setOwnWorksheet] = useState<{ classId: string; userId: string; available: boolean } | null>(null);
-  const worksheetAvailable = ownWorksheet?.classId === classId && ownWorksheet.userId === currentUserId && ownWorksheet.available;
-  useEffect(() => {
-    if (!connection.host && ownWorksheet?.classId === classId && ownWorksheet.userId === currentUserId
-      && !ownWorksheet.available && isPersonalWorkbookBoard(activeBoard)) setActiveBoard(SHARED_BOARD_ID);
-  }, [connection.host, ownWorksheet, classId, currentUserId, activeBoard]);
-  useEffect(() => {
-    if (connection.host) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const revision = await onlineClassesApi.documentVersion(classId, personalWorkbookBoardId(currentUserId));
-        if (!cancelled) setOwnWorksheet({ classId, userId: currentUserId, available: revision.version > 0 });
-      } catch {
-        // A non-pilot lesson or lost connection cannot grant worksheet access.
-      }
-    };
-    void load();
-    const timer = window.setInterval(() => void load(), 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [classId, currentUserId, connection.host]);
   useEffect(() => {
     if (!connection.host || !eventId) return;
     let cancelled = false;
-    void lessonPreparationApi.personalWorkbooks(eventId).then(data => {
-      if (!cancelled) setPersonalWorkbooks({ eventId, data });
-    }).catch(() => { /* Keep shared uploads available if the optional pilot is unavailable. */ });
-    return () => { cancelled = true; };
+    let loading = false;
+    let pending = false;
+    const load = async () => {
+      if (loading) { pending = true; return; }
+      loading = true;
+      try {
+        const data = await lessonPreparationApi.personalWorkbooks(eventId);
+        if (!cancelled) setPersonalWorkbooks({ eventId, data });
+      } catch { /* Keep the last authorized roster through temporary failures. */ }
+      finally {
+        loading = false;
+        if (pending && !cancelled) { pending = false; void load(); }
+      }
+    };
+    const refresh = () => void load();
+    void load();
+    const timer = window.setInterval(refresh, 4000);
+    window.addEventListener('mc-workbook-updated', refresh);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('mc-workbook-updated', refresh); };
   }, [connection.host, eventId]);
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
@@ -388,7 +383,11 @@ function RoomBody({
   const answers = useAnswersPanel(eventId, connection.host, answerStudentId, currentUserId,
     connection.host && Boolean(personalBoardOwner(activeBoard)) && !personalWorkbookData);
   const boardDocument = useBoardDocument(classId);
-  const students = useStudentRoster(classId, connection.host);
+  const admittedStudents = useStudentRoster(classId, connection.host);
+  const students = [...new Map([
+    ...(personalWorkbookData?.enabled ? personalWorkbookData.students.map(student => ({ userId: student.studentId, displayName: student.studentName })) : []),
+    ...admittedStudents,
+  ].map(student => [student.userId, student])).values()];
   const { camerasByOwner } = useLessonNotebookCameras({ eventId, classId, enabled: connection.host });
   const [archiving, setArchiving] = useState(false);
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
@@ -499,10 +498,9 @@ function RoomBody({
   // walking through a whole group does not pile up one canvas per student
   // (their marks live on the server, so reopening one loses nothing).
   const showingAllStudents = connection.host && activeBoard === ALL_STUDENT_BOARDS_ID;
-  const selectedWorksheet = isPersonalWorkbookBoard(activeBoard);
   const boardsToShow = connection.host
-    ? [SHARED_BOARD_ID, ...(selectedWorksheet ? [activeBoard] : [])]
-    : [SHARED_BOARD_ID, personalBoardId(currentUserId), ...(worksheetAvailable ? [personalWorkbookBoardId(currentUserId)] : [])];
+    ? [SHARED_BOARD_ID]
+    : [SHARED_BOARD_ID, personalBoardId(currentUserId)];
 
   // A new screen share takes the main area; the user can switch back to the
   // board at any time, and the board keeps its marks while it is not shown.
@@ -513,22 +511,29 @@ function RoomBody({
   }, [sharing]);
 
   const showScreen = sharing && mainView === 'screen';
-  const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !selectedWorksheet && !showScreen;
+  const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !showScreen;
   const selectBoard = (boardId: string) => {
     setActiveBoard(boardId);
     setMainView('board');
     if (connection.host && boardId !== SHARED_BOARD_ID && window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
   };
 
-  const fileAction = connection.host ? <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
-    disabled={materialBusy || Boolean(selectedWorksheet && !personalWorkbookData?.enabled)} onClick={() => {
-      materialTarget.current = activeBoard;
-      materialInput.current?.click();
-    }}>
-    <BoardToolbarIcon name="file" />{materialBusy ? 'Загрузка…' : personalUploadStudent
-      ? `${language === 'DE' ? 'Persönliches Arbeitsblatt hochladen' : 'Загрузить персональный лист'}${personalUploadStudentName ? `: ${personalUploadStudentName}` : ''}`
-      : language === 'DE' ? 'Gemeinsames Dokument für alle hinzufügen' : 'Добавить общий документ для всех'}
-  </button> : undefined;
+  const fileAction = connection.host ? <>
+    <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
+      disabled={materialBusy} onClick={() => materialInput.current?.click()}>
+      <BoardToolbarIcon name="file" />{materialBusy ? 'Загрузка…'
+        : language === 'DE' ? 'Gemeinsames Dokument für alle hinzufügen' : 'Добавить общий документ для всех'}
+    </button>
+    {personalUploadStudent && <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
+      disabled={materialBusy} onClick={() => {
+        materialTarget.current = personalWorkbookBoardId(personalUploadStudent);
+        personalMaterialInput.current?.click();
+      }}>
+      <BoardToolbarIcon name="file" />{language === 'DE'
+        ? (personalUploadStudentName ? `Arbeitsblatt für ${personalUploadStudentName} hochladen` : 'Arbeitsblatt für Schüler hochladen')
+        : (personalUploadStudentName ? `Загрузить лист для ${personalUploadStudentName}` : 'Загрузить лист ученику')}
+    </button>}
+  </> : undefined;
 
   return (
     <>
@@ -570,12 +575,13 @@ function RoomBody({
           students={students}
           activeId={activeBoard}
           onChange={selectBoard}
-          worksheetAvailable={worksheetAvailable}
-          worksheetStudents={personalWorkbookData?.enabled ? personalWorkbookData.students.map(student => ({ userId: student.studentId, displayName: student.studentName })) : []}
         />
         </div>
       </div>
-      {connection.host && <input ref={materialInput} type="file" multiple={!personalUploadStudent} accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
+      {connection.host && <input ref={materialInput} type="file" multiple accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
+        disabled={materialBusy} hidden
+        onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files, SHARED_BOARD_ID); event.target.value = ''; }} />}
+      {connection.host && <input ref={personalMaterialInput} type="file" accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
         disabled={materialBusy} hidden
         onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadMaterial(files, materialTarget.current); event.target.value = ''; }} />}
 
@@ -609,6 +615,7 @@ function RoomBody({
                 <Suspense fallback={null}>
                   <DocumentWhiteboardPanel
                     sharedDocument={boardDocument}
+                    personalWorkbooksEnabled={connection.host ? personalWorkbookData?.enabled : undefined}
                     classId={classId}
                     actorId={currentUserId}
                     isHost={connection.host}
@@ -617,7 +624,7 @@ function RoomBody({
                     canAnnotate
                     fileAction={visible ? fileAction : undefined}
                     active={visible}
-                    observedPage={studentPages[boardId]}
+                    observedPages={studentPages}
                     onSaveLessonDocuments={connection.host ? archiveBoards : undefined}
                     savingLessonDocuments={archiving}
                     // Answers belong to whichever board the teacher is looking at.
@@ -653,13 +660,14 @@ function RoomBody({
             renderBoard={(studentId, active, compact, following) => <Suspense fallback={null}>
               <DocumentWhiteboardPanel
                 sharedDocument={boardDocument}
+                personalWorkbooksEnabled={personalWorkbookData?.enabled}
                 classId={classId}
                 actorId={currentUserId}
                 isHost
                 targetId={personalBoardId(studentId)}
                 compactPreview={compact}
                 followStudent={following}
-                observedPage={studentPages[personalBoardId(studentId)]}
+                observedPages={studentPages}
                 canAnnotate={!compact}
                 active={active}
                 fileAction={active && !compact ? fileAction : undefined}

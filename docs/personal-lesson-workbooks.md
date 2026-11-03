@@ -1,41 +1,43 @@
 # Personal lesson worksheets pilot
 
-The lesson keeps one shared workbook for everyone and an optional additional PDF
-for each pupil. A personal workbook upload does not replace the shared workbook, create
-homework, or copy the worksheet to other pupils.
+The classroom has two pupil buttons: **Общая доска** and **Моя доска**.
+The shared board always uses the lesson's shared PDF. My board uses that pupil's
+personal PDF when one is assigned, otherwise the shared PDF, otherwise a blank
+board. A personal upload does not replace the shared file, create homework, or
+copy the worksheet to other pupils.
 Each pupil's worksheet can also have a separate private PDF answer key for the
 teacher. Answers are stored and served separately from the pupil's worksheet.
 
 The pilot is enabled only for lessons owned by teacher
 `14e3c7c1-1fc8-41bd-858a-6c20efdd957a`. Other teachers keep their existing behavior.
 The owning teacher sees the per-pupil upload controls on the lesson preparation
-page. Pupils see a third **Персональный лист** button beside **Общая доска** and
-**Моя доска** in the classroom. The PDF and its annotations open in this separate
-worksheet tab; the existing **Моя доска** keeps its previous behavior. The teacher
-can inspect a pupil's personal worksheet independently of that pupil's board.
+page. A pupil opens both shared and individually assigned work through **Моя
+доска**, without a third worksheet button. The teacher selects each pupil once
+in the classroom selector and can upload a shared file for everyone or a file
+for that pupil.
 
 Document routing follows the same rule throughout preparation, the classroom,
 and connector uploads:
 
-| Uploaded documents | Shared board | Every pupil's My board | Personal worksheet |
-|---|---|---|---|
-| No PDFs | Blank background | Blank background | Button absent |
-| Shared PDF only | Shared PDF | Shared PDF | Button absent |
-| Personal PDFs only | Blank background | Blank background | Each assigned pupil's own PDF |
-| Shared and personal PDFs | Shared PDF | Shared PDF | Each assigned pupil's own PDF |
+| Uploaded documents | Shared board | My board |
+|---|---|---|
+| No PDFs | Blank background | Blank background |
+| Shared PDF only | Shared PDF | Shared PDF for each pupil |
+| Personal PDFs only | Blank background | Own PDF when assigned, otherwise blank |
+| Shared and personal PDFs | Shared PDF | Own PDF when assigned, otherwise shared PDF |
 
-The personal worksheet button appears only for a pupil with an assigned PDF.
-My board always uses the shared document background; its annotations remain
-independent for each pupil. A personal worksheet has its own PDF and annotations.
-Uploading one does not create or replace a shared PDF. A blank background does
-not clear saved handwriting from the same lesson.
+Each pupil's annotations remain independent. Existing personal files, blank
+pages and handwriting open through My board. Earlier handwriting associated
+with a shared document stays in its original scope and remains separately
+available to lesson exports. A blank background does not clear saved handwriting
+from the same lesson.
 
 The classroom upload action explicitly names a shared document for everyone,
-including when the teacher opens a pupil's My board. An upload from a personal
-worksheet explicitly names that pupil. The selected surface is captured when
+including when the teacher opens a pupil's My board. The individual upload
+explicitly names the selected pupil. The selected destination is captured when
 the file picker opens, so switching surfaces cannot silently change recipients.
 
-## Connector tools (MCP 1.25.0)
+## Connector tools (MCP 1.26.0)
 
 All personal worksheet and answer tools require a current active OAuth identity: the pilot teacher, or an
 administrator exercising existing lesson-management authority. The selected
@@ -114,7 +116,7 @@ uploads, or written to receipts. The selected pupil's worksheet and every other
 pupil's answer file are preserved.
 
 The teacher's answer panel reads the selected pupil's private answer key when
-that pupil's personal worksheet is selected. Shared `prepare_lesson` answer
+that pupil's My board is selected. Shared `prepare_lesson` answer
 uploads and `attach_lesson_answers` continue to update the lesson's shared
 teacher-answer file; they do not update a personal answer key.
 
@@ -124,10 +126,22 @@ Personal PDFs are keyed by teacher, calendar event and pupil. A class's host or
 that particular admitted pupil may read the PDF and its revision through the
 classroom document API using `boardId=personal-workbook-<studentUserId>`. A different
 pupil cannot read either the file or its revision; waiting-room membership alone
-does not grant access. Every request checks current lesson membership. Personal
-worksheet tabs without an uploaded PDF return no personal document. Shared board,
-My board (`personal-<studentUserId>`) and Personal worksheet
-(`personal-workbook-<studentUserId>`) render and store annotations in separate scopes.
+does not grant access. Every request checks current lesson membership. A successful
+private version probe of `0` confirms that My board may use the shared file;
+pending requests, network failures and access errors do not grant that fallback.
+For a non-pilot lesson the version probe also returns `0`, after admission,
+ownership and current-roster checks; private bytes and annotations stay closed.
+
+My board is a single UI choice backed by separate existing storage scopes.
+Without a private assignment its real target is `personal-<studentUserId>` and
+its background is the shared PDF. With a private assignment its real target is
+`personal-workbook-<studentUserId>`, retaining that file's pages and handwriting.
+The UI resolves the source live and remounts the paper panel when the source
+changes. Page hints, pupil-view telemetry and teacher following use that real
+target. Notebook camera annotations remain in their existing camera scope.
+Legacy REST requests for the ordinary personal target still return the shared
+PDF, so earlier shared-background notes and private notes can be exported
+separately without overlaying them on a different worksheet.
 
 Replacing the shared workbook preserves every personal file. Replacing one
 personal file preserves all other pupils' files and the shared workbook.

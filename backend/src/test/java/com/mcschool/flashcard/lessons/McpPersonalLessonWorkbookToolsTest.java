@@ -90,12 +90,33 @@ class McpPersonalLessonWorkbookToolsTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void catalogDescribesSeparatePersonalWorksheetTabAndAnnotationTarget() {
+    void catalogDescribesPrivatePriorityInMyBoardAndPreservedAnnotationScope() {
         Map<String, Object> catalog = request("owner", "tools/list", Map.of());
         List<Map<String, Object>> tools = (List<Map<String, Object>>) catalog.get("tools");
         String description = tools.stream().filter(tool -> "upload_personal_lesson_workbook".equals(tool.get("name")))
                 .map(tool -> String.valueOf(tool.get("description"))).findFirst().orElseThrow();
-        assertThat(description).contains("Персональный лист", "personal-workbook-<studentUserId>", "existing My board remain available");
+        assertThat(description).contains("My board (Моя доска)", "takes priority over the common workbook",
+                "personal-workbook-<studentUserId>", "other pupils are unchanged", "common-workbook annotations remain separate");
+        assertThat(description).doesNotContain("separate Personal worksheet tab", "Персональный лист");
+        String common = tools.stream().filter(tool -> "prepare_lesson".equals(tool.get("name")))
+                .map(tool -> String.valueOf(tool.get("description"))).findFirst().orElseThrow();
+        assertThat(common).contains("Shared board", "My board unless that pupil has a private worksheet", "Private worksheets and their annotations are preserved");
+        String download = tools.stream().filter(tool -> "download_lesson_pdf".equals(tool.get("name")))
+                .map(tool -> String.valueOf(tool.get("description"))).findFirst().orElseThrow();
+        assertThat(download).contains("common workbook", "does not select a pupil's private worksheet or private answers");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void discoveryAndInitializationExplainTwoBoardsAndTheCommonOrBlankFallback() {
+        for (String method : List.of("initialize", "server/discover")) {
+            Map<String, Object> discovery = request("owner", method, Map.of());
+            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.26.0");
+            assertThat(String.valueOf(discovery.get("instructions"))).contains("Shared board and My board (Моя доска)",
+                    "takes priority over the common workbook", "uses the common workbook or stays blank",
+                    "Shared board continues to show the common workbook to everyone");
+            assertThat(String.valueOf(discovery.get("instructions"))).doesNotContain("separate Personal worksheet tab");
+        }
     }
 
     @Test

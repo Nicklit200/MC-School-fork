@@ -34,7 +34,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from xml.etree import ElementTree
-          for name, minimum in {'PersonalLessonWorkbookPersistenceIntegrationTest': 6, 'PersonalLessonAnswersPersistenceIntegrationTest': 5}.items():
+          for name, minimum in {'PersonalLessonWorkbookPersistenceIntegrationTest': 7, 'PersonalLessonAnswersPersistenceIntegrationTest': 5}.items():
               report = Path('backend/target/surefire-reports') / f'TEST-com.mcschool.flashcard.lessons.{name}.xml'
               suite = ElementTree.parse(report).getroot()
               assert int(suite.get('tests', '0')) >= minimum, f'{name}: missing database coverage'

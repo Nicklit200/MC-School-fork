@@ -1,11 +1,15 @@
 // Development-only two-participant fixture. REST is supplied by the browser test;
 // a local transport delivers the real encoded LiveKit packets between tabs.
 import { createRoot } from 'react-dom/client';
+import { useState } from 'react';
 import { RoomContext } from '@livekit/components-react';
 import { Room, RoomEvent } from 'livekit-client';
 import Konva from 'konva';
 import { I18nProvider } from '../../src/i18n/I18nContext';
 import { WhiteboardPanel } from '../../src/features/online-classes/WhiteboardPanel';
+import { DocumentWhiteboardPanel } from '../../src/features/online-classes/DocumentWhiteboardPanel';
+import { BoardSwitcher } from '../../src/features/online-classes/BoardSwitcher';
+import { personalBoardId } from '../../src/features/online-classes/boards';
 import type { PdfDoc } from '../../src/features/online-classes/pdfDocument';
 import '../../src/index.css';
 import '../../src/online-classes.css';
@@ -36,22 +40,56 @@ const pdf: PdfDoc = {
     const canvas = window.document.createElement('canvas');
     canvas.width = Math.min(1200, Math.ceil(width)); canvas.height = Math.round(canvas.width * Math.SQRT2);
     const context = canvas.getContext('2d')!;
-    context.fillStyle = '#fffefa'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = params.get('unified') === '1' ? '#ddeeff' : '#fffefa'; context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = '#253345'; context.font = `${canvas.width * .05}px sans-serif`;
     context.fillText('Personal worksheet', canvas.width * .1, canvas.height * .1);
     return { canvas, aspect: 1 / Math.SQRT2 };
   },
 };
+const visibleStages = () => Konva.stages.filter(stage => stage.container().getClientRects().length > 0);
+const backgroundColor = () => {
+  const image = visibleStages()[0]?.getChildren()[0]?.findOne('Image')?.getAttr('image') as HTMLCanvasElement | undefined;
+  return image?.getContext('2d') ? Array.from(image.getContext('2d')!.getImageData(1, 1, 1, 1).data).slice(0, 3) : null;
+};
+const frames: Array<number[] | null> = [];
+const sample = () => { if (frames.length < 600) frames.push(backgroundColor()); window.requestAnimationFrame(sample); };
+if (params.get('unified') === '1') window.requestAnimationFrame(sample);
 Object.assign(window, { boardPagesFixture: {
   outgoing,
+  frames,
+  backgroundColor,
+  visibleStages: () => visibleStages().length,
   savedInkCount: (page: number) => Konva.stages
     .filter(stage => Number(stage.container().closest('[data-page-index]')?.getAttribute('data-page-index')) === page)
     .reduce((sum, stage) => sum + (stage.getChildren()[1]?.getChildren().length ?? 0), 0),
 } });
+
+function UnifiedBoards() {
+  const mine = personalBoardId(role === 'teacher' ? ids.owner : actorId);
+  const [activeId, setActiveId] = useState(params.get('initial') === 'shared' ? 'board-1' : mine);
+  const common = params.get('common') === 'none' ? null : pdf;
+  return <>
+    <div id="source-switcher" style={{ position: 'fixed', top: 8, left: 8, zIndex: 40 }}>
+      <BoardSwitcher isHost={role === 'teacher'} currentUserId={actorId} students={[
+        { userId: ids.owner, displayName: 'Owner' }, { userId: ids.peer, displayName: 'Peer' },
+      ]} activeId={activeId} onChange={setActiveId} />
+    </div>
+    <div className="online-class-room__board" style={{ position: 'absolute', inset: 0 }} hidden={activeId !== 'board-1'}>
+      <DocumentWhiteboardPanel classId="page-sync-fixture" actorId={actorId} isHost={role === 'teacher'} targetId="board-1" sharedDocument={common} active={activeId === 'board-1'} />
+    </div>
+    <div className="online-class-room__board" style={{ position: 'absolute', inset: 0 }} hidden={activeId === 'board-1'}>
+      <DocumentWhiteboardPanel classId="page-sync-fixture" actorId={actorId} isHost={role === 'teacher'}
+        targetId={activeId === 'board-1' ? mine : activeId} sharedDocument={common} active={activeId !== 'board-1'}
+        personalWorkbooksEnabled={role === 'teacher' ? true : undefined}
+        observedPages={params.get('observed') === '1' ? { [personalBoardId(ids.owner)]: 8, [targetId]: 2 } : undefined} />
+    </div>
+  </>;
+}
 createRoot(window.document.getElementById('root')!).render(
   <RoomContext.Provider value={room}><I18nProvider>
     <div className="online-class-room online-class-room--original-v3" style={{ position: 'fixed', inset: 0 }}>
-      <WhiteboardPanel classId="page-sync-fixture" actorId={actorId} isHost={role === 'teacher'} targetId={targetId} document={pdf} />
+      {params.get('unified') === '1' ? <UnifiedBoards />
+        : <WhiteboardPanel classId="page-sync-fixture" actorId={actorId} isHost={role === 'teacher'} targetId={targetId} document={pdf} />}
     </div>
   </I18nProvider></RoomContext.Provider>,
 );

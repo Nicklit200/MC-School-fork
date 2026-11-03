@@ -1,5 +1,5 @@
 import { useI18n } from '../../i18n/I18nContext';
-import { SHARED_BOARD_ID, personalBoardId, personalWorkbookBoardId } from './boards';
+import { SHARED_BOARD_ID, personalBoardId } from './boards';
 import type { RosterStudent } from './useStudentRoster';
 
 /**
@@ -17,19 +17,14 @@ export function BoardSwitcher({
   students,
   activeId,
   onChange,
-  worksheetAvailable = false,
-  worksheetStudents = [],
 }: {
   isHost: boolean;
   currentUserId: string;
   students: RosterStudent[];
   activeId: string;
   onChange: (boardId: string) => void;
-  worksheetAvailable?: boolean;
-  worksheetStudents?: RosterStudent[];
 }) {
-  const { t, language } = useI18n();
-  const worksheetLabel = language === 'DE' ? 'Persönliches Arbeitsblatt' : 'Персональный лист';
+  const { t } = useI18n();
 
   if (isHost) {
     return (
@@ -43,9 +38,6 @@ export function BoardSwitcher({
               {t('onlineClass.board.studentBoard', { name: student.displayName })}
             </option>
           ))}
-          {worksheetStudents.map(student => <option key={personalWorkbookBoardId(student.userId)} value={personalWorkbookBoardId(student.userId)}>
-            {worksheetLabel}: {student.displayName}
-          </option>)}
         </select>
       </label>
     );
@@ -68,9 +60,6 @@ export function BoardSwitcher({
           {t(label)}
         </button>
       ))}
-      {worksheetAvailable && <button type="button" aria-pressed={activeId === personalWorkbookBoardId(currentUserId)}
-        className={activeId === personalWorkbookBoardId(currentUserId) ? 'is-active' : undefined}
-        onClick={() => onChange(personalWorkbookBoardId(currentUserId))}>{worksheetLabel}</button>}
     </div>
   );
 }

@@ -71,7 +71,10 @@ public class OnlineClassDocumentService {
         OnlineClass onlineClass = accessService.requireAdmitted(caller, classId);
         UUID studentId = personalBoardOwner(caller, onlineClass, boardId);
         if (PersonalBoard.isWorkbook(boardId)) {
-            requireWorkbookPilot(onlineClass);
+            // An authorized owner may probe whether My board has a private
+            // source. Non-pilot classes use the common source; bytes and
+            // annotations still reject this private target as before.
+            if (!PersonalLessonWorkbookService.PILOT_TEACHER_ID.equals(onlineClass.getTeacher().getId())) return 0L;
             return personalWorkbooks.workbookVersionForClass(onlineClass, studentId);
         }
         return preparations.findByTeacherIdAndEventId(

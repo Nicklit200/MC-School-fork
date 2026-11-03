@@ -109,6 +109,10 @@
 /* Only the paper's fit area has clear edges; the board itself fills the room.
    Menus overlay it without resizing a canvas in the middle of a stroke. */
 .whiteboard--original-v3.school-islands-board { position:relative; min-width:0; min-height:0; }
+.online-class-room--original-v3 .whiteboard__document-loading {
+  flex:1; min-width:0; min-height:0; display:grid; place-content:center;
+  padding:80px 24px; color:var(--v3-muted); text-align:center;
+}
 .whiteboard--original-v3.school-islands-board .whiteboard__stage { padding:0; background:var(--v3-bg); background-image:none; }
 .whiteboard--original-v3.school-islands-board .whiteboard__surface {
   position:absolute; inset:var(--classroom-page-top,132px) 30px var(--classroom-page-bottom,68px); width:auto; height:auto;

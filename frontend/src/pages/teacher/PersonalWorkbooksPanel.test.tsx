@@ -26,7 +26,7 @@ describe('personal lesson worksheets', () => {
     vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: false, students: [] });
     mount();
     await waitFor(() => expect(lessonPreparationApi.personalWorkbooks).toHaveBeenCalledWith('lesson-1'));
-    expect(screen.queryByRole('heading', { name: 'Персональные листы' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Листы учеников' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Лист для/)).not.toBeInTheDocument();
   });
 

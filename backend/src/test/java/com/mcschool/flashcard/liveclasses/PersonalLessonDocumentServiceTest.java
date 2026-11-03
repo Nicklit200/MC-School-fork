@@ -50,6 +50,37 @@ class PersonalLessonDocumentServiceTest {
     }
 
     @Test
+    void commonWorkbookRemainsTheOrdinaryPersonalSourceWhenNoPrivatePdfIsAssigned() {
+        var preparation = LessonPreparation.create(teacher, "event");
+        preparation.attachWorkbook("shared.pdf", "shared".getBytes());
+        when(shared.findByTeacherIdAndEventId(teacher.getId(), "event")).thenReturn(Optional.of(preparation));
+        String mine = PersonalBoard.targetIdFor(student.getId());
+        String privateSource = PersonalBoard.workbookTargetIdFor(student.getId());
+
+        assertThat(service.workbookVersion(studentCaller, room.getId(), privateSource)).isZero();
+        assertThat(service.workbook(studentCaller, room.getId(), privateSource)).isEmpty();
+        for (String source : java.util.List.of("board-1", mine)) {
+            assertThat(service.workbook(studentCaller, room.getId(), source)).contains("shared".getBytes());
+            assertThat(service.workbookVersion(studentCaller, room.getId(), source)).isEqualTo(1L);
+        }
+    }
+
+    @Test
+    void personalOnlyPdfDoesNotPopulateSharedOrOrdinaryPersonalSource() {
+        var workbook = PersonalLessonWorkbook.create(teacher.getId(), "event", student.getId());
+        workbook.attach("personal.pdf", "personal".getBytes());
+        when(personal.workbookForClass(room, student.getId())).thenReturn(Optional.of(workbook));
+        when(personal.workbookVersionForClass(room, student.getId())).thenReturn(3L);
+        String privateSource = PersonalBoard.workbookTargetIdFor(student.getId());
+        assertThat(service.workbook(studentCaller, room.getId(), privateSource)).contains("personal".getBytes());
+        assertThat(service.workbookVersion(studentCaller, room.getId(), privateSource)).isEqualTo(3L);
+        for (String source : java.util.List.of("board-1", PersonalBoard.targetIdFor(student.getId()))) {
+            assertThat(service.workbook(studentCaller, room.getId(), source)).isEmpty();
+            assertThat(service.workbookVersion(studentCaller, room.getId(), source)).isZero();
+        }
+    }
+
+    @Test
     void absentPersonalPdfDoesNotFallBackToSharedOnPilotAccount() {
         assertThat(service.workbook(studentCaller, room.getId(), "personal-workbook-" + student.getId())).isEmpty();
         assertThat(service.workbookVersion(studentCaller, room.getId(), "personal-workbook-" + student.getId())).isZero();
@@ -101,8 +132,33 @@ class PersonalLessonDocumentServiceTest {
         verify(personal, never()).workbookForClass(any(), any());
         assertThatThrownBy(() -> service.workbook(studentCaller, room.getId(), "personal-workbook-" + student.getId()))
                 .isInstanceOf(ResourceNotFoundException.class);
-        assertThatThrownBy(() -> service.workbookVersion(studentCaller, room.getId(), "personal-workbook-" + student.getId()))
+        assertThat(service.workbookVersion(studentCaller, room.getId(), "personal-workbook-" + student.getId())).isZero();
+        verify(personal, never()).workbookVersionForClass(any(), any());
+    }
+
+    @Test
+    void nonPilotPrivateVersionProbeStillRequiresExactOwnerAndCurrentRosterForOwnerAndHost() {
+        ReflectionTestUtils.setField(teacher, "id", UUID.randomUUID());
+        var host = new AuthenticatedUser(teacher.getId(), null, Role.TEACHER);
+        when(access.requireAdmitted(host, room.getId())).thenReturn(room);
+        when(access.isHost(host, room)).thenReturn(true);
+        String privateSource = PersonalBoard.workbookTargetIdFor(student.getId());
+        assertThat(service.workbookVersion(studentCaller, room.getId(), privateSource)).isZero();
+        assertThat(service.workbookVersion(host, room.getId(), privateSource)).isZero();
+        assertThatThrownBy(() -> service.workbookVersion(studentCaller, room.getId(),
+                PersonalBoard.workbookTargetIdFor(UUID.randomUUID())))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        doThrow(new ResourceNotFoundException("No longer enrolled")).when(personal).requireClassStudent(room, student.getId());
+        for (AuthenticatedUser caller : java.util.List.of(studentCaller, host)) {
+            assertThatThrownBy(() -> service.workbookVersion(caller, room.getId(), privateSource))
+                    .isInstanceOf(ResourceNotFoundException.class);
+            assertThatThrownBy(() -> service.workbook(caller, room.getId(), privateSource))
+                    .isInstanceOf(ResourceNotFoundException.class);
+        }
+        verify(personal, never()).workbookVersionForClass(any(), any());
+        verify(personal, never()).workbookForClass(any(), any());
+        verifyNoInteractions(shared);
     }
 
     @Test

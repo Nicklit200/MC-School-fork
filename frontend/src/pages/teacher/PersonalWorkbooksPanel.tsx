@@ -98,10 +98,10 @@ export function PersonalWorkbooksPanel({ eventId }: { eventId: string }) {
   }
 
   return <section className="panel" style={{ padding: 20, marginBottom: 18 }} aria-labelledby="personal-workbooks-title">
-    <h2 id="personal-workbooks-title" style={{ marginTop: 0 }}>{de ? 'Persönliche Arbeitsblätter' : 'Персональные листы'}</h2>
+    <h2 id="personal-workbooks-title" style={{ marginTop: 0 }}>{de ? 'Arbeitsblätter der Schüler' : 'Листы учеников'}</h2>
     <p className="muted">{de
-      ? 'Die gemeinsame PDF wird allen unter „Gemeinsames Whiteboard“ und „Mein Whiteboard“ angezeigt. Eine persönliche PDF erscheint zusätzlich nur beim ausgewählten Schüler unter „Persönliches Arbeitsblatt“. Diese PDF und die Notizen sind nur für ihn und dich sichtbar.'
-      : 'Общий PDF показывается всем в разделах «Общая доска» и «Моя доска». Персональный PDF появляется отдельно у выбранного ученика по кнопке «Персональный лист». Его PDF и записи доступны только ему и тебе.'}</p>
+      ? 'Die gemeinsame PDF erscheint unter „Gemeinsames Whiteboard“ und als Vorlage unter „Mein Whiteboard“. Ein persönliches Arbeitsblatt ersetzt diese Vorlage nur unter „Mein Whiteboard“ des ausgewählten Schülers. Andere Schüler behalten die gemeinsame Vorlage. Persönliche Notizen sind nur für den Schüler und dich sichtbar.'
+      : 'Общий PDF показывается в разделе «Общая доска» и служит основой для «Моя доска» каждого ученика. Персональный лист заменяет эту основу только в «Моя доска» выбранного ученика; у остальных остаётся общий PDF. Личные записи доступны только ученику и тебе.'}</p>
     <p className="muted">{de ? 'Persönliche Lösungen bleiben privat. Beim Wechsel zu diesem Schüler zeigt die Lösungsleiste dessen eigenes PDF.'
       : 'Решения каждого ученика видны только преподавателю. При переключении на ученика панель решений покажет его отдельный PDF.'}</p>
     {!value.students.length && <p className="muted">{de ? 'Diesem Unterricht sind noch keine Schüler zugeordnet.' : 'К этому уроку ещё не привязаны ученики.'}</p>}

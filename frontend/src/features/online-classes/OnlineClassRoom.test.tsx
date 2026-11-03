@@ -11,6 +11,7 @@ import { I18nProvider } from '../../i18n/I18nContext';
 import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import type { CameraModule } from '../notebook-camera/cameraModules';
 import { useClassSession } from './useClassSession';
+import { useBoardDocumentState } from './useBoardDocument';
 
 let screenShares: unknown[] = [];
 const notebookFixture = vi.hoisted(() => ({ camerasByOwner: new Map(), viewerProps: new Map(), panelProps: [] as Record<string, any>[] }));
@@ -83,7 +84,7 @@ vi.mock('./TranscriptionControls', () => ({ TranscriptionControls: () => null })
 vi.mock('./ParticipantListPanel', () => ({ ParticipantListPanel: () => null }));
 vi.mock('./WaitingRoomPanel', () => ({ WaitingRoomPanel: () => null }));
 vi.mock('./AnswersPanelResizer', () => ({ AnswersPanelResizer: () => <div data-testid="answers-panel-resizer" /> }));
-vi.mock('./useBoardDocument', () => ({ useBoardDocument: () => null }));
+vi.mock('./useBoardDocument', () => ({ useBoardDocument: () => null, useBoardDocumentState: vi.fn() }));
 vi.mock('./useClassEvents', () => ({ useClassEvents: () => ({ publish: vi.fn() }) }));
 vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
 vi.mock('./usePdf', () => ({ usePdf: () => ({ status: 'idle' }), usePdfPage: () => null }));
@@ -117,6 +118,7 @@ vi.mock('../../api/onlineClasses', async () => {
 import { OnlineClassRoom } from './OnlineClassRoom';
 
 beforeEach(() => {
+  vi.mocked(useBoardDocumentState).mockReset().mockReturnValue({ status: 'empty', document: null, version: 0 });
   livekitFixture.connectionState = 'connected';
   vi.mocked(onlineClassesApi.startTranscription).mockReset().mockResolvedValue(undefined);
   vi.mocked(lessonPreparationApi.personalWorkbooks).mockReset().mockResolvedValue({ enabled: false, students: [] });
@@ -245,6 +247,7 @@ describe('PDF upload contract', () => {
   it('uploads a pilot personal worksheet to that student without changing the shared PDF', async () => {
     vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [
       { studentId: 'alice', studentName: 'Анна', hasWorkbook: false, filename: null, version: 0 },
+      { studentId: 'bob', studentName: 'Борис', hasWorkbook: false, filename: null, version: 0 },
     ] });
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
       { userId: 'alice', displayName: 'Анна', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
@@ -252,16 +255,41 @@ describe('PDF upload contract', () => {
     vi.mocked(lessonPreparationApi.uploadPersonalWorkbook).mockResolvedValue({ studentId: 'alice', studentName: 'Анна', hasWorkbook: true, filename: 'anna.pdf', version: 1 });
     vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(new ArrayBuffer(8));
     const view = mount(true);
-    await screen.findByRole('option', { name: 'Персональный лист: Анна' });
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-alice');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Загрузить персональный лист: Анна' }));
-    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    await screen.findByRole('option', { name: 'Доска ученика: Анна' });
+    expect(screen.getAllByRole('option', { name: 'Доска ученика: Анна' })).toHaveLength(1);
+    expect(screen.getByRole('option', { name: 'Доска ученика: Борис' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Персональный лист/ })).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-alice');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Загрузить лист для Анна' }));
+    // The native picker can stay open while the teacher changes the board.
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-bob');
+    const input = view.container.querySelector('input[type="file"]:not([multiple])') as HTMLInputElement;
     expect(input.multiple).toBe(false);
     const file = new File(['%PDF-1.7'], 'anna.pdf', { type: 'application/pdf' });
     await userEvent.upload(input, file);
     await waitFor(() => expect(lessonPreparationApi.uploadPersonalWorkbook).toHaveBeenCalledWith('e1', 'alice', file));
     expect(lessonPreparationApi.appendWorkbook).not.toHaveBeenCalled();
     await waitFor(() => expect(onlineClassesApi.documentBytes).toHaveBeenCalledWith('c1', 'personal-workbook-alice'));
+  });
+
+  it('keeps the shared upload explicit on a pupil’s assigned My board', async () => {
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [
+      { studentId: 'alice', studentName: 'Анна', hasWorkbook: true, filename: 'anna.pdf', version: 1 },
+    ] });
+    vi.mocked(useBoardDocumentState).mockReturnValue({ status: 'ready', document: { pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() }, version: 1 });
+    vi.mocked(lessonPreparationApi.appendWorkbook).mockResolvedValue({ hasWorkbook: true } as never);
+    vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(new ArrayBuffer(8));
+    const view = mount(true);
+    await screen.findByRole('option', { name: 'Доска ученика: Анна' });
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-alice');
+    const board = await screen.findByTestId('board-personal-workbook-alice');
+    expect(within(board).getByRole('menuitem', { name: 'Загрузить лист для Анна' })).toBeInTheDocument();
+    await userEvent.click(within(board).getByRole('menuitem', { name: 'Добавить общий документ для всех' }));
+    const file = new File(['%PDF-1.7'], 'all.pdf', { type: 'application/pdf' });
+    await userEvent.upload(view.container.querySelector('input[type="file"][multiple]')!, file);
+    await waitFor(() => expect(lessonPreparationApi.appendWorkbook).toHaveBeenCalledWith('e1', file));
+    expect(lessonPreparationApi.uploadPersonalWorkbook).not.toHaveBeenCalled();
+    expect(screen.getByTestId('board-personal-workbook-alice')).toHaveAttribute('data-active', 'true');
   });
 
   it('archives each board using its own PDF background', async () => {
@@ -302,7 +330,7 @@ describe('PDF upload contract', () => {
     vi.mocked(completedLessonApi.save).mockImplementation(async (_eventId, classId, boardId) => ({ id: boardId, classId, boardId, filename: 'board.pdf', savedAt: '' }));
     vi.mocked(completedLessonApi.list).mockResolvedValue(['board-1', 'personal-workbook-bob'].map(boardId => ({ id: boardId, classId: 'c1', boardId, filename: 'board.pdf', savedAt: '' })));
     mount(true);
-    await screen.findByRole('option', { name: 'Персональный лист: Борис' });
+    await screen.findByRole('option', { name: 'Доска ученика: Борис' });
     vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [{ ...student, hasWorkbook: true, filename: 'bob.pdf', version: 1 }] });
     await act(async () => boardProps.filter(props => props.targetId === 'board-1').at(-1)!.onSaveLessonDocuments());
     expect(exportBoardPdf).toHaveBeenCalledWith(expect.objectContaining({ targetId: 'personal-workbook-bob', pageCount: 1, pdfDocument: personalDocument }));
@@ -311,20 +339,15 @@ describe('PDF upload contract', () => {
     expect(personalDocument.destroy).toHaveBeenCalledOnce();
   });
 
-  it('shows a third pupil button only after a personal worksheet is available', async () => {
-    vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 0 });
+  it('opens the assigned worksheet through My board while keeping only two navigation buttons', async () => {
+    vi.mocked(useBoardDocumentState).mockReturnValue({ status: 'ready', document: { pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() }, version: 1 });
     mount(false);
-    await screen.findByRole('button', { name: 'Моя доска' });
-    expect(screen.queryByRole('button', { name: 'Персональный лист' })).not.toBeInTheDocument();
-    vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 1 });
-    // Remount represents the pupil entering again after a connector upload.
-    cleanup();
-    mount(false);
-    await userEvent.click(await screen.findByRole('button', { name: 'Персональный лист' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Моя доска' }));
     expect(screen.getByTestId('board-personal-workbook-me')).toHaveAttribute('data-active', 'true');
-    expect(screen.getByTestId('board-personal-me')).toHaveAttribute('data-active', 'false');
-    await userEvent.click(screen.getByRole('button', { name: 'Моя доска' }));
-    expect(screen.getByTestId('board-personal-me')).toHaveAttribute('data-active', 'true');
+    expect(screen.queryByRole('button', { name: 'Персональный лист' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('board-personal-me')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Общая доска' }));
+    expect(screen.getByTestId('board-board-1')).toHaveAttribute('data-active', 'true');
     expect(screen.getByTestId('board-personal-workbook-me')).toHaveAttribute('data-active', 'false');
   });
 });
@@ -700,12 +723,11 @@ describe('OnlineClassRoom', () => {
     await waitFor(() => expect(button).toBeEnabled());
     await userEvent.click(button);
     expect(screen.getByText('Решения для учителя')).toBeInTheDocument();
-    await screen.findByRole('option', { name: 'Персональный лист: Alice' });
+    await screen.findByRole('option', { name: 'Доска ученика: Alice' });
     await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
     await waitFor(() => expect(lessonPreparationApi.personalAnswersMetadata).toHaveBeenCalledWith('e1', 'u1'));
     expect(await screen.findByText('Решения: Alice')).toBeInTheDocument();
     expect(screen.getByTestId('answers-panel-resizer')).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-u1');
     expect(screen.getByText('Решения: Alice')).toBeInTheDocument();
     expect(lessonPreparationApi.personalAnswersMetadata).toHaveBeenCalledTimes(1);
     await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u2');

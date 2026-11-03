@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { onlineClassesApi } from '../../api/onlineClasses';
-import { useBoardDocument } from './useBoardDocument';
+import { useBoardDocument, useBoardDocumentState } from './useBoardDocument';
 import { openPdf } from './pdfDocument';
 
 vi.mock('../../api/onlineClasses', async () => {
@@ -100,5 +100,50 @@ describe('useBoardDocument', () => {
     act(() => window.dispatchEvent(new Event('mc-workbook-updated')));
     expect(api.documentVersion).not.toHaveBeenCalled();
     expect(result.current).toBe(doc);
+  });
+
+  it('distinguishes confirmed absence from unavailable private metadata and download failure', async () => {
+    api.documentVersion.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ version: 2 });
+    api.documentBytes.mockRejectedValue(new Error('bad download'));
+    const { result } = renderHook(() => useBoardDocumentState('class-1', 'personal-workbook-alice'));
+    expect(result.current.status).toBe('loading');
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.document).toBeNull();
+    act(() => window.dispatchEvent(new Event('mc-workbook-updated')));
+    await waitFor(() => expect(api.documentBytes).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.status).not.toBe('empty');
+  });
+
+  it('withdraws inheritance while an assigned PDF loads and detects connector uploads through polling', async () => {
+    vi.useFakeTimers();
+    api.documentVersion.mockResolvedValue({ version: 0 });
+    let release!: (bytes: ArrayBuffer) => void;
+    api.documentBytes.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const { result, unmount } = renderHook(() => useBoardDocumentState('class-1', 'personal-workbook-alice'));
+    try {
+      await act(async () => {});
+      expect(result.current.status).toBe('empty');
+      api.documentVersion.mockResolvedValue({ version: 1 });
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+      expect(result.current).toEqual({ status: 'loading', document: null, version: 1 });
+      await act(async () => release(new ArrayBuffer(8)));
+      expect(result.current).toEqual({ status: 'ready', document: doc, version: 1 });
+      api.documentVersion.mockRejectedValue(new Error('offline'));
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+      expect(result.current.document).toBe(doc);
+    } finally { unmount(); vi.useRealTimers(); }
+  });
+
+  it('ignores an old absence response when an upload happened during its metadata request', async () => {
+    let release!: (value: { version: number }) => void;
+    api.documentVersion.mockImplementationOnce(() => new Promise(resolve => { release = resolve; })).mockResolvedValue({ version: 1 });
+    api.documentBytes.mockResolvedValue(new ArrayBuffer(8));
+    const { result } = renderHook(() => useBoardDocumentState('class-1', 'personal-workbook-alice'));
+    act(() => window.dispatchEvent(new Event('mc-workbook-updated')));
+    await act(async () => release({ version: 0 }));
+    expect(result.current.status).not.toBe('empty');
+    await waitFor(() => expect(result.current.document).toBe(doc));
+    expect(api.documentVersion).toHaveBeenCalledTimes(2);
   });
 });

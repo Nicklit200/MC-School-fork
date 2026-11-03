@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -236,6 +237,100 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         mvc.perform(get(operations).with(authentication(hostAccount))).andExpect(status().isNotFound());
         mvc.perform(get(operations).with(authentication(ownerAccount))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unifiedMyBoardKeepsLegacyOrdinaryAndWorksheetBytesPagesAndInkSeparate() throws Exception {
+        byte[] commonPdf = pdf(1);
+        byte[] privatePdf = pdf(2);
+        var preparation = LessonPreparation.create(teacher, "event");
+        preparation.attachWorkbook("common-a.pdf", commonPdf);
+        preparations.saveAndFlush(preparation);
+        var peer = users.saveAndFlush(User.managedStudent("Peer", teacher));
+        var group = groups.saveAndFlush(StudentGroup.create(teacher, "Legacy boards"));
+        groupMembers.saveAndFlush(StudentGroupMember.create(group, student));
+        groupMembers.saveAndFlush(StudentGroupMember.create(group, peer));
+        when(lessons.listGroupLessons(caller)).thenReturn(List.of(new GroupLessonResponse(
+                "event", "event", group.getId(), "Legacy boards", null, null, List.of(student.getId(), peer.getId()),
+                "Math", Instant.now(), Instant.now().plusSeconds(3600), null, null)));
+        var room = classes.saveAndFlush(OnlineClass.forGroup(teacher, "event", "event", "Math",
+                Instant.now(), Instant.now().plusSeconds(3600), group));
+        for (User pupil : List.of(student, peer)) {
+            var admitted = OnlineClassParticipant.student(room, pupil);
+            admitted.admit();
+            participants.saveAndFlush(admitted);
+        }
+        var hostAccount = account(teacher.getId(), Role.TEACHER);
+        var ownerAccount = account(student.getId(), Role.STUDENT);
+        var peerAccount = account(peer.getId(), Role.STUDENT);
+        String ordinaryTarget = PersonalBoard.targetIdFor(student.getId());
+        String worksheetTarget = PersonalBoard.workbookTargetIdFor(student.getId());
+        String base = "/api/v1/online-classes/" + room.getId();
+        String pages = base + "/annotations/documents";
+
+        // These notes predate the personal PDF assignment and must stay on A.
+        String ordinaryPage = mvc.perform(post(pages).param("targetType", "WHITEBOARD").param("targetId", ordinaryTarget)
+                        .param("pageIndex", "0").with(authentication(ownerAccount)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String ordinaryId = json.readTree(ordinaryPage).path("id").asString("");
+        UUID ordinaryOperation = UUID.randomUUID();
+        String ordinaryInk = """
+                {"kind":"pen","color":"#aa0000","width":0.004,"points":[[0.1,0.2],[0.3,0.4]]}
+                """;
+        String ordinaryReplay = pages + "/" + ordinaryId + "/operations";
+        mvc.perform(post(ordinaryReplay).with(authentication(ownerAccount)).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(new AnnotationOperationRequest(ordinaryOperation, AnnotationOperationType.ADD, ordinaryInk))))
+                .andExpect(status().isOk());
+
+        service.upload(caller, "event", student.getId(), "private-b.pdf", privatePdf);
+        String worksheetPage = mvc.perform(post(pages).param("targetType", "WHITEBOARD").param("targetId", worksheetTarget)
+                        .param("pageIndex", "2").with(authentication(hostAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String worksheetId = json.readTree(worksheetPage).path("id").asString("");
+        assertThat(ordinaryId).isNotBlank().isNotEqualTo(worksheetId);
+        assertThat(worksheetId).isNotBlank();
+        UUID worksheetOperation = UUID.randomUUID();
+        String worksheetInk = """
+                {"kind":"pen","color":"#0000bb","width":0.006,"points":[[0.6,0.7],[0.8,0.9]]}
+                """;
+        String worksheetReplay = pages + "/" + worksheetId + "/operations";
+        mvc.perform(post(worksheetReplay).with(authentication(hostAccount)).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(new AnnotationOperationRequest(worksheetOperation, AnnotationOperationType.ADD, worksheetInk))))
+                .andExpect(status().isOk());
+
+        for (var viewer : List.of(ownerAccount, hostAccount)) {
+            mvc.perform(get(pages).with(authentication(viewer)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].id").value(ordinaryId)).andExpect(jsonPath("$[0].targetId").value(ordinaryTarget))
+                    .andExpect(jsonPath("$[0].pageIndex").value(0))
+                    .andExpect(jsonPath("$[1].id").value(worksheetId)).andExpect(jsonPath("$[1].targetId").value(worksheetTarget))
+                    .andExpect(jsonPath("$[1].pageIndex").value(2));
+            mvc.perform(get(ordinaryReplay).with(authentication(viewer)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].operationId").value(ordinaryOperation.toString()))
+                    .andExpect(jsonPath("$[0].payload").value(ordinaryInk));
+            mvc.perform(get(worksheetReplay).with(authentication(viewer)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].operationId").value(worksheetOperation.toString()))
+                    .andExpect(jsonPath("$[0].payload").value(worksheetInk));
+            mvc.perform(get(base + "/document").param("boardId", ordinaryTarget).with(authentication(viewer)))
+                    .andExpect(status().isOk()).andExpect(content().bytes(commonPdf));
+            mvc.perform(get(base + "/document").param("boardId", worksheetTarget).with(authentication(viewer)))
+                    .andExpect(status().isOk()).andExpect(content().bytes(privatePdf));
+        }
+        mvc.perform(get(pages).with(authentication(peerAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        for (String target : List.of(ordinaryTarget, worksheetTarget)) {
+            mvc.perform(get(base + "/document").param("boardId", target).with(authentication(peerAccount)))
+                    .andExpect(status().isNotFound());
+        }
+        for (String replay : List.of(ordinaryReplay, worksheetReplay)) {
+            mvc.perform(get(replay).with(authentication(peerAccount))).andExpect(status().isNotFound());
+        }
+        // The private override never replaces the shared source for other pupils.
+        mvc.perform(get(base + "/document").with(authentication(peerAccount)))
+                .andExpect(status().isOk()).andExpect(content().bytes(commonPdf));
     }
 
     @Test
