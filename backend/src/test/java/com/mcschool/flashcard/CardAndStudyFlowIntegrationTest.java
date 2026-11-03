@@ -66,7 +66,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         String studentInvitation = postAndReturn("/api/v1/students", teacherToken,
                 "{\"fullName\": \"Sam Student\", \"email\": \"sam@test.local\"}", status().isCreated());
         studentId = UUID.fromString(JsonPath.read(studentInvitation, "$.student.id"));
-        studentToken = activate(JsonPath.read(studentInvitation, "$.invitationToken"), "StudentPass123!");
+        studentToken = signInManagedStudent(studentInvitation, "StudentPass123!");
     }
 
     // --- Card management (teacher) ---
@@ -757,8 +757,7 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         String otherStudentInvitation = postAndReturn("/api/v1/students", teacherToken,
                 "{\"fullName\": \"Other Student\", \"email\": \"other-student@test.local\"}",
                 status().isCreated());
-        String otherStudentToken = activate(JsonPath.read(otherStudentInvitation, "$.invitationToken"),
-                "OtherStudent123!");
+        String otherStudentToken = signInManagedStudent(otherStudentInvitation, "OtherStudent123!");
 
         mockMvc.perform(get("/api/v1/study/sessions/{id}", sessionId)
                         .header("Authorization", "Bearer " + otherStudentToken))
@@ -951,20 +950,15 @@ class CardAndStudyFlowIntegrationTest extends AbstractIntegrationTest {
         return JsonPath.read(body, "$.accessToken");
     }
 
-    private String activate(String invitationToken, String password) throws Exception {
-        return activate(invitationToken, password, null);
-    }
-
-    /** {@code email} is optional for students and required for every other role. */
-    private String activate(String invitationToken, String password, String email) throws Exception {
-        String emailField = email == null ? "" : "\"email\": \"" + email + "\", ";
-        String body = mockMvc.perform(post("/api/v1/auth/activate")
+    private String signInManagedStudent(String createdStudent, String password) throws Exception {
+        String id = JsonPath.read(createdStudent, "$.student.id");
+        String username = JsonPath.read(createdStudent, "$.student.username");
+        mockMvc.perform(put("/api/v1/students/{id}/password", id)
+                        .header("Authorization", "Bearer " + teacherToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"invitationToken\": \"" + invitationToken + "\", " + emailField
-                                + "\"password\": \"" + password + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        return JsonPath.read(body, "$.accessToken");
+                        .content("{\"password\": \"" + password + "\"}"))
+                .andExpect(status().isNoContent());
+        return login(username, password);
     }
 
     /** POST helper returning the response body, asserting the given status. */
