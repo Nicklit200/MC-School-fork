@@ -67,6 +67,40 @@ describe('usePdf', () => {
     });
     expect(late.destroy).toHaveBeenCalled();
   });
+
+  it('never returns the previous private PDF on the first render of a changed key', async () => {
+    const alice = fakeDoc(), bob = fakeDoc();
+    const seen: Array<{ key: string; doc?: PdfDoc }> = [];
+    let release!: (bytes: ArrayBuffer) => void;
+    const { result, rerender } = renderHook(({ key }) => {
+      const pdf = usePdf(key, () => key === 'alice' ? Promise.resolve(new ArrayBuffer(8)) : new Promise<ArrayBuffer>(resolve => { release = resolve; }),
+        async () => key === 'alice' ? alice : bob);
+      seen.push({ key, doc: pdf.status === 'ready' ? pdf.doc : undefined });
+      return pdf;
+    }, { initialProps: { key: 'alice' } });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    seen.length = 0;
+    rerender({ key: 'bob' });
+    expect(seen.every(value => value.key !== 'bob' || value.doc !== alice)).toBe(true);
+    expect(result.current.status).toBe('loading');
+    await act(async () => { release(new ArrayBuffer(16)); });
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready', doc: bob }));
+  });
+
+  it('uses the original source callbacks for a late download and releases its stale PDF', async () => {
+    const alice = fakeDoc(), bob = fakeDoc();
+    const openAlice = vi.fn(async () => alice), openBob = vi.fn(async () => bob);
+    let release!: (bytes: ArrayBuffer) => void;
+    const { result, rerender } = renderHook(({ key }) => usePdf(key,
+      () => key === 'alice' ? new Promise<ArrayBuffer>(resolve => { release = resolve; }) : Promise.resolve(new ArrayBuffer(16)),
+      key === 'alice' ? openAlice : openBob), { initialProps: { key: 'alice' } });
+    rerender({ key: 'bob' });
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready', doc: bob }));
+    await act(async () => { release(new ArrayBuffer(8)); });
+    expect(openAlice).toHaveBeenCalledOnce(); expect(openBob).toHaveBeenCalledOnce();
+    expect(alice.destroy).toHaveBeenCalledOnce();
+    expect(result.current).toMatchObject({ status: 'ready', doc: bob });
+  });
 });
 
 describe('usePdfPage', () => {

@@ -82,6 +82,7 @@ vi.mock('./RecordingControls', () => ({
 vi.mock('./TranscriptionControls', () => ({ TranscriptionControls: () => null }));
 vi.mock('./ParticipantListPanel', () => ({ ParticipantListPanel: () => null }));
 vi.mock('./WaitingRoomPanel', () => ({ WaitingRoomPanel: () => null }));
+vi.mock('./AnswersPanelResizer', () => ({ AnswersPanelResizer: () => <div data-testid="answers-panel-resizer" /> }));
 vi.mock('./useBoardDocument', () => ({ useBoardDocument: () => null }));
 vi.mock('./useClassEvents', () => ({ useClassEvents: () => ({ publish: vi.fn() }) }));
 vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
@@ -103,7 +104,8 @@ vi.mock('./WhiteboardPanel', () => ({
 }));
 
 vi.mock('../../api/lessonPreparation', () => ({
-  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn(), personalWorkbooks: vi.fn(), uploadPersonalWorkbook: vi.fn() },
+  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn(), personalWorkbooks: vi.fn(), uploadPersonalWorkbook: vi.fn(),
+    personalAnswersMetadata: vi.fn(), personalAnswersBytes: vi.fn(), uploadPersonalAnswers: vi.fn() },
   completedLessonApi: { list: vi.fn(), save: vi.fn() },
 }));
 vi.mock('../../api/onlineClasses', async () => {
@@ -117,6 +119,7 @@ beforeEach(() => {
   livekitFixture.connectionState = 'connected';
   vi.mocked(onlineClassesApi.startTranscription).mockReset().mockResolvedValue(undefined);
   vi.mocked(lessonPreparationApi.personalWorkbooks).mockReset().mockResolvedValue({ enabled: false, students: [] });
+  vi.mocked(lessonPreparationApi.personalAnswersMetadata).mockReset().mockImplementation(async (_eventId, studentId) => ({ studentId, hasAnswers: false, answersFilename: null, version: 0 }));
 });
 
 const connection = (host: boolean): OnlineClassConnection => ({
@@ -595,6 +598,64 @@ describe('OnlineClassRoom', () => {
     expect(lessonPreparationApi.get).not.toHaveBeenCalled();
     expect(lessonPreparationApi.answersBytes).not.toHaveBeenCalled();
     expect(lessonPreparationApi.uploadAnswers).not.toHaveBeenCalled();
+    expect(lessonPreparationApi.personalAnswersMetadata).not.toHaveBeenCalled();
+    expect(lessonPreparationApi.personalAnswersBytes).not.toHaveBeenCalled();
+  });
+
+  it('keeps the answers panel open and selects the pupil’s private solutions on both personal surfaces', async () => {
+    const previous = globalThis.ResizeObserver;
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
+    try {
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [
+      { studentId: 'u1', studentName: 'Alice', hasWorkbook: true, filename: 'alice.pdf', version: 1 },
+      { studentId: 'u2', studentName: 'Bob', hasWorkbook: true, filename: 'bob.pdf', version: 1 },
+    ] });
+    vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
+      { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+      { userId: 'u2', displayName: 'Bob', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+    ]);
+    mount(true);
+    const board = await screen.findByTestId('board-board-1');
+    const button = await within(board).findByRole('button', { name: 'Ответы' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(screen.getByText('Решения для учителя')).toBeInTheDocument();
+    await screen.findByRole('option', { name: 'Персональный лист: Alice' });
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
+    await waitFor(() => expect(lessonPreparationApi.personalAnswersMetadata).toHaveBeenCalledWith('e1', 'u1'));
+    expect(await screen.findByText('Решения: Alice')).toBeInTheDocument();
+    expect(screen.getByTestId('answers-panel-resizer')).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-workbook-u1');
+    expect(screen.getByText('Решения: Alice')).toBeInTheDocument();
+    expect(lessonPreparationApi.personalAnswersMetadata).toHaveBeenCalledTimes(1);
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u2');
+    expect(await screen.findByText('Решения: Bob')).toBeInTheDocument();
+    expect(screen.getByText(/Для этого ученика решения ещё не загружены/)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'all-student-boards');
+    expect(await screen.findByText('Решения для учителя')).toBeInTheDocument();
+    expect(lessonPreparationApi.get).toHaveBeenCalledWith('e1');
+    } finally {
+      if (previous) vi.stubGlobal('ResizeObserver', previous); else vi.unstubAllGlobals();
+    }
+  });
+
+  it('retains common answers on personal boards for teachers outside the pilot', async () => {
+    const previous = globalThis.ResizeObserver;
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
+    try {
+    mount(true);
+    await screen.findByRole('option', { name: 'Доска ученика: Alice' });
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'personal-u1');
+    const board = await screen.findByTestId('board-personal-u1');
+    const button = await within(board).findByRole('button', { name: 'Ответы' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(screen.getByText('Решения для учителя')).toBeInTheDocument();
+    expect(lessonPreparationApi.personalAnswersMetadata).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('answers-panel-resizer')).not.toBeInTheDocument();
+    } finally {
+      if (previous) vi.stubGlobal('ResizeObserver', previous); else vi.unstubAllGlobals();
+    }
   });
 
   it('keeps one teacher answers entry on the board and a lesson title without a logo', async () => {

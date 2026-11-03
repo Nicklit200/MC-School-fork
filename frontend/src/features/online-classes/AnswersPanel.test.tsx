@@ -75,6 +75,14 @@ describe('AnswersButton', () => {
 });
 
 describe('AnswersPanel', () => {
+  it('names the selected pupil and makes missing personal solutions explicit', () => {
+    renderPanel({ status: 'idle' }, {}, { personal: true, studentName: 'Анна' });
+    expect(screen.getByText('Решения: Анна')).toBeInTheDocument();
+    expect(screen.getByText(/Для этого ученика решения ещё не загружены/)).toBeInTheDocument();
+    expect(screen.getByText('Видны только преподавателю')).toBeInTheDocument();
+    expect(screen.queryByText('Решения для учителя')).not.toBeInTheDocument();
+  });
+
   it('closes from the × on its border', async () => {
     const handlers = renderPanel(ready());
     await userEvent.click(screen.getByRole('button', { name: 'Закрыть ответы' }));

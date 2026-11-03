@@ -111,7 +111,7 @@ class McpSiteFunctionsTransportIntegrationTest {
                 "prepare_lesson", "get_skill_board", "assign_homework_series", "update_school_prompt", "update_brand_guide");
         assertThat(names).doesNotHaveDuplicates();
         JsonNode state = value(call("admin", "mindcrafti_status", Map.of()));
-        assertThat(state.path("version").asText()).isEqualTo("1.24.0");
+        assertThat(state.path("version").asText()).isEqualTo("1.25.0");
         assertThat(state.path("availableToolCount").asInt()).isEqualTo(names.size());
         JsonNode catalog = value(call("admin", "list_site_functions", Map.of("limit", 100)));
         assertThat(catalog.path("total").asInt()).isGreaterThan(150);

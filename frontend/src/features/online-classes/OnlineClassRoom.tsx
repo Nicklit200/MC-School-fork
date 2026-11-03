@@ -30,6 +30,7 @@ import { BoardToolbarIcon } from './BoardToolbar';
 import '../../styles/whiteboard-original-v3.css';
 import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
+import { AnswersPanelResizer } from './AnswersPanelResizer';
 import { CameraColumn } from './CameraColumn';
 import { CaptionsPanel } from './CaptionsPanel';
 import { RecordingControls } from './RecordingControls';
@@ -381,7 +382,10 @@ function RoomBody({
     if (!hostUserId || senderIdentity?.split('|')[0] !== hostUserId) return;
     window.dispatchEvent(new Event('mc-workbook-updated'));
   });
-  const answers = useAnswersPanel(eventId, connection.host);
+  const answerStudentId = personalWorkbookData?.enabled ? personalBoardOwner(activeBoard) ?? undefined : undefined;
+  const answerStudentName = answerStudentId ? personalWorkbookData?.students.find(student => student.studentId === answerStudentId)?.studentName : undefined;
+  const answers = useAnswersPanel(eventId, connection.host, answerStudentId, currentUserId,
+    connection.host && Boolean(personalBoardOwner(activeBoard)) && !personalWorkbookData);
   const boardDocument = useBoardDocument(classId);
   const students = useStudentRoster(classId, connection.host);
   const { camerasByOwner } = useLessonNotebookCameras({ eventId, classId, enabled: connection.host });
@@ -566,8 +570,11 @@ function RoomBody({
       <div className={`online-class-room__stage${videosOpen ? " online-class-room__stage--videos-open" : ""}${showStudentWorkspaces ? ' online-class-room__stage--student-workspaces' : ''}`}>
           {/* Teacher-only answer PDF has its own column. It must not cover the shared
               canvas: the sibling board reflows to the remaining available width. */}
-          {connection.host && answers.open && (
+          {connection.host && answers.open && (<>
             <AnswersPanel
+              key={answers.scope}
+              personal={answers.personal}
+              studentName={answerStudentName}
               pdf={answers.pdf}
               view={answers.view}
               getView={answers.getView}
@@ -578,7 +585,8 @@ function RoomBody({
               uploading={answers.uploading}
               uploadError={answers.uploadError}
             />
-          )}
+            {personalWorkbookData?.enabled && <AnswersPanelResizer storageKey={currentUserId} />}
+          </>)}
         <div className="online-class-room__main">
           {/* The board stays mounted while a screen is shown, so switching back
               returns to the same page, zoom, tool and marks. */}

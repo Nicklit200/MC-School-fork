@@ -19,7 +19,7 @@ export function usePdf(
   fetchBytes: () => Promise<ArrayBuffer>,
   open: (data: ArrayBuffer) => Promise<PdfDoc> = openPdf,
 ): PdfState {
-  const [state, setState] = useState<PdfState>({ status: 'idle' });
+  const [loaded, setLoaded] = useState<{ key: string | null; state: PdfState }>({ key: null, state: { status: 'idle' } });
   const fetchRef = useRef(fetchBytes);
   fetchRef.current = fetchBytes;
   // Callers pass inline functions; keying the effect on them would reload forever.
@@ -28,25 +28,26 @@ export function usePdf(
 
   useEffect(() => {
     if (!key) {
-      setState({ status: 'idle' });
+      setLoaded({ key, state: { status: 'idle' } });
       return;
     }
     let active = true;
     let loaded: PdfDoc | null = null;
-    setState({ status: 'loading' });
-    fetchRef
-      .current()
-      .then((bytes) => openRef.current(bytes))
+    const fetchSource = fetchRef.current;
+    const openSource = openRef.current;
+    setLoaded({ key, state: { status: 'loading' } });
+    fetchSource()
+      .then((bytes) => openSource(bytes))
       .then((doc) => {
         if (!active) {
           doc.destroy();
           return;
         }
         loaded = doc;
-        setState({ status: 'ready', doc });
+        setLoaded({ key, state: { status: 'ready', doc } });
       })
       .catch((error: unknown) => {
-        if (active) setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        if (active) setLoaded({ key, state: { status: 'error', message: error instanceof Error ? error.message : String(error) } });
       });
     return () => {
       active = false;
@@ -54,7 +55,9 @@ export function usePdf(
     };
   }, [key]);
 
-  return state;
+  // Effects run after rendering. Never expose the previous private document
+  // during that first render of another lesson or pupil's source.
+  return loaded.key === key ? loaded.state : key ? { status: 'loading' } : { status: 'idle' };
 }
 
 /** Renders one page of a loaded PDF whenever the page or width changes. */

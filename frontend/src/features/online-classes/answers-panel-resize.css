@@ -1,0 +1,47 @@
+/* The separator and reference PDF take real space beside the board. */
+.online-class-room .online-class-room__stage:has(> .answers-panel-resizer) > .answers-panel {
+  box-sizing: border-box;
+  width: var(--answers-panel-width, 204px);
+  flex: 0 0 var(--answers-panel-width, 204px);
+  max-width: none;
+}
+.answers-panel-resizer {
+  position: relative;
+  align-self: stretch;
+  flex: 0 0 12px;
+  width: 12px;
+  min-width: 12px;
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  background: #222629;
+  outline-offset: -2px;
+}
+.answers-panel-resizer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 3px;
+  height: 48px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: #76838e;
+}
+.answers-panel-resizer:hover::before,
+.answers-panel-resizer:focus-visible::before { background: #f2a267; }
+.answers-panel-resizer:focus-visible { outline: 2px solid #f2a267; }
+.answers-panel-resizing,
+.answers-panel-resizing * { cursor: col-resize !important; user-select: none !important; }
+@media (pointer: coarse) {
+  .answers-panel-resizer { flex-basis: 24px; width: 24px; min-width: 24px; }
+  .answers-panel-resizer::before { left: 10px; }
+}
+@media (max-width: 680px) {
+  .answers-panel-resizer { display: none; }
+  .online-class-room .online-class-room__stage:has(> .answers-panel-resizer) > .answers-panel {
+    width: 100%;
+    flex: 0 1 300px;
+  }
+}

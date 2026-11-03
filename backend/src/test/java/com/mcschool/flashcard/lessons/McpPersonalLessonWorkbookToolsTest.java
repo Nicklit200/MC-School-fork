@@ -38,6 +38,7 @@ class McpPersonalLessonWorkbookToolsTest {
     private final UserRepository users = mock(UserRepository.class);
     private final McpOAuthService oauth = mock(McpOAuthService.class);
     private final PersonalLessonWorkbookService personal = mock(PersonalLessonWorkbookService.class);
+    private final PersonalLessonAnswersService personalAnswers = mock(PersonalLessonAnswersService.class);
     private final McpAccessService access = mock(McpAccessService.class);
     private final McpOperationReceiptService receipts = mock(McpOperationReceiptService.class);
     private final LessonPreparationService shared = mock(LessonPreparationService.class);
@@ -58,6 +59,7 @@ class McpPersonalLessonWorkbookToolsTest {
         when(oauth.resolveAccessToken("owner")).thenReturn(Optional.of(owner));
         when(oauth.resolveAccessToken("admin")).thenReturn(Optional.of(admin));
         when(oauth.resolveAccessToken("other")).thenReturn(Optional.of(otherTeacher));
+        when(oauth.resolveAccessToken("student")).thenReturn(Optional.of(User.managedStudent("Student", owner)));
         when(access.requireActor(owner)).thenReturn(teacher);
         when(access.requireActor(admin)).thenReturn(principal(admin));
         when(access.requireTeacher(any(), eq(owner.getId()))).thenReturn(teacher);
@@ -71,6 +73,7 @@ class McpPersonalLessonWorkbookToolsTest {
                 mock(LessonPdfDraftService.class), mock(StoryTemplateMasterService.class),
                 mock(StoryTemplateDownloadLinkService.class), mock(FunnelAnalyticsService.class));
         controller.setPersonalLessonWorkbookService(personal);
+        controller.setPersonalLessonAnswersService(personalAnswers);
         controller.setPersonalWorkbookAccess(access);
         controller.setPersonalWorkbookReceipts(receipts);
     }
@@ -78,10 +81,10 @@ class McpPersonalLessonWorkbookToolsTest {
     @Test
     void catalogExposesPilotToolsToOwnerAndAdministratorsButNotOtherTeachersOrImportKey() {
         for (String token : List.of("owner", "admin")) {
-            assertThat(toolNames(token)).contains("list_personal_lesson_workbooks", "upload_personal_lesson_workbook");
+            assertThat(toolNames(token)).contains("list_personal_lesson_workbooks", "upload_personal_lesson_workbook", "upload_personal_lesson_answers");
         }
-        for (String token : List.of("other", "import-key")) {
-            assertThat(toolNames(token)).doesNotContain("list_personal_lesson_workbooks", "upload_personal_lesson_workbook");
+        for (String token : List.of("other", "import-key", "student")) {
+            assertThat(toolNames(token)).doesNotContain("list_personal_lesson_workbooks", "upload_personal_lesson_workbook", "upload_personal_lesson_answers");
         }
     }
 
@@ -102,7 +105,10 @@ class McpPersonalLessonWorkbookToolsTest {
         Map<String, Object> foreignTeacher = new HashMap<>(target());
         foreignTeacher.put("teacherId", otherTeacher.getId().toString());
         assertRejected(call("admin", "list_personal_lesson_workbooks", foreignTeacher), 403);
-        verifyNoInteractions(personal, receipts);
+        assertRejected(call("other", "upload_personal_lesson_answers", target()), 403);
+        assertRejected(call("import-key", "upload_personal_lesson_answers", target()), 403);
+        assertRejected(call("admin", "upload_personal_lesson_answers", foreignTeacher), 403);
+        verifyNoInteractions(personal, personalAnswers, receipts);
     }
 
     @Test
@@ -149,6 +155,107 @@ class McpPersonalLessonWorkbookToolsTest {
         assertRejected(call("owner", "upload_personal_lesson_workbook", args), 400);
         verify(personal, never()).upload(any(), any(), any(), any(), any());
         verifyNoInteractions(receipts, drive, shared);
+    }
+
+    @Test
+    void listIncludesPrivateAnswerStatusForStaffWithoutAnswerBytes() {
+        when(personal.list(teacher, EVENT)).thenReturn(new PersonalLessonWorkbookService.PersonalWorkbooksResponse(
+                true, List.of(new PersonalLessonWorkbookService.PersonalWorkbookResponse(
+                        studentId, "Student", true, "student.pdf", 1L, true, "private-answers.pdf", 2L))));
+        Map<String, Object> result = call("owner", "list_personal_lesson_workbooks", target());
+        assertThat(result.get("isError")).isEqualTo(false);
+        String metadata = json.writeValueAsString(result.get("structuredContent"));
+        assertThat(metadata).contains("\"hasAnswers\":true", "private-answers.pdf", "\"answersVersion\":2");
+        assertThat(metadata).doesNotContain("base64", "pdfBase64", "workbookPdf", "answersPdf");
+        verifyNoInteractions(personalAnswers, shared, drive, receipts);
+    }
+
+    @Test
+    void directPersonalAnswersUploadUsesItsOwnReceiptAndPreservesAllWorkbooksAndSharedAnswers() {
+        byte[] pdf = "%PDF-1.7\nprivate-answer-key".getBytes(StandardCharsets.UTF_8);
+        var saved = new PersonalLessonAnswersService.Metadata(studentId, true, "private-answers.pdf", 1L);
+        when(personalAnswers.upload(teacher, EVENT, studentId, "private-answers.pdf", pdf)).thenReturn(saved);
+        stubReceipt("upload_personal_lesson_answers", "requested-answers-001");
+        Map<String, Object> args = answersUpload(pdf);
+        Map<String, Object> result = call("admin", "upload_personal_lesson_answers", args);
+        assertThat(result.get("isError")).isEqualTo(false);
+        assertThat(result.get("structuredContent")).isEqualTo(saved);
+        assertThat(json.writeValueAsString(result)).doesNotContain("private-answer-key", "pdfBase64", "base64");
+        verify(receipts).execute(eq(principal(admin)), eq(owner.getId()), eq("upload_personal_lesson_answers"),
+                eq("requested-answers-001"), any(), any(), any());
+        verify(personalAnswers).upload(teacher, EVENT, studentId, "private-answers.pdf", pdf);
+        verify(personal, never()).upload(any(), any(), any(), any(), any());
+        verifyNoInteractions(shared, drive);
+    }
+
+    @Test
+    void drivePersonalAnswersUseTheSelectedTeachersAccessAndReturnOnlyMetadata() {
+        byte[] pdf = "%PDF-1.7\nprivate-drive-answer-key".getBytes(StandardCharsets.UTF_8);
+        var saved = new PersonalLessonAnswersService.Metadata(studentId, true, "private-answers.pdf", 1L);
+        when(drive.downloadForTeacher(owner.getId(), "drive-answers-file", "private-answers.pdf")).thenReturn(pdf);
+        when(personalAnswers.upload(teacher, EVENT, studentId, "private-answers.pdf", pdf)).thenReturn(saved);
+        stubReceipt("upload_personal_lesson_answers", "requested-answers-001");
+        Map<String, Object> args = answersUpload(pdf);
+        args.remove("pdfBase64"); args.put("driveFileId", "drive-answers-file");
+        Map<String, Object> result = call("owner", "upload_personal_lesson_answers", args);
+        assertThat(result.get("isError")).isEqualTo(false);
+        assertThat(result.get("structuredContent")).isEqualTo(saved);
+        verify(drive).downloadForTeacher(owner.getId(), "drive-answers-file", "private-answers.pdf");
+        verify(personal, never()).upload(any(), any(), any(), any(), any());
+        verifyNoInteractions(shared);
+    }
+
+    @Test
+    void personalAnswerReceiptRechecksTheCurrentLessonRosterBeforeWriting() {
+        byte[] pdf = "%PDF-1.7\nprivate-answer-key".getBytes(StandardCharsets.UTF_8);
+        var initial = new PersonalLessonWorkbookService.PersonalWorkbooksResponse(true,
+                List.of(new PersonalLessonWorkbookService.PersonalWorkbookResponse(studentId, "Student", false, null, 0L)));
+        when(personal.list(teacher, EVENT)).thenReturn(initial,
+                new PersonalLessonWorkbookService.PersonalWorkbooksResponse(true, List.of()));
+        stubReceipt("upload_personal_lesson_answers", "requested-answers-001");
+        assertRejected(call("owner", "upload_personal_lesson_answers", answersUpload(pdf)), 404);
+        verifyNoInteractions(personalAnswers, shared, drive);
+        verify(personal, never()).upload(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void personalAnswersRejectUnknownRecipientsAmbiguousSourcesAndMissingRetryKey() {
+        byte[] pdf = "%PDF-1.7\nprivate-answer-key".getBytes(StandardCharsets.UTF_8);
+        Map<String, Object> args = answersUpload(pdf);
+        args.put("studentId", UUID.randomUUID().toString());
+        assertRejected(call("owner", "upload_personal_lesson_answers", args), 404);
+        args = answersUpload(pdf); args.put("driveFileId", "drive-file");
+        assertRejected(call("owner", "upload_personal_lesson_answers", args), 400);
+        args = answersUpload(pdf); args.remove("idempotencyKey");
+        assertRejected(call("owner", "upload_personal_lesson_answers", args), 400);
+        verifyNoInteractions(personalAnswers, shared, drive, receipts);
+        verify(personal, never()).upload(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void studentCannotInvokePrivateAnswerToolsEvenByName() {
+        Map<String, Object> envelope = (Map<String, Object>) controller.post("Bearer student", null,
+                Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call", "params", Map.of(
+                        "name", "upload_personal_lesson_answers", "arguments", target()))).getBody();
+        assertThat(envelope).containsKey("error");
+        verifyNoInteractions(personalAnswers, personal, receipts, shared, drive);
+    }
+
+    private void stubReceipt(String operation, String key) {
+        when(access.asTeacher(any(), eq(teacher), any())).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
+        when(receipts.execute(any(), eq(owner.getId()), eq(operation), eq(key), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    ((Runnable) invocation.getArgument(5)).run();
+                    return ((Supplier<?>) invocation.getArgument(6)).get();
+                });
+    }
+
+    private Map<String, Object> answersUpload(byte[] pdf) {
+        Map<String, Object> args = upload(pdf);
+        args.put("filename", "private-answers.pdf");
+        args.put("idempotencyKey", "requested-answers-001");
+        return args;
     }
 
     private Map<String, Object> upload(byte[] pdf) {

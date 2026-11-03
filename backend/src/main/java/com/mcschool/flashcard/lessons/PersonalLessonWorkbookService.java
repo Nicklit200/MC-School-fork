@@ -12,7 +12,6 @@ import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserStatus;
-import java.io.IOException;
 import java.util.Comparator;
 import java.util.Arrays;
 import java.util.List;
@@ -21,25 +20,23 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.apache.pdfbox.Loader;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 /** Private-account pilot for per-student lesson PDFs. All identities are server checked. */
 @Service
 public class PersonalLessonWorkbookService {
     public static final UUID PILOT_TEACHER_ID = UUID.fromString("14e3c7c1-1fc8-41bd-858a-6c20efdd957a");
-    private static final int MAX_PDF_BYTES = 25 * 1024 * 1024;
     private final PersonalLessonWorkbookRepository repository;
     private final GoogleCalendarLessonService lessons;
     private final UserRepository users;
     private final StudentGroupRepository groups;
     private final StudentGroupMemberRepository members;
     private final LessonPreparationService preparations;
+    private PersonalLessonAnswersRepository answersRepository;
 
     public PersonalLessonWorkbookService(PersonalLessonWorkbookRepository repository,
             GoogleCalendarLessonService lessons, UserRepository users,
@@ -53,8 +50,19 @@ public class PersonalLessonWorkbookService {
         this.preparations = preparations;
     }
 
+    @Autowired
+    public void setAnswersRepository(PersonalLessonAnswersRepository answersRepository) {
+        this.answersRepository = answersRepository;
+    }
+
+    /** This response is available only through teacher-scoped preparation APIs. */
     public record PersonalWorkbookResponse(UUID studentId, String studentName, boolean hasWorkbook,
-                                            String filename, long version) {}
+                                            String filename, long version, boolean hasAnswers,
+                                            String answersFilename, long answersVersion) {
+        public PersonalWorkbookResponse(UUID studentId, String studentName, boolean hasWorkbook, String filename, long version) {
+            this(studentId, studentName, hasWorkbook, filename, version, false, null, 0L);
+        }
+    }
     public record PersonalWorkbooksResponse(boolean enabled, List<PersonalWorkbookResponse> students) {}
 
     public boolean enabled(AuthenticatedUser teacher) {
@@ -73,12 +81,18 @@ public class PersonalLessonWorkbookService {
         List<User> roster = lessonStudents(teacher, eventId);
         Map<UUID, PersonalLessonWorkbookRepository.Metadata> stored = repository.metadata(teacher.id(), eventId)
                 .stream().collect(Collectors.toMap(PersonalLessonWorkbookRepository.Metadata::getStudentId, Function.identity()));
+        Map<UUID, PersonalLessonAnswersRepository.Metadata> answers = answersRepository == null ? Map.of()
+                : answersRepository.metadata(teacher.id(), eventId).stream()
+                    .collect(Collectors.toMap(PersonalLessonAnswersRepository.Metadata::getStudentId, Function.identity()));
         return new PersonalWorkbooksResponse(true, roster.stream()
                 .map(student -> {
                     var metadata = stored.get(student.getId());
+                    var answerMetadata = answers.get(student.getId());
                     return new PersonalWorkbookResponse(student.getId(), student.getFullName(), metadata != null,
                             metadata == null ? null : metadata.getFilename(),
-                            metadata == null ? 0L : metadata.getVersion() + 1L);
+                            metadata == null ? 0L : metadata.getVersion() + 1L,
+                            answerMetadata != null, answerMetadata == null ? null : answerMetadata.getFilename(),
+                            answerMetadata == null ? 0L : answerMetadata.getVersion() + 1L);
                 }).toList());
     }
 
@@ -87,14 +101,14 @@ public class PersonalLessonWorkbookService {
                                             String filename, byte[] pdf) {
         requireEnabled(teacher);
         User student = requireStudent(lessonStudents(teacher, eventId), studentId);
-        validatePdf(pdf);
+        LessonPdfUpload.validate(pdf);
         // Completed-lesson exports need the preparation metadata even when this
         // lesson has only personal files. Existing shared PDFs remain untouched.
         preparations.getOrCreate(teacher, eventId);
         PersonalLessonWorkbook workbook = repository.findByTeacherIdAndEventIdAndStudentId(
                 teacher.id(), eventId, studentId)
                 .orElseGet(() -> PersonalLessonWorkbook.create(teacher.id(), eventId, studentId));
-        String storedFilename = filename(filename);
+        String storedFilename = LessonPdfUpload.filename(filename, "personal-workbook.pdf");
         if (storedFilename.equals(workbook.getFilename()) && Arrays.equals(pdf, workbook.getWorkbookPdf())) {
             return response(student, workbook);
         }
@@ -112,6 +126,13 @@ public class PersonalLessonWorkbookService {
         requireStudent(lessonStudents(teacher, eventId), studentId);
         return repository.findByTeacherIdAndEventIdAndStudentId(teacher.id(), eventId, studentId)
                 .map(PersonalLessonWorkbook::getWorkbookPdf);
+    }
+
+    /** Reused by teacher-only per-pupil resources, even before a workbook exists. */
+    @Transactional
+    public void requireLessonStudent(AuthenticatedUser teacher, String eventId, UUID studentId) {
+        requireEnabled(teacher);
+        requireStudent(lessonStudents(teacher, eventId), studentId);
     }
 
     /** Called only after classroom admission and board-owner authorization. No Calendar network call. */
@@ -184,29 +205,11 @@ public class PersonalLessonWorkbookService {
     }
 
     private PersonalWorkbookResponse response(User student, PersonalLessonWorkbook workbook) {
+        var answers = answersRepository == null || workbook == null ? Optional.<PersonalLessonAnswersRepository.Metadata>empty()
+                : answersRepository.metadataForStudent(workbook.getTeacherId(), workbook.getEventId(), student.getId());
         return new PersonalWorkbookResponse(student.getId(), student.getFullName(), workbook != null,
-                workbook == null ? null : workbook.getFilename(), workbook == null ? 0L : workbook.documentVersion());
-    }
-
-    private String filename(String value) {
-        if (value == null || value.isBlank()) return "personal-workbook.pdf";
-        String clean = value.replace('\\', '/');
-        clean = clean.substring(clean.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}\\\"]", "").strip();
-        if (clean.isBlank()) return "personal-workbook.pdf";
-        if (clean.length() > 255) clean = clean.substring(0, 251) + ".pdf";
-        return clean;
-    }
-
-    private void validatePdf(byte[] pdf) {
-        if (pdf != null && pdf.length > MAX_PDF_BYTES)
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "PDF must not exceed 25 MB");
-        if (pdf == null || pdf.length < 5 || pdf[0] != '%' || pdf[1] != 'P' || pdf[2] != 'D'
-                || pdf[3] != 'F' || pdf[4] != '-')
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please upload a valid PDF");
-        try (var document = Loader.loadPDF(pdf)) {
-            if (document.isEncrypted() || document.getNumberOfPages() == 0) throw new IOException("Unreadable PDF");
-        } catch (IOException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please upload a readable PDF with at least one page");
-        }
+                workbook == null ? null : workbook.getFilename(), workbook == null ? 0L : workbook.documentVersion(),
+                answers.isPresent(), answers.map(PersonalLessonAnswersRepository.Metadata::getFilename).orElse(null),
+                answers.map(row -> row.getVersion() + 1L).orElse(0L));
     }
 }

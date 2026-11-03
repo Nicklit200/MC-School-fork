@@ -154,4 +154,21 @@ class PersonalLessonWorkbookServiceTest {
         assertThatThrownBy(() -> service.workbookForClass(room, student.getId())).isInstanceOf(ResourceNotFoundException.class);
         assertThatThrownBy(() -> service.workbookVersionForClass(room, student.getId())).isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void teacherPreparationListJoinsAnswerMetadataWithoutLoadingAnyAnswerPdf() {
+        var answerRepository = mock(PersonalLessonAnswersRepository.class);
+        service.setAnswersRepository(answerRepository);
+        var metadata = mock(PersonalLessonAnswersRepository.Metadata.class);
+        when(metadata.getStudentId()).thenReturn(student.getId());
+        when(metadata.getFilename()).thenReturn("private-solutions.pdf");
+        when(metadata.getVersion()).thenReturn(2L);
+        when(answerRepository.metadata(teacher.getId(), "event")).thenReturn(List.of(metadata));
+        var row = service.list(caller, "event").students().get(0);
+        assertThat(row.hasWorkbook()).isFalse();
+        assertThat(row.hasAnswers()).isTrue();
+        assertThat(row.answersFilename()).isEqualTo("private-solutions.pdf");
+        assertThat(row.answersVersion()).isEqualTo(3L);
+        verify(answerRepository, never()).findByTeacherIdAndEventIdAndStudentId(any(), any(), any());
+    }
 }

@@ -25,6 +25,8 @@ export function AnswersPanel({
   onUpload,
   uploading = false,
   uploadError = null,
+  personal = false,
+  studentName,
 }: {
   pdf: PdfState;
   view: AnswersView;
@@ -35,6 +37,8 @@ export function AnswersPanel({
   onUpload?: (file: File) => void | Promise<void>;
   uploading?: boolean;
   uploadError?: string | null;
+  personal?: boolean;
+  studentName?: string;
 }) {
   const { t, language } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -99,7 +103,9 @@ export function AnswersPanel({
   return (
     <aside id="answers-panel" className="answers-panel" aria-label={t('onlineClass.answers.title')}>
       <header className="answers-panel__heading">
-        <strong>{language === 'DE' ? 'Lösungen für Lehrkräfte' : 'Решения для учителя'}</strong>
+        <strong>{personal
+          ? studentName ? `${language === 'DE' ? 'Lösungen' : 'Решения'}: ${studentName}` : (language === 'DE' ? 'Persönliche Lösungen' : 'Персональные решения')
+          : language === 'DE' ? 'Lösungen für Lehrkräfte' : 'Решения для учителя'}</strong>
       <button
         type="button"
         className="answers-panel__close"
@@ -129,7 +135,9 @@ export function AnswersPanel({
       >
         {pdf.status === 'loading' && <p role="status">{t('onlineClass.answers.loading')}</p>}
         {pdf.status === 'error' && <p role="alert">{t('onlineClass.answers.error')}</p>}
-        {pdf.status === 'idle' && <p>{language === 'DE' ? 'Fügen Sie ein PDF mit Lösungen hinzu' : 'Добавьте PDF с решениями'}</p>}
+        {pdf.status === 'idle' && <p>{personal
+          ? (language === 'DE' ? 'Für diesen Schüler sind noch keine Lösungen hochgeladen. Fügen Sie sein Lösungs-PDF hinzu.' : 'Для этого ученика решения ещё не загружены. Добавьте его PDF решений.')
+          : language === 'DE' ? 'Fügen Sie ein PDF mit Lösungen hinzu' : 'Добавьте PDF с решениями'}</p>}
         {doc && (
           <canvas
             ref={canvasRef}

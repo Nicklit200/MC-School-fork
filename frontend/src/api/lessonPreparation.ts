@@ -9,7 +9,12 @@ export type PersonalWorkbook = {
   hasWorkbook: boolean;
   filename: string | null;
   version: number;
+  hasAnswers?: boolean;
+  answersFilename?: string | null;
+  answersVersion?: number;
 };
+
+export type PersonalAnswers = { studentId: string; hasAnswers: boolean; answersFilename: string | null; version: number };
 
 export type PersonalWorkbooks = { enabled: boolean; students: PersonalWorkbook[] };
 
@@ -78,6 +83,32 @@ function uploadHomeworkSeries(eventId: string, startDate: string, days: number, 
 }
 
 export const lessonPreparationApi = {
+  personalAnswersMetadata(eventId: string, studentId: string) {
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-answers/${encodeURIComponent(studentId)}/metadata`, {
+      headers: authHeaders(),
+    }).then(parse<PersonalAnswers>);
+  },
+  uploadPersonalAnswers(eventId: string, studentId: string, file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-answers/${encodeURIComponent(studentId)}`, {
+      method: 'POST', headers: authHeaders(), body: form,
+    }).then(parse<PersonalAnswers>);
+  },
+  async personalAnswersBytes(eventId: string, studentId: string) {
+    const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-answers/${encodeURIComponent(studentId)}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) throw new ApiRequestError(response.status, 'PERSONAL_ANSWERS', response.statusText);
+    return response.arrayBuffer();
+  },
+  async personalAnswersUrl(eventId: string, studentId: string) {
+    const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-answers/${encodeURIComponent(studentId)}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) throw new ApiRequestError(response.status, 'PERSONAL_ANSWERS', response.statusText);
+    return URL.createObjectURL(await response.blob());
+  },
   personalWorkbooks(eventId: string) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-workbooks`, {
       headers: authHeaders(),
