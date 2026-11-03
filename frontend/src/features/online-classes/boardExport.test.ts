@@ -5,6 +5,7 @@ import { exportBoardPdf } from './boardExport';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), replay: vi.fn(), stages: [] as Record<string, any>[], images: [] as Record<string, any>[],
+  lines: [] as { page: number; attributes: Record<string, any> }[],
 }));
 vi.mock('../../api/onlineClasses', () => ({ onlineClassesApi: { listAnnotationDocuments: mocks.list, replayAnnotations: mocks.replay } }));
 vi.mock('konva', () => {
@@ -19,12 +20,15 @@ vi.mock('konva', () => {
       destroy() {}
     },
     Image: class extends Node { constructor(attributes: Record<string, any>) { super(attributes); mocks.images.push(attributes); } },
-    Layer: Node, Rect: Node, Shape: Node, Line: Node, Arrow: Node, Ellipse: Node, Text: Node,
+    Line: class extends Node { constructor(attributes: Record<string, any>) {
+      super(attributes); mocks.lines.push({ page: mocks.stages.length - 1, attributes });
+    } },
+    Layer: Node, Rect: Node, Shape: Node, Arrow: Node, Ellipse: Node, Text: Node,
   } };
 });
 
 beforeEach(() => {
-  vi.clearAllMocks(); mocks.stages.length = 0; mocks.images.length = 0;
+  vi.clearAllMocks(); mocks.stages.length = 0; mocks.images.length = 0; mocks.lines.length = 0;
   mocks.list.mockResolvedValue([]); mocks.replay.mockResolvedValue([]);
 });
 
@@ -63,6 +67,47 @@ describe('board PDF page geometry', () => {
     expect(pdf).toContain('/Count 2');
     expect(pdf).toContain('/MediaBox [0 0 1200 600]');
     expect(pdf).toContain('/MediaBox [0 0 1200 1697.25]');
+  });
+
+  it('includes a freshly persisted blank personal page despite stale local page count', async () => {
+    const targetId = 'personal-workbook-alice';
+    mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), targetId, id: 'blank-page', pageIndex: 1 }]);
+    const blob = await exportBoardPdf({ ...options, targetId });
+    expect(mocks.stages).toHaveLength(2);
+    expect(mocks.replay).toHaveBeenCalledExactlyOnceWith('class-1', 'blank-page', 0);
+    expect(mocks.lines).toHaveLength(0);
+    expect(await readPdf(blob)).toContain('/Count 2');
+  });
+
+  it('exports fresh later-page ink on its own page and excludes other private targets and invalid indices', async () => {
+    const targetId = 'personal-workbook-alice';
+    const later = { ...annotationDocument('WHITEBOARD', 210, 297), targetId, id: 'later-page', pageIndex: 3, revision: 1 };
+    mocks.list.mockResolvedValue([
+      later,
+      { ...later, id: 'other-pupil', targetId: 'personal-workbook-bob', pageIndex: 8 },
+      { ...later, id: 'my-board', targetId: 'personal-alice', pageIndex: 7 },
+      { ...later, id: 'shared-board', targetId: 'board-1', pageIndex: 6 },
+      { ...later, id: 'camera', targetType: 'NOTEBOOK_CAMERA', pageIndex: 5 },
+      ...[-1, 1.5, 10000, Number.NaN, Number.POSITIVE_INFINITY].map((pageIndex, index) => ({ ...later, id: `invalid-${index}`, pageIndex })),
+    ]);
+    mocks.replay.mockImplementation(async (_classId: string, documentId: string) => documentId === 'later-page' ? [{
+      operationId: 'ink', sequence: 1, actorId: 'teacher', layerOwnerId: 'teacher', operationType: 'ADD',
+      payload: JSON.stringify({ kind: 'line', color: '#123abc', x1: .1, y1: .2, x2: .6, y2: .7 }),
+    }] : []);
+    const blob = await exportBoardPdf({ ...options, targetId });
+    expect(mocks.stages).toHaveLength(4);
+    expect(mocks.replay).toHaveBeenCalledExactlyOnceWith('class-1', 'later-page', 0);
+    expect(mocks.lines).toEqual([{ page: 3, attributes: expect.objectContaining({ stroke: '#123abc' }) }]);
+    expect(await readPdf(blob)).toContain('/Count 4');
+  });
+
+  it('keeps every original PDF page even when local annotation page count is stale', async () => {
+    const canvas = document.createElement('canvas'), renderPage = vi.fn(async () => ({ canvas, aspect: 2 }));
+    const pdfDocument: PdfDoc = { pageCount: 3, renderPage, destroy: vi.fn() };
+    const blob = await exportBoardPdf({ ...options, pdfDocument });
+    expect(renderPage.mock.calls).toEqual([[0, 1600], [1, 1600], [2, 1600]]);
+    expect(mocks.images).toHaveLength(3);
+    expect(await readPdf(blob)).toContain('/Count 3');
   });
 
   it('respects a recorded source format instead of the blank-page fallback', async () => {

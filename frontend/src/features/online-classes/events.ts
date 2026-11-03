@@ -22,6 +22,8 @@ export const STROKE_TOPIC = 'mc.class.stroke.v1';
 export const NOTEBOOK_STROKE_TOPIC = 'mc.class.notebook-stroke.v1';
 /** New workbook pages are available to the class. */
 export const DOCUMENT_TOPIC = 'mc.class.document.v1';
+/** A durable page was opened; peers re-read their authorized page metadata. */
+export const BOARD_PAGES_TOPIC = 'mc.class.pages.v1';
 
 /** Hard cap per packet; annotation batches are chunked below this. */
 export const MAX_PACKET_BYTES = 8192;
@@ -40,6 +42,13 @@ interface BaseEvent {
 export interface DocumentEvent extends BaseEvent {
   type: 'document';
   version: number;
+}
+
+/** A private refresh hint, never an instruction to navigate or trust a count. */
+export interface BoardPagesEvent extends BaseEvent {
+  type: 'pages';
+  targetType: 'WHITEBOARD' | 'NOTEBOOK_CAMERA';
+  targetId: string;
 }
 
 export interface HandEvent extends BaseEvent {
@@ -175,6 +184,7 @@ export interface ControlEvent {
 }
 
 export type ClassEvent =
+  | BoardPagesEvent
   | DocumentEvent
   | HandEvent
   | ReactionEvent
@@ -240,6 +250,16 @@ export function parseClassEvent(raw: Uint8Array, classId: string): ClassEvent | 
   if (!isRecord(parsed) || !hasBase(parsed, classId)) return null;
 
   switch (parsed.type) {
+    case 'pages': {
+      const targetId = parsed.targetId;
+      const owner = typeof targetId === 'string' && targetId.startsWith('personal-workbook-')
+        ? targetId.slice('personal-workbook-'.length)
+        : typeof targetId === 'string' && targetId.startsWith('personal-') ? targetId.slice('personal-'.length) : '';
+      return (parsed.targetType === 'WHITEBOARD' || parsed.targetType === 'NOTEBOOK_CAMERA')
+        && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(owner)
+        && isFiniteIn(parsed.at, 0, Number.MAX_SAFE_INTEGER)
+        ? (parsed as unknown as BoardPagesEvent) : null;
+    }
     case 'document':
       return isInt(parsed.version, 1, Number.MAX_SAFE_INTEGER) ? (parsed as unknown as DocumentEvent) : null;
     case 'hand':
@@ -375,6 +395,10 @@ export function encodeEvent(event: ClassEvent): Uint8Array {
 
 export function documentEvent(classId: string, version: number): DocumentEvent {
   return { v: 1, type: 'document', classId, id: newId(), at: Date.now(), version };
+}
+
+export function boardPagesEvent(classId: string, targetType: BoardPagesEvent['targetType'], targetId: string): BoardPagesEvent {
+  return { v: 1, type: 'pages', classId, id: newId(), at: Date.now(), targetType, targetId };
 }
 
 export function handEvent(classId: string, raised: boolean): HandEvent {

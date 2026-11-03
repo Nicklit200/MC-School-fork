@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -90,6 +91,55 @@ class PersonalWorkbookAnnotationAccessTest {
     }
 
     @Test
+    void multipageWorkbookChecksMembershipOncePerListForOwnerAndHost() {
+        var secondPage = document(worksheet.getTargetId(), 1);
+        var thirdPage = document(worksheet.getTargetId(), 2);
+        when(documents.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId()))
+                .thenReturn(List.of(shared, worksheet, secondPage, thirdPage));
+
+        for (AuthenticatedUser caller : List.of(owner, host)) {
+            assertThat(service.listDocuments(caller, room.getId())).extracting(item -> item.id())
+                    .containsExactly(shared.getId(), worksheet.getId(), secondPage.getId(), thirdPage.getId());
+        }
+
+        verify(personal, times(2)).enabledForTeacher(teacher.getId());
+        verify(personal, times(2)).requireClassStudent(room, student.getId());
+        verifyNoInteractions(events, storage);
+    }
+
+    @Test
+    void ownerListRechecksRevokedMembershipOnTheNextRequest() {
+        assertListRevocationIsFresh(owner);
+    }
+
+    @Test
+    void hostListRechecksRevokedMembershipOnTheNextRequest() {
+        assertListRevocationIsFresh(host);
+    }
+
+    @Test
+    void multipageWorkbooksStayIsolatedBetweenOwnersWhileHostCanSeeBoth() {
+        var secondPage = document(worksheet.getTargetId(), 1);
+        var otherWorksheet = document(PersonalBoard.workbookTargetIdFor(otherStudent.getId()));
+        var otherSecondPage = document(otherWorksheet.getTargetId(), 1);
+        when(documents.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId()))
+                .thenReturn(List.of(shared, myBoard, worksheet, secondPage, otherWorksheet, otherSecondPage));
+
+        assertThat(service.listDocuments(owner, room.getId())).extracting(item -> item.id())
+                .containsExactly(shared.getId(), myBoard.getId(), worksheet.getId(), secondPage.getId());
+        assertThat(service.listDocuments(other, room.getId())).extracting(item -> item.id())
+                .containsExactly(shared.getId(), otherWorksheet.getId(), otherSecondPage.getId());
+        assertThat(service.listDocuments(host, room.getId())).extracting(item -> item.id())
+                .containsExactly(shared.getId(), myBoard.getId(), worksheet.getId(), secondPage.getId(),
+                        otherWorksheet.getId(), otherSecondPage.getId());
+
+        // Each owner request and the host request independently authorize its target.
+        verify(personal, times(2)).requireClassStudent(room, student.getId());
+        verify(personal, times(2)).requireClassStudent(room, otherStudent.getId());
+        verifyNoInteractions(events, storage);
+    }
+
+    @Test
     void nonPilotClassRejectsWorkbookScopeWhileKeepingExistingPersonalBoard() {
         when(personal.enabledForTeacher(teacher.getId())).thenReturn(false);
         assertDenied(owner, worksheet);
@@ -159,12 +209,34 @@ class PersonalWorkbookAnnotationAccessTest {
     }
 
     private OnlineClassAnnotationDocument document(String target) {
-        OnlineClassAnnotationDocument document = OnlineClassAnnotationDocument.create(room, AnnotationTargetType.WHITEBOARD, target, 0);
-        when(documents.findByOnlineClassIdAndTargetTypeAndTargetIdAndPageIndex(room.getId(), AnnotationTargetType.WHITEBOARD, target, 0))
+        return document(target, 0);
+    }
+
+    private OnlineClassAnnotationDocument document(String target, int pageIndex) {
+        OnlineClassAnnotationDocument document = OnlineClassAnnotationDocument.create(room, AnnotationTargetType.WHITEBOARD, target, pageIndex);
+        when(documents.findByOnlineClassIdAndTargetTypeAndTargetIdAndPageIndex(room.getId(), AnnotationTargetType.WHITEBOARD, target, pageIndex))
                 .thenReturn(Optional.of(document));
         when(documents.findByIdAndOnlineClassId(document.getId(), room.getId())).thenReturn(Optional.of(document));
         when(documents.findForUpdate(document.getId(), room.getId())).thenReturn(Optional.of(document));
         return document;
+    }
+
+    private void assertListRevocationIsFresh(AuthenticatedUser caller) {
+        var secondPage = document(worksheet.getTargetId(), 1);
+        var thirdPage = document(worksheet.getTargetId(), 2);
+        when(documents.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId()))
+                .thenReturn(List.of(shared, worksheet, secondPage, thirdPage));
+        assertThat(service.listDocuments(caller, room.getId())).extracting(item -> item.id())
+                .containsExactly(shared.getId(), worksheet.getId(), secondPage.getId(), thirdPage.getId());
+
+        doThrow(new ResourceNotFoundException("No longer a lesson participant"))
+                .when(personal).requireClassStudent(room, student.getId());
+
+        assertThat(service.listDocuments(caller, room.getId())).extracting(item -> item.id())
+                .containsExactly(shared.getId());
+        verify(personal, times(2)).enabledForTeacher(teacher.getId());
+        verify(personal, times(2)).requireClassStudent(room, student.getId());
+        verifyNoInteractions(events, storage);
     }
 
     private void assertDenied(AuthenticatedUser caller, OnlineClassAnnotationDocument document) {

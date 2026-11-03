@@ -7,6 +7,7 @@ import {
   parseClassEvent,
   parseControlEvent,
   reactionEvent,
+  boardPagesEvent,
 } from './events';
 
 const CLASS_ID = '11111111-1111-1111-1111-111111111111';
@@ -17,6 +18,23 @@ function pack(value: unknown): Uint8Array {
 }
 
 describe('class event protocol', () => {
+  it('round-trips a private durable-page refresh hint without a trusted count or navigation', () => {
+    const hint = boardPagesEvent(CLASS_ID, 'WHITEBOARD', 'personal-workbook-alice');
+    expect(parseClassEvent(encodeEvent(hint), CLASS_ID)).toMatchObject({ type: 'pages', targetType: 'WHITEBOARD', targetId: 'personal-workbook-alice' });
+    expect(hint).not.toHaveProperty('pageCount');
+    expect(hint).not.toHaveProperty('page');
+    expect(parseClassEvent(encodeEvent(hint), OTHER_CLASS)).toBeNull();
+  });
+
+  it('rejects malformed page hints and non-private targets', () => {
+    const hint = boardPagesEvent(CLASS_ID, 'WHITEBOARD', 'personal-workbook-alice');
+    for (const targetId of ['board-1', '', 'personal-', 'personal-workbook-', 'personal-<script>', `personal-${'a'.repeat(129)}`]) {
+      expect(parseClassEvent(pack({ ...hint, targetId }), CLASS_ID)).toBeNull();
+    }
+    expect(parseClassEvent(pack({ ...hint, targetType: 'SCREEN_SHARE' }), CLASS_ID)).toBeNull();
+    expect(parseClassEvent(pack({ ...hint, at: -1 }), CLASS_ID)).toBeNull();
+  });
+
   it('round-trips the events we send', () => {
     expect(parseClassEvent(encodeEvent(handEvent(CLASS_ID, true)), CLASS_ID)).toMatchObject({
       type: 'hand',

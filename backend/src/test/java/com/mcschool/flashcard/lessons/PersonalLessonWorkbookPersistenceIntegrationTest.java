@@ -2,6 +2,11 @@ package com.mcschool.flashcard.lessons;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
@@ -11,34 +16,45 @@ import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.liveclasses.*;
+import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest;
 import com.mcschool.flashcard.users.*;
 import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import tools.jackson.databind.ObjectMapper;
 
 /** Complete Flyway history, actual bytea persistence and optimistic locking in PostgreSQL. */
 @SpringBootTest
+@AutoConfigureMockMvc
+@TestPropertySource(properties = "app.online-classes.enabled=true")
 @Testcontainers(disabledWithoutDocker = true)
 class PersonalLessonWorkbookPersistenceIntegrationTest {
     @Container private static final PostgreSQLContainer<?> DATABASE = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -54,6 +70,8 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     @Autowired private StudentGroupMemberRepository groupMembers;
     @Autowired private CompletedLessonDocumentController completedDocuments;
     @Autowired private PlatformTransactionManager transactions;
+    @Autowired private MockMvc mvc;
+    @Autowired private ObjectMapper json;
     @MockitoBean private GoogleCalendarLessonService lessons;
     private User teacher;
     private User student;
@@ -155,6 +173,72 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     }
 
     @Test
+    void blankWorksheetPageIsDiscoverableBeforeInkAndReplayStaysPrivateAcrossRosterRemoval() throws Exception {
+        var peer = users.saveAndFlush(User.managedStudent("Peer", teacher));
+        var group = groups.saveAndFlush(StudentGroup.create(teacher, "Page sync"));
+        var membership = groupMembers.saveAndFlush(StudentGroupMember.create(group, student));
+        groupMembers.saveAndFlush(StudentGroupMember.create(group, peer));
+        when(lessons.listGroupLessons(caller)).thenReturn(List.of(new GroupLessonResponse(
+                "event", "event", group.getId(), "Page sync", null, null, List.of(student.getId(), peer.getId()),
+                "Math", Instant.now(), Instant.now().plusSeconds(3600), null, null)));
+        service.upload(caller, "event", student.getId(), "worksheet.pdf", pdf(1));
+        var room = classes.saveAndFlush(OnlineClass.forGroup(teacher, "event", "event", "Math",
+                Instant.now(), Instant.now().plusSeconds(3600), group));
+        for (User pupil : List.of(student, peer)) {
+            var admitted = OnlineClassParticipant.student(room, pupil);
+            admitted.admit();
+            participants.saveAndFlush(admitted);
+        }
+        var hostAccount = account(teacher.getId(), Role.TEACHER);
+        var ownerAccount = account(student.getId(), Role.STUDENT);
+        var peerAccount = account(peer.getId(), Role.STUDENT);
+        String board = PersonalBoard.workbookTargetIdFor(student.getId());
+        String pages = "/api/v1/online-classes/" + room.getId() + "/annotations/documents";
+
+        // Opening the appended blank page persists its identity before any stroke exists.
+        var opened = mvc.perform(post(pages).param("targetType", "WHITEBOARD").param("targetId", board)
+                        .param("pageIndex", "1").with(authentication(hostAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String documentId = json.readTree(opened).path("id").asString("");
+        assertThat(documentId).isNotBlank();
+        mvc.perform(get(pages).with(authentication(ownerAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(documentId)).andExpect(jsonPath("$[0].targetId").value(board))
+                .andExpect(jsonPath("$[0].pageIndex").value(1)).andExpect(jsonPath("$[0].revision").value(0));
+        mvc.perform(post(pages).param("targetType", "WHITEBOARD").param("targetId", board)
+                        .param("pageIndex", "1").with(authentication(ownerAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(documentId));
+
+        UUID operationId = UUID.randomUUID();
+        String ink = """
+                {"kind":"pen","color":"#123456","width":0.004,"points":[[0.2,0.3],[0.4,0.5]]}
+                """;
+        String operations = pages + "/" + documentId + "/operations";
+        mvc.perform(post(operations).with(authentication(hostAccount)).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(new AnnotationOperationRequest(operationId, AnnotationOperationType.ADD, ink))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.sequence").value(1));
+        mvc.perform(get(operations).with(authentication(ownerAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].operationId").value(operationId.toString()))
+                .andExpect(jsonPath("$[0].sequence").value(1))
+                .andExpect(jsonPath("$[0].actorId").value(teacher.getId().toString()))
+                .andExpect(jsonPath("$[0].layerOwnerId").value(teacher.getId().toString()))
+                .andExpect(jsonPath("$[0].payload").value(ink));
+        mvc.perform(get(pages).with(authentication(peerAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get(operations).with(authentication(peerAccount))).andExpect(status().isNotFound());
+
+        // A later request must recheck current membership even for the host.
+        groupMembers.deleteById(membership.getId());
+        groupMembers.flush();
+        mvc.perform(get(pages).with(authentication(hostAccount)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get(operations).with(authentication(hostAccount))).andExpect(status().isNotFound());
+        mvc.perform(get(operations).with(authentication(ownerAccount))).andExpect(status().isNotFound());
+    }
+
+    @Test
     @WithMockUser(roles = "TEACHER")
     void detachedGroupClassCanValidateMembershipAndSaveCompletedWorksheetWithoutOpenSession() throws Exception {
         var group = groups.saveAndFlush(StudentGroup.create(teacher, "Group"));
@@ -203,5 +287,10 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
             assertThat(workbooks.count()).isZero();
             status.setRollbackOnly();
         });
+    }
+
+    private UsernamePasswordAuthenticationToken account(UUID userId, Role role) {
+        return UsernamePasswordAuthenticationToken.authenticated(new AuthenticatedUser(userId, null, role), null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + role.name())));
     }
 }

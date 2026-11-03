@@ -51,6 +51,7 @@ import {
 
 import { WhiteboardPageSurface, type PageSurfaceHandle, type PageSurfaceStatus } from './WhiteboardPageSurface';
 import { useBoardPageLayout } from './useBoardPageLayout';
+import { useAnnotationPageSync } from './useAnnotationPageSync';
 import type { NotebookCameraGeometry } from './notebookCameraGeometry';
 
 const INPUT_MODE_KEY = 'mc.board.inputMode';
@@ -344,23 +345,9 @@ export function WhiteboardPanel({
   const sendLaser = personal || camera ? undefined : broadcastLaser;
 
   // --- Pages ----------------------------------------------------------------
-  // A joiner (or a reload) learns how many pages already exist from the server.
-  useEffect(() => {
-    let active = true;
-    onlineClassesApi
-      .listAnnotationDocuments(classId)
-      .then((documents) => {
-        if (!active) return;
-        const last = documents
-          .filter((entry) => entry.targetType === targetType && entry.targetId === targetId)
-          .reduce((max, entry) => Math.max(max, entry.pageIndex), 0);
-        setPages((current) => ensurePageCount(current, last + 1));
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [classId, targetType, targetId]);
+  const receivePageCount = useCallback((count: number) => setPages(current => ensurePageCount(current, count)), []);
+  const pageSync = useAnnotationPageSync({ classId, targetType, targetId, actorId, isHost, hostUserId, active,
+    onPageCount: receivePageCount });
 
   // A PDF sets the floor for the page count; blank pages can still be added after it.
   useEffect(() => {
@@ -544,7 +531,7 @@ export function WhiteboardPanel({
     if (scrollSelected.current === pages.current && !locked) { scrollSelected.current = null; return; }
     scrollSelected.current = null;
     alignCurrentPage();
-  }, [continuous, active, pages.current, pages.count, pageHeight, pageWidth, alignCurrentPage, studentFollowRequested]);
+  }, [continuous, active, pages.current, pageHeight, pageWidth, alignCurrentPage, studentFollowRequested]);
   useLayoutEffect(() => {
     const root = scrollRef.current;
     if (!continuous || !root) return;
@@ -932,6 +919,7 @@ export function WhiteboardPanel({
               active={active && (index === pages.current || (continuous && visiblePages.has(index)))} selected={index === pages.current}
               lasers={index === pages.current && !camera ? lasers : []} onLaser={sendLaser}
               onActivate={activatePage} onStatusChange={reportPageStatus} onAspectChange={reportPageAspect}
+              onDocumentReady={pageSync.documentReady}
               onCanvasGeometry={reportCanvasGeometry} onScrollGesture={scrollPages}
             />}
           </article>)}

@@ -11,7 +11,9 @@ import com.mcschool.flashcard.liveclasses.provider.ClassArtifactStorage;
 import com.mcschool.flashcard.users.User;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -158,9 +160,14 @@ public class OnlineClassAnnotationService {
     @Transactional(readOnly = true)
     public List<AnnotationDocumentResponse> listDocuments(AuthenticatedUser caller, UUID classId) {
         OnlineClass onlineClass = accessService.requireAdmitted(caller, classId);
+        // All pages of one target share its owner and roster checks. Keep this
+        // cache local to this read so polling does not repeat those database
+        // checks per page, while the next request rechecks revoked membership.
+        Map<String, Boolean> targetAccess = new HashMap<>();
         return documentRepository.findAllByOnlineClassIdOrderByPageIndexAsc(classId).stream()
                 // Someone else's private board is not merely unreadable: it is not listed.
-                .filter(document -> canAccessBoard(caller, onlineClass, document.getTargetId()))
+                .filter(document -> targetAccess.computeIfAbsent(document.getTargetId(),
+                        targetId -> canAccessBoard(caller, onlineClass, targetId)))
                 .map(AnnotationDocumentResponse::from)
                 .toList();
     }

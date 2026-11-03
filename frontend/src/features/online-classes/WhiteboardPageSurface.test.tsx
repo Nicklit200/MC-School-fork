@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef, forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { onlineClassesApi } from '../../api/onlineClasses';
+import { onlineClassesApi, type AnnotationDocument } from '../../api/onlineClasses';
 import type { Shape } from './annotations';
 import { DEFAULT_TOOL_SETTINGS } from './boardTools';
 import { DEFAULT_VIEW } from './boardView';
@@ -115,6 +115,19 @@ describe('WhiteboardPageSurface', () => {
     api.appendAnnotation.mockImplementation(async (_classId, _doc, operationId, operationType, payload) => ({
       id: `saved-${++sequence}`, operationId, sequence, actorId: 'teacher', layerOwnerId: 'teacher', operationType, payload, createdAt: '',
     }));
+  });
+
+  it('announces a blank page only after its annotation document has been persisted', async () => {
+    let resolve!: (value: AnnotationDocument) => void;
+    api.openAnnotationDocument.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const onDocumentReady = vi.fn();
+    render(<WhiteboardPageSurface {...baseProps} targetId="personal-workbook-student" pageIndex={2} onDocumentReady={onDocumentReady} />);
+    expect(onDocumentReady).not.toHaveBeenCalled();
+    const document: AnnotationDocument = { id: 'persisted-blank', targetType: 'WHITEBOARD', targetId: 'personal-workbook-student', pageIndex: 2,
+      sourceWidth: null, sourceHeight: null, revision: 0, snapshotSavedAt: null };
+    await act(async () => { resolve(document); });
+    await waitFor(() => expect(onDocumentReady).toHaveBeenCalledExactlyOnceWith(document));
+    expect(api.appendAnnotation).not.toHaveBeenCalled();
   });
 
   it('keeps documents, marks and undo bound to their fixed pages', async () => {

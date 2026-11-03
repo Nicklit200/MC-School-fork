@@ -15,6 +15,8 @@ import {
   STROKE_TOPIC,
   STUDENT_VIEW_TOPIC,
   VIEW_TOPIC,
+  BOARD_PAGES_TOPIC,
+  boardPagesEvent,
   annotationEvent,
   strokeEvent,
   studentViewEvent,
@@ -914,6 +916,53 @@ describe('WhiteboardPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Добавить страницу' }));
     expect(screen.getAllByRole('status').some((node) => node.textContent === '2 / 2')).toBe(true);
+  });
+
+  it('discovers a teacher’s new personal worksheet page without navigating or changing the owner’s view', async () => {
+    const targetId = 'personal-workbook-student';
+    const user = userEvent.setup();
+    mount('student', { targetId, document: { pageCount: 2 } as never });
+    await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', targetId, 0, undefined, undefined));
+    await user.click(screen.getByRole('button', { name: 'Следующая страница' }));
+    await waitFor(() => expect(canvasProps.pageKey).toBe(`WHITEBOARD:${targetId}:1`));
+    const view = { zoom: 2, panX: -100, panY: -90 };
+    act(() => canvasProps.onViewChange(view));
+    api.listAnnotationDocuments.mockResolvedValue([
+      { id: 'blank-page-2', targetType: 'WHITEBOARD', targetId, pageIndex: 2 } as never,
+      { id: 'other-pupil', targetType: 'WHITEBOARD', targetId: 'personal-workbook-bob', pageIndex: 99 } as never,
+      { id: 'camera', targetType: 'NOTEBOOK_CAMERA', targetId, pageIndex: 9 } as never,
+    ]);
+    act(() => handlers[BOARD_PAGES_TOPIC]({ event: boardPagesEvent('c1', 'WHITEBOARD', targetId), senderIdentity: 'teacher|tab' }));
+    await screen.findByText('2 / 3');
+    expect(canvasProps.pageKey).toBe(`WHITEBOARD:${targetId}:1`);
+    expect(canvasProps.view).toEqual(view);
+    await user.click(screen.getByRole('button', { name: 'Следующая страница' }));
+    await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledWith('c1', 'WHITEBOARD', targetId, 2, undefined, undefined));
+  });
+
+  it('keeps the owner’s continuous scroll position when a remote blank page extends the worksheet', async () => {
+    chooseLayout('student', 'continuous');
+    const observers = documentObservers();
+    try {
+      const targetId = 'personal-workbook-student';
+      mount('student', { targetId, document: { pageCount: 3 } as never });
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(3));
+      const { pages } = documentGeometry(list);
+      act(() => { observers.resize(); observers.reveal(list); });
+      list.scrollTop = 650;
+      fireEvent.scroll(list);
+      await waitFor(() => expect(pages[1]).toHaveAttribute('aria-current', 'page'));
+      act(() => canvasProps.onDocumentGesture({ scale: 2, anchor: { x: 500, y: 350 }, pan: { x: 0, y: 0 } }));
+      act(() => observers.frame());
+      const scroll = { left: list.scrollLeft, top: list.scrollTop };
+      api.listAnnotationDocuments.mockResolvedValue([{ id: 'blank-page-3', targetType: 'WHITEBOARD', targetId, pageIndex: 3 } as never]);
+      act(() => handlers[BOARD_PAGES_TOPIC]({ event: boardPagesEvent('c1', 'WHITEBOARD', targetId), senderIdentity: 'teacher|tab' }));
+      await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(4));
+      expect(list.scrollLeft).toBeCloseTo(scroll.left); expect(list.scrollTop).toBeCloseTo(scroll.top);
+      expect(pages[1]).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByText('200%')).toBeInTheDocument();
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it('opens a separate annotation document for each page', async () => {

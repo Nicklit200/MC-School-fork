@@ -32,6 +32,7 @@ backend DTOs must match it.
 | `mc.class.control.v1` | reliable | moderation notices must arrive |
 | `mc.class.annotation.v1` | reliable | durable strokes; ordered by sequence |
 | `mc.class.student-view.v1` | reliable, private | pupil viewport updates to the classroom host only |
+| `mc.class.pages.v1` | reliable, private | refresh a private board's durable page list |
 | `mc.class.reaction.v1` | lossy | transient, expires in ~4 s |
 | `mc.class.pointer.v1` | lossy | superseded ~20×/s; a dropped frame is invisible |
 
@@ -97,6 +98,24 @@ Bodies are plain text and are never rendered as HTML.
 Coordinates are normalized to the target surface (0..1), never CSS pixels.
 `operationId` de-duplicates the realtime copy against the persisted row;
 `sequence` gives late joiners a deterministic replay order.
+
+### `mc.class.pages.v1`
+
+```jsonc
+{ "v": 1, "type": "pages", "classId": "<uuid>", "id": "<uuid>",
+  "at": 1789744374000, "targetType": "WHITEBOARD",
+  "targetId": "personal-workbook-<pupil-uuid>" }
+```
+
+Send after the annotation document has been opened successfully, including a
+blank page with no strokes. Resolve explicit recipient devices for the owning
+pupil and classroom host; an empty recipient list never becomes a broadcast.
+The receiver accepts hints only from that owner or the roster's host for the
+exact class, target type and target id. It rereads the authorized REST document
+list; the packet contains no page count, page selection, zoom or ink. Discovery
+increases the known page count without changing the viewer's navigation.
+Private boards also refresh while visible every two seconds and on returning
+to the tab, so dropped hints and late entry recover from persisted empty pages.
 
 ### `mc.class.pointer.v1` (P7)
 

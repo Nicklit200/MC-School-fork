@@ -34,10 +34,10 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from xml.etree import ElementTree
-          for name in ('PersonalLessonWorkbookPersistenceIntegrationTest', 'PersonalLessonAnswersPersistenceIntegrationTest'):
+          for name, minimum in {'PersonalLessonWorkbookPersistenceIntegrationTest': 6, 'PersonalLessonAnswersPersistenceIntegrationTest': 5}.items():
               report = Path('backend/target/surefire-reports') / f'TEST-com.mcschool.flashcard.lessons.{name}.xml'
               suite = ElementTree.parse(report).getroot()
-              assert int(suite.get('tests', '0')) >= 5, f'{name}: missing database coverage'
+              assert int(suite.get('tests', '0')) >= minimum, f'{name}: missing database coverage'
               for field in ('skipped', 'failures', 'errors'):
                   assert int(suite.get(field, '0')) == 0, f'{name}: {field} must be zero'
           PY

@@ -14,6 +14,7 @@ import type { PdfDoc } from './pdfDocument';
 import { penOutline, strokeWidthPixels, tracePenOutline } from './freehand';
 import { shapeTextSizePx, textStyleFor } from './textStyles';
 import { A4_PORTRAIT_ASPECT } from './boardPaper';
+import { annotationPageCount } from './annotationPages';
 
 /**
  * Konva is loaded when the first export runs, not with the board: most lessons
@@ -173,9 +174,13 @@ export async function exportBoardPdf({
   const documents = (await onlineClassesApi.listAnnotationDocuments(classId)).filter(
     (entry) => entry.targetType === targetType && entry.targetId === targetId,
   );
+  // Another participant may have added pages since this viewer last polled.
+  // Use the fresh, authorized server list so even an untouched blank page is
+  // included, while keeping every original PDF page and unsaved local page.
+  const count = annotationPageCount(documents, targetType, targetId, Math.max(pageCount, pdfDocument?.pageCount ?? 1));
 
   const pages: JpegPage[] = [];
-  for (let index = 0; index < Math.max(1, pageCount); index += 1) {
+  for (let index = 0; index < count; index += 1) {
     const document = documents.find((entry) => entry.pageIndex === index);
     const operations = document
       ? ((await onlineClassesApi.replayAnnotations(classId, document.id, 0)) as unknown as Operation[])

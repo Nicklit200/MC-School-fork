@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import type { AnnotationTargetType } from '../../api/onlineClasses';
+import type { AnnotationDocument, AnnotationTargetType } from '../../api/onlineClasses';
 import { A4_PORTRAIT_ASPECT } from './boardPaper';
 import type { ToolSettings } from './boardTools';
 import type { PageView } from './boardView';
@@ -69,6 +69,8 @@ export interface WhiteboardPageSurfaceProps {
   onStatusChange?: (pageIndex: number, status: PageSurfaceStatus) => void;
   onAspectChange?: (pageIndex: number, aspect: number | null) => void;
   onCanvasGeometry?: (pageIndex: number, viewport: { width: number; height: number }, aspect: number | null) => void;
+  /** Called only after this page has a durable annotation document. */
+  onDocumentReady?: (document: AnnotationDocument) => void;
   viewScope?: string;
 }
 
@@ -107,6 +109,7 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
   onStatusChange,
   onAspectChange,
   onCanvasGeometry,
+  onDocumentReady,
   viewScope,
 }, ref) {
   const camera = targetType === 'NOTEBOOK_CAMERA';
@@ -194,6 +197,11 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
     },
   });
   boardRef.current = board;
+  const documentReadyCallback = useRef(onDocumentReady);
+  documentReadyCallback.current = onDocumentReady;
+  useEffect(() => {
+    if (board.document) documentReadyCallback.current?.(board.document);
+  }, [board.document?.id]);
   useImperativeHandle(ref, () => ({ board, canvas: () => canvasRef.current }));
 
   // Reconcile only with confirmed server operations. An ADD may already have
