@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['board-zoom.spec.mjs', 'board-pages.spec.mjs'],
+  testMatch: ['board-zoom.spec.mjs', 'board-pages.spec.mjs', 'answers-panel.spec.mjs'],
   timeout: 30000,
   use: {
     baseURL: 'http://127.0.0.1:4174', browserName: 'chromium', hasTouch: true,

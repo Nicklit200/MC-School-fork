@@ -6,7 +6,7 @@ const DEFAULT_WIDTH = 204;
 const STORAGE_PREFIX = 'mindcrafti:answers-panel-width:v1:';
 
 /** Changes only the teacher's layout. Board coordinates and PDF view state are independent. */
-export function AnswersPanelResizer({ storageKey }: { storageKey: string }) {
+export function AnswersPanelResizer({ storageKey, videosOpen = false }: { storageKey: string; videosOpen?: boolean }) {
   const { language } = useI18n();
   const separator = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLElement | null>(null);
@@ -19,7 +19,14 @@ export function AnswersPanelResizer({ storageKey }: { storageKey: string }) {
   const apply = useCallback((requested: number) => {
     const parent = stage.current;
     if (!parent) return;
-    const available = parent.getBoundingClientRect().width || parent.clientWidth || window.innerWidth;
+    const stageWidth = parent.getBoundingClientRect().width || parent.clientWidth || window.innerWidth;
+    const cameras = parent.querySelector<HTMLElement>(':scope > .online-class-room__videos-drawer.is-open');
+    const cameraStyle = cameras && getComputedStyle(cameras);
+    // Desktop cameras occupy a flex column; the retractable tablet overlay does not.
+    const cameraWidth = cameras && cameraStyle?.display !== 'none'
+      && cameraStyle?.position !== 'absolute' && cameraStyle?.position !== 'fixed'
+      ? cameras.getBoundingClientRect().width : 0;
+    const available = stageWidth - cameraWidth;
     const dividerWidth = separator.current?.getBoundingClientRect().width || 12;
     const max = Math.max(180, Math.min(available * 0.8, available - 260 - dividerWidth));
     const min = Math.min(180, max);
@@ -78,6 +85,8 @@ export function AnswersPanelResizer({ storageKey }: { storageKey: string }) {
       stage.current = null;
     };
   }, [apply, finish, key]);
+
+  useEffect(() => { apply(preferred.current); }, [apply, videosOpen]);
 
   return <div ref={separator} className="answers-panel-resizer" role="separator" tabIndex={0}
     aria-orientation="vertical" aria-controls="answers-panel"

@@ -5,10 +5,15 @@ import { AnswersPanelResizer } from './AnswersPanelResizer';
 
 let stageWidth = 1000;
 let measure: ResizeObserverCallback;
+function layout(teacher = 'teacher-1', videosOpen = false, overlayVideos = false) {
+  return <I18nProvider><div data-testid="stage">
+    <aside id="answers-panel" /><AnswersPanelResizer storageKey={teacher} videosOpen={videosOpen} /><main />
+    <div data-testid="cameras" className={`online-class-room__videos-drawer${videosOpen ? ' is-open' : ''}`}
+      style={{ position: overlayVideos ? 'absolute' : 'relative' }} />
+  </div></I18nProvider>;
+}
 function mount(teacher = 'teacher-1') {
-  return render(<I18nProvider><div data-testid="stage">
-    <aside id="answers-panel" /><AnswersPanelResizer storageKey={teacher} /><main />
-  </div></I18nProvider>);
+  return render(layout(teacher));
 }
 function pointer(type: string, x: number, pointerType = 'mouse', pointerId = 1) {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, button: 0 });
@@ -23,7 +28,7 @@ describe('teacher answer panel width', () => {
     stageWidth = 1000;
     localStorage.clear(); localStorage.setItem('language', 'RU');
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return { width: this.dataset.testid === 'stage' ? stageWidth : this.getAttribute('role') === 'separator' ? 12 : 204, height: 700,
+      return { width: this.dataset.testid === 'stage' ? stageWidth : this.dataset.testid === 'cameras' ? 220 : this.getAttribute('role') === 'separator' ? 12 : 204, height: 700,
         left: 0, top: 0, right: stageWidth, bottom: 700, x: 0, y: 0, toJSON: () => ({}) };
     });
     vi.stubGlobal('ResizeObserver', class {
@@ -77,6 +82,20 @@ describe('teacher answer panel width', () => {
     expect(Number(screen.getByRole('separator').getAttribute('aria-valuenow'))).toBeLessThanOrEqual(stageWidth - 260);
     fireEvent.keyDown(screen.getByRole('separator'), { key: 'Home' });
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '180');
+  });
+
+  it('reserves the open desktop camera column and restores the preference when it closes', () => {
+    localStorage.setItem('mindcrafti:answers-panel-width:v1:teacher-1', '700');
+    const view = mount();
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '700');
+    view.rerender(layout('teacher-1', true));
+    const width = Number(screen.getByRole('separator').getAttribute('aria-valuenow'));
+    expect(stageWidth - 220 - 12 - width).toBeGreaterThanOrEqual(260);
+    expect(localStorage.getItem('mindcrafti:answers-panel-width:v1:teacher-1')).toBe('700');
+    view.rerender(layout('teacher-1', false));
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '700');
+    view.rerender(layout('teacher-1', true, true));
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '700');
   });
 
   it('cleans up the temporary stage width and dragging state on close', () => {

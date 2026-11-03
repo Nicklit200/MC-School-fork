@@ -84,7 +84,8 @@ vi.mock('./RecordingControls', () => ({
 vi.mock('./TranscriptionControls', () => ({ TranscriptionControls: () => null }));
 vi.mock('./ParticipantListPanel', () => ({ ParticipantListPanel: () => null }));
 vi.mock('./WaitingRoomPanel', () => ({ WaitingRoomPanel: () => null }));
-vi.mock('./AnswersPanelResizer', () => ({ AnswersPanelResizer: () => <div data-testid="answers-panel-resizer" /> }));
+vi.mock('./AnswersPanelResizer', () => ({ AnswersPanelResizer: ({ storageKey }: { storageKey: string }) =>
+  <div data-testid="answers-panel-resizer" data-owner={storageKey} /> }));
 vi.mock('./useBoardDocument', () => ({ useBoardDocument: () => null, useBoardDocumentState: vi.fn() }));
 vi.mock('./useClassEvents', () => ({ useClassEvents: () => ({ publish: vi.fn() }) }));
 vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
@@ -846,6 +847,7 @@ describe('OnlineClassRoom', () => {
     expect(lessonPreparationApi.uploadAnswers).not.toHaveBeenCalled();
     expect(lessonPreparationApi.personalAnswersMetadata).not.toHaveBeenCalled();
     expect(lessonPreparationApi.personalAnswersBytes).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('answers-panel-resizer')).not.toBeInTheDocument();
   });
 
   it('keeps the answers panel open and selects the pupil’s private solutions on both personal surfaces', async () => {
@@ -897,7 +899,7 @@ describe('OnlineClassRoom', () => {
     await userEvent.click(button);
     expect(screen.getByText('Решения для учителя')).toBeInTheDocument();
     expect(lessonPreparationApi.personalAnswersMetadata).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('answers-panel-resizer')).not.toBeInTheDocument();
+    expect(screen.getByTestId('answers-panel-resizer')).toHaveAttribute('data-owner', 'me');
     } finally {
       if (previous) vi.stubGlobal('ResizeObserver', previous); else vi.unstubAllGlobals();
     }
@@ -929,11 +931,34 @@ describe('OnlineClassRoom', () => {
       await userEvent.click(button);
       const sidebar = screen.getByRole('complementary', { name: 'Панель ответов' });
       expect(sidebar.parentElement).toHaveClass('online-class-room__stage');
-      expect(sidebar.nextElementSibling).toHaveClass('online-class-room__main');
+      expect(sidebar.nextElementSibling).toBe(screen.getByTestId('answers-panel-resizer'));
+      expect(sidebar.nextElementSibling?.nextElementSibling).toHaveClass('online-class-room__main');
       expect(boardProps.at(-1)?.overlay).toBeUndefined();
     } finally {
       if (previous) vi.stubGlobal('ResizeObserver', previous);
       else vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(['loading', 'failed'])('keeps the trial lesson resize handle while worksheet metadata is %s', async state => {
+    const previous = globalThis.ResizeObserver;
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
+    try {
+      vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([]);
+      vi.mocked(lessonPreparationApi.personalWorkbooks).mockImplementation(() => state === 'loading'
+        ? new Promise(() => {}) : Promise.reject(new Error('worksheet metadata unavailable')));
+      mount(true, { lessonTitle: 'Пробный урок · Тестовый урок' });
+      const board = await screen.findByTestId('board-board-1');
+      await userEvent.click(await within(board).findByRole('button', { name: 'Ответы' }));
+      const sidebar = screen.getByRole('complementary', { name: 'Панель ответов' });
+      const handle = screen.getByTestId('answers-panel-resizer');
+      expect(handle).toHaveAttribute('data-owner', 'me');
+      expect(handle.parentElement).toBe(sidebar.parentElement);
+      expect(lessonPreparationApi.personalAnswersMetadata).not.toHaveBeenCalled();
+      await userEvent.click(within(sidebar).getByRole('button', { name: 'Закрыть ответы' }));
+      expect(screen.queryByTestId('answers-panel-resizer')).not.toBeInTheDocument();
+    } finally {
+      if (previous) vi.stubGlobal('ResizeObserver', previous); else vi.unstubAllGlobals();
     }
   });
 

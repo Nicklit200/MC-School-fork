@@ -656,7 +656,7 @@ function RoomBody({
               uploading={answers.uploading}
               uploadError={answers.uploadError}
             />
-            {personalWorkbookData?.enabled && <AnswersPanelResizer storageKey={currentUserId} />}
+            <AnswersPanelResizer storageKey={currentUserId} videosOpen={videosOpen} />
           </>)}
         <div className="online-class-room__main" aria-busy={boardsFrozen}
           ref={element => { if (element) element.inert = boardsFrozen; }}>
