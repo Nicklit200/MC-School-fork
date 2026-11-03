@@ -50,12 +50,15 @@
 }
 .online-class-room--original-v3 .online-class-room__lesson-actions { display:flex; align-items:center; gap:8px; flex:0 1 auto; min-width:0; pointer-events:none; }
 .online-class-room--original-v3 .online-class-room__lesson-actions > * { pointer-events:auto; }
+.online-class-room--original-v3 .online-class-room__archive-notice { display:flex; align-items:center; gap:6px; min-width:0; max-width:420px; font-size:12px; }
+.online-class-room--original-v3 .online-class-room__archive-notice > span { min-width:0; overflow-wrap:anywhere; }
 .online-class-room--original-v3 .online-class-room__board-controls { margin-left:auto; flex-shrink:0; gap:4px; padding:4px 6px; }
 .online-class-room--original-v3 .online-class-room__topbar button,
 .online-class-room--original-v3 .online-class-room__topbar select {
   height:34px; min-height:34px; padding:5px 10px; border:1px solid #3b4348;
   border-radius:9px; color:var(--v3-muted); background:#2a2f33f5; box-shadow:none; font-size:11px;
 }
+.online-class-room--original-v3 .online-class-room__archive-notice > button { flex:none; min-width:32px; padding:4px; font-size:20px; }
 .online-class-room--original-v3 .online-class-room__board-controls button,
 .online-class-room--original-v3 .online-class-room__board-controls select { border:0; background:transparent; }
 .online-class-room--original-v3 .online-class-room__topbar button[aria-pressed='true'] { color:var(--v3-orange); background:var(--v3-selected); }
@@ -290,7 +293,7 @@ body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:2
   .online-class-room--original-v3 .online-class-room__lesson-island strong { max-width:clamp(64px,25vw,110px); font-size:12px; }
   .online-class-room--original-v3 .online-class-room__topbar { flex-wrap:wrap; overflow:visible; }
   .online-class-room--original-v3 .online-class-room__lesson-actions { order:3; flex:1 0 100%; flex-wrap:wrap; }
-  .online-class-room--original-v3 .online-class-room__lesson-actions:not(:has(button, [role='alert'], [role='alertdialog'], .recording__active, .transcription span)) { display:none; }
+  .online-class-room--original-v3 .online-class-room__lesson-actions:not(:has(button, [role='alert'], [role='alertdialog'], .recording__active, .transcription span, .online-class-room__archive-notice)) { display:none; }
   .online-class-room--original-v3 .board-switcher select { max-width:clamp(120px,34vw,150px); font-size:10px; }
   .online-class-room--original-v3 .online-class-room__stage { flex-direction:column; }
   .online-class-room--original-v3 .online-class-room__stage > .answers-panel,

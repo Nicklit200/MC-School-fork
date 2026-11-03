@@ -98,6 +98,7 @@ vi.mock('./WhiteboardPanel', () => ({
       <section data-testid={`board-${props.targetId}${props.targetType === 'NOTEBOOK_CAMERA' ? '-camera' : ''}`} data-active={String(props.active)}>
         {props.fileAction}
         {props.hostActions}
+        {props.lessonDocumentsStatus && <span role={props.lessonDocumentsError ? 'alert' : 'status'}>{props.lessonDocumentsStatus}</span>}
       </section>
     );
   },
@@ -325,6 +326,85 @@ describe('PDF upload contract', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Моя доска' }));
     expect(screen.getByTestId('board-personal-me')).toHaveAttribute('data-active', 'true');
     expect(screen.getByTestId('board-personal-workbook-me')).toHaveAttribute('data-active', 'false');
+  });
+});
+
+describe('lesson PDF save notifications', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    boardProps.length = 0;
+    screenShares = [];
+    notebookFixture.camerasByOwner.clear();
+    vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
+      { userId: 'alice', displayName: 'Анна', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+    ]);
+    vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+    vi.mocked(onlineClassesApi.listAnnotationDocuments).mockResolvedValue([]);
+    vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(null);
+    vi.mocked(exportBoardPdf).mockResolvedValue(new Blob(['%PDF-1.7']));
+    vi.mocked(completedLessonApi.save).mockImplementation(async (_eventId, classId, boardId) => ({
+      id: boardId, classId, boardId, filename: 'board.pdf', savedAt: '',
+    }));
+    vi.mocked(completedLessonApi.list).mockResolvedValue(['board-1', 'personal-alice'].map(boardId => ({
+      id: boardId, classId: 'c1', boardId, filename: 'board.pdf', savedAt: '',
+    })));
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  const saveBoards = () => boardProps.filter(props => props.targetId === 'board-1').at(-1)!.onSaveLessonDocuments() as Promise<void>;
+
+  it('shows one confirmation across the room and mounted boards, then clears it after five seconds', async () => {
+    mount(true);
+    await screen.findByRole('option', { name: /Анна/ });
+    vi.useFakeTimers();
+    await act(async () => { await saveBoards(); });
+    expect(screen.getAllByText(/PDF сохранены в разделе/)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Закрыть уведомление о сохранении' })).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(4999); });
+    expect(screen.getByText(/PDF сохранены в разделе/)).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.queryByText(/PDF сохранены в разделе/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Закрыть уведомление о сохранении' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a new save visible past the old timeout and starts dismissal only after verification', async () => {
+    mount(true);
+    await screen.findByRole('option', { name: /Анна/ });
+    vi.useFakeTimers();
+    await act(async () => { await saveBoards(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    let verify!: (docs: Awaited<ReturnType<typeof completedLessonApi.list>>) => void;
+    vi.mocked(completedLessonApi.list).mockImplementationOnce(() => new Promise(resolve => { verify = resolve; }));
+    let saving!: Promise<void>;
+    await act(async () => { saving = saveBoards(); });
+    expect(screen.getByText('Проверяем сохранённые PDF на сервере…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Закрыть уведомление о сохранении' })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+    expect(screen.getByText('Проверяем сохранённые PDF на сервере…')).toBeInTheDocument();
+    await act(async () => {
+      verify(['board-1', 'personal-alice'].map(boardId => ({ id: boardId, classId: 'c1', boardId, filename: 'board.pdf', savedAt: '' })));
+      await saving;
+    });
+    expect(screen.getAllByText(/PDF сохранены в разделе/)).toHaveLength(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(screen.queryByText(/PDF сохранены в разделе/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a failed verification visible until the teacher dismisses it', async () => {
+    vi.mocked(completedLessonApi.list).mockRejectedValueOnce(new Error('Проверка недоступна'));
+    mount(true);
+    await screen.findByRole('option', { name: /Анна/ });
+    vi.useFakeTimers();
+    await act(async () => { await saveBoards(); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Проверка недоступна');
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Проверка недоступна');
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть уведомление о сохранении' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 

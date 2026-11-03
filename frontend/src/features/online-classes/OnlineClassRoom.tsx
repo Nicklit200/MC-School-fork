@@ -392,6 +392,13 @@ function RoomBody({
   const [archiving, setArchiving] = useState(false);
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
   const [archiveError, setArchiveError] = useState(false);
+  useEffect(() => {
+    // Keep progress and errors visible. A completed save only needs a brief
+    // confirmation; starting another save cancels the previous dismissal.
+    if (!archiveNotice || archiving || archiveError) return;
+    const timer = window.setTimeout(() => setArchiveNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [archiveNotice, archiving, archiveError]);
   const archiveBoards = async (): Promise<void> => {
     if (archiving) return;
     if (!eventId) {
@@ -460,7 +467,7 @@ function RoomBody({
         setArchiveError(true);
         setArchiveNotice(`Подтверждено ${confirmed.length} из ${boards.length} PDF. Ошибки: ${failures.join('; ')}. Можно повторить без удаления других файлов.`);
       } else {
-        setArchiveNotice(`Готово: все ${confirmed.length} PDF сохранены и проверены. Они доступны в разделе «Пройденный урок».`);
+        setArchiveNotice(`PDF сохранены в разделе «Пройденный урок»: ${confirmed.length}.`);
       }
     } catch (error) {
       setArchiveError(true);
@@ -531,7 +538,11 @@ function RoomBody({
         </div>
         <div className="online-class-room__lesson-actions">
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
-        {archiveNotice && <span role={archiveError ? 'alert' : 'status'} style={{fontSize:12,color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>}
+        {archiveNotice && <div className="online-class-room__archive-notice">
+          <span role={archiveError ? 'alert' : 'status'} style={{color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>
+          {!archiving && <button type="button" onClick={() => setArchiveNotice(null)}
+            aria-label={language === 'DE' ? 'Speicherhinweis schließen' : 'Закрыть уведомление о сохранении'}>×</button>}
+        </div>}
         <RecordingControls
           classId={classId}
           isHost={connection.host}
@@ -608,8 +619,6 @@ function RoomBody({
                     observedPage={studentPages[boardId]}
                     onSaveLessonDocuments={connection.host ? archiveBoards : undefined}
                     savingLessonDocuments={archiving}
-                    lessonDocumentsStatus={archiveNotice}
-                    lessonDocumentsError={archiveError}
                     // Answers belong to whichever board the teacher is looking at.
                     hostActions={
                       connection.host && visible ? (
@@ -655,8 +664,6 @@ function RoomBody({
                 fileAction={active && !compact ? fileAction : undefined}
                 onSaveLessonDocuments={!compact ? archiveBoards : undefined}
                 savingLessonDocuments={archiving}
-                lessonDocumentsStatus={archiveNotice}
-                lessonDocumentsError={archiveError}
                 hostActions={active && !compact ? <AnswersButton compact status={answers.status} open={answers.open} onToggle={answers.toggle} /> : undefined}
               />
             </Suspense>}
