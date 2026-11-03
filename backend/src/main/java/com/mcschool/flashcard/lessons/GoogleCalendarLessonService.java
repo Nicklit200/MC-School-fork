@@ -9,6 +9,9 @@ import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.PersistenceContext;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -43,6 +46,8 @@ public class GoogleCalendarLessonService {
     private final GoogleCalendarOAuthService oauthService;
     private final GoogleMeetEventsService meetEventsService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public GoogleCalendarLessonService(ObjectMapper objectMapper,
                                        StudentGroupRepository groupRepository,
@@ -186,6 +191,23 @@ public class GoogleCalendarLessonService {
                 .map(LessonHistoryEntry::toResponse)
                 .sorted(Comparator.comparing(GroupLessonResponse::startsAt))
                 .toList();
+    }
+
+    /** A native assignment may change while Start waits for its classroom row lock. */
+    @Transactional(readOnly = true)
+    public void refreshOwnedNativeLessonForClassPromotion(AuthenticatedUser teacher, String eventId) {
+        if (!eventId.startsWith(ManualLessonService.EVENT_PREFIX)) return;
+        if (teacher.role() != Role.TEACHER) throw new ResourceNotFoundException("Lesson not found");
+        LessonHistoryEntry history = historyRepository.findByTeacherIdAndEventId(teacher.id(), eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        // Refresh this owned history row, not the persistence context: the
+        // caller must retain its managed, locked classroom and its changes.
+        try {
+            entityManager.refresh(history);
+        } catch (EntityNotFoundException missing) {
+            throw new ResourceNotFoundException("Lesson not found");
+        }
+        if (history.getDeletedAt() != null) throw new ResourceNotFoundException("Lesson not found");
     }
 
     @Transactional

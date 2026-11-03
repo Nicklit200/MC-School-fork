@@ -118,6 +118,33 @@ public class OnlineClassService {
             if (latest.getId().equals(current.getId())) break;
         }
         if (current.isTerminal()) return toResponse(current, caller);
+        if (current.isTeacherOnly() && (lesson.groupId() != null || lesson.studentId() != null)) {
+            // A queued Start request may have read its audience before waiting
+            // for this row lock. Verify the current owned lesson once more
+            // before exposing the prepared room to its first audience.
+            lessonService.refreshOwnedNativeLessonForClassPromotion(caller, eventId);
+            lesson = lessonService.listGroupLessons(caller).stream()
+                    .filter(candidate -> candidate.eventId().equals(eventId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        }
+        // No pupil has ever been authorized in a teacher-only room. Its first
+        // verified assignment may retain the same shared ink and lesson data.
+        // Replacing an existing audience still retires the old room below.
+        if (current.isTeacherOnly() && current.getBindingKey().equals(lesson.bindingKey())) {
+            if (lesson.groupId() != null) {
+                StudentGroup group = groupRepository.findByIdAndTeacherId(lesson.groupId(), caller.id())
+                        .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+                current.promoteToGroup(group);
+            } else if (lesson.studentId() != null) {
+                User student = accessService.requireActiveUser(lesson.studentId());
+                if (student.getRole() != Role.STUDENT || student.getTeacher() == null
+                        || !student.getTeacher().getId().equals(caller.id())) {
+                    throw new ResourceNotFoundException("Student not found");
+                }
+                current.promoteToStudent(student);
+            }
+        }
         if (hasCurrentTarget(current, lesson)) {
             Instant scheduledStart = availableOccurrenceStart(caller.id(), lesson, current.getId());
             Instant scheduledEnd = DateOnlyLessonSchedule.onlineClassEnd(lesson);
@@ -166,7 +193,8 @@ public class OnlineClassService {
             created = OnlineClass.forStudent(teacher, lesson.eventId(), lesson.bindingKey(),
                     lesson.title(), lesson.startsAt(), scheduledEnd, student);
         } else {
-            throw new ConflictException("This lesson is not linked to a student or group yet");
+            created = OnlineClass.forTeacherOnly(teacher, lesson.eventId(), lesson.bindingKey(),
+                    lesson.title(), lesson.startsAt(), scheduledEnd);
         }
 
         OnlineClass saved = classRepository.save(created);
@@ -190,7 +218,8 @@ public class OnlineClassService {
             created = OnlineClass.forStudent(teacher, lesson.eventId(), lesson.bindingKey(),
                     lesson.title(), retryStart, retryEnd, student);
         } else {
-            throw new ConflictException("This lesson is not linked to a student or group yet");
+            created = OnlineClass.forTeacherOnly(teacher, lesson.eventId(), lesson.bindingKey(),
+                    lesson.title(), retryStart, retryEnd);
         }
         return classRepository.save(created);
     }

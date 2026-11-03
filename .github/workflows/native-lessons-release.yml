@@ -12,6 +12,7 @@ on:
       - 'backend/src/test/java/com/mcschool/flashcard/notebookcamera/**'
       - 'backend/src/main/resources/db/migration/V86__*'
       - 'backend/src/main/resources/db/migration/V87__*'
+      - 'backend/src/main/resources/db/migration/V97__*'
       - 'backend/pom.xml'
       - 'frontend/src/api/**'
       - 'frontend/src/pages/teacher/CreateLessonPanel*'
@@ -59,7 +60,7 @@ jobs:
       - name: Require Docker for real PostgreSQL verification
         run: docker info > /dev/null
       - name: Verify native lessons, atomic series, PDF compatibility and bounded student joining
-        run: ./mvnw -B -ntp '-Dtest=ManualLesson*,LessonSeriesServiceTest,CoveredMaterialServiceTest,DateOnlyLessonScheduleTest,NativeLessonPdfCompatibilityTest,OnlineClassServiceIntegrationTest,TeacherPresentLessonEntryIntegrationTest,LessonEntryPolicyTest,TeacherPresenceServiceTest,NotebookCameraPersistenceIntegrationTest' test
+        run: ./mvnw -B -ntp '-Dtest=ManualLesson*,LessonSeriesServiceTest,CoveredMaterialServiceTest,DateOnlyLessonScheduleTest,NativeLessonPdfCompatibilityTest,OnlineClassServiceIntegrationTest,UnassignedOnlineClassIntegrationTest,UnassignedNativeBindingIntegrationTest,OnlineClassTeacherOnlyTest,TeacherPresentLessonEntryIntegrationTest,LessonEntryPolicyTest,TeacherPresenceServiceTest,NotebookCameraPersistenceIntegrationTest' test
       - name: Require executed PostgreSQL tests without skips
         run: |
           python3 - <<'PY'
@@ -69,6 +70,8 @@ jobs:
           suites = {
               'com.mcschool.flashcard.lessons.ManualLessonPersistenceIntegrationTest': 3,
               'com.mcschool.flashcard.liveclasses.OnlineClassServiceIntegrationTest': 1,
+              'com.mcschool.flashcard.liveclasses.UnassignedOnlineClassIntegrationTest': 10,
+              'com.mcschool.flashcard.liveclasses.UnassignedNativeBindingIntegrationTest': 2,
               'com.mcschool.flashcard.liveclasses.TeacherPresentLessonEntryIntegrationTest': 1,
               'com.mcschool.flashcard.notebookcamera.NotebookCameraPersistenceIntegrationTest': 1,
           }

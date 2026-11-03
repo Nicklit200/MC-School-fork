@@ -28,7 +28,8 @@ vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: { id: current
 vi.mock('./GoogleDrivePdfPicker', () => ({ GoogleDrivePdfPicker: () => null }));
 vi.mock('../../api/aiPilot', () => ({ aiPilotApi: { status: vi.fn(async () => ({ configured: false, model: '' })) } }));
 vi.mock('../../features/online-classes/LessonClassArtifacts', () => ({ LessonClassArtifacts: () => null }));
-vi.mock('../../features/online-classes/StartOnlineClassButton', () => ({ StartOnlineClassButton: () => <button type="button">Начать онлайн-урок</button> }));
+vi.mock('../../features/online-classes/StartOnlineClassButton', () => ({ StartOnlineClassButton: ({ eventId }: { eventId: string }) =>
+  <button type="button" data-event-id={eventId}>Начать онлайн-урок</button> }));
 
 const archived: CompletedLessonDocument = { id: 'board-pdf', classId: 'class-1', boardId: 'board-1', filename: 'Записи общей доски.pdf', savedAt: '2026-10-23T15:00:00Z' };
 const uploaded: CompletedLessonDocument = { ...archived, id: 'manual-pdf', boardId: 'manual-shared', filename: 'Тетрадь.pdf' };
@@ -155,18 +156,22 @@ describe('native lesson details preserve completed documents', () => {
       transcriptText: 'Сохранённый старый текст',
     })));
   });
-  it('keeps the configured trial board available to a regular teacher but requires an assigned pupil for video', async () => {
+  it.each(['RU', 'DE'])('opens the modern classroom for an unassigned trial and explains later pupil assignment (%s)', async language => {
     vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'true');
     vi.stubEnv('VITE_MINDCRAFTI_ONLINE_ENABLED', 'true');
+    localStorage.setItem('language', language);
     mount();
-    expect(await screen.findByText('Для подключения ученика назначьте его этому уроку')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Начать онлайн-урок' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Mindcrafti доска (тест)' })).toHaveAttribute('href', '/lesson-board/local-trial');
+    expect(await screen.findByRole('button', { name: 'Начать онлайн-урок' })).toHaveAttribute('data-event-id', 'local-trial');
+    expect(screen.getByText(language === 'DE'
+      ? /Sie können die Tafel öffnen und den Unterricht ohne Schüler vorbereiten/
+      : /Можно открыть доску и подготовить урок без ученика/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Пробный урок' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mindcrafti доска (тест)' })).not.toBeInTheDocument();
     expect(screen.queryByText('AI пилот Николая')).not.toBeInTheDocument();
     expect(aiPilotApi.status).not.toHaveBeenCalled();
   });
-  it('keeps the same primary classroom entry for any teacher and their own assigned pupil', async () => {
-    vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'true');
+  it.each(['true', 'false'])('offers only the deployed classroom entry for an assigned pupil (modern=%s)', async modern => {
+    vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', modern);
     vi.stubEnv('VITE_MINDCRAFTI_ONLINE_ENABLED', 'true');
     const pupil = { id: 'regular-pupil', fullName: 'Анна', chatGptProjectUrl: null } as StudentListItem;
     vi.mocked(api.students.list).mockResolvedValue([pupil]);
@@ -177,16 +182,31 @@ describe('native lesson details preserve completed documents', () => {
       startsAt: '2026-10-23T00:00:00Z', endsAt: '2026-10-23T01:00:00Z', meetUrl: null, calendarUrl: null,
     }]);
     mount();
-    expect(await screen.findByRole('button', { name: 'Начать онлайн-урок' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Mindcrafti доска (тест)' })).not.toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'Урок Анны' });
+    if (modern === 'true') {
+      expect(screen.getByRole('button', { name: 'Начать онлайн-урок' })).toHaveAttribute('data-event-id', 'local-trial');
+      expect(screen.queryByRole('link', { name: 'Mindcrafti доска (тест)' })).not.toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole('button', { name: 'Начать онлайн-урок' })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Mindcrafti доска (тест)' })).toHaveAttribute('href', '/lesson-board/local-trial');
+    }
     expect(screen.queryByText('AI пилот Николая')).not.toBeInTheDocument();
     expect(aiPilotApi.status).not.toHaveBeenCalled();
   });
   it('does not expose the standalone fallback when its deployment switch is off', async () => {
+    vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'false');
     vi.stubEnv('VITE_MINDCRAFTI_ONLINE_ENABLED', 'false');
     mount();
     await screen.findByText('Для подключения ученика назначьте его этому уроку');
     expect(screen.queryByRole('link', { name: 'Mindcrafti доска (тест)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Начать онлайн-урок' })).not.toBeInTheDocument();
+  });
+  it('preserves the explicitly deployed legacy fallback for an unassigned trial', async () => {
+    vi.stubEnv('VITE_MINDCRAFTI_LIVEKIT_ENABLED', 'false');
+    vi.stubEnv('VITE_MINDCRAFTI_ONLINE_ENABLED', 'true');
+    mount();
+    expect(await screen.findByRole('link', { name: 'Mindcrafti доска (тест)' })).toHaveAttribute('href', '/lesson-board/local-trial');
+    expect(screen.queryByRole('button', { name: 'Начать онлайн-урок' })).not.toBeInTheDocument();
   });
   it('keeps the separate AI pilot restricted to its existing owner account', async () => {
     currentUser.id = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';

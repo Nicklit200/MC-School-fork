@@ -83,6 +83,22 @@ describe('StartOnlineClassButton error handling', () => {
     expect(api.start).toHaveBeenCalledExactlyOnceWith('future-class');
   });
 
+  it('opens an unassigned native trial through its original event without creating a replacement test lesson', async () => {
+    api.materializeFromCalendar.mockResolvedValue({ id: 'trial-class', eventId: 'local-trial', status: 'SCHEDULED',
+      studentId: null, groupId: null } as Awaited<ReturnType<typeof onlineClassesApi.materializeFromCalendar>>);
+    api.start.mockResolvedValue({ id: 'trial-class', eventId: 'local-trial', status: 'LIVE' } as never);
+    render(<I18nProvider><MemoryRouter initialEntries={['/teacher/lessons/local-trial']}><Routes>
+      <Route path="/teacher/lessons/local-trial" element={<StartOnlineClassButton eventId="local-trial" />} />
+      <Route path="/online-classes/trial-class" element={<p>Modern trial classroom</p>} />
+    </Routes></MemoryRouter></I18nProvider>);
+    expect(api.materializeFromCalendar).not.toHaveBeenCalled();
+    expect(api.start).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Начать онлайн-урок' }));
+    expect(await screen.findByText('Modern trial classroom')).toBeInTheDocument();
+    expect(api.materializeFromCalendar).toHaveBeenCalledExactlyOnceWith('local-trial');
+    expect(api.start).toHaveBeenCalledExactlyOnceWith('trial-class');
+  });
+
   it.each(['RU', 'DE'])('does not repeat the obsolete teacher day-only rule after a legacy server rejection (%s)', async language => {
     localStorage.setItem('language', language);
     api.start.mockRejectedValue(new ApiRequestError(409, 'CONFLICT', 'Entry is only available on the lesson day in Europe/Berlin'));

@@ -54,6 +54,7 @@ export function LessonDetailPage() {
   const isNickAiPilot = user?.id === NICK_AI_PILOT_TEACHER_ID;
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
   const hasLessonAudience = Boolean(lesson?.studentId || lesson?.groupId);
+  const modernClassroomEnabled = import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true';
   const [lessonStudents, setLessonStudents] = useState<LessonStudent[]>([]);
   const [preparation, setPreparation] = useState<LessonPreparation | null>(null);
   const [coveredMaterial, setCoveredMaterial] = useState('');
@@ -375,17 +376,21 @@ export function LessonDetailPage() {
             </button>
           )}
           {lesson?.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}
-          {lesson && hasLessonAudience && (
+          {lesson && modernClassroomEnabled && (
             <StartOnlineClassButton eventId={lesson.eventId} />
           )}
           {lesson?.meetUrl && <a className="btn btn--ghost" href={lesson.meetUrl} target="_blank" rel="noreferrer">{t('onlineClass.meetFallback')}</a>}
           {lesson && !hasLessonAudience && (
             <p className="muted" style={{ maxWidth: 340, fontSize: 13 }}>{language === 'DE'
-              ? 'Ordnen Sie diesem Unterricht einen Schüler zu, damit er teilnehmen kann.'
-              : 'Для подключения ученика назначьте его этому уроку'}</p>
+              ? (modernClassroomEnabled
+                ? 'Sie können die Tafel öffnen und den Unterricht ohne Schüler vorbereiten. Ordnen Sie einen Schüler zu und öffnen Sie den Unterricht danach erneut über «Online-Unterricht starten».'
+                : 'Ordnen Sie diesem Unterricht einen Schüler zu, damit er teilnehmen kann.')
+              : (modernClassroomEnabled
+                ? 'Можно открыть доску и подготовить урок без ученика. Для подключения ученика назначьте его этому уроку и снова нажмите «Начать онлайн-урок».'
+                : 'Для подключения ученика назначьте его этому уроку')}</p>
           )}
           {/* Retain the configured standalone board for lessons that do not use the video classroom. */}
-          {user?.role === 'TEACHER' && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && (import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED !== 'true' || !hasLessonAudience) && (
+          {user?.role === 'TEACHER' && lesson && import.meta.env.VITE_MINDCRAFTI_ONLINE_ENABLED === 'true' && !modernClassroomEnabled && (
             <Link className="btn btn--secondary" to={`/lesson-board/${encodeURIComponent(eventId)}`}>
               Mindcrafti доска (тест)
             </Link>
