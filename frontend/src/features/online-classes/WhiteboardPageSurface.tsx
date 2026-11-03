@@ -65,6 +65,7 @@ export interface WhiteboardPageSurfaceProps {
   onScrollGesture?: (dx: number, dy: number) => void;
   onDocumentGesture?: (gesture: DocumentGesture) => void;
   onDocumentPenContact?: (active: boolean) => void;
+  wheelAction?: 'pan' | 'zoom';
   onActivate?: (pageIndex: number) => void;
   onStatusChange?: (pageIndex: number, status: PageSurfaceStatus) => void;
   onAspectChange?: (pageIndex: number, aspect: number | null) => void;
@@ -105,6 +106,7 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
   onScrollGesture,
   onDocumentGesture,
   onDocumentPenContact,
+  wheelAction = 'pan',
   onActivate,
   onStatusChange,
   onAspectChange,
@@ -288,6 +290,7 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
         view={view}
         onViewChange={onViewChange}
         navigationLocked={navigationLocked}
+        wheelAction={wheelAction}
         onScrollGesture={continuous ? onScrollGesture : undefined}
         onDocumentGesture={continuous && targetType === 'WHITEBOARD' ? onDocumentGesture : undefined}
         onDocumentPenContact={continuous && targetType === 'WHITEBOARD' ? onDocumentPenContact : undefined}

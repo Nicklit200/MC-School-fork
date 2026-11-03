@@ -118,6 +118,24 @@ test('children scroll between worksheet pages and submit ink from both pages', a
   await expect(page.getByText('Hausaufgabe wurde abgegeben.', { exact: true })).toBeVisible();
 });
 
+test('plain trackpad wheel over the homework ink canvas scrolls the page without zooming or drawing', async ({ page }) => {
+  await openHomework(page);
+  const canvas = page.getByTestId('homework-ink-0');
+  await canvas.scrollIntoViewIfNeeded();
+  await expect(canvas).toHaveCSS('opacity', '1');
+  const box = await canvas.boundingBox();
+  const before = await page.evaluate(() => window.scrollY);
+  const pixels = await canvas.evaluate(node => node.toDataURL());
+  const y = Math.min(Math.max(box.y + box.height * .3, 160), page.viewportSize().height - 120);
+  await page.mouse.move(box.x + box.width * .5, y);
+  await page.mouse.wheel(0, 450);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before + 150);
+  expect(Math.abs((await canvas.boundingBox()).width - box.width)).toBeLessThan(1);
+  expect(await canvas.evaluate(node => node.toDataURL())).toBe(pixels);
+  expect(await page.evaluate(() => window.visualViewport.scale)).toBe(1);
+  await expect(toolbar(page).getByRole('button', { name: 'Rückgängig', exact: true })).toBeDisabled();
+});
+
 test('the lesson-board toolbar applies pen settings and erases real homework ink', async ({ page }) => {
   await openHomework(page);
   await expect(toolbar(page)).toHaveCount(1);

@@ -114,6 +114,54 @@ function animationFrames() {
 }
 
 describe('WhiteboardCanvas wheel navigation', () => {
+  it('zooms opted-in lesson pages with plain vertical wheel around the cursor and never creates ink', () => {
+    const frames = animationFrames(), onViewChange = vi.fn(), onCommit = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} wheelAction="zoom" onViewChange={onViewChange} onCommit={onCommit} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ left: 100, top: 50, width: 1000, height: 500 } as DOMRect);
+    const up = new WheelEvent('wheel', { deltaY: -20, clientX: 400, clientY: 250, bubbles: true, cancelable: true });
+    fireEvent(surface, up);
+    fireEvent.wheel(surface, { deltaY: -1, deltaMode: 1, clientX: 400, clientY: 250 });
+    expect(onViewChange).not.toHaveBeenCalled(); expect(up.defaultPrevented).toBe(true);
+    frames.flush();
+    const enlarged = onViewChange.mock.lastCall![0];
+    expect(enlarged.zoom).toBeCloseTo(Math.exp(.072));
+    expect(screenToBoard({ x: 300, y: 200 }, enlarged)).toEqual({ x: 300, y: 200 });
+    fireEvent.wheel(surface, { deltaY: 20, clientX: 400, clientY: 250 }); frames.flush();
+    expect(onViewChange.mock.lastCall![0].zoom).toBeLessThan(enlarged.zoom);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('routes opted-in continuous plain wheel once, keeping horizontal-only wheel as pan', () => {
+    const onDocumentGesture = vi.fn(), onScrollGesture = vi.fn(), onViewChange = vi.fn(), outerWheel = vi.fn();
+    const { container } = render(<div onWheel={outerWheel}><WhiteboardCanvas {...props} wheelAction="zoom"
+      onDocumentGesture={onDocumentGesture} onScrollGesture={onScrollGesture} onViewChange={onViewChange} /></div>);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    const wheel = new WheelEvent('wheel', { deltaY: -20, clientX: 300, clientY: 200, bubbles: true, cancelable: true });
+    fireEvent(surface, wheel);
+    expect(onDocumentGesture).toHaveBeenCalledExactlyOnceWith({ scale: Math.exp(.04), anchor: { x: 300, y: 200 }, pan: { x: 0, y: 0 } });
+    expect(wheel.defaultPrevented).toBe(true); expect(outerWheel).not.toHaveBeenCalled();
+    fireEvent.wheel(surface, { deltaX: 40, deltaY: 0 });
+    expect(onScrollGesture).toHaveBeenCalledExactlyOnceWith(40, 0);
+    expect(onViewChange).not.toHaveBeenCalled();
+  });
+
+  it.each([{ navigationLocked: true }, { active: false }])('blocks opted-in wheel zoom while navigation is unavailable: %j', blocked => {
+    const frames = animationFrames(), onViewChange = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} wheelAction="zoom" onViewChange={onViewChange} {...blocked} />);
+    fireEvent.wheel(container.querySelector('.whiteboard__surface')!, { deltaY: -20 }); frames.flush();
+    expect(onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('leaves wheel scrolling inside an editable board field native', () => {
+    const frames = animationFrames(), onViewChange = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} wheelAction="zoom" onViewChange={onViewChange} />);
+    const input = document.createElement('textarea'); container.querySelector('.whiteboard__surface')!.append(input);
+    const wheel = new WheelEvent('wheel', { deltaY: -20, bubbles: true, cancelable: true });
+    fireEvent(input, wheel); frames.flush();
+    expect(wheel.defaultPrevented).toBe(false); expect(onViewChange).not.toHaveBeenCalled();
+  });
+
   it('accumulates rapid paged zoom once per frame and preserves the local cursor anchor', () => {
     const frames = animationFrames(), onViewChange = vi.fn();
     const { container } = render(<WhiteboardCanvas {...props} onViewChange={onViewChange} />);

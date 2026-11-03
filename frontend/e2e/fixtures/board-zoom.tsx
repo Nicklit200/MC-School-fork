@@ -14,6 +14,10 @@ import '../../src/online-classes.css';
 localStorage.setItem('language', 'RU');
 localStorage.setItem('mc.board.pageLayout:zoom-teacher', new URLSearchParams(location.search).get('layout') === 'paged' ? 'paged' : 'continuous');
 const operations: unknown[] = [];
+const wheelEvents: Array<{ trusted: boolean; ctrl: boolean; meta: boolean; deltaY: number }> = [];
+window.addEventListener('wheel', event => {
+  wheelEvents.push({ trusted: event.isTrusted, ctrl: event.ctrlKey, meta: event.metaKey, deltaY: event.deltaY });
+}, { capture: true, passive: true });
 onlineClassesApi.listParticipants = async () => [{ userId: 'zoom-teacher', classRole: 'HOST' } as never];
 onlineClassesApi.listAnnotationDocuments = async () => [];
 onlineClassesApi.openAnnotationDocument = async (classId, targetType, targetId, pageIndex = 0) => ({
@@ -46,9 +50,17 @@ const document: PdfDoc = {
 };
 Object.assign(window, { boardZoomFixture: {
   operations,
+  wheelEvents,
   stages: () => Konva.stages.filter(stage => stage.container().getClientRects().length).map(stage => ({
     x: stage.x(), y: stage.y(), scaleX: stage.scaleX(), scaleY: stage.scaleY(),
   })),
+  paperBox: () => {
+    const stage = Konva.stages.find(stage => stage.container().getClientRects().length);
+    const image = stage?.findOne('Image');
+    if (!stage || !image) return null;
+    const container = stage.container().getBoundingClientRect(), box = image.getClientRect();
+    return { x: container.x + box.x, y: container.y + box.y, width: box.width, height: box.height };
+  },
 } });
 const room = new Room();
 createRoot(window.document.getElementById('root')!).render(

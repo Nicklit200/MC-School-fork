@@ -81,6 +81,8 @@ export interface WhiteboardCanvasHandle {
   getSize: () => { width: number; height: number };
   /** Parent owns a multi-touch document gesture, including contacts on other pages. */
   setDocumentNavigation?: (active: boolean) => void;
+  /** Zoom from the page's surrounding margin using the same local RAF queue. */
+  zoomAt?: (scale: number, clientPoint: Point) => void;
 }
 
 export interface RemoteLaser {
@@ -113,6 +115,8 @@ interface Props {
   onDocumentGesture?: (gesture: DocumentGesture) => void;
   /** Native iPad Pencil may have no Pointer Events for the document parent. */
   onDocumentPenContact?: (active: boolean) => void;
+  /** Lesson boards opt in; worksheets keep their ordinary wheel scrolling. */
+  wheelAction?: 'pan' | 'zoom';
   /** Student under follow mode: the canvas may not be moved by the viewer. */
   navigationLocked?: boolean;
   /** Rendered page content (PDF page) under the marks. */
@@ -169,6 +173,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     onScrollGesture,
     onDocumentGesture,
     onDocumentPenContact,
+    wheelAction = 'pan',
     navigationLocked = false,
     background = null,
     notebookView = null,
@@ -252,6 +257,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   onDocumentGestureRef.current = onDocumentGesture;
   const activeRef = useRef(active);
   activeRef.current = active;
+  const wheelActionRef = useRef(wheelAction);
+  wheelActionRef.current = wheelAction;
   const documentPenCallback = useRef(onDocumentPenContact);
   documentPenCallback.current = onDocumentPenContact;
   const nativePenContact = useRef(false);
@@ -374,6 +381,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       }) ?? null;
     },
     getSize: () => live.current.viewport,
+    zoomAt: (scale, clientPoint) => zoomAtClient(scale, clientPoint),
     setDocumentNavigation: active => {
       if (externalNavigation.current === active) return;
       // This flag must change before cancelling the draft: the parent calls us
@@ -934,19 +942,24 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     };
   }, [controller, tabletNavigation, textEdit]);
 
+  const zoomAtClient = (scale: number, clientPoint: Point) => {
+    if (!activeRef.current || lockedRef.current || controller.isDrawing || !Number.isFinite(scale) || scale <= 0) return;
+    if (onDocumentGestureRef.current) {
+      onDocumentGestureRef.current({ scale, anchor: clientPoint, pan: { x: 0, y: 0 } });
+    } else if (onViewChangeRef.current) {
+      const rect = containerRef.current?.getBoundingClientRect();
+      const local = { x: clientPoint.x - (rect?.left ?? 0), y: clientPoint.y - (rect?.top ?? 0) };
+      queueWheelView(zoomAbout(wheelView.current, wheelView.current.zoom * scale, local, live.current.viewport));
+    }
+  };
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (navigationLocked || controller.isDrawing) { if (onScrollGesture || onDocumentGesture) event.stopPropagation(); return; }
-    const local = localPoint(event);
-    // Ctrl/⌘ + wheel (and trackpad pinch, which arrives the same way) zooms;
-    // a plain wheel scrolls the zoomed page.
-    if (event.ctrlKey || event.metaKey) {
+    if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (!active || navigationLocked || controller.isDrawing) { if (onScrollGesture || onDocumentGesture) event.stopPropagation(); return; }
+    // Lesson boards use vertical trackpad scrolling as cursor-anchored zoom.
+    // Other canvas consumers retain wheel scrolling and Ctrl/⌘ pinch zoom.
+    if (event.ctrlKey || event.metaKey || (wheelAction === 'zoom' && event.deltaY !== 0)) {
       event.stopPropagation();
-      const scale = wheelZoomScale(event, live.current.viewport.height);
-      if (onDocumentGestureRef.current) {
-        onDocumentGestureRef.current({ scale, anchor: { x: event.clientX, y: event.clientY }, pan: { x: 0, y: 0 } });
-      } else if (onViewChangeRef.current) {
-        queueWheelView(zoomAbout(wheelView.current, wheelView.current.zoom * scale, local, live.current.viewport));
-      }
+      zoomAtClient(wheelZoomScale(event, live.current.viewport.height), { x: event.clientX, y: event.clientY });
     } else if (onScrollGesture) {
       event.stopPropagation();
       const delta = wheelDeltaPixels(event, live.current.viewport.height);
@@ -963,7 +976,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     // React's wheel listener is passive in browsers. Prevent native scrolling
     // separately, so one wheel event cannot move the document twice.
     const preventNativeWheel = (event: WheelEvent) => {
-      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey) && (onViewChangeRef.current || onDocumentGestureRef.current))
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (onScrollGestureRef.current || ((event.ctrlKey || event.metaKey || (wheelActionRef.current === 'zoom' && event.deltaY !== 0)) && (onViewChangeRef.current || onDocumentGestureRef.current))
           || (wheelView.current.zoom > 1 && onViewChangeRef.current)) event.preventDefault();
     };
     surface.addEventListener('wheel', preventNativeWheel, { passive: false });

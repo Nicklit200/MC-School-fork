@@ -117,6 +117,14 @@ describe('WhiteboardPageSurface', () => {
     }));
   });
 
+  it('defaults to worksheet wheel scrolling and forwards the lesson-only zoom opt-in', async () => {
+    const { rerender } = render(<WhiteboardPageSurface {...baseProps} />);
+    await ready();
+    expect(canvas().wheelAction).toBe('pan');
+    rerender(<WhiteboardPageSurface {...baseProps} wheelAction="zoom" />);
+    expect(canvas().wheelAction).toBe('zoom');
+  });
+
   it('announces a blank page only after its annotation document has been persisted', async () => {
     let resolve!: (value: AnnotationDocument) => void;
     api.openAnnotationDocument.mockReturnValueOnce(new Promise(done => { resolve = done; }));

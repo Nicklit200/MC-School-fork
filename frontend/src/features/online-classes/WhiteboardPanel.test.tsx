@@ -32,6 +32,7 @@ let canvasProps: CanvasProps = {};
 const pageCanvasProps = new Map<string, CanvasProps>();
 const canvasDocumentNavigation = new Map<string, ReturnType<typeof vi.fn>>();
 const canvasSnapshot = vi.fn((mimeType?: string) => mimeType === 'image/jpeg' ? 'data:image/jpeg;base64,/9j/2Q==' : 'data:image/png;base64,AAA');
+const canvasZoomAt = vi.fn();
 vi.mock('./WhiteboardCanvas', () => ({
   WhiteboardCanvas: forwardRef((props: CanvasProps, ref) => {
     const documentNavigation = useRef(vi.fn());
@@ -42,8 +43,9 @@ vi.mock('./WhiteboardCanvas', () => ({
       toDataURL: canvasSnapshot,
       getSize: () => ({ width: 1000, height: 500 }),
       setDocumentNavigation: documentNavigation.current,
+      zoomAt: (scale: number, anchor: { x: number; y: number }) => canvasZoomAt(props.pageKey, scale, anchor),
     }));
-    return <div data-testid="canvas" data-page-key={props.pageKey} data-locked={String(props.navigationLocked)} />;
+    return <div className="whiteboard__surface" data-testid="canvas" data-page-key={props.pageKey} data-locked={String(props.navigationLocked)} />;
   }),
 }));
 
@@ -557,7 +559,7 @@ describe('WhiteboardPanel', () => {
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it.each([false, true])('routes a gap pinch-wheel once and respects teacher navigation locking: %s', async locked => {
+  it.each([false, true])('routes plain and pinch wheel over a gap once and respects teacher navigation locking: %s', async locked => {
     chooseLayout(locked ? 'student' : 'teacher', 'continuous');
     const observers = documentObservers();
     try {
@@ -568,9 +570,9 @@ describe('WhiteboardPanel', () => {
       act(() => observers.resize());
       if (locked) await act(async () => handlers[VIEW_TOPIC]({ event: hostView({ page: 0, documentView: { zoom: 1, x: .5, y: .5 } }), senderIdentity: 'teacher|tab' }));
       const width = pages[0].offsetWidth;
-      const ordinaryWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 80, clientX: 500, clientY: 350 });
+      const ordinaryWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -20, clientX: 500, clientY: 350 });
       fireEvent(rail, ordinaryWheel);
-      expect(ordinaryWheel.defaultPrevented).toBe(false);
+      expect(ordinaryWheel.defaultPrevented).toBe(true);
       const pageWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -25, clientX: 500, clientY: 350 });
       fireEvent(screen.getAllByTestId('canvas')[0], pageWheel);
       expect(pageWheel.defaultPrevented).toBe(false);
@@ -579,10 +581,33 @@ describe('WhiteboardPanel', () => {
       fireEvent(rail, gapWheel);
       expect(gapWheel.defaultPrevented).toBe(true);
       act(() => observers.frame());
-      expect(pages[0].offsetWidth).toBeCloseTo(width * (locked ? 1 : Math.exp(.1)));
-      expect(parseFloat(rail.style.gap)).toBeCloseTo(24 * (locked ? 1 : Math.exp(.1)));
+      expect(pages[0].offsetWidth).toBeCloseTo(width * (locked ? 1 : Math.exp(.14)));
+      expect(parseFloat(rail.style.gap)).toBeCloseTo(24 * (locked ? 1 : Math.exp(.14)));
       expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.view).toBe(DEFAULT_VIEW);
+      expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.wheelAction).toBe('zoom');
     } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('delegates paged lesson margins to the active canvas zoom queue', async () => {
+    chooseLayout('teacher', 'paged');
+    const { container } = mount('host');
+    await screen.findByTestId('canvas');
+    const list = container.querySelector('.whiteboard__pages')!;
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -20, clientX: 500, clientY: 350 });
+    fireEvent(list, wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(canvasZoomAt).toHaveBeenCalledExactlyOnceWith('WHITEBOARD:board-1:0', Math.exp(.04), { x: 500, y: 350 });
+    expect(canvasProps.wheelAction).toBe('zoom');
+  });
+
+  it('keeps notebook-camera wheel scrolling outside the lesson zoom opt-in', async () => {
+    const { container } = mount('host', { targetType: 'NOTEBOOK_CAMERA', targetId: 'personal-student' });
+    await screen.findByTestId('canvas');
+    const list = container.querySelector('.whiteboard__pages')!;
+    expect(canvasProps.wheelAction).toBe('pan');
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -20 });
+    fireEvent(list, wheel);
+    expect(wheel.defaultPrevented).toBe(false); expect(canvasZoomAt).not.toHaveBeenCalled();
   });
 
   it('takes over an existing page contact when the second finger lands in a gap, then releases every canvas', async () => {
