@@ -32,7 +32,9 @@
     ['problem_text','Сложность в начале',3],['narrative','История работы и результат',5],['period_text','Период',1],
     ['footer_text','Нижняя подпись',1],['brand_subtitle','Текст под логотипом',1]
   ];
-  const contentFields = () => project.story.kind==='progress'?progressFields:textFields;
+  const contentFields = () => project.story.kind==='progress'
+    ? progressFields.flatMap(field=>field[0]==='headline_2'&&project.html.includes('{{subheadline}}')?[field,['subheadline','Формат занятий',1]]:[field])
+    : textFields;
   const palette = {
     brand:{accent:'#FF6A00',ink:'#0A2463',background:'#FFFFFF',soft:'#F9EEE5',card:'#FFFFFF',muted:'#8190A5',divider:'#F0DED0',decoration:'#FFF1E5'},
     sand:{accent:'#B96D42',ink:'#352F2D',background:'#FFFDFC',soft:'#F7EDE4',card:'#FFFFFF',muted:'#857A72',divider:'#EAD9C9',decoration:'#F7E3D0'},
@@ -163,7 +165,8 @@
       if(before===null)missingScores.push([index,'before']);if(after===null)missingScores.push([index,'after']);
       if(s.assessment?.growthMetric==='scale_percent'){
         const change=before!==null && after!==null?Number((after-before).toFixed(2)):null;
-        variables[`skill_${index+1}_change_percent`]=change===null?'Нет оценки':`${change>0?'+':''}${change}% шкалы`;
+        const unit=s.assessment.growthDisplay==='compact_percent'?'%':'% шкалы';
+        variables[`skill_${index+1}_change_percent`]=change===null?'Нет оценки':`${change>0?'+':''}${change}${unit}`;
       }else{
         const change=before>0 && after!==null?Math.round((after-before)/before*100):null;
         variables[`skill_${index+1}_change_percent`]=change===null?'Новая оценка':`${change>0?'+':''}${change}%`;
@@ -223,6 +226,7 @@
   }
   function queueRender(){clearTimeout(renderTimer);renderTimer=setTimeout(renderNow,90);}
   function renderNow(){
+    updateStoryAction();
     const frame=$('storyFrame');
     frame.onload=()=>{validation();};
     frame.srcdoc=outputDocument(false);
@@ -310,6 +314,7 @@
       updateControls();
     }else if(activeCode==='html'){
       project.html=value;
+      fillContent();updateControls();
     }else{
       let parsed;
       try{parsed=JSON.parse(value);}catch(e){$('codeError').textContent='Неверный JSON: '+e.message;$('codeError').classList.remove('hidden');return false;}
@@ -332,6 +337,24 @@
     $('templateTabs').innerHTML=collection.templates.map(template=>`<button type="button" role="tab" id="tab-${template.id}" aria-controls="templateWorkspace" aria-selected="${template===project}" tabindex="${template===project?'0':'-1'}" data-template="${template.id}">${escapeHtml(plainDashes(template.name))}</button>`).join('');
     $('templateWorkspace').setAttribute('aria-labelledby','tab-'+project.id);
     $('templateName').value=project.name;
+    updateStoryAction();
+  }
+  function updateStoryAction(){
+    const button=$('createStoryBtn');if(!button)return;
+    const reusable=project.story.reusableTemplate===true;
+    button.hidden=!reusable;button.classList.toggle('hidden',!reusable);
+    button.style.display=reusable?'inline-flex':'none';
+    button.disabled=collection.templates.length>=20;
+  }
+  function createStory(){
+    if(!flushCode()||project.story.reusableTemplate!==true)return;
+    if(collection.templates.length>=20){toast('В проекте может быть не более 20 шаблонов');return;}
+    let idIndex=1,nameIndex=1;
+    while(collection.templates.some(template=>template.id==='story-'+idIndex))idIndex++;
+    while(collection.templates.some(template=>template.name==='Новая история '+nameIndex))nameIndex++;
+    const copy=deep(project);copy.id='story-'+idIndex;copy.name='Новая история '+nameIndex;copy.story.reusableTemplate=false;
+    collection.templates.push(copy);initialTemplates.set(copy.id,deep(copy));
+    selectTemplate(copy.id);toast('Новая история создана');
   }
   function selectTemplate(id){
     if(id===project.id)return true;
@@ -431,7 +454,10 @@
   function exportPrompt(){
     if(!flushCode())return;
     const s=project.story;
-    const growthRule=s.assessment?.growthMetric==='scale_percent'?' Прибавку навыка считай как оценка после минус оценка до на полной шкале 0-100. Подписывай результат «% шкалы», например 55 до и 70 после дают «+15% шкалы». Не дели разницу на исходную оценку. Ноль является известной оценкой. Если хотя бы одной оценки нет, пиши «Нет оценки».':'';
+    const growthLabel=s.assessment?.growthDisplay==='compact_percent'
+      ? ' В видимой подписи оставляй только число со знаком и %, например 55 до и 70 после дают «+15%», без слова «шкалы».'
+      : ' Подписывай результат «% шкалы», например 55 до и 70 после дают «+15% шкалы».';
+    const growthRule=s.assessment?.growthMetric==='scale_percent'?' Прибавку навыка считай как оценка после минус оценка до на полной шкале 0-100.'+growthLabel+' Не дели разницу на исходную оценку. Ноль является известной оценкой. Если хотя бы одной оценки нет, пиши «Нет оценки».':'';
     const msg=plainDashes(`Помоги мне настроить выбранный шаблон «${project.name}» генератора Instagram Stories Mindcrafti. Используй фиксированные цвета, размеры и CSS. Не используй длинные тире U+2013 и U+2014: в тексте ставь обычный дефис (-). НЕ публикуй сторис без моего одобрения.${growthRule} ${location.protocol==='file:'?'Сейчас редактор открыт локально, поэтому через облачный браузер ChatGPT эта ссылка недоступна. Для управления через ChatGPT Work требуется HTTPS-размещение.':'Мой редактор доступен по адресу: '+location.href}\n\nТекущий стиль: акцент ${getCSS('--accent')}, текст ${getCSS('--ink')}, заголовок ${getCSS('--title-size')}. Тема: ${s.student_label||s.headline_1} ${s.headline_2} ${s.period_text||s.headline_3}.`);
     navigator.clipboard.writeText(msg).then(()=>toast('Инструкция для ChatGPT скопирована'),()=>window.prompt('Скопируй текст:',msg));
   }
@@ -449,6 +475,7 @@
       project.name=name;renderTemplateTabs();renderNow();toast('Название шаблона сохранено');
     };
     $('renameTemplateBtn').onclick=renameTemplate;
+    if($('createStoryBtn'))$('createStoryBtn').onclick=createStory;
     $('templateName').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renameTemplate();}};
     $('renameTemplateForm').onsubmit=e=>{e.preventDefault();renameTemplate();};
     $('contentControls').addEventListener('input',e=>{
@@ -457,7 +484,8 @@
       if(e.target.dataset.skill!==undefined){
         const index=Number(e.target.dataset.skill), key=e.target.dataset.skillField;
         project.story.skills ||= [];project.story.skills[index] ||= {};
-        project.story.skills[index][key]=key==='name'?e.target.value:Math.max(0,Math.min(100,Number(e.target.value)||0));queueRender();
+        const value=e.target.value.trim();
+        project.story.skills[index][key]=key==='name'?e.target.value:value===''||!Number.isFinite(Number(value))?null:Math.max(0,Math.min(100,Number(value)));queueRender();
       }
     });
     for(const b of document.querySelectorAll('.seg'))b.onclick=()=>{

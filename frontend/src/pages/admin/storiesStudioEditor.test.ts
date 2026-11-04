@@ -10,6 +10,16 @@ const original = { story: { headline_1: 'Исходный текст', items: [{
   html: '<div class="story"><img src="{{logo_src}}"><p>{{headline_1}}</p></div>', assets: { logoSrc: 'data:image/png;base64,YQ==' } };
 type Template = { id: string; name: string; story: Record<string, any>; css: string; html: string };
 type Collection = { schema: string; activeTemplateId: string; assets: { logoSrc: string }; templates: Template[] };
+const progressSource = JSON.parse(html.match(/<script\b[^>]*id="progress-template-data"[^>]*>([\s\S]*?)<\/script>/)![1]);
+function reusableProject(): Collection {
+  const source=structuredClone(progressSource);
+  source.story={...source.story,reusableTemplate:true,student_label:'Имя ученика',subheadline:'Работа в группе',assessment:{growthMetric:'scale_percent',growthDisplay:'compact_percent'},skills:source.story.skills.map((skill: { name: string })=>({name:skill.name,before:null,after:null}))};
+  source.html=source.html.replace('{{headline_2}}','{{subheadline}} {{headline_2}}');
+  return {schema:'mindcrafti.story-studio/2',activeTemplateId:'results-template',assets:structuredClone(original.assets),templates:[
+    {id:'template-1',name:'Новости образования',story:structuredClone(original.story),css:original.css,html:original.html},
+    {id:'results-template',name:'Шаблон результатов',...source},
+  ]};
+}
 const saved = (): Collection => JSON.parse(localStorage.getItem(storageKey)!);
 const input = (selector: string, value: string) => {
   const field = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)!;
@@ -21,8 +31,9 @@ const preview = () => new DOMParser().parseFromString((document.getElementById('
 let listeners: [EventTarget, string, EventListenerOrEventListenerObject, boolean | AddEventListenerOptions | undefined][];
 let blobs: Blob[];
 
-function start(value: unknown = original) {
+function start(value: unknown = original, previousMarkup = false) {
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'));
+  if(previousMarkup)document.getElementById('createStoryBtn')!.remove();
   localStorage.setItem(storageKey, JSON.stringify(value));
   window.eval(script);
 }
@@ -49,6 +60,13 @@ afterEach(() => {
 });
 
 describe('Stories Studio named editor templates', () => {
+  it('still boots with the previous cached markup that has no create-story action', () => {
+    expect(()=>start(original,true)).not.toThrow();
+    expect(preview().body.textContent).toContain('Исходный текст');
+    progress();expect(preview().querySelector('.pill-label')?.textContent).toBe('Результаты учеников');
+    expect(saved().templates).toHaveLength(2);
+  });
+
   it.each(['button', 'enter'])('migrates the original exactly and keeps it unchanged through switching and renaming with %s', action => {
     start();
     expect(saved().schema).toBe('mindcrafti.story-studio/2');
@@ -127,6 +145,79 @@ describe('Stories Studio named editor templates', () => {
     expect(prompt).toContain('оценка после минус оценка до');expect(prompt).toContain('+15% шкалы');
     expect(prompt).toContain('Не дели разницу на исходную оценку');expect(prompt).toContain('Нет оценки');
     expect(prompt).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  it.each([[55,70,'+15%'],[65,70,'+5%'],[0,20,'+20%'],[70,65,'-5%'],[70,70,'0%'],[null,70,'Нет оценки']])
+    ('renders opted-in compact full-scale labels for %s to %s as %s', (before,after,expected) => {
+      const source=reusableProject();source.templates[1].story.skills[0]={name:'Учебный навык',before,after};start(source);
+      expect(preview().querySelector('.skill-delta')?.textContent).toBe(expected);
+    });
+
+  it('copies the compact label rule with full-scale math while a legacy mode ignores the compact flag', async () => {
+    const source=reusableProject();start(source);click('#copyPromptBtn');await Promise.resolve();
+    const prompt=vi.mocked(navigator.clipboard.writeText).mock.lastCall![0];
+    expect(prompt).toContain('полной шкале 0-100');expect(prompt).toContain('«+15%»');
+    expect(prompt).toContain('без слова «шкалы»');expect(prompt).toContain('Не дели разницу на исходную оценку');
+    expect(prompt).not.toContain('+15% шкалы');
+    const content=source.templates[1].story;content.assessment.growthMetric='relative_percent';content.skills[0]={name:'Навык',before:55,after:70};
+    click('[data-code="json"]');input('#codeEditor',JSON.stringify(content));vi.advanceTimersByTime(400);
+    expect(preview().querySelector('.skill-delta')?.textContent).toBe('+27%');
+  });
+
+  it('creates independent stories from a reusable source, preserving the base and registering each reset snapshot', () => {
+    const source=reusableProject();start(source);
+    expect(document.getElementById('createStoryBtn')).toHaveAttribute('type','button');
+    expect(document.getElementById('createStoryBtn')).not.toHaveAttribute('hidden');
+    click('#createStoryBtn');const first=saved().templates[2];
+    expect(first).toEqual({...source.templates[1],id:'story-1',name:'Новая история 1',story:{...source.templates[1].story,reusableTemplate:false}});
+    expect(saved().activeTemplateId).toBe('story-1');expect(saved().templates.slice(0,2)).toEqual(source.templates);expect(saved().assets).toEqual(source.assets);
+    expect(document.getElementById('createStoryBtn')).toHaveAttribute('hidden');
+    input('[data-content="student_label"]','Новая подпись');input('[data-skill="0"][data-skill-field="before"]','55');vi.advanceTimersByTime(100);
+    click('[data-template="results-template"]');expect(saved().templates[1]).toEqual(source.templates[1]);
+    click('#createStoryBtn');expect(saved().activeTemplateId).toBe('story-2');expect(saved().templates[3].name).toBe('Новая история 2');
+    expect(saved().templates[3].story.skills[0].before).toBeNull();
+    click('[data-template="story-1"]');click('#resetBtn');
+    expect(saved().templates[2]).toEqual(first);expect(saved().templates[1]).toEqual(source.templates[1]);
+    click('[data-template="template-1"]');expect(document.getElementById('createStoryBtn')).toHaveAttribute('hidden');
+  });
+
+  it('flushes valid raw edits into the clone and blocks cloning invalid raw JSON', () => {
+    start(reusableProject());const css=saved().templates[1].css+'\n.clone-edit{color:red}';
+    input('#codeEditor',css).focus();click('#createStoryBtn');
+    expect(saved().templates[2].css).toBe(css);expect(saved().templates[1].css).toBe(css);
+    click('[data-template="results-template"]');click('[data-code="json"]');input('#codeEditor','{invalid').focus();click('#createStoryBtn');
+    expect(saved().templates).toHaveLength(3);expect(saved().activeTemplateId).toBe('results-template');
+    expect(document.getElementById('codeError')).not.toHaveClass('hidden');
+  });
+
+  it('keeps a cleared manual score unknown while accepting an explicit zero', () => {
+    start(reusableProject());click('#createStoryBtn');
+    input('[data-skill="0"][data-skill-field="before"]','55');input('[data-skill="0"][data-skill-field="after"]','70');vi.advanceTimersByTime(100);
+    input('[data-skill="0"][data-skill-field="before"]','');vi.advanceTimersByTime(100);
+    expect(saved().templates[2].story.skills[0].before).toBeNull();
+    expect(preview().querySelector('.tube-row.before .tube-value')?.textContent).toBe('?');
+    expect(preview().querySelector('.skill-delta')?.textContent).toBe('Нет оценки');
+    input('[data-skill="0"][data-skill-field="before"]','0');vi.advanceTimersByTime(100);
+    expect(saved().templates[2].story.skills[0].before).toBe(0);
+    expect(preview().querySelector('.tube-row.before .tube-value')?.textContent).toBe('0%');
+    expect(preview().querySelector('.skill-delta')?.textContent).toBe('+70%');
+  });
+
+  it('never exceeds the twenty-template limit and uses unique ids and names after restore', () => {
+    const source=reusableProject();source.templates.push({...structuredClone(source.templates[0]),id:'story-1',name:'Новая история 1'});
+    start(source);click('#createStoryBtn');expect(saved().templates[3]).toMatchObject({id:'story-2',name:'Новая история 2'});
+    const full=reusableProject();while(full.templates.length<20)full.templates.push({...structuredClone(full.templates[0]),id:'existing-'+full.templates.length});
+    start(full);expect(document.getElementById('createStoryBtn')).toBeDisabled();click('#createStoryBtn');
+    expect(saved().templates).toHaveLength(20);expect(saved().templates).toEqual(full.templates);
+  });
+
+  it('offers a format field only when the active progress HTML binds it, including after raw HTML changes', () => {
+    start();progress();expect(document.querySelector('[data-content="subheadline"]')).toBeNull();
+    click('[data-code="html"]');input('#codeEditor',saved().templates[1].html.replace('{{headline_2}}','{{subheadline}} {{headline_2}}'));vi.advanceTimersByTime(400);
+    expect(document.querySelector('[data-content="subheadline"]')?.parentElement).toHaveTextContent('Формат занятий');
+    input('[data-content="subheadline"]','Индивидуально');vi.advanceTimersByTime(100);expect(preview().body.textContent).toContain('Индивидуально');
+    click('[data-code="html"]');input('#codeEditor',saved().templates[1].html.replace('{{subheadline}}',''));vi.advanceTimersByTime(400);
+    expect(document.querySelector('[data-content="subheadline"]')).toBeNull();
   });
 
   it('binds a delayed photo to its originating template after switching', () => {
