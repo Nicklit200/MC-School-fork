@@ -14,6 +14,15 @@ describe('Stories Studio project formats', () => {
     expect(serializeStudioProject(serialized, logo)).toBe(serialized);
   });
 
+  it('round-trips archived sources and unknown root metadata without adding them to the visible templates', () => {
+    const archivedStories=Array.from({length:4},(_,index)=>({...first,id:`completed-${index+1}`,name:`Готовая история ${index+1}`}));
+    const archived={...collection,templates:[{...first,name:'Шаблон новостей'},{...second,name:'Результаты учеников'}],archivedStories,customRoot:{preserved:['unknown',7]}};
+    const serialized=serializeStudioProject(JSON.stringify(archived),logo);
+    expect(JSON.parse(serialized)).toEqual(archived);
+    expect(JSON.parse(serialized).templates).toHaveLength(2);
+    expect(serializeStudioProject(serialized,logo)).toBe(serialized);
+  });
+
   it('preserves original legacy fields and logo while permitting a missing legacy logo fallback', () => {
     const legacy = { story: first.story, css: first.css, html: first.html, assets: { logoSrc: logo } };
     expect(JSON.parse(serializeStudioProject(JSON.stringify(legacy), 'data:image/png;base64,Yg=='))).toEqual({ schema: 'mindcrafti.story-studio/1', ...legacy });
@@ -35,5 +44,6 @@ describe('Stories Studio project formats', () => {
   it('retains the existing whole-project character limit', () => {
     const large = { ...collection, templates: [{ ...first, css: 'x'.repeat(1_900_001) }, second] };
     expect(() => serializeStudioProject(JSON.stringify(large), logo)).toThrow('too large');
+    expect(() => serializeStudioProject(JSON.stringify({...collection,archivedStories:[{...first,css:'x'.repeat(1_900_001)}]}),logo)).toThrow('too large');
   });
 });

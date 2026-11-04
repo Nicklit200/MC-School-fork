@@ -78,6 +78,28 @@ describe('Stories Studio cloud connection', () => {
     expect(stored.templates[0]).toEqual(first); expect(stored.templates[1].name).toBe('Переименовано');
   });
 
+  it('preserves archived stories through cloud hydration, a visible-template edit, save and reload', async () => {
+    const news={id:'template-1',name:'Шаблон новостей',...JSON.parse(project('Новости'))};
+    const results={id:'results-template',name:'Результаты учеников',...JSON.parse(project('Результаты'))};
+    const archivedStories=Array.from({length:4},(_,index)=>({...JSON.parse(project('Архив '+index)),id:`completed-${index}`,name:'Готовая история',css:'\r\n.story { --custom:  12px; }\n',story:{headline_1:'Учебный пример',unknown:{retained:true}}}));
+    const collection={schema:'mindcrafti.story-studio/2',activeTemplateId:'results-template',assets:{logoSrc:logo},templates:[news,results],archivedStories,customRoot:{retained:true}};
+    vi.mocked(storyStudioApi.get).mockResolvedValue({...info(9),projectJson:JSON.stringify(collection)});
+    const view=render(<AdminMindcraftiStudioPage />);
+    const frame=screen.getByTitle('Mindcrafti Stories Studio') as HTMLIFrameElement;
+    const hydrate=vi.spyOn(frame.contentWindow!,'postMessage');await message('ready');
+    expect(JSON.parse(hydrate.mock.lastCall![0].payload)).toEqual(collection);
+    const edited=structuredClone(collection);edited.templates[1].story.headline_1='Измененный результат';
+    await message('save',JSON.stringify(edited));await settle();
+    const [version,saved]=vi.mocked(storyStudioApi.save).mock.lastCall!;
+    expect(version).toBe(9);expect(JSON.parse(saved)).toEqual(edited);
+    expect(JSON.parse(saved).templates).toHaveLength(2);expect(JSON.parse(saved).archivedStories).toEqual(archivedStories);
+    view.unmount();vi.mocked(storyStudioApi.get).mockResolvedValue({...info(10),projectJson:saved});
+    render(<AdminMindcraftiStudioPage />);
+    const reloaded=screen.getByTitle('Mindcrafti Stories Studio') as HTMLIFrameElement;
+    const rehydrate=vi.spyOn(reloaded.contentWindow!,'postMessage');await message('ready');
+    expect(JSON.parse(rehydrate.mock.lastCall![0].payload)).toEqual(edited);
+  });
+
   it('keeps a stale local draft as recovery rather than overwriting cloud data', async () => {
     localStorage.setItem('mindcrafti.admin-studio.project.v2:admin-one', JSON.stringify({ projectJson: canonical('Local'), baseVersion: 1, pending: true }));
     vi.mocked(storyStudioApi.get).mockResolvedValue({ ...info(4), projectJson: canonical('Cloud') });

@@ -24,7 +24,10 @@ async function openStudio(page, reusable = false) {
     initial = { schema: 'mindcrafti.story-studio/2', activeTemplateId: 'template-1', assets: initial.assets, templates: [
       { id: 'template-1', name: 'Новости образования', story: initial.story, css: initial.css, html: initial.html },
       { id: 'results-template', name: 'Шаблон результатов', ...source },
-    ] };
+    ], archivedStories: Array.from({ length:4 }, (_,index) => ({
+      id: `completed-${index+1}`, name: `Готовая история ${index+1}`, story: { headline_1:'Учебный пример', customArchive:{ retained:true } },
+      css:'\r\n.story { --archive:  12px; }\n', html:'<div>{{headline_1}}</div>',
+    })), customRoot:{ retained:['archive metadata',7] } };
   }
   const cloud = { project: initial, version: 7, writes: [], errors: [] };
   const snapshot = () => {
@@ -202,6 +205,7 @@ test('full-scale change survives a cloud save and reload and exports the same co
 test('a connector-provided anonymous template edits, saves, restores and exports without a create action', async ({ page }) => {
   const cloud = await openStudio(page, true);
   const news = structuredClone(cloud.project.templates[0]);
+  const archivedStories = structuredClone(cloud.project.archivedStories), customRoot = structuredClone(cloud.project.customRoot);
   await expect(studio(page).locator('#createStoryBtn')).toHaveCount(0);
   await selectTemplate(page, 'results-template');
   await expect(rendered(page).locator('.skill-delta')).toHaveText(['Нет оценки', 'Нет оценки']);
@@ -216,10 +220,15 @@ test('a connector-provided anonymous template edits, saves, restores and exports
   await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15%', '+5%']);
   await expect.poll(() => cloud.project.templates?.[1]?.story.skills.map(({ before, after }) => [before,after])).toEqual([[55,70],[65,70]]);
   expect(cloud.project.templates).toHaveLength(2);expect(cloud.project.templates[0]).toEqual(news);
+  expect(cloud.project.archivedStories).toEqual(archivedStories);expect(cloud.project.customRoot).toEqual(customRoot);
   expect(cloud.project.templates[1].story).toMatchObject({ reusableTemplate: true, student_label: 'Учебный пример', subheadline: 'Индивидуально', assessment: { growthMetric: 'scale_percent', growthDisplay: 'compact_percent' } });
   await page.reload();
   await expect(studio(page).locator('[data-template="results-template"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(studio(page).locator('#templateTabs [role="tab"]')).toHaveCount(2);
   await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15%', '+5%']);
+  const project = await download(page, () => studio(page).locator('#saveProjectBtn').click());
+  const restored = JSON.parse(project.bytes.toString('utf8'));
+  expect(restored.templates).toHaveLength(2);expect(restored.archivedStories).toEqual(archivedStories);expect(restored.customRoot).toEqual(customRoot);
   const output = await download(page, () => studio(page).locator('#exportHtmlBtn').click());
   expect(output.bytes.toString('utf8')).toContain('+15%');
   expect(output.bytes.toString('utf8')).toContain('Индивидуально');

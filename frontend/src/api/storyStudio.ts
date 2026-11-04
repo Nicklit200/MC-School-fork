@@ -50,7 +50,7 @@ export function serializeStudioProject(raw: string, logoSrc: string): string {
       ids.add(template.id);
     }
     if (typeof parsed.activeTemplateId !== 'string' || !ids.has(parsed.activeTemplateId)) throw new Error('Invalid active Studio template');
-    project = { schema: 'mindcrafti.story-studio/2', activeTemplateId: parsed.activeTemplateId,
+    project = { ...parsed, schema: 'mindcrafti.story-studio/2', activeTemplateId: parsed.activeTemplateId,
       assets: { ...parsed.assets, logoSrc: originalLogo }, templates: parsed.templates };
   } else {
     if ((parsed.schema !== undefined && parsed.schema !== 'mindcrafti.story-studio/1') || !source(parsed)) throw new Error('Invalid Studio project');
