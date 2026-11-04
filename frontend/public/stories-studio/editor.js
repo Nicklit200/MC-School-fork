@@ -435,12 +435,15 @@
       const next=e.key==='ArrowRight'?(index+1)%collection.templates.length:e.key==='ArrowLeft'?(index+collection.templates.length-1)%collection.templates.length:e.key==='Home'?0:e.key==='End'?collection.templates.length-1:null;
       if(next!==null){e.preventDefault();if(selectTemplate(collection.templates[next].id))$('tab-'+project.id).focus();}
     };
-    $('renameTemplateForm').onsubmit=e=>{
-      e.preventDefault();if(!flushCode())return;
+    const renameTemplate=()=>{
+      if(!flushCode())return;
       const name=plainDashes($('templateName').value).trim();
       if(!name||name.length>80){toast('Название должно содержать от 1 до 80 символов');return;}
       project.name=name;renderTemplateTabs();renderNow();toast('Название шаблона сохранено');
     };
+    $('renameTemplateBtn').onclick=renameTemplate;
+    $('templateName').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renameTemplate();}};
+    $('renameTemplateForm').onsubmit=e=>{e.preventDefault();renameTemplate();};
     $('contentControls').addEventListener('input',e=>{
       if(e.target.dataset.content){project.story[e.target.dataset.content]=e.target.value;queueRender();}
       if(e.target.dataset.item!==undefined){project.story.items ||= [];const index=Number(e.target.dataset.item);project.story.items[index] ||= {};project.story.items[index].text=e.target.value;queueRender();}

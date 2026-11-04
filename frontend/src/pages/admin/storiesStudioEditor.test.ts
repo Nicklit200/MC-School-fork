@@ -49,13 +49,18 @@ afterEach(() => {
 });
 
 describe('Stories Studio named editor templates', () => {
-  it('migrates the original exactly and keeps it unchanged through switching and renaming the results tab', () => {
+  it.each(['button', 'enter'])('migrates the original exactly and keeps it unchanged through switching and renaming with %s', action => {
     start();
     expect(saved().schema).toBe('mindcrafti.story-studio/2');
     expect(saved().templates[0]).toEqual({ id: 'template-1', name: 'Новости образования', story: original.story, css: original.css, html: original.html });
     expect(saved().assets.logoSrc).toBe(original.assets.logoSrc);
     progress(); input('#templateName', 'Мои результаты');
-    document.getElementById('renameTemplateForm')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(document.getElementById('renameTemplateBtn')).toHaveAttribute('type', 'button');
+    if(action==='button')click('#renameTemplateBtn');
+    else {
+      const enter=new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true});
+      document.getElementById('templateName')!.dispatchEvent(enter);expect(enter.defaultPrevented).toBe(true);
+    }
     input('[data-content="student_label"]', 'Анонимный ученик');
     input('[data-content="problem_text"]', 'Сложно сокращать дроби');
     vi.advanceTimersByTime(100);
