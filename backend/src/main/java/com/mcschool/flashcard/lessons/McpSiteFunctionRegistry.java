@@ -121,8 +121,8 @@ final class McpSiteFunctionRegistry {
         add(functions, "brand_guide", SchoolBrandGuideController.class, Scope.ADMIN, "update");
         add(functions, "stories_template", StoryTemplateMasterController.class, Scope.ADMIN, "info upload download");
         // Studio reads contain the real HTML/CSS/JSON project and embedded logo, not the legacy PPTX.
-        // Full-document writes are deliberately not exposed through the general MCP adapter.
-        add(functions, "stories_studio", StoryStudioProjectController.class, Scope.ADMIN, "info chunk download");
+        // Saving uses the existing private-owner, expected-version controller and a durable MCP receipt.
+        add(functions, "stories_studio", StoryStudioProjectController.class, Scope.ADMIN, "info chunk download save");
         add(functions, "skill_boards", SkillBoardController.class, Scope.CALLER, "get");
         add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save create");
         add(functions, "skill_mastery", SkillMasteryController.class, Scope.CALLER,

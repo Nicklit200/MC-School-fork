@@ -9,7 +9,9 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,8 +23,8 @@ import tools.jackson.databind.ObjectMapper;
 /** The browser editor's project, intentionally separate from the three-slide PPTX store. */
 @Service
 public class StoryStudioProjectService {
-    static final int MAX_CHARS = 1_900_000;
-    static final int MAX_BYTES = 4 * 1024 * 1024;
+    public static final int MAX_CHARS = 1_900_000;
+    public static final int MAX_BYTES = 4 * 1024 * 1024;
     static final int CHUNK_BYTES = 64 * 1024;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
@@ -62,7 +64,7 @@ public class StoryStudioProjectService {
         result.put("chunkCount", (size + CHUNK_BYTES - 1) / CHUNK_BYTES);
         result.put("instructions", stored == null
                 ? "Open Stories Studio once in the original admin browser to sync its existing local project. Do not request a PPTX or substitute a Library template."
-                : "This is the exact admin editor project: story, css, html and assets.logoSrc. Download all chunks with this version and verify SHA-256. Preserve the design and logo. No publication has been scheduled by reading or saving this project.");
+                : "This is the exact private admin editor project, either a legacy story/css/html document or a named template collection, with assets.logoSrc. Download all chunks with this version and verify SHA-256. Preserve every template, unknown story fields and the embedded logo. Saving updates this owner's private project only and does not publish or schedule a story.");
         return result;
     }
 
@@ -104,17 +106,37 @@ public class StoryStudioProjectService {
         try {
             Object parsed = mapper.readValue(json, Object.class);
             if (!(parsed instanceof Map<?, ?> p)
-                    || !(p.get("story") instanceof Map<?, ?>)
-                    || !(p.get("css") instanceof String css) || css.isBlank()
-                    || !(p.get("html") instanceof String html) || html.isBlank()
                     || !(p.get("assets") instanceof Map<?, ?> assets)
                     || !(assets.get("logoSrc") instanceof String logo)
                     || !logo.matches("data:image/(png|webp|jpeg);base64,[A-Za-z0-9+/=\\r\\n]+")) {
                 throw new IllegalArgumentException("Invalid project");
             }
+            if ("mindcrafti.story-studio/2".equals(p.get("schema"))) {
+                if (!(p.get("templates") instanceof List<?> templates) || templates.isEmpty() || templates.size() > 20
+                        || !(p.get("activeTemplateId") instanceof String active)) throw new IllegalArgumentException("Invalid collection");
+                var ids = new HashSet<String>();
+                for (Object entry : templates) {
+                    if (!(entry instanceof Map<?, ?> template)
+                            || !(template.get("id") instanceof String id) || !id.matches("[A-Za-z0-9_-]{1,80}")
+                            || !ids.add(id) || !(template.get("name") instanceof String name)
+                            || name.isBlank() || name.length() > 80 || !validSource(template)) {
+                        throw new IllegalArgumentException("Invalid template");
+                    }
+                }
+                if (!ids.contains(active)) throw new IllegalArgumentException("Active template is missing");
+            } else if ((p.get("schema") != null && !"mindcrafti.story-studio/1".equals(p.get("schema"))) || !validSource(p)) {
+                throw new IllegalArgumentException("Invalid legacy project");
+            }
         } catch (Exception invalid) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Expected Studio story, css, html and embedded original assets.logoSrc");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Expected a valid Studio v1 project or v2 named template collection and embedded original assets.logoSrc");
         }
+    }
+
+    private static boolean validSource(Map<?, ?> source) {
+        return source.get("story") instanceof Map<?, ?>
+                && source.get("css") instanceof String css && !css.isBlank()
+                && source.get("html") instanceof String html && !html.isBlank();
     }
 
     @Transactional(readOnly = true)

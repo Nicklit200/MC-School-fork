@@ -95,6 +95,7 @@ adding a new HTTP endpoint does not make it available through MCH3.
 | `drive` | ADMIN | `listSharedDrives`, `listFolders`, `listPdfFiles`, `download`, `upload`. These raw Drive IDs use the school service account and have no per-teacher folder guard, so the adapter exposes them only to administrators. Teachers use the existing scoped lesson/PDF tools. |
 | `school_prompts`, `brand_guide` | CALLER/ADMIN | Staff reads; administrator updates. BrandGuide also provides `pdf`. Dedicated tools remain preferred. |
 | `stories_template` | ADMIN | `info`, `upload`, `download`; approved master only, no public download-token entry point. |
+| `stories_studio` | ADMIN | `info`, `chunk`, `download`, `save`. Exact private editor project owned by the signed-in administrator, including original embedded logo. Supports legacy v1 and v2 named template collections. `save` requires the current `body.expectedVersion`, explicit confirmation and an idempotency key. Saving does not publish or schedule stories. See [Stories Studio project saves](stories-studio-project-save.md). |
 | `skill_boards`, `skill_mastery` | CALLER/ADMIN | Board read and administrator revision-checked save; existing student/group mastery reads/history/update under the same service access policy. Always read the fresh board before editing it; existing dedicated tools remain preferred. |
 | `account` | CALLER | `updateSettings` (own language settings); passwords excluded. |
 

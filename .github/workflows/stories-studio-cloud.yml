@@ -8,7 +8,12 @@ on:
       - 'backend/src/main/resources/db/migration/*story_studio*'
       - 'backend/src/test/java/com/mcschool/flashcard/settings/StoryStudio*'
       - 'frontend/src/api/storyStudio.ts'
+      - 'frontend/src/api/storyStudio.test.ts'
+      - 'frontend/public/stories-studio/**'
+      - 'frontend/src/pages/admin/mindcrafti-studio.html'
       - 'frontend/src/pages/admin/AdminMindcraftiStudioPage*'
+      - 'frontend/src/pages/admin/storiesStudioEditor.test.ts'
+      - 'frontend/e2e/stories-templates*'
       - '.github/workflows/stories-studio-cloud.yml'
   workflow_dispatch:
 
@@ -51,7 +56,7 @@ jobs:
         run: npm ci
       - name: Test cloud synchronization and original design preservation
         working-directory: frontend
-        run: npm test -- src/pages/admin/AdminMindcraftiStudioPage.test.tsx
+        run: npm test -- src/pages/admin/AdminMindcraftiStudioPage.test.tsx src/pages/admin/storiesStudioEditor.test.ts src/api/storyStudio.test.ts
       - name: Compile and build frontend
         working-directory: frontend
         run: npm run build

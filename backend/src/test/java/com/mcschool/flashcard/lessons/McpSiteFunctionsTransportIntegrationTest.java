@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -120,7 +123,7 @@ class McpSiteFunctionsTransportIntegrationTest {
                 "prepare_lesson", "get_skill_board", "assign_homework_series", "update_school_prompt", "update_brand_guide");
         assertThat(names).doesNotHaveDuplicates();
         JsonNode state = value(call("admin", "mindcrafti_status", Map.of()));
-        assertThat(state.path("version").asText()).isEqualTo("1.27.0");
+        assertThat(state.path("version").asText()).isEqualTo("1.28.0");
         assertThat(state.path("availableToolCount").asInt()).isEqualTo(names.size());
         JsonNode catalog = value(call("admin", "list_site_functions", Map.of("limit", 100)));
         assertThat(catalog.path("total").asInt()).isGreaterThan(150);
@@ -211,6 +214,103 @@ class McpSiteFunctionsTransportIntegrationTest {
         }
         JsonNode schema = value(call("teacher-a", "get_site_function", Map.of("functionId", "students.updateStudentName")));
         assertThat(schema.path("argumentsSchema").path("properties").has("body")).isTrue();
+    }
+
+    @Test
+    void privateStudioCollectionSavesLargeExactProjectAndReadbackAndRetryPreserveEveryTemplate() throws Exception {
+        String project = studioProject("x".repeat(210000));
+        JsonNode schema = value(call("admin", "get_site_function", Map.of("functionId", "stories_studio.save")));
+        assertThat(schema.path("argumentsSchema").path("properties").path("body").path("properties")
+                .path("projectJson").path("maxLength").asInt()).isEqualTo(1900000);
+        Map<String, Object> save = studioSave(0, project, "studio-create-collection");
+        JsonNode created = value(call("admin", "execute_site_function", save));
+        assertThat(created.path("version").asInt()).isEqualTo(1);
+        assertThat(created.has("projectJson")).isFalse();
+        assertThat(value(call("admin", "execute_site_function", save))).isEqualTo(created);
+        assertThat(studioReadback("admin", created)).isEqualTo(project);
+        assertThat(jdbc.queryForObject("select revision from story_studio_projects where owner_id=?", Long.class, admin.getId())).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("select count(*) from mcp_operation_receipts where actor_id=?", Long.class, admin.getId())).isEqualTo(1L);
+        String updated = project.replace("\"activeTemplateId\":\"template-2\"", "\"activeTemplateId\":\"template-1\"");
+        JsonNode next = value(call("admin", "execute_site_function", studioSave(1, updated, "studio-select-news-template")));
+        assertThat(next.path("version").asInt()).isEqualTo(2);
+        assertThat(studioReadback("admin", next)).isEqualTo(updated);
+        rejected(call("admin", "read_site_function", Map.of("functionId", "stories_studio.chunk",
+                "arguments", Map.of("version", 1, "chunkIndex", 0))), 409);
+        rejected(call("admin", "execute_site_function", studioSave(0, project, "studio-stale-create")), 409);
+        Map<String, Object> unconfirmed = new HashMap<>(studioSave(2, updated, "studio-unconfirmed")); unconfirmed.put("confirm", false);
+        rejected(call("admin", "execute_site_function", unconfirmed), 400);
+        rejected(call("admin", "read_site_function", Map.of("functionId", "stories_studio.save", "arguments", save.get("arguments"))), 400);
+        String stored = jdbc.queryForObject("select project_json from story_studio_projects where owner_id=?", String.class, admin.getId());
+        assertThat(stored).isEqualTo(updated).contains("\"name\":\"Новости\"", "\"name\":\"Результаты\"", "original-unknown-field", "data:image/webp;base64,YQ==");
+    }
+
+    @Test
+    void privateStudioSaveIsAdminOnlyAndEachAdministratorHasAnIndependentOwnerAndVersion() throws Exception {
+        String project = studioProject("private-original");
+        JsonNode original = value(call("admin", "execute_site_function", studioSave(0, project, "studio-own-private-save")));
+        rejected(call("teacher-a", "get_site_function", Map.of("functionId", "stories_studio.save")), 404);
+        rejected(call("teacher-a", "execute_site_function", studioSave(0, project, "teacher-cannot-save")), 404);
+        rejected(call("mcp-test-import-secret", "execute_site_function", studioSave(0, project, "import-cannot-save")), 403);
+        User other = users.save(User.bootstrapAdmin("Other admin", "other-studio@test.local", "unused")); tokens.put("other-admin", other.getId());
+        JsonNode otherInfo = value(call("other-admin", "read_site_function", Map.of("functionId", "stories_studio.info", "arguments", Map.of())));
+        assertThat(otherInfo.path("configured").asBoolean()).isFalse();
+        rejected(call("other-admin", "read_site_function", Map.of("functionId", "stories_studio.chunk", "arguments", Map.of("version", 1, "chunkIndex", 0))), 404);
+        rejected(call("other-admin", "execute_site_function", studioSave(1, studioProject("foreign-change"), "studio-wrong-owner-version")), 409);
+        Map<String, Object> forged = new HashMap<>(studioSave(0, project, "studio-forged-owner"));
+        forged.put("arguments", Map.of("ownerId", admin.getId().toString(), "body", Map.of("expectedVersion", 0, "projectJson", project)));
+        rejected(call("other-admin", "execute_site_function", forged), 400);
+        String otherProject = studioProject("other-admin-draft");
+        JsonNode otherSaved = value(call("other-admin", "execute_site_function", studioSave(0, otherProject, "studio-own-private-save")));
+        assertThat(studioReadback("other-admin", otherSaved)).isEqualTo(otherProject);
+        assertThat(studioReadback("admin", original)).isEqualTo(project);
+        assertThat(jdbc.queryForObject("select count(*) from story_studio_projects", Long.class)).isEqualTo(2L);
+    }
+
+    @Test
+    void concurrentStudioSavesWithTheSameExpectedVersionHaveExactlyOneWinner() throws Exception {
+        value(call("admin", "execute_site_function", studioSave(0, studioProject("initial"), "studio-concurrent-initial")));
+        String first = studioProject("first-concurrent"), second = studioProject("second-concurrent");
+        var executor = Executors.newFixedThreadPool(2);
+        var start = new CountDownLatch(1);
+        JsonNode one, two;
+        try {
+            var left = executor.submit(() -> { start.await(); return call("admin", "execute_site_function", studioSave(1, first, "studio-concurrent-first")); });
+            var right = executor.submit(() -> { start.await(); return call("admin", "execute_site_function", studioSave(1, second, "studio-concurrent-second")); });
+            start.countDown(); one = left.get(30, TimeUnit.SECONDS); two = right.get(30, TimeUnit.SECONDS);
+        } finally { executor.shutdownNow(); }
+        assertThat(List.of(one, two).stream().filter(result -> result.path("isError").asBoolean()).count()).isEqualTo(1);
+        JsonNode winner = one.path("isError").asBoolean() ? two : one;
+        rejected(one.path("isError").asBoolean() ? one : two, 409);
+        assertThat(value(winner).path("version").asInt()).isEqualTo(2);
+        JsonNode info = value(call("admin", "read_site_function", Map.of("functionId", "stories_studio.info", "arguments", Map.of())));
+        assertThat(studioReadback("admin", info)).isIn(first, second);
+        assertThat(jdbc.queryForObject("select revision from story_studio_projects where owner_id=?", Long.class, admin.getId())).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("select count(*) from mcp_operation_receipts where actor_id=?", Long.class, admin.getId())).isEqualTo(2L);
+    }
+
+    private static String studioProject(String extra) {
+        return "{\"schema\":\"mindcrafti.story-studio/2\",\"activeTemplateId\":\"template-2\","
+                + "\"assets\":{\"logoSrc\":\"data:image/webp;base64,YQ==\"},\"templates\":["
+                + "{\"id\":\"template-1\",\"name\":\"Новости\",\"story\":{\"custom\":\"original-unknown-field\"},\"css\":\".original{}\",\"html\":\"<b>Original</b>\"},"
+                + "{\"id\":\"template-2\",\"name\":\"Результаты\",\"story\":{\"extra\":\"" + extra + "\"},\"css\":\".progress{}\",\"html\":\"<b>Progress</b>\"}]}";
+    }
+
+    private static Map<String, Object> studioSave(long expectedVersion, String project, String key) {
+        return Map.of("functionId", "stories_studio.save", "arguments", Map.of("body", Map.of("expectedVersion", expectedVersion, "projectJson", project)),
+                "confirm", true, "idempotencyKey", key);
+    }
+
+    private String studioReadback(String actor, JsonNode metadata) throws Exception {
+        var output = new ByteArrayOutputStream();
+        for (int index = 0; index < metadata.path("chunkCount").asInt(); index++) {
+            JsonNode chunk = value(call(actor, "read_site_function", Map.of("functionId", "stories_studio.chunk", "arguments",
+                    Map.of("version", metadata.path("version").asLong(), "chunkIndex", index))));
+            assertThat(chunk.path("sha256").asText()).isEqualTo(metadata.path("sha256").asText());
+            output.writeBytes(java.util.Base64.getDecoder().decode(chunk.path("base64").asText()));
+        }
+        String digest = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(output.toByteArray()));
+        assertThat(digest).isEqualTo(metadata.path("sha256").asText());
+        return output.toString(java.nio.charset.StandardCharsets.UTF_8);
     }
 
     @Test

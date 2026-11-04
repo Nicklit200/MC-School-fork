@@ -63,6 +63,21 @@ describe('Stories Studio cloud connection', () => {
     expect(storyStudioApi.save).not.toHaveBeenCalled();
   });
 
+  it('saves the migrated collection using the existing cloud version and preserves both templates on the next edit', async () => {
+    vi.mocked(storyStudioApi.get).mockResolvedValue({ ...info(7), projectJson: canonical('Original') });
+    render(<AdminMindcraftiStudioPage />); await message('ready');
+    const first = { id: 'template-1', name: 'Новости образования', ...JSON.parse(project('Original')) };
+    const second = { id: 'template-2', name: 'Результаты учеников', ...JSON.parse(project('Results')) };
+    const collection = { schema: 'mindcrafti.story-studio/2', activeTemplateId: 'template-1', assets: { logoSrc: logo }, templates: [first, second] };
+    await message('save', JSON.stringify(collection)); await settle();
+    expect(storyStudioApi.save).toHaveBeenLastCalledWith(7, serializeStudioProject(JSON.stringify(collection), logo));
+    collection.templates[1] = { ...second, name: 'Переименовано' }; collection.activeTemplateId='template-2';
+    await message('save', JSON.stringify(collection)); await settle();
+    expect(storyStudioApi.save).toHaveBeenLastCalledWith(8, serializeStudioProject(JSON.stringify(collection), logo));
+    const stored = JSON.parse(JSON.parse(localStorage.getItem('mindcrafti.admin-studio.project.v2:admin-one')!).projectJson);
+    expect(stored.templates[0]).toEqual(first); expect(stored.templates[1].name).toBe('Переименовано');
+  });
+
   it('keeps a stale local draft as recovery rather than overwriting cloud data', async () => {
     localStorage.setItem('mindcrafti.admin-studio.project.v2:admin-one', JSON.stringify({ projectJson: canonical('Local'), baseVersion: 1, pending: true }));
     vi.mocked(storyStudioApi.get).mockResolvedValue({ ...info(4), projectJson: canonical('Cloud') });
@@ -141,5 +156,27 @@ describe('exact project serialization', () => {
   });
   it('rejects malformed projects', () => {
     for (const raw of ['{}', '[]', 'null', 'not json']) expect(() => serializeStudioProject(raw, logo)).toThrow();
+  });
+
+  it('retains both named sources and an existing original logo byte for byte', () => {
+    const original = { id: 'template-1', name: 'Новости образования', ...JSON.parse(project('Original')), css: '\r\n:root { --custom:  12px; }\n', html: '<div data-custom="yes">{{headline_1}}</div>' };
+    original.story.custom = { untouched: ['unknown', 7] };
+    const other = { id: 'template-2', name: 'Результаты учеников', story: { kind: 'progress', skills: [{ before: 55, after: 70 }] }, css: '.results{}', html: '<div>{{student_label}}</div>' };
+    const collection = { schema: 'mindcrafti.story-studio/2', activeTemplateId: 'template-2', assets: { logoSrc: 'data:image/png;base64,YQ==' }, templates: [original, other] };
+    const serialized = serializeStudioProject(JSON.stringify(collection), logo);
+    expect(JSON.parse(serialized)).toEqual(collection);
+    expect(serializeStudioProject(serialized, logo)).toBe(serialized);
+  });
+
+  it('rejects invalid collections instead of reducing them to a single template', () => {
+    const template = { id: 'template-1', name: 'Новости', ...JSON.parse(project('Original')) };
+    const base = { schema: 'mindcrafti.story-studio/2', activeTemplateId: 'template-1', assets: { logoSrc: logo }, templates: [template] };
+    for (const invalid of [
+      { ...base, templates: [] }, { ...base, templates: [template, template] }, { ...base, activeTemplateId: 'missing' },
+      { ...base, templates: [{ ...template, id: '<bad>' }] }, { ...base, templates: [{ ...template, name: ' ' }] },
+      { ...base, templates: [{ ...template, css: '' }] }, { ...base, templates: [{ ...template, story: [] }] },
+      { ...base, assets: { logoSrc: 'https://example.test/logo.png' } }, { ...base, assets: undefined },
+      { ...base, schema: 'mindcrafti.story-studio/999' },
+    ]) expect(() => serializeStudioProject(JSON.stringify(invalid), logo)).toThrow();
   });
 });

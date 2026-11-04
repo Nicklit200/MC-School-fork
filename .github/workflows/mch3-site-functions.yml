@@ -40,7 +40,7 @@ jobs:
           suites = {
               'McpOperationReceiptIntegrationTest': 13,
               'McpLessonSchedulePersistenceIntegrationTest': 4,
-              'McpSiteFunctionsTransportIntegrationTest': 10,
+              'McpSiteFunctionsTransportIntegrationTest': 13,
               'McpLessonTranscriptReadServiceTest': 16,
           }
           for name, minimum in suites.items():

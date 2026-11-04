@@ -5,6 +5,8 @@ import com.mcschool.flashcard.cards.CardController;
 import com.mcschool.flashcard.cards.dto.ImportPreviewRequest;
 import com.mcschool.flashcard.lessonboard.LessonBoardController;
 import com.mcschool.flashcard.students.StudentController;
+import com.mcschool.flashcard.settings.StoryStudioProjectController;
+import com.mcschool.flashcard.settings.StoryStudioProjectService;
 import com.mcschool.flashcard.students.dto.StudentInvitationResponse;
 import com.mcschool.flashcard.teachers.TeacherController;
 import com.mcschool.flashcard.users.Language;
@@ -41,6 +43,7 @@ class McpSiteFunctionsServiceTest {
     private final LessonBoardController board = mock(LessonBoardController.class);
     private final AdminAccountController accounts = mock(AdminAccountController.class);
     private final LessonTranscriptReadService transcripts = mock(LessonTranscriptReadService.class);
+    private final StoryStudioProjectService studio = mock(StoryStudioProjectService.class);
     private final AuthenticatedUser teacher = new AuthenticatedUser(UUID.randomUUID(), "teacher@example.test", Role.TEACHER);
     private final AuthenticatedUser admin = new AuthenticatedUser(UUID.randomUUID(), "admin@example.test", Role.ADMIN);
     private final User oauth = mock(User.class);
@@ -70,6 +73,7 @@ class McpSiteFunctionsServiceTest {
         when(context.getBean(LessonBoardController.class)).thenReturn(board);
         when(context.getBean(AdminAccountController.class)).thenReturn(accounts);
         when(context.getBean(LessonTranscriptController.class)).thenReturn(new LessonTranscriptController(transcripts));
+        when(context.getBean(StoryStudioProjectController.class)).thenReturn(new StoryStudioProjectController(studio));
     }
 
     @Test
@@ -126,6 +130,26 @@ class McpSiteFunctionsServiceTest {
         assertThatThrownBy(() -> read("lesson_transcripts.get", Map.of("eventId", "saved-event", "source", "all"))).hasMessageContaining("400");
         assertThatThrownBy(() -> read("lesson_transcripts.get", Map.of("eventId", "saved-event", "limit", 20001))).hasMessageContaining("400");
     }
+
+    @Test
+    void privateStudioSaveHasOnlyItsReviewedLargeFieldBudgetAndUsesAtomicAdminReceipt() {
+        assertThatThrownBy(() -> service.call("get_site_function", Map.of("functionId", "stories_studio.save"), oauth, false)).hasMessageContaining("404");
+        when(access.requireActor(oauth)).thenReturn(admin);
+        Map<?, ?> schema = (Map<?, ?>) service.call("get_site_function", Map.of("functionId", "stories_studio.save"), oauth, false);
+        assertThat(schema.get("readOnly")).isEqualTo(false);
+        assertThat(schema.toString()).contains("maxLength=1900000", "expectedVersion", "does not publish");
+        String project = "x".repeat(MAX_STUDIO_TEST_SIZE);
+        when(studio.save(admin, 3, project)).thenReturn(Map.of("version", 4L, "configured", true));
+        assertThat(write("stories_studio.save", Map.of("body", Map.of("expectedVersion", 3, "projectJson", project))).toString()).contains("version=4");
+        verify(studio).save(admin, 3, project);
+        verify(receipts).execute(eq(admin), isNull(), anyString(), anyString(), anyMap(), any(), any());
+        verify(receipts, never()).executeExternal(any(), any(), any(), any(), any(), any(), any());
+        assertThatThrownBy(() -> read("stories_studio.info", Map.of("projectJson", project))).hasMessageContaining("400");
+        assertThatThrownBy(() -> write("stories_studio.save", Map.of("body", Map.of("expectedVersion", 3,
+                "projectJson", "x".repeat(StoryStudioProjectService.MAX_CHARS + 1))))).hasMessageContaining("400");
+    }
+
+    private static final int MAX_STUDIO_TEST_SIZE = 210_000;
 
     @Test
     void onlyReadToolCanReadAndMutationToolRequiresConfirmationAndDurableKey() {
