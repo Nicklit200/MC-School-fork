@@ -160,3 +160,30 @@ test('compiled HTML and PNG export the active renamed template while the whole p
   expect(saved.templates[1].story.student_label).toBe('Публичный пример');
   expect(cloud.errors).toEqual([]);
 });
+
+test('full-scale change survives a cloud save and reload and exports the same compiled labels', async ({ page }) => {
+  const cloud = await openStudio(page);
+  await selectTemplate(page, 'template-2');
+  await studio(page).locator('[data-code="json"]').click();
+  const editor = studio(page).locator('#codeEditor');
+  const story = JSON.parse(await editor.inputValue());
+  story.assessment = { ...story.assessment, growthMetric: 'scale_percent' };
+  await editor.fill(JSON.stringify(story, null, 2));
+  await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15% шкалы', '+5% шкалы']);
+  await expect.poll(() => cloud.project.templates?.[1].story.assessment?.growthMetric).toBe('scale_percent');
+  expect(cloud.project.templates[1].story.skills.map(({ before, after }) => [before, after])).toEqual([[55,70],[65,70]]);
+  const savedVersion = cloud.version;
+
+  await page.reload();
+  await expect(studio(page).locator('[data-template="template-2"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15% шкалы', '+5% шкалы']);
+  expect(cloud.version).toBeGreaterThanOrEqual(savedVersion);
+  const exported = await download(page, () => studio(page).locator('#exportHtmlBtn').click());
+  const labels = await page.evaluate(output => {
+    const document = new DOMParser().parseFromString(output, 'text/html');
+    return [...document.querySelectorAll('.skill-delta')].map(node => node.textContent);
+  }, exported.bytes.toString('utf8'));
+  expect(labels).toEqual(['+15% шкалы', '+5% шкалы']);
+  expect(exported.bytes.toString('utf8')).not.toMatch(/\{\{skill_\d_change_percent\}\}/u);
+  expect(cloud.errors).toEqual([]);
+});

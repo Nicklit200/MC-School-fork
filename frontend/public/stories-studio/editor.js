@@ -161,8 +161,13 @@
       variables[`skill_${index+1}_before`]=before??'';
       variables[`skill_${index+1}_after`]=after??'';
       if(before===null)missingScores.push([index,'before']);if(after===null)missingScores.push([index,'after']);
-      const change=before>0 && after!==null?Math.round((after-before)/before*100):null;
-      variables[`skill_${index+1}_change_percent`]=change===null?'Новая оценка':`${change>0?'+':''}${change}%`;
+      if(s.assessment?.growthMetric==='scale_percent'){
+        const change=before!==null && after!==null?Number((after-before).toFixed(2)):null;
+        variables[`skill_${index+1}_change_percent`]=change===null?'Нет оценки':`${change>0?'+':''}${change}% шкалы`;
+      }else{
+        const change=before>0 && after!==null?Math.round((after-before)/before*100):null;
+        variables[`skill_${index+1}_change_percent`]=change===null?'Новая оценка':`${change>0?'+':''}${change}%`;
+      }
     }
     for (const key of ['student_label','problem_text','narrative','period_text']) variables[key]=s[key] || '';
     const markup=template.html.replace(/\{\{([\w.]+)\}\}/g,(_x,key)=>{
@@ -425,7 +430,9 @@
   }
   function exportPrompt(){
     if(!flushCode())return;
-    const s=project.story;const msg=plainDashes(`Помоги мне настроить выбранный шаблон «${project.name}» генератора Instagram Stories Mindcrafti. Используй фиксированные цвета, размеры и CSS. Не используй длинные тире U+2013 и U+2014: в тексте ставь обычный дефис (-). НЕ публикуй сторис без моего одобрения. ${location.protocol==='file:'?'Сейчас редактор открыт локально, поэтому через облачный браузер ChatGPT эта ссылка недоступна. Для управления через ChatGPT Work требуется HTTPS-размещение.':'Мой редактор доступен по адресу: '+location.href}\n\nТекущий стиль: акцент ${getCSS('--accent')}, текст ${getCSS('--ink')}, заголовок ${getCSS('--title-size')}. Тема: ${s.student_label||s.headline_1} ${s.headline_2} ${s.period_text||s.headline_3}.`);
+    const s=project.story;
+    const growthRule=s.assessment?.growthMetric==='scale_percent'?' Прибавку навыка считай как оценка после минус оценка до на полной шкале 0-100. Подписывай результат «% шкалы», например 55 до и 70 после дают «+15% шкалы». Не дели разницу на исходную оценку. Ноль является известной оценкой. Если хотя бы одной оценки нет, пиши «Нет оценки».':'';
+    const msg=plainDashes(`Помоги мне настроить выбранный шаблон «${project.name}» генератора Instagram Stories Mindcrafti. Используй фиксированные цвета, размеры и CSS. Не используй длинные тире U+2013 и U+2014: в тексте ставь обычный дефис (-). НЕ публикуй сторис без моего одобрения.${growthRule} ${location.protocol==='file:'?'Сейчас редактор открыт локально, поэтому через облачный браузер ChatGPT эта ссылка недоступна. Для управления через ChatGPT Work требуется HTTPS-размещение.':'Мой редактор доступен по адресу: '+location.href}\n\nТекущий стиль: акцент ${getCSS('--accent')}, текст ${getCSS('--ink')}, заголовок ${getCSS('--title-size')}. Тема: ${s.student_label||s.headline_1} ${s.headline_2} ${s.period_text||s.headline_3}.`);
     navigator.clipboard.writeText(msg).then(()=>toast('Инструкция для ChatGPT скопирована'),()=>window.prompt('Скопируй текст:',msg));
   }
   function bindEvents(){

@@ -101,6 +101,34 @@ describe('Stories Studio named editor templates', () => {
     expect(preview().body.textContent).not.toMatch(/[\u2013\u2014]/);
   });
 
+  it.each([
+    [55,70,'+15% шкалы'],[65,70,'+5% шкалы'],[0,20,'+20% шкалы'],
+    [70,65,'-5% шкалы'],[70,70,'0% шкалы'],[50.125,65.5,'+15.38% шкалы'],
+    [null,70,'Нет оценки'],[55,'','Нет оценки'],[undefined,70,'Нет оценки'],
+  ])('renders opted-in full-scale change for %s to %s as %s', (before,after,expected) => {
+    start(); progress(); const content=saved().templates[1].story;
+    content.assessment={growthMetric:'scale_percent'};content.skills[0].before=before;content.skills[0].after=after;
+    click('[data-code="json"]');input('#codeEditor',JSON.stringify(content));vi.advanceTimersByTime(400);
+    expect(preview().querySelector('.skill-delta')?.textContent).toBe(expected);
+    expect(preview().querySelectorAll('.skill-delta')[1]?.textContent).toBe('+5% шкалы');
+    expect(saved().templates[1].story.skills[0]).toEqual(content.skills[0]);
+  });
+
+  it('preserves explicit legacy relative growth and limits the copied full-scale rule to opted-in stories', async () => {
+    start();progress();const content=saved().templates[1].story;
+    content.assessment={growthMetric:'relative_percent'};
+    click('[data-code="json"]');input('#codeEditor',JSON.stringify(content));vi.advanceTimersByTime(400);
+    expect([...preview().querySelectorAll('.skill-delta')].map(node=>node.textContent)).toEqual(['+27%','+8%']);
+    click('#copyPromptBtn');await Promise.resolve();
+    expect(vi.mocked(navigator.clipboard.writeText).mock.lastCall![0]).not.toContain('полной шкале');
+    content.assessment.growthMetric='scale_percent';input('#codeEditor',JSON.stringify(content));vi.advanceTimersByTime(400);
+    click('#copyPromptBtn');await Promise.resolve();
+    const prompt=vi.mocked(navigator.clipboard.writeText).mock.lastCall![0];
+    expect(prompt).toContain('оценка после минус оценка до');expect(prompt).toContain('+15% шкалы');
+    expect(prompt).toContain('Не дели разницу на исходную оценку');expect(prompt).toContain('Нет оценки');
+    expect(prompt).not.toMatch(/[\u2013\u2014]/);
+  });
+
   it('binds a delayed photo to its originating template after switching', () => {
     const readers: { onload: (() => void) | null; result: string }[] = [], images: { onload: (() => void) | null }[] = [];
     vi.stubGlobal('FileReader', class { onload = null; result = 'data:image/jpeg;base64,Yg=='; constructor() { readers.push(this); } readAsDataURL() {} });
