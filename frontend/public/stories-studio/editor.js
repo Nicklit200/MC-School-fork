@@ -226,7 +226,6 @@
   }
   function queueRender(){clearTimeout(renderTimer);renderTimer=setTimeout(renderNow,90);}
   function renderNow(){
-    updateStoryAction();
     const frame=$('storyFrame');
     frame.onload=()=>{validation();};
     frame.srcdoc=outputDocument(false);
@@ -337,24 +336,6 @@
     $('templateTabs').innerHTML=collection.templates.map(template=>`<button type="button" role="tab" id="tab-${template.id}" aria-controls="templateWorkspace" aria-selected="${template===project}" tabindex="${template===project?'0':'-1'}" data-template="${template.id}">${escapeHtml(plainDashes(template.name))}</button>`).join('');
     $('templateWorkspace').setAttribute('aria-labelledby','tab-'+project.id);
     $('templateName').value=project.name;
-    updateStoryAction();
-  }
-  function updateStoryAction(){
-    const button=$('createStoryBtn');if(!button)return;
-    const reusable=project.story.reusableTemplate===true;
-    button.hidden=!reusable;button.classList.toggle('hidden',!reusable);
-    button.style.display=reusable?'inline-flex':'none';
-    button.disabled=collection.templates.length>=20;
-  }
-  function createStory(){
-    if(!flushCode()||project.story.reusableTemplate!==true)return;
-    if(collection.templates.length>=20){toast('В проекте может быть не более 20 шаблонов');return;}
-    let idIndex=1,nameIndex=1;
-    while(collection.templates.some(template=>template.id==='story-'+idIndex))idIndex++;
-    while(collection.templates.some(template=>template.name==='Новая история '+nameIndex))nameIndex++;
-    const copy=deep(project);copy.id='story-'+idIndex;copy.name='Новая история '+nameIndex;copy.story.reusableTemplate=false;
-    collection.templates.push(copy);initialTemplates.set(copy.id,deep(copy));
-    selectTemplate(copy.id);toast('Новая история создана');
   }
   function selectTemplate(id){
     if(id===project.id)return true;
@@ -475,7 +456,6 @@
       project.name=name;renderTemplateTabs();renderNow();toast('Название шаблона сохранено');
     };
     $('renameTemplateBtn').onclick=renameTemplate;
-    if($('createStoryBtn'))$('createStoryBtn').onclick=createStory;
     $('templateName').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();renameTemplate();}};
     $('renameTemplateForm').onsubmit=e=>{e.preventDefault();renameTemplate();};
     $('contentControls').addEventListener('input',e=>{

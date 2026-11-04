@@ -199,17 +199,13 @@ test('full-scale change survives a cloud save and reload and exports the same co
   expect(cloud.errors).toEqual([]);
 });
 
-test('a reusable anonymous template creates an independent compact story that saves, restores and exports', async ({ page }) => {
+test('a connector-provided anonymous template edits, saves, restores and exports without a create action', async ({ page }) => {
   const cloud = await openStudio(page, true);
-  const base = structuredClone(cloud.project.templates[1]);
-  await expect(studio(page).locator('#createStoryBtn')).toBeHidden();
+  const news = structuredClone(cloud.project.templates[0]);
+  await expect(studio(page).locator('#createStoryBtn')).toHaveCount(0);
   await selectTemplate(page, 'results-template');
   await expect(rendered(page).locator('.skill-delta')).toHaveText(['Нет оценки', 'Нет оценки']);
-  await expect(studio(page).locator('#createStoryBtn')).toBeVisible();
-  await studio(page).locator('#createStoryBtn').click();
-  await expect(studio(page).locator('[data-template="story-1"]')).toHaveAttribute('aria-selected', 'true');
-  await expect(studio(page).locator('#templateName')).toHaveValue('Новая история 1');
-  await expect(studio(page).locator('#createStoryBtn')).toBeHidden();
+  await expect(studio(page).locator('#createStoryBtn')).toHaveCount(0);
   await studio(page).locator('#tabContent').click();
   await studio(page).locator('[data-content="student_label"]').fill('Учебный пример');
   await studio(page).locator('[data-content="subheadline"]').fill('Индивидуально');
@@ -218,11 +214,11 @@ test('a reusable anonymous template creates an independent compact story that sa
     await studio(page).locator(`[data-skill="${skill}"][data-skill-field="after"]`).fill(String(after));
   }
   await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15%', '+5%']);
-  await expect.poll(() => cloud.project.templates?.[2]?.story.skills.map(({ before, after }) => [before,after])).toEqual([[55,70],[65,70]]);
-  expect(cloud.project.templates[1]).toEqual(base);
-  expect(cloud.project.templates[2].story).toMatchObject({ reusableTemplate: false, subheadline: 'Индивидуально', assessment: { growthMetric: 'scale_percent', growthDisplay: 'compact_percent' } });
+  await expect.poll(() => cloud.project.templates?.[1]?.story.skills.map(({ before, after }) => [before,after])).toEqual([[55,70],[65,70]]);
+  expect(cloud.project.templates).toHaveLength(2);expect(cloud.project.templates[0]).toEqual(news);
+  expect(cloud.project.templates[1].story).toMatchObject({ reusableTemplate: true, student_label: 'Учебный пример', subheadline: 'Индивидуально', assessment: { growthMetric: 'scale_percent', growthDisplay: 'compact_percent' } });
   await page.reload();
-  await expect(studio(page).locator('[data-template="story-1"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(studio(page).locator('[data-template="results-template"]')).toHaveAttribute('aria-selected', 'true');
   await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15%', '+5%']);
   const output = await download(page, () => studio(page).locator('#exportHtmlBtn').click());
   expect(output.bytes.toString('utf8')).toContain('+15%');
@@ -231,17 +227,8 @@ test('a reusable anonymous template creates an independent compact story that sa
   const png = await download(page, () => studio(page).locator('#exportPngBtn').click());
   expect(png.bytes.subarray(0,8)).toEqual(Buffer.from([137,80,78,71,13,10,26,10]));
   expect(png.bytes.readUInt32BE(16)).toBe(1080);expect(png.bytes.readUInt32BE(20)).toBe(1920);
-  await selectTemplate(page, 'results-template');
-  await expect(rendered(page).locator('.skill-delta')).toHaveText(['Нет оценки', 'Нет оценки']);
-  expect(cloud.project.templates[1]).toEqual(base);
   await page.setViewportSize({ width:320,height:1000 });
-  const mobileButton=studio(page).locator('#createStoryBtn');await expect(mobileButton).toBeVisible();
-  const geometry=await mobileButton.evaluate(button=>{
-    const box=button.getBoundingClientRect();return {left:box.left,right:box.right,viewport:document.documentElement.clientWidth,overflow:document.documentElement.scrollWidth};
-  });
-  expect(geometry.left).toBeGreaterThanOrEqual(0);expect(geometry.right).toBeLessThanOrEqual(geometry.viewport+1);expect(geometry.overflow).toBeLessThanOrEqual(geometry.viewport+1);
-  await mobileButton.click();
-  await expect(studio(page).locator('[data-template="story-2"]')).toHaveAttribute('aria-selected','true');
-  await expect(rendered(page).locator('.skill-delta')).toHaveText(['Нет оценки','Нет оценки']);
+  await expect(studio(page).locator('#createStoryBtn')).toHaveCount(0);
+  await expect(rendered(page).locator('.skill-delta')).toHaveText(['+15%','+5%']);
   expect(cloud.errors).toEqual([]);
 });
