@@ -24,6 +24,9 @@ async function openStudio(page) {
   };
   page.on('pageerror', error => cloud.errors.push(error.message));
   await page.addInitScript(user => {
+    // Auth belongs to the application document. The editor deliberately has
+    // an opaque sandbox origin and must not access the parent's storage.
+    if (window.top !== window) return;
     localStorage.setItem('language', 'RU');
     localStorage.setItem('accessToken', 'browser-fixture-only');
     localStorage.setItem('authUser', JSON.stringify(user));
