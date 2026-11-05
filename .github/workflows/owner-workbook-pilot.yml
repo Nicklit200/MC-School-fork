@@ -57,3 +57,12 @@ jobs:
       - name: Check SVG and geometry generator
         working-directory: backend/src/main/resources/owner-workbook-generator
         run: node diagrams.test.mjs
+      - name: Install PDF smoke-test runtime
+        run: python3 -m pip install --quiet 'weasyprint>=60' pymupdf
+      - name: Generate and verify real vector PDFs
+        working-directory: backend/src/main/resources/owner-workbook-generator
+        run: |
+          rm -rf /tmp/mindcrafti-workbook-v4-ci
+          node generate.mjs --lesson=examples/clean-tasks-demo.json --out=/tmp/mindcrafti-workbook-v4-ci --basename=Mindcrafti_CI
+          test -f /tmp/mindcrafti-workbook-v4-ci/Mindcrafti_CI_Arbeitsheft_60min.pdf
+          test -f /tmp/mindcrafti-workbook-v4-ci/Mindcrafti_CI_Lehrerloesungen_60min.pdf
