@@ -57,7 +57,8 @@ function stripes(b) {
 }
 
 function example(b) {
-  const formulas = `<div class="example-inner">${b.expressions.map(math).join('')}</div>`;
+  // Each expression occupies an independent centered cell; no inline SVG collisions.
+  const formulas = `<div class="example-inner">${b.expressions.map(expr => `<div class="example-math-item">${math(expr)}</div>`).join('')}</div>`;
   if (b.text) {
     return `<div class="block example-split"><div class="callout"><div class="eyebrow">${richText(b.label)}</div><p>${richText(b.text)}</p></div><div class="example-box">${formulas}</div></div>`;
   }
