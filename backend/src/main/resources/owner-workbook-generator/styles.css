@@ -56,27 +56,51 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .callout p { font-size: 13.1px; line-height: 1.5; margin: 1mm 0 0; }
 .example-box { border: 0.26mm solid var(--border); background: var(--card-gray); border-radius: 4.3mm; padding: 3.6mm 5.4mm; min-height: 21mm; }
 .example-box.has-text { background: white; }
-.example-box .example-inner { display: flex; gap: 9mm; align-items: center; justify-content: flex-start; margin-left: 28mm; }
+/* Formulas are separate, centered flex items. Each may wrap as a unit at A4 width. */
+.example-box .example-inner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  width: 100%; margin: 0; min-width: 0;
+}
+.example-math-item {
+  display: flex; flex: 0 1 auto; align-items: center; justify-content: center;
+  min-width: 0; max-width: 100%; min-height: 10mm;
+  padding: 1.2mm 2.6mm; text-align: center;
+}
+.example-math-item .formula { max-width: 100%; min-width: 0; }
 .example-box .formula { font-size: 19px; font-weight: 700; }
 .example-box .example-eyebrow { margin-bottom: 1.4mm; }
 .example-text { color: var(--navy); font-size: 12.6px; line-height: 1.45; margin: 1mm 0 2mm; }
 .example-split .callout { min-height: 0; padding: 4.5mm 5.5mm; }
 .example-split .example-box { margin-top: 3.6mm; min-height: 21mm; padding-top: 4.4mm; }
-.example-split .example-inner { margin-left: 18mm; }
+/* The example row is centered even inside example-split. */
 .exercise { border: .26mm solid var(--border); border-radius: 4.5mm; padding: 4.7mm 4.2mm 3.7mm 4.1mm; }
 .exercise-head { display: flex; align-items: start; gap: 3mm; margin-bottom: 1.4mm; }
 .exercise-number { min-width: 8.6mm; width: 8.6mm; height: 8.6mm; flex: 0 0 8.6mm; border-radius: 50%; background: var(--orange-soft); display: flex; align-items: center; justify-content: center; color: var(--orange); font-size: 10px; font-weight: 700; }
 .exercise-title { font-size: 15.5px; font-weight: 700; line-height: 1.25; margin-top: 1mm; }
 .exercise-subtitle { color: var(--gray-text); font-size: 12px; line-height: 1.35; margin-top: 2.4mm; }
 .exercise-content { padding: 0.5mm 1.4mm 0 2mm; }
+/* A work line must never share the formula row: long SVGs can exceed 56mm. */
 .task-row {
-  display: flex; align-items: center; gap: 3.0mm; min-height: 16.1mm;
+  display: grid; grid-template-columns: 8mm minmax(0, 1fr);
+  grid-template-rows: auto auto; align-items: center;
+  column-gap: 3mm; min-height: 16.1mm;
 }
-.task-row .item-label { color: var(--orange); font-weight: 700; font-size: 11px; width: 8mm; flex: 0 0 8mm; }
-.task-row .expression-wrap { flex: 0 0 56mm; display: flex; align-items: center; white-space: nowrap; min-width: 0; }
-.task-row .workline { align-self: stretch; flex: 1; min-width: 10mm; border-bottom: .23mm solid var(--line); height: 8.6mm; margin: 0.8mm 1mm 0 0; }
+.task-row .item-label {
+  grid-column: 1; grid-row: 1; color: var(--orange);
+  font-weight: 700; font-size: 11px; width: 8mm;
+}
+.task-row .expression-wrap {
+  grid-column: 2; grid-row: 1; display: flex;
+  align-items: center; justify-content: flex-start;
+  width: 100%; min-width: 0; max-width: 100%; min-height: 9.8mm;
+}
+.task-row .expression-wrap .formula { min-width: 0; max-width: 100%; }
+.task-row .workline {
+  grid-column: 2; grid-row: 2; width: 100%; min-width: 0;
+  border-bottom: .23mm solid var(--line); height: 6.0mm; margin: 0 0 0.5mm;
+}
 .exercise.relaxed .task-row { min-height: 24.3mm; }
-.exercise.relaxed .task-row .workline { height: 14.5mm; }
+.exercise.relaxed .task-row .workline { height: 13mm; }
 /* Do not rely on flex gap: some PDF layout engines ignore it. */
 .formula { display: inline-flex; align-items: center; justify-content: flex-start; gap: 0; vertical-align: middle; white-space: nowrap; color: var(--navy); font-size: 21px; line-height: 1.15; }
 .formula > * { flex: 0 0 auto; flex-shrink: 0; }
@@ -101,7 +125,7 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .exit-list { margin-top: 3.2mm; }
 .exercise.exit { padding: 0; border: 0; }
 .exit .exercise-content { padding: 0; }
-.exit .task-row { display: block; height: 26.8mm; min-height: 0; border: .26mm solid var(--border); border-radius: 4mm; margin-bottom: 2.7mm; padding: 2.5mm 4.5mm; }
+.exit .task-row { display: block; min-height: 26.8mm; height: auto; border: .26mm solid var(--border); border-radius: 4mm; margin-bottom: 2.7mm; padding: 2.5mm 4.5mm; }
 .exit .item-label { display: inline-block; width: 14mm; vertical-align: middle; }
 .exit .expression-wrap { display: inline-flex; width: calc(100% - 19mm); vertical-align: middle; }
 .exit .task-row .workline { display:block; height: 3mm; margin: 2.5mm 1mm 0 16mm; width: calc(100% - 17mm); }
@@ -110,8 +134,8 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .self-rating { color: var(--gray-text); font-size: 12px; margin: 4mm 0 1mm 4.5mm; display:flex; flex-wrap:wrap; gap:3.8mm; align-items:center; }
 .rating-choice { display:inline-flex; align-items:center; gap:1.2mm; white-space:nowrap; }
 .rating-check { width:2.8mm;height:2.8mm;border:.22mm solid #9da8b9;display:inline-block; }
-.error-detective .task-row { width: 50%; display: inline-flex; min-height: 15mm; }
-.error-detective .task-row .expression-wrap { flex-basis: auto; }
+.error-detective .task-row { width: 100%; display: grid; min-height: 14mm; }
+.error-detective .task-row .expression-wrap { width: 100%; }
 .error-detective .task-row .workline { display: none; }
 .error-detective .correction-line { margin: 1.5mm 1mm 0 4.5mm; border-bottom: 1px solid var(--line); }
 /* footer */
@@ -171,9 +195,13 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .facts-note { font-size: 10.8px; color: var(--gray-text); line-height: 1.35; margin-top: 1.8mm; }
 
 /* MathJax TeX -> inline SVG. Supports algebraic fractions, powers, roots and equations. */
-.math-latex { display:inline-block; max-width:100%; vertical-align:middle; line-height:0; }
-.math-latex svg { max-width:100%; overflow:visible; }
-.formula-latex { min-height:1.45em; }
+/* Preserve the MathJax SVG viewBox while making its size participate in layout. */
+.math-latex {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 0; max-width: 100%; vertical-align: middle; line-height: 1;
+}
+.math-latex svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.formula-latex { min-width: 0; max-width: 100%; min-height: 1.45em; }
 .inline-math { font-size:inherit; line-height:inherit; vertical-align:middle; }
 .inline-math.formula > * + * { margin-left:.2em; }
 .rich-text, .task-description { font-size:13px; line-height:1.6; margin:2mm 0; overflow-wrap:break-word; }
@@ -181,9 +209,9 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .layout-grid > *, .layout-stack > * { min-width:0; max-width:100%; }
 .layout-grid > .block, .layout-stack > .block { margin-top:0; }
 .layout-stack { display:flex; flex-direction:column; gap:3mm; min-width:0; }
-.layout-grid .example-inner { margin-left:0; flex-wrap:wrap; }
-.layout-grid .task-row { flex-wrap:wrap; }
-.layout-grid .expression-wrap { flex:1 1 auto; max-width:100%; }
+.layout-grid .example-inner { width: 100%; }
+.layout-grid .task-row { grid-template-columns: 7mm minmax(0, 1fr); }
+.layout-grid .expression-wrap { width: 100%; min-width: 0; max-width: 100%; }
 .layout-grid .formula { font-size:18px; }
 .layout-grid .inline-math { font-size:inherit; }
 .task-card, .matching { border:.26mm solid var(--border); border-radius:4mm; padding:4mm; break-inside:avoid; page-break-inside:avoid; }
