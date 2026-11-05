@@ -1,12 +1,12 @@
-# Mindcrafti School — Owner Workbook Pilot v3
+# Mindcrafti School — Workbook Generator v4
 
-**Status:** ChatGPT-only pilot with reusable geometry/graph components (v3); no changes to the public site or teacher UI. ChatGPT-only pilot; no site button, no background generation, no automatic publication. Other teachers' school prompts and UI are unchanged. This directory is packaged as a resource in the MC-School backend, and an owner-gated MCP tool can provide the current master source to the school's ChatGPT workflow.
+**Status:** server-side canonical workbook renderer with reusable vector geometry/graph components. Source retrieval remains owner/admin-only, while signed-in TEACHER accounts may generate unpublished drafts for their own exact lessons. Publication still requires explicit approval.
 
 ## Roles and intended workflow
 
-- Only signed-in **ADMIN** or the explicitly allowed Nick teacher account can retrieve the template via `get_owner_workbook_generator`. An API key alone cannot access it.
-- All teachers continue using the normal `get_school_prompt` and `get_brand_guide` tools. The pilot **does not change** those prompts.
-- The generator runs in the ChatGPT working environment **on explicit request**. It never modifies a live lesson; the teacher checks PDFs first and authorizes publication separately via `prepare_lesson` or the existing draft approval flow.
+- Only signed-in **ADMIN** or the explicitly allowed owner account can retrieve generator source through `get_owner_workbook_generator`; an API key cannot access source.
+- Signed-in **TEACHER** accounts can use the server-side renderer only for lessons they own; ADMIN can select an accessible teacher.
+- Generation saves an **unpublished draft** containing student workbook + teacher answers. It never modifies the live lesson until `publish_lesson_draft` is explicitly confirmed.
 - Never include pupil names, emails, class transcripts, or private education histories in the public GitHub sample. `lesson.sample.json` is anonymized and illustrative.
 - Every new real Mindcrafti document must first use the **current** school prompt, monthly plan and Brand Guide. When the logo is updated, extract the original M from the current Guide and supply it as `--logo=...` instead of relying on the bundled pilot asset.
 
