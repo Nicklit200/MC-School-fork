@@ -64,5 +64,5 @@ jobs:
         run: |
           rm -rf /tmp/mindcrafti-workbook-v4-ci
           node generate.mjs --lesson=examples/clean-tasks-demo.json --out=/tmp/mindcrafti-workbook-v4-ci --basename=Mindcrafti_CI
-          test -f /tmp/mindcrafti-workbook-v4-ci/Mindcrafti_CI_Arbeitsheft_60min.pdf
-          test -f /tmp/mindcrafti-workbook-v4-ci/Mindcrafti_CI_Lehrerloesungen_60min.pdf
+          test -f /tmp/mindcrafti-workbook-v4-ci/Mindcrafti_CI_Arbeitsheft_90min.pdf
+          test -f /tmp/mindcrafti-workbook-v4-ci/Mindcrafti_CI_Lehrerloesungen_90min.pdf
