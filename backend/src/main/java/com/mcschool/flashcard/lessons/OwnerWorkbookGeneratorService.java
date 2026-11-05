@@ -22,7 +22,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class OwnerWorkbookGeneratorService {
-    private static final String VERSION = "2026-10-19-v3-clean-diagrams";
+    private static final String VERSION = "2026-11-05-v4-fast-shared";
     private static final String RESOURCE_PREFIX = "owner-workbook-generator/";
     private static final String REPO_PATH = "backend/src/main/resources/owner-workbook-generator/";
     private static final UUID NICK_TEACHER_ID = UUID.fromString("14e3c7c1-1fc8-41bd-858a-6c20efdd957a");
@@ -52,11 +52,11 @@ public class OwnerWorkbookGeneratorService {
             info.put("files", new ArrayList<>(TEXT_FILES));
             info.put("sourceBranch", "integration/railway-and-ux");
             info.put("sourceDirectory", REPO_PATH);
-            info.put("generation", "Use generator + diagrams.mjs inside ChatGPT to create two PDFs; no site UI or server-side execution.");
+            info.put("generation", "Source retrieval remains owner-only for debugging. Canonical generation now runs server-side through teacher-scoped generate_workbook/create_lesson_draft and produces unpublished drafts.");
             info.put("diagrams", "SVG graphs and 2D/3D geometry. Default triangle labels: ABC, abc, αβγ; numeric data below in Gegeben/Gesucht; PDF review required.");
             info.put("publication", "Never publish or assign homework without the user's explicit approval.");
             info.put("branding", "Fetch the current get_brand_guide before generating. Reuse the original M logo.");
-            info.put("teacherPrompts", "Unchanged; this tool is not available to other teachers.");
+            info.put("teacherPrompts", "Generator source remains private; signed-in teachers use the shared server-side renderer only for their own lessons.");
             return info;
         }
         if (!ALLOWED_FILES.contains(file))
