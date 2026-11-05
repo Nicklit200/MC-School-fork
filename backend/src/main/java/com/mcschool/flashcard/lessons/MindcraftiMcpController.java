@@ -905,8 +905,12 @@ public class MindcraftiMcpController {
         result.put("updatedAt", settings.updatedAt() == null ? null : settings.updatedAt().toString());
         result.put("usage", "Use this prompt only for its specific material type. Workbook and homework are intentionally separate: workbook does not imply homework, and homework does not imply workbook. Apply the teacher's additional instructions on top of the selected prompt. If an additional instruction conflicts with the school prompt for this one request, follow the teacher's explicit request unless it would make the task unsafe or impossible.");
         result.put("configured", prompt != null && !prompt.isBlank());
-        result.put("brandGuide", schoolBrandGuideService.readForMcp());
-        result.put("brandGuideUsage", "The embedded Brand Guide is the current visual design standard. Apply it to every generated Mindcrafti document or PDF unless the administrator explicitly says otherwise.");
+        Map<String,Object> brandGuideSummary = new LinkedHashMap<>(schoolBrandGuideService.readForMcp());
+        // Do not embed the complete Brand Guide PDF/base64 in every school-prompt response.
+        // The server-side renderer reads the authoritative stored PDF directly when it needs the logo.
+        brandGuideSummary.remove("base64");
+        result.put("brandGuide", brandGuideSummary);
+        result.put("brandGuideUsage", "This lightweight Brand Guide summary is enough for normal lesson planning. The canonical server-side PDF renderer reads the current stored Brand Guide and original logo directly. Call get_brand_guide only when the actual source PDF is explicitly needed for a non-canonical visual task.");
         return result;
     }
 
