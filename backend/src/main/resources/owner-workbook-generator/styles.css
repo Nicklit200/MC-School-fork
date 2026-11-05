@@ -195,12 +195,9 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .facts-note { font-size: 10.8px; color: var(--gray-text); line-height: 1.35; margin-top: 1.8mm; }
 
 /* MathJax TeX -> inline SVG. Supports algebraic fractions, powers, roots and equations. */
-/* Preserve the MathJax SVG viewBox while making its size participate in layout. */
-.math-latex {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 0; max-width: 100%; vertical-align: middle; line-height: 1;
-}
-.math-latex svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+/* Preserve MathJax inline SVG intrinsic sizing to avoid blowing up rich text blocks. */
+.math-latex { display: inline-block; max-width: 100%; vertical-align: middle; line-height: 0; }
+.math-latex svg { max-width: 100%; overflow: visible; }
 .formula-latex { min-width: 0; max-width: 100%; min-height: 1.45em; }
 .inline-math { font-size:inherit; line-height:inherit; vertical-align:middle; }
 .inline-math.formula > * + * { margin-left:.2em; }
