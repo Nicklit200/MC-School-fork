@@ -54,7 +54,11 @@
   <script>
   (() => {
     'use strict';
+    if (typeof console !== 'undefined' && typeof console.info === 'function') console.info('[MCH3 file transfer] bootstrap 1.30.1');
     const $ = id => document.getElementById(id);
+    const protocolVersion = '2026-01-26';
+    const rpcPending = new Map();
+    let rpcSequence = 0, bridgeReady = false, bridgeFailed = false, serverToolsAvailable = false, bufferedResult = null;
     const operations = new Set(['prepare_lesson', 'upload_personal_lesson_workbook', 'upload_personal_lesson_answers',
       'lesson_preparation.uploadWorkbook', 'lesson_preparation.uploadAnswers']);
     const contextFields = ['operation', 'teacherId', 'eventId', 'studentId', 'idempotencyKey', 'confirm',
@@ -71,6 +75,29 @@
     const safeCount = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
 
     function problem(code) { const error = new Error(code); error.transferCode = code; return error; }
+    function post(message) {
+      if (!window.parent || window.parent === window || typeof window.parent.postMessage !== 'function') throw problem('bridge');
+      window.parent.postMessage(message, '*');
+    }
+    function notify(method, params) {
+      post({ jsonrpc: '2.0', method, ...(params === undefined ? {} : { params }) });
+    }
+    function request(method, params, timeout = 60000) {
+      if (!bridgeReady && method !== 'ui/initialize') return Promise.reject(problem('bridge'));
+      return new Promise((resolve, reject) => {
+        const id = `mch3-file-transfer-${++rpcSequence}`;
+        const timer = setTimeout(() => { rpcPending.delete(id); reject(problem('timeout')); }, timeout);
+        rpcPending.set(id, { resolve, reject, timer });
+        try { post({ jsonrpc: '2.0', id, method, params }); }
+        catch (_) { clearTimeout(timer); rpcPending.delete(id); reject(problem('bridge')); }
+      });
+    }
+    function reportSize() {
+      if (!bridgeReady) return;
+      const measured = document.documentElement?.getBoundingClientRect?.().height || document.body?.scrollHeight || 180;
+      const height = Math.max(180, Math.ceil(measured));
+      try { notify('ui/notifications/size-changed', { height }); } catch (_) { /* layout is optional */ }
+    }
     function timed(promise, timeout = 30000) {
       let timer;
       return Promise.race([Promise.resolve(promise), new Promise((_, reject) => {
@@ -128,7 +155,7 @@
     function setStatus(message, tone = '') {
       $('status').textContent = message;
       $('status').dataset.tone = tone;
-      try { window.openai?.notifyIntrinsicHeight?.(); } catch (_) { /* optional host layout */ }
+      reportSize();
     }
     function renderDocuments(documents, verified = false) {
       $('documents').replaceChildren();
@@ -144,6 +171,7 @@
         }
         $('documents').append(item);
       }
+      reportSize();
     }
     function buttons() {
       const host = window.openai;
@@ -193,7 +221,7 @@
       return null;
     }
     async function call(name, args) {
-      return unwrap(await timed(window.openai.callTool(name, args), 60000));
+      return unwrap(await request('tools/call', { name, arguments: args }));
     }
     async function readBack(c, files) {
       let metadata;
@@ -230,7 +258,12 @@
     }
     async function run(onlyVerify = false) {
       if (!context || busy) return;
-      if (typeof window.openai?.getFileDownloadUrl !== 'function' || typeof window.openai?.callTool !== 'function') {
+      if (bridgeReady && !serverToolsAvailable) {
+        phase = 'unavailable'; attempted = true;
+        setStatus('Этот режим ChatGPT не поддерживает сохранение файлов в MCH3. Откройте новый чат с подключённым MCH3.', 'error');
+        buttons(); return;
+      }
+      if (!bridgeReady || typeof window.openai?.getFileDownloadUrl !== 'function') {
         phase = 'unavailable'; setStatus('Откройте эту панель в ChatGPT с подключённым MCH3.', 'error'); buttons(); return;
       }
       const c = { ...context }, key = contextKey, files = effectiveSlots(c);
@@ -239,6 +272,7 @@
         if (!uploaded && !onlyVerify) {
           setStatus('Получаем выбранные PDF из ChatGPT.');
           const references = await Promise.all(files.map(reference));
+          if (!bridgeReady || key !== contextKey) throw problem('bridge');
           const args = {};
           for (const field of contextFields) if (!field.endsWith('FileId') && c[field] !== undefined) args[field] = c[field];
           files.forEach((file, index) => { args[file.field] = references[index]; });
@@ -267,12 +301,12 @@
       }
     }
     async function chooseFiles() {
-      if (!context || busy || typeof window.openai?.selectFiles !== 'function') return;
+      if (!bridgeReady || !context || busy || typeof window.openai?.selectFiles !== 'function') return;
       const c = { ...context }, key = contextKey, wanted = slots(c);
       busy = true; buttons();
       try {
         const choices = await timed(window.openai.selectFiles(), 120000);
-        if (key !== contextKey || !Array.isArray(choices) || !choices.length) return;
+        if (!bridgeReady || key !== contextKey || !Array.isArray(choices) || !choices.length) return;
         const matches = {};
         for (const file of wanted) {
           const candidates = wanted.length === 1 && choices.length === 1 ? choices
@@ -312,21 +346,87 @@
       if (!attempted) void run(uploaded);
     }
     function observe() {
-      const host = window.openai;
-      const c = validContext(host?.toolOutput);
-      if (c) install(c);
+      if (!bridgeReady || bridgeFailed) return;
       if (!context && Date.now() >= startupDeadline) {
-        setStatus(host ? 'Ожидаем подтверждённый запрос загрузки из чата.' : 'Откройте эту панель внутри ChatGPT с подключённым MCH3.');
+        setStatus('Ожидаем подтверждённый запрос загрузки из чата.');
       }
       if (startupTimer) clearTimeout(startupTimer);
-      if (!context && Date.now() < startupDeadline) startupTimer = setTimeout(observe, 250);
+      if ((!context || !attempted) && Date.now() < startupDeadline) startupTimer = setTimeout(observe, 250);
       if (context && !busy && !attempted) void run(uploaded);
+    }
+    function toolResult(result) {
+      if (!result || typeof result !== 'object' || Array.isArray(result)) return;
+      if (!bridgeReady) { if (!bridgeFailed) bufferedResult = result; return; }
+      if (result.isError === true) {
+        setStatus('ChatGPT не подтвердил запрос загрузки. Вернитесь в чат и выберите нужный урок.', 'error'); return;
+      }
+      let value;
+      try { value = unwrap(result); } catch (_) { return; }
+      const c = validContext(value);
+      if (c) install(c);
+      observe();
+    }
+    function receive(event) {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!message || typeof message !== 'object' || Array.isArray(message) || message.jsonrpc !== '2.0') return;
+      const hasId = Object.prototype.hasOwnProperty.call(message, 'id');
+      if (hasId && !(typeof message.id === 'string' || (typeof message.id === 'number' && Number.isFinite(message.id)))) return;
+      if (typeof message.method === 'string') {
+        if (hasId) {
+          if (message.method === 'ping') {
+            post({ jsonrpc: '2.0', id: message.id, result: {} });
+          } else if (message.method === 'ui/resource-teardown') {
+            bridgeReady = false; bridgeFailed = true; contextKey = ''; context = null; pending = null;
+            for (const entry of rpcPending.values()) { clearTimeout(entry.timer); entry.reject(problem('bridge')); }
+            rpcPending.clear();
+            if (startupTimer) clearTimeout(startupTimer);
+            post({ jsonrpc: '2.0', id: message.id, result: {} });
+          } else {
+            post({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not found' } });
+          }
+          return;
+        }
+        if (message.method === 'ui/notifications/tool-result') toolResult(message.params);
+        // Tool input is deliberately ignored. Only an authorized tool result can start a transfer.
+        return;
+      }
+      if (!hasId || !rpcPending.has(message.id)) return;
+      const entry = rpcPending.get(message.id);
+      rpcPending.delete(message.id); clearTimeout(entry.timer);
+      const hasResult = Object.prototype.hasOwnProperty.call(message, 'result');
+      const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
+      if (hasError || !hasResult || hasResult === hasError) entry.reject(problem('bridge'));
+      else entry.resolve(message.result);
+    }
+    async function initialize() {
+      try {
+        const result = await request('ui/initialize', { appInfo: { name: 'mindcrafti-file-transfer', version: '1.30.1' },
+          appCapabilities: {}, protocolVersion }, 15000);
+        if (!result || result.protocolVersion !== protocolVersion || !result.hostInfo || typeof result.hostInfo.name !== 'string'
+          || typeof result.hostInfo.version !== 'string' || !result.hostCapabilities || typeof result.hostCapabilities !== 'object'
+          || !result.hostContext || typeof result.hostContext !== 'object') throw problem('bridge');
+        serverToolsAvailable = !!result.hostCapabilities.serverTools && typeof result.hostCapabilities.serverTools === 'object';
+        notify('ui/notifications/initialized');
+        bridgeReady = true;
+        startupDeadline = Date.now() + 15000;
+        if (typeof console !== 'undefined' && typeof console.info === 'function') console.info('[MCH3 file transfer] MCP Apps initialized 1.30.1');
+        if (bufferedResult) { const value = bufferedResult; bufferedResult = null; toolResult(value); }
+        if (typeof ResizeObserver === 'function') new ResizeObserver(reportSize).observe(document.documentElement);
+        reportSize(); observe();
+      } catch (_) {
+        bridgeReady = false; bridgeFailed = true; bufferedResult = null;
+        if (startupTimer) clearTimeout(startupTimer);
+        setStatus('Не удалось подключить панель загрузки к ChatGPT. Откройте новый чат с MCH3 и повторите запрос.', 'error');
+        buttons();
+      }
     }
     $('retry').addEventListener('click', () => { if (!busy) void run(); });
     $('verify').addEventListener('click', () => { if (!busy) void run(true); });
     $('choose').addEventListener('click', () => { void chooseFiles(); });
     window.addEventListener('openai:set_globals', observe, { passive: true });
-    observe();
+    window.addEventListener('message', receive);
+    void initialize();
   })();
   </script>
 </body>

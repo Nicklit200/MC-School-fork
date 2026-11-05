@@ -134,7 +134,7 @@ class McpSiteFunctionsTransportIntegrationTest {
         assertThat(execute.path("inputSchema").path("properties").path("file").path("required").toString())
                 .contains("download_url", "file_id");
         JsonNode state = value(call("admin", "mindcrafti_status", Map.of()));
-        assertThat(state.path("version").asText()).isEqualTo("1.30.0");
+        assertThat(state.path("version").asText()).isEqualTo("1.30.1");
         assertThat(state.path("availableToolCount").asInt()).isEqualTo(names.size());
         JsonNode catalog = value(call("admin", "list_site_functions", Map.of("limit", 100)));
         assertThat(catalog.path("total").asInt()).isGreaterThan(150);

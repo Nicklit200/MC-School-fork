@@ -50,12 +50,13 @@ import tools.jackson.databind.ObjectMapper;
 @RestController
 @RequestMapping("/api/v1/mcp")
 public class MindcraftiMcpController {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(MindcraftiMcpController.class);
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.30.0";
+    private static final String SERVER_VERSION = "1.30.1";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
-    private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer.html";
+    private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
     private static final String FILE_TRANSFER_MIME = "text/html;profile=mcp-app";
     private static final Set<String> FILE_TRANSFER_OPERATIONS = Set.of("prepare_lesson",
             "upload_personal_lesson_workbook", "upload_personal_lesson_answers",
@@ -286,6 +287,8 @@ public class MindcraftiMcpController {
     }
 
     private Map<String, Object> readFileTransferResource(Map<String, Object> request, AuthContext auth) {
+        LOG.info("MCH3 PDF transfer panel requested version={} authenticated={} allowed={}",
+                SERVER_VERSION, auth.authenticated(), fileTransferActorAllowed(auth));
         if (!fileTransferActorAllowed(auth)) {
             throw new org.springframework.security.access.AccessDeniedException("School OAuth sign-in is required");
         }
@@ -298,6 +301,7 @@ public class MindcraftiMcpController {
         } catch (java.io.IOException unavailable) {
             throw new IllegalStateException("The lesson file-transfer panel is unavailable");
         }
+        LOG.info("MCH3 PDF transfer panel served version={} role={}", SERVER_VERSION, auth.user().getRole());
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("ui", Map.of("prefersBorder", true,
                 "csp", Map.of("connectDomains", List.of(), "resourceDomains", List.of())));

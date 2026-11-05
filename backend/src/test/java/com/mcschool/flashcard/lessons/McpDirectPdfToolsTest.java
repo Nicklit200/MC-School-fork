@@ -35,7 +35,7 @@ import tools.jackson.databind.ObjectMapper;
 /** Controller boundaries: authorize first, preserve stable receipts, then import both PDF slots. */
 class McpDirectPdfToolsTest {
     private static final String EVENT = "actual-lesson-event";
-    private static final String TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer.html";
+    private static final String TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
     private final ObjectMapper json = new ObjectMapper();
     private final UserRepository users = mock(UserRepository.class);
     private final McpOAuthService oauth = mock(McpOAuthService.class);
@@ -388,7 +388,7 @@ class McpDirectPdfToolsTest {
         assertThat((List<String>) startSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
         assertThat((List<String>) finishSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
         Map<String, Object> initialization = rpc("admin", "initialize", Map.of());
-        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.30.0");
+        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.30.1");
         assertThat((Map<String, Object>) initialization.get("capabilities")).containsKey("resources");
     }
 

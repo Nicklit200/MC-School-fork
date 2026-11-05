@@ -1,4 +1,4 @@
-# Direct PDF input for MCH3 1.30.0
+# Direct PDF input for MCH3 1.30.1
 
 For PDFs already created or attached in ChatGPT, prefer the direct file input.
 Do NOT upload to Google Drive as an intermediate step.
@@ -61,7 +61,7 @@ validator expected a file ID string. It does not change the documented server
 file contract or add a second persistence path.
 
 `prepare_lesson_file_transfer` accepts opaque file IDs and emits the authenticated
-`ui://mindcrafti/lesson-file-transfer.html` resource. Only an explicitly confirmed
+`ui://mindcrafti/lesson-file-transfer-v2.html` resource. Only an explicitly confirmed
 upload starts the panel. It uses `window.openai.getFileDownloadUrl`, or the host's
 file selector when access must be granted, and calls the app-only
 `complete_lesson_file_transfer` tool with complete file objects. The helper tools
@@ -75,6 +75,11 @@ Private uploads still require the exact current pupil and existing pilot access.
 The panel never renders or saves signed download URLs in widget state, logs or
 model-visible output. A host without file APIs shows an explicit failure instead
 of pretending a local path or plain file ID was uploaded.
+
+The panel completes the MCP Apps `ui/initialize` handshake before reading files
+or invoking tools and consumes the authorized `ui/notifications/tool-result`.
+Its resource URI is versioned because ChatGPT uses that URI as a template cache
+key. After changing the panel, refresh tools and start a new chat.
 
 Example server-side JSON-RPC arguments after the host resolves its files:
 
