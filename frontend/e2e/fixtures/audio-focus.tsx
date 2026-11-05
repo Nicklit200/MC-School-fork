@@ -13,6 +13,7 @@ const errors: string[] = [];
 function AudioFixture() {
   const audio = useClassAudioFocus('audio-qa', 'teacher', config.identity === 'teacher');
   const [ready, setReady] = useState(false);
+  const [startupError, setStartupError] = useState('');
   useEffect(() => {
     let active = true;
     const context = new AudioContext();
@@ -25,11 +26,12 @@ function AudioFixture() {
       await room.connect('ws://127.0.0.1:7880', config.token);
       await room.localParticipant.publishTrack(destination.stream.getAudioTracks()[0], { source: Track.Source.Microphone });
       if (active) { setReady(true); (window as any).audioFocusFixture.ready = true; }
-    })().catch(error => errors.push(String(error)));
+    })().catch(error => { errors.push(String(error)); if (active) setStartupError(String(error)); });
     return () => { active = false; void room.disconnect(); oscillator.stop(); void context.close(); };
   }, []);
   return <>
     <h1>{config.identity}</h1><p data-testid="ready">{ready ? 'ready' : 'connecting'}</p>
+    <p data-testid="startup-error">{startupError}</p>
     <p data-testid="focus">{audio.focus?.studentId ?? 'group'}:{String(audio.focus?.announceAll ?? false)}</p>
     <p data-testid="error">{String(audio.error)}</p>
     {config.identity === 'teacher' && <>

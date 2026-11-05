@@ -40,8 +40,10 @@ jobs:
       - run: npm install --no-save @playwright/test
       - run: npx playwright install --with-deps chromium
       - name: Start isolated local SFU
-        run: docker run -d --rm --name audio-focus-sfu --network host livekit/livekit-server:v1.13.11 --dev --bind 127.0.0.1 --node-ip 127.0.0.1
+        run: docker run -d --rm --name audio-focus-sfu --network host -v "$PWD/e2e/livekit-audio.yaml:/etc/livekit-audio.yaml:ro" livekit/livekit-server:v1.13.11 --dev --config /etc/livekit-audio.yaml --node-ip 127.0.0.1
       - run: npx playwright test --config=playwright.audio-focus.config.mjs
+      - if: failure()
+        run: docker logs audio-focus-sfu
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
