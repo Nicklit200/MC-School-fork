@@ -93,3 +93,25 @@ test('legacy v3 lessons and corrected MathJax example still render',async()=>{
     assert.doesNotMatch(workbook,/data-mml-node="merror"/);
   }
 });
+
+
+test('Sonja two-point equations keep long MathJax expressions in isolated cells',async()=>{
+  const lesson=basic();
+  lesson.workbookPages[0].blocks=[
+    {type:'example',label:'BEISPIEL: SCHRITT FÜR SCHRITT',expressions:[
+      {latex:'A(0\\mid 1),\\ B(2\\mid 5)'},
+      {latex:'m=\\frac{5-1}{2-0}=2,\\quad t=1'},
+      {latex:'y=2x+1'}
+    ]},
+    {type:'exercise',number:'04',title:'Bestimme m, t und die Funktionsgleichung.',rows:[
+      {label:'a.',math:{latex:'A(-2\\mid 5),\\quad B(2\\mid -3)'},work:true},
+      {label:'b.',math:{latex:'A(-1\\mid 0),\\quad B(3\\mid 8)'},work:true}
+    ],writeLines:3}
+  ];
+  const {workbook}=await render(lesson);
+  assert.equal((workbook.match(/class="example-math-item"/g)||[]).length,3);
+  assert.equal((workbook.match(/class="task-row"/g)||[]).length,2);
+  assert.equal((workbook.match(/class="workline"/g)||[]).length,2);
+  assert.match(workbook,/expression-wrap/);
+  assert.doesNotMatch(workbook,/data-mml-node="merror"/);
+});
