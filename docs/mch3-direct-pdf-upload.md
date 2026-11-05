@@ -1,4 +1,4 @@
-# Direct PDF input for MCH3 1.29.0
+# Direct PDF input for MCH3 1.29.1
 
 For PDFs already created or attached in ChatGPT, prefer the direct file input.
 Do NOT upload to Google Drive as an intermediate step.
@@ -26,11 +26,16 @@ The host handles the transfer of its authorized file input. The server receives
 a short-lived HTTPS capability and resolves the PDF bytes directly. It does not
 read the client's local path and needs no Google Drive or OpenAI API key.
 
-Refresh the installed MCH3 connection after deployment so the host discovers
-the new schemas and file-parameter metadata. A client that has cached the old
-catalog cannot use these new fields until it refreshes. If the host does not
+After deployment, use ChatGPT Settings > Plugins > MCH3 > Manage > Refresh tools,
+then start a NEW chat so it discovers the new schemas and file-parameter metadata.
+An already active chat can retain the old catalog even after tools are refreshed. If the host does not
 offer file transfer for a particular local/generated file, do not invent a
 download URL or claim that passing a local path worked.
+
+The advertised file-tool schemas are flat objects so host normalization cannot
+make source alternatives overlap. The backend still checks exactly one populated
+source per PDF before downloading or writing; blank legacy source strings are
+ignored, and conflicting nonblank sources return `exactly_one_source_required`.
 
 ## Workflow
 

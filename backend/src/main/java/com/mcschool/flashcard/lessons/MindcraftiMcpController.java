@@ -51,7 +51,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.29.0";
+    private static final String SERVER_VERSION = "1.29.1";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -343,7 +343,7 @@ public class MindcraftiMcpController {
         prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename. Also used for Drive fallback lookup."));
         prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for the workbook. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
         prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for teacher answers. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
-        tools.add(fileTool("prepare_lesson", "Create or update lesson preparation for the selected teacher. Its common workbook appears on Shared board and on each pupil's My board unless that pupil has a private worksheet assigned with upload_personal_lesson_workbook. Private worksheets and their annotations are preserved. Admins can write to any teacher lesson. Prefer workbookFile and answersFile for PDFs attached in ChatGPT, with school OAuth and a stable idempotencyKey; no Google Drive intermediate is needed. Legacy base64 and teacher-scoped Drive imports remain supported. Each PDF slot accepts at most one source; omitted slots and notes remain unchanged.", pdfSourcesSchema(prepareProperties, List.of("teacherId", "eventId"), List.of(List.of("workbookFile", "workbookBase64", "driveWorkbookFileId"), List.of("answersFile", "answersBase64", "driveAnswersFileId")), true), writeAnnotations(), List.of("workbookFile", "answersFile")));
+        tools.add(fileTool("prepare_lesson", "Create or update lesson preparation for the selected teacher. Its common workbook appears on Shared board and on each pupil's My board unless that pupil has a private worksheet assigned with upload_personal_lesson_workbook. Private worksheets and their annotations are preserved. Admins can write to any teacher lesson. Prefer workbookFile and answersFile for PDFs attached in ChatGPT, with school OAuth and a stable idempotencyKey; no Google Drive intermediate is needed. Legacy base64 and teacher-scoped Drive imports remain supported. Each PDF slot accepts at most one source; omitted slots and notes remain unchanged.", schema(prepareProperties, List.of("teacherId", "eventId")), writeAnnotations(), List.of("workbookFile", "answersFile")));
 
         if (personalLessonWorkbookService != null && personalWorkbookActorAllowed(auth)) {
             Map<String, Object> personalProperties = new LinkedHashMap<>();
@@ -1509,25 +1509,10 @@ public class MindcraftiMcpController {
         result.put("_meta", Map.of("openai/fileParams", fileParameters));
         return result;
     }
-    private Map<String, Object> pdfSourcesSchema(Map<String, Object> properties, List<String> required,
-            List<List<String>> groups, boolean optional) {
-        Map<String, Object> result = schema(properties, required);
-        List<Map<String, Object>> constraints = new ArrayList<>();
-        for (List<String> group : groups) {
-            List<Map<String, Object>> choices = new ArrayList<>();
-            for (String field : group) choices.add(Map.of("required", List.of(field)));
-            if (optional) choices.add(Map.of("not", Map.of("anyOf", List.copyOf(choices))));
-            constraints.add(Map.of("oneOf", choices));
-        }
-        result.put("allOf", constraints);
-        return result;
-    }
     private Map<String, Object> personalPdfSourcesSchema(Map<String, Object> properties) {
-        Map<String, Object> result = schema(properties, List.of("teacherId", "eventId", "studentId", "idempotencyKey"));
-        result.put("oneOf", List.of(Map.of("required", List.of("pdfFile")),
-                Map.of("required", List.of("pdfBase64")), Map.of("required", List.of("driveFileId"))));
-        result.put("anyOf", List.of(Map.of("required", List.of("pdfFile")), Map.of("required", List.of("filename"))));
-        return result;
+        // Keep file-tool contracts flat for host schema normalization. Source
+        // exclusivity and conditional filenames are validated before downloads.
+        return schema(properties, List.of("teacherId", "eventId", "studentId", "idempotencyKey"));
     }
     private Map<String, Object> schema(Map<String, Object> properties, List<String> required) { Map<String, Object> schema = new LinkedHashMap<>(); schema.put("type", "object"); schema.put("properties", properties); if (!required.isEmpty()) schema.put("required", required); schema.put("additionalProperties", false); return schema; }
     private Map<String, Object> property(String type, String description) { return Map.of("type", type, "description", description); }

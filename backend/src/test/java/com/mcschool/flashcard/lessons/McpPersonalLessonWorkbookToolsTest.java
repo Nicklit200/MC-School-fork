@@ -110,13 +110,14 @@ class McpPersonalLessonWorkbookToolsTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void catalogDeclaresOfficialTopLevelFileParametersAndExclusivePdfSources() {
+    void catalogDeclaresOfficialTopLevelFileParametersAndServerValidatedSources() {
         List<Map<String, Object>> catalog = (List<Map<String, Object>>) request("owner", "tools/list", Map.of()).get("tools");
         for (String name : List.of("upload_personal_lesson_workbook", "upload_personal_lesson_answers")) {
             Map<String, Object> tool = catalog.stream().filter(item -> name.equals(item.get("name"))).findFirst().orElseThrow();
             assertThat((Map<String, Object>) tool.get("_meta")).containsEntry("openai/fileParams", List.of("pdfFile"));
             Map<String, Object> schema = (Map<String, Object>) tool.get("inputSchema");
-            assertThat((List<?>) schema.get("oneOf")).hasSize(3);
+            assertThat(schema).doesNotContainKeys("oneOf", "anyOf", "allOf", "not");
+            assertThat((List<String>) schema.get("required")).containsExactlyInAnyOrder("teacherId", "eventId", "studentId", "idempotencyKey");
             Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
             Map<String, Object> file = (Map<String, Object>) properties.get("pdfFile");
             assertThat((List<String>) file.get("required")).containsExactlyInAnyOrder("download_url", "file_id");
@@ -145,6 +146,7 @@ class McpPersonalLessonWorkbookToolsTest {
                 });
         Map<String, Object> args = new HashMap<>(target());
         args.put("studentId", studentId.toString()); args.put("idempotencyKey", "attached-001"); args.put("pdfFile", file("first-secret"));
+        args.put("pdfBase64", ""); args.put("driveFileId", "");
         assertThat(call("admin", "upload_personal_lesson_workbook", args).get("isError")).isEqualTo(false);
         args.put("pdfFile", file("expired-or-renewed-secret"));
         Map<String, Object> replay = call("admin", "upload_personal_lesson_workbook", args);
@@ -180,7 +182,7 @@ class McpPersonalLessonWorkbookToolsTest {
     void discoveryAndInitializationExplainTwoBoardsAndTheCommonOrBlankFallback() {
         for (String method : List.of("initialize", "server/discover")) {
             Map<String, Object> discovery = request("owner", method, Map.of());
-            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.29.0");
+            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.29.1");
             assertThat(String.valueOf(discovery.get("instructions"))).contains("Shared board and My board (Моя доска)",
                     "takes priority over the common workbook", "uses the common workbook or stays blank",
                     "Shared board continues to show the common workbook to everyone");

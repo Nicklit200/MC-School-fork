@@ -116,6 +116,52 @@ class McpDirectPdfToolsTest {
                 .doesNotContain("shared-workbook", "shared-answers", "base64", "download_url");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void advertisedPairInputKeepsOfficialFilesWithoutCrossFieldSchemaAlternatives() {
+        Map<String, Object> envelope = (Map<String, Object>) controller.post("Bearer admin", null,
+                Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/list")).getBody();
+        List<Map<String, Object>> tools = (List<Map<String, Object>>) ((Map<String, Object>) envelope.get("result")).get("tools");
+        Map<String, Object> tool = tools.stream().filter(item -> "prepare_lesson".equals(item.get("name")))
+                .findFirst().orElseThrow();
+        assertThat((Map<String, Object>) tool.get("_meta"))
+                .containsEntry("openai/fileParams", List.of("workbookFile", "answersFile"));
+        Map<String, Object> schema = (Map<String, Object>) tool.get("inputSchema");
+        assertThat(schema).containsEntry("type", "object").containsEntry("additionalProperties", false)
+                .doesNotContainKeys("oneOf", "anyOf", "allOf", "not");
+        assertThat((List<String>) schema.get("required")).containsExactlyInAnyOrder("teacherId", "eventId");
+        Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+        for (String field : List.of("workbookFile", "answersFile")) {
+            Map<String, Object> file = (Map<String, Object>) properties.get(field);
+            assertThat(file).containsEntry("type", "object").containsEntry("additionalProperties", false);
+            assertThat((List<String>) file.get("required")).containsExactlyInAnyOrder("download_url", "file_id");
+            assertThat((Map<String, Object>) file.get("properties"))
+                    .containsOnlyKeys("download_url", "file_id", "mime_type", "file_name");
+        }
+        assertThat(properties).containsKeys("idempotencyKey", "workbookBase64", "answersBase64",
+                "driveWorkbookFileId", "driveAnswersFileId");
+    }
+
+    @Test void attachedPairAcceptsBlankOptionalLegacySourcesWithoutTreatingThemAsExtraFiles() {
+        Map<String, Object> args = attachedPair("secret");
+        for (String field : List.of("workbookBase64", "answersBase64", "driveWorkbookFileId", "driveAnswersFileId")) {
+            args.put(field, "");
+        }
+        ChatGptFileReference bookRef = files.reference(args.get("workbookFile"), "workbookFile", "", "lesson-workbook.pdf");
+        ChatGptFileReference answersRef = files.reference(args.get("answersFile"), "answersFile", "", "lesson-answers.pdf");
+        doReturn(new PdfInput("workbook.pdf", workbook, "file-workbook")).when(files).resolve(bookRef);
+        doReturn(new PdfInput("answers.pdf", answers, "file-answers")).when(files).resolve(answersRef);
+        executeReceipt();
+
+        assertThat(call("admin", args).get("isError")).isEqualTo(false);
+
+        verify(preparations).prepareMaterials(eq(teacher), eq(EVENT), any(), eq("workbook.pdf"),
+                eq(workbook), eq("answers.pdf"), eq(answers));
+        verify(files).resolve(bookRef);
+        verify(files).resolve(answersRef);
+        verifyNoInteractions(drive);
+    }
+
     @Test void secondFileFailureLeavesNotesAndBothDocumentsUntouched() {
         Map<String, Object> args = attachedPair("secret");
         args.put("lessonPlan", "new plan that must not be partially written");
@@ -133,7 +179,13 @@ class McpDirectPdfToolsTest {
     @Test void rejectsAmbiguousSourcesAndMissingKeyBeforeAnyDownloadOrWrite() {
         Map<String, Object> args = attachedPair("secret");
         args.put("workbookBase64", Base64.getEncoder().encodeToString(workbook));
-        rejected(call("teacher", args), 400);
+        Map<String, Object> workbookConflict = call("teacher", args);
+        rejected(workbookConflict, 400);
+        assertThat(json.writeValueAsString(workbookConflict)).contains("exactly_one_source_required");
+        args = attachedPair("secret"); args.put("driveAnswersFileId", "nonempty-conflicting-source");
+        Map<String, Object> answersConflict = call("teacher", args);
+        rejected(answersConflict, 400);
+        assertThat(json.writeValueAsString(answersConflict)).contains("exactly_one_source_required");
         args = attachedPair("secret"); args.remove("idempotencyKey");
         rejected(call("teacher", args), 400);
         verify(files, never()).resolve(any());
