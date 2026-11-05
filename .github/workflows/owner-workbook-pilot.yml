@@ -15,7 +15,6 @@ on:
   push:
     branches:
       - integration/railway-and-ux
-      - 'feat/workbook-generator-*'
     paths:
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/MindcraftiMcpController.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/OwnerWorkbookPdfRenderService.java'
