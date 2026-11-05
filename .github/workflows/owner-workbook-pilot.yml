@@ -1,6 +1,17 @@
-name: Owner workbook v3 pilot
+name: Workbook generator v4
 
 on:
+  pull_request:
+    branches:
+      - integration/railway-and-ux
+    paths:
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/MindcraftiMcpController.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/OwnerWorkbookPdfRenderService.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/LessonPdfDraftService.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/OwnerWorkbookPdfRenderServiceTest.java'
+      - 'backend/src/main/resources/owner-workbook-generator/**'
+      - 'backend/Dockerfile'
+      - '.github/workflows/owner-workbook-pilot.yml'
   push:
     branches:
       - integration/railway-and-ux
@@ -36,7 +47,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Compile backend and run owner-only workbook unit tests
+      - name: Compile backend and run workbook unit tests
         working-directory: backend
         run: mvn -B -ntp -Dtest=OwnerWorkbookPdfRenderServiceTest test
       - name: Package backend
