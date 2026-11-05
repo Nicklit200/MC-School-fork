@@ -78,6 +78,7 @@ public class OwnerWorkbookPdfRenderService {
     public Map<String, Object> create(AuthenticatedUser teacher, String eventId,
                                       String lessonJson, String planSummary,
                                       String difficultySummary) throws Exception {
+        long startedNanos = System.nanoTime();
         Objects.requireNonNull(teacher, "teacher");
         if (eventId == null || eventId.isBlank())
             throw new IllegalArgumentException("eventId is required");
@@ -130,6 +131,7 @@ public class OwnerWorkbookPdfRenderService {
                 throw new IllegalArgumentException("Workbook generation/QA failed: " +
                         fullLog.substring(Math.max(0, fullLog.length() - 1800)));
             }
+            long renderedNanos = System.nanoTime();
             byte[] workbook = Files.readAllBytes(output.resolve(basename + "_Arbeitsheft_" + duration + "min.pdf"));
             byte[] answers = Files.readAllBytes(output.resolve(basename + "_Lehrerloesungen_" + duration + "min.pdf"));
             if (workbook.length > MAX_DOCUMENT_BYTES || answers.length > MAX_DOCUMENT_BYTES)
@@ -138,6 +140,9 @@ public class OwnerWorkbookPdfRenderService {
                     answers, planSummary, difficultySummary, exerciseCount, officialLogo);
             result.put("generator", "Mindcrafti SVG/A4 workbook " + VERSION);
             result.put("lessonDurationMinutes", Integer.parseInt(duration));
+            result.put("renderMs", (renderedNanos - startedNanos) / 1_000_000L);
+            result.put("totalGenerationMs", (System.nanoTime() - startedNanos) / 1_000_000L);
+            result.put("runtimeCached", true);
             result.put("publication", "DRAFT only; review both PDFs before calling publish_lesson_draft");
             return result;
         } finally {
