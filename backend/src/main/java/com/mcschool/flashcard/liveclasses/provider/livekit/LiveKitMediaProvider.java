@@ -226,6 +226,26 @@ public class LiveKitMediaProvider implements LiveClassMediaProvider {
                 List.of(), List.of(), topic));
     }
 
+    @Override
+    public void updateRoomAudioFocus(String roomName, String focusJson) {
+        List<LivekitModels.Room> rooms = execute(roomServiceClient.listRooms(List.of(roomName)));
+        if (rooms == null || rooms.isEmpty()) throw new MediaProviderException("LiveKit room is unavailable");
+        try {
+            var mapper = new tools.jackson.databind.ObjectMapper();
+            String previous = rooms.get(0).getMetadata();
+            var metadata = previous.isBlank() ? mapper.createObjectNode() : mapper.readTree(previous);
+            if (!(metadata instanceof tools.jackson.databind.node.ObjectNode object)) {
+                throw new MediaProviderException("LiveKit room metadata is incompatible");
+            }
+            object.set("mcAudioFocus", mapper.readTree(focusJson));
+            execute(roomServiceClient.updateRoomMetadata(roomName, mapper.writeValueAsString(object)));
+        } catch (MediaProviderException error) {
+            throw error;
+        } catch (RuntimeException error) {
+            throw new MediaProviderException("Could not update room audio focus");
+        }
+    }
+
     /**
      * Unwraps a Retrofit call. Provider errors are rethrown without the response
      * body, which can echo request details; tokens are never logged.

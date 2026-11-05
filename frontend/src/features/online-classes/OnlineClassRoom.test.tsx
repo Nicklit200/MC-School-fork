@@ -17,6 +17,8 @@ import { useBoardDocumentState } from './useBoardDocument';
 let screenShares: unknown[] = [];
 const notebookFixture = vi.hoisted(() => ({ camerasByOwner: new Map(), viewerProps: new Map(), panelProps: [] as Record<string, any>[] }));
 const livekitFixture = vi.hoisted(() => ({ connectionState: 'connected' }));
+const audioFixture = vi.hoisted(() => ({ focus: null as any, busy: false, error: false, change: vi.fn() }));
+vi.mock('./useClassAudioFocus', () => ({ useClassAudioFocus: () => audioFixture }));
 
 vi.mock('@livekit/components-react', () => ({
   LiveKitRoom: ({ children, onDisconnected, onConnected, onError }: {
@@ -123,6 +125,7 @@ vi.mock('../../api/onlineClasses', async () => {
 import { OnlineClassRoom } from './OnlineClassRoom';
 
 beforeEach(() => {
+  audioFixture.focus = null; audioFixture.busy = false; audioFixture.error = false; audioFixture.change.mockClear();
   vi.mocked(flushClassAnnotations).mockReset().mockResolvedValue(undefined);
   vi.mocked(hasPendingClassAnnotations).mockReset().mockReturnValue(false);
   vi.mocked(useBoardDocumentState).mockReset().mockReturnValue({ status: 'empty', document: null, version: 0 });
@@ -894,6 +897,42 @@ describe('OnlineClassRoom', () => {
       { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
     ]);
     vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: true, answersFilename: 'a.pdf' } as never);
+  });
+
+  it('switches listening with the existing Open and All pupils controls', async () => {
+    vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
+      { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+      { userId: 'u2', displayName: 'Boris', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
+    ]);
+    mount(true);
+    await screen.findByRole('option', { name: 'Доска ученика: Boris' });
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'all-student-boards');
+    audioFixture.change.mockClear();
+    await userEvent.click(within(screen.getByRole('region', { name: 'Работа ученика: Alice' })).getByRole('button', { name: 'Открыть' }));
+    expect(audioFixture.change).toHaveBeenLastCalledWith('u1');
+    await userEvent.click(screen.getByRole('button', { name: 'Все ученики' }));
+    expect(audioFixture.change).toHaveBeenLastCalledWith(null);
+  });
+
+  it('announces to all without navigating away, then returns to the selected pupil', async () => {
+    audioFixture.focus = { version: 1, classId: 'c1', teacherId: 'me', studentId: 'u1', announceAll: false };
+    const view = mount(true);
+    const announce = await screen.findByRole('button', { name: 'Сказать всем' });
+    await userEvent.click(announce);
+    expect(audioFixture.change).toHaveBeenLastCalledWith('u1', true);
+    audioFixture.focus = { ...audioFixture.focus, announceAll: true };
+    view.rerender(classroom(true));
+    await userEvent.click(screen.getByRole('button', { name: 'Вернуться к ученику' }));
+    expect(audioFixture.change).toHaveBeenLastCalledWith('u1', false);
+    expect(screen.getByTestId('board-personal-u1')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('shows a failed audio switch and exposes recovery without ending the call', async () => {
+    audioFixture.error = true;
+    mount(true);
+    expect(await screen.findByText('Не удалось переключить звук.')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Включить общий звук' }));
+    expect(audioFixture.change).toHaveBeenLastCalledWith(null);
   });
 
   it('handles an unexpected LiveKit disconnect without clicking Leave', async () => {

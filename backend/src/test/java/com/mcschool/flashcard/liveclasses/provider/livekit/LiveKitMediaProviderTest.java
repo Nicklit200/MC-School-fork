@@ -235,6 +235,52 @@ class LiveKitMediaProviderTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void audioFocusPreservesOtherRoomMetadataAndReportsProviderFailure() throws Exception {
+        RoomServiceClient client = mock(RoomServiceClient.class);
+        Call<java.util.List<LivekitModels.Room>> read = mock(Call.class);
+        Call<LivekitModels.Room> write = mock(Call.class);
+        when(client.listRooms(java.util.List.of(ROOM))).thenReturn(read);
+        when(read.execute()).thenReturn(retrofit2.Response.success(java.util.List.of(
+                LivekitModels.Room.newBuilder().setName(ROOM).setMetadata("{\"anotherFeature\":{\"enabled\":true}}").build())));
+        when(client.updateRoomMetadata(org.mockito.ArgumentMatchers.eq(ROOM), org.mockito.ArgumentMatchers.anyString())).thenReturn(write);
+        when(write.execute()).thenReturn(retrofit2.Response.success(LivekitModels.Room.getDefaultInstance()));
+        OnlineClassProperties properties = new OnlineClassProperties(
+                true, "wss://example.livekit.cloud", API_KEY, API_SECRET,
+                false, false, null, null, Duration.ofMinutes(10), null, null, false);
+        var adapter = new LiveKitMediaProvider(properties, client);
+        adapter.updateRoomAudioFocus(ROOM, "{\"version\":1,\"studentId\":null}");
+        var json = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(client).updateRoomMetadata(org.mockito.ArgumentMatchers.eq(ROOM), json.capture());
+        assertThat(MAPPER.readTree(json.getValue()).path("anotherFeature").path("enabled").asBoolean()).isTrue();
+        assertThat(MAPPER.readTree(json.getValue()).path("mcAudioFocus").path("version").asInt()).isEqualTo(1);
+        when(write.execute()).thenThrow(new IOException("offline"));
+        assertThatThrownBy(() -> adapter.updateRoomAudioFocus(ROOM, "{}"))
+                .isInstanceOf(MediaProviderException.class);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void audioFocusCannotCreateAMissingRoomOrOverwriteNonObjectMetadata() throws Exception {
+        RoomServiceClient client = mock(RoomServiceClient.class);
+        Call<java.util.List<LivekitModels.Room>> read = mock(Call.class);
+        when(client.listRooms(java.util.List.of(ROOM))).thenReturn(read);
+        OnlineClassProperties properties = new OnlineClassProperties(
+                true, "wss://example.livekit.cloud", API_KEY, API_SECRET,
+                false, false, null, null, Duration.ofMinutes(10), null, null, false);
+        var adapter = new LiveKitMediaProvider(properties, client);
+        when(read.execute()).thenReturn(retrofit2.Response.success(java.util.List.of()));
+        assertThatThrownBy(() -> adapter.updateRoomAudioFocus(ROOM, "{}"))
+                .isInstanceOf(MediaProviderException.class);
+        when(read.execute()).thenReturn(retrofit2.Response.success(java.util.List.of(
+                LivekitModels.Room.newBuilder().setMetadata("[]").build())));
+        assertThatThrownBy(() -> adapter.updateRoomAudioFocus(ROOM, "{}"))
+                .isInstanceOf(MediaProviderException.class);
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never()).updateRoomMetadata(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void presenceNeverTreatsEndpointFailureOrNullResponseAsEmpty() throws Exception {
         RoomServiceClient client = mock(RoomServiceClient.class);
         Call<java.util.List<LivekitModels.ParticipantInfo>> operation = mock(Call.class);

@@ -44,6 +44,7 @@ import { DocumentWhiteboardPanel } from './DocumentWhiteboardPanel';
 import { openPdf, type PdfDoc } from './pdfDocument';
 import { useBoardDocument } from './useBoardDocument';
 import { useHostUserId } from './useHostUserId';
+import { useClassAudioFocus } from './useClassAudioFocus';
 import { useClassEvents } from './useClassEvents';
 import { DOCUMENT_TOPIC, documentEvent, VIEW_TOPIC } from './events';
 import type { TranslationKey } from '../../i18n/translations';
@@ -373,6 +374,14 @@ function RoomBody({
   const sharing = useScreenShareActive();
   const wasSharing = useRef(false);
   const hostUserId = useHostUserId(classId);
+  const audioFocus = useClassAudioFocus(classId, hostUserId, connection.host);
+  const audioRestore = useRef(false);
+  useEffect(() => { audioRestore.current = false; }, [classId]);
+  useEffect(() => {
+    if (!connection.host || audioRestore.current || !audioFocus.focus) return;
+    audioRestore.current = true;
+    if (audioFocus.focus.studentId) setActiveBoard(personalBoardId(audioFocus.focus.studentId));
+  }, [connection.host, audioFocus.focus]);
   const { publish: publishDocument } = useClassEvents(classId, DOCUMENT_TOPIC, ({ event, senderIdentity }) => {
     if (event.type !== 'document' || connection.host) return;
     // Ignore document-update packets from students. Only the bound teacher
@@ -603,10 +612,14 @@ function RoomBody({
   const showScreen = sharing && mainView === 'screen';
   const showStudentWorkspaces = connection.host && activeBoard !== SHARED_BOARD_ID && !showScreen;
   const selectBoard = (boardId: string) => {
+    audioRestore.current = true;
+    if (connection.host) audioFocus.change(personalBoardOwner(boardId));
     setActiveBoard(boardId);
     setMainView('board');
     if (connection.host && boardId !== SHARED_BOARD_ID && window.matchMedia?.('(max-width: 900px)').matches) setVideosOpen(false);
   };
+  const audioStudentName = students.find(student => student.userId === audioFocus.focus?.studentId)?.displayName
+    ?? (language === 'DE' ? 'Schüler' : 'ученик');
 
   const fileAction = connection.host ? <>
     <button type="button" role="menuitem" tabIndex={-1} className="board-toolbar__action"
@@ -633,6 +646,29 @@ function RoomBody({
           <ConnectionStatus />
         </div>
         <div className="online-class-room__lesson-actions">
+        <div className="online-class-room__audio-focus">
+          <span role="status">{audioFocus.busy ? (language === 'DE' ? 'Audio wird umgeschaltet' : 'Переключаем звук')
+            : connection.host ? (audioFocus.focus?.studentId && !audioFocus.focus.announceAll
+              ? (language === 'DE' ? `Sie sprechen mit ${audioStudentName}. Sie hören alle.` : `Вас слышит ${audioStudentName}. Вы слышите всех.`)
+              : (language === 'DE' ? 'Die ganze Gruppe hört Sie' : 'Вас слышит вся группа'))
+              : audioFocus.focus?.announceAll ? (language === 'DE' ? 'Der Lehrer spricht mit allen' : 'Учитель обращается ко всем')
+              : audioFocus.focus?.studentId ? (audioFocus.focus.studentId === currentUserId
+                ? (language === 'DE' ? 'Gespräch mit dem Lehrer' : 'Разговор с учителем')
+                : (language === 'DE' ? 'Selbstständige Arbeit. Sie hören Ihre Mitschüler.' : 'Самостоятельная работа. Вы слышите друг друга.'))
+              : (language === 'DE' ? 'Gemeinsames Gespräch' : 'Общий разговор')}</span>
+          {connection.host && audioFocus.focus?.studentId && <button type="button" disabled={audioFocus.busy}
+            aria-pressed={audioFocus.focus.announceAll}
+            onClick={() => audioFocus.change(audioFocus.focus!.studentId, !audioFocus.focus!.announceAll)}>
+            {audioFocus.focus.announceAll ? (language === 'DE' ? 'Zurück zum Schüler' : 'Вернуться к ученику')
+              : (language === 'DE' ? 'An alle sprechen' : 'Сказать всем')}
+          </button>}
+          {audioFocus.error && <span role="alert">
+            {language === 'DE' ? 'Audio konnte nicht umgeschaltet werden.' : 'Не удалось переключить звук.'}
+            {connection.host && <button type="button" disabled={audioFocus.busy} onClick={() => audioFocus.change(null)}>
+              {language === 'DE' ? 'Gemeinsames Audio wiederherstellen' : 'Включить общий звук'}
+            </button>}
+          </span>}
+        </div>
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
         {inkRecoveryError && <div role="alert" className="online-class-room__archive-notice online-class-room__archive-notice--error">
           <span>{language === 'DE' ? 'Notizen konnten noch nicht gespeichert werden. Bitte erneut versuchen.'

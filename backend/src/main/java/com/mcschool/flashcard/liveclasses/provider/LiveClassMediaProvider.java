@@ -49,4 +49,9 @@ public interface LiveClassMediaProvider {
      * @param topic versioned topic name, e.g. {@code mc.class.control.v1}
      */
     void sendControlPacket(String roomName, String topic, byte[] payload);
+
+    /** Server-authored listening mode, retained in the live room across reconnects. */
+    default void updateRoomAudioFocus(String roomName, String focusJson) {
+        throw new MediaProviderException("Audio focus is unavailable");
+    }
 }

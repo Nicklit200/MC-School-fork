@@ -9,6 +9,14 @@ export type OnlineClassStatus = 'SCHEDULED' | 'LOBBY_OPEN' | 'LIVE' | 'ENDED' | 
 
 export type ClassFeatureState = 'INACTIVE' | 'STARTING' | 'ACTIVE' | 'STOPPING' | 'FAILED';
 
+export interface ClassAudioFocus {
+  version: 1;
+  classId: string;
+  teacherId: string;
+  studentId: string | null;
+  announceAll: boolean;
+}
+
 export interface OnlineClass {
   id: string;
   eventId: string;
@@ -252,6 +260,9 @@ export const onlineClassesApi = {
 
   muteAllStudents: (classId: string) =>
     request<ClassParticipant[]>('POST', `/online-classes/${classId}/mute-all-students`),
+
+  setAudioFocus: (classId: string, studentId: string | null, announceAll = false) =>
+    request<ClassAudioFocus>('PUT', `/online-classes/${classId}/audio-focus`, { studentId, announceAll }),
 
   setStudentScreenShare: (classId: string, enabled: boolean) =>
     request<void>('POST', `/online-classes/${classId}/settings/student-screen-share?enabled=${enabled}`),

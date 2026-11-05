@@ -377,3 +377,8 @@ body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:2
 .student-workspaces--overview .whiteboard--compact-preview:not(.whiteboard--following-student) .whiteboard__zoom {
   display:inline-flex!important; right:8px; bottom:8px;
 }
+.online-class-room__audio-focus {
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px;
+  min-width:0; max-width:340px; font-size:12px; line-height:1.35;
+}
+.online-class-room__audio-focus button { padding:5px 8px; font-size:12px; }
