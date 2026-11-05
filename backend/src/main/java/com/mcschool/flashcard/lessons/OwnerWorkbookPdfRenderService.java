@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -28,19 +29,50 @@ import tools.jackson.databind.ObjectMapper;
 public class OwnerWorkbookPdfRenderService {
     static final int MAX_INPUT_CHARS = 115_000;
     static final int MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
-    static final String VERSION = "2026-10-19-v3-clean-diagrams";
+    static final String VERSION = "2026-11-05-v4-fast-shared";
     private static final List<String> RENDER_FILES = List.of(
             "generate.mjs", "diagrams.mjs", "styles.css", "render_pdf.py", "verify_pdf.py");
 
     private final ObjectMapper mapper;
     private final LessonPdfDraftService drafts;
     private final SchoolBrandGuideService brandGuide;
+    private final Path runtimeDirectory;
+    private volatile CachedLogo cachedLogo;
 
     public OwnerWorkbookPdfRenderService(ObjectMapper mapper, LessonPdfDraftService drafts,
                                          SchoolBrandGuideService brandGuide) {
         this.mapper = mapper;
         this.drafts = drafts;
         this.brandGuide = brandGuide;
+        this.runtimeDirectory = prepareRuntimeDirectory();
+    }
+
+    private Path prepareRuntimeDirectory() {
+        try {
+            Path runtime = Files.createTempDirectory("mindcrafti-workbook-runtime-");
+            for (String name : RENDER_FILES) {
+                try (var input = new ClassPathResource("owner-workbook-generator/" + name).getInputStream()) {
+                    Files.copy(input, runtime.resolve(name));
+                }
+            }
+            runtime.toFile().deleteOnExit();
+            return runtime;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Cannot initialize Mindcrafti workbook renderer runtime", ex);
+        }
+    }
+
+    private BufferedImage officialLogo(AuthenticatedUser teacher) throws IOException {
+        var guide = brandGuide.readForStaff(teacher);
+        CachedLogo current = cachedLogo;
+        if (current != null && Objects.equals(current.updatedAt(), guide.updatedAt())) return current.image();
+        synchronized (this) {
+            current = cachedLogo;
+            if (current != null && Objects.equals(current.updatedAt(), guide.updatedAt())) return current.image();
+            BufferedImage image = LessonPdfDraftService.extractOfficialLogo(brandGuide.pdfForStaff(teacher).bytes());
+            cachedLogo = new CachedLogo(guide.updatedAt(), image);
+            return image;
+        }
     }
 
     public Map<String, Object> create(AuthenticatedUser teacher, String eventId,
@@ -55,15 +87,9 @@ public class OwnerWorkbookPdfRenderService {
         Map<String, Object> document = mapper.readValue(lessonJson, Map.class);
         int exerciseCount = validateDocument(document);
 
-        BufferedImage officialLogo = LessonPdfDraftService.extractOfficialLogo(
-                brandGuide.pdfForStaff(teacher).bytes());
-        Path workspace = Files.createTempDirectory("mindcrafti-workbook-v3-");
+        BufferedImage officialLogo = officialLogo(teacher);
+        Path workspace = Files.createTempDirectory("mindcrafti-workbook-job-");
         try {
-            for (String name : RENDER_FILES) {
-                try (var input = new ClassPathResource("owner-workbook-generator/" + name).getInputStream()) {
-                    Files.copy(input, workspace.resolve(name));
-                }
-            }
             Path logoPath = workspace.resolve("logo.png");
             if (!ImageIO.write(officialLogo, "png", logoPath.toFile()))
                 throw new IllegalStateException("Cannot encode official school logo");
@@ -74,10 +100,10 @@ public class OwnerWorkbookPdfRenderService {
             String duration = String.valueOf(((Number) requireMap(document.get("meta"), "meta")
                     .get("durationMinutes")).intValue());
             String basename = "Mindcrafti_Workbook_v3";
-            ProcessBuilder pb = new ProcessBuilder("node", "generate.mjs",
+            ProcessBuilder pb = new ProcessBuilder("node", runtimeDirectory.resolve("generate.mjs").toString(),
                     "--lesson=" + dataPath, "--out=" + output,
                     "--basename=" + basename, "--logo=" + logoPath);
-            pb.directory(workspace.toFile());
+            pb.directory(runtimeDirectory.toFile());
             pb.redirectErrorStream(true);
             Path logs = workspace.resolve("renderer.log");
             pb.redirectOutput(logs.toFile());
@@ -174,4 +200,6 @@ public class OwnerWorkbookPdfRenderService {
             throw new IllegalArgumentException("Each page must contain 1..35 blocks");
         return blocks;
     }
+
+    private record CachedLogo(Instant updatedAt, BufferedImage image) {}
 }
