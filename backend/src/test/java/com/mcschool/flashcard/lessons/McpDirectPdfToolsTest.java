@@ -35,6 +35,7 @@ import tools.jackson.databind.ObjectMapper;
 /** Controller boundaries: authorize first, preserve stable receipts, then import both PDF slots. */
 class McpDirectPdfToolsTest {
     private static final String EVENT = "actual-lesson-event";
+    private static final String TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer.html";
     private final ObjectMapper json = new ObjectMapper();
     private final UserRepository users = mock(UserRepository.class);
     private final McpOAuthService oauth = mock(McpOAuthService.class);
@@ -63,7 +64,10 @@ class McpDirectPdfToolsTest {
         when(users.findById(teacherUser.getId())).thenReturn(Optional.of(teacherUser));
         when(access.requireActor(teacherUser)).thenReturn(teacher);
         when(access.requireActor(admin)).thenReturn(principal(admin));
+        when(access.requireActor(foreignTeacher)).thenReturn(principal(foreignTeacher));
         when(access.requireTeacher(any(), eq(teacher.id()))).thenReturn(teacher);
+        when(access.requireTeacher(eq(principal(foreignTeacher)), eq(teacher.id())))
+                .thenThrow(new org.springframework.security.access.AccessDeniedException("Another teacher's lesson"));
         when(access.asTeacher(any(), eq(teacher), any())).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
         when(calendar.listGroupLessons(teacher)).thenReturn(List.of(new GroupLessonResponse(EVENT, "binding", null,
                 null, UUID.randomUUID(), "Student", List.of(), "Lesson", Instant.parse("2026-11-05T14:00:00Z"),
@@ -244,6 +248,178 @@ class McpDirectPdfToolsTest {
         verifyNoInteractions(preparations, receipts, drive);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void fileTransferStartAuthorizesTheLessonAndReturnsOnlyHostFileIdsWithoutWriting() {
+        Map<String, Object> args = transferStart();
+        args.put("lessonPlan", "Preserved preparation context");
+
+        Map<String, Object> result = call("admin", "prepare_lesson_file_transfer", args);
+
+        assertThat(result.get("isError")).isEqualTo(false);
+        assertThat((Map<String, Object>) result.get("structuredContent"))
+                .containsAllEntriesOf(args);
+        assertThat(json.writeValueAsString(result)).doesNotContain("download_url", "base64", "https:");
+        verify(calendar).listGroupLessons(teacher);
+        verify(files, never()).resolve(any());
+        verifyNoInteractions(preparations, receipts, drive);
+    }
+
+    @Test void fileTransferStartRejectsUnconfirmedUntrustedOrUnrelatedRequestsBeforeIo() {
+        List<Map<String, Object>> invalid = new ArrayList<>();
+        Map<String, Object> args = transferStart(); args.remove("confirm"); invalid.add(args);
+        args = transferStart(); args.put("confirm", false); invalid.add(args);
+        args = transferStart(); args.put("operation", "online_classes.end"); invalid.add(args);
+        args = transferStart(); args.put("eventId", "another-teachers-event"); invalid.add(args);
+        args = transferStart(); args.put("workbookFileId", "/mnt/data/workbook.pdf"); invalid.add(args);
+        args = transferStart(); args.put("answersFileId", "https://files.oaiusercontent.com/file.pdf"); invalid.add(args);
+        args = transferStart(); args.put("idempotencyKey", " "); invalid.add(args);
+        args = transferStart(); args.put("workbookBase64", "unrequested-legacy-source"); invalid.add(args);
+        for (Map<String, Object> request : invalid) {
+            rejected(call("admin", "prepare_lesson_file_transfer", request), 400);
+        }
+        assertThat(call("foreign", "prepare_lesson_file_transfer", transferStart()).get("isError")).isEqualTo(true);
+        assertThat(call("import-key", "prepare_lesson_file_transfer", transferStart()).get("isError")).isEqualTo(true);
+        verify(files, never()).resolve(any());
+        verifyNoInteractions(preparations, receipts, drive);
+    }
+
+    @Test void widgetCompletionReusesAtomicPreparationAndStableReceiptWithoutDownloadingOnReplay() {
+        Map<String, Object> args = attachedPair("first-widget-secret");
+        args.put("operation", "prepare_lesson"); args.put("confirm", true);
+        ChatGptFileReference bookRef = files.reference(args.get("workbookFile"), "workbookFile", "", "lesson-workbook.pdf");
+        ChatGptFileReference answersRef = files.reference(args.get("answersFile"), "answersFile", "", "lesson-answers.pdf");
+        doReturn(new PdfInput("workbook.pdf", workbook, "file-workbook")).when(files).resolve(bookRef);
+        doReturn(new PdfInput("answers.pdf", answers, "file-answers")).when(files).resolve(answersRef);
+        List<Map<String, Object>> identities = new ArrayList<>();
+        when(receipts.execute(any(), eq(teacher.id()), eq("prepare_lesson"), eq("prepare-001"), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    ((Runnable) invocation.getArgument(5)).run();
+                    identities.add(invocation.getArgument(4));
+                    return identities.size() == 1 ? ((Supplier<?>) invocation.getArgument(6)).get() : saved;
+                });
+
+        Map<String, Object> first = call("admin", "complete_lesson_file_transfer", args);
+        args.put("workbookFile", file("workbook", "renewed-widget-secret"));
+        args.put("answersFile", file("answers", "renewed-widget-secret"));
+        Map<String, Object> replay = call("admin", "complete_lesson_file_transfer", args);
+
+        assertThat(first.get("structuredContent")).isEqualTo(saved);
+        assertThat(replay.get("structuredContent")).isEqualTo(saved);
+        assertThat(first.get("isError")).isEqualTo(false);
+        assertThat(replay.get("isError")).isEqualTo(false);
+        assertThat(identities).hasSize(2);
+        assertThat(identities.get(0)).isEqualTo(identities.get(1));
+        assertThat(json.writeValueAsString(identities)).doesNotContain("download_url", "widget-secret", "https:");
+        verify(files).resolve(bookRef); verify(files).resolve(answersRef);
+        verify(preparations).prepareMaterials(eq(teacher), eq(EVENT), any(), eq("workbook.pdf"),
+                eq(workbook), eq("answers.pdf"), eq(answers));
+        verifyNoInteractions(drive);
+    }
+
+    @Test void widgetCompletionRejectsUnconfirmedTargetsAndOtherSourcesBeforeResolvingAnyPdf() {
+        for (boolean confirmed : List.of(false, true)) {
+            Map<String, Object> args = attachedPair("secret");
+            args.put("operation", "prepare_lesson"); args.put("confirm", confirmed);
+            if (confirmed) args.put("answersBase64", Base64.getEncoder().encodeToString(answers));
+            rejected(call("admin", "complete_lesson_file_transfer", args), 400);
+        }
+        Map<String, Object> args = attachedPair("secret"); args.put("operation", "prepare_lesson");
+        rejected(call("admin", "complete_lesson_file_transfer", args), 400);
+        args.put("confirm", true); args.put("eventId", "forged-event");
+        assertThat(call("admin", "complete_lesson_file_transfer", args).get("isError")).isEqualTo(true);
+        verify(files, never()).resolve(any());
+        verifyNoInteractions(preparations, receipts, drive);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void websiteWidgetCompletionUsesOnlyItsFixedExistingUploadFunctionAndFileParameter() {
+        McpSiteFunctionsService site = mock(McpSiteFunctionsService.class);
+        controller.setSiteFunctionsService(site);
+        when(site.call(eq("execute_site_function"), any(), eq(admin), eq(false)))
+                .thenReturn(Map.of("uploaded", true));
+        List<String> operations = List.of("lesson_preparation.uploadWorkbook", "lesson_preparation.uploadAnswers");
+        for (String operation : operations) {
+            Map<String, Object> args = target();
+            args.put("operation", operation); args.put("confirm", true);
+            args.put("idempotencyKey", "website-widget-" + operation);
+            args.put("pdfFile", file("workbook", "widget-secret"));
+            args.put("filename", "approved.pdf");
+            Map<String, Object> result = call("admin", "complete_lesson_file_transfer", args);
+            assertThat(result.get("isError")).isEqualTo(false);
+            assertThat(result.get("structuredContent")).isEqualTo(Map.of("uploaded", true));
+        }
+        ArgumentCaptor<Map<String, Object>> requests = ArgumentCaptor.forClass(Map.class);
+        verify(site, times(2)).call(eq("execute_site_function"), requests.capture(), eq(admin), eq(false));
+        for (int index = 0; index < operations.size(); index++) {
+            Map<String, Object> request = requests.getAllValues().get(index);
+            assertThat(request).containsOnlyKeys("functionId", "teacherId", "arguments", "confirm", "idempotencyKey", "file")
+                    .containsEntry("functionId", operations.get(index)).containsEntry("confirm", true)
+                    .containsEntry("teacherId", teacher.id().toString())
+                    .containsEntry("arguments", Map.of("eventId", EVENT));
+            assertThat((Map<String, Object>) request.get("file"))
+                    .containsOnlyKeys("download_url", "file_id", "mime_type", "file_name")
+                    .containsEntry("file_name", "approved.pdf");
+        }
+        verify(files, never()).resolve(any());
+        verifyNoInteractions(preparations, receipts, drive);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void bridgeCatalogKeepsTransportObjectsAndAppVisibilitySeparateFromAutomaticFileParams() {
+        List<Map<String, Object>> catalog = (List<Map<String, Object>>) rpc("admin", "tools/list", Map.of()).get("tools");
+        Map<String, Object> start = catalog.stream().filter(item -> "prepare_lesson_file_transfer".equals(item.get("name")))
+                .findFirst().orElseThrow();
+        Map<String, Object> finish = catalog.stream().filter(item -> "complete_lesson_file_transfer".equals(item.get("name")))
+                .findFirst().orElseThrow();
+        Map<String, Object> startMeta = (Map<String, Object>) start.get("_meta");
+        Map<String, Object> finishMeta = (Map<String, Object>) finish.get("_meta");
+        assertThat(startMeta).containsEntry("openai/outputTemplate", TRANSFER_RESOURCE).doesNotContainKey("openai/fileParams");
+        assertThat(finishMeta).doesNotContainKey("openai/fileParams");
+        assertThat((Map<String, Object>) finishMeta.get("ui")).containsEntry("visibility", List.of("app"));
+        Map<String, Object> startSchema = (Map<String, Object>) start.get("inputSchema");
+        Map<String, Object> finishSchema = (Map<String, Object>) finish.get("inputSchema");
+        Map<String, Object> startProperties = (Map<String, Object>) startSchema.get("properties");
+        Map<String, Object> finishProperties = (Map<String, Object>) finishSchema.get("properties");
+        assertThat((Map<String, Object>) startProperties.get("workbookFileId")).containsEntry("type", "string");
+        assertThat((Map<String, Object>) finishProperties.get("workbookFile")).containsEntry("type", "object");
+        assertThat((List<String>) startSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
+        assertThat((List<String>) finishSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
+        Map<String, Object> initialization = rpc("admin", "initialize", Map.of());
+        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.30.0");
+        assertThat((Map<String, Object>) initialization.get("capabilities")).containsKey("resources");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fileTransferResourceIsStaticAuthenticatedAndCannotReadArbitraryPaths() {
+        List<Map<String, Object>> resources = (List<Map<String, Object>>) rpc("admin", "resources/list", Map.of()).get("resources");
+        assertThat(resources).hasSize(1);
+        assertThat(resources.get(0)).containsEntry("uri", TRANSFER_RESOURCE);
+        Map<String, Object> result = rpc("admin", "resources/read", Map.of("uri", TRANSFER_RESOURCE));
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        assertThat(contents).hasSize(1);
+        assertThat(contents.get(0)).containsEntry("uri", TRANSFER_RESOURCE)
+                .containsEntry("mimeType", "text/html;profile=mcp-app");
+        assertThat(String.valueOf(contents.get(0).get("text")))
+                .contains("getFileDownloadUrl", "complete_lesson_file_transfer")
+                .doesNotContain("first-widget-secret", "teacher@test.local");
+        assertThat((List<?>) rpc("import-key", "resources/list", Map.of()).get("resources")).isEmpty();
+        assertThat((List<?>) rpc("anonymous", "resources/list", Map.of()).get("resources")).isEmpty();
+        assertThat(envelope("anonymous", "resources/read", Map.of("uri", TRANSFER_RESOURCE))).containsKey("error");
+        assertThat(envelope("admin", "resources/read", Map.of("uri", "file:///etc/passwd"))).containsKey("error");
+        verifyNoInteractions(preparations, receipts, drive);
+    }
+
+    private Map<String, Object> transferStart() {
+        Map<String, Object> args = target();
+        args.put("operation", "prepare_lesson"); args.put("confirm", true); args.put("idempotencyKey", "prepare-001");
+        args.put("workbookFileId", "file_workbook123"); args.put("answersFileId", "file_answers123");
+        return args;
+    }
+
     private void executeReceipt() {
         when(receipts.execute(any(), eq(teacher.id()), eq("prepare_lesson"), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
@@ -268,11 +444,24 @@ class McpDirectPdfToolsTest {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> call(String token, Map<String, Object> arguments) {
-        Map<String, Object> envelope = (Map<String, Object>) controller.post("Bearer " + token, null,
-                Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call", "params",
-                        Map.of("name", "prepare_lesson", "arguments", arguments))).getBody();
-        assertThat(envelope).doesNotContainKey("error");
-        return (Map<String, Object>) envelope.get("result");
+        return call(token, "prepare_lesson", arguments);
+    }
+
+    private Map<String, Object> call(String token, String name, Map<String, Object> arguments) {
+        return rpc(token, "tools/call", Map.of("name", name, "arguments", arguments));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> rpc(String token, String method, Map<String, Object> params) {
+        Map<String, Object> response = envelope(token, method, params);
+        assertThat(response).doesNotContainKey("error");
+        return (Map<String, Object>) response.get("result");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> envelope(String token, String method, Map<String, Object> params) {
+        return (Map<String, Object>) controller.post("Bearer " + token, null,
+                Map.of("jsonrpc", "2.0", "id", 1, "method", method, "params", params)).getBody();
     }
 
     @SuppressWarnings("unchecked")

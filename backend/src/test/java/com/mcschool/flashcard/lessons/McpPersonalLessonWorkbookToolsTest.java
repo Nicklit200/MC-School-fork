@@ -14,6 +14,7 @@ import static org.mockito.Mockito.doReturn;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.auth.McpOAuthService;
 import com.mcschool.flashcard.drive.TeacherGoogleDriveDownloadService;
+import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
 import com.mcschool.flashcard.settings.SchoolBrandGuideService;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
@@ -23,6 +24,7 @@ import com.mcschool.flashcard.trialleads.FunnelAnalyticsService;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -39,6 +41,7 @@ class McpPersonalLessonWorkbookToolsTest {
     private final ObjectMapper json = new ObjectMapper();
     private final UserRepository users = mock(UserRepository.class);
     private final McpOAuthService oauth = mock(McpOAuthService.class);
+    private final GoogleCalendarLessonService calendar = mock(GoogleCalendarLessonService.class);
     private final PersonalLessonWorkbookService personal = mock(PersonalLessonWorkbookService.class);
     private final PersonalLessonAnswersService personalAnswers = mock(PersonalLessonAnswersService.class);
     private final McpAccessService access = mock(McpAccessService.class);
@@ -68,7 +71,7 @@ class McpPersonalLessonWorkbookToolsTest {
         when(personal.list(teacher, EVENT)).thenReturn(new PersonalLessonWorkbookService.PersonalWorkbooksResponse(
                 true, List.of(new PersonalLessonWorkbookService.PersonalWorkbookResponse(studentId, "Student", false, null, 0L))));
         controller = new MindcraftiMcpController("import-key", json, users, oauth,
-                mock(GoogleCalendarLessonService.class), shared, mock(LessonPreparationRepository.class),
+                calendar, shared, mock(LessonPreparationRepository.class),
                 mock(TranscriptLessonGuard.class), drive, mock(McpHomeworkSeriesService.class),
                 mock(McpAnalyticsService.class), mock(McpHomeworkReadService.class), mock(McpHomeworkWriteService.class),
                 mock(MonthlyPlanService.class), mock(SchoolPromptSettingsService.class), mock(SchoolBrandGuideService.class),
@@ -172,9 +175,64 @@ class McpPersonalLessonWorkbookToolsTest {
         verify(personal, never()).upload(any(), any(), any(), any(), any());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void privateFileTransferChecksTheExactRosterBeforeExposingAnUploadContext() {
+        stubTransferLesson();
+        Map<String, Object> args = new HashMap<>(target());
+        args.put("operation", "upload_personal_lesson_workbook");
+        args.put("confirm", true); args.put("studentId", studentId.toString());
+        args.put("pdfFileId", "file_private123"); args.put("idempotencyKey", "private-transfer-001");
+        Map<String, Object> accepted = call("admin", "prepare_lesson_file_transfer", args);
+        assertThat(accepted.get("isError")).isEqualTo(false);
+        assertThat((Map<String, Object>) accepted.get("structuredContent")).containsAllEntriesOf(args);
+        verify(personal).list(teacher, EVENT);
+
+        args.put("studentId", UUID.randomUUID().toString());
+        assertRejected(call("admin", "prepare_lesson_file_transfer", args), 404);
+        args.put("studentId", studentId.toString());
+        assertRejected(call("other", "prepare_lesson_file_transfer", args), 403);
+        assertRejected(call("import-key", "prepare_lesson_file_transfer", args), 403);
+        verify(personal, never()).upload(any(), any(), any(), any(), any());
+        verifyNoInteractions(personalAnswers, shared, drive, receipts);
+    }
+
+    @Test
+    void privateWidgetCompletionKeepsTheOriginalPrivateReceiptAndTarget() {
+        stubTransferLesson();
+        byte[] pdf = "%PDF-1.7\nwidget-private-workbook".getBytes(StandardCharsets.UTF_8);
+        ChatGptPdfResolver resolver = spy(new ChatGptPdfResolver("files.oaiusercontent.com"));
+        controller.setChatGptPdfResolver(resolver);
+        ChatGptFileReference reference = resolver.reference(file("widget-secret"), "pdfFile", "", "personal-workbook.pdf");
+        doReturn(new PdfInput("attached.pdf", pdf, "file-one")).when(resolver).resolve(reference);
+        var saved = new PersonalLessonWorkbookService.PersonalWorkbookResponse(studentId, "Student", true, "attached.pdf", 1L);
+        when(personal.upload(teacher, EVENT, studentId, "attached.pdf", pdf)).thenReturn(saved);
+        stubReceipt("upload_personal_lesson_workbook", "private-widget-001");
+        Map<String, Object> args = new HashMap<>(target());
+        args.put("operation", "upload_personal_lesson_workbook"); args.put("confirm", true);
+        args.put("studentId", studentId.toString()); args.put("pdfFile", file("widget-secret"));
+        args.put("idempotencyKey", "private-widget-001");
+
+        Map<String, Object> result = call("admin", "complete_lesson_file_transfer", args);
+
+        assertThat(result.get("isError")).isEqualTo(false);
+        assertThat(result.get("structuredContent")).isEqualTo(saved);
+        verify(resolver).resolve(reference);
+        verify(personal).upload(teacher, EVENT, studentId, "attached.pdf", pdf);
+        verify(receipts).execute(any(), eq(owner.getId()), eq("upload_personal_lesson_workbook"),
+                eq("private-widget-001"), any(), any(), any());
+        verifyNoInteractions(shared, drive, personalAnswers);
+    }
+
     private Map<String, Object> file(String signature) {
         return Map.of("download_url", "https://files.oaiusercontent.com/document.pdf?sig=" + signature,
                 "file_id", "file-one", "mime_type", "application/pdf", "file_name", "attached.pdf");
+    }
+
+    private void stubTransferLesson() {
+        when(calendar.listGroupLessons(teacher)).thenReturn(List.of(new GroupLessonResponse(EVENT, "binding", null,
+                null, studentId, "Student", List.of(), "Lesson", Instant.parse("2026-11-05T14:00:00Z"),
+                Instant.parse("2026-11-05T15:00:00Z"), null, null)));
     }
 
     @Test
@@ -182,7 +240,7 @@ class McpPersonalLessonWorkbookToolsTest {
     void discoveryAndInitializationExplainTwoBoardsAndTheCommonOrBlankFallback() {
         for (String method : List.of("initialize", "server/discover")) {
             Map<String, Object> discovery = request("owner", method, Map.of());
-            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.29.1");
+            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.30.0");
             assertThat(String.valueOf(discovery.get("instructions"))).contains("Shared board and My board (Моя доска)",
                     "takes priority over the common workbook", "uses the common workbook or stays blank",
                     "Shared board continues to show the common workbook to everyone");

@@ -1,4 +1,4 @@
-# Direct PDF input for MCH3 1.29.1
+# Direct PDF input for MCH3 1.30.0
 
 For PDFs already created or attached in ChatGPT, prefer the direct file input.
 Do NOT upload to Google Drive as an intermediate step.
@@ -42,11 +42,39 @@ ignored, and conflicting nonblank sources return `exactly_one_source_required`.
 1. Create and inspect the PDF documents in the ChatGPT runtime.
 2. Obtain the teacher's instruction to upload them.
 3. Identify the exact teacher and event using `find_lessons`; preserve their IDs.
-4. Call `prepare_lesson` with the two runtime file inputs and a stable
-   `idempotencyKey`. Send explicit filenames when they differ from the runtime's
-   original names. Do not manually construct a large base64 string.
+4. Prefer `prepare_lesson_file_transfer` when the PDFs already have ChatGPT file
+   IDs. Pass the exact operation, target, filenames, `confirm: true` and a stable
+   `idempotencyKey`. Its ChatGPT panel obtains temporary download URLs through
+   the official host file API and submits them to the existing MCH3 upload code.
+   If the host asks for file access, select the intended PDFs from ChatGPT's
+   file library. No local file copying or Google Drive upload is needed.
+   Hosts that implement direct file parameters correctly may also call the
+   original `prepare_lesson` with `workbookFile` and `answersFile`.
 5. Read `get_lesson_preparation` for the same teacher/event and verify both
    filenames, flags, byte lengths and versions.
+
+### ChatGPT file-transfer panel
+
+The panel is a host adapter for a runtime compatibility problem observed during
+real acceptance: the outer tool validator required a file object, while another
+validator expected a file ID string. It does not change the documented server
+file contract or add a second persistence path.
+
+`prepare_lesson_file_transfer` accepts opaque file IDs and emits the authenticated
+`ui://mindcrafti/lesson-file-transfer.html` resource. Only an explicitly confirmed
+upload starts the panel. It uses `window.openai.getFileDownloadUrl`, or the host's
+file selector when access must be granted, and calls the app-only
+`complete_lesson_file_transfer` tool with complete file objects. The helper tools
+deliberately do not use `openai/fileParams`, so their two argument validators see
+the same types. Completion reuses the existing authorization, PDF resolver,
+receipt, atomic preparation and personal-document services.
+
+Supported operations are `prepare_lesson`, the two personal upload tools, and
+`lesson_preparation.uploadWorkbook` / `lesson_preparation.uploadAnswers`.
+Private uploads still require the exact current pupil and existing pilot access.
+The panel never renders or saves signed download URLs in widget state, logs or
+model-visible output. A host without file APIs shows an explicit failure instead
+of pretending a local path or plain file ID was uploaded.
 
 Example server-side JSON-RPC arguments after the host resolves its files:
 

@@ -29,9 +29,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -51,8 +53,13 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.29.1";
+    private static final String SERVER_VERSION = "1.30.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
+    private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer.html";
+    private static final String FILE_TRANSFER_MIME = "text/html;profile=mcp-app";
+    private static final Set<String> FILE_TRANSFER_OPERATIONS = Set.of("prepare_lesson",
+            "upload_personal_lesson_workbook", "upload_personal_lesson_answers",
+            "lesson_preparation.uploadWorkbook", "lesson_preparation.uploadAnswers");
 
     private final String apiKey;
     private final ObjectMapper objectMapper;
@@ -217,6 +224,8 @@ public class MindcraftiMcpController {
                 case "ping" -> Map.of();
                 case "tools/list" -> Map.of("tools", tools(auth));
                 case "tools/call" -> callTool(body, auth);
+                case "resources/list" -> fileTransferResources(auth);
+                case "resources/read" -> readFileTransferResource(body, auth);
                 default -> null;
             };
             if (result == null) return ResponseEntity.ok(error(id, -32601, "Method not found: " + method));
@@ -234,7 +243,8 @@ public class MindcraftiMcpController {
         String protocolVersion = requested.isBlank() ? "2025-11-25" : requested;
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("protocolVersion", protocolVersion);
-        result.put("capabilities", Map.of("tools", Map.of("listChanged", true)));
+        result.put("capabilities", Map.of("tools", Map.of("listChanged", true),
+                "resources", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
                 ? "For the curriculum skills board, always read get_skill_board fresh before answering from it or using edit_skill_board. Edit only explicitly requested items, using the exact returned revision. Preserve unrelated content and read back after saving. A stale revision means reconcile, not blind retry. This catalog does not contain pupil mastery. Mindcrafti school tools include lessons, structured monthly plans for students and groups, school prompts, the current school Brand Guide, the current approved 3-slide Mindcrafti Stories PPTX via get_story_template_info and get_story_template_chunk, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. When preparing the next lesson for a student or group, use get_month_plan for the current month when a plan exists, then combine it with recent lesson/homework evidence and the current school prompt. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with the most specific lessonType: group or individual for lesson logic, workbook for a workbook/worksheet, homework for homework, diagnostic for a diagnostic lesson, or error_correction for work on mistakes, and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. For ANY Mindcrafti-branded document or visual material (PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document, parent report, internal document or other branded artifact), first call get_brand_guide and follow the current Brand Guide for visual design. Do not reuse a Brand Guide from chat history. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
@@ -251,13 +261,224 @@ public class MindcraftiMcpController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("resultType", "complete");
         result.put("supportedVersions", List.of("2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"));
-        result.put("capabilities", Map.of("tools", Map.of()));
+        result.put("capabilities", Map.of("tools", Map.of(), "resources", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
                 ? "For the curriculum skills board, always read get_skill_board fresh before answering from it or using edit_skill_board. Edit only explicitly requested items, using the exact returned revision. Preserve unrelated content and read back after saving. A stale revision means reconcile, not blind retry. This catalog does not contain pupil mastery. Mindcrafti lesson, school-prompt, Brand Guide, homework-file and school analytics tools. If the teacher says to make a lesson or homework 'по промту', fetch the current school prompt with get_school_prompt before generating. For any Mindcrafti-branded document or visual material, fetch the current Brand Guide with get_brand_guide before creating it. Extra teacher instructions override or refine the prompt for that request. If the teacher says 'без промта', do not fetch the lesson prompt."
                 : "Mindcrafti diagnostic MCP connection. No school data is exposed without authentication.");
         if (authenticated) result.put("instructions", result.get("instructions") + schedulingInstructions());
         return result;
+    }
+
+    private boolean fileTransferActorAllowed(AuthContext auth) {
+        User user = auth.user();
+        return !auth.apiKey() && user != null && !user.isArchived()
+                && user.getStatus() == com.mcschool.flashcard.users.UserStatus.ACTIVE
+                && (user.getRole() == Role.ADMIN || user.getRole() == Role.TEACHER);
+    }
+
+    private Map<String, Object> fileTransferResources(AuthContext auth) {
+        return Map.of("resources", fileTransferActorAllowed(auth)
+                ? List.of(Map.of("uri", FILE_TRANSFER_RESOURCE, "name", "lesson-file-transfer",
+                        "title", "Загрузка PDF в урок", "mimeType", FILE_TRANSFER_MIME,
+                        "description", "Transfers the approved ChatGPT PDFs to the selected Mindcrafti lesson."))
+                : List.of());
+    }
+
+    private Map<String, Object> readFileTransferResource(Map<String, Object> request, AuthContext auth) {
+        if (!fileTransferActorAllowed(auth)) {
+            throw new org.springframework.security.access.AccessDeniedException("School OAuth sign-in is required");
+        }
+        if (!FILE_TRANSFER_RESOURCE.equals(required(map(request.get("params")), "uri"))) {
+            throw new IllegalArgumentException("Unknown Mindcrafti resource");
+        }
+        String html;
+        try (var input = new ClassPathResource("mcp/lesson-file-transfer.html").getInputStream()) {
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (java.io.IOException unavailable) {
+            throw new IllegalStateException("The lesson file-transfer panel is unavailable");
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("ui", Map.of("prefersBorder", true,
+                "csp", Map.of("connectDomains", List.of(), "resourceDomains", List.of())));
+        metadata.put("openai/widgetPrefersBorder", true);
+        metadata.put("openai/widgetDescription", "Uploads the approved PDFs directly from ChatGPT to the selected Mindcrafti lesson and verifies their saved metadata.");
+        metadata.put("openai/widgetCSP", Map.of("connect_domains", List.of(), "resource_domains", List.of()));
+        metadata.put("openai/ui", Map.of("availableDisplayModes", List.of("inline", "fullscreen")));
+        return Map.of("contents", List.of(Map.of("uri", FILE_TRANSFER_RESOURCE, "mimeType", FILE_TRANSFER_MIME,
+                "text", html, "_meta", metadata)));
+    }
+
+    private Map<String, Object> fileTransferProperties(boolean completion) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("operation", Map.of("type", "string", "enum", FILE_TRANSFER_OPERATIONS.stream().sorted().toList(),
+                "description", "The exact approved shared, personal, or website PDF upload operation."));
+        properties.put("teacherId", property("string", "Exact teacher UUID returned by find_lessons."));
+        properties.put("eventId", property("string", "Exact lesson eventId returned by find_lessons."));
+        properties.put("studentId", property("string", "Required only for a personal PDF: exact current lesson participant UUID."));
+        properties.put("idempotencyKey", Map.of("type", "string", "minLength", 8, "maxLength", 128,
+                "description", "Stable key for the approved upload. Reuse unchanged files and arguments on retries."));
+        properties.put("confirm", Map.of("type", "boolean", "enum", List.of(true),
+                "description", "True only after the teacher explicitly approved uploading these PDFs to this lesson."));
+        properties.put("workbookFilename", property("string", "Optional workbook filename for prepare_lesson."));
+        properties.put("answersFilename", property("string", "Optional teacher-answer filename for prepare_lesson."));
+        properties.put("filename", property("string", "Optional filename for the one personal or website PDF."));
+        properties.put("homeworkNotes", property("string", "Optional homework note change, only for prepare_lesson."));
+        properties.put("difficulties", property("string", "Optional difficulties note change, only for prepare_lesson."));
+        properties.put("lessonPlan", property("string", "Optional lesson plan change, only for prepare_lesson."));
+        if (completion) {
+            properties.put("workbookFile", ChatGptPdfResolver.fileSchema());
+            properties.put("answersFile", ChatGptPdfResolver.fileSchema());
+            properties.put("pdfFile", ChatGptPdfResolver.fileSchema());
+        } else {
+            Map<String, Object> id = Map.of("type", "string", "maxLength", 512,
+                    "description", "Real opaque ChatGPT file ID from the file library. Never a URL, filesystem path or base64 data.");
+            properties.put("workbookFileId", id);
+            properties.put("answersFileId", id);
+            properties.put("pdfFileId", id);
+        }
+        return properties;
+    }
+
+    private List<Map<String, Object>> fileTransferTools() {
+        List<String> required = List.of("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
+        Map<String, Object> startSchema = schema(fileTransferProperties(false), required);
+        Map<String, Object> start = tool("prepare_lesson_file_transfer",
+                "Preferred direct transfer for PDFs that already have real ChatGPT file IDs. Call only after the teacher explicitly says to upload the approved files to this exact lesson, with confirm=true. Export locally created PDFs to the ChatGPT file library first if needed. The panel obtains real temporary download URLs using ChatGPT's file interface and reuses the existing Mindcrafti upload paths; no Google Drive or manual base64 is needed. Do not claim the files were saved until the panel and a readback confirm success. Supports shared preparation, both private PDF tools, and the two lesson_preparation PDF website functions.",
+                startSchema, writeAnnotations());
+        start.put("outputSchema", startSchema);
+        start.put("_meta", Map.of("ui", Map.of("resourceUri", FILE_TRANSFER_RESOURCE, "visibility", List.of("model", "app")),
+                "openai/outputTemplate", FILE_TRANSFER_RESOURCE, "openai/widgetAccessible", true,
+                "openai/toolInvocation/invoking", "Подготовка загрузки PDF", "openai/toolInvocation/invoked", "Открыта загрузка PDF"));
+        Map<String, Object> finish = tool("complete_lesson_file_transfer",
+                "App-only completion for the approved lesson-file transfer panel. Accepts complete runtime file objects obtained through the host file interface. Rechecks school OAuth, lesson ownership and personal roster, then uses the original idempotent PDF upload operation. Never use invented file references.",
+                schema(fileTransferProperties(true), required), writeAnnotations());
+        finish.put("outputSchema", Map.of("type", "object", "additionalProperties", true));
+        finish.put("_meta", Map.of("ui", Map.of("visibility", List.of("app")),
+                "openai/visibility", "private", "openai/widgetAccessible", true));
+        return List.of(start, finish);
+    }
+
+    private Map<String, Object> prepareLessonFileTransfer(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        Map<String, Object> context = fileTransferContext(arguments, auth, false);
+        Map<String, Object> result = toolResult(context);
+        result.put("content", List.of(Map.of("type", "text", "text",
+                "The approved PDF transfer panel is ready. Upload is not yet confirmed; wait for its saved-file verification.")));
+        return result;
+    }
+
+    private Object completeLessonFileTransfer(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        Map<String, Object> context = fileTransferContext(arguments, auth, true);
+        String operation = string(context.remove("operation"));
+        context.remove("confirm");
+        if ("prepare_lesson".equals(operation)) return prepareLesson(context, auth);
+        if (operation.startsWith("upload_personal_lesson_")) return personalLessonWorkbooks(operation, context, auth);
+        if (siteFunctionsService == null) throw new IllegalStateException("Website PDF uploads are unavailable");
+        Map<String, Object> file = new LinkedHashMap<>(map(context.remove("pdfFile")));
+        Object filename = context.remove("filename");
+        if (filename != null) file.put("file_name", filename);
+        return siteFunctionsService.call("execute_site_function", Map.of("functionId", operation,
+                "teacherId", context.get("teacherId"), "arguments", Map.of("eventId", context.get("eventId")),
+                "confirm", true, "idempotencyKey", context.get("idempotencyKey"), "file", file), auth.user(), false);
+    }
+
+    private Map<String, Object> fileTransferContext(Map<String, Object> arguments, AuthContext auth, boolean completion) {
+        if (!fileTransferActorAllowed(auth) || personalWorkbookAccess == null || personalWorkbookReceipts == null) {
+            throw new org.springframework.security.access.AccessDeniedException("School OAuth sign-in is required for lesson file transfers");
+        }
+        if (!Boolean.TRUE.equals(arguments.get("confirm"))) throw new IllegalArgumentException("confirm=true is required for the approved PDF upload");
+        String operation = required(arguments, "operation");
+        if (!FILE_TRANSFER_OPERATIONS.contains(operation)) throw new IllegalArgumentException("Unsupported lesson file-transfer operation");
+        boolean shared = "prepare_lesson".equals(operation);
+        boolean personal = operation.startsWith("upload_personal_lesson_");
+        Set<String> allowed = new java.util.HashSet<>(Set.of("operation", "teacherId", "eventId", "idempotencyKey", "confirm"));
+        if (shared) {
+            allowed.addAll(Set.of("workbookFilename", "answersFilename", "homeworkNotes", "difficulties", "lessonPlan"));
+            allowed.addAll(completion ? Set.of("workbookFile", "answersFile") : Set.of("workbookFileId", "answersFileId"));
+        } else {
+            allowed.add("filename");
+            allowed.add(completion ? "pdfFile" : "pdfFileId");
+            if (personal) allowed.add("studentId");
+        }
+        if (!allowed.containsAll(arguments.keySet())) throw new IllegalArgumentException("Unsupported lesson file-transfer arguments");
+        AuthenticatedUser actor = personalWorkbookAccess.requireActor(auth.user());
+        UUID teacherId = uuid(required(arguments, "teacherId"), "teacherId");
+        AuthenticatedUser teacher = personalWorkbookAccess.requireTeacher(actor, teacherId);
+        String eventId = required(arguments, "eventId");
+        requireLesson(teacher, eventId);
+        if (personal) {
+            requirePersonalWorkbookActor(auth);
+            if (!AiLessonPilotService.PILOT_TEACHER_ID.equals(teacherId)) {
+                throw new org.springframework.security.access.AccessDeniedException("Personal worksheets are enabled only for the pilot teacher's lessons");
+            }
+            if ("upload_personal_lesson_answers".equals(operation) && personalLessonAnswersService == null) {
+                throw new IllegalStateException("Personal teacher-answer uploads are unavailable");
+            }
+            requirePersonalWorkbookStudent(teacher, eventId, uuid(required(arguments, "studentId"), "studentId"));
+        } else if (!shared && siteFunctionsService == null) {
+            throw new IllegalStateException("Website PDF uploads are unavailable");
+        }
+        String key = required(arguments, "idempotencyKey");
+        if (key.length() < 8 || key.length() > 128 || key.codePoints().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("idempotencyKey must contain 8 to 128 printable characters");
+        }
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("operation", operation); context.put("teacherId", teacherId.toString());
+        context.put("eventId", eventId); context.put("idempotencyKey", key); context.put("confirm", true);
+        if (personal) context.put("studentId", uuid(required(arguments, "studentId"), "studentId").toString());
+        if (shared) {
+            copyTransferNotes(arguments, context, "homeworkNotes");
+            copyTransferNotes(arguments, context, "difficulties");
+            copyTransferNotes(arguments, context, "lessonPlan");
+            copyTransferFilename(arguments, context, "workbookFilename");
+            copyTransferFilename(arguments, context, "answersFilename");
+            boolean workbook = copyTransferFile(arguments, context, completion ? "workbookFile" : "workbookFileId", completion);
+            boolean answers = copyTransferFile(arguments, context, completion ? "answersFile" : "answersFileId", completion);
+            if (!workbook && !answers) throw new IllegalArgumentException("At least one approved ChatGPT PDF is required");
+            if (!workbook && context.containsKey("workbookFilename") || !answers && context.containsKey("answersFilename")) {
+                throw new IllegalArgumentException("A PDF filename requires its matching file");
+            }
+        } else {
+            copyTransferFilename(arguments, context, "filename");
+            if (!copyTransferFile(arguments, context, completion ? "pdfFile" : "pdfFileId", completion)) {
+                throw new IllegalArgumentException("Exactly one approved ChatGPT PDF is required");
+            }
+        }
+        return context;
+    }
+
+    private boolean copyTransferFile(Map<String, Object> source, Map<String, Object> target, String field, boolean completion) {
+        if (!source.containsKey(field)) return false;
+        if (completion) {
+            if (!(source.get(field) instanceof Map<?, ?>)) throw new IllegalArgumentException(field + " must be a complete ChatGPT file object");
+            target.put(field, source.get(field));
+            return true;
+        }
+        if (!(source.get(field) instanceof String value)) throw new IllegalArgumentException(field + " must be a ChatGPT file ID");
+        value = value.trim();
+        if (value.isEmpty()) return false;
+        if (value.length() > 512 || !value.matches("[A-Za-z0-9_-]+")) {
+            throw new IllegalArgumentException(field + " must be an opaque ChatGPT file ID, not a URL or local path");
+        }
+        target.put(field, value);
+        return true;
+    }
+
+    private void copyTransferFilename(Map<String, Object> source, Map<String, Object> target, String field) {
+        if (!source.containsKey(field)) return;
+        if (!(source.get(field) instanceof String value) || value.length() > 1024) throw new IllegalArgumentException(field + " must be a PDF filename");
+        if (value.isBlank()) return;
+        String lower = value.strip().toLowerCase(Locale.ROOT);
+        if (lower.startsWith("__answers__:") || lower.equals("__transcript__")) {
+            throw new IllegalArgumentException("Document roles must use the selected file-transfer operation");
+        }
+        target.put(field, ChatGptPdfResolver.filename(value, "document.pdf"));
+    }
+
+    private void copyTransferNotes(Map<String, Object> source, Map<String, Object> target, String field) {
+        if (!source.containsKey(field)) return;
+        if (!(source.get(field) instanceof String value) || value.length() > 200_000) throw new IllegalArgumentException(field + " must be text of at most 200000 characters");
+        target.put(field, value);
     }
 
     private List<Map<String, Object>> tools(AuthContext auth) {
@@ -270,6 +491,7 @@ public class MindcraftiMcpController {
             if (lessonScheduleService != null) tools.addAll(McpLessonScheduleService.definitions());
             if (siteFunctionsService != null) tools.addAll(McpSiteFunctionsService.definitions());
         }
+        if (fileTransferActorAllowed(auth)) tools.addAll(fileTransferTools());
         tools.addAll(SkillBoardMcpService.definitions());
         tools.addAll(SkillMasteryMcpService.definitions());
         tools.addAll(PersonalNutritionMcpService.definitions());
@@ -507,6 +729,15 @@ public class MindcraftiMcpController {
             return toolResult(status);
         }
         if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
+        if ("prepare_lesson_file_transfer".equals(name) || "complete_lesson_file_transfer".equals(name)) {
+            try {
+                return "prepare_lesson_file_transfer".equals(name)
+                        ? prepareLessonFileTransfer(arguments, auth)
+                        : toolResult(completeLessonFileTransfer(arguments, auth));
+            } catch (Exception failure) {
+                return siteToolFailure(failure);
+            }
+        }
         if ("list_personal_lesson_workbooks".equals(name) || "upload_personal_lesson_workbook".equals(name)
                 || "upload_personal_lesson_answers".equals(name)) {
             try {
@@ -1502,10 +1733,17 @@ public class MindcraftiMcpController {
     private Map<String, Object> readOnlyAnnotations() { return Map.of("readOnlyHint", true, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
     private Map<String, Object> writeAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
     private Map<String, Object> destructiveWriteAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", true, "idempotentHint", false, "openWorldHint", false); }
-    private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) { Map<String, Object> tool = new LinkedHashMap<>(); tool.put("name", name); tool.put("description", description); tool.put("inputSchema", inputSchema); tool.put("annotations", annotations); return tool; }
+    private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) {
+        Map<String, Object> tool = new LinkedHashMap<>();
+        tool.put("name", name); tool.put("description", description); tool.put("inputSchema", inputSchema); tool.put("annotations", annotations);
+        if ("get_lesson_preparation".equals(name) || "list_personal_lesson_workbooks".equals(name)) {
+            tool.put("_meta", Map.of("ui", Map.of("visibility", List.of("model", "app")), "openai/widgetAccessible", true));
+        }
+        return tool;
+    }
     private Map<String, Object> fileTool(String name, String description, Map<String, Object> inputSchema,
             Map<String, Object> annotations, List<String> fileParameters) {
-        Map<String, Object> result = tool(name, description + " For PDFs already created or attached in ChatGPT, prefer the direct file input. Do NOT upload to Google Drive as an intermediate step. Use Google Drive only when the source file already lives there.", inputSchema, annotations);
+        Map<String, Object> result = tool(name, description + " For PDFs already created or attached in ChatGPT, prefer the direct file input. Do NOT upload to Google Drive as an intermediate step. Use Google Drive only when the source file already lives there. When the PDFs already have ChatGPT file IDs, prefer prepare_lesson_file_transfer; its panel also provides a direct-transfer fallback when host file-argument translation fails.", inputSchema, annotations);
         result.put("_meta", Map.of("openai/fileParams", fileParameters));
         return result;
     }

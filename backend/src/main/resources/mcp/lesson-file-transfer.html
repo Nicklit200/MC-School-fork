@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Материалы урока Mindcrafti</title>
+  <style>
+    :root { color-scheme: light dark; font: 15px/1.45 system-ui, sans-serif; color: #192235; background: transparent; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 12px; }
+    main { max-width: 680px; margin: auto; padding: 22px; border: 1px solid #dfe3e9; border-radius: 18px; background: #fff; }
+    .brand { margin: 0 0 13px; color: #f57432; font-size: 12px; font-weight: 800; letter-spacing: .13em; }
+    h1 { margin: 0 0 10px; font-size: 23px; line-height: 1.2; }
+    #status { margin: 0; min-height: 44px; color: #556174; }
+    #status[data-tone="success"] { color: #167045; }
+    #status[data-tone="error"] { color: #a13c25; }
+    #documents { margin: 18px 0 0; padding: 0; list-style: none; }
+    #documents li { padding: 13px 0; border-top: 1px solid #e8ebf0; overflow-wrap: anywhere; }
+    .label { display: block; color: #677285; font-size: 12px; }
+    .filename { display: block; margin: 3px 0; font-weight: 650; }
+    .detail { color: #556174; font-size: 13px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 17px; }
+    button { padding: 10px 14px; border: 1px solid #f57432; border-radius: 10px; color: #192235; background: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+    button.primary { color: #fff; background: #d85719; border-color: #d85719; }
+    button:disabled { cursor: wait; opacity: .55; }
+    button:focus-visible { outline: 3px solid #ffc7a9; outline-offset: 3px; }
+    [hidden] { display: none !important; }
+    #note { margin: 14px 0 0; color: #778195; font-size: 12px; }
+    @media (prefers-color-scheme: dark) {
+      :root { color: #eef1f8; }
+      main { background: #19202d; border-color: #364052; }
+      #status, .detail { color: #c2cad8; }
+      #documents li { border-color: #364052; }
+      .label, #note { color: #aab4c5; }
+      button { background: #19202d; color: #eef1f8; }
+      #status[data-tone="success"] { color: #8cd6ac; }
+      #status[data-tone="error"] { color: #ffad94; }
+    }
+  </style>
+</head>
+<body>
+  <main aria-labelledby="title">
+    <p class="brand">MINDCRAFTI</p>
+    <h1 id="title">Материалы урока</h1>
+    <p id="status" role="status" aria-live="polite">Подготавливаем загрузку PDF.</p>
+    <ul id="documents" aria-label="Документы"></ul>
+    <div class="actions">
+      <button id="choose" hidden>Выбрать PDF из ChatGPT</button>
+      <button id="retry" class="primary" hidden>Повторить загрузку</button>
+      <button id="verify" hidden>Проверить загрузку</button>
+    </div>
+    <p id="note">Файлы сохраняются в выбранном уроке. Другие материалы остаются на месте.</p>
+  </main>
+  <script>
+  (() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const operations = new Set(['prepare_lesson', 'upload_personal_lesson_workbook', 'upload_personal_lesson_answers',
+      'lesson_preparation.uploadWorkbook', 'lesson_preparation.uploadAnswers']);
+    const contextFields = ['operation', 'teacherId', 'eventId', 'studentId', 'idempotencyKey', 'confirm',
+      'workbookFileId', 'answersFileId', 'pdfFileId', 'workbookFilename', 'answersFilename', 'filename',
+      'homeworkNotes', 'difficulties', 'lessonPlan'];
+    let context = null, contextKey = '', pending = null, busy = false, uploaded = false;
+    let selected = {}, lastResult = null, phase = 'waiting', attempted = false;
+    let startupTimer = null, startupDeadline = Date.now() + 15000;
+
+    const text = value => typeof value === 'string' ? value : '';
+    const idValid = value => typeof value === 'string' && value.length > 0 && value.length <= 512
+      && !/^(?:[\\/]|https?:|file:|sandbox:)/i.test(value) && !/[\u0000-\u001f]/.test(value);
+    const personal = c => c.operation.startsWith('upload_personal_lesson_');
+    const safeCount = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
+
+    function problem(code) { const error = new Error(code); error.transferCode = code; return error; }
+    function timed(promise, timeout = 30000) {
+      let timer;
+      return Promise.race([Promise.resolve(promise), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(problem('timeout')), timeout);
+      })]).finally(() => clearTimeout(timer));
+    }
+    function cleanFilename(value, fallback) {
+      let name = (text(value) || fallback).normalize('NFC').replace(/\\/g, '/').split('/').pop();
+      name = name.replace(/[\p{Cc}\p{Cf}\p{Cs}"<>:|?*]/gu, '').trim().replace(/[. ]+$/, '');
+      if (!name || name.toLowerCase() === '.pdf') return 'document.pdf';
+      let stem = name.toLowerCase().endsWith('.pdf') ? name.slice(0, -4) : name;
+      stem = stem.slice(0, 251);
+      if (/[\uD800-\uDBFF]$/.test(stem)) stem = stem.slice(0, -1);
+      return (stem || 'document') + '.pdf';
+    }
+    function slots(c) {
+      if (c.operation === 'prepare_lesson') return [
+        ...(c.workbookFileId ? [{ field: 'workbookFile', id: c.workbookFileId, kind: 'workbook', label: 'Рабочий лист',
+          name: cleanFilename(c.workbookFilename, 'lesson-workbook.pdf'), named: !!c.workbookFilename }] : []),
+        ...(c.answersFileId ? [{ field: 'answersFile', id: c.answersFileId, kind: 'answers', label: 'Ответы преподавателя',
+          name: cleanFilename(c.answersFilename, 'lesson-answers.pdf'), named: !!c.answersFilename }] : [])
+      ];
+      const answers = /answers$/i.test(c.operation);
+      return [{ field: 'pdfFile', id: c.pdfFileId, kind: answers ? 'answers' : 'workbook',
+        label: answers ? 'Ответы преподавателя' : 'Рабочий лист', named: !!c.filename,
+        name: cleanFilename(c.filename, personal(c) ? (answers ? 'personal-answers.pdf' : 'personal-workbook.pdf')
+          : (answers ? 'lesson-answers.pdf' : 'lesson-workbook.pdf')) }];
+    }
+    function validContext(raw) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.confirm !== true || !operations.has(raw.operation)) return null;
+      if (!text(raw.teacherId) || !text(raw.eventId) || !text(raw.idempotencyKey)) return null;
+      const c = {};
+      for (const key of contextFields) if (raw[key] !== undefined) c[key] = raw[key];
+      if (personal(c) && !text(c.studentId)) return null;
+      const documents = slots(c);
+      if (!documents.length || documents.some(file => !idValid(file.id))) return null;
+      if (c.operation === 'prepare_lesson' && c.pdfFileId) return null;
+      if (c.operation !== 'prepare_lesson' && (c.workbookFileId || c.answersFileId)) return null;
+      return c;
+    }
+    function effectiveSlots(c) {
+      return slots(c).map(file => ({ ...file, ...(selected[file.field] || {}) }));
+    }
+    function stateMarker(c) {
+      // A compact UI change marker, never an authorization token. Keep notes out of saved widget state.
+      const value = JSON.stringify(c), hashes = [2166136261, 2246822519, 3266489917, 668265263];
+      for (let index = 0; index < value.length; index++) {
+        for (let part = 0; part < hashes.length; part++) {
+          hashes[part] = Math.imul(hashes[part] ^ (value.charCodeAt(index) + part), 16777619 + part * 2);
+        }
+      }
+      return JSON.stringify([c.operation, c.teacherId, c.eventId, c.studentId || '', c.idempotencyKey,
+        value.length, hashes.map(hash => hash >>> 0)]);
+    }
+    function setStatus(message, tone = '') {
+      $('status').textContent = message;
+      $('status').dataset.tone = tone;
+      try { window.openai?.notifyIntrinsicHeight?.(); } catch (_) { /* optional host layout */ }
+    }
+    function renderDocuments(documents, verified = false) {
+      $('documents').replaceChildren();
+      for (const doc of documents) {
+        const item = document.createElement('li');
+        const label = document.createElement('span'); label.className = 'label'; label.textContent = doc.label;
+        const filename = document.createElement('span'); filename.className = 'filename'; filename.textContent = doc.filename || doc.name;
+        item.append(label, filename);
+        if (verified) {
+          const detail = document.createElement('span'); detail.className = 'detail';
+          detail.textContent = `${doc.present ? 'Сохранён' : 'Не найден'} · ${doc.sizeBytes.toLocaleString('ru-RU')} байт · Версия ${doc.version}`;
+          item.append(detail);
+        }
+        $('documents').append(item);
+      }
+    }
+    function buttons() {
+      const host = window.openai;
+      $('choose').hidden = phase !== 'select' || typeof host?.selectFiles !== 'function';
+      $('retry').hidden = !context || busy || uploaded || !['error', 'select', 'unavailable'].includes(phase);
+      $('verify').hidden = !uploaded || busy || phase === 'success';
+      for (const name of ['choose', 'retry', 'verify']) $(name).disabled = busy;
+    }
+    function persist() {
+      if (!context || typeof window.openai?.setWidgetState !== 'function') return;
+      // Persist only safe document metadata and IDs. Temporary URLs never leave the local call payload.
+      const state = { modelContent: { status: phase, eventId: context.eventId, operation: context.operation,
+        documents: lastResult || [] }, privateContent: { contextMarker: stateMarker(context), selected, uploaded } };
+      try { window.openai.setWidgetState(state); } catch (_) { /* state persistence is optional */ }
+    }
+    function unwrap(result) {
+      if (!result || typeof result !== 'object') throw problem('response');
+      if (result.isError === true || result.error) throw problem('tool');
+      if (result.structuredContent !== undefined) {
+        const value = result.structuredContent;
+        if (value?.isError === true || value?.error) throw problem('tool');
+        return value;
+      }
+      if (Array.isArray(result.content)) {
+        for (const part of result.content) {
+          if (part.type === 'text' && typeof part.text === 'string') {
+            let parsed;
+            try { parsed = JSON.parse(part.text); } catch (_) { continue; }
+            if (parsed?.isError === true || parsed?.error) throw problem('tool');
+            return parsed;
+          }
+        }
+      }
+      return result;
+    }
+    function findPayload(value, predicate, depth = 0) {
+      if (depth > 6 || value == null) return null;
+      if (predicate(value)) return value;
+      if (typeof value === 'string') {
+        try { return findPayload(JSON.parse(value), predicate, depth + 1); } catch (_) { return null; }
+      }
+      if (typeof value !== 'object' || Array.isArray(value)) return null;
+      for (const key of ['result', 'data', 'body', 'response', 'structuredContent', 'value']) {
+        const match = findPayload(value[key], predicate, depth + 1);
+        if (match) return match;
+      }
+      return null;
+    }
+    async function call(name, args) {
+      return unwrap(await timed(window.openai.callTool(name, args), 60000));
+    }
+    async function readBack(c, files) {
+      let metadata;
+      if (personal(c)) {
+        const output = await call('list_personal_lesson_workbooks', { teacherId: c.teacherId, eventId: c.eventId });
+        const roster = findPayload(output, value => typeof value === 'object' && Array.isArray(value.students));
+        metadata = roster?.students.find(student => student.studentId === c.studentId);
+      } else {
+        const output = await call('get_lesson_preparation', { teacherId: c.teacherId, eventId: c.eventId });
+        metadata = findPayload(output, value => typeof value === 'object' && value.eventId === c.eventId
+          && typeof value.hasWorkbook === 'boolean' && typeof value.hasAnswers === 'boolean');
+      }
+      if (!metadata) throw problem('verification');
+      const rows = files.map(file => ({ kind: file.kind, label: file.label,
+        present: file.kind === 'workbook' ? metadata.hasWorkbook === true : metadata.hasAnswers === true,
+        filename: text(file.kind === 'workbook' ? (personal(c) ? metadata.filename : metadata.workbookFilename) : metadata.answersFilename),
+        sizeBytes: safeCount(file.kind === 'workbook' ? metadata.workbookSizeBytes : metadata.answersSizeBytes),
+        version: safeCount(file.kind === 'workbook' ? (personal(c) ? metadata.version : metadata.workbookVersion) : metadata.answersVersion) }));
+      if (rows.some((row, index) => !row.present || !row.sizeBytes || !row.version || row.filename !== files[index].name)) {
+        throw problem('verification');
+      }
+      return rows;
+    }
+    async function reference(file) {
+      let response;
+      try { response = await timed(window.openai.getFileDownloadUrl({ fileId: file.id }), 20000); }
+      catch (_) { throw problem('selection'); }
+      const downloadUrl = response?.downloadUrl;
+      if (typeof downloadUrl !== 'string' || downloadUrl.length > 8192) throw problem('selection');
+      let url;
+      try { url = new URL(downloadUrl); } catch (_) { throw problem('selection'); }
+      if (url.protocol !== 'https:' || url.username || url.password) throw problem('selection');
+      return { download_url: downloadUrl, file_id: file.id, mime_type: 'application/pdf', file_name: file.name };
+    }
+    async function run(onlyVerify = false) {
+      if (!context || busy) return;
+      if (typeof window.openai?.getFileDownloadUrl !== 'function' || typeof window.openai?.callTool !== 'function') {
+        phase = 'unavailable'; setStatus('Откройте эту панель в ChatGPT с подключённым MCH3.', 'error'); buttons(); return;
+      }
+      const c = { ...context }, key = contextKey, files = effectiveSlots(c);
+      busy = true; attempted = true; phase = uploaded || onlyVerify ? 'verifying' : 'resolving'; buttons();
+      try {
+        if (!uploaded && !onlyVerify) {
+          setStatus('Получаем выбранные PDF из ChatGPT.');
+          const references = await Promise.all(files.map(reference));
+          const args = {};
+          for (const field of contextFields) if (!field.endsWith('FileId') && c[field] !== undefined) args[field] = c[field];
+          files.forEach((file, index) => { args[file.field] = references[index]; });
+          phase = 'uploading'; setStatus('Сохраняем PDF в уроке.');
+          try { await call('complete_lesson_file_transfer', args); }
+          finally { for (const file of files) delete args[file.field]; references.length = 0; }
+          uploaded = true;
+        }
+        phase = 'verifying'; setStatus('Проверяем сохранённые документы.');
+        const rows = await readBack(c, files);
+        if (key !== contextKey) return;
+        lastResult = rows; phase = 'success';
+        renderDocuments(rows, true); setStatus('Готово. PDF сохранены, результат проверен.', 'success');
+      } catch (error) {
+        if (key !== contextKey) return;
+        phase = error?.transferCode === 'selection' ? 'select' : 'error';
+        // Host errors can include signed URLs. Display fixed copy, never the raw message.
+        setStatus(phase === 'select' ? (typeof window.openai?.selectFiles === 'function'
+          ? 'Разрешите ChatGPT передать эти PDF: выберите их из библиотеки.'
+          : 'В этой сессии ChatGPT не предоставил доступ к PDF. Откройте новый чат с MCH3 и выбранными файлами.')
+          : uploaded ? 'Загрузка завершилась, но проверить результат пока не удалось. Нажмите «Проверить загрузку».'
+          : 'Не удалось подтвердить загрузку. Можно повторить запрос с теми же файлами.', 'error');
+      } finally {
+        busy = false; buttons(); persist();
+        if (pending) { const next = pending; pending = null; install(next); }
+      }
+    }
+    async function chooseFiles() {
+      if (!context || busy || typeof window.openai?.selectFiles !== 'function') return;
+      const c = { ...context }, key = contextKey, wanted = slots(c);
+      busy = true; buttons();
+      try {
+        const choices = await timed(window.openai.selectFiles(), 120000);
+        if (key !== contextKey || !Array.isArray(choices) || !choices.length) return;
+        const matches = {};
+        for (const file of wanted) {
+          const candidates = wanted.length === 1 && choices.length === 1 ? choices
+            : choices.filter(item => cleanFilename(item.fileName, 'document.pdf') === file.name);
+          if (candidates.length !== 1 || !idValid(candidates[0].fileId)
+            || (candidates[0].mimeType && candidates[0].mimeType.toLowerCase() !== 'application/pdf')) throw problem('selection');
+          const item = candidates[0];
+          matches[file.field] = { id: item.fileId, name: file.named ? file.name : cleanFilename(item.fileName, file.name) };
+        }
+        if (new Set(Object.values(matches).map(item => item.id)).size !== wanted.length) throw problem('selection');
+        selected = matches; phase = 'ready'; renderDocuments(effectiveSlots(c)); persist();
+      } catch (_) {
+        phase = 'select'; setStatus('Выберите по одному PDF с указанными именами. Одинаковые имена не выбираются автоматически.', 'error');
+      } finally {
+        busy = false; buttons();
+        if (phase === 'ready' && key === contextKey) void run();
+        if (pending) { const next = pending; pending = null; install(next); }
+      }
+    }
+    function install(c) {
+      const key = JSON.stringify(c);
+      if (key === contextKey) return;
+      if (busy) { pending = c; return; }
+      context = c; contextKey = key; selected = {}; uploaded = false; lastResult = null; attempted = false; phase = 'ready';
+      const saved = window.openai?.widgetState;
+      if (saved?.privateContent?.contextMarker === stateMarker(c)) {
+        const priorSelection = saved.privateContent.selected;
+        if (priorSelection && typeof priorSelection === 'object') {
+          for (const file of slots(c)) {
+            const prior = priorSelection[file.field];
+            if (prior && idValid(prior.id) && text(prior.name)) selected[file.field] = { id: prior.id, name: cleanFilename(prior.name, file.name) };
+          }
+        }
+        uploaded = saved.privateContent.uploaded === true;
+      }
+      renderDocuments(effectiveSlots(c)); buttons();
+      if (!attempted) void run(uploaded);
+    }
+    function observe() {
+      const host = window.openai;
+      const c = validContext(host?.toolOutput);
+      if (c) install(c);
+      if (!context && Date.now() >= startupDeadline) {
+        setStatus(host ? 'Ожидаем подтверждённый запрос загрузки из чата.' : 'Откройте эту панель внутри ChatGPT с подключённым MCH3.');
+      }
+      if (startupTimer) clearTimeout(startupTimer);
+      if (!context && Date.now() < startupDeadline) startupTimer = setTimeout(observe, 250);
+      if (context && !busy && !attempted) void run(uploaded);
+    }
+    $('retry').addEventListener('click', () => { if (!busy) void run(); });
+    $('verify').addEventListener('click', () => { if (!busy) void run(true); });
+    $('choose').addEventListener('click', () => { void chooseFiles(); });
+    window.addEventListener('openai:set_globals', observe, { passive: true });
+    observe();
+  })();
+  </script>
+</body>
+</html>

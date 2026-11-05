@@ -216,7 +216,7 @@ public class ChatGptPdfResolver {
         return value.isBlank() ? null : value.strip();
     }
 
-    private static String filename(String requested, String fallback) {
+    static String filename(String requested, String fallback) {
         String safeFallback = fallback == null || fallback.isBlank() ? "document.pdf" : fallback;
         String value = requested == null || requested.isBlank() ? safeFallback : requested;
         value = Normalizer.normalize(value, Normalizer.Form.NFC);
