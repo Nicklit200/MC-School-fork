@@ -54,10 +54,13 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.30.1";
+    private static final String SERVER_VERSION = "1.30.2";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
     private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
     private static final String FILE_TRANSFER_MIME = "text/html;profile=mcp-app";
+    private static final String UI_DIAGNOSTIC_MODERN_RESOURCE = "ui://mindcrafti/ui-diagnostic-modern-v1.html";
+    private static final String UI_DIAGNOSTIC_LEGACY_RESOURCE = "ui://mindcrafti/ui-diagnostic-legacy-v1.html";
+    private static final String UI_DIAGNOSTIC_LEGACY_MIME = "text/html+skybridge";
     private static final Set<String> FILE_TRANSFER_OPERATIONS = Set.of("prepare_lesson",
             "upload_personal_lesson_workbook", "upload_personal_lesson_answers",
             "lesson_preparation.uploadWorkbook", "lesson_preparation.uploadAnswers");
@@ -217,6 +220,9 @@ public class MindcraftiMcpController {
         boolean notification = id == null;
 
         if (notification) return ResponseEntity.accepted().build();
+        if (Set.of("initialize", "server/discover", "resources/list", "resources/read", "resources/templates/list").contains(method)) {
+            LOG.info("MCH3 RPC method={} version={}", method, SERVER_VERSION);
+        }
 
         try {
             Object result = switch (method) {
@@ -227,9 +233,13 @@ public class MindcraftiMcpController {
                 case "tools/call" -> callTool(body, auth);
                 case "resources/list" -> fileTransferResources(auth);
                 case "resources/read" -> readFileTransferResource(body, auth);
+                case "resources/templates/list" -> Map.of("resourceTemplates", List.of());
                 default -> null;
             };
-            if (result == null) return ResponseEntity.ok(error(id, -32601, "Method not found: " + method));
+            if (result == null) {
+                LOG.warn("MCH3 RPC unknown method version={}", SERVER_VERSION);
+                return ResponseEntity.ok(error(id, -32601, "Method not found: " + method));
+            }
             return ResponseEntity.ok(success(id, result));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.ok(error(id, -32602, ex.getMessage()));
@@ -278,21 +288,43 @@ public class MindcraftiMcpController {
                 && (user.getRole() == Role.ADMIN || user.getRole() == Role.TEACHER);
     }
 
+    private boolean uiDiagnosticActorAllowed(AuthContext auth) {
+        return fileTransferActorAllowed(auth) && auth.user().getRole() == Role.ADMIN;
+    }
+
     private Map<String, Object> fileTransferResources(AuthContext auth) {
-        return Map.of("resources", fileTransferActorAllowed(auth)
-                ? List.of(Map.of("uri", FILE_TRANSFER_RESOURCE, "name", "lesson-file-transfer",
+        List<Map<String, Object>> resources = new ArrayList<>();
+        if (fileTransferActorAllowed(auth)) {
+            resources.add(Map.of("uri", FILE_TRANSFER_RESOURCE, "name", "lesson-file-transfer",
                         "title", "Загрузка PDF в урок", "mimeType", FILE_TRANSFER_MIME,
-                        "description", "Transfers the approved ChatGPT PDFs to the selected Mindcrafti lesson."))
-                : List.of());
+                        "description", "Transfers the approved ChatGPT PDFs to the selected Mindcrafti lesson."));
+        }
+        if (uiDiagnosticActorAllowed(auth)) {
+            resources.add(uiDiagnosticResourceDescriptor(false));
+            resources.add(uiDiagnosticResourceDescriptor(true));
+        }
+        return Map.of("resources", resources);
+    }
+
+    private Map<String, Object> uiDiagnosticResourceDescriptor(boolean legacy) {
+        return Map.of("uri", legacy ? UI_DIAGNOSTIC_LEGACY_RESOURCE : UI_DIAGNOSTIC_MODERN_RESOURCE,
+                "name", legacy ? "ui-diagnostic-legacy" : "ui-diagnostic-modern",
+                "title", "MCH3 UI diagnostic (" + (legacy ? "legacy" : "modern") + ")",
+                "mimeType", legacy ? UI_DIAGNOSTIC_LEGACY_MIME : FILE_TRANSFER_MIME,
+                "description", "Read-only administrator diagnostic for the ChatGPT UI host.");
     }
 
     private Map<String, Object> readFileTransferResource(Map<String, Object> request, AuthContext auth) {
+        String uri = required(map(request.get("params")), "uri");
+        if (UI_DIAGNOSTIC_MODERN_RESOURCE.equals(uri) || UI_DIAGNOSTIC_LEGACY_RESOURCE.equals(uri)) {
+            return readUiDiagnosticResource(uri, auth);
+        }
         LOG.info("MCH3 PDF transfer panel requested version={} authenticated={} allowed={}",
                 SERVER_VERSION, auth.authenticated(), fileTransferActorAllowed(auth));
         if (!fileTransferActorAllowed(auth)) {
             throw new org.springframework.security.access.AccessDeniedException("School OAuth sign-in is required");
         }
-        if (!FILE_TRANSFER_RESOURCE.equals(required(map(request.get("params")), "uri"))) {
+        if (!FILE_TRANSFER_RESOURCE.equals(uri)) {
             throw new IllegalArgumentException("Unknown Mindcrafti resource");
         }
         String html;
@@ -311,6 +343,52 @@ public class MindcraftiMcpController {
         metadata.put("openai/ui", Map.of("availableDisplayModes", List.of("inline", "fullscreen")));
         return Map.of("contents", List.of(Map.of("uri", FILE_TRANSFER_RESOURCE, "mimeType", FILE_TRANSFER_MIME,
                 "text", html, "_meta", metadata)));
+    }
+
+    private Map<String, Object> readUiDiagnosticResource(String uri, AuthContext auth) {
+        if (!uiDiagnosticActorAllowed(auth)) {
+            throw new org.springframework.security.access.AccessDeniedException("UI diagnostics require an active school OAuth administrator");
+        }
+        boolean legacy = UI_DIAGNOSTIC_LEGACY_RESOURCE.equals(uri);
+        String html;
+        try (var input = new ClassPathResource("mcp/ui-diagnostic.html").getInputStream()) {
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace("__MCH3_DIAGNOSTIC_MODE__", legacy ? "legacy" : "modern");
+        } catch (java.io.IOException unavailable) {
+            throw new IllegalStateException("The UI diagnostic panel is unavailable");
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("ui", Map.of("prefersBorder", true));
+        if (legacy) metadata.put("openai/widgetPrefersBorder", true);
+        return Map.of("contents", List.of(Map.of("uri", uri,
+                "mimeType", legacy ? UI_DIAGNOSTIC_LEGACY_MIME : FILE_TRANSFER_MIME,
+                "text", html, "_meta", metadata)));
+    }
+
+    private List<Map<String, Object>> uiDiagnosticTools() {
+        List<Map<String, Object>> definitions = new ArrayList<>();
+        for (boolean legacy : List.of(false, true)) {
+            String mode = legacy ? "legacy" : "modern";
+            String uri = legacy ? UI_DIAGNOSTIC_LEGACY_RESOURCE : UI_DIAGNOSTIC_MODERN_RESOURCE;
+            Map<String, Object> definition = tool("test_mch3_ui_" + mode,
+                    "ADMIN ONLY: Open a read-only " + mode + " ChatGPT UI diagnostic. Tests panel construction and host bridge availability; does not access files or change any school data.",
+                    schema(Map.of(), List.of()), readOnlyAnnotations());
+            definition.put("outputSchema", schema(Map.of("success", Map.of("type", "boolean", "const", true),
+                    "ready", Map.of("type", "boolean", "const", true),
+                    "mode", Map.of("type", "string", "const", mode)), List.of("success", "ready", "mode")));
+            definition.put("_meta", Map.of("ui", Map.of("resourceUri", uri), "openai/outputTemplate", uri));
+            definitions.add(definition);
+        }
+        return definitions;
+    }
+
+    private Map<String, Object> testUiDiagnostic(String name, Map<String, Object> arguments, AuthContext auth) throws Exception {
+        if (!uiDiagnosticActorAllowed(auth)) {
+            throw new org.springframework.security.access.AccessDeniedException("UI diagnostics require an active school OAuth administrator");
+        }
+        if (!arguments.isEmpty()) throw new IllegalArgumentException("UI diagnostics accept no arguments");
+        return toolResult(Map.of("success", true, "ready", true,
+                "mode", "test_mch3_ui_legacy".equals(name) ? "legacy" : "modern"));
     }
 
     private Map<String, Object> fileTransferProperties(boolean completion) {
@@ -496,6 +574,7 @@ public class MindcraftiMcpController {
             if (siteFunctionsService != null) tools.addAll(McpSiteFunctionsService.definitions());
         }
         if (fileTransferActorAllowed(auth)) tools.addAll(fileTransferTools());
+        if (uiDiagnosticActorAllowed(auth)) tools.addAll(uiDiagnosticTools());
         tools.addAll(SkillBoardMcpService.definitions());
         tools.addAll(SkillMasteryMcpService.definitions());
         tools.addAll(PersonalNutritionMcpService.definitions());
@@ -731,6 +810,13 @@ public class MindcraftiMcpController {
             status.put("availableToolCount", visibleNames.size());
             status.put("availableToolNames", visibleNames);
             return toolResult(status);
+        }
+        if ("test_mch3_ui_modern".equals(name) || "test_mch3_ui_legacy".equals(name)) {
+            try {
+                return testUiDiagnostic(name, arguments, auth);
+            } catch (Exception failure) {
+                return siteToolFailure(failure);
+            }
         }
         if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
         if ("prepare_lesson_file_transfer".equals(name) || "complete_lesson_file_transfer".equals(name)) {

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Проверка панели Mindcrafti</title>
+  <style>
+    :root { font: 14px/1.5 system-ui, sans-serif; color: #192235; background: transparent; color-scheme: light dark; }
+    body { margin: 0; padding: 12px; }
+    main { max-width: 620px; margin: auto; border: 1px solid #dfe3e9; border-radius: 14px; padding: 20px; background: #fff; }
+    h1 { margin: 0 0 12px; font-size: 21px; }
+    h2 { margin: 16px 0 6px; font-size: 15px; }
+    p { margin: 6px 0; }
+    #status { color: #c6521e; }
+    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, monospace; }
+    @media (prefers-color-scheme: dark) { :root { color: #eef1f8; } main { background: #19202d; border-color: #364052; } #status { color: #ffad94; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Проверка панели Mindcrafti</h1>
+    <p id="status" role="status" aria-live="polite">HTML открыт. Ожидаем запуск JavaScript.</p>
+    <p id="mode">Режим: __MCH3_DIAGNOSTIC_MODE__</p>
+    <h2>Подключение MCP Apps</h2>
+    <pre id="bridge">Ожидаем подключение.</pre>
+    <h2>Возможности ChatGPT</h2>
+    <pre id="extensions">Проверка еще не выполнена.</pre>
+    <p>Эта проверка не загружает файлы и не изменяет данные.</p>
+  </main>
+  <script>
+  (() => {
+    'use strict';
+    if (typeof console !== 'undefined' && typeof console.info === 'function') console.info('[MCH3 diagnostic] bootstrap 1.30.2');
+    const $ = id => document.getElementById(id);
+    const version = '2026-01-26';
+    const requestId = 1;
+    let phase = 'starting', responseSeen = false, connected = false, timer = null;
+    let hostCaps = {}, protocolSupported = false, hostContextPresent = false, toolResultMode = 'none';
+    const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+    const parentAvailable = () => !!window.parent && window.parent !== window && typeof window.parent.postMessage === 'function';
+    function extensions() {
+      const api = window.openai;
+      const lines = ['window.openai: ' + !!api];
+      for (const name of ['getFileDownloadUrl', 'selectFiles', 'callTool', 'setWidgetState']) lines.push(name + ': ' + (typeof api?.[name] === 'function'));
+      const mode = api?.toolOutput?.mode;
+      lines.push('legacy toolOutput mode: ' + (mode === 'modern' || mode === 'legacy' ? mode : 'none'));
+      $('extensions').textContent = lines.join('\n');
+    }
+    function render() {
+      const lines = ['state: ' + phase, 'parent available: ' + parentAvailable(), 'initialize response: ' + responseSeen,
+        'protocol supported: ' + protocolSupported, 'initialized sent: ' + connected, 'hostContext present: ' + hostContextPresent];
+      for (const name of ['serverTools', 'serverResources', 'openLinks', 'downloadFile', 'updateModelContext', 'message', 'sandbox']) lines.push('host ' + name + ': ' + object(hostCaps[name]));
+      lines.push('tool-result mode: ' + toolResultMode);
+      $('bridge').textContent = lines.join('\n');
+      extensions();
+    }
+    function post(message) { window.parent.postMessage(message, '*'); }
+    function status(text, state) { $('status').textContent = text; phase = state; render(); }
+    function finishFailure(text, state) { clearTimeout(timer); status(text, state); }
+    function receive(event) {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!object(message) || message.jsonrpc !== '2.0') return;
+      if (typeof message.method === 'string') {
+        if (message.method === 'ui/notifications/tool-result' && !Object.prototype.hasOwnProperty.call(message, 'id')) {
+          const mode = message.params?.structuredContent?.mode;
+          toolResultMode = mode === 'modern' || mode === 'legacy' ? mode : 'none';
+          render();
+        } else if (message.method === 'ping' && (typeof message.id === 'string' || Number.isFinite(message.id))) {
+          post({ jsonrpc: '2.0', id: message.id, result: {} });
+        }
+        return;
+      }
+      if (message.id !== requestId || phase !== 'waiting') return;
+      const hasResult = Object.prototype.hasOwnProperty.call(message, 'result');
+      const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
+      if (hasResult === hasError) return;
+      responseSeen = true;
+      if (hasError) {
+        if (!object(message.error) || !Number.isInteger(message.error.code) || typeof message.error.message !== 'string') return;
+        finishFailure('Хост вернул ошибку подключения. Файлы и данные не изменялись.', 'host-error');
+        return;
+      }
+      const result = message.result;
+      if (!object(result)) { finishFailure('Получен неподдерживаемый ответ подключения.', 'invalid-response'); return; }
+      protocolSupported = result.protocolVersion === version;
+      hostCaps = object(result.hostCapabilities) ? result.hostCapabilities : {};
+      hostContextPresent = object(result.hostContext);
+      if (!protocolSupported || !object(result.hostCapabilities) || !object(result.hostInfo)
+          || typeof result.hostInfo.name !== 'string' || typeof result.hostInfo.version !== 'string') {
+        finishFailure('Ответ подключения не соответствует протоколу MCP Apps.', 'invalid-response');
+        return;
+      }
+      clearTimeout(timer);
+      try {
+        post({ jsonrpc: '2.0', method: 'ui/notifications/initialized' });
+        connected = true;
+        status('JavaScript работает. MCP Apps подключен.', 'connected');
+        const height = Math.max(320, Math.ceil(document.body?.scrollHeight || 320));
+        post({ jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { height } });
+      } catch (_) { finishFailure('Не удалось завершить подключение к хосту.', 'transport-error'); }
+    }
+    window.addEventListener('message', receive);
+    window.addEventListener('openai:set_globals', extensions);
+    status('JavaScript запущен. Подключаем MCP Apps.', 'starting');
+    if (!parentAvailable()) { status('Панель открыта без хоста MCP Apps.', 'no-host'); return; }
+    phase = 'waiting';
+    timer = setTimeout(() => finishFailure('Хост не ответил за 10 секунд. JavaScript панели работает.', 'timeout'), 10000);
+    render();
+    try {
+      post({ jsonrpc: '2.0', id: requestId, method: 'ui/initialize', params: {
+        appInfo: { name: 'mindcrafti-ui-diagnostic', version: '1.30.2' },
+        appCapabilities: {}, protocolVersion: version
+      } });
+    } catch (_) { finishFailure('Не удалось отправить запрос подключения.', 'transport-error'); }
+  })();
+  </script>
+</body>
+</html>

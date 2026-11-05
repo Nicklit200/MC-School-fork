@@ -36,6 +36,8 @@ import tools.jackson.databind.ObjectMapper;
 class McpDirectPdfToolsTest {
     private static final String EVENT = "actual-lesson-event";
     private static final String TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
+    private static final String MODERN_DIAGNOSTIC_RESOURCE = "ui://mindcrafti/ui-diagnostic-modern-v1.html";
+    private static final String LEGACY_DIAGNOSTIC_RESOURCE = "ui://mindcrafti/ui-diagnostic-legacy-v1.html";
     private final ObjectMapper json = new ObjectMapper();
     private final UserRepository users = mock(UserRepository.class);
     private final McpOAuthService oauth = mock(McpOAuthService.class);
@@ -388,7 +390,7 @@ class McpDirectPdfToolsTest {
         assertThat((List<String>) startSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
         assertThat((List<String>) finishSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
         Map<String, Object> initialization = rpc("admin", "initialize", Map.of());
-        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.30.1");
+        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.30.2");
         assertThat((Map<String, Object>) initialization.get("capabilities")).containsKey("resources");
     }
 
@@ -396,8 +398,9 @@ class McpDirectPdfToolsTest {
     @SuppressWarnings("unchecked")
     void fileTransferResourceIsStaticAuthenticatedAndCannotReadArbitraryPaths() {
         List<Map<String, Object>> resources = (List<Map<String, Object>>) rpc("admin", "resources/list", Map.of()).get("resources");
-        assertThat(resources).hasSize(1);
-        assertThat(resources.get(0)).containsEntry("uri", TRANSFER_RESOURCE);
+        assertThat(resources).hasSize(3);
+        assertThat(resources.stream().map(resource -> resource.get("uri")).toList())
+                .contains(TRANSFER_RESOURCE, MODERN_DIAGNOSTIC_RESOURCE, LEGACY_DIAGNOSTIC_RESOURCE);
         Map<String, Object> result = rpc("admin", "resources/read", Map.of("uri", TRANSFER_RESOURCE));
         List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
         assertThat(contents).hasSize(1);
@@ -411,6 +414,87 @@ class McpDirectPdfToolsTest {
         assertThat(envelope("anonymous", "resources/read", Map.of("uri", TRANSFER_RESOURCE))).containsKey("error");
         assertThat(envelope("admin", "resources/read", Map.of("uri", "file:///etc/passwd"))).containsKey("error");
         verifyNoInteractions(preparations, receipts, drive);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void diagnosticCatalogIsAdministratorOnlyAndDeclaresPassiveEmptyArgumentTools() {
+        List<Map<String, Object>> adminTools = (List<Map<String, Object>>) rpc("admin", "tools/list", Map.of()).get("tools");
+        Map<String, String> diagnostics = Map.of("test_mch3_ui_modern", MODERN_DIAGNOSTIC_RESOURCE,
+                "test_mch3_ui_legacy", LEGACY_DIAGNOSTIC_RESOURCE);
+        for (Map.Entry<String, String> diagnostic : diagnostics.entrySet()) {
+            Map<String, Object> definition = adminTools.stream()
+                    .filter(item -> diagnostic.getKey().equals(item.get("name"))).findFirst().orElseThrow();
+            Map<String, Object> schema = (Map<String, Object>) definition.get("inputSchema");
+            assertThat(schema).containsEntry("type", "object").containsEntry("additionalProperties", false);
+            assertThat((Map<?, ?>) schema.get("properties")).isEmpty();
+            assertThat((Map<String, Object>) definition.get("annotations"))
+                    .containsEntry("readOnlyHint", true).containsEntry("destructiveHint", false);
+            assertThat((Map<String, Object>) definition.get("_meta"))
+                    .containsEntry("openai/outputTemplate", diagnostic.getValue())
+                    .doesNotContainKey("openai/fileParams");
+        }
+        for (String token : List.of("teacher", "foreign", "import-key", "anonymous")) {
+            List<Map<String, Object>> tools = (List<Map<String, Object>>) rpc(token, "tools/list", Map.of()).get("tools");
+            assertThat(tools.stream().map(tool -> tool.get("name")).toList())
+                    .doesNotContain("test_mch3_ui_modern", "test_mch3_ui_legacy");
+        }
+        verifyNoInteractions(preparations, receipts, drive, files, calendar);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void diagnosticToolsHaveNoBusinessWritesAndRejectNonemptyArgumentsOrInactiveActors() {
+        User inactive = User.bootstrapAdmin("Inactive", "inactive@test.local", "unused");
+        ReflectionTestUtils.setField(inactive, "status", com.mcschool.flashcard.users.UserStatus.INACTIVE);
+        User archived = User.bootstrapAdmin("Archived", "archived@test.local", "unused");
+        archived.archive();
+        when(oauth.resolveAccessToken("inactive-admin")).thenReturn(Optional.of(inactive));
+        when(oauth.resolveAccessToken("archived-admin")).thenReturn(Optional.of(archived));
+        for (String mode : List.of("modern", "legacy")) {
+            String name = "test_mch3_ui_" + mode;
+            Map<String, Object> result = call("admin", name, Map.of());
+            assertThat(result.get("isError")).isEqualTo(false);
+            assertThat((Map<String, Object>) result.get("structuredContent"))
+                    .containsOnlyKeys("success", "ready", "mode")
+                    .containsEntry("success", true).containsEntry("ready", true).containsEntry("mode", mode);
+            rejected(call("admin", name, Map.of("eventId", EVENT)), 400);
+            for (String token : List.of("teacher", "foreign", "import-key", "anonymous", "inactive-admin", "archived-admin")) {
+                rejected(call(token, name, Map.of()), 403);
+            }
+        }
+        verifyNoInteractions(preparations, receipts, drive, files, calendar, access, users);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void diagnosticResourcesUseDistinctMimesWithoutExposingPrivateTargetsOrTeacherAccess() {
+        Map<String, String> types = Map.of(MODERN_DIAGNOSTIC_RESOURCE, "text/html;profile=mcp-app",
+                LEGACY_DIAGNOSTIC_RESOURCE, "text/html+skybridge");
+        List<Map<String, Object>> teacherResources = (List<Map<String, Object>>) rpc("teacher", "resources/list", Map.of()).get("resources");
+        assertThat(teacherResources).hasSize(1);
+        assertThat(teacherResources.get(0)).containsEntry("uri", TRANSFER_RESOURCE);
+        for (Map.Entry<String, String> resource : types.entrySet()) {
+            List<Map<String, Object>> contents = (List<Map<String, Object>>) rpc("admin", "resources/read",
+                    Map.of("uri", resource.getKey())).get("contents");
+            assertThat(contents).hasSize(1);
+            assertThat(contents.get(0)).containsEntry("uri", resource.getKey()).containsEntry("mimeType", resource.getValue());
+            assertThat(String.valueOf(contents.get(0).get("text")))
+                    .contains(resource.getKey().equals(MODERN_DIAGNOSTIC_RESOURCE) ? "modern" : "legacy")
+                    .doesNotContain("__MCH3_DIAGNOSTIC_MODE__", EVENT, "teacher@test.local", "admin@test.local");
+            for (String token : List.of("teacher", "foreign", "import-key", "anonymous")) {
+                assertThat(envelope(token, "resources/read", Map.of("uri", resource.getKey()))).containsKey("error");
+            }
+        }
+        verifyNoInteractions(preparations, receipts, drive, files, calendar);
+    }
+
+    @Test void resourceTemplateDiscoveryIsEmptyForAllAuthenticationModes() {
+        for (String token : List.of("admin", "teacher", "foreign", "import-key", "anonymous")) {
+            assertThat(rpc(token, "resources/templates/list", Map.of()))
+                    .isEqualTo(Map.of("resourceTemplates", List.of()));
+        }
+        verifyNoInteractions(preparations, receipts, drive, files, calendar, access, users);
     }
 
     private Map<String, Object> transferStart() {

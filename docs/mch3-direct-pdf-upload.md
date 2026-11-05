@@ -1,4 +1,4 @@
-# Direct PDF input for MCH3 1.30.1
+# Direct PDF input for MCH3 1.30.2
 
 For PDFs already created or attached in ChatGPT, prefer the direct file input.
 Do NOT upload to Google Drive as an intermediate step.
@@ -204,3 +204,10 @@ just to test this connector change.
 ## Shared board refresh behavior
 
 The classroom revision probe uses the independent workbook version, not the optimistic-lock version of the entire preparation row. Saving notes, private answers, a transcript attachment, or a live Soniox transcript therefore leaves the shared board revision unchanged. Replacing or appending the workbook increments the revision and still refreshes the board. This prevents the four-second polling fallback from reopening an unchanged PDF during a call.
+
+
+## Production acceptance and UI diagnostics
+
+Production 1.30.1 serves the authorized file-transfer resource, but the tested ChatGPT client currently reports that the app cannot open. The isolated technical lesson still has no saved workbook or answers. End-to-end acceptance is pending; do not infer a successful upload from the helper tool result.
+
+Administrators can compare the read-only `test_mch3_ui_modern` and `test_mch3_ui_legacy` tools. Both serve the same minimal self-contained diagnostic page, using the standard MCP Apps MIME or the compatibility MIME from the official OpenAI examples. These tools show bootstrap, handshake, and capability booleans only. They cannot call server tools, access files, or write lesson data. Teacher, pupil, anonymous and API-key sessions cannot access them. Use a fresh chat after refreshing tools. These diagnostics isolate rendering; they are not PDF uploads.
