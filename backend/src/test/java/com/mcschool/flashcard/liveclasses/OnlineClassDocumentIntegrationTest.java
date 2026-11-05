@@ -99,8 +99,8 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void filenamesMentioningAnswersStillUploadToWorkbookSlotOnIPad() {
-        byte[] pdf = "%PDF-1.4\\n1 0 obj\\n<< >>\\nendobj\\n%%EOF".getBytes();
+    void filenamesMentioningAnswersStillUploadToWorkbookSlotOnIPad() throws Exception {
+        byte[] pdf = pdfWithPages(1);
         var result = preparationService.uploadWorkbook(teacherPrincipal,
                 "event-doc", "Mathe Antworten und Lösungen.pdf", pdf);
 
@@ -113,8 +113,8 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void explicitLegacyAnswersPrefixKeepsOldMcpClientsCompatible() {
-        byte[] pdf = "%PDF-1.4\\n%%EOF".getBytes();
+    void explicitLegacyAnswersPrefixKeepsOldMcpClientsCompatible() throws Exception {
+        byte[] pdf = pdfWithPages(1);
         var result = preparationService.uploadWorkbook(teacherPrincipal,
                 "event-doc", "__answers__:teacher-solutions.pdf", pdf);
 
@@ -127,8 +127,8 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
     void anEmptyIPadUploadMustNotReportSuccess() {
         assertThatThrownBy(() -> preparationService.uploadWorkbook(
                 teacherPrincipal, "event-doc", "Aufgaben.pdf", new byte[0]))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("non-empty PDF");
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode().value()).isEqualTo(400));
         assertThat(preparations.findByTeacherIdAndEventId(
                 teacher.getId(), "event-doc")).isEmpty();
     }
@@ -142,6 +142,55 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void unrelatedPreparationUpdatesDoNotReloadTheSharedWorkbook() throws Exception {
+        preparationService.uploadWorkbook(teacherPrincipal, "event-doc", "workbook.pdf", pdfWithPages(1));
+        long workbookVersion = documentService.workbookVersion(studentPrincipal, onlineClass.getId());
+        assertThat(workbookVersion).isPositive();
+
+        LessonPreparation preparation = preparations.findByTeacherIdAndEventId(
+                teacher.getId(), "event-doc").orElseThrow();
+        Long rowVersion = preparation.getVersion();
+        preparation.updateNotes("Homework", "Difficulties", "Lesson plan", "Manual transcript");
+        preparation = preparations.saveAndFlush(preparation);
+        assertThat(preparation.getVersion()).isGreaterThan(rowVersion);
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
+                .as("notes and manual transcript do not change the PDF")
+                .isEqualTo(workbookVersion);
+
+        preparation.attachAnswers("answers.pdf", pdfWithPages(1));
+        preparation = preparations.saveAndFlush(preparation);
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
+                .as("private answers do not change the shared PDF")
+                .isEqualTo(workbookVersion);
+
+        preparation.replaceSonioxTranscript("Live transcript", Instant.now());
+        preparation = preparations.saveAndFlush(preparation);
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
+                .as("live transcription does not change the PDF")
+                .isEqualTo(workbookVersion);
+
+        preparation.attachTranscriptPdf("transcript.pdf", pdfWithPages(1));
+        preparation.markSiteOpened(Instant.now());
+        preparations.saveAndFlush(preparation);
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
+                .as("transcript attachments and opening preparation do not change the PDF")
+                .isEqualTo(workbookVersion);
+    }
+
+    @Test
+    void replacingTheSharedWorkbookIncrementsItsDocumentRevision() throws Exception {
+        preparationService.uploadWorkbook(teacherPrincipal, "event-doc", "first.pdf", pdfWithPages(1));
+        long previousVersion = documentService.workbookVersion(studentPrincipal, onlineClass.getId());
+        byte[] replacement = pdfWithPages(2);
+
+        preparationService.uploadWorkbook(teacherPrincipal, "event-doc", "replacement.pdf", replacement);
+
+        assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
+                .isEqualTo(previousVersion + 1);
+        assertThat(documentService.workbook(studentPrincipal, onlineClass.getId())).contains(replacement);
+    }
+
+    @Test
     void appendWorkbookKeepsAllOriginalPagesAndExposesMoreToStudents() throws Exception {
         byte[] original = pdfWithPages(2);
         byte[] second = pdfWithPages(3);
@@ -150,7 +199,7 @@ class OnlineClassDocumentIntegrationTest extends AbstractIntegrationTest {
         var originalVersion = documentService.workbookVersion(studentPrincipal, onlineClass.getId());
         preparationService.appendWorkbook(teacherPrincipal, "event-doc", "second.pdf", second);
         assertThat(documentService.workbookVersion(studentPrincipal, onlineClass.getId()))
-                .isGreaterThan(originalVersion);
+                .isEqualTo(originalVersion + 1);
         byte[] joined = documentService.workbook(studentPrincipal, onlineClass.getId()).orElseThrow();
         try (var merged = Loader.loadPDF(joined)) {
             assertThat(merged.getNumberOfPages()).isEqualTo(5);

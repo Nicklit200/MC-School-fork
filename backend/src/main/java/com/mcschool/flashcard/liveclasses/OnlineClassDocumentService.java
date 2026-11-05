@@ -80,7 +80,9 @@ public class OnlineClassDocumentService {
         return preparations.findByTeacherIdAndEventId(
                         onlineClass.getTeacher().getId(), onlineClass.getEventId())
                 .filter(LessonPreparation::hasWorkbook)
-                .map(p -> p.getVersion() == null ? 1L : p.getVersion() + 1L)
+                // Poll the PDF revision, not the row's optimistic-lock version:
+                // notes, answers and live transcripts must not reload the board.
+                .map(LessonPreparation::getWorkbookVersion)
                 .orElse(0L);
     }
 

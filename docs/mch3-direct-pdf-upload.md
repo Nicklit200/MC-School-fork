@@ -162,3 +162,7 @@ explicit test lesson using real runtime file inputs, then read that lesson back.
 An isolated HTTP/database test alone does not prove the host transferred its
 generated local file successfully. Do not overwrite a real pupil's materials
 just to test this connector change.
+
+## Shared board refresh behavior
+
+The classroom revision probe uses the independent workbook version, not the optimistic-lock version of the entire preparation row. Saving notes, private answers, a transcript attachment, or a live Soniox transcript therefore leaves the shared board revision unchanged. Replacing or appending the workbook increments the revision and still refreshes the board. This prevents the four-second polling fallback from reopening an unchanged PDF during a call.
