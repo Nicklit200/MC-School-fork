@@ -14,7 +14,8 @@ export type PersonalWorkbook = {
   answersVersion?: number;
 };
 
-export type PersonalAnswers = { studentId: string; hasAnswers: boolean; answersFilename: string | null; version: number };
+export type AnswersMetadata = { hasAnswers: boolean; answersFilename: string | null; version: number };
+export type PersonalAnswers = AnswersMetadata & { studentId: string };
 
 export type PersonalWorkbooks = { enabled: boolean; students: PersonalWorkbook[] };
 
@@ -51,7 +52,7 @@ async function parse<T>(response: Response): Promise<T> {
 }
 
 async function pdfBytes(eventId: string, kind: 'workbook' | 'answers' | 'transcript') {
-  const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/${kind}`, { headers: authHeaders() });
+  const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/${kind}`, { headers: authHeaders(), cache: 'no-store' });
   if (!response.ok) throw new ApiRequestError(response.status, kind.toUpperCase(), response.statusText);
   return response.arrayBuffer();
 }
@@ -83,9 +84,14 @@ function uploadHomeworkSeries(eventId: string, startDate: string, days: number, 
 }
 
 export const lessonPreparationApi = {
+  answersMetadata(eventId: string) {
+    return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/answers/metadata`, {
+      headers: authHeaders(), cache: 'no-store',
+    }).then(parse<AnswersMetadata>);
+  },
   personalAnswersMetadata(eventId: string, studentId: string) {
     return fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-answers/${encodeURIComponent(studentId)}/metadata`, {
-      headers: authHeaders(),
+      headers: authHeaders(), cache: 'no-store',
     }).then(parse<PersonalAnswers>);
   },
   uploadPersonalAnswers(eventId: string, studentId: string, file: File) {
@@ -97,7 +103,7 @@ export const lessonPreparationApi = {
   },
   async personalAnswersBytes(eventId: string, studentId: string) {
     const response = await fetch(`${BASE_URL}/lesson-preparations/${encodeURIComponent(eventId)}/personal-answers/${encodeURIComponent(studentId)}`, {
-      headers: authHeaders(),
+      headers: authHeaders(), cache: 'no-store',
     });
     if (!response.ok) throw new ApiRequestError(response.status, 'PERSONAL_ANSWERS', response.statusText);
     return response.arrayBuffer();

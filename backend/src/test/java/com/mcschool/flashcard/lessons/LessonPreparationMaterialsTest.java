@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
@@ -43,6 +44,31 @@ class LessonPreparationMaterialsTest {
             document.save(bytes);
             return bytes.toByteArray();
         }
+    }
+
+    @Test
+    void answersMetadataReadsOnlyTheTeachersScalarRevision() {
+        var row = mock(LessonPreparationRepository.AnswersMetadata.class);
+        when(row.getHasAnswers()).thenReturn(true);
+        when(row.getAnswersFilename()).thenReturn("answers.pdf");
+        when(row.getVersion()).thenReturn(7L);
+        when(repository.answersMetadata(teacher.getId(), "pdf-test-event")).thenReturn(Optional.of(row));
+
+        assertThat(service.answersMetadata(actor, "pdf-test-event"))
+                .isEqualTo(new LessonPreparationService.AnswersMetadata(true, "answers.pdf", 7L));
+        verify(repository).answersMetadata(teacher.getId(), "pdf-test-event");
+        verifyNoMoreInteractions(repository);
+        verifyNoInteractions(drive);
+    }
+
+    @Test
+    void missingAnswersMetadataDoesNotCreateAPreparationOrReadAnotherTeacher() {
+        when(repository.answersMetadata(teacher.getId(), "missing-event")).thenReturn(Optional.empty());
+        assertThat(service.answersMetadata(actor, "missing-event"))
+                .isEqualTo(new LessonPreparationService.AnswersMetadata(false, null, 0L));
+        verify(repository).answersMetadata(teacher.getId(), "missing-event");
+        verifyNoMoreInteractions(repository);
+        verifyNoInteractions(drive);
     }
 
     @Test

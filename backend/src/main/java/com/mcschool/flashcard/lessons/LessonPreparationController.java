@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -111,9 +112,16 @@ public class LessonPreparationController {
     public ResponseEntity<byte[]> answers(@AuthenticationPrincipal AuthenticatedUser teacher,
                                           @PathVariable String eventId) {
         LessonPreparation preparation = service.require(teacher, eventId);
-        if (!preparation.hasAnswers()) return ResponseEntity.notFound().build();
+        if (!preparation.hasAnswers()) return ResponseEntity.notFound().cacheControl(CacheControl.noStore()).build();
         String filename = preparation.getAnswersFilename() == null ? "lesson-answers.pdf" : preparation.getAnswersFilename();
         return pdf(filename, preparation.getAnswersPdf());
+    }
+
+    @GetMapping("/{eventId}/answers/metadata")
+    public ResponseEntity<LessonPreparationService.AnswersMetadata> answersMetadata(
+            @AuthenticationPrincipal AuthenticatedUser teacher, @PathVariable String eventId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.answersMetadata(teacher, eventId));
     }
 
     @PostMapping("/{eventId}/drive-archive")
@@ -152,6 +160,7 @@ public class LessonPreparationController {
 
     private ResponseEntity<byte[]> pdf(String filename, byte[] body) {
         return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename.replace("\"", "") + "\"")
                 .body(body);

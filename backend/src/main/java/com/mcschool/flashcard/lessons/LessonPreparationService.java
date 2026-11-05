@@ -49,6 +49,17 @@ public class LessonPreparationService {
         return response(require(teacher, eventId));
     }
 
+    public record AnswersMetadata(boolean hasAnswers, String answersFilename, long version) {}
+
+    /** Polling must not create preparation rows or load private lesson content. */
+    @Transactional(readOnly = true)
+    public AnswersMetadata answersMetadata(AuthenticatedUser teacher, String eventId) {
+        return repository.answersMetadata(teacher.id(), eventId)
+                .filter(LessonPreparationRepository.AnswersMetadata::getHasAnswers)
+                .map(row -> new AnswersMetadata(true, row.getAnswersFilename(), row.getVersion()))
+                .orElseGet(() -> new AnswersMetadata(false, null, 0L));
+    }
+
     @Transactional
     public LessonPreparationResponse update(AuthenticatedUser teacher, String eventId, UpdateLessonPreparationRequest request) {
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);

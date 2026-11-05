@@ -50,6 +50,7 @@ class PersonalLessonAnswersPersistenceIntegrationTest {
     @Autowired private PersonalLessonWorkbookService workbooks;
     @Autowired private PersonalLessonWorkbookRepository workbookFiles;
     @Autowired private LessonPreparationRepository preparations;
+    @Autowired private LessonPreparationService preparationService;
     @Autowired private UserRepository users;
     @Autowired private StudentGroupRepository groups;
     @Autowired private StudentGroupMemberRepository members;
@@ -106,6 +107,44 @@ class PersonalLessonAnswersPersistenceIntegrationTest {
             document.save(output);
             return output.toByteArray();
         }
+    }
+
+    @Test
+    void sharedAnswersProbeTracksSameNameReplacementWithoutFollowingWorkbookOrNotes() throws Exception {
+        User anotherTeacher = users.saveAndFlush(User.activeTeacher("Other", "other@test.local", "other", "unused"));
+        LessonPreparation other = LessonPreparation.create(anotherTeacher, "event");
+        other.attachAnswers("other-teacher.pdf", pdf(1));
+        preparations.saveAndFlush(other);
+        String shared = "/api/v1/lesson-preparations/event/answers";
+        mvc.perform(get(shared + "/metadata").with(authentication(account(teacher.getId(), Role.TEACHER))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.hasAnswers").value(false))
+                .andExpect(jsonPath("$.version").value(0)).andExpect(header().string("Cache-Control", "no-store"));
+        assertThat(preparations.count()).isEqualTo(1L);
+
+        byte[] first = pdf(2), replacement = pdf(3);
+        preparationService.uploadAnswers(caller, "event", "answers.pdf", first);
+        var initial = preparations.answersMetadata(teacher.getId(), "event").orElseThrow();
+        assertThat(initial.getHasAnswers()).isTrue();
+        assertThat(initial.getAnswersFilename()).isEqualTo("answers.pdf");
+        assertThat(initial.getVersion()).isEqualTo(1L);
+        preparationService.uploadWorkbook(caller, "event", "workbook.pdf", pdf(1));
+        preparationService.update(caller, "event", new com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest(
+                "Homework", "Difficulty", "Plan", "Transcript", null));
+        mvc.perform(get(shared + "/metadata").with(authentication(account(teacher.getId(), Role.TEACHER))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.transcriptText").doesNotExist());
+
+        preparationService.uploadAnswers(caller, "event", "answers.pdf", replacement);
+        mvc.perform(get(shared + "/metadata").with(authentication(account(teacher.getId(), Role.TEACHER))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.answersFilename").value("answers.pdf"))
+                .andExpect(jsonPath("$.version").value(2)).andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(get(shared).with(authentication(account(teacher.getId(), Role.TEACHER))))
+                .andExpect(status().isOk()).andExpect(content().bytes(replacement))
+                .andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(get(shared + "/metadata").with(authentication(account(student.getId(), Role.STUDENT))))
+                .andExpect(status().isForbidden());
+        assertThat(preparations.answersMetadata(anotherTeacher.getId(), "event").orElseThrow().getAnswersFilename())
+                .isEqualTo("other-teacher.pdf");
     }
 
     @Test

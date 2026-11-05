@@ -9,7 +9,7 @@ import { openPdf } from './pdfDocument';
 const pdfDocuments = vi.hoisted(() => new Map());
 
 vi.mock('../../api/lessonPreparation', () => ({
-  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(),
+  lessonPreparationApi: { answersMetadata: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(),
     personalAnswersMetadata: vi.fn(), personalAnswersBytes: vi.fn(), uploadPersonalAnswers: vi.fn() },
 }));
 vi.mock('./pdfDocument', () => ({ openPdf: vi.fn() }));
@@ -25,8 +25,10 @@ vi.mock('./usePdf', () => ({
 
 const api = vi.mocked(lessonPreparationApi);
 
-const prep = (hasAnswers: boolean): LessonPreparation => ({
+const prep = (hasAnswers: boolean): LessonPreparation & { version: number } => ({
   eventId: 'e1',
+  version: 0,
+  answersVersion: 0,
   homeworkNotes: null,
   difficulties: null,
   lessonPlan: null,
@@ -49,8 +51,8 @@ const personal = (studentId: string, hasAnswers = true): PersonalAnswers => ({ s
 
 describe('useAnswersPanel', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); pdfDocuments.clear(); api.get.mockReset(); api.uploadAnswers.mockReset(); api.answersBytes.mockReset();
-    api.get.mockResolvedValue(prep(false)); api.uploadAnswers.mockResolvedValue(prep(true)); api.answersBytes.mockResolvedValue(new ArrayBuffer(8));
+    vi.clearAllMocks(); pdfDocuments.clear(); api.answersMetadata.mockReset(); api.uploadAnswers.mockReset(); api.answersBytes.mockReset();
+    api.answersMetadata.mockResolvedValue(prep(false)); api.uploadAnswers.mockResolvedValue(prep(true)); api.answersBytes.mockResolvedValue(new ArrayBuffer(8));
     api.personalAnswersMetadata.mockReset().mockImplementation(async (_eventId, studentId) => personal(studentId));
     api.uploadPersonalAnswers.mockReset().mockImplementation(async (_eventId, studentId) => personal(studentId));
     api.personalAnswersBytes.mockReset().mockResolvedValue(new ArrayBuffer(8));
@@ -60,15 +62,15 @@ describe('useAnswersPanel', () => {
   it('asks the server for nothing and refuses upload when the viewer is not the host', async () => {
     const { result } = renderHook(() => useAnswersPanel('e1', false));
     expect(result.current.status).toBe('unavailable');
-    expect(api.get).not.toHaveBeenCalled();
+    expect(api.answersMetadata).not.toHaveBeenCalled();
     act(() => result.current.toggle());
     expect(result.current.open).toBe(false);
     await act(async () => { await result.current.upload(pdfFile()); });
-    expect(api.get).not.toHaveBeenCalled(); expect(api.uploadAnswers).not.toHaveBeenCalled(); expect(api.answersBytes).not.toHaveBeenCalled();
+    expect(api.answersMetadata).not.toHaveBeenCalled(); expect(api.uploadAnswers).not.toHaveBeenCalled(); expect(api.answersBytes).not.toHaveBeenCalled();
   });
 
   it('opens the empty answers panel so the teacher can upload a first PDF', async () => {
-    api.get.mockResolvedValue(prep(false));
+    api.answersMetadata.mockResolvedValue(prep(false));
     const { result } = renderHook(() => useAnswersPanel('e1', true));
     await waitFor(() => expect(result.current.status).toBe('none'));
     act(() => result.current.toggle());
@@ -76,13 +78,13 @@ describe('useAnswersPanel', () => {
   });
 
   it('reads a failed lookup as "none" rather than breaking the lesson', async () => {
-    api.get.mockRejectedValue(new Error('500'));
+    api.answersMetadata.mockRejectedValue(new Error('500'));
     const { result } = renderHook(() => useAnswersPanel('e1', true));
     await waitFor(() => expect(result.current.status).toBe('none'));
   });
 
   it('opens when answers exist and loads the file only once opened', async () => {
-    api.get.mockResolvedValue(prep(true));
+    api.answersMetadata.mockResolvedValue(prep(true));
     const { result } = renderHook(() => useAnswersPanel('e1', true));
     await waitFor(() => expect(result.current.status).toBe('available'));
     expect(result.current.pdf.status).toBe('idle');
@@ -92,7 +94,7 @@ describe('useAnswersPanel', () => {
   });
 
   it('remembers page, zoom and scroll across close and reopen, and keeps the document', async () => {
-    api.get.mockResolvedValue(prep(true));
+    api.answersMetadata.mockResolvedValue(prep(true));
     const { result } = renderHook(() => useAnswersPanel('e1', true));
     await waitFor(() => expect(result.current.status).toBe('available'));
     act(() => result.current.toggle());
@@ -132,7 +134,7 @@ describe('useAnswersPanel', () => {
   });
 
   it('refreshes a replaced PDF even when its filename is unchanged', async () => {
-    api.get.mockResolvedValue(prep(true));
+    api.answersMetadata.mockResolvedValue(prep(true));
     const { result } = renderHook(() => useAnswersPanel('e1', true)); await waitFor(() => expect(result.current.status).toBe('available'));
     act(() => result.current.toggle()); const previous = result.current.pdf, key = pdfKey();
     await act(async () => { await result.current.upload(pdfFile()); });
@@ -140,7 +142,7 @@ describe('useAnswersPanel', () => {
   });
 
   it.each(['upload', 'empty verification', 'PDF parsing'])('keeps the existing document and view after %s fails and permits retry', async failure => {
-    api.get.mockResolvedValue(prep(true));
+    api.answersMetadata.mockResolvedValue(prep(true));
     const { result } = renderHook(() => useAnswersPanel('e1', true)); await waitFor(() => expect(result.current.status).toBe('available'));
     act(() => { result.current.toggle(); result.current.setView({ page: 2, zoom: 2 }); result.current.rememberScroll(340, 20); });
     const previous = result.current.pdf, key = pdfKey();
@@ -178,14 +180,14 @@ describe('useAnswersPanel', () => {
     const { result } = renderHook(() => useAnswersPanel(undefined, true));
     await act(async () => { result.current.toggle(); await result.current.upload(pdfFile()); });
     expect(result.current.status).toBe('unavailable'); expect(result.current.open).toBe(false);
-    expect(api.get).not.toHaveBeenCalled(); expect(api.uploadAnswers).not.toHaveBeenCalled(); expect(api.answersBytes).not.toHaveBeenCalled();
+    expect(api.answersMetadata).not.toHaveBeenCalled(); expect(api.uploadAnswers).not.toHaveBeenCalled(); expect(api.answersBytes).not.toHaveBeenCalled();
   });
 
   it('never requests common or personal solutions for a pupil even when a personal ID is passed', async () => {
     const { result } = renderHook(() => useAnswersPanel('e1', false, 'alice', 'teacher'));
     await act(async () => { result.current.toggle(); await result.current.upload(pdfFile()); });
     expect(result.current.status).toBe('unavailable');
-    expect(api.get).not.toHaveBeenCalled();
+    expect(api.answersMetadata).not.toHaveBeenCalled();
     expect(api.answersBytes).not.toHaveBeenCalled();
     expect(api.personalAnswersMetadata).not.toHaveBeenCalled();
     expect(api.personalAnswersBytes).not.toHaveBeenCalled();
@@ -194,7 +196,7 @@ describe('useAnswersPanel', () => {
   });
 
   it('keeps a missing personal file empty rather than using the available common answers', async () => {
-    api.get.mockResolvedValue(prep(true));
+    api.answersMetadata.mockResolvedValue(prep(true));
     api.personalAnswersMetadata.mockResolvedValue(personal('alice', false));
     const { result } = renderHook(() => useAnswersPanel('e1', true, 'alice', 'teacher'));
     await waitFor(() => expect(result.current.status).toBe('none'));
@@ -203,7 +205,7 @@ describe('useAnswersPanel', () => {
     expect(result.current.personal).toBe(true);
     expect(result.current.pdf.status).toBe('idle');
     expect(api.personalAnswersMetadata).toHaveBeenCalledWith('e1', 'alice');
-    expect(api.get).not.toHaveBeenCalled(); expect(api.answersBytes).not.toHaveBeenCalled();
+    expect(api.answersMetadata).not.toHaveBeenCalled(); expect(api.answersBytes).not.toHaveBeenCalled();
   });
 
   it('keeps the panel open while switching pupils and restores each source’s independent page, zoom and scroll', async () => {

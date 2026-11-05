@@ -39,7 +39,7 @@ jobs:
           node .github/scripts/mch3-ui-diagnostic.test.cjs
       - name: Validate file inputs, permissions, idempotency and persisted PDFs
         working-directory: backend
-        run: ./mvnw -B -ntp -Dtest=ChatGptPdfResolverTest,LessonPreparationMaterialsTest,NativeLessonPdfCompatibilityTest,McpDirectPdfToolsTest,McpPersonalLessonWorkbookToolsTest,McpSiteFunctionsServiceTest,McpSiteFunctionsTransportIntegrationTest,PersonalLessonWorkbookServiceTest,PersonalLessonAnswersServiceTest,PersonalLessonWorkbookPersistenceIntegrationTest,PersonalLessonAnswersPersistenceIntegrationTest test
+        run: ./mvnw -B -ntp -Dtest=ChatGptPdfResolverTest,LessonPreparationMaterialsTest,SharedLessonAnswersMetadataApiTest,NativeLessonPdfCompatibilityTest,McpDirectPdfToolsTest,McpPersonalLessonWorkbookToolsTest,McpSiteFunctionsServiceTest,McpSiteFunctionsTransportIntegrationTest,PersonalLessonWorkbookServiceTest,PersonalLessonAnswersServiceTest,PersonalLessonWorkbookPersistenceIntegrationTest,PersonalLessonAnswersPersistenceIntegrationTest test
       - name: Require all real PostgreSQL suites to run
         shell: bash
         run: |

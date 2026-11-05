@@ -111,7 +111,7 @@ vi.mock('./WhiteboardPanel', () => ({
 }));
 
 vi.mock('../../api/lessonPreparation', () => ({
-  lessonPreparationApi: { get: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn(), personalWorkbooks: vi.fn(), uploadPersonalWorkbook: vi.fn(),
+  lessonPreparationApi: { answersMetadata: vi.fn(), answersBytes: vi.fn(), uploadAnswers: vi.fn(), appendWorkbook: vi.fn(), personalWorkbooks: vi.fn(), uploadPersonalWorkbook: vi.fn(),
     personalAnswersMetadata: vi.fn(), personalAnswersBytes: vi.fn(), uploadPersonalAnswers: vi.fn() },
   completedLessonApi: { list: vi.fn(), save: vi.fn() },
 }));
@@ -170,7 +170,7 @@ describe('PDF upload contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([]);
-    vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+    vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: false } as never);
     vi.mocked(onlineClassesApi.documentVersion).mockResolvedValue({ version: 2 });
   });
 
@@ -367,7 +367,7 @@ describe('lesson PDF save notifications', () => {
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
       { userId: 'alice', displayName: 'Анна', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
     ]);
-    vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+    vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: false } as never);
     vi.mocked(onlineClassesApi.listAnnotationDocuments).mockResolvedValue([]);
     vi.mocked(onlineClassesApi.documentBytes).mockResolvedValue(null);
     vi.mocked(exportBoardPdf).mockResolvedValue(new Blob(['%PDF-1.7']));
@@ -583,7 +583,7 @@ describe('transcription starts when the teacher enters the media room', () => {
     notebookFixture.viewerProps.clear();
     notebookFixture.panelProps.length = 0;
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([]);
-    vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+    vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: false } as never);
   });
 
   afterEach(() => {
@@ -783,7 +783,7 @@ describe('OnlineClassRoom', () => {
     vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([
       { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
     ]);
-    vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: true, answersFilename: 'a.pdf' } as never);
+    vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: true, answersFilename: 'a.pdf' } as never);
   });
 
   it('handles an unexpected LiveKit disconnect without clicking Leave', async () => {
@@ -842,7 +842,7 @@ describe('OnlineClassRoom', () => {
     mount(false);
     await screen.findByTestId('board-board-1');
     expect(screen.queryByRole('button', { name: /Ответы/ })).not.toBeInTheDocument();
-    expect(lessonPreparationApi.get).not.toHaveBeenCalled();
+    expect(lessonPreparationApi.answersMetadata).not.toHaveBeenCalled();
     expect(lessonPreparationApi.answersBytes).not.toHaveBeenCalled();
     expect(lessonPreparationApi.uploadAnswers).not.toHaveBeenCalled();
     expect(lessonPreparationApi.personalAnswersMetadata).not.toHaveBeenCalled();
@@ -880,7 +880,7 @@ describe('OnlineClassRoom', () => {
     expect(screen.getByText(/Для этого ученика решения ещё не загружены/)).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByRole('combobox'), 'all-student-boards');
     expect(await screen.findByText('Решения для учителя')).toBeInTheDocument();
-    expect(lessonPreparationApi.get).toHaveBeenCalledWith('e1');
+    expect(lessonPreparationApi.answersMetadata).toHaveBeenCalledWith('e1');
     } finally {
       if (previous) vi.stubGlobal('ResizeObserver', previous); else vi.unstubAllGlobals();
     }
@@ -972,7 +972,7 @@ describe('OnlineClassRoom', () => {
     const previous = globalThis.ResizeObserver;
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
     try {
-      vi.mocked(lessonPreparationApi.get).mockResolvedValue({ hasAnswers: false } as never);
+      vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: false } as never);
       vi.mocked(lessonPreparationApi.uploadAnswers).mockResolvedValue({ hasAnswers: true, answersFilename: 'solutions.pdf' } as never);
       vi.mocked(lessonPreparationApi.answersBytes).mockResolvedValue(new ArrayBuffer(16));
       mount(true);
