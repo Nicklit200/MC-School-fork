@@ -15,7 +15,7 @@ Server AI configuration is optional. If unavailable, ChatGPT first calls `prepar
 
 Generation reads current school prompts, the current Brand Guide, the available monthly plan, exact lesson and student/group, prior notes/transcript, profile facts and documented recent card/homework evidence. Missing information remains missing. A handwritten submission is not classified as wrong without actual analysis. A plan's candidate lesson is not proof that a topic has been taught.
 
-Active OAuth teachers may generate, download and publish only their own lessons. ADMIN may select an accessible teacher. Students, parents and API keys cannot use server generation. `get_owner_workbook_generator` and the low-level JSON/source workflow retain their existing owner/admin gate.
+Active OAuth teachers may generate, download and publish only their own lessons. ADMIN may select an accessible teacher. Students, parents and API keys cannot use server generation. The `generate_workbook` and v3 `create_lesson_draft` compatibility routes accept teachers with fresh context tokens and idempotency keys. Source access through `get_owner_workbook_generator` remains owner/admin only.
 
 Draft creation does not change lesson materials. Publication replaces the approved common workbook/answers slots and reads back event ID, flags, filenames and sizes. It preserves schedule, transcript, homework, status, other pupils' private worksheets and annotations. Personal workbooks take priority on My board; Shared board uses the common workbook. Personal answers stay staff-only.
 

@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.text.Normalizer;
 import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -97,7 +98,7 @@ public class LessonPdfDraftService {
                   workbook_pdf, answers_pdf, lesson_plan, difficulties, task_count, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?)
                 """, draftId, teacher.id(), eventId, workbookName, answersName,
-                workbook, answers, plan, difficulties, tasks.size(), Instant.now());
+                workbook, answers, plan, difficulties, tasks.size(), Timestamp.from(Instant.now()));
         Map<String,Object> result = new LinkedHashMap<>();
         result.put("draftId", draftId.toString());
         result.put("status", "DRAFT");
@@ -144,7 +145,7 @@ public class LessonPdfDraftService {
                    workbook_pdf, answers_pdf, lesson_plan, difficulties, task_count, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?)
                 """, id, teacher.id(), eventId, workbookName, answerName,
-                workbook, answers, planText, difficultiesText, taskCount, Instant.now());
+                workbook, answers, planText, difficultiesText, taskCount, Timestamp.from(Instant.now()));
 
         Map<String,Object> result = new LinkedHashMap<>();
         result.put("draftId", id.toString());
@@ -222,7 +223,7 @@ public class LessonPdfDraftService {
         preparationService.prepareMaterials(teacher, draft.eventId(), null,
                 draft.workbookName(), draft.workbook(), draft.answersName(), draft.answers());
         jdbc.update("UPDATE lesson_pdf_drafts SET status = 'PUBLISHED', published_at = ? WHERE id = ?",
-                Instant.now(), draftId);
+                Timestamp.from(Instant.now()), draftId);
         return publicationResult(teacher, draft, false);
     }
 
