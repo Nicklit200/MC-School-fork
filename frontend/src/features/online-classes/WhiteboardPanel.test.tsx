@@ -559,7 +559,7 @@ describe('WhiteboardPanel', () => {
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it.each([false, true])('routes plain and pinch wheel over a gap once and respects teacher navigation locking: %s', async locked => {
+  it.each([false, true])('keeps gap scrolling native, zooms only with modifiers and respects teacher navigation locking: %s', async locked => {
     chooseLayout(locked ? 'student' : 'teacher', 'continuous');
     const observers = documentObservers();
     try {
@@ -572,7 +572,11 @@ describe('WhiteboardPanel', () => {
       const width = pages[0].offsetWidth;
       const ordinaryWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -20, clientX: 500, clientY: 350 });
       fireEvent(rail, ordinaryWheel);
-      expect(ordinaryWheel.defaultPrevented).toBe(true);
+      expect(ordinaryWheel.defaultPrevented).toBe(locked);
+      act(() => observers.frame());
+      expect(pages[0].offsetWidth).toBe(width);
+      expect(parseFloat(rail.style.gap)).toBe(24);
+      expect(canvasZoomAt).not.toHaveBeenCalled();
       const pageWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -25, clientX: 500, clientY: 350 });
       fireEvent(screen.getAllByTestId('canvas')[0], pageWheel);
       expect(pageWheel.defaultPrevented).toBe(false);
@@ -581,23 +585,27 @@ describe('WhiteboardPanel', () => {
       fireEvent(rail, gapWheel);
       expect(gapWheel.defaultPrevented).toBe(true);
       act(() => observers.frame());
-      expect(pages[0].offsetWidth).toBeCloseTo(width * (locked ? 1 : Math.exp(.14)));
-      expect(parseFloat(rail.style.gap)).toBeCloseTo(24 * (locked ? 1 : Math.exp(.14)));
+      expect(pages[0].offsetWidth).toBeCloseTo(width * (locked ? 1 : Math.exp(.10)));
+      expect(parseFloat(rail.style.gap)).toBeCloseTo(24 * (locked ? 1 : Math.exp(.10)));
       expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.view).toBe(DEFAULT_VIEW);
-      expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.wheelAction).toBe('zoom');
+      expect(pageCanvasProps.get('WHITEBOARD:board-1:0')!.wheelAction).toBe('pan');
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it('delegates paged lesson margins to the active canvas zoom queue', async () => {
+  it.each(['board-1', 'personal-student', 'personal-workbook-student'])('scrolls paged margins without zoom and keeps explicit Ctrl zoom for %s', async targetId => {
     chooseLayout('teacher', 'paged');
-    const { container } = mount('host');
+    const { container } = mount('host', { targetId });
     await screen.findByTestId('canvas');
     const list = container.querySelector('.whiteboard__pages')!;
     const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -20, clientX: 500, clientY: 350 });
     fireEvent(list, wheel);
-    expect(wheel.defaultPrevented).toBe(true);
-    expect(canvasZoomAt).toHaveBeenCalledExactlyOnceWith('WHITEBOARD:board-1:0', Math.exp(.04), { x: 500, y: 350 });
-    expect(canvasProps.wheelAction).toBe('zoom');
+    expect(wheel.defaultPrevented).toBe(false);
+    expect(canvasZoomAt).not.toHaveBeenCalled();
+    const pinch = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -20, clientX: 500, clientY: 350 });
+    fireEvent(list, pinch);
+    expect(pinch.defaultPrevented).toBe(true);
+    expect(canvasZoomAt).toHaveBeenCalledExactlyOnceWith(`WHITEBOARD:${targetId}:0`, Math.exp(.04), { x: 500, y: 350 });
+    expect(canvasProps.wheelAction).toBe('pan');
   });
 
   it('keeps notebook-camera wheel scrolling outside the lesson zoom opt-in', async () => {

@@ -454,8 +454,14 @@ export function WhiteboardPanel({
     const wheel = (event: WheelEvent) => {
       // Page surfaces handle their own wheel. This also covers blank margins
       // around a page without applying the same event twice.
-      if ((!event.ctrlKey && !event.metaKey && event.deltaY === 0) || (event.target as Element).closest('.whiteboard__surface')) return;
+      if ((event.target as Element).closest('.whiteboard__surface')) return;
       if ((event.target as Element).closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (!event.ctrlKey && !event.metaKey) {
+        if (drawingPage.current !== null || locked || !active) {
+          event.preventDefault(); event.stopPropagation();
+        }
+        return;
+      }
       event.preventDefault(); event.stopPropagation();
       if (drawingPage.current !== null || locked || !active) return;
       const scale = wheelZoomScale(event, readScrollViewport(root).height), anchor = { x: event.clientX, y: event.clientY };
@@ -921,7 +927,7 @@ export function WhiteboardPanel({
               onDocumentGesture={continuous ? applyDocumentGesture : undefined}
               onDocumentPenContact={continuous ? pressed => noteDocumentPenContact(index, pressed) : undefined}
               canAnnotate={annotationAllowed} navigationLocked={locked} continuous={continuous}
-              wheelAction={targetType === 'WHITEBOARD' ? 'zoom' : 'pan'}
+              wheelAction="pan"
               active={active && (index === pages.current || (continuous && visiblePages.has(index)))} selected={index === pages.current}
               lasers={index === pages.current && !camera ? lasers : []} onLaser={sendLaser}
               onActivate={activatePage} onStatusChange={reportPageStatus} onAspectChange={reportPageAspect}

@@ -114,7 +114,26 @@ function animationFrames() {
 }
 
 describe('WhiteboardCanvas wheel navigation', () => {
-  it('zooms opted-in lesson pages with plain vertical wheel around the cursor and never creates ink', () => {
+  it.each([1, 2])('scrolls plain trackpad movement once without changing zoom at scale %s', zoom => {
+    const frames = animationFrames(), onDocumentGesture = vi.fn(), onScrollGesture = vi.fn();
+    const onViewChange = vi.fn(), onCommit = vi.fn(), outerWheel = vi.fn();
+    const { container } = render(<div onWheel={outerWheel}><WhiteboardCanvas {...props} wheelAction="pan"
+      view={{ ...DEFAULT_VIEW, zoom }} onDocumentGesture={onDocumentGesture} onScrollGesture={onScrollGesture}
+      onViewChange={onViewChange} onCommit={onCommit} /></div>);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    const down = new WheelEvent('wheel', { deltaY: 60, bubbles: true, cancelable: true });
+    fireEvent(surface, down);
+    fireEvent.wheel(surface, { deltaY: -2, deltaMode: 1 });
+    frames.flush();
+    expect(onScrollGesture.mock.calls).toEqual([[0, 60], [0, -32]]);
+    expect(down.defaultPrevented).toBe(true);
+    expect(outerWheel).not.toHaveBeenCalled();
+    expect(onDocumentGesture).not.toHaveBeenCalled();
+    expect(onViewChange).not.toHaveBeenCalled();
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('zooms explicitly opted-in consumers with plain vertical wheel around the cursor and never creates ink', () => {
     const frames = animationFrames(), onViewChange = vi.fn(), onCommit = vi.fn();
     const { container } = render(<WhiteboardCanvas {...props} wheelAction="zoom" onViewChange={onViewChange} onCommit={onCommit} />);
     const surface = container.querySelector('.whiteboard__surface')!;

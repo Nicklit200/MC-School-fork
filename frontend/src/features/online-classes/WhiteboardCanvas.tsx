@@ -955,8 +955,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     if (!active || navigationLocked || controller.isDrawing) { if (onScrollGesture || onDocumentGesture) event.stopPropagation(); return; }
-    // Lesson boards use vertical trackpad scrolling as cursor-anchored zoom.
-    // Other canvas consumers retain wheel scrolling and Ctrl/⌘ pinch zoom.
+    // Ordinary trackpad movement scrolls. Zoom requires an explicit modifier
+    // or a consumer that separately opts into wheel zoom.
     if (event.ctrlKey || event.metaKey || (wheelAction === 'zoom' && event.deltaY !== 0)) {
       event.stopPropagation();
       zoomAtClient(wheelZoomScale(event, live.current.viewport.height), { x: event.clientX, y: event.clientY });
