@@ -2,6 +2,11 @@ package com.mcschool.flashcard.lessons;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -26,7 +31,9 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -36,9 +43,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -46,9 +50,8 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(properties = {"app.online-classes.enabled=true", "MINDCRAFTI_LESSON_IMPORT_API_KEY=mcp-test-import-secret",
         "app.online-classes.idle-sweep-initial-ms=86400000"})
 @AutoConfigureMockMvc
-@Testcontainers(disabledWithoutDocker = true)
+@EnabledIf("databaseAvailable")
 class McpSiteFunctionsTransportIntegrationTest {
-    @Container private static final PostgreSQLContainer<?> DATABASE = new PostgreSQLContainer<>("postgres:16-alpine");
     @Autowired private MockMvc http;
     @Autowired private ObjectMapper json;
     @Autowired private JdbcTemplate jdbc;
@@ -58,17 +61,21 @@ class McpSiteFunctionsTransportIntegrationTest {
     @MockitoBean private McpOAuthService oauth;
     @MockitoBean private GoogleCalendarOAuthService googleOAuth;
     @MockitoBean private com.mcschool.flashcard.drive.GoogleDriveStructureService driveStructure;
+    @MockitoBean private ChatGptPdfResolver chatGptPdfResolver;
     private User admin, teacherA, teacherB, studentA, studentB;
     private final Map<String, UUID> tokens = new HashMap<>();
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry properties) {
-        properties.add("spring.datasource.url", DATABASE::getJdbcUrl);
-        properties.add("spring.datasource.username", DATABASE::getUsername);
-        properties.add("spring.datasource.password", DATABASE::getPassword);
+        McpTestDatabase.properties(properties);
         properties.add("spring.datasource.hikari.maximum-pool-size", () -> 2);
         properties.add("spring.datasource.hikari.minimum-idle", () -> 0);
     }
+
+    static boolean databaseAvailable() { return McpTestDatabase.available(); }
+
+    @AfterAll
+    static void stopDatabase() { McpTestDatabase.stop(); }
 
     @BeforeEach
     void fixtures() {
@@ -122,11 +129,161 @@ class McpSiteFunctionsTransportIntegrationTest {
                 "list_site_functions", "get_site_function", "read_site_function", "execute_site_function",
                 "prepare_lesson", "get_skill_board", "assign_homework_series", "update_school_prompt", "update_brand_guide");
         assertThat(names).doesNotHaveDuplicates();
+        JsonNode execute = tools.valueStream().filter(item -> item.path("name").asText().equals("execute_site_function")).findFirst().orElseThrow();
+        assertThat(execute.path("_meta").path("openai/fileParams").get(0).asText()).isEqualTo("file");
+        assertThat(execute.path("inputSchema").path("properties").path("file").path("required").toString())
+                .contains("download_url", "file_id");
         JsonNode state = value(call("admin", "mindcrafti_status", Map.of()));
-        assertThat(state.path("version").asText()).isEqualTo("1.28.0");
+        assertThat(state.path("version").asText()).isEqualTo("1.29.0");
         assertThat(state.path("availableToolCount").asInt()).isEqualTo(names.size());
         JsonNode catalog = value(call("admin", "list_site_functions", Map.of("limit", 100)));
         assertThat(catalog.path("total").asInt()).isGreaterThan(150);
+    }
+
+    @Test
+    void sharedChatGptPdfUploadsPersistInTheSelectedSlotAndReplayWithoutRefetching() throws Exception {
+        String event = "local-direct-shared-pdf";
+        savedLesson(teacherA, event);
+        byte[] workbook = transcriptPdf("Shared workbook from ChatGPT");
+        byte[] answers = transcriptPdf("Private teacher solutions");
+        mockDirectReferenceParser();
+        when(chatGptPdfResolver.resolve(any())).thenAnswer(invocation -> {
+            ChatGptFileReference reference = invocation.getArgument(0);
+            return new PdfInput(reference.filename(), reference.fileId().equals("file-workbook") ? workbook : answers, reference.fileId());
+        });
+        Map<String, Object> upload = directSharedUpload("lesson_preparation.uploadWorkbook", event, "file-workbook", "shared-workbook-once", "first");
+        JsonNode created = value(call("teacher-a", "execute_site_function", upload));
+        assertThat(created.path("hasWorkbook").asBoolean()).isTrue();
+        assertThat(created.path("success").asBoolean()).isTrue();
+        assertThat(created.path("workbookSizeBytes").asLong()).isEqualTo(workbook.length);
+        assertThat(created.path("workbookVersion").asLong()).isEqualTo(1);
+        assertThat(preparations.findByTeacherIdAndEventId(teacherA.getId(), event).orElseThrow().getWorkbookPdf()).isEqualTo(workbook);
+        // A refreshed temporary URL identifies the same attachment and must not cause another fetch.
+        Map<String, Object> retry = directSharedUpload("lesson_preparation.uploadWorkbook", event, "file-workbook", "shared-workbook-once", "refreshed");
+        assertThat(value(call("teacher-a", "execute_site_function", retry))).isEqualTo(created);
+        verify(chatGptPdfResolver, times(1)).resolve(any());
+        rejected(call("teacher-a", "execute_site_function", directSharedUpload("lesson_preparation.uploadWorkbook", event,
+                "file-different", "shared-workbook-once", "changed")), 409);
+        verify(chatGptPdfResolver, times(1)).resolve(any());
+
+        Map<String, Object> answersUpload = new HashMap<>(directSharedUpload("lesson_preparation.uploadAnswers", event,
+                "file-answers", "shared-answers-once", "answers"));
+        answersUpload.put("teacherId", teacherA.getId().toString());
+        JsonNode storedAnswers = value(call("admin", "execute_site_function", answersUpload));
+        assertThat(storedAnswers.path("hasAnswers").asBoolean()).isTrue();
+        assertThat(storedAnswers.path("answersSizeBytes").asLong()).isEqualTo(answers.length);
+        assertThat(storedAnswers.path("answersVersion").asLong()).isEqualTo(1);
+        LessonPreparation stored = preparations.findByTeacherIdAndEventId(teacherA.getId(), event).orElseThrow();
+        assertThat(stored.getWorkbookPdf()).isEqualTo(workbook);
+        assertThat(stored.getAnswersPdf()).isEqualTo(answers);
+        JsonNode workbookRead = value(call("teacher-a", "read_site_function", Map.of("functionId", "lesson_preparation.workbook", "arguments", Map.of("eventId", event))));
+        JsonNode answersRead = value(call("teacher-a", "read_site_function", Map.of("functionId", "lesson_preparation.answers", "arguments", Map.of("eventId", event))));
+        assertThat(java.util.Base64.getDecoder().decode(workbookRead.path("base64").asText())).isEqualTo(workbook);
+        assertThat(java.util.Base64.getDecoder().decode(answersRead.path("base64").asText())).isEqualTo(answers);
+        assertThat(workbookRead.path("sizeBytes").asInt()).isEqualTo(workbook.length);
+        assertThat(answersRead.path("sizeBytes").asInt()).isEqualTo(answers.length);
+        verify(chatGptPdfResolver, times(2)).resolve(any());
+        assertThat(jdbc.queryForObject("select count(*) from mcp_operation_receipts where operation like 'site_lesson_preparation_upload_%'", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void prepareLessonReplacesBothAttachedPdfsAtomicallyAndReadbackShowsSizesAndVersions() throws Exception {
+        String event = "local-direct-prepare-pair";
+        savedLesson(teacherA, event);
+        byte[] oldAnswers = transcriptPdf("Previously attached wrong answer PDF");
+        LessonPreparation old = LessonPreparation.create(teacherA, event);
+        old.attachAnswers("wrong-answers.pdf", oldAnswers);
+        preparations.saveAndFlush(old);
+        JsonNode initial = value(call("teacher-a", "get_lesson_preparation", Map.of("teacherId", teacherA.getId().toString(), "eventId", event)));
+        assertThat(initial.path("hasWorkbook").asBoolean()).isFalse();
+        assertThat(initial.path("answersFilename").asText()).isEqualTo("wrong-answers.pdf");
+        byte[] workbook = transcriptPdf("New student worksheet");
+        byte[] answers = transcriptPdf("New matching teacher solutions");
+        byte[] replacementWorkbook = transcriptPdf("Corrected student worksheet");
+        byte[] replacementAnswers = transcriptPdf("Corrected teacher solutions");
+        mockDirectReferenceParser();
+        when(chatGptPdfResolver.resolve(any())).thenAnswer(invocation -> {
+            ChatGptFileReference reference = invocation.getArgument(0);
+            byte[] bytes = switch (reference.fileId()) {
+                case "pair-workbook" -> workbook;
+                case "pair-answers" -> answers;
+                case "pair-workbook-2" -> replacementWorkbook;
+                case "pair-answers-2" -> replacementAnswers;
+                case "pair-invalid-answers" -> "%PDF-corrupt".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                default -> throw new IllegalArgumentException("Unexpected test attachment");
+            };
+            return new PdfInput(reference.filename(), bytes, reference.fileId());
+        });
+        Map<String, Object> pair = preparePair(event, "pair-workbook", "pair-answers", "prepare-pair-once", "Saved notes");
+        JsonNode saved = value(call("teacher-a", "prepare_lesson", pair));
+        assertThat(saved.path("success").asBoolean()).isTrue();
+        assertThat(saved.path("hasWorkbook").asBoolean()).isTrue();
+        assertThat(saved.path("hasAnswers").asBoolean()).isTrue();
+        assertThat(saved.path("workbookSizeBytes").asLong()).isEqualTo(workbook.length);
+        assertThat(saved.path("answersSizeBytes").asLong()).isEqualTo(answers.length);
+        assertThat(saved.path("workbookVersion").asLong()).isEqualTo(1);
+        assertThat(saved.path("answersVersion").asLong()).isEqualTo(2);
+        assertThat(value(call("teacher-a", "prepare_lesson", pair))).isEqualTo(saved);
+        verify(chatGptPdfResolver, times(2)).resolve(any());
+
+        JsonNode replaced = value(call("teacher-a", "prepare_lesson", preparePair(event,
+                "pair-workbook-2", "pair-answers-2", "prepare-corrected-pair", "Corrected notes")));
+        assertThat(replaced.path("workbookVersion").asLong()).isEqualTo(2);
+        assertThat(replaced.path("answersVersion").asLong()).isEqualTo(3);
+        JsonNode readback = value(call("teacher-a", "get_lesson_preparation", Map.of("teacherId", teacherA.getId().toString(), "eventId", event)));
+        assertThat(readback.path("workbookSizeBytes").asLong()).isEqualTo(replacementWorkbook.length);
+        assertThat(readback.path("answersSizeBytes").asLong()).isEqualTo(replacementAnswers.length);
+        assertThat(readback.path("homeworkNotes").asText()).isEqualTo("Corrected notes");
+        rejected(call("teacher-a", "prepare_lesson", preparePair(event,
+                "pair-workbook", "pair-invalid-answers", "prepare-invalid-pair", "Must not persist")), 400);
+        LessonPreparation preserved = preparations.findByTeacherIdAndEventId(teacherA.getId(), event).orElseThrow();
+        assertThat(preserved.getWorkbookPdf()).isEqualTo(replacementWorkbook);
+        assertThat(preserved.getAnswersPdf()).isEqualTo(replacementAnswers);
+        JsonNode afterFailure = value(call("teacher-a", "get_lesson_preparation", Map.of("teacherId", teacherA.getId().toString(), "eventId", event)));
+        assertThat(afterFailure.path("homeworkNotes").asText()).isEqualTo("Corrected notes");
+        assertThat(afterFailure.path("workbookVersion").asLong()).isEqualTo(2);
+        assertThat(afterFailure.path("answersVersion").asLong()).isEqualTo(3);
+        assertThat(jdbc.queryForObject("select count(*) from mcp_operation_receipts where operation='prepare_lesson'", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void directSharedUploadRejectsForeignLessonsUnconfirmedWritesAndAmbiguousSourcesBeforeFetching() throws Exception {
+        String event = "local-direct-authority";
+        savedLesson(teacherA, event);
+        mockDirectReferenceParser();
+        Map<String, Object> upload = directSharedUpload("lesson_preparation.uploadWorkbook", event, "file-private", "direct-authority-key", "signature");
+        rejected(call("teacher-b", "execute_site_function", upload), 404);
+        Map<String, Object> unconfirmed = new HashMap<>(upload); unconfirmed.put("confirm", false);
+        rejected(call("teacher-a", "execute_site_function", unconfirmed), 400);
+        Map<String, Object> ambiguous = new HashMap<>(upload);
+        ambiguous.put("arguments", Map.of("eventId", event, "file", Map.of("filename", "paper.pdf", "contentType", "application/pdf", "base64", "JVBERi0xLjQ=")));
+        JsonNode conflict = call("teacher-a", "execute_site_function", ambiguous);
+        rejected(conflict, 400);
+        assertThat(conflict.toString()).contains("exactly_one_source_required");
+        verify(chatGptPdfResolver, never()).resolve(any());
+        assertThat(preparations.findByTeacherIdAndEventId(teacherA.getId(), event)).isEmpty();
+        assertThat(jdbc.queryForObject("select count(*) from mcp_operation_receipts", Integer.class)).isZero();
+    }
+
+    private void mockDirectReferenceParser() {
+        when(chatGptPdfResolver.reference(any(), anyString(), nullable(String.class), anyString())).thenAnswer(invocation -> {
+            Map<?, ?> file = invocation.getArgument(0);
+            return new ChatGptFileReference((String) file.get("download_url"), (String) file.get("file_id"),
+                    "application/pdf", file.containsKey("file_name") ? (String) file.get("file_name") : "paper.pdf");
+        });
+    }
+
+    private Map<String, Object> preparePair(String event, String workbookId, String answersId, String key, String notes) {
+        return Map.of("teacherId", teacherA.getId().toString(), "eventId", event, "homeworkNotes", notes,
+                "workbookFile", Map.of("download_url", "https://files.oaiusercontent.com/attachment?sig=workbook", "file_id", workbookId, "file_name", "workbook.pdf"),
+                "answersFile", Map.of("download_url", "https://files.oaiusercontent.com/attachment?sig=answers", "file_id", answersId, "file_name", "answers.pdf"),
+                "idempotencyKey", key);
+    }
+
+    private Map<String, Object> directSharedUpload(String function, String event, String fileId, String key, String signature) {
+        return Map.of("functionId", function, "arguments", Map.of("eventId", event), "confirm", true, "idempotencyKey", key,
+                "file", Map.of("download_url", "https://files.oaiusercontent.com/attachment?sig=" + signature,
+                        "file_id", fileId, "mime_type", "application/pdf", "file_name", "paper.pdf"));
     }
 
     @Test

@@ -47,6 +47,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -77,6 +78,7 @@ public class McpSiteFunctionsService {
     static final int MAX_TEXT = 200_000;
     static final int MAX_JSON_TEXT = 40 * 1024 * 1024;
     private static final Set<String> TOOLS = Set.of("list_site_functions", "get_site_function", "read_site_function", "execute_site_function");
+    private static final Set<String> DIRECT_PDF_FUNCTIONS = Set.of("lesson_preparation.uploadWorkbook", "lesson_preparation.uploadAnswers");
     private static final Set<String> SECRET_FIELDS = Set.of("password", "passwordhash", "invitationtoken", "invitationexpiresat",
             "activationtoken", "activationurl", "accesstoken", "refreshtoken", "authorizationurl", "authorizationcode",
             "pairingtoken", "sessiontoken", "token", "clientsecret", "apikey", "downloadurl");
@@ -87,6 +89,7 @@ public class McpSiteFunctionsService {
     private final McpOperationReceiptService receipts;
     private final McpSiteFunctionTargetGuard targets;
     private final Map<String, McpSiteFunctionRegistry.Function> functions;
+    private ChatGptPdfResolver chatGptPdfResolver;
 
     public McpSiteFunctionsService(ApplicationContext context, ObjectMapper mapper, Validator validator,
                                    McpAccessService access, McpOperationReceiptService receipts,
@@ -106,6 +109,9 @@ public class McpSiteFunctionsService {
         this.functions = Map.copyOf(registry);
     }
 
+    @Autowired(required = false)
+    void setChatGptPdfResolver(ChatGptPdfResolver resolver) { this.chatGptPdfResolver = resolver; }
+
     public static boolean handles(String name) { return TOOLS.contains(name); }
 
     public static List<Map<String, Object>> definitions() {
@@ -116,6 +122,11 @@ public class McpSiteFunctionsService {
         Map<String, Object> execute = new LinkedHashMap<>(selector);
         execute.put("confirm", Map.of("type", "boolean", "const", true, "description", "True only for the concrete action explicitly requested by the user."));
         execute.put("idempotencyKey", Map.of("type", "string", "minLength", 8, "maxLength", 128, "description", "Unique stable key for this action; reuse only for identical retries."));
+        execute.put("file", ChatGptPdfResolver.fileSchema());
+        Map<String, Object> executeTool = new LinkedHashMap<>(tool("execute_site_function", "Perform an explicitly requested allowlisted website change. Inspect get_site_function first. Requires confirm=true and stable idempotencyKey; stores a durable receipt and rechecks access before replay. Only lesson_preparation.uploadWorkbook and lesson_preparation.uploadAnswers accept a top-level ChatGPT file instead of arguments.file base64. The file always binds to that operation's fixed file parameter; do not pass both sources. External actions with uncertain completion remain blocked: inspect website state and never change the key merely to retry. May delete/archive/end a lesson or send a message: use only for the user's concrete requested action.",
+                schema(execute, List.of("functionId", "arguments", "confirm", "idempotencyKey")), false, true));
+        executeTool.put("description", executeTool.get("description") + " For PDFs already created or attached in ChatGPT, prefer the direct file input. Do NOT upload to Google Drive as an intermediate step. Use Google Drive only when the source file already lives there.");
+        executeTool.put("_meta", Map.of("openai/fileParams", List.of("file")));
         return List.of(
                 tool("list_site_functions", "Discover the signed-in ADMIN/TEACHER's finite website operation catalog. Filter by domain. Existing dedicated lesson/PDF/skills tools remain preferred. Browser device/auth/student-study exceptions are listed explicitly.",
                         schema(Map.of("domain", Map.of("type", "string", "maxLength", 80), "offset", Map.of("type", "integer", "minimum", 0), "limit", Map.of("type", "integer", "minimum", 1, "maximum", 100)), List.of()), true, false),
@@ -123,8 +134,7 @@ public class McpSiteFunctionsService {
                         schema(Map.of("functionId", selector.get("functionId")), List.of("functionId")), true, false),
                 tool("read_site_function", "Run only a read-only allowlisted website function with current ownership checks. ADMIN teacher-scoped reads require teacherId. No credentials or browser media streams are returned.",
                         schema(selector, List.of("functionId", "arguments")), true, false),
-                tool("execute_site_function", "Perform an explicitly requested allowlisted website change. Inspect get_site_function first. Requires confirm=true and stable idempotencyKey; stores a durable receipt and rechecks access before replay. External actions with uncertain completion remain blocked: inspect website state and never change the key merely to retry. May delete/archive/end a lesson or send a message: use only for the user's concrete requested action.",
-                        schema(execute, List.of("functionId", "arguments", "confirm", "idempotencyKey")), false, true));
+                executeTool);
     }
 
     public Object call(String name, Map<String, Object> args, User oauthUser, boolean apiKey) {
@@ -142,7 +152,7 @@ public class McpSiteFunctionsService {
                 return describe(function(actor, args.get("functionId")));
             }
             requireKeys(args, name.equals("read_site_function") ? Set.of("functionId", "teacherId", "arguments")
-                    : Set.of("functionId", "teacherId", "arguments", "confirm", "idempotencyKey"));
+                    : Set.of("functionId", "teacherId", "arguments", "confirm", "idempotencyKey", "file"));
             McpSiteFunctionRegistry.Function function = function(actor, args.get("functionId"));
             boolean read = name.equals("read_site_function");
             if (read != function.readOnly()) bad(read ? "This function changes data; use execute_site_function" : "This function is read-only; use read_site_function");
@@ -154,8 +164,27 @@ public class McpSiteFunctionsService {
             // Native admin teacher endpoints use their declared path parameter, never an implicit identity switch.
             if (function.scope() == McpSiteFunctionRegistry.Scope.ADMIN && input.get("teacherId") != null
                     && !function.domain().equals("teachers")) access.requireTeacher(actor, optionalUuid(input.get("teacherId")));
-            Object[] bound = bind(function, input, effective);
-            Supplier<Object> work = () -> invoke(function, bound);
+            boolean directPdfFunction = DIRECT_PDF_FUNCTIONS.contains(function.id());
+            if (args.containsKey("file") && !directPdfFunction) bad("Top-level file is not supported for this function");
+            if (directPdfFunction && (args.containsKey("file") == input.containsKey("file"))) bad("exactly_one_source_required");
+            ChatGptFileReference directFile = args.containsKey("file")
+                    ? requirePdfResolver().reference(args.get("file"), "file", null,
+                        function.id().endsWith("uploadAnswers") ? "lesson-answers.pdf" : "lesson-workbook.pdf") : null;
+            Map<String, Object> receiptInput = new LinkedHashMap<>(input);
+            if (directFile != null) receiptInput.put("file", directFile.identity());
+            // File URLs are short-lived capabilities. Resolve only for a new authorized receipt,
+            // so a successful retry does not fetch again or require the original URL to remain live.
+            Supplier<Object> work;
+            if (directFile != null) {
+                work = () -> {
+                    Map<String, Object> resolved = new LinkedHashMap<>(input);
+                    resolved.put("file", directFile);
+                    return invoke(function, bind(function, resolved, effective));
+                };
+            } else {
+                Object[] bound = bind(function, input, effective);
+                work = () -> invoke(function, bound);
+            }
             Runnable recheck = () -> {
                 recheckAdministrativeTargets(function, actor, input);
                 targets.check(function, effective, input);
@@ -168,8 +197,8 @@ public class McpSiteFunctionsService {
                 if (key.length() < 8) bad("idempotencyKey must have at least 8 characters");
                 UUID teacherId = effective.role() == Role.TEACHER ? effective.id() : null;
                 return function.externalEffect()
-                        ? receipts.executeExternal(actor, teacherId, receiptOperation(function.id()), key, input, recheck, work)
-                        : receipts.execute(actor, teacherId, receiptOperation(function.id()), key, input, recheck, work);
+                        ? receipts.executeExternal(actor, teacherId, receiptOperation(function.id()), key, receiptInput, recheck, work)
+                        : receipts.execute(actor, teacherId, receiptOperation(function.id()), key, receiptInput, recheck, work);
             };
             return function.scope() == McpSiteFunctionRegistry.Scope.TEACHER
                     ? access.asTeacher(actor, effective, secured) : access.asActor(actor, secured);
@@ -178,7 +207,8 @@ public class McpSiteFunctionsService {
                     "Outcome unknown/in progress; inspect current website state. A new key is allowed only for a newly explicitly requested action.");
         } catch (ResponseStatusException denied) {
             // Status is useful; raw provider/SQL/token messages are never propagated through MCP.
-            throw new ResponseStatusException(denied.getStatusCode(), safeReason(denied.getStatusCode().value()));
+            String reason = "exactly_one_source_required".equals(denied.getReason()) ? denied.getReason() : safeReason(denied.getStatusCode().value());
+            throw new ResponseStatusException(denied.getStatusCode(), reason);
         } catch (AccessDeniedException denied) {
             throw new AccessDeniedException("Access denied");
         } catch (RuntimeException failure) {
@@ -189,6 +219,11 @@ public class McpSiteFunctionsService {
             // Conversion and application failures can embed rejected input or provider credentials.
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Operation unavailable");
         }
+    }
+
+    private ChatGptPdfResolver requirePdfResolver() {
+        if (chatGptPdfResolver == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Direct file input unavailable");
+        return chatGptPdfResolver;
     }
 
     private Object list(AuthenticatedUser actor, Map<String, Object> args) {
@@ -256,6 +291,11 @@ public class McpSiteFunctionsService {
             if (binding.required()) required.add(binding.name());
         }
         result.put("argumentsSchema", schema(properties, required));
+        if (DIRECT_PDF_FUNCTIONS.contains(function.id())) {
+            result.put("directFileInput", Map.of("tool", "execute_site_function", "parameter", "file", "bindsTo", "arguments.file",
+                    "schema", ChatGptPdfResolver.fileSchema(), "contentType", "application/pdf",
+                    "instructions", "Provide exactly one source: top-level file from ChatGPT, or the existing arguments.file {filename,contentType,base64}. When using top-level file, omit arguments.file. No local paths, file_uri strings or arbitrary URLs are accepted. Reuse the same idempotencyKey for the same file_id on identical retries."));
+        }
         result.put("limits", Map.of("fileBytes", MAX_FILE_BYTES, "totalFileBytes", MAX_TOTAL_FILE_BYTES, "files", MAX_FILES,
                 "collectionItems", MAX_COLLECTION, "textCharacters", MAX_TEXT));
         result.put("classroomFeatureGate", function.classroomGate());
@@ -434,6 +474,15 @@ public class McpSiteFunctionsService {
     private static final class FileBudget { int count; long bytes; }
 
     private MultipartFile upload(Object value, String name, FileBudget files) {
+        if (value instanceof ChatGptFileReference reference) {
+            PdfInput pdf = requirePdfResolver().resolve(reference);
+            value = new InMemoryUpload(name, pdf.filename(), "application/pdf", pdf.bytes());
+        }
+        if (value instanceof InMemoryUpload upload) {
+            byte[] bytes = upload.data();
+            if (bytes.length == 0 || bytes.length > MAX_FILE_BYTES || ++files.count > MAX_FILES || (files.bytes += bytes.length) > MAX_TOTAL_FILE_BYTES) bad("File limit exceeded");
+            return upload;
+        }
         Map<String, Object> file = object(value, name);
         requireKeys(file, Set.of("filename", "contentType", "base64"));
         String filename = text(file.get("filename"), "filename", 255);

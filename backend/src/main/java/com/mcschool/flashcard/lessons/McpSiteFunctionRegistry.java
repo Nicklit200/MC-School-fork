@@ -51,7 +51,7 @@ final class McpSiteFunctionRegistry {
     private static final Set<String> EXTERNAL_EFFECTS = Set.of(
             "students.createStudent", "groups.create", "groups.addMembers", "groups.createCard", "groups.importCards", "groups.createPdfHomework",
             "cards.createCardInHomework", "cards.importCardsIntoHomework", "homework.createPdfHomework", "homework.uploadWorksheet",
-            "lesson_preparation.uploadAnswers", "lesson_preparation.archiveToDrive", "lesson_preparation.assignHomeworkSeries",
+            "lesson_preparation.archiveToDrive", "lesson_preparation.assignHomeworkSeries",
             "ai_pilot.prepare", "ai_pilot.analyze", "meet_events.ensureSubscription", "drive.upload", "notebook_camera.revoke",
             "online_classes.materializeFromCalendar", "online_classes.openLobby", "online_classes.start", "online_classes.end", "online_classes.cancel",
             "online_classes.mediaDiagnostics", "online_classes.mute", "online_classes.requestUnmute", "online_classes.removeParticipant",

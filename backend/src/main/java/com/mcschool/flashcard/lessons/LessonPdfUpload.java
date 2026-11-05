@@ -13,7 +13,7 @@ final class LessonPdfUpload {
     static String filename(String value, String fallback) {
         if (value == null || value.isBlank()) return fallback;
         String clean = value.replace('\\', '/');
-        clean = clean.substring(clean.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}\\\"]", "").strip();
+        clean = clean.substring(clean.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}\\p{Cf}\\\"<>:|?*]", "").strip();
         if (clean.isBlank()) return fallback;
         if (clean.length() > 255) clean = clean.substring(0, 251) + ".pdf";
         return clean;

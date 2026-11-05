@@ -48,9 +48,10 @@ class PersonalLessonAnswersServiceTest {
         var row = mock(PersonalLessonAnswersRepository.Metadata.class);
         when(row.getFilename()).thenReturn("teacher-only.pdf");
         when(row.getVersion()).thenReturn(4L);
+        when(row.getAnswersSizeBytes()).thenReturn(1234L);
         when(repository.metadataForStudent(teacher.id(), "event", studentId)).thenReturn(Optional.of(row));
         assertThat(service.metadata(teacher, "event", studentId))
-                .isEqualTo(new PersonalLessonAnswersService.Metadata(studentId, true, "teacher-only.pdf", 5L));
+                .isEqualTo(new PersonalLessonAnswersService.Metadata(studentId, true, "teacher-only.pdf", 5L, 1234L));
         verify(repository, never()).findByTeacherIdAndEventIdAndStudentId(any(), any(), any());
     }
 
@@ -59,7 +60,7 @@ class PersonalLessonAnswersServiceTest {
         byte[] bytes = pdf();
         when(repository.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
         var saved = service.upload(teacher, "event", studentId, "C:\\fakepath\\solutions.pdf\r\n", bytes);
-        assertThat(saved).isEqualTo(new PersonalLessonAnswersService.Metadata(studentId, true, "solutions.pdf", 1L));
+        assertThat(saved).isEqualTo(new PersonalLessonAnswersService.Metadata(studentId, true, "solutions.pdf", 1L, bytes.length));
         var captured = org.mockito.ArgumentCaptor.forClass(PersonalLessonAnswers.class);
         verify(repository).saveAndFlush(captured.capture());
         assertThat(captured.getValue().getTeacherId()).isEqualTo(teacher.id());

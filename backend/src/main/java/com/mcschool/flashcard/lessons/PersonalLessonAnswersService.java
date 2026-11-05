@@ -21,7 +21,11 @@ public class PersonalLessonAnswersService {
         this.workbooks = workbooks;
     }
 
-    public record Metadata(UUID studentId, boolean hasAnswers, String answersFilename, long version) {}
+    public record Metadata(UUID studentId, boolean hasAnswers, String answersFilename, long version, long answersSizeBytes) {
+        public Metadata(UUID studentId, boolean hasAnswers, String answersFilename, long version) {
+            this(studentId, hasAnswers, answersFilename, version, 0L);
+        }
+    }
 
     public boolean enabled(AuthenticatedUser teacher) { return workbooks.enabled(teacher); }
 
@@ -30,7 +34,7 @@ public class PersonalLessonAnswersService {
     public Metadata metadata(AuthenticatedUser teacher, String eventId, UUID studentId) {
         workbooks.requireLessonStudent(teacher, eventId, studentId);
         return repository.metadataForStudent(teacher.id(), eventId, studentId)
-                .map(row -> new Metadata(studentId, true, row.getFilename(), row.getVersion() + 1L))
+                .map(row -> new Metadata(studentId, true, row.getFilename(), row.getVersion() + 1L, row.getAnswersSizeBytes()))
                 .orElseGet(() -> new Metadata(studentId, false, null, 0L));
     }
 
@@ -58,6 +62,7 @@ public class PersonalLessonAnswersService {
     }
 
     private Metadata response(PersonalLessonAnswers answers) {
-        return new Metadata(answers.getStudentId(), true, answers.getFilename(), answers.documentVersion());
+        return new Metadata(answers.getStudentId(), true, answers.getFilename(), answers.documentVersion(),
+                answers.getAnswersPdf() == null ? 0L : answers.getAnswersPdf().length);
     }
 }

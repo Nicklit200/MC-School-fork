@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LessonPreparationService {
     private static final String ANSWERS_COMPAT_PREFIX = "__answers__:";
-    private static final String ANSWERS_UPLOAD_HINT = "If your Mindcrafti tool schema does not expose a separate answers field, call prepare_lesson with driveWorkbookFileId set to the answers PDF and workbookFilename beginning with '__answers__:'; the server will store it in the dedicated Answers slot and preserve the workbook.";
+    private static final String ANSWERS_UPLOAD_HINT = "Prefer prepare_lesson with answersFile for a PDF created or attached in ChatGPT. Do NOT upload to Google Drive as an intermediate step. Legacy answersBase64 and driveAnswersFileId remain supported; use Drive only when the source already lives there. Refresh the MCH3 connection if the file fields are missing.";
 
     private final LessonPreparationRepository repository;
     private final UserRepository userRepository;
@@ -63,23 +63,22 @@ public class LessonPreparationService {
 
     @Transactional
     public LessonPreparationResponse uploadWorkbook(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
-        if (!looksLikePdf(pdf)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Workbook upload requires a non-empty PDF file");
-        }
+        LessonPdfUpload.validate(pdf);
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
         // Never guess a document's role from incidental words in its filename.
         // 'solutions_for_students.pdf' is still a workbook when the caller
         // chooses the workbook slot. An explicit __answers__: legacy prefix
         // is the ONLY backwards-compatible exception for older MCP clients.
         boolean answersCompatibility = isAnswersCompatibilityFilename(filename);
-        String storedFilename = answersCompatibility ? cleanAnswersFilename(filename) : filename;
+        String storedFilename = LessonPdfUpload.filename(
+                answersCompatibility ? cleanAnswersFilename(filename) : filename,
+                answersCompatibility ? "lesson-answers.pdf" : "lesson-workbook.pdf");
         if (answersCompatibility) {
             preparation.attachAnswers(storedFilename, pdf);
         } else {
             preparation.attachWorkbook(storedFilename, pdf);
         }
-        LessonPreparation saved = repository.save(preparation);
+        LessonPreparation saved = repository.saveAndFlush(preparation);
         // Live classroom uploads must respond immediately after database persistence.
         // Drive archiving is available separately via the explicit archive endpoint;
         // do not block the upload HTTP request on remote Drive calls.
@@ -145,11 +144,49 @@ public class LessonPreparationService {
 
     @Transactional
     public LessonPreparationResponse uploadAnswers(AuthenticatedUser teacher, String eventId, String filename, byte[] pdf) {
+        LessonPdfUpload.validate(pdf);
         LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
-        preparation.attachAnswers(filename, pdf);
-        LessonPreparation saved = repository.save(preparation);
-        driveArchiveService.archiveAnswersBestEffort(teacher, eventId, filename, pdf);
+        preparation.attachAnswers(LessonPdfUpload.filename(filename, "lesson-answers.pdf"), pdf);
+        LessonPreparation saved = repository.saveAndFlush(preparation);
         return response(saved);
+    }
+
+    /**
+     * Save an explicitly selected pair of materials as one local transaction.
+     * All files are validated before touching the existing preparation; omitted
+     * document slots and note fields are preserved. Drive archiving is explicit.
+     */
+    @Transactional
+    public LessonPreparationResponse prepareMaterials(AuthenticatedUser teacher, String eventId,
+            UpdateLessonPreparationRequest notes, String workbookFilename, byte[] workbookPdf,
+            String answersFilename, byte[] answersPdf) {
+        if (workbookPdf != null) LessonPdfUpload.validate(workbookPdf);
+        if (answersPdf != null) LessonPdfUpload.validate(answersPdf);
+        boolean legacyAnswers = workbookPdf != null && isAnswersCompatibilityFilename(workbookFilename);
+        if (legacyAnswers && answersPdf != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "exactly_one_source_required: use one source for the answers slot");
+        }
+        LessonPreparation preparation = getOrCreateEntity(teacher, eventId);
+        if (notes != null) {
+            preparation.updateNotes(
+                    notes.homeworkNotes() == null ? preparation.getHomeworkNotes() : notes.homeworkNotes(),
+                    notes.difficulties() == null ? preparation.getDifficulties() : notes.difficulties(),
+                    notes.lessonPlan() == null ? preparation.getLessonPlan() : notes.lessonPlan(),
+                    notes.transcriptText() == null ? preparation.getTranscriptText() : notes.transcriptText());
+            if (notes.coveredMaterial() != null) preparation.updateCoveredMaterial(notes.coveredMaterial());
+        }
+        if (workbookPdf != null) {
+            String filename = LessonPdfUpload.filename(
+                    legacyAnswers ? cleanAnswersFilename(workbookFilename) : workbookFilename,
+                    legacyAnswers ? "lesson-answers.pdf" : "lesson-workbook.pdf");
+            if (legacyAnswers) preparation.attachAnswers(filename, workbookPdf);
+            else preparation.attachWorkbook(filename, workbookPdf);
+        }
+        if (answersPdf != null) {
+            preparation.attachAnswers(LessonPdfUpload.filename(answersFilename, "lesson-answers.pdf"), answersPdf);
+        }
+        return response(repository.saveAndFlush(preparation));
     }
 
     @Transactional
@@ -263,6 +300,11 @@ public class LessonPreparationService {
                 preparation.getSiteOpenedAt(),
                 preparation.getCoveredMaterial(),
                 preparation.getTranscriptText(),
-                preparation.getSonioxTranscriptText());
+                preparation.getSonioxTranscriptText(),
+                true,
+                preparation.hasWorkbook() ? preparation.getWorkbookPdf().length : 0,
+                preparation.getWorkbookVersion(),
+                preparation.hasAnswers() ? preparation.getAnswersPdf().length : 0,
+                preparation.getAnswersVersion());
     }
 }

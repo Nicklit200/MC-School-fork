@@ -12,10 +12,15 @@ public interface PersonalLessonWorkbookRepository extends JpaRepository<Personal
         UUID getStudentId();
         String getFilename();
         Long getVersion();
+        long getWorkbookSizeBytes();
     }
 
-    @Query("select w.studentId as studentId, w.filename as filename, w.version as version "
-            + "from PersonalLessonWorkbook w where w.teacherId = :teacherId and w.eventId = :eventId")
+    @Query(value = """
+            SELECT student_id AS "studentId", filename, version,
+                   octet_length(workbook_pdf) AS "workbookSizeBytes"
+            FROM personal_lesson_workbooks
+            WHERE teacher_id = :teacherId AND event_id = :eventId
+            """, nativeQuery = true)
     List<Metadata> metadata(UUID teacherId, String eventId);
 
     @Query("select w.version from PersonalLessonWorkbook w where w.teacherId = :teacherId "

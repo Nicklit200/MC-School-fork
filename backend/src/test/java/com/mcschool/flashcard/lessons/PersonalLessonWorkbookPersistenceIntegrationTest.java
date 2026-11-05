@@ -27,7 +27,9 @@ import java.util.UUID;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -39,6 +41,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -47,18 +50,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.ObjectMapper;
 
 /** Complete Flyway history, actual bytea persistence and optimistic locking in PostgreSQL. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "app.online-classes.enabled=true")
-@Testcontainers(disabledWithoutDocker = true)
+@EnabledIf("databaseAvailable")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class PersonalLessonWorkbookPersistenceIntegrationTest {
-    @Container private static final PostgreSQLContainer<?> DATABASE = new PostgreSQLContainer<>("postgres:16-alpine");
     @Autowired private PersonalLessonWorkbookService service;
     @Autowired private PersonalLessonWorkbookRepository workbooks;
     @Autowired private LessonPreparationRepository preparations;
@@ -80,10 +80,13 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry properties) {
-        properties.add("spring.datasource.url", DATABASE::getJdbcUrl);
-        properties.add("spring.datasource.username", DATABASE::getUsername);
-        properties.add("spring.datasource.password", DATABASE::getPassword);
+        McpTestDatabase.properties(properties);
     }
+
+    static boolean databaseAvailable() { return McpTestDatabase.available(); }
+
+    @AfterAll
+    static void stopDatabase() { McpTestDatabase.stop(); }
 
     @BeforeEach
     void setup() {
@@ -117,6 +120,9 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
 
         var uploaded = service.upload(caller, "event", student.getId(), "personal.pdf", personal);
         assertThat(uploaded.version()).isEqualTo(1L);
+        assertThat(uploaded.workbookSizeBytes()).isEqualTo(personal.length);
+        assertThat(uploaded.answersSizeBytes()).isZero();
+        assertThat(workbooks.metadata(teacher.getId(), "event").get(0).getWorkbookSizeBytes()).isEqualTo(personal.length);
         assertThat(service.workbook(caller, "event", student.getId())).contains(personal);
         assertThat(service.list(caller, "event").students()).containsExactly(uploaded);
         assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), "event").orElseThrow().getWorkbookPdf()).isEqualTo(shared);

@@ -71,11 +71,17 @@ public class LessonPreparation {
     @Column(name = "workbook_filename", length = 255)
     private String workbookFilename;
 
+    @Column(name = "workbook_version", nullable = false)
+    private long workbookVersion;
+
     @Column(name = "answers_pdf", columnDefinition = "bytea")
     private byte[] answersPdf;
 
     @Column(name = "answers_filename", length = 255)
     private String answersFilename;
+
+    @Column(name = "answers_version", nullable = false)
+    private long answersVersion;
 
     @Column(name = "site_opened_at")
     private Instant siteOpenedAt;
@@ -126,8 +132,10 @@ public class LessonPreparation {
         copy.transcriptFilename = this.transcriptFilename;
         copy.workbookPdf = this.workbookPdf == null ? null : this.workbookPdf.clone();
         copy.workbookFilename = this.workbookFilename;
+        copy.workbookVersion = this.workbookVersion;
         copy.answersPdf = this.answersPdf == null ? null : this.answersPdf.clone();
         copy.answersFilename = this.answersFilename;
+        copy.answersVersion = this.answersVersion;
         copy.siteOpenedAt = this.siteOpenedAt;
         return copy;
     }
@@ -135,11 +143,13 @@ public class LessonPreparation {
     public void attachWorkbook(String filename, byte[] pdf) {
         this.workbookFilename = filename;
         this.workbookPdf = pdf;
+        this.workbookVersion++;
     }
 
     public void attachAnswers(String filename, byte[] pdf) {
         this.answersFilename = filename;
         this.answersPdf = pdf;
+        this.answersVersion++;
     }
 
     public void attachTranscriptPdf(String filename, byte[] pdf) {

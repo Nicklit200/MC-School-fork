@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -50,7 +51,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.28.0";
+    private static final String SERVER_VERSION = "1.29.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
 
     private final String apiKey;
@@ -128,6 +129,12 @@ public class MindcraftiMcpController {
     private PersonalLessonAnswersService personalLessonAnswersService;
     private McpAccessService personalWorkbookAccess;
     private McpOperationReceiptService personalWorkbookReceipts;
+    private ChatGptPdfResolver chatGptPdfResolver;
+
+    @Autowired
+    public void setChatGptPdfResolver(ChatGptPdfResolver resolver) {
+        this.chatGptPdfResolver = resolver;
+    }
 
     @Autowired
     public void setPersonalLessonWorkbookService(PersonalLessonWorkbookService service) {
@@ -327,13 +334,16 @@ public class MindcraftiMcpController {
         prepareProperties.put("homeworkNotes", property("string", "Homework completion/status and relevant notes for the teacher."));
         prepareProperties.put("difficulties", property("string", "Observed gaps, recurring errors, or difficulties to address."));
         prepareProperties.put("lessonPlan", property("string", "Concise plan for the lesson."));
-        prepareProperties.put("workbookBase64", property("string", "Optional workbook PDF bytes encoded as base64. Use this for direct upload without Google Drive."));
+        prepareProperties.put("workbookFile", ChatGptPdfResolver.fileSchema());
+        prepareProperties.put("answersFile", ChatGptPdfResolver.fileSchema());
+        prepareProperties.put("idempotencyKey", property("string", "Stable key for this requested preparation. Required with workbookFile or answersFile; reuse on identical retries, including when the temporary download URL changes. Optional for legacy base64, Drive and notes-only requests."));
+        prepareProperties.put("workbookBase64", property("string", "Legacy workbook PDF bytes encoded as base64. Prefer workbookFile for a PDF already attached in ChatGPT. Supply at most one workbook source."));
         prepareProperties.put("workbookFilename", property("string", "Optional workbook PDF filename. Also used to find the file in the selected teacher's Drive if a connector file id is not directly readable."));
-        prepareProperties.put("answersBase64", property("string", "Optional teacher-answers PDF bytes encoded as base64. Use this for direct upload without Google Drive."));
+        prepareProperties.put("answersBase64", property("string", "Legacy teacher-answers PDF bytes encoded as base64. Prefer answersFile for a PDF already attached in ChatGPT. Supply at most one answers source."));
         prepareProperties.put("answersFilename", property("string", "Optional teacher-answer PDF filename. Also used for Drive fallback lookup."));
         prepareProperties.put("driveWorkbookFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for the workbook. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
         prepareProperties.put("driveAnswersFileId", property("string", "Optional Google Drive PDF raw file ID or Drive URL for teacher answers. Mindcrafti uses the selected teacher's Google access if the school account cannot read it."));
-        tools.add(tool("prepare_lesson", "Create or update lesson preparation for the selected teacher. Its common workbook appears on Shared board and on each pupil's My board unless that pupil has a private worksheet assigned with upload_personal_lesson_workbook. Private worksheets and their annotations are preserved. Admins can write to any teacher lesson. PDFs may be uploaded directly as base64 or imported from Google Drive using the selected teacher's access.", schema(prepareProperties, List.of("teacherId", "eventId")), writeAnnotations()));
+        tools.add(fileTool("prepare_lesson", "Create or update lesson preparation for the selected teacher. Its common workbook appears on Shared board and on each pupil's My board unless that pupil has a private worksheet assigned with upload_personal_lesson_workbook. Private worksheets and their annotations are preserved. Admins can write to any teacher lesson. Prefer workbookFile and answersFile for PDFs attached in ChatGPT, with school OAuth and a stable idempotencyKey; no Google Drive intermediate is needed. Legacy base64 and teacher-scoped Drive imports remain supported. Each PDF slot accepts at most one source; omitted slots and notes remain unchanged.", pdfSourcesSchema(prepareProperties, List.of("teacherId", "eventId"), List.of(List.of("workbookFile", "workbookBase64", "driveWorkbookFileId"), List.of("answersFile", "answersBase64", "driveAnswersFileId")), true), writeAnnotations(), List.of("workbookFile", "answersFile")));
 
         if (personalLessonWorkbookService != null && personalWorkbookActorAllowed(auth)) {
             Map<String, Object> personalProperties = new LinkedHashMap<>();
@@ -344,19 +354,20 @@ public class MindcraftiMcpController {
                     schema(personalProperties, List.of("teacherId", "eventId")), readOnlyAnnotations()));
             Map<String, Object> personalUpload = new LinkedHashMap<>(personalProperties);
             personalUpload.put("studentId", property("string", "Exact student UUID from list_personal_lesson_workbooks. Only a current participant of this exact lesson may receive the PDF."));
-            personalUpload.put("filename", property("string", "Personal worksheet PDF filename."));
-            personalUpload.put("pdfBase64", property("string", "PDF bytes encoded as base64, up to 15 MB. Provide exactly one of pdfBase64 or driveFileId."));
-            personalUpload.put("driveFileId", property("string", "Optional Google Drive PDF ID or URL readable by the selected teacher. Provide exactly one of pdfBase64 or driveFileId."));
+            personalUpload.put("filename", property("string", "Personal worksheet PDF filename. Optional with pdfFile, using file_name or a safe default; required for legacy base64 and Drive."));
+            personalUpload.put("pdfFile", ChatGptPdfResolver.fileSchema());
+            personalUpload.put("pdfBase64", property("string", "Legacy PDF bytes encoded as base64, up to 15 MB. Provide exactly one of pdfFile, pdfBase64 or driveFileId."));
+            personalUpload.put("driveFileId", property("string", "Optional Google Drive PDF ID or URL readable by the selected teacher. Provide exactly one of pdfFile, pdfBase64 or driveFileId."));
             personalUpload.put("idempotencyKey", property("string", "Stable key for this explicitly requested upload. Reuse the same key and arguments for identical retries; use a new key only for a new requested upload."));
-            tools.add(tool("upload_personal_lesson_workbook",
-                    "OWNER LESSON PILOT: Upload or replace one student's private PDF. It takes priority over the common workbook in that pupil's My board (Моя доска). Shared board keeps the common workbook for everyone, and other pupils are unchanged. The existing personal-workbook-<studentUserId> annotation scope is preserved; common-workbook annotations remain separate. This does not assign homework. Only the owning teacher and that admitted student can read the private worksheet in class. OAuth Nick teacher or ADMIN only, target teacher restricted to Nick. Retry with the same idempotencyKey.",
-                    schema(personalUpload, List.of("teacherId", "eventId", "studentId", "filename", "idempotencyKey")), writeAnnotations()));
+            tools.add(fileTool("upload_personal_lesson_workbook",
+                    "OWNER LESSON PILOT: Upload or replace one student's private PDF. It takes priority over the common workbook in that pupil's My board (Моя доска). Shared board keeps the common workbook for everyone, and other pupils are unchanged. The existing personal-workbook-<studentUserId> annotation scope is preserved; common-workbook annotations remain separate. This does not assign homework. Only the owning teacher and that admitted student can read the private worksheet in class. OAuth Nick teacher or ADMIN only, target teacher restricted to Nick. Prefer pdfFile for a ChatGPT attachment without a Google Drive intermediate. Supply exactly one of pdfFile, pdfBase64 or driveFileId and retry with the same idempotencyKey.",
+                    personalPdfSourcesSchema(personalUpload), writeAnnotations(), List.of("pdfFile")));
             if (personalLessonAnswersService != null) {
                 Map<String, Object> personalAnswers = new LinkedHashMap<>(personalUpload);
                 personalAnswers.put("filename", property("string", "Private teacher-answer PDF filename for this student's personal worksheet."));
-                tools.add(tool("upload_personal_lesson_answers",
-                        "OWNER LESSON PILOT: Upload or replace the private teacher-answer PDF for one student's personal worksheet. Only staff can read the answers; no answer bytes or metadata are exposed through student classroom routes. This preserves the student's worksheet and the lesson's shared answers. OAuth Nick teacher or ADMIN only, target teacher restricted to Nick. Provide exactly one of pdfBase64 or driveFileId and reuse the same idempotencyKey on identical retries. Returns private answer metadata only.",
-                        schema(personalAnswers, List.of("teacherId", "eventId", "studentId", "filename", "idempotencyKey")), writeAnnotations()));
+                tools.add(fileTool("upload_personal_lesson_answers",
+                        "OWNER LESSON PILOT: Upload or replace the private teacher-answer PDF for one student's personal worksheet. Only staff can read the answers; no answer bytes or metadata are exposed through student classroom routes. This preserves the student's worksheet and the lesson's shared answers. OAuth Nick teacher or ADMIN only, target teacher restricted to Nick. Prefer pdfFile for an attached ChatGPT PDF, without a Google Drive intermediate. Provide exactly one of pdfFile, pdfBase64 or driveFileId and reuse the same idempotencyKey on identical retries. Returns private answer metadata only.",
+                        personalPdfSourcesSchema(personalAnswers), writeAnnotations(), List.of("pdfFile")));
             }
         }
 
@@ -504,6 +515,13 @@ public class MindcraftiMcpController {
                 return siteToolFailure(failure);
             }
         }
+        if ("prepare_lesson".equals(name)) {
+            try {
+                return toolResult(prepareLesson(arguments, auth));
+            } catch (Exception failure) {
+                return siteToolFailure(failure);
+            }
+        }
         if (McpLessonScheduleService.handles(name) || McpSiteFunctionsService.handles(name)) {
             try {
                 if (auth.apiKey() || auth.user() == null)
@@ -557,7 +575,6 @@ public class MindcraftiMcpController {
             case "download_lesson_pdf" -> toolResult(downloadLessonPdf(arguments, auth));
             case "download_lesson_transcript" -> toolResult(downloadLessonTranscript(arguments, auth));
             case "audit_lesson_transcripts" -> toolResult(auditLessonTranscripts(auth));
-            case "prepare_lesson" -> toolResult(prepareLesson(arguments, auth));
             case "attach_lesson_answers" -> toolResult(attachLessonAnswers(arguments, auth));
             case "attach_lesson_transcript" -> toolResult(attachLessonTranscript(arguments, auth));
             case "find_homework_targets" -> toolResult(findHomeworkTargets(arguments, auth));
@@ -1101,7 +1118,7 @@ public class MindcraftiMcpController {
             }
             return personalLessonWorkbookService.list(teacher, eventId);
         }
-        if (!java.util.Set.of("teacherId", "eventId", "studentId", "filename", "pdfBase64", "driveFileId", "idempotencyKey").containsAll(arguments.keySet())) {
+        if (!java.util.Set.of("teacherId", "eventId", "studentId", "filename", "pdfFile", "pdfBase64", "driveFileId", "idempotencyKey").containsAll(arguments.keySet())) {
             throw new IllegalArgumentException("Unsupported personal worksheet arguments");
         }
         if (personalWorkbookReceipts == null) throw new IllegalStateException("Personal worksheet uploads are unavailable");
@@ -1111,15 +1128,35 @@ public class MindcraftiMcpController {
         }
         UUID studentId = uuid(required(arguments, "studentId"), "studentId");
         String key = required(arguments, "idempotencyKey");
-        String filename = normalizedPdfFilename(required(arguments, "filename"),
-                uploadingAnswers ? "personal-answers.pdf" : "personal-workbook.pdf");
         String direct = string(arguments.get("pdfBase64"));
         String driveId = string(arguments.get("driveFileId"));
-        if (direct.isBlank() == driveId.isBlank()) {
-            throw new IllegalArgumentException("Provide exactly one PDF source: pdfBase64 or driveFileId");
+        boolean hasFile = arguments.containsKey("pdfFile");
+        if ((hasFile ? 1 : 0) + (direct.isBlank() ? 0 : 1) + (driveId.isBlank() ? 0 : 1) != 1) {
+            throw new IllegalArgumentException("exactly_one_source_required: Provide exactly one PDF source: pdfFile, pdfBase64 or driveFileId");
         }
         // Check this exact lesson's current roster before fetching or decoding a file.
         requirePersonalWorkbookStudent(teacher, eventId, studentId);
+        if (hasFile) {
+            ChatGptFileReference reference = requirePdfResolver().reference(arguments.get("pdfFile"), "pdfFile",
+                    string(arguments.get("filename")), uploadingAnswers ? "personal-answers.pdf" : "personal-workbook.pdf");
+            Map<String, Object> normalized = Map.of("teacherId", teacherId.toString(), "eventId", eventId,
+                    "studentId", studentId.toString(), "filename", reference.filename(), "pdfFile", reference.identity());
+            return personalWorkbookReceipts.execute(actor, teacherId, name, key, normalized,
+                    () -> {
+                        requirePersonalWorkbookActor(auth);
+                        AuthenticatedUser currentTeacher = personalWorkbookAccess.requireTeacher(actor, teacherId);
+                        requirePersonalWorkbookStudent(currentTeacher, eventId, studentId);
+                    },
+                    () -> personalWorkbookAccess.asTeacher(actor, teacher, () -> {
+                        PdfInput pdf = requirePdfResolver().resolve(reference);
+                        return uploadingAnswers
+                                ? personalLessonAnswersService.upload(teacher, eventId, studentId, pdf.filename(), pdf.bytes())
+                                : personalLessonWorkbookService.upload(teacher, eventId, studentId, pdf.filename(), pdf.bytes());
+                    }));
+        }
+        // Preserve legacy receipt fingerprints for already completed base64/Drive uploads.
+        String filename = normalizedPdfFilename(required(arguments, "filename"),
+                uploadingAnswers ? "personal-answers.pdf" : "personal-workbook.pdf");
         byte[] pdf = !direct.isBlank() ? decodePdfBase64(direct, "pdfBase64")
                 : teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveId, filename);
         if (!looksLikePdf(pdf) || pdf.length > MAX_DIRECT_PDF_BYTES) {
@@ -1146,47 +1183,119 @@ public class MindcraftiMcpController {
         }
     }
 
-    private LessonPreparationResponse prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {
+    private Object prepareLesson(Map<String, Object> arguments, AuthContext auth) throws Exception {
         AuthenticatedUser teacher = requireTeacher(arguments, auth);
         String eventId = required(arguments, "eventId");
         requireLesson(teacher, eventId);
-        LessonPreparationResponse current = preparationService.getOrCreate(teacher, eventId);
-        String homeworkNotes = optional(arguments, "homeworkNotes", current.homeworkNotes());
-        String difficulties = optional(arguments, "difficulties", current.difficulties());
-        String lessonPlan = optional(arguments, "lessonPlan", current.lessonPlan());
-        LessonPreparationResponse result = preparationService.update(teacher, eventId, new UpdateLessonPreparationRequest(homeworkNotes, difficulties, lessonPlan, null));
-
-        String workbookBase64 = string(arguments.get("workbookBase64"));
+        if (!java.util.Set.of("teacherId", "eventId", "homeworkNotes", "difficulties", "lessonPlan",
+                "workbookFilename", "answersFilename", "workbookFile", "answersFile", "workbookBase64",
+                "answersBase64", "driveWorkbookFileId", "driveAnswersFileId", "idempotencyKey").containsAll(arguments.keySet())) {
+            throw new IllegalArgumentException("Unsupported lesson preparation arguments");
+        }
         String rawWorkbookFilename = string(arguments.get("workbookFilename")).trim();
-        boolean transcriptCompatibilityImport = "__TRANSCRIPT__".equals(rawWorkbookFilename);
-        if (transcriptCompatibilityImport) {
+        if ("__TRANSCRIPT__".equals(rawWorkbookFilename)) {
             throw new IllegalArgumentException("Transcript import through prepare_lesson is disabled. Use attach_lesson_transcript with the original Soniox PDF filename so Mindcrafti can verify the target lesson.");
         }
-        String workbookFilename = normalizedPdfFilename(rawWorkbookFilename, "lesson-workbook.pdf");
-        String driveWorkbookFileId = string(arguments.get("driveWorkbookFileId"));
-        if (!workbookBase64.isBlank() && !driveWorkbookFileId.isBlank()) throw new IllegalArgumentException("Use either workbookBase64 or driveWorkbookFileId, not both");
-        if (!workbookBase64.isBlank()) {
-            byte[] pdf = decodePdfBase64(workbookBase64, "workbookBase64");
-            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
-        } else if (!driveWorkbookFileId.isBlank()) {
-            byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveWorkbookFileId, workbookFilename);
-            if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveWorkbookFileId does not point to a PDF file");
-            result = preparationService.uploadWorkbook(teacher, eventId, workbookFilename, pdf);
+        McpPdfSource workbook = pdfSource(arguments, "workbookFile", "workbookBase64", "driveWorkbookFileId",
+                rawWorkbookFilename, "lesson-workbook.pdf");
+        McpPdfSource answers = pdfSource(arguments, "answersFile", "answersBase64", "driveAnswersFileId",
+                string(arguments.get("answersFilename")), "lesson-answers.pdf");
+        boolean legacyAnswersTarget = workbook != null && workbook.filename().toLowerCase(Locale.ROOT).startsWith("__answers__:");
+        if (legacyAnswersTarget && answers != null) {
+            throw new IllegalArgumentException("exactly_one_source_required: A legacy answers workbook source cannot be combined with a separate answers source");
         }
+        UpdateLessonPreparationRequest notes = new UpdateLessonPreparationRequest(
+                optional(arguments, "homeworkNotes", null), optional(arguments, "difficulties", null),
+                optional(arguments, "lessonPlan", null), null);
+        String key = string(arguments.get("idempotencyKey")).trim();
+        if ((workbook != null && workbook.file() != null || answers != null && answers.file() != null) && key.isBlank()) {
+            throw new IllegalArgumentException("idempotencyKey is required for attached ChatGPT lesson PDFs");
+        }
+        Supplier<Object> write = () -> {
+            PdfInput workbookPdf = resolvePdfSource(workbook, teacher.id());
+            PdfInput answersPdf = resolvePdfSource(answers, teacher.id());
+            return preparationService.prepareMaterials(teacher, eventId, notes,
+                    workbookPdf == null ? null : workbookPdf.filename(), workbookPdf == null ? null : workbookPdf.bytes(),
+                    answersPdf == null ? null : answersPdf.filename(), answersPdf == null ? null : answersPdf.bytes());
+        };
+        if (key.isBlank()) return write.get();
+        if (auth.apiKey() || auth.user() == null || personalWorkbookAccess == null || personalWorkbookReceipts == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Idempotent lesson preparation requires school OAuth sign-in");
+        }
+        AuthenticatedUser actor = personalWorkbookAccess.requireActor(auth.user());
+        personalWorkbookAccess.requireTeacher(actor, teacher.id());
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put("teacherId", teacher.id().toString());
+        normalized.put("eventId", eventId);
+        normalized.put("homeworkNotes", notes.homeworkNotes());
+        normalized.put("difficulties", notes.difficulties());
+        normalized.put("lessonPlan", notes.lessonPlan());
+        normalized.put("workbook", workbook == null ? null : workbook.identity());
+        normalized.put("answers", answers == null ? null : answers.identity());
+        return personalWorkbookReceipts.execute(actor, teacher.id(), "prepare_lesson", key, normalized,
+                () -> requireLesson(personalWorkbookAccess.requireTeacher(actor, teacher.id()), eventId),
+                () -> personalWorkbookAccess.asTeacher(actor, teacher, write));
+    }
 
-        String answersBase64 = string(arguments.get("answersBase64"));
-        String answersFilename = normalizedPdfFilename(string(arguments.get("answersFilename")), "lesson-answers.pdf");
-        String driveAnswersFileId = string(arguments.get("driveAnswersFileId"));
-        if (!answersBase64.isBlank() && !driveAnswersFileId.isBlank()) throw new IllegalArgumentException("Use either answersBase64 or driveAnswersFileId, not both");
-        if (!answersBase64.isBlank()) {
-            byte[] pdf = decodePdfBase64(answersBase64, "answersBase64");
-            result = preparationService.uploadAnswers(teacher, eventId, answersFilename, pdf);
-        } else if (!driveAnswersFileId.isBlank()) {
-            byte[] pdf = teacherDriveDownloadService.downloadForTeacher(teacher.id(), driveAnswersFileId, answersFilename);
-            if (!looksLikePdf(pdf)) throw new IllegalArgumentException("driveAnswersFileId does not point to a PDF file");
-            result = preparationService.uploadAnswers(teacher, eventId, answersFilename, pdf);
+    private McpPdfSource pdfSource(Map<String, Object> arguments, String fileField, String base64Field,
+            String driveField, String explicitFilename, String fallbackFilename) {
+        String base64 = string(arguments.get(base64Field)).trim();
+        String driveId = string(arguments.get(driveField)).trim();
+        boolean hasFile = arguments.containsKey(fileField);
+        int count = (hasFile ? 1 : 0) + (base64.isBlank() ? 0 : 1) + (driveId.isBlank() ? 0 : 1);
+        if (count > 1) throw new IllegalArgumentException("exactly_one_source_required: Provide at most one PDF source: " + fileField + ", " + base64Field + " or " + driveField);
+        if (count == 0) return null;
+        boolean explicitLegacyAnswers = "workbookFile".equals(fileField) && explicitFilename != null
+                && explicitFilename.trim().toLowerCase(Locale.ROOT).startsWith("__answers__:");
+        String selectedFilename = explicitLegacyAnswers ? explicitFilename.trim().substring("__answers__:".length()) : explicitFilename;
+        ChatGptFileReference reference = hasFile
+                ? requirePdfResolver().reference(arguments.get(fileField), fileField, selectedFilename, fallbackFilename) : null;
+        String filename = reference == null ? normalizedPdfFilename(explicitFilename, fallbackFilename) : reference.filename();
+        if (reference != null && explicitLegacyAnswers) filename = "__answers__:" + filename;
+        return new McpPdfSource(filename, base64, driveId, reference, base64Field);
+    }
+
+    private PdfInput resolvePdfSource(McpPdfSource source, UUID teacherId) {
+        if (source == null) return null;
+        if (source.file() != null) {
+            PdfInput file = requirePdfResolver().resolve(source.file());
+            return new PdfInput(source.filename(), file.bytes(), file.fileId());
         }
-        return result;
+        try {
+            byte[] pdf = source.base64().isBlank()
+                    ? teacherDriveDownloadService.downloadForTeacher(teacherId, source.driveId(), source.filename())
+                    : decodePdfBase64(source.base64(), source.base64Field());
+            if (!looksLikePdf(pdf) || pdf.length > MAX_DIRECT_PDF_BYTES) {
+                throw new IllegalArgumentException("Lesson file must be a PDF of at most 15 MB");
+            }
+            return new PdfInput(source.filename(), pdf, "");
+        } catch (org.springframework.web.server.ResponseStatusException | IllegalArgumentException failure) {
+            throw failure;
+        } catch (Exception failure) {
+            throw new IllegalArgumentException("The selected teacher's lesson PDF could not be imported");
+        }
+    }
+
+    private ChatGptPdfResolver requirePdfResolver() {
+        if (chatGptPdfResolver == null) throw new IllegalStateException("ChatGPT PDF uploads are unavailable");
+        return chatGptPdfResolver;
+    }
+
+    private record McpPdfSource(String filename, String base64, String driveId, ChatGptFileReference file, String base64Field) {
+        Map<String, Object> identity() {
+            if (file != null) return Map.of("source", "file", "filename", filename, "file", file.identity());
+            if (!driveId.isBlank()) return Map.of("source", "drive", "driveFileId", driveId, "filename", filename);
+            String encoded = base64;
+            int comma = encoded.indexOf(',');
+            if (encoded.regionMatches(true, 0, "data:", 0, 5) && comma >= 0) encoded = encoded.substring(comma + 1);
+            try {
+                return Map.of("source", "base64", "filename", filename, "sha256",
+                        java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                                .digest(encoded.getBytes(StandardCharsets.UTF_8))));
+            } catch (java.security.NoSuchAlgorithmException failure) {
+                throw new IllegalStateException("Unable to identify lesson PDF");
+            }
+        }
     }
 
     private LessonPreparationResponse attachLessonAnswers(Map<String, Object> arguments, AuthContext auth) throws Exception {
@@ -1394,6 +1503,32 @@ public class MindcraftiMcpController {
     private Map<String, Object> writeAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", false, "idempotentHint", true, "openWorldHint", false); }
     private Map<String, Object> destructiveWriteAnnotations() { return Map.of("readOnlyHint", false, "destructiveHint", true, "idempotentHint", false, "openWorldHint", false); }
     private Map<String, Object> tool(String name, String description, Map<String, Object> inputSchema, Map<String, Object> annotations) { Map<String, Object> tool = new LinkedHashMap<>(); tool.put("name", name); tool.put("description", description); tool.put("inputSchema", inputSchema); tool.put("annotations", annotations); return tool; }
+    private Map<String, Object> fileTool(String name, String description, Map<String, Object> inputSchema,
+            Map<String, Object> annotations, List<String> fileParameters) {
+        Map<String, Object> result = tool(name, description + " For PDFs already created or attached in ChatGPT, prefer the direct file input. Do NOT upload to Google Drive as an intermediate step. Use Google Drive only when the source file already lives there.", inputSchema, annotations);
+        result.put("_meta", Map.of("openai/fileParams", fileParameters));
+        return result;
+    }
+    private Map<String, Object> pdfSourcesSchema(Map<String, Object> properties, List<String> required,
+            List<List<String>> groups, boolean optional) {
+        Map<String, Object> result = schema(properties, required);
+        List<Map<String, Object>> constraints = new ArrayList<>();
+        for (List<String> group : groups) {
+            List<Map<String, Object>> choices = new ArrayList<>();
+            for (String field : group) choices.add(Map.of("required", List.of(field)));
+            if (optional) choices.add(Map.of("not", Map.of("anyOf", List.copyOf(choices))));
+            constraints.add(Map.of("oneOf", choices));
+        }
+        result.put("allOf", constraints);
+        return result;
+    }
+    private Map<String, Object> personalPdfSourcesSchema(Map<String, Object> properties) {
+        Map<String, Object> result = schema(properties, List.of("teacherId", "eventId", "studentId", "idempotencyKey"));
+        result.put("oneOf", List.of(Map.of("required", List.of("pdfFile")),
+                Map.of("required", List.of("pdfBase64")), Map.of("required", List.of("driveFileId"))));
+        result.put("anyOf", List.of(Map.of("required", List.of("pdfFile")), Map.of("required", List.of("filename"))));
+        return result;
+    }
     private Map<String, Object> schema(Map<String, Object> properties, List<String> required) { Map<String, Object> schema = new LinkedHashMap<>(); schema.put("type", "object"); schema.put("properties", properties); if (!required.isEmpty()) schema.put("required", required); schema.put("additionalProperties", false); return schema; }
     private Map<String, Object> property(String type, String description) { return Map.of("type", type, "description", description); }
     private Map<String, Object> arrayProperty(String description) { Map<String, Object> value = new LinkedHashMap<>(); value.put("type", "array"); value.put("description", description); value.put("items", Map.of("type", "string")); return value; }

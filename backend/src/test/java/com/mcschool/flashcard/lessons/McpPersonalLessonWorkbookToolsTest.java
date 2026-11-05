@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.doReturn;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.auth.McpOAuthService;
@@ -108,10 +110,77 @@ class McpPersonalLessonWorkbookToolsTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void catalogDeclaresOfficialTopLevelFileParametersAndExclusivePdfSources() {
+        List<Map<String, Object>> catalog = (List<Map<String, Object>>) request("owner", "tools/list", Map.of()).get("tools");
+        for (String name : List.of("upload_personal_lesson_workbook", "upload_personal_lesson_answers")) {
+            Map<String, Object> tool = catalog.stream().filter(item -> name.equals(item.get("name"))).findFirst().orElseThrow();
+            assertThat((Map<String, Object>) tool.get("_meta")).containsEntry("openai/fileParams", List.of("pdfFile"));
+            Map<String, Object> schema = (Map<String, Object>) tool.get("inputSchema");
+            assertThat((List<?>) schema.get("oneOf")).hasSize(3);
+            Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+            Map<String, Object> file = (Map<String, Object>) properties.get("pdfFile");
+            assertThat((List<String>) file.get("required")).containsExactlyInAnyOrder("download_url", "file_id");
+            assertThat((Map<String, Object>) file.get("properties")).containsOnlyKeys("download_url", "file_id", "mime_type", "file_name");
+        }
+        Map<String, Object> common = catalog.stream().filter(item -> "prepare_lesson".equals(item.get("name"))).findFirst().orElseThrow();
+        assertThat((Map<String, Object>) common.get("_meta")).containsEntry("openai/fileParams", List.of("workbookFile", "answersFile"));
+    }
+
+    @Test
+    void attachedPersonalPdfIsResolvedInsideReceiptAndReplayDoesNotFetchAgain() {
+        byte[] pdf = "%PDF-1.7\nattached-private-workbook".getBytes(StandardCharsets.UTF_8);
+        ChatGptPdfResolver resolver = spy(new ChatGptPdfResolver("files.oaiusercontent.com"));
+        controller.setChatGptPdfResolver(resolver);
+        ChatGptFileReference first = resolver.reference(file("first-secret"), "pdfFile", "", "personal-workbook.pdf");
+        doReturn(new PdfInput("attached.pdf", pdf, "file-one")).when(resolver).resolve(first);
+        var saved = new PersonalLessonWorkbookService.PersonalWorkbookResponse(studentId, "Student", true, "attached.pdf", 1L);
+        when(personal.upload(teacher, EVENT, studentId, "attached.pdf", pdf)).thenReturn(saved);
+        when(access.asTeacher(any(), eq(teacher), any())).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
+        List<Map<String, Object>> fingerprints = new java.util.ArrayList<>();
+        when(receipts.execute(any(), eq(owner.getId()), eq("upload_personal_lesson_workbook"), eq("attached-001"), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    ((Runnable) invocation.getArgument(5)).run();
+                    fingerprints.add(invocation.getArgument(4));
+                    return fingerprints.size() == 1 ? ((Supplier<?>) invocation.getArgument(6)).get() : saved;
+                });
+        Map<String, Object> args = new HashMap<>(target());
+        args.put("studentId", studentId.toString()); args.put("idempotencyKey", "attached-001"); args.put("pdfFile", file("first-secret"));
+        assertThat(call("admin", "upload_personal_lesson_workbook", args).get("isError")).isEqualTo(false);
+        args.put("pdfFile", file("expired-or-renewed-secret"));
+        Map<String, Object> replay = call("admin", "upload_personal_lesson_workbook", args);
+        assertThat(replay.get("structuredContent")).isEqualTo(saved);
+        assertThat(fingerprints).hasSize(2);
+        assertThat(fingerprints.get(0)).isEqualTo(fingerprints.get(1));
+        assertThat(json.writeValueAsString(fingerprints)).doesNotContain("secret", "download_url", "https:", "pdfBase64");
+        verify(resolver).resolve(first);
+        verify(personal).upload(teacher, EVENT, studentId, "attached.pdf", pdf);
+        verifyNoInteractions(drive, shared);
+    }
+
+    @Test
+    void attachedPdfCannotBypassSourceExclusivityOrCurrentStudentAuthorization() {
+        ChatGptPdfResolver resolver = mock(ChatGptPdfResolver.class);
+        controller.setChatGptPdfResolver(resolver);
+        Map<String, Object> args = upload("%PDF-1.7\nlegacy".getBytes(StandardCharsets.UTF_8));
+        args.put("pdfFile", file("secret"));
+        assertRejected(call("owner", "upload_personal_lesson_workbook", args), 400);
+        args.remove("pdfBase64"); args.put("studentId", UUID.randomUUID().toString());
+        assertRejected(call("owner", "upload_personal_lesson_answers", args), 404);
+        verifyNoInteractions(resolver, receipts, drive, personalAnswers, shared);
+        verify(personal, never()).upload(any(), any(), any(), any(), any());
+    }
+
+    private Map<String, Object> file(String signature) {
+        return Map.of("download_url", "https://files.oaiusercontent.com/document.pdf?sig=" + signature,
+                "file_id", "file-one", "mime_type", "application/pdf", "file_name", "attached.pdf");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void discoveryAndInitializationExplainTwoBoardsAndTheCommonOrBlankFallback() {
         for (String method : List.of("initialize", "server/discover")) {
             Map<String, Object> discovery = request("owner", method, Map.of());
-            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.28.0");
+            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.29.0");
             assertThat(String.valueOf(discovery.get("instructions"))).contains("Shared board and My board (Моя доска)",
                     "takes priority over the common workbook", "uses the common workbook or stays blank",
                     "Shared board continues to show the common workbook to everyone");

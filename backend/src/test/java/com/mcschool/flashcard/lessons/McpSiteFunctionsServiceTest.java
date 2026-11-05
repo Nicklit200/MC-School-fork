@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,6 +45,8 @@ class McpSiteFunctionsServiceTest {
     private final AdminAccountController accounts = mock(AdminAccountController.class);
     private final LessonTranscriptReadService transcripts = mock(LessonTranscriptReadService.class);
     private final StoryStudioProjectService studio = mock(StoryStudioProjectService.class);
+    private final LessonPreparationController preparation = mock(LessonPreparationController.class);
+    private final ChatGptPdfResolver pdfResolver = mock(ChatGptPdfResolver.class);
     private final AuthenticatedUser teacher = new AuthenticatedUser(UUID.randomUUID(), "teacher@example.test", Role.TEACHER);
     private final AuthenticatedUser admin = new AuthenticatedUser(UUID.randomUUID(), "admin@example.test", Role.ADMIN);
     private final User oauth = mock(User.class);
@@ -53,6 +56,7 @@ class McpSiteFunctionsServiceTest {
     void setup() {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
         service = new McpSiteFunctionsService(context, JsonMapper.builder().findAndAddModules().build(), validator, access, receipts, targets);
+        service.setChatGptPdfResolver(pdfResolver);
         when(access.requireActor(oauth)).thenReturn(teacher);
         when(access.requireTeacher(eq(teacher), nullable(UUID.class))).thenReturn(teacher);
         when(access.requireTeacher(eq(admin), eq(teacher.id()))).thenReturn(teacher);
@@ -74,6 +78,7 @@ class McpSiteFunctionsServiceTest {
         when(context.getBean(AdminAccountController.class)).thenReturn(accounts);
         when(context.getBean(LessonTranscriptController.class)).thenReturn(new LessonTranscriptController(transcripts));
         when(context.getBean(StoryStudioProjectController.class)).thenReturn(new StoryStudioProjectController(studio));
+        when(context.getBean(LessonPreparationController.class)).thenReturn(preparation);
     }
 
     @Test
@@ -228,6 +233,110 @@ class McpSiteFunctionsServiceTest {
         assertThatThrownBy(() -> write("homework.uploadWorksheet", Map.of("homeworkId", homework.toString(), "file", fake))).hasMessageContaining("400");
         Map<String, Object> remote = Map.of("filename", "paper.pdf", "contentType", "application/pdf", "url", "https://example.test/secret");
         assertThatThrownBy(() -> write("homework.uploadWorksheet", Map.of("homeworkId", homework.toString(), "file", remote))).hasMessageContaining("400");
+    }
+
+    @Test
+    void directFileIsAdvertisedOnlyAsATopLevelStandardChatGptFileWithFixedBindings() {
+        Map<?, ?> tool = McpSiteFunctionsService.definitions().stream()
+                .filter(item -> item.get("name").equals("execute_site_function")).findFirst().orElseThrow();
+        assertThat(tool.get("_meta")).isEqualTo(Map.of("openai/fileParams", List.of("file")));
+        Map<?, ?> schema = (Map<?, ?>) tool.get("inputSchema");
+        Map<?, ?> file = (Map<?, ?>) ((Map<?, ?>) schema.get("properties")).get("file");
+        assertThat(file.get("required")).isEqualTo(List.of("download_url", "file_id"));
+        assertThat(file.get("additionalProperties")).isEqualTo(false);
+        assertThat(file.toString()).doesNotContain("file_uri");
+        Map<?, ?> metadata = (Map<?, ?>) service.call("get_site_function",
+                Map.of("functionId", "lesson_preparation.uploadWorkbook"), oauth, false);
+        assertThat(metadata.toString()).contains("directFileInput", "arguments.file", "base64");
+        assertThat(service.call("get_site_function", Map.of("functionId", "homework.uploadWorksheet"), oauth, false).toString())
+                .doesNotContain("directFileInput");
+        assertThat(McpSiteFunctionRegistry.functions().stream().filter(item -> item.id().equals("lesson_preparation.uploadAnswers"))
+                .findFirst().orElseThrow().externalEffect()).isFalse();
+    }
+
+    @Test
+    void directFileResolvesOnlyInsideAuthorizedLocalReceiptAndNeverFingerprintsItsSignedUrl() throws Exception {
+        Map<String, Object> raw = directFile("file-workbook");
+        ChatGptFileReference reference = reference("file-workbook");
+        byte[] pdf = "%PDF-1.4\ntrusted-resolver-validated-pdf".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        when(pdfResolver.reference(raw, "file", null, "lesson-workbook.pdf")).thenReturn(reference);
+        when(pdfResolver.resolve(reference)).thenReturn(new PdfInput("paper.pdf", pdf, "file-workbook"));
+        Object result = directWrite("lesson_preparation.uploadWorkbook", Map.of("eventId", "event-1"), raw, true);
+        assertThat(result).isEqualTo(Map.of("success", true));
+        var upload = org.mockito.ArgumentCaptor.forClass(MultipartFile.class);
+        verify(preparation).uploadWorkbook(eq(teacher), eq("event-1"), upload.capture());
+        assertThat(upload.getValue().getOriginalFilename()).isEqualTo("paper.pdf");
+        assertThat(upload.getValue().getBytes()).isEqualTo(pdf);
+        verify(receipts).execute(eq(teacher), eq(teacher.id()), eq("site_lesson_preparation_upload_workbook"),
+                eq("direct-file-once"), argThat(input -> input.get("file").equals(reference.identity())
+                        && !input.toString().contains("download_url") && !input.toString().contains("signed-secret")), any(), any());
+        verify(receipts, never()).executeExternal(any(), any(), any(), any(), any(), any(), any());
+        var order = inOrder(targets, receipts, pdfResolver, preparation);
+        order.verify(targets).check(any(), eq(teacher), eq(Map.of("eventId", "event-1")));
+        order.verify(receipts).execute(any(), any(), any(), any(), any(), any(), any());
+        order.verify(pdfResolver).resolve(reference);
+        order.verify(preparation).uploadWorkbook(any(), any(), any());
+    }
+
+    @Test
+    void directFileSourceConflictsMissingSourcesAndUnsupportedBindingsFailBeforeWork() {
+        Map<String, Object> legacy = Map.of("filename", "paper.pdf", "contentType", "application/pdf", "base64", "JVBERi0xLjQ=");
+        assertThatThrownBy(() -> directWrite("lesson_preparation.uploadWorkbook",
+                Map.of("eventId", "event-1", "file", legacy), directFile("file-1"), true)).hasMessageContaining("exactly_one_source_required");
+        assertThatThrownBy(() -> write("lesson_preparation.uploadAnswers", Map.of("eventId", "event-1")))
+                .hasMessageContaining("exactly_one_source_required");
+        assertThatThrownBy(() -> directWrite("homework.uploadWorksheet",
+                Map.of("homeworkId", UUID.randomUUID().toString()), directFile("file-1"), true)).hasMessageContaining("400");
+        verifyNoInteractions(pdfResolver, receipts, preparation);
+    }
+
+    @Test
+    void unconfirmedAndUnauthorizedDirectUploadsDoNotFetchAFile() {
+        Map<String, Object> raw = directFile("file-private");
+        when(pdfResolver.reference(raw, "file", null, "lesson-answers.pdf")).thenReturn(reference("file-private"));
+        assertThatThrownBy(() -> directWrite("lesson_preparation.uploadAnswers", Map.of("eventId", "event-1"), raw, false))
+                .hasMessageContaining("400");
+        doThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND))
+                .when(targets).check(any(), eq(teacher), anyMap());
+        assertThatThrownBy(() -> directWrite("lesson_preparation.uploadAnswers", Map.of("eventId", "foreign-event"), raw, true))
+                .hasMessageContaining("404");
+        verify(pdfResolver, never()).resolve(any());
+        verifyNoInteractions(receipts, preparation);
+    }
+
+    @Test
+    void completedDirectReceiptReplaysWithoutFetchingAgainAndStillRechecksOwnership() {
+        Map<String, Object> raw = directFile("file-complete");
+        when(pdfResolver.reference(raw, "file", null, "lesson-workbook.pdf")).thenReturn(reference("file-complete"));
+        doAnswer(invocation -> { invocation.getArgument(5, Runnable.class).run(); return Map.of("saved", true); })
+                .when(receipts).execute(any(), nullable(UUID.class), anyString(), anyString(), anyMap(), any(), any());
+        assertThat(directWrite("lesson_preparation.uploadWorkbook", Map.of("eventId", "event-1"), raw, true))
+                .isEqualTo(Map.of("saved", true));
+        verify(targets, times(2)).check(any(), eq(teacher), eq(Map.of("eventId", "event-1")));
+        verify(pdfResolver, never()).resolve(any());
+        verifyNoInteractions(preparation);
+    }
+
+    @Test
+    void legacySharedPdfUploadRemainsSupported() throws Exception {
+        write("lesson_preparation.uploadAnswers", Map.of("eventId", "event-1", "file",
+                Map.of("filename", "answers.pdf", "contentType", "application/pdf", "base64", "JVBERi0xLjQ=")));
+        verify(preparation).uploadAnswers(eq(teacher), eq("event-1"), any(MultipartFile.class));
+        verifyNoInteractions(pdfResolver);
+    }
+
+    private Map<String, Object> directFile(String fileId) {
+        return Map.of("download_url", "https://files.oaiusercontent.com/attachment?sig=signed-secret", "file_id", fileId,
+                "mime_type", "application/pdf", "file_name", "paper.pdf");
+    }
+
+    private ChatGptFileReference reference(String fileId) {
+        return new ChatGptFileReference("https://files.oaiusercontent.com/attachment?sig=signed-secret", fileId, "application/pdf", "paper.pdf");
+    }
+
+    private Object directWrite(String function, Map<String, Object> arguments, Map<String, Object> file, boolean confirm) {
+        return service.call("execute_site_function", Map.of("functionId", function, "arguments", arguments,
+                "file", file, "confirm", confirm, "idempotencyKey", "direct-file-once"), oauth, false);
     }
 
     @Test

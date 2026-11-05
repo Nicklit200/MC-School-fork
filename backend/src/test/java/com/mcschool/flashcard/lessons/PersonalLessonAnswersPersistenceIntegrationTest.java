@@ -18,7 +18,9 @@ import java.util.UUID;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -29,22 +31,20 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /** Complete Flyway schema plus real HTTP authorization: answer PDFs never become pupil resources. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "app.online-classes.enabled=true")
-@Testcontainers(disabledWithoutDocker = true)
+@EnabledIf("databaseAvailable")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class PersonalLessonAnswersPersistenceIntegrationTest {
-    @Container private static final PostgreSQLContainer<?> DATABASE = new PostgreSQLContainer<>("postgres:16-alpine");
     @Autowired private PersonalLessonAnswersService answers;
     @Autowired private PersonalLessonAnswersRepository answerFiles;
     @Autowired private PersonalLessonWorkbookService workbooks;
@@ -66,10 +66,13 @@ class PersonalLessonAnswersPersistenceIntegrationTest {
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry properties) {
-        properties.add("spring.datasource.url", DATABASE::getJdbcUrl);
-        properties.add("spring.datasource.username", DATABASE::getUsername);
-        properties.add("spring.datasource.password", DATABASE::getPassword);
+        McpTestDatabase.properties(properties);
     }
+
+    static boolean databaseAvailable() { return McpTestDatabase.available(); }
+
+    @AfterAll
+    static void stopDatabase() { McpTestDatabase.stop(); }
 
     @BeforeEach
     void setup() {
@@ -112,10 +115,17 @@ class PersonalLessonAnswersPersistenceIntegrationTest {
                         .file(new MockMultipartFile("file", "private-solutions.pdf", "application/pdf", privateAnswers))
                         .with(authentication(account(teacher.getId(), Role.TEACHER))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.hasAnswers").value(true))
-                .andExpect(jsonPath("$.version").value(1)).andExpect(header().string("Cache-Control", "no-store"));
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.answersSizeBytes").value(privateAnswers.length))
+                .andExpect(header().string("Cache-Control", "no-store"));
         assertThat(workbookFiles.count()).isZero();
         assertThat(answerFiles.count()).isEqualTo(1);
         var row = workbooks.list(caller, "event").students().stream().filter(item -> item.studentId().equals(student.getId())).findFirst().orElseThrow();
+        assertThat(row.answersSizeBytes()).isEqualTo(privateAnswers.length);
+        assertThat(row.workbookSizeBytes()).isZero();
+        assertThat(answerFiles.metadataForStudent(teacher.getId(), "event", student.getId()).orElseThrow().getAnswersSizeBytes())
+                .isEqualTo(privateAnswers.length);
+        assertThat(answers.metadata(caller, "event", student.getId()).answersSizeBytes()).isEqualTo(privateAnswers.length);
         assertThat(row.hasWorkbook()).isFalse();
         assertThat(row.hasAnswers()).isTrue();
         assertThat(row.answersFilename()).isEqualTo("private-solutions.pdf");

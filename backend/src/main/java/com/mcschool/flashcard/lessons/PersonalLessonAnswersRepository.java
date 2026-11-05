@@ -13,13 +13,22 @@ public interface PersonalLessonAnswersRepository extends JpaRepository<PersonalL
         UUID getStudentId();
         String getFilename();
         Long getVersion();
+        long getAnswersSizeBytes();
     }
 
-    @Query("select a.studentId as studentId, a.filename as filename, a.version as version "
-            + "from PersonalLessonAnswers a where a.teacherId = :teacherId and a.eventId = :eventId")
+    @Query(value = """
+            SELECT student_id AS "studentId", filename, version,
+                   octet_length(answers_pdf) AS "answersSizeBytes"
+            FROM personal_lesson_answers
+            WHERE teacher_id = :teacherId AND event_id = :eventId
+            """, nativeQuery = true)
     List<Metadata> metadata(UUID teacherId, String eventId);
 
-    @Query("select a.studentId as studentId, a.filename as filename, a.version as version "
-            + "from PersonalLessonAnswers a where a.teacherId = :teacherId and a.eventId = :eventId and a.studentId = :studentId")
+    @Query(value = """
+            SELECT student_id AS "studentId", filename, version,
+                   octet_length(answers_pdf) AS "answersSizeBytes"
+            FROM personal_lesson_answers
+            WHERE teacher_id = :teacherId AND event_id = :eventId AND student_id = :studentId
+            """, nativeQuery = true)
     Optional<Metadata> metadataForStudent(UUID teacherId, String eventId, UUID studentId);
 }
