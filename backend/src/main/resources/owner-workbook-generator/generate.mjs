@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve, basename } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { renderDiagram } from './diagrams.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -199,6 +199,64 @@ function checkAnswerMath(data){
   console.log(`Verified ${checked} mathematical answer chains exactly.`);
 }
 
+function blockWeight(block, teacher = false) {
+  const type = String(block?.type || '');
+  switch (type) {
+    case 'callout': return 1.4;
+    case 'strips': return 2.3;
+    case 'graph': return 5.0;
+    case 'geometry': return 4.8;
+    case 'facts': return 2.2;
+    case 'example': return 2.2;
+    case 'exercise': {
+      const rows = Array.isArray(block.rows) ? block.rows.length : 0;
+      const writeLines = Number(block.writeLines || 0);
+      return 1.0 + rows * 0.9 + writeLines * 0.42 + (block.extra ? 0.7 : 0) + (block.selfRating ? 0.55 : 0);
+    }
+    case 'teacherNote': return 1.2 + (Array.isArray(block.paragraphs) ? block.paragraphs.length * 0.55 : 0.55);
+    case 'schedule': return 1.2 + (Array.isArray(block.rows) ? block.rows.length * 0.55 : 0);
+    case 'solutions': return 1.3 + (Array.isArray(block.items) ? block.items.length * 0.62 : 0);
+    default:
+      if (teacher) throw new TypeError('Unknown teacher block in preflight: ' + type);
+      throw new TypeError('Unknown workbook block in preflight: ' + type);
+  }
+}
+function preflightPages(pages, teacher = false) {
+  const maxUnits = teacher ? 18 : 16;
+  const maxBlocks = teacher ? 14 : 10;
+  pages.forEach((page, index) => {
+    if (!page || !Array.isArray(page.blocks)) throw new TypeError(`Page ${index + 1} must contain blocks[]`);
+    if (page.blocks.length > maxBlocks) throw new Error(`Page ${index + 1} has too many blocks for A4 preflight (${page.blocks.length} > ${maxBlocks})`);
+    const units = page.blocks.reduce((sum, block) => sum + blockWeight(block, teacher), 0);
+    if (units > maxUnits) throw new Error(`Page ${index + 1} is likely to overflow A4 before rendering (layout weight ${units.toFixed(1)} > ${maxUnits})`);
+  });
+}
+function runProcess(command, args, timeoutMs, errorPrefix) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe']});
+    let stdout = '', stderr = '', settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      rejectPromise(new Error(`${errorPrefix} timed out after ${timeoutMs} ms`));
+    }, timeoutMs);
+    child.stdout.on('data', chunk => { stdout += chunk.toString(); if (stdout.length > 12000) stdout = stdout.slice(-12000); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); if (stderr.length > 12000) stderr = stderr.slice(-12000); });
+    child.on('error', error => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      rejectPromise(new Error(`${errorPrefix}: ${error.message}`));
+    });
+    child.on('close', code => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (code !== 0) rejectPromise(new Error(`${errorPrefix}: ${(stderr || stdout).slice(-4000)}`));
+      else resolvePromise({stdout, stderr});
+    });
+  });
+}
+
 function findChromium(){
   for(const cmd of [process.env.CHROMIUM_PATH,'/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','chromium','chromium-browser','google-chrome'].filter(Boolean)) {
     const found=spawnSync(cmd,['--version'],{encoding:'utf8',timeout:5000,stdio:'pipe'});
@@ -213,6 +271,8 @@ function pdfFromHtml(chromium,source,dest){
   console.log(`Created ${dest}`);
 }
 await mkdir(out,{recursive:true});
+preflightPages(lesson.workbookPages, false);
+preflightPages(lesson.teacherPages, true);
 checkAnswerMath(lesson);
 const dateKey = String(lesson.meta.date || 'undated').replace(/[^0-9]/g,'') || 'undated';
 const groupKey = String(lesson.meta.group || 'Gruppe').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50) || 'Gruppe';
@@ -231,15 +291,18 @@ if(process.argv.includes('--html-only')) {
   console.log('HTML only mode: ready to preview in any modern browser.');
 } else if(engine === 'weasyprint') {
   const helper = join(root,'render_pdf.py');
-  for(const t of targets) {
-    const done = spawnSync('python3',[helper,t.htmlPath,t.pdfPath],{encoding:'utf8',timeout:120000,stdio:'pipe'});
-    if(done.status!==0)throw Error('WeasyPrint PDF failed: '+done.stderr?.slice(-4000));
+  await Promise.all(targets.map(async t => {
+    await runProcess('python3',[helper,t.htmlPath,t.pdfPath],120000,'WeasyPrint PDF failed');
     console.log('Created '+t.pdfPath);
-  }
+  }));
 } else if(engine === 'chromium') {
   const chromium=findChromium();
   if(!chromium)throw Error('Chromium not found. Set CHROMIUM_PATH.');
-  for(const target of targets)pdfFromHtml(chromium,target.htmlPath,target.pdfPath);
+  await Promise.all(targets.map(async target => {
+    const args=['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--allow-file-access-from-files','--no-pdf-header-footer','--virtual-time-budget=2000',`--print-to-pdf=${resolve(target.pdfPath)}`,pathToFileURL(resolve(target.htmlPath)).href];
+    await runProcess(chromium,args,90000,'Chromium printing failed');
+    console.log('Created '+target.pdfPath);
+  }));
 } else throw Error('Unknown engine: '+engine);
 if (!process.argv.includes('--html-only')) {
   // Prevent export of a document with overlapping mathematical symbols or
