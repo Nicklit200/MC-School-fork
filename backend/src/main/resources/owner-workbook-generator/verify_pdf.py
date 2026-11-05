@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """QA for generated PDFs: page count, A4, branding and content bounds."""
 import json
+import re
 import sys
 from pathlib import Path
 import fitz
@@ -58,7 +59,21 @@ for path in found:
             text = page.get_text()
             assert 'MINDCRAFTI SCHOOL' in text, 'Brand text missing'
             assert len(page.get_images()) >= 1, 'Official logo missing'
-            blocks = [b for b in page.get_text('blocks') if b[4].strip() and b[1] > 160 and 'MINDCRAFTI SCHOOL  /' not in b[4]]
+            blocks = []
+            for b in page.get_text('blocks'):
+                block_text = b[4].strip()
+                if not block_text or b[1] <= 160:
+                    continue
+                # The absolute-positioned footer legitimately sits below the
+                # content boundary. Exclude only blocks that match the footer
+                # identity, never arbitrary low-position content.
+                footer_block = b[1] > 760 and (
+                    'MINDCRAFTI SCHOOL' in block_text
+                    or re.search(r'\\b\\d{2}\\s*/\\s*\\d{2}\\b', block_text)
+                )
+                if footer_block:
+                    continue
+                blocks.append(b)
             for b in blocks:
                 assert b[0] >= -1 and b[2] <= rect.width + 1, f'Horizontal overflow on page {page.number+1}'
                 assert b[3] < 789, f'Content touches footer on page {page.number+1}: {b[3]}'
