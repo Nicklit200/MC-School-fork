@@ -58,7 +58,7 @@ async function pinch(page, anchor, from = 100, to = 150) {
   await session.detach();
 }
 
-test('a mouse notch changes board zoom gently and cancels native page zoom', async ({ page }) => {
+test('Ctrl plus a mouse notch changes board zoom gently and cancels native page zoom', async ({ page }) => {
   const errors = await openBoard(page);
   const anchor = { x: 500, y: 420 };
   await page.mouse.move(anchor.x, anchor.y);
@@ -72,7 +72,7 @@ test('a mouse notch changes board zoom gently and cancels native page zoom', asy
   expect(errors).toEqual([]);
 });
 
-test('a burst on a zoomed document keeps the same point under the cursor after browser layout', async ({ page }) => {
+test('a Ctrl-wheel burst on a zoomed document keeps the same point under the cursor after browser layout', async ({ page }) => {
   const errors = await openBoard(page);
   await enlarge(page);
   await page.locator('.whiteboard__pages').evaluate(node => { node.scrollTop = 260; node.scrollLeft = 100; });
@@ -131,7 +131,7 @@ test.describe('tablet touch-event input', () => {
   });
 });
 
-test('paged canvas composes wheel events and keeps the cursor on the same drawing point', async ({ page }) => {
+test('paged canvas composes Ctrl-wheel events and keeps the cursor on the same drawing point', async ({ page }) => {
   const errors = await openBoard(page, 'paged');
   await enlarge(page);
   const anchor = { x: 480, y: 420 };
@@ -148,34 +148,6 @@ test('paged canvas composes wheel events and keeps the cursor on the same drawin
   expect(errors).toEqual([]);
 });
 
-async function drawingPoint(page, layout, anchor) {
-  if (layout === 'continuous') return documentPoint(page, anchor);
-  return page.locator('.whiteboard__surface').first().evaluate((node, anchor) => {
-    const rect = node.getBoundingClientRect(), stage = window.boardZoomFixture.stages()[0];
-    return { x: (anchor.x - rect.x - stage.x) / stage.scaleX, y: (anchor.y - rect.y - stage.y) / stage.scaleY };
-  }, anchor);
-}
-
-async function drawingError(page, layout, anchor, original) {
-  if (layout === 'continuous') return documentError(page, anchor, original);
-  return page.locator('.whiteboard__surface').first().evaluate((node, { anchor, original }) => {
-    const rect = node.getBoundingClientRect(), stage = window.boardZoomFixture.stages()[0];
-    return Math.hypot(rect.x + stage.x + original.x * stage.scaleX - anchor.x,
-      rect.y + stage.y + original.y * stage.scaleY - anchor.y);
-  }, { anchor, original });
-}
-
-async function trustedPlainBurst(page, anchor, count, deltaY) {
-  const input = await page.context().newCDPSession(page);
-  try {
-    // CDP creates trusted wheel packets, like vertical trackpad motion. Queue
-    // them together so a pending React frame cannot discard accumulated zoom.
-    await Promise.all(Array.from({ length: count }, () => input.send('Input.dispatchMouseEvent', {
-      type: 'mouseWheel', x: anchor.x, y: anchor.y, deltaX: 0, deltaY, modifiers: 0,
-    })));
-  } finally { await input.detach(); }
-}
-
 async function expectNoPageZoomOrInk(page) {
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   expect(await page.evaluate(() => window.visualViewport.scale)).toBe(1);
@@ -185,29 +157,48 @@ async function expectNoPageZoomOrInk(page) {
   expect(events.every(event => event.trusted && !event.ctrl && !event.meta)).toBe(true);
 }
 
+for (const enlarged of [false, true]) test(`plain trackpad wheel scrolls down and up without zoom ${enlarged ? 'on an enlarged document' : 'at fit'}`, async ({ page }) => {
+  const errors = await openBoard(page);
+  if (enlarged) await enlarge(page);
+  const root = page.locator('.whiteboard__pages');
+  await root.evaluate(node => { node.scrollTop = 260; });
+  const beforeScroll = await root.evaluate(node => node.scrollTop);
+  const beforeZoom = await zoom(page);
+  await page.mouse.move(480, 420);
+  await page.mouse.wheel(0, 180);
+  await expect.poll(() => root.evaluate(node => node.scrollTop)).toBeGreaterThan(beforeScroll);
+  const down = await root.evaluate(node => node.scrollTop);
+  expect(await zoom(page)).toBe(beforeZoom);
+  await page.mouse.wheel(0, -120);
+  await expect.poll(() => root.evaluate(node => node.scrollTop)).toBeLessThan(down);
+  expect(await zoom(page)).toBe(beforeZoom);
+  await expectNoPageZoomOrInk(page);
+  expect(errors).toEqual([]);
+});
+
+test('plain trackpad wheel moves an enlarged paged canvas vertically without changing its scale', async ({ page }) => {
+  const errors = await openBoard(page, 'paged');
+  await enlarge(page);
+  const before = await page.evaluate(() => window.boardZoomFixture.stages()[0]);
+  const beforeZoom = await zoom(page);
+  await page.mouse.move(480, 420);
+  await page.mouse.wheel(0, 80);
+  await expect.poll(() => page.evaluate(() => window.boardZoomFixture.stages()[0].y)).toBeLessThan(before.y);
+  const down = await page.evaluate(() => window.boardZoomFixture.stages()[0]);
+  expect(down.scaleX).toBe(before.scaleX);
+  expect(down.x).toBe(before.x);
+  await page.mouse.wheel(0, -60);
+  await expect.poll(() => page.evaluate(() => window.boardZoomFixture.stages()[0].y)).toBeGreaterThan(down.y);
+  expect(await zoom(page)).toBe(beforeZoom);
+  const after = await page.evaluate(() => window.boardZoomFixture.stages()[0]);
+  expect(after.scaleX).toBe(before.scaleX);
+  expect(after.x).toBe(before.x);
+  await expectNoPageZoomOrInk(page);
+  expect(errors).toEqual([]);
+});
+
 for (const layout of ['continuous', 'paged']) {
-  test(`plain trackpad wheel composes proportional zoom up and down at the cursor in ${layout} layout`, async ({ page }) => {
-    const errors = await openBoard(page, layout);
-    await enlarge(page);
-    if (layout === 'continuous') {
-      await page.locator('.whiteboard__pages').evaluate(node => { node.scrollTop = 260; node.scrollLeft = 100; });
-    }
-    const anchor = { x: 480, y: 420 };
-    const original = await drawingPoint(page, layout, anchor);
-    const before = await zoom(page);
-    await trustedPlainBurst(page, anchor, 12, -4);
-    await expect.poll(async () => Math.abs(await zoom(page) - before * Math.exp(48 * .002))).toBeLessThan(.025);
-    await expect.poll(() => drawingError(page, layout, anchor, original)).toBeLessThan(3);
-
-    await page.mouse.move(anchor.x, anchor.y);
-    await page.mouse.wheel(0, 48);
-    await expect.poll(async () => Math.abs(await zoom(page) - before)).toBeLessThan(.025);
-    await expect.poll(() => drawingError(page, layout, anchor, original)).toBeLessThan(3);
-    await expectNoPageZoomOrInk(page);
-    expect(errors).toEqual([]);
-  });
-
-  test(`plain wheel also zooms from the PDF's blank margin in ${layout} layout`, async ({ page }) => {
+  test(`plain wheel in the PDF's blank margin never zooms in ${layout} layout`, async ({ page }) => {
     const errors = await openBoard(page, layout);
     const root = page.locator(layout === 'continuous' ? '.whiteboard__pages' : '.whiteboard__surface').first();
     const box = await root.boundingBox();
@@ -219,20 +210,26 @@ for (const layout of ['continuous', 'paged']) {
     }
     expect(paper.x - box.x).toBeGreaterThan(10);
     const anchor = { x: (box.x + paper.x) / 2, y: box.y + box.height * .45 };
+    const pages = page.locator('.whiteboard__pages');
+    const beforeScroll = await pages.evaluate(node => node.scrollTop);
+    const beforeZoom = await zoom(page);
     await page.mouse.move(anchor.x, anchor.y);
-    await page.mouse.wheel(0, -80);
-    await expect.poll(() => zoom(page)).toBeGreaterThan(1.1);
-    expect(await zoom(page)).toBeLessThan(1.3);
-    if (layout === 'paged') {
-      // The outer gutter is outside the canvas, so the panel's own wheel
-      // listener must delegate the same gesture to the active paged canvas.
-      const pages = await page.locator('.whiteboard__pages').boundingBox();
-      expect(box.x - pages.x).toBeGreaterThan(2);
-      const before = await zoom(page);
-      await page.mouse.move((pages.x + box.x) / 2, anchor.y);
+    await page.mouse.wheel(0, 120);
+    if (layout === 'continuous') {
+      await expect.poll(() => pages.evaluate(node => node.scrollTop)).toBeGreaterThan(beforeScroll);
+      const down = await pages.evaluate(node => node.scrollTop);
+      await page.mouse.wheel(0, -80);
+      await expect.poll(() => pages.evaluate(node => node.scrollTop)).toBeLessThan(down);
+    } else {
+      // At fit this single page has no overflow. Neither its canvas margin
+      // nor the outer gutter should turn an ordinary scroll into zoom.
+      expect(await pages.evaluate(node => node.scrollTop)).toBe(beforeScroll);
+      const pagesBox = await pages.boundingBox();
+      expect(box.x - pagesBox.x).toBeGreaterThan(2);
+      await page.mouse.move((pagesBox.x + box.x) / 2, anchor.y);
       await page.mouse.wheel(0, -40);
-      await expect.poll(() => zoom(page)).toBeGreaterThan(before);
     }
+    expect(await zoom(page)).toBe(beforeZoom);
     await expectNoPageZoomOrInk(page);
     expect(errors).toEqual([]);
   });
