@@ -21,6 +21,7 @@ import com.mcschool.flashcard.liveclasses.*;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest;
 import com.mcschool.flashcard.users.*;
 import java.io.ByteArrayOutputStream;
+import java.sql.DriverManager;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -82,6 +84,7 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     @Autowired private StudentGroupMemberRepository groupMembers;
     @Autowired private CompletedLessonDocumentController completedDocuments;
     @Autowired private PlatformTransactionManager transactions;
+    @Autowired private Environment environment;
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper json;
     @MockitoBean private GoogleCalendarLessonService lessons;
@@ -421,6 +424,58 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     }
 
     @Test
+    void firstAssignmentsShareOnePreparationWhenAllThreeObserveItMissing() throws Exception {
+        var fixture = groupOfThree();
+        var uploads = new ArrayList<Callable<PersonalLessonWorkbookService.PersonalWorkbookResponse>>();
+        var files = new ArrayList<byte[]>();
+        for (int index = 0; index < fixture.pupils().size(); index++) {
+            User pupil = fixture.pupils().get(index);
+            byte[] bytes = pdf(index + 2);
+            files.add(bytes);
+            uploads.add(() -> service.upload(caller, "event", pupil.getId(), "worksheet.pdf", bytes));
+        }
+        // Use a separate connection so all three Hikari connections remain
+        // available to the uploads. SHARE permits their initial SELECTs while
+        // holding every first INSERT until all three have observed no row.
+        try (var barrier = DriverManager.getConnection(environment.getRequiredProperty("spring.datasource.url"),
+                environment.getRequiredProperty("spring.datasource.username"),
+                environment.getRequiredProperty("spring.datasource.password"))) {
+            barrier.setAutoCommit(false);
+            try (var lock = barrier.createStatement()) {
+                lock.execute("LOCK TABLE lesson_preparations IN SHARE MODE");
+            }
+            assertThat(concurrently(uploads, () -> {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+                int waiting = 0;
+                try (var query = barrier.createStatement()) {
+                    while (waiting < 3 && System.nanoTime() < deadline) {
+                        try (var result = query.executeQuery("""
+                                SELECT count(*) FROM pg_locks
+                                WHERE locktype = 'relation' AND relation = 'lesson_preparations'::regclass
+                                  AND mode = 'RowExclusiveLock' AND NOT granted
+                                """)) {
+                            result.next();
+                            waiting = result.getInt(1);
+                        }
+                        if (waiting < 3) Thread.sleep(10);
+                    }
+                } finally {
+                    barrier.commit();
+                }
+                assertThat(waiting).as("all three first preparation inserts reached the barrier").isEqualTo(3);
+                return null;
+            })).allSatisfy(upload -> assertThat(upload.version()).isEqualTo(1));
+        }
+        assertThat(preparations.count()).isEqualTo(1);
+        assertThat(workbooks.count()).isEqualTo(3);
+        for (int index = 0; index < fixture.pupils().size(); index++) {
+            byte[] expected = files.get(index);
+            assertThat(service.workbook(caller, "event", fixture.pupils().get(index).getId()))
+                    .hasValueSatisfying(bytes -> assertThat(bytes).isEqualTo(expected));
+        }
+    }
+
+    @Test
     void threePrivateWorksheetsAndConcurrentInkSurviveReconnectAndOnePupilReplacement() throws Exception {
         var fixture = groupOfThree();
         byte[] shared = pdf(1);
@@ -594,6 +649,10 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     }
 
     private <T> List<T> concurrently(List<Callable<T>> actions) throws Exception {
+        return concurrently(actions, () -> null);
+    }
+
+    private <T> List<T> concurrently(List<Callable<T>> actions, Callable<Void> afterStart) throws Exception {
         var pool = Executors.newFixedThreadPool(actions.size());
         var ready = new CountDownLatch(actions.size());
         var start = new CountDownLatch(1);
@@ -605,6 +664,7 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
             })).toList();
             assertThat(ready.await(20, TimeUnit.SECONDS)).isTrue();
             start.countDown();
+            afterStart.call();
             var results = new ArrayList<T>();
             for (var future : futures) results.add(future.get(30, TimeUnit.SECONDS));
             return results;

@@ -4,7 +4,6 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
-import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -270,9 +269,15 @@ public class LessonPreparationService {
     private LessonPreparation getOrCreateEntity(AuthenticatedUser teacher, String eventId) {
         return repository.findByTeacherIdAndEventId(teacher.id(), eventId)
                 .orElseGet(() -> {
-                    User teacherEntity = userRepository.findById(teacher.id())
+                    userRepository.findById(teacher.id())
                             .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
-                    return LessonPreparation.create(teacherEntity, eventId);
+                    // A deferred JPA insert races when different pupils receive
+                    // their first PDFs together. Let PostgreSQL create one row,
+                    // wait for the winning transaction, then load its managed
+                    // entity. Catching a duplicate key would abort this transaction.
+                    repository.insertIfAbsent(teacher.id(), eventId);
+                    return repository.findByTeacherIdAndEventId(teacher.id(), eventId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Lesson preparation not found"));
                 });
     }
 
