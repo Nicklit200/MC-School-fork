@@ -291,10 +291,9 @@ if(process.argv.includes('--html-only')) {
   console.log('HTML only mode: ready to preview in any modern browser.');
 } else if(engine === 'weasyprint') {
   const helper = join(root,'render_pdf.py');
-  await Promise.all(targets.map(async t => {
-    await runProcess('python3',[helper,t.htmlPath,t.pdfPath],120000,'WeasyPrint PDF failed');
-    console.log('Created '+t.pdfPath);
-  }));
+  const renderArgs = [helper, ...targets.flatMap(t => [t.htmlPath, t.pdfPath])];
+  await runProcess('python3',renderArgs,120000,'WeasyPrint PDF failed');
+  for (const t of targets) console.log('Created '+t.pdfPath);
 } else if(engine === 'chromium') {
   const chromium=findChromium();
   if(!chromium)throw Error('Chromium not found. Set CHROMIUM_PATH.');
