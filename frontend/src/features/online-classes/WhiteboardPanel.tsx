@@ -25,12 +25,13 @@ import {
   zoomAbout,
   type BoardPages,
   type PageView,
+  type Point,
 } from './boardView';
 import { isPersonalBoard, personalBoardOwner, isPersonalWorkbookBoard } from './boards';
 import { VIEW_TOPIC, viewEvent, type DocumentViewport, type StudentViewSnapshot } from './events';
 import { documentPageSize, documentRailWidth, documentScrollBounds, zoomDocumentScroll, type DocumentScroll } from './documentBoardView';
 import { wheelZoomScale } from './wheelGesture';
-import type { DocumentGesture } from './documentGesture';
+import { TwoFingerNavigation, type DocumentGesture } from './documentGesture';
 import { isPalmContact, type InputMode } from './inputPolicy';
 import { navigationLocked } from './followTeacher';
 import { PageNavigator } from './PageNavigator';
@@ -366,6 +367,7 @@ export function WhiteboardPanel({
   const pointerScrollStart = useRef(0);
   const gapContacts = useRef(new Map<number, { x: number; y: number }>());
   const documentContacts = useRef(new Map<number, { x: number; y: number }>());
+  const twoFingerNavigation = useRef(new TwoFingerNavigation());
   const documentNavigationActive = useRef(false);
   const surfacePointers = useRef(new Set<number>());
   const penPointers = useRef(new Set<number>());
@@ -377,6 +379,7 @@ export function WhiteboardPanel({
     nativePenPages.current.add(index);
     cancelDocumentFrame();
     gapContacts.current.clear(); documentContacts.current.clear();
+    twoFingerNavigation.current.reset();
     documentNavigationActive.current = false;
     for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);
   };
@@ -384,6 +387,7 @@ export function WhiteboardPanel({
     const release = () => {
       cancelDocumentFrame();
       gapContacts.current.clear(); documentContacts.current.clear(); surfacePointers.current.clear(); penPointers.current.clear(); nativePenPages.current.clear();
+      twoFingerNavigation.current.reset();
       documentNavigationActive.current = false;
       for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);
     };
@@ -664,6 +668,7 @@ export function WhiteboardPanel({
       cancelDocumentFrame();
       penPointers.current.add(event.pointerId);
       lastPenContact.current = Date.now(); gapContacts.current.clear(); documentContacts.current.clear();
+      twoFingerNavigation.current.reset();
       documentNavigationActive.current = false;
       for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);
     }
@@ -677,7 +682,11 @@ export function WhiteboardPanel({
           documentNavigationActive.current = true;
           for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(true);
         }
+        const previousPair = JSON.stringify([...gapContacts.current.keys()].slice(0, 2));
         gapContacts.current = new Map(documentContacts.current);
+        if (previousPair !== JSON.stringify([...gapContacts.current.keys()].slice(0, 2))) {
+          twoFingerNavigation.current.begin([...gapContacts.current.values()].slice(0, 2) as [Point, Point]);
+        }
         for (const id of gapContacts.current.keys()) {
           try { event.currentTarget.setPointerCapture(id); } catch { /* An ended contact needs no capture. */ }
         }
@@ -700,18 +709,25 @@ export function WhiteboardPanel({
     const before = [...gapContacts.current.values()].slice(0, 2);
     gapContacts.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const after = [...gapContacts.current.values()].slice(0, 2);
+    if (before.length === 2 && after.length === 2) {
+      applyDocumentGesture(twoFingerNavigation.current.update(after as [Point, Point]));
+      return;
+    }
     const center = (points: typeof before) => points.length === 1 ? points[0]
       : { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 };
     const start = center(before), end = center(after);
-    const distance = (points: typeof before) => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-    const scale = before.length === 2 && distance(before) > 0 ? distance(after) / distance(before) : 1;
-    applyDocumentGesture({ scale, anchor: start, pan: { x: end.x - start.x, y: end.y - start.y } });
+    applyDocumentGesture({ scale: 1, anchor: start, pan: { x: end.x - start.x, y: end.y - start.y } });
   };
   const endDocumentPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'pen') { lastPenContact.current = Date.now(); penPointers.current.delete(event.pointerId); }
     documentContacts.current.delete(event.pointerId);
     surfacePointers.current.delete(event.pointerId);
+    const pairChanged = [...gapContacts.current.keys()].slice(0, 2).includes(event.pointerId);
     if (gapContacts.current.delete(event.pointerId)) { event.preventDefault(); event.stopPropagation(); }
+    if (pairChanged) {
+      twoFingerNavigation.current.reset();
+      if (gapContacts.current.size >= 2) twoFingerNavigation.current.begin([...gapContacts.current.values()].slice(0, 2) as [Point, Point]);
+    }
     if (documentNavigationActive.current && documentContacts.current.size === 0) {
       documentNavigationActive.current = false;
       for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);

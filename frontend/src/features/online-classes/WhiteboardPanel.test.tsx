@@ -618,6 +618,41 @@ describe('WhiteboardPanel', () => {
     expect(wheel.defaultPrevented).toBe(false); expect(canvasZoomAt).not.toHaveBeenCalled();
   });
 
+  it.each([1, 3])('scrolls vertical and jittery horizontal two-finger pointer pairs without zoom at document scale %s', async zoom => {
+    chooseLayout('teacher', 'continuous');
+    const observers = documentObservers();
+    try {
+      mount('host', { document: { pageCount: 3 } as never });
+      const list = await screen.findByRole('region', { name: 'Страницы доски' });
+      await waitFor(() => expect(list.querySelectorAll('article')).toHaveLength(3));
+      const { pages, rail } = documentGeometry(list);
+      act(() => observers.resize());
+      if (zoom !== 1) {
+        act(() => pageCanvasProps.get('WHITEBOARD:board-1:0')!.onDocumentGesture({ scale: zoom, anchor: { x: 500, y: 350 }, pan: { x: 0, y: 0 } }));
+        act(() => observers.frame());
+      }
+      const canvas = screen.getAllByTestId('canvas')[0], width = pages[0].offsetWidth;
+      const assertWidth = () => { act(() => observers.frame()); expect(pages[0].offsetWidth).toBe(width); };
+      for (const vertical of [true, false]) {
+        list.scrollTop = 400;
+        const firstX = vertical ? 300 : 200, secondX = vertical ? 300 : 400, secondY = vertical ? 500 : 300;
+        documentPointer(canvas, 'pointerdown', { pointerId: 1, clientX: firstX, clientY: 300 });
+        documentPointer(rail, 'pointerdown', { pointerId: 2, clientX: secondX, clientY: secondY });
+        documentPointer(canvas, 'pointermove', { pointerId: 1, clientX: firstX - 1.5, clientY: 240 }); assertWidth();
+        documentPointer(rail, 'pointermove', { pointerId: 2, clientX: secondX + 1.5, clientY: secondY - 60 }); assertWidth();
+        expect(list.scrollTop).toBeCloseTo(460);
+        documentPointer(canvas, 'pointermove', { pointerId: 1, clientX: firstX + 1.5, clientY: 320 }); assertWidth();
+        documentPointer(rail, 'pointermove', { pointerId: 2, clientX: secondX - 1.5, clientY: secondY + 20 }); assertWidth();
+        expect(list.scrollTop).toBeCloseTo(380);
+        documentPointer(canvas, 'pointerup', { pointerId: 1, clientX: firstX + 1.5, clientY: 320 });
+        documentPointer(rail, 'pointerup', { pointerId: 2, clientX: secondX - 1.5, clientY: secondY + 20 });
+      }
+      expect(parseFloat(rail.style.gap)).toBe(24 * zoom);
+      await act(async () => {});
+      expect(api.appendAnnotation).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('takes over an existing page contact when the second finger lands in a gap, then releases every canvas', async () => {
     chooseLayout('teacher', 'continuous');
     const observers = documentObservers();
@@ -634,11 +669,14 @@ describe('WhiteboardPanel', () => {
       const second = documentPointer(rail, 'pointerdown', { pointerId: 2, clientX: 400, clientY: 300 });
       expect(second.defaultPrevented).toBe(true);
       for (const navigate of canvasDocumentNavigation.values()) expect(navigate).toHaveBeenLastCalledWith(true);
-      documentPointer(rail, 'pointermove', { pointerId: 2, clientX: 500, clientY: 300 });
+      documentPointer(rail, 'pointermove', { pointerId: 2, clientX: 450, clientY: 300 });
+      act(() => observers.frame());
+      pages.forEach(page => expect(page.offsetWidth).toBe(width));
+      documentPointer(firstCanvas, 'pointermove', { pointerId: 1, clientX: 250, clientY: 300 });
       act(() => observers.frame());
       pages.forEach(page => expect(page.offsetWidth).toBeCloseTo(width * 2));
       expect(parseFloat(rail.style.gap)).toBe(48);
-      documentPointer(firstCanvas, 'pointermove', { pointerId: 1, clientX: 250, clientY: 300 });
+      documentPointer(firstCanvas, 'pointermove', { pointerId: 1, clientX: 200, clientY: 300 });
       act(() => observers.frame());
       pages.forEach(page => expect(page.offsetWidth).toBeCloseTo(width * 2.5));
       documentPointer(rail, 'pointerup', { pointerId: 2, clientX: 500, clientY: 300 });
@@ -692,7 +730,8 @@ describe('WhiteboardPanel', () => {
       const pinch = (firstId: number) => {
         documentPointer(canvas, 'pointerdown', { pointerId: firstId, clientX: 300, clientY: 300 });
         documentPointer(rail, 'pointerdown', { pointerId: firstId + 1, clientX: 400, clientY: 300 });
-        documentPointer(rail, 'pointermove', { pointerId: firstId + 1, clientX: 500, clientY: 300 });
+        documentPointer(canvas, 'pointermove', { pointerId: firstId, clientX: 250, clientY: 300 });
+        documentPointer(rail, 'pointermove', { pointerId: firstId + 1, clientX: 450, clientY: 300 });
         documentPointer(canvas, 'pointerup', { pointerId: firstId, clientX: 300, clientY: 300 });
         documentPointer(rail, 'pointerup', { pointerId: firstId + 1, clientX: 500, clientY: 300 });
       };

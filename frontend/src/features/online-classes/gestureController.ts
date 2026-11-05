@@ -2,7 +2,7 @@ import {
   type PageView,
   type Point,
   panBy,
-  pinchView,
+  zoomAbout,
 } from './boardView';
 import {
   type InputMode,
@@ -10,8 +10,8 @@ import {
   actionFor,
   shouldCancelStroke,
 } from './inputPolicy';
-import { panWithScroll, pinchWithScroll } from './continuousBoardNavigation';
-import { documentPinch, type DocumentGesture } from './documentGesture';
+import { panWithScroll } from './continuousBoardNavigation';
+import { TwoFingerNavigation, type DocumentGesture } from './documentGesture';
 
 /**
  * Turns raw pointer events into board intents.
@@ -57,6 +57,8 @@ export class GestureController {
   private anchors: [Point, Point] | null = null;
   private panStart: Point | null = null;
   private pinchStartedAtFit = false;
+  private readonly twoFinger = new TwoFingerNavigation();
+  private pinchPair: string | null = null;
 
   constructor(private readonly deps: GestureDeps) {}
 
@@ -92,6 +94,7 @@ export class GestureController {
       }
       // A pen always pre-empts any pan/pinch made by fingers.
       if (this.state === 'pan' || this.state === 'pinch') {
+        this.twoFinger.reset();
         this.state = 'idle';
         this.anchors = null;
         this.panStart = null;
@@ -130,26 +133,26 @@ export class GestureController {
       return [{ type: 'stroke-move', point: position, pressure }];
     }
     // Ignored palms never become navigation pointers by moving later.
-    if (!this.touches.has(id) || this.deps.locked()) return [];
+    if (!this.touches.has(id)) return [];
+    if (this.deps.locked()) { this.twoFinger.reset(); return []; }
 
     if (this.state === 'pinch' && this.anchors && this.touches.size >= 2) {
       const [a, b] = this.firstTwoTouches();
+      const gesture = this.twoFinger.update([a, b]);
       if (this.deps.documentZoom?.()) {
-        const gesture = documentPinch(this.anchors, [a, b]);
         this.anchors = [a, b];
         return [{ type: 'document-gesture', gesture }];
       }
       if (this.deps.continuous?.()) {
-        const next = pinchWithScroll(this.startView, this.anchors, [a, b], this.deps.board(), this.pinchStartedAtFit);
+        const next = panWithScroll(zoomAbout(this.startView, this.startView.zoom * gesture.scale, gesture.anchor, this.deps.board()),
+          gesture.pan.x, gesture.pan.y, this.deps.board(), this.pinchStartedAtFit);
         this.anchors = [a, b];
         return this.applyContinuousNavigation(next);
       }
-      return [
-        {
-          type: 'view',
-          view: pinchView(this.startView, this.anchors[0], this.anchors[1], a, b, this.deps.board()),
-        },
-      ];
+      this.startView = panBy(zoomAbout(this.startView, this.startView.zoom * gesture.scale, gesture.anchor, this.deps.board()),
+        gesture.pan.x, gesture.pan.y, this.deps.board());
+      this.anchors = [a, b];
+      return [{ type: 'view', view: this.startView }];
     }
     if (this.state === 'pan' && this.panStart && this.touches.has(id)) {
       if (this.deps.continuous?.() || this.deps.documentZoom?.()) {
@@ -210,6 +213,8 @@ export class GestureController {
     this.lastPenRelease = Number.NEGATIVE_INFINITY;
     this.anchors = null;
     this.panStart = null;
+    this.twoFinger.reset();
+    this.pinchPair = null;
   }
 
   private now(): number {
@@ -233,17 +238,23 @@ export class GestureController {
   }
 
   private beginNavigation(): void {
+    const pair = JSON.stringify([...this.touches.keys()].slice(0, 2));
+    if (this.state === 'pinch' && this.touches.size >= 2 && this.pinchPair === pair) return;
     this.startView = this.deps.view();
     if (this.touches.size >= 2) {
       const [a, b] = this.firstTwoTouches();
       this.state = 'pinch';
+      this.pinchPair = pair;
       this.anchors = [a, b];
+      this.twoFinger.begin([a, b]);
       this.pinchStartedAtFit = this.startView.zoom <= 1;
       this.panStart = null;
     } else {
       const only = [...this.touches.values()][0];
       this.state = only ? 'pan' : 'idle';
       this.anchors = null;
+      this.twoFinger.reset();
+      this.pinchPair = null;
       this.panStart = only ?? null;
     }
   }

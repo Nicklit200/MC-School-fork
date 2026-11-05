@@ -528,3 +528,93 @@ describe('useAnnotationBoard — archive persistence barrier', () => {
     expect(api.replayAnnotations).toHaveBeenLastCalledWith('hook-lost-clear', 'doc-1', 0);
   });
 });
+
+describe('useAnnotationBoard recovery acknowledgements', () => {
+  const saved = (operationId: string) => ({ id: `row-${operationId}`, operationId, sequence: 1,
+    actorId: 'teacher-1', layerOwnerId: 'teacher-1', operationType: 'ADD', payload: JSON.stringify(PEN), createdAt: '' });
+  const options = (classId: string, onSaved = vi.fn()) => ({ classId, targetType: 'WHITEBOARD' as const,
+    targetId: 'board-1', pageIndex: 0, actorId: 'teacher-1', isHost: true, onSaved });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.openAnnotationDocument.mockResolvedValue(DOC);
+    api.replayAnnotations.mockResolvedValue([]);
+    api.appendAnnotation.mockImplementation(async (_classId, _doc, operationId) => saved(operationId) as never);
+  });
+
+  it('merges a recovered shared ADD and emits its peer hint exactly once with the original operation ID', async () => {
+    const onSaved = vi.fn(), props = options('recovery-live-shared', onSaved);
+    api.appendAnnotation.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useAnnotationBoard(props));
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => { expect(await result.current.addShape(PEN, 'recovered-shared')).toBe(false); });
+    expect(result.current.shapes).toEqual([]); expect(onSaved).not.toHaveBeenCalled();
+    await act(async () => { await flushClassAnnotations(props.classId, props.actorId); });
+    expect(result.current.shapes).toEqual([expect.objectContaining({ operationId: 'recovered-shared', sequence: 1 })]);
+    expect(result.current.confirmedStrokeIds).toEqual(['recovered-shared']);
+    expect(onSaved).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ operationId: 'recovered-shared', sequence: 1 }), 'doc-1');
+    await act(async () => { await flushClassAnnotations(props.classId, props.actorId); });
+    expect(api.appendAnnotation).toHaveBeenCalledTimes(2); expect(onSaved).toHaveBeenCalledOnce();
+    expect(api.appendAnnotation.mock.calls.map(call => call[2])).toEqual(['recovered-shared', 'recovered-shared']);
+  });
+
+  it('delivers the old request acknowledgement to the matching remounted hook, not its unmounted publisher', async () => {
+    const previousHint = vi.fn(), currentHint = vi.fn(), classId = 'recovery-remounted-shared';
+    api.appendAnnotation.mockRejectedValueOnce(new Error('offline'));
+    const first = renderHook(() => useAnnotationBoard(options(classId, previousHint)));
+    await waitFor(() => expect(first.result.current.document).not.toBeNull());
+    await act(async () => { expect(await first.result.current.addShape(PEN, 'same-id-after-reentry')).toBe(false); });
+    first.unmount();
+    const current = renderHook(() => useAnnotationBoard(options(classId, currentHint)));
+    await waitFor(() => expect(current.result.current.document).not.toBeNull());
+    expect(current.result.current.shapes).toEqual([]);
+    await act(async () => { await flushClassAnnotations(classId, 'teacher-1'); });
+    expect(current.result.current.shapes).toEqual([expect.objectContaining({ operationId: 'same-id-after-reentry', sequence: 1 })]);
+    expect(current.result.current.confirmedStrokeIds).toEqual(['same-id-after-reentry']);
+    expect(previousHint).not.toHaveBeenCalled(); expect(currentHint).toHaveBeenCalledOnce();
+  });
+
+  it.each([{ actorId: 'other-actor' }, { targetId: 'personal-other-pupil' }, { pageIndex: 1 }, { classId: 'other-class' }])(
+    'does not deliver an old recovered ACK into a changed scope %j', async changed => {
+      const onSaved = vi.fn(), props = options(`recovery-scope-${Object.keys(changed)[0]}`, onSaved);
+      api.appendAnnotation.mockRejectedValueOnce(new Error('offline'));
+      const { result, rerender } = renderHook(value => useAnnotationBoard(value), { initialProps: props });
+      await waitFor(() => expect(result.current.document).not.toBeNull());
+      await act(async () => { expect(await result.current.addShape(PEN, 'old-scope-stroke')).toBe(false); });
+      rerender({ ...props, ...changed });
+      await waitFor(() => expect(api.openAnnotationDocument).toHaveBeenCalledTimes(2));
+      await act(async () => { await flushClassAnnotations(props.classId, props.actorId); });
+      expect(result.current.shapes).toEqual([]); expect(result.current.confirmedStrokeIds).toEqual([]);
+      expect(onSaved).not.toHaveBeenCalled();
+    },
+  );
+
+  it('restores the document and existing ink when a flush recovers an exhausted initial open', async () => {
+    vi.useFakeTimers();
+    try {
+      const props = options('recovery-exhausted-open');
+      api.openAnnotationDocument.mockRejectedValue(new Error('offline'));
+      const { result } = renderHook(() => useAnnotationBoard(props));
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(api.openAnnotationDocument).toHaveBeenCalledTimes(4); expect(result.current.document).toBeNull();
+      api.openAnnotationDocument.mockResolvedValue(DOC);
+      api.replayAnnotations.mockResolvedValue([saved('existing-after-open')] as never);
+      await act(async () => { await flushClassAnnotations(props.classId, props.actorId); });
+      expect(result.current.document).toEqual(DOC);
+      expect(result.current.shapes).toEqual([expect.objectContaining({ operationId: 'existing-after-open', sequence: 1 })]);
+      expect(result.current.confirmedStrokeIds).toEqual(['existing-after-open']);
+      expect(api.replayAnnotations).toHaveBeenCalledExactlyOnceWith(props.classId, 'doc-1', 0);
+      expect(props.onSaved).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not turn a successful server write into a retry when its peer hint callback throws', async () => {
+    const onSaved = vi.fn(() => { throw new Error('peer connection lost'); });
+    const props = options('recovery-callback-error', onSaved);
+    const { result } = renderHook(() => useAnnotationBoard(props));
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+    await act(async () => { expect(await result.current.addShape(PEN, 'accepted-before-hint')).toBe(true); });
+    await act(async () => { await flushClassAnnotations(props.classId, props.actorId); });
+    expect(result.current.confirmedStrokeIds).toEqual(['accepted-before-hint']);
+    expect(api.appendAnnotation).toHaveBeenCalledOnce(); expect(onSaved).toHaveBeenCalledOnce();
+  });
+});

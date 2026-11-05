@@ -612,11 +612,12 @@ describe('WhiteboardCanvas continuous scrolling', () => {
     vi.spyOn(surface, 'getBoundingClientRect').mockImplementation(() => ({ left, top, width: 1000, height: 500 } as DOMRect));
     fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 240 });
     fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 320, clientY: 240 });
-    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 520, clientY: 240 });
-    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 2, anchor: { x: 220, y: 240 }, pan: { x: 100, y: 0 } });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 240 });
+    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 420, clientY: 240 });
+    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 2, anchor: { x: 220, y: 240 }, pan: { x: 0, y: 0 } });
     left = -180; top = -60;
-    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 220, clientY: 240 });
-    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 0.75, anchor: { x: 320, y: 240 }, pan: { x: 50, y: 0 } });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 240 });
+    expect(onDocumentGesture).toHaveBeenLastCalledWith({ scale: 0.75, anchor: { x: 220, y: 240 }, pan: { x: 50, y: 0 } });
     fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch' }); fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'touch' });
     expect(onCommit).not.toHaveBeenCalled(); expect(onViewChange).not.toHaveBeenCalled();
   });
@@ -630,6 +631,34 @@ describe('WhiteboardCanvas continuous scrolling', () => {
     });
     expect(onDocumentGesture).toHaveBeenCalledExactlyOnceWith({ scale: 2, anchor: { x: 200, y: 200 }, pan: { x: 100, y: 20 } });
     expect(onViewChange).not.toHaveBeenCalled();
+  });
+
+  it.each(['pointer', 'ios-touch'] as const)('keeps parallel %s finger scrolling separate from zoom and ink', backend => {
+    mock.backend = backend;
+    const onDocumentGesture = vi.fn(), onCommit = vi.fn(), onViewChange = vi.fn();
+    const { container } = render(<WhiteboardCanvas {...props} inputMode="finger" onDocumentGesture={onDocumentGesture}
+      onViewChange={onViewChange} onCommit={onCommit} />);
+    if (backend === 'ios-touch') {
+      act(() => {
+        mock.nativeCallbacks.onGesture([{ id: 1, clientX: 100, clientY: 200 }, { id: 2, clientX: 300, clientY: 200 }]);
+        mock.nativeCallbacks.onGesture([{ id: 2, clientX: 301.5, clientY: 140 }, { id: 1, clientX: 98.5, clientY: 140 }]);
+        mock.nativeCallbacks.onGesture([{ id: 1, clientX: 101.5, clientY: 220 }, { id: 2, clientX: 298.5, clientY: 220 }]);
+        mock.nativeCallbacks.onGesture([]);
+      });
+    } else {
+      const surface = container.querySelector('.whiteboard__surface')!;
+      fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 200 });
+      fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 400 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 140 });
+      fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 340 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 101.5, clientY: 220 });
+      fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 98.5, clientY: 420 });
+      fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'touch' });
+      fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch' });
+    }
+    expect(onDocumentGesture.mock.calls.every(([gesture]) => gesture.scale === 1)).toBe(true);
+    expect(onDocumentGesture.mock.calls.reduce((sum, [gesture]) => sum + gesture.pan.y, 0)).toBe(20);
+    expect(onCommit).not.toHaveBeenCalled(); expect(onViewChange).not.toHaveBeenCalled();
   });
 
   it('keeps a scrolled large page sharp in a bounded raster and exports the full page', () => {
@@ -832,7 +861,12 @@ describe('WhiteboardCanvas continuous scrolling', () => {
     const fingers = (y: number, spread = 200) => [{ id: 1, clientX: 300, clientY: y }, { id: 2, clientX: 300 + spread, clientY: y }];
     act(() => { mock.nativeCallbacks.onGesture(fingers(300)); mock.nativeCallbacks.onGesture(fingers(260)); });
     expect(onScrollGesture).toHaveBeenCalledExactlyOnceWith(0, 40);
-    act(() => { mock.nativeCallbacks.onGesture(fingers(260, 400)); });
+    act(() => {
+      mock.nativeCallbacks.onGesture(fingers(260, 400));
+      mock.nativeCallbacks.onGesture([]);
+      mock.nativeCallbacks.onGesture(fingers(260, 200));
+      mock.nativeCallbacks.onGesture(fingers(260, 400));
+    });
     expect(onViewChange.mock.calls.at(-1)?.[0].zoom).toBe(2);
   });
 });

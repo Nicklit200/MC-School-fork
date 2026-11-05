@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
-import { flushClassAnnotations } from './annotationSync';
+import { flushClassAnnotations, hasPendingClassAnnotations } from './annotationSync';
 import { openPdf } from './pdfDocument';
 import { onlineClassesApi, type OnlineClass, type OnlineClassConnection } from '../../api/onlineClasses';
 import { I18nProvider } from '../../i18n/I18nContext';
@@ -92,7 +92,7 @@ vi.mock('./useHostUserId', () => ({ useHostUserId: () => 'me' }));
 vi.mock('./usePdf', () => ({ usePdf: () => ({ status: 'idle' }), usePdfPage: () => null }));
 vi.mock('./pdfDocument', () => ({ openPdf: vi.fn(async () => ({ pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() })) }));
 vi.mock('./boardExport', () => ({ exportBoardPdf: vi.fn() }));
-vi.mock('./annotationSync', () => ({ flushClassAnnotations: vi.fn() }));
+vi.mock('./annotationSync', () => ({ flushClassAnnotations: vi.fn(), hasPendingClassAnnotations: vi.fn() }));
 
 const boardProps: Record<string, any>[] = [];
 vi.mock('./WhiteboardPanel', () => ({
@@ -124,6 +124,7 @@ import { OnlineClassRoom } from './OnlineClassRoom';
 
 beforeEach(() => {
   vi.mocked(flushClassAnnotations).mockReset().mockResolvedValue(undefined);
+  vi.mocked(hasPendingClassAnnotations).mockReset().mockReturnValue(false);
   vi.mocked(useBoardDocumentState).mockReset().mockReturnValue({ status: 'empty', document: null, version: 0 });
   livekitFixture.connectionState = 'connected';
   vi.mocked(onlineClassesApi.startTranscription).mockReset().mockResolvedValue(undefined);
@@ -459,7 +460,7 @@ describe('lesson PDF save notifications', () => {
       mount(true, { onLeave, onEndForAll });
       await screen.findByRole('option', { name: /Анна/ });
       fireEvent.click(screen.getByRole('button', { name: action === 'leave' ? 'Выйти' : 'Завершить урок для всех' }));
-      expect(flushClassAnnotations).toHaveBeenCalledExactlyOnceWith('c1');
+      expect(flushClassAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'me', expect.any(Function));
       expect(exportBoardPdf).not.toHaveBeenCalled();
       expect(screen.getByRole('button', { name: 'Выйти' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Завершить урок для всех' })).toBeDisabled();
@@ -543,17 +544,17 @@ describe('lesson PDF save notifications', () => {
     } finally { confirm.mockRestore(); }
   });
 
-  it.each([false, true])('does not require archive work for a pupil or standalone room (host=%s)', async host => {
+  it.each([false, true])('flushes own ink without teacher archive work for a pupil or standalone room (host=%s)', async host => {
     let finish!: () => void;
     const onLeave = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
     mount(host, { onLeave, ...(host ? { eventId: undefined } : {}) });
     await screen.findByTestId('board-board-1');
     await userEvent.click(screen.getByRole('button', { name: 'Выйти' }));
     expect(onLeave).toHaveBeenCalledOnce();
-    expect(flushClassAnnotations).not.toHaveBeenCalled();
+    expect(flushClassAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'me', expect.any(Function));
     expect(completedLessonApi.save).not.toHaveBeenCalled();
-    expect(screen.getByTestId('board-board-1').closest('.online-class-room__main')).toHaveProperty('inert', false);
-    expect(boardProps.filter(props => props.targetId === 'board-1').at(-1)?.canAnnotate).toBe(true);
+    expect(screen.getByTestId('board-board-1').closest('.online-class-room__main')).toHaveProperty('inert', true);
+    expect(boardProps.filter(props => props.targetId === 'board-1').at(-1)?.canAnnotate).toBe(false);
     await act(async () => finish());
   });
 
@@ -572,6 +573,115 @@ describe('lesson PDF save notifications', () => {
     expect(onLeave).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeEnabled();
     expect(screen.queryByText(/PDF сохранены в разделе/)).not.toBeInTheDocument();
+  });
+
+  it('waits for a pupil’s own pending ink before leaving and keeps their board frozen', async () => {
+    let finish!: () => void;
+    vi.mocked(flushClassAnnotations).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const onLeave = vi.fn();
+    mount(false, { onLeave });
+    await screen.findByTestId('board-board-1');
+    emitPupilCamera('camera-me', pupilCameraSource());
+    await screen.findByTestId('board-personal-me-camera');
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+    expect(flushClassAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'me', expect.any(Function));
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Выйти' })).toBeDisabled();
+    expect(screen.getByTestId('board-board-1').closest('.online-class-room__main')).toHaveProperty('inert', true);
+    expect(boardProps.filter(props => props.targetId === 'board-1').at(-1)?.canAnnotate).toBe(false);
+    expect(boardProps.filter(props => props.targetType === 'NOTEBOOK_CAMERA' && props.actorId === 'me').at(-1)?.canAnnotate).toBe(false);
+    await act(async () => finish());
+    await waitFor(() => expect(onLeave).toHaveBeenCalledOnce());
+    expect(completedLessonApi.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pupil in the lesson after failed ink saving and allows an explicit exit retry', async () => {
+    vi.mocked(flushClassAnnotations).mockRejectedValueOnce(new Error('Есть несохранённые записи'));
+    const onLeave = vi.fn();
+    mount(false, { onLeave });
+    await screen.findByTestId('board-board-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Выход отложен'));
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Выйти' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+    await waitFor(() => expect(onLeave).toHaveBeenCalledOnce());
+    expect(flushClassAnnotations).toHaveBeenCalledTimes(2);
+    expect(completedLessonApi.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('pupil ink recovery after reconnect', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    screenShares = [];
+    vi.mocked(onlineClassesApi.listParticipants).mockResolvedValue([]);
+    vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: false } as never);
+    vi.mocked(hasPendingClassAnnotations).mockReturnValue(true);
+  });
+
+  it('retries the current pupil on entry and after a new connected transition, not on ordinary rerenders', async () => {
+    livekitFixture.connectionState = 'connecting';
+    const room = mount(false);
+    await screen.findByTestId('board-board-1');
+    expect(flushClassAnnotations).not.toHaveBeenCalled();
+    livekitFixture.connectionState = 'connected';
+    room.rerender(classroom(false));
+    await waitFor(() => expect(flushClassAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'me', expect.any(Function)));
+    room.rerender(classroom(false));
+    expect(flushClassAnnotations).toHaveBeenCalledOnce();
+    livekitFixture.connectionState = 'reconnecting';
+    room.rerender(classroom(false));
+    livekitFixture.connectionState = 'connected';
+    room.rerender(classroom(false));
+    await waitFor(() => expect(flushClassAnnotations).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows a recovery error and retries without leaving or archiving another pupil’s work', async () => {
+    vi.mocked(flushClassAnnotations).mockRejectedValueOnce(new Error('offline'));
+    const onLeave = vi.fn();
+    mount(false, { onLeave });
+    await screen.findByRole('button', { name: 'Повторить сохранение записей' });
+    expect(screen.getByRole('alert')).toHaveTextContent('Записи на доске ещё не сохранены');
+    await userEvent.click(screen.getByRole('button', { name: 'Повторить сохранение записей' }));
+    await waitFor(() => expect(flushClassAnnotations).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Повторить сохранение записей' })).not.toBeInTheDocument());
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(completedLessonApi.save).not.toHaveBeenCalled();
+  });
+
+  it('tries the same actor again after leaving and re-entering the classroom', async () => {
+    vi.mocked(flushClassAnnotations).mockRejectedValueOnce(new Error('offline'));
+    const room = mount(false, { currentUserId: 'alice' });
+    await screen.findByRole('button', { name: 'Повторить сохранение записей' });
+    room.unmount();
+    mount(false, { currentUserId: 'alice' });
+    await waitFor(() => expect(flushClassAnnotations).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(flushClassAnnotations).mock.calls.map(([classId, actorId]) => [classId, actorId]))
+      .toEqual([['c1', 'alice'], ['c1', 'alice']]);
+    expect(screen.queryByRole('button', { name: 'Повторить сохранение записей' })).not.toBeInTheDocument();
+  });
+
+  it('cancels an old class/account recovery scope and hides its late failure', async () => {
+    let fail!: (error: Error) => void;
+    vi.mocked(flushClassAnnotations).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const room = mount(false, { currentUserId: 'alice' });
+    await waitFor(() => expect(flushClassAnnotations).toHaveBeenCalledOnce());
+    const isCurrent = vi.mocked(flushClassAnnotations).mock.calls[0][2]!;
+    expect(isCurrent()).toBe(true);
+    vi.mocked(hasPendingClassAnnotations).mockReturnValue(false);
+    room.rerender(classroom(false, { classId: 'c2', eventId: 'e2', currentUserId: 'bob' }));
+    expect(isCurrent()).toBe(false);
+    await act(async () => fail(new Error('old offline failure')));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(flushClassAnnotations).toHaveBeenCalledExactlyOnceWith('c1', 'alice', expect.any(Function));
+  });
+
+  it('never performs an unscoped recovery for a missing actor', async () => {
+    mount(false, { currentUserId: '' });
+    await screen.findByTestId('board-board-1');
+    expect(hasPendingClassAnnotations).not.toHaveBeenCalled();
+    expect(flushClassAnnotations).not.toHaveBeenCalled();
   });
 });
 

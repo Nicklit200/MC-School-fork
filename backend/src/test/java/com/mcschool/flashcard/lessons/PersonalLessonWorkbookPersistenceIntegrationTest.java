@@ -16,6 +16,7 @@ import com.mcschool.flashcard.groups.StudentGroupMember;
 import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
+import com.mcschool.flashcard.lessons.dto.CreateLessonRequest;
 import com.mcschool.flashcard.liveclasses.*;
 import com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest;
 import com.mcschool.flashcard.users.*;
@@ -24,11 +25,17 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -67,6 +74,10 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
     @Autowired private OnlineClassRepository classes;
     @Autowired private OnlineClassParticipantRepository participants;
     @Autowired private OnlineClassDocumentService documents;
+    @Autowired private OnlineClassAnnotationService annotations;
+    @Autowired private OnlineClassService onlineClasses;
+    @Autowired private ManualLessonService manualLessons;
+    @Autowired private LessonHistoryRepository history;
     @Autowired private StudentGroupRepository groups;
     @Autowired private StudentGroupMemberRepository groupMembers;
     @Autowired private CompletedLessonDocumentController completedDocuments;
@@ -388,6 +399,219 @@ class PersonalLessonWorkbookPersistenceIntegrationTest {
             assertThat(workbooks.count()).isZero();
             status.setRollbackOnly();
         });
+    }
+
+    @RepeatedTest(5)
+    void firstAssignmentsForThreePupilsCanBeUploadedConcurrently() throws Exception {
+        var fixture = groupOfThree();
+        var uploads = new ArrayList<Callable<PersonalLessonWorkbookService.PersonalWorkbookResponse>>();
+        for (int index = 0; index < fixture.pupils().size(); index++) {
+            User pupil = fixture.pupils().get(index);
+            byte[] bytes = pdf(index + 2);
+            uploads.add(() -> service.upload(caller, "event", pupil.getId(), "worksheet.pdf", bytes));
+        }
+        assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), "event")).isEmpty();
+        assertThat(concurrently(uploads)).allSatisfy(upload -> assertThat(upload.version()).isEqualTo(1));
+        assertThat(service.list(caller, "event").students()).hasSize(3).allSatisfy(row -> {
+            assertThat(row.hasWorkbook()).isTrue();
+            assertThat(row.version()).isEqualTo(1);
+        });
+        assertThat(workbooks.count()).isEqualTo(3);
+        assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), "event")).isPresent();
+    }
+
+    @Test
+    void threePrivateWorksheetsAndConcurrentInkSurviveReconnectAndOnePupilReplacement() throws Exception {
+        var fixture = groupOfThree();
+        byte[] shared = pdf(1);
+        var preparation = LessonPreparation.create(teacher, "event");
+        preparation.attachWorkbook("shared.pdf", shared);
+        preparations.saveAndFlush(preparation);
+        var room = OnlineClass.forGroup(teacher, "event", "event", "Private assignment test",
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), fixture.group());
+        room.start(Instant.now());
+        room = classes.saveAndFlush(room);
+        UUID roomId = room.getId();
+        var bytesByPupil = new java.util.HashMap<UUID, byte[]>();
+        var documentByPupil = new java.util.HashMap<UUID, UUID>();
+        for (int index = 0; index < fixture.pupils().size(); index++) {
+            User pupil = fixture.pupils().get(index);
+            byte[] bytes = pdf(index + 2);
+            bytesByPupil.put(pupil.getId(), bytes);
+            service.upload(caller, "event", pupil.getId(), "worksheet.pdf", bytes);
+            var admitted = OnlineClassParticipant.student(room, pupil);
+            admitted.admit();
+            participants.saveAndFlush(admitted);
+            var owner = new AuthenticatedUser(pupil.getId(), null, Role.STUDENT);
+            String target = PersonalBoard.workbookTargetIdFor(pupil.getId());
+            assertThat(documents.workbook(owner, roomId, target)).contains(bytes);
+            assertThat(documents.workbook(caller, roomId, target)).contains(bytes);
+            assertThat(documents.workbookVersion(owner, roomId, target)).isEqualTo(1);
+            documentByPupil.put(pupil.getId(), annotations.openDocument(owner, roomId,
+                    AnnotationTargetType.WHITEBOARD, target, 0, null, null).id());
+        }
+        var writes = new ArrayList<Callable<Void>>();
+        for (User pupil : fixture.pupils()) {
+            var owner = new AuthenticatedUser(pupil.getId(), null, Role.STUDENT);
+            UUID documentId = documentByPupil.get(pupil.getId());
+            writes.add(() -> {
+                for (int index = 0; index < 8; index++) {
+                    var operation = new AnnotationOperationRequest(UUID.randomUUID(), AnnotationOperationType.ADD,
+                            "{\"kind\":\"pen\",\"color\":\"#123456\",\"width\":0.004,\"points\":[[0.1,0.2],[0.3,0.4]]}");
+                    var saved = annotations.append(owner, roomId, documentId, operation);
+                    assertThat(saved.sequence()).isEqualTo(index + 1);
+                    // A retry after a connection interruption is the same operation.
+                    assertThat(annotations.append(owner, roomId, documentId, operation).sequence()).isEqualTo(saved.sequence());
+                }
+                return null;
+            });
+        }
+        concurrently(writes);
+        for (User pupil : fixture.pupils()) {
+            var reconnected = new AuthenticatedUser(pupil.getId(), null, Role.STUDENT);
+            UUID documentId = documentByPupil.get(pupil.getId());
+            assertThat(annotations.replay(reconnected, roomId, documentId, 0)).hasSize(8)
+                    .allSatisfy(operation -> assertThat(operation.actorId()).isEqualTo(pupil.getId()));
+            assertThat(annotations.replay(reconnected, roomId, documentId, 5)).extracting(item -> item.sequence())
+                    .containsExactly(6L, 7L, 8L);
+            assertThat(annotations.listDocuments(reconnected, roomId)).extracting(item -> item.id())
+                    .containsExactly(documentId);
+            assertThat(annotations.replay(caller, roomId, documentId, 0)).hasSize(8);
+            for (User peer : fixture.pupils()) {
+                if (peer.getId().equals(pupil.getId())) continue;
+                String otherTarget = PersonalBoard.workbookTargetIdFor(peer.getId());
+                assertThatThrownBy(() -> documents.workbook(reconnected, roomId, otherTarget))
+                        .isInstanceOf(ResourceNotFoundException.class);
+                assertThatThrownBy(() -> annotations.replay(reconnected, roomId, documentByPupil.get(peer.getId()), 0))
+                        .isInstanceOf(ResourceNotFoundException.class);
+                assertThatThrownBy(() -> annotations.openDocument(reconnected, roomId,
+                        AnnotationTargetType.WHITEBOARD, otherTarget, 0, null, null))
+                        .isInstanceOf(ResourceNotFoundException.class);
+                assertThatThrownBy(() -> annotations.append(reconnected, roomId, documentByPupil.get(peer.getId()),
+                        new AnnotationOperationRequest(UUID.randomUUID(), AnnotationOperationType.ADD,
+                                "{\"kind\":\"pen\",\"width\":0.004,\"points\":[[0.1,0.2]]}")))
+                        .isInstanceOf(ResourceNotFoundException.class);
+            }
+        }
+        User replaced = fixture.pupils().get(1);
+        byte[] replacement = pdf(5);
+        assertThat(service.upload(caller, "event", replaced.getId(), "worksheet.pdf", replacement).version()).isEqualTo(2);
+        for (User pupil : fixture.pupils()) {
+            String target = PersonalBoard.workbookTargetIdFor(pupil.getId());
+            boolean changed = pupil.getId().equals(replaced.getId());
+            assertThat(documents.workbook(caller, roomId, target))
+                    .contains(changed ? replacement : bytesByPupil.get(pupil.getId()));
+            assertThat(documents.workbookVersion(caller, roomId, target)).isEqualTo(changed ? 2 : 1);
+            assertThat(annotations.replay(caller, roomId, documentByPupil.get(pupil.getId()), 0)).hasSize(8);
+        }
+        assertThat(annotations.listDocuments(caller, roomId)).hasSize(3);
+        assertThat(documents.workbook(caller, roomId)).contains(shared);
+    }
+
+    @Test
+    void oneOffGroupRebindChangesOnlyOneLessonAndArchivesTheOldLiveRoomWithoutLosingFilesOrInk() throws Exception {
+        var fixture = groupOfThree();
+        var regular = groups.saveAndFlush(StudentGroup.create(teacher, "Regular two-pupil group"));
+        for (User pupil : fixture.pupils().subList(0, 2)) {
+            groupMembers.saveAndFlush(StudentGroupMember.create(regular, pupil));
+        }
+        Instant start = Instant.now().plusSeconds(4 * 86400L);
+        var first = manualLessons.create(caller, new CreateLessonRequest("One-off session", start,
+                start.plusSeconds(3600), regular.getId(), null));
+        var future = manualLessons.create(caller, new CreateLessonRequest("Next regular session", start.plusSeconds(7 * 86400L),
+                start.plusSeconds(7 * 86400L + 3600), regular.getId(), null));
+        when(lessons.listGroupLessons(caller)).thenAnswer(ignored -> history
+                .findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(teacher.getId()).stream()
+                .map(LessonHistoryEntry::toResponse).toList());
+        byte[] shared = pdf(1), privatePdf = pdf(2);
+        var preparation = LessonPreparation.create(teacher, first.eventId());
+        preparation.attachWorkbook("shared.pdf", shared);
+        preparations.saveAndFlush(preparation);
+        service.upload(caller, first.eventId(), student.getId(), "worksheet.pdf", privatePdf);
+        UUID oldClassId = onlineClasses.materializeFromCalendar(caller, first.eventId()).id();
+        var oldRoom = classes.findById(oldClassId).orElseThrow();
+        oldRoom.start(Instant.now());
+        classes.saveAndFlush(oldRoom);
+        var admitted = OnlineClassParticipant.student(oldRoom, student);
+        admitted.admit();
+        participants.saveAndFlush(admitted);
+        var owner = new AuthenticatedUser(student.getId(), null, Role.STUDENT);
+        User guest = fixture.pupils().get(2);
+        var guestCaller = new AuthenticatedUser(guest.getId(), null, Role.STUDENT);
+        String target = PersonalBoard.workbookTargetIdFor(student.getId());
+        UUID oldDocument = annotations.openDocument(owner, oldClassId, AnnotationTargetType.WHITEBOARD,
+                target, 0, null, null).id();
+        UUID savedOperation = UUID.randomUUID();
+        annotations.append(owner, oldClassId, oldDocument,
+                new AnnotationOperationRequest(savedOperation, AnnotationOperationType.ADD,
+                        "{\"kind\":\"pen\",\"width\":0.004,\"points\":[[0.1,0.2],[0.3,0.4]]}"));
+        assertThatThrownBy(() -> documents.workbook(guestCaller, oldClassId, target))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        // Rebind one dated native event, leaving the permanent group's two members unchanged.
+        manualLessons.bindGroup(caller, first.eventId(), fixture.group().getId());
+        assertThat(classes.findById(oldClassId).orElseThrow().getStatus()).isEqualTo(OnlineClassStatus.LIVE);
+        var rebound = history.findByTeacherIdAndEventId(teacher.getId(), first.eventId()).orElseThrow().toResponse();
+        assertThat(rebound.eventId()).isEqualTo(first.eventId());
+        assertThat(rebound.groupId()).isEqualTo(fixture.group().getId());
+        assertThat(rebound.participantStudentIds()).containsExactlyInAnyOrderElementsOf(fixture.pupils().stream().map(User::getId).toList());
+        var next = history.findByTeacherIdAndEventId(teacher.getId(), future.eventId()).orElseThrow().toResponse();
+        assertThat(next.groupId()).isEqualTo(regular.getId());
+        assertThat(next.participantStudentIds()).containsExactlyInAnyOrder(student.getId(), fixture.pupils().get(1).getId());
+        assertThat(groupMembers.findAllByGroupIdOrderByCreatedAtAsc(regular.getId())).hasSize(2);
+        assertThat(service.list(caller, first.eventId()).students()).hasSize(3);
+        assertThat(service.list(caller, future.eventId()).students()).hasSize(2);
+
+        // Materializing the explicitly changed audience retires the old session and creates a new room.
+        var replacement = onlineClasses.materializeFromCalendar(caller, first.eventId());
+        assertThat(replacement.id()).isNotEqualTo(oldClassId);
+        assertThat(replacement.status()).isEqualTo(OnlineClassStatus.SCHEDULED);
+        assertThat(classes.findById(oldClassId).orElseThrow().getStatus()).isEqualTo(OnlineClassStatus.ENDED);
+        assertThat(classes.findById(replacement.id()).orElseThrow().getGroup().getId()).isEqualTo(fixture.group().getId());
+        assertThat(annotations.replay(caller, oldClassId, oldDocument, 0)).extracting(item -> item.operationId()).containsExactly(savedOperation);
+        assertThat(annotations.listDocuments(caller, replacement.id())).isEmpty();
+        assertThat(documents.workbook(caller, replacement.id(), target)).contains(privatePdf);
+        assertThat(documents.workbook(caller, replacement.id())).contains(shared);
+        assertThat(preparations.findByTeacherIdAndEventId(teacher.getId(), first.eventId()).orElseThrow().getWorkbookPdf()).isEqualTo(shared);
+        assertThatThrownBy(() -> annotations.replay(guestCaller, oldClassId, oldDocument, 0))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThat(onlineClasses.materializeFromCalendar(caller, first.eventId()).id()).isEqualTo(replacement.id());
+    }
+
+    private record ThreePupils(StudentGroup group, List<User> pupils) {}
+
+    private ThreePupils groupOfThree() {
+        var pupils = List.of(student,
+                users.saveAndFlush(User.managedStudent("Pupil B", teacher)),
+                users.saveAndFlush(User.managedStudent("Pupil C", teacher)));
+        var group = groups.saveAndFlush(StudentGroup.create(teacher, "Three private assignments"));
+        for (User pupil : pupils) groupMembers.saveAndFlush(StudentGroupMember.create(group, pupil));
+        when(lessons.listGroupLessons(caller)).thenReturn(List.of(new GroupLessonResponse(
+                "event", "event", group.getId(), "Three private assignments", null, null,
+                pupils.stream().map(User::getId).toList(), "Math", Instant.now(),
+                Instant.now().plusSeconds(3600), null, null)));
+        return new ThreePupils(group, pupils);
+    }
+
+    private <T> List<T> concurrently(List<Callable<T>> actions) throws Exception {
+        var pool = Executors.newFixedThreadPool(actions.size());
+        var ready = new CountDownLatch(actions.size());
+        var start = new CountDownLatch(1);
+        try {
+            var futures = actions.stream().map(action -> pool.submit(() -> {
+                ready.countDown();
+                if (!start.await(20, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test start timed out");
+                return action.call();
+            })).toList();
+            assertThat(ready.await(20, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            var results = new ArrayList<T>();
+            for (var future : futures) results.add(future.get(30, TimeUnit.SECONDS));
+            return results;
+        } finally {
+            start.countDown();
+            pool.shutdownNow();
+        }
     }
 
     private UsernamePasswordAuthenticationToken account(UUID userId, Role role) {

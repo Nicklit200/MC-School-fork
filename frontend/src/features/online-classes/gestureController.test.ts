@@ -86,11 +86,14 @@ describe('continuous document navigation', () => {
     const { controller } = setup('finger', false, true, true);
     controller.down(1, 'touch', { x: 100, y: 100 });
     expect(types(controller.down(2, 'touch', { x: 300, y: 100 }))).toEqual(['stroke-cancel']);
-    expect(controller.move(2, { x: 500, y: 100 })).toEqual([
-      { type: 'document-gesture', gesture: { scale: 2, anchor: { x: 200, y: 100 }, pan: { x: 100, y: 0 } } },
+    expect(controller.move(1, { x: 0, y: 100 })).toEqual([
+      { type: 'document-gesture', gesture: { scale: 1, anchor: { x: 200, y: 100 }, pan: { x: 0, y: 0 } } },
     ]);
-    expect(controller.move(1, { x: 200, y: 100 })).toEqual([
-      { type: 'document-gesture', gesture: { scale: 0.75, anchor: { x: 300, y: 100 }, pan: { x: 50, y: 0 } } },
+    expect(controller.move(2, { x: 400, y: 100 })).toEqual([
+      { type: 'document-gesture', gesture: { scale: 2, anchor: { x: 200, y: 100 }, pan: { x: 0, y: 0 } } },
+    ]);
+    expect(controller.move(1, { x: 100, y: 100 })).toEqual([
+      { type: 'document-gesture', gesture: { scale: 0.75, anchor: { x: 200, y: 100 }, pan: { x: 50, y: 0 } } },
     ]);
     expect(types([...controller.up(2), ...controller.up(1)])).not.toContain('stroke-end');
   });
@@ -100,6 +103,29 @@ describe('continuous document navigation', () => {
     state.view = { zoom: 3, panX: -300, panY: -200 };
     controller.down(1, 'mouse', { x: 200, y: 200 }, false, true);
     expect(controller.move(1, { x: 180, y: 150 })).toEqual([{ type: 'scroll', dx: 20, dy: 50 }]);
+  });
+
+  it.each([1, 3])('scrolls sequential vertical two-finger pointer packets without zoom or ink at zoom %s', zoom => {
+    const { controller, state } = setup('finger', false, true, true);
+    state.view = { zoom, panX: 0, panY: 0 };
+    controller.down(1, 'touch', { x: 100, y: 200 });
+    expect(types(controller.down(2, 'touch', { x: 100, y: 400 }))).toEqual(['stroke-cancel']);
+    const intents = [...controller.move(1, { x: 100, y: 140 }), ...controller.move(2, { x: 100, y: 340 }),
+      ...controller.move(1, { x: 101.5, y: 220 }), ...controller.move(2, { x: 98.5, y: 420 })];
+    const gestures = intents.flatMap(intent => intent.type === 'document-gesture' ? [intent.gesture] : []);
+    expect(gestures.every(gesture => gesture.scale === 1)).toBe(true);
+    expect(gestures.reduce((total, gesture) => total + gesture.pan.y, 0)).toBe(20);
+    expect(types(intents)).not.toContain('view'); expect(types(intents)).not.toContain('stroke-move');
+    expect(types([...controller.up(2), ...controller.up(1)])).not.toContain('stroke-end');
+  });
+
+  it('keeps a swipe locked when an unrelated third contact appears and lifts', () => {
+    const { controller } = setup('finger', false, true, true);
+    controller.down(1, 'touch', { x: 100, y: 200 }); controller.down(2, 'touch', { x: 300, y: 200 });
+    controller.move(1, { x: 100, y: 140 }); controller.move(2, { x: 300, y: 140 });
+    controller.down(3, 'touch', { x: 500, y: 500 }); controller.up(3);
+    const intents = [...controller.move(1, { x: 0, y: 140 }), ...controller.move(2, { x: 400, y: 140 })];
+    expect(intents.every(intent => intent.type === 'document-gesture' && intent.gesture.scale === 1)).toBe(true);
   });
 
   it('blocks document pinch under follow lock and preserves pencil palm grace', () => {
@@ -174,6 +200,7 @@ describe('finger mode', () => {
     const second = controller.down(2, 'touch', { x: 500, y: 300 });
     expect(types(second)).toEqual(['stroke-cancel']);
 
+    controller.move(1, { x: 255, y: 300 });
     const moved = controller.move(2, { x: 600, y: 300 });
     expect(types(moved)).toEqual(['view']);
     expect((moved[0] as { view: PageView }).view.zoom).toBeGreaterThan(1);

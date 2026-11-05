@@ -6,9 +6,9 @@
  * iPad-like touch snapshots without a browser or physical tablet.
  */
 import type { TabletInkContact } from '../../lib/tabletInkInput';
-import { panBy, pinchView, type PageView, type Point } from './boardView';
-import { panWithScroll, pinchWithScroll } from './continuousBoardNavigation';
-import { documentPinch, type DocumentGesture } from './documentGesture';
+import { panBy, zoomAbout, type PageView, type Point } from './boardView';
+import { panWithScroll } from './continuousBoardNavigation';
+import { TwoFingerNavigation, type DocumentGesture } from './documentGesture';
 
 type BoardSize = { width: number; height: number };
 type Origin = { left: number; top: number };
@@ -39,15 +39,18 @@ function inBoard(contact: TabletInkContact, origin: Origin): Point {
 /**
  * Call with the entire set of fingers currently touching the drawing surface,
  * never with the stylus. One-finger panning can be disabled when a finger is
- * currently used to draw; two fingers ALWAYS pan and pinch together.
+ * currently used to draw. Two fingers navigate without drawing; a parallel
+ * swipe keeps the zoom fixed until those contacts lift.
  */
 export class TabletBoardNavigation {
   private anchor: Anchor | null = null;
   private continuousOrigin: Origin | null = null;
+  private readonly twoFinger = new TwoFingerNavigation();
 
   reset(): void {
     this.anchor = null;
     this.continuousOrigin = null;
+    this.twoFinger.reset();
   }
 
   update(
@@ -74,6 +77,7 @@ export class TabletBoardNavigation {
       const contact = contacts[0];
       const point = inBoard(contact, contactOrigin);
       if (!this.anchor || this.anchor.kind !== 'pan' || this.anchor.id !== contact.id) {
+        this.twoFinger.reset();
         this.anchor = { kind: 'pan', id: contact.id, initial: point, view: { ...view } };
         return null;
       }
@@ -104,25 +108,27 @@ export class TabletBoardNavigation {
         first: inBoard(a, contactOrigin), second: inBoard(b, contactOrigin),
         view: { ...view }, scrollAtFit: view.zoom <= 1,
       };
+      this.twoFinger.begin([this.anchor.first, this.anchor.second]);
       return null;
     }
 
     const anchor = this.anchor as PinchAnchor;
+    const first = inBoard(a, contactOrigin), second = inBoard(b, contactOrigin);
+    const gesture = this.twoFinger.update([first, second], true);
+    anchor.first = first; anchor.second = second;
     if (options.onDocumentGesture) {
-      const first = inBoard(a, contactOrigin), second = inBoard(b, contactOrigin);
-      const gesture = documentPinch([anchor.first, anchor.second], [first, second]);
-      anchor.first = first; anchor.second = second;
       options.onDocumentGesture({ ...gesture, anchor: { x: gesture.anchor.x + contactOrigin.left, y: gesture.anchor.y + contactOrigin.top } });
       return null;
     }
     if (options.onScrollGesture) {
-      const first = inBoard(a, contactOrigin), second = inBoard(b, contactOrigin);
-      const next = pinchWithScroll(anchor.view, [anchor.first, anchor.second], [first, second], board, anchor.scrollAtFit);
-      anchor.first = first; anchor.second = second; anchor.view = next.view;
+      const next = panWithScroll(zoomAbout(anchor.view, anchor.view.zoom * gesture.scale, gesture.anchor, board),
+        gesture.pan.x, gesture.pan.y, board, anchor.scrollAtFit);
+      anchor.view = next.view;
       if (next.scroll.x || next.scroll.y) options.onScrollGesture(next.scroll.x, next.scroll.y);
       return next.view;
     }
-    return pinchView(anchor.view, anchor.first, anchor.second,
-      inBoard(a, origin), inBoard(b, origin), board);
+    anchor.view = panBy(zoomAbout(anchor.view, anchor.view.zoom * gesture.scale, gesture.anchor, board),
+      gesture.pan.x, gesture.pan.y, board);
+    return anchor.view;
   }
 }

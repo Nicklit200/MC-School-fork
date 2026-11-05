@@ -1,7 +1,7 @@
 import { lessonPreparationApi, completedLessonApi, type PersonalWorkbooks } from '../../api/lessonPreparation';
 import { exportBoardPdf } from './boardExport';
 import { annotationPageCount } from './annotationPages';
-import { flushClassAnnotations } from './annotationSync';
+import { flushClassAnnotations, hasPendingClassAnnotations } from './annotationSync';
 import { NotebookCameraPanel } from '../notebook-camera/NotebookCameraPanel';
 import type { NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import { useLessonNotebookCameras } from '../notebook-camera/useLessonNotebookCameras';
@@ -397,7 +397,7 @@ function RoomBody({
   const archiveFlight = useRef<{ scope: string; promise: Promise<boolean> } | null>(null);
   const exitFlight = useRef<string | null>(null);
   const [exitPending, setExitPending] = useState(false);
-  const boardsFrozen = connection.host && Boolean(eventId) && (archiving || exitPending);
+  const boardsFrozen = exitPending || (connection.host && Boolean(eventId) && archiving);
   const archiveScope = JSON.stringify([classId, eventId, currentUserId, connection.host]);
   const currentArchiveScope = useRef(archiveScope);
   currentArchiveScope.current = archiveScope;
@@ -406,6 +406,35 @@ function RoomBody({
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+  const [inkRecoveryBusy, setInkRecoveryBusy] = useState(false);
+  const [inkRecoveryError, setInkRecoveryError] = useState(false);
+  const inkRecoveryFlight = useRef<{ scope: string; promise: Promise<void> } | null>(null);
+  const liveConnectionState = useRef(connectionState);
+  liveConnectionState.current = connectionState;
+  const recoverInk = useCallback(() => {
+    const isCurrent = () => mounted.current && currentArchiveScope.current === archiveScope
+      && liveConnectionState.current === ConnectionState.Connected;
+    if (!currentUserId || !isCurrent()) return Promise.resolve();
+    if (inkRecoveryFlight.current?.scope === archiveScope) return inkRecoveryFlight.current.promise;
+    setInkRecoveryBusy(true);
+    setInkRecoveryError(false);
+    const promise = flushClassAnnotations(classId, currentUserId, isCurrent)
+      .catch(() => { if (isCurrent()) setInkRecoveryError(true); })
+      .finally(() => {
+        if (inkRecoveryFlight.current?.scope === archiveScope) inkRecoveryFlight.current = null;
+        if (isCurrent()) setInkRecoveryBusy(false);
+      });
+    inkRecoveryFlight.current = { scope: archiveScope, promise };
+    return promise;
+  }, [archiveScope, classId, currentUserId]);
+  useEffect(() => {
+    setInkRecoveryBusy(false);
+    setInkRecoveryError(false);
+  }, [archiveScope]);
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected && currentUserId
+        && hasPendingClassAnnotations(classId, currentUserId)) void recoverInk();
+  }, [archiveScope, classId, connectionState, currentUserId, recoverInk]);
   useEffect(() => {
     setArchiving(false);
     setExitPending(false);
@@ -425,7 +454,8 @@ function RoomBody({
     const fail = () => { if (isCurrent()) setArchiveError(true); };
     let sharedArchiveDocument: PdfDoc | null = null;
     try {
-      await flushClassAnnotations(classId);
+      if (!currentUserId) throw new Error('Не удалось подтвердить пользователя доски.');
+      await flushClassAnnotations(classId, currentUserId, isCurrent);
       const documents = await onlineClassesApi.listAnnotationDocuments(classId);
       // Another tab or the connector may have assigned a sheet after entry.
       const latestWorkbooks = personalWorkbookData?.enabled ? await lessonPreparationApi.personalWorkbooks(eventId) : null;
@@ -516,7 +546,14 @@ function RoomBody({
     setExitPending(true);
     const scope = archiveScope;
     try {
-      const saved = !connection.host || !eventId || await archiveBoards();
+      let saved: boolean;
+      if (connection.host && eventId) saved = await archiveBoards();
+      else {
+        if (!currentUserId) throw new Error('Не удалось подтвердить пользователя доски.');
+        await flushClassAnnotations(classId, currentUserId,
+          () => mounted.current && currentArchiveScope.current === scope);
+        saved = true;
+      }
       if (!mounted.current || currentArchiveScope.current !== scope) return;
       if (saved) await action();
       else setArchiveNotice(current => `${current ?? 'Документы не сохранены.'} Выход отложен. Повторите сохранение или нажмите кнопку выхода ещё раз.`);
@@ -597,6 +634,13 @@ function RoomBody({
         </div>
         <div className="online-class-room__lesson-actions">
         {materialError && <span role="alert" style={{ color: '#dc2626' }}>{materialError}</span>}
+        {inkRecoveryError && <div role="alert" className="online-class-room__archive-notice online-class-room__archive-notice--error">
+          <span>{language === 'DE' ? 'Notizen konnten noch nicht gespeichert werden. Bitte erneut versuchen.'
+            : 'Записи на доске ещё не сохранены. Повторите сохранение.'}</span>
+          <button type="button" disabled={inkRecoveryBusy} onClick={() => void recoverInk()}>
+            {language === 'DE' ? 'Notizen erneut speichern' : 'Повторить сохранение записей'}
+          </button>
+        </div>}
         {archiveNotice && <div className="online-class-room__archive-notice">
           <span role={archiveError ? 'alert' : 'status'} style={{color:archiveError?'#dc2626':undefined}}>{archiveNotice}</span>
           {!archiving && !exitPending && <button type="button" onClick={() => setArchiveNotice(null)}
@@ -696,7 +740,7 @@ function RoomBody({
             hidden={!ownNotebook || activeBoard !== personalBoardId(currentUserId) || showScreen}>
             <Suspense fallback={null}>
               <WhiteboardPanel key={notebookScope} classId={classId} actorId={currentUserId} isHost={false}
-                targetType="NOTEBOOK_CAMERA" targetId={personalBoardId(currentUserId)} canAnnotate
+                targetType="NOTEBOOK_CAMERA" targetId={personalBoardId(currentUserId)} canAnnotate={!boardsFrozen}
                 active={Boolean(ownNotebook) && activeBoard === personalBoardId(currentUserId) && !showScreen}
                 liveBackground={ownNotebook ? { source: ownNotebook.source.rawVideo, width: ownNotebook.source.rawWidth, height: ownNotebook.source.rawHeight,
                   notebookView: { view: ownNotebook.source.view, rawWidth: ownNotebook.source.rawWidth, rawHeight: ownNotebook.source.rawHeight, renderer: ownNotebook.source.renderer } } : null} />

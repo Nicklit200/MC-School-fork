@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ANNOTATION_FLUSH_TIMEOUT_MS, confirmAnnotationWrite, flushClassAnnotations, trackAnnotationWrite } from './annotationSync';
+import { ANNOTATION_FLUSH_TIMEOUT_MS, confirmAnnotationWrite, flushClassAnnotations, hasPendingClassAnnotations, trackAnnotationWrite } from './annotationSync';
 
 function deferred() {
   let resolve!: () => void;
@@ -11,6 +11,50 @@ function deferred() {
 afterEach(() => vi.useRealTimers());
 
 describe('class annotation save barrier', () => {
+  it('waits for only the current actor while another pupil still has an in-flight write', async () => {
+    const alice = deferred(), bob = deferred();
+    const first = trackAnnotationWrite('actor-pending', 'a', () => alice.promise, { actorId: 'alice' });
+    const second = trackAnnotationWrite('actor-pending', 'b', () => bob.promise, { actorId: 'bob' });
+    const done = vi.fn();
+    const flushing = flushClassAnnotations('actor-pending', 'alice').then(done);
+    expect(hasPendingClassAnnotations('actor-pending', 'alice')).toBe(true);
+    alice.resolve(); await first; await flushing;
+    expect(done).toHaveBeenCalledOnce();
+    expect(hasPendingClassAnnotations('actor-pending', 'alice')).toBe(false);
+    expect(hasPendingClassAnnotations('actor-pending', 'bob')).toBe(true);
+    bob.resolve(); await second;
+  });
+
+  it('recovers failed pupil ADDs with stable closures without retrying another account', async () => {
+    const alice = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+    const bob = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+    await expect(trackAnnotationWrite('actor-failed', 'a', alice, { actorId: 'alice', scope: 'personal-a', operationType: 'ADD', retainOnFailure: true })).rejects.toThrow();
+    await expect(trackAnnotationWrite('actor-failed', 'b', bob, { actorId: 'bob', scope: 'personal-b', operationType: 'ADD', retainOnFailure: true })).rejects.toThrow();
+    await flushClassAnnotations('actor-failed', 'alice');
+    expect(alice).toHaveBeenCalledTimes(2); expect(bob).toHaveBeenCalledOnce();
+    expect(hasPendingClassAnnotations('actor-failed', 'alice')).toBe(false);
+    expect(hasPendingClassAnnotations('actor-failed', 'bob')).toBe(true);
+    await flushClassAnnotations('actor-failed', 'bob');
+    expect(bob).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops before retrying an old actor when the class or account changes during a pending request', async () => {
+    const pending = deferred();
+    let current = true;
+    const write = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(undefined);
+    const saving = trackAnnotationWrite('changed-actor', 'stroke', write, { actorId: 'alice', operationType: 'ADD', retainOnFailure: true });
+    const savingRejected = expect(saving).rejects.toThrow('offline');
+    const rejected = expect(flushClassAnnotations('changed-actor', 'alice', () => current)).rejects.toThrow('Контекст урока изменился');
+    current = false;
+    pending.reject(new Error('offline'));
+    await savingRejected; await rejected;
+    expect(write).toHaveBeenCalledOnce();
+    expect(hasPendingClassAnnotations('changed-actor', 'alice')).toBe(true);
+    current = true;
+    await flushClassAnnotations('changed-actor', 'alice', () => current);
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for all page writes without waiting for another classroom', async () => {
     const first = deferred(), second = deferred(), other = deferred();
     const saves = [trackAnnotationWrite('all-pages', 'one', () => first.promise),

@@ -104,14 +104,28 @@ describe('native iPad continuous document navigation', () => {
     expect(onScrollGesture.mock.calls).toEqual([[0, 30], [0, 20]]);
   });
 
-  it('uses two fingers to scroll in finger mode and preserves pinch zoom', () => {
+  it('locks two-finger scrolling in finger mode and starts pinch zoom with a fresh pair', () => {
     const gesture = new TabletBoardNavigation(), onScrollGesture = vi.fn();
     const options = { locked: false, allowOneFingerPan: false, onScrollGesture };
     gesture.update([finger(1, 300, 300), finger(2, 500, 300)], location, view, board, options);
     expect(gesture.update([finger(1, 300, 260), finger(2, 500, 260)], location, view, board, options)?.zoom).toBe(1);
     expect(onScrollGesture).toHaveBeenCalledExactlyOnceWith(0, 40);
     const zoomed = gesture.update([finger(1, 200, 260), finger(2, 600, 260)], location, view, board, options)!;
-    expect(zoomed.zoom).toBe(2);
+    expect(zoomed.zoom).toBe(1);
+    gesture.update([], location, view, board, options);
+    gesture.update([finger(3, 300, 300), finger(4, 500, 300)], location, view, board, options);
+    expect(gesture.update([finger(3, 200, 300), finger(4, 600, 300)], location, view, board, options)?.zoom).toBe(2);
+  });
+
+  it.each([1, 3])('scrolls native full snapshots at zoom %s with no scale drift despite jitter, reordered contacts or page movement', zoom => {
+    const gesture = new TabletBoardNavigation(), onDocumentGesture = vi.fn();
+    const options = { ...enabled, allowOneFingerPan: false, onDocumentGesture };
+    const currentView = { zoom, panX: -100, panY: -200 };
+    gesture.update([finger(1, 100, 200), finger(2, 300, 200)], location, currentView, board, options);
+    gesture.update([finger(2, 301.5, 140), finger(1, 98.5, 140)], location, currentView, board, options);
+    gesture.update([finger(1, 101.5, 220), finger(2, 298.5, 220)], { ...location, top: location.top - 60 }, currentView, board, options);
+    expect(onDocumentGesture.mock.calls.map(([value]) => value.scale)).toEqual([1, 1]);
+    expect(onDocumentGesture.mock.calls.map(([value]) => value.pan.y)).toEqual([-60, 80]);
   });
 
   it('blocks scrolling while locked and starts a fresh contact origin after release', () => {
