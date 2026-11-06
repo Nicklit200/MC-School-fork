@@ -17,29 +17,56 @@ delete subject.examTitle;
 
 // Model a relational store: unique owner/key, independent owner predicates,
 // transactional rollback, tuple ordering, filtering and bounded SELECT pages.
+// Bun binds a bare JS string to JSONB as a JSON string. The explicit json()
+// wrapper is required here too, so JSON.stringify can no longer mask the bug.
 // This intentionally does not emulate the application's merge/resume logic.
 class MemoryPostgres {
   records=[];
   nextRecordedOrder=1n;
   now=()=>current;
   calls=[];
+  json(value){return {__jsonParameter:true,value:structuredClone(value)};}
+  jsonValue(value){return structuredClone(value?.__jsonParameter===true?value.value:value);}
   async begin(action){
     const snapshot=structuredClone(this.records);
-    try{return await action(this);}catch(error){this.records=snapshot;throw error;}
+    const tx={unsafe:(query,params)=>this.execute(query,params,true),json:value=>this.json(value)};
+    try{
+      const result=await action(tx);
+      this.calls.push({query:'COMMIT',params:[],transaction:true});
+      await this.afterCommit?.();
+      return result;
+    }catch(error){this.records=snapshot;throw error;}
   }
   async unsafe(query,params=[]){
-    this.calls.push({query,params});
+    return this.execute(query,params,false);
+  }
+  async execute(query,params=[],transaction=false){
+    this.calls.push({query,params,transaction});
     if(/^CREATE (TABLE|INDEX) /.test(query))return [];
     if(query.startsWith('INSERT INTO personal_study_sessions(')){
       const [owner_hash,session_id,idempotency_key,request_fingerprint,semester_id,exam_id,material_id,session_date,occurred_at,payload]=params;
       if(this.records.some(row=>row.owner_hash===owner_hash&&row.idempotency_key===idempotency_key))return [];
       assert.equal(this.records.some(row=>row.owner_hash===owner_hash&&row.session_id===session_id),false,'session primary key');
-      this.records.push({owner_hash,session_id,idempotency_key,request_fingerprint,semester_id,exam_id,material_id,session_date,occurred_at,createdAt:this.now().toISOString(),recordedOrder:String(this.nextRecordedOrder++),payload:JSON.parse(payload)});
+      const row={owner_hash,session_id,idempotency_key,request_fingerprint,semester_id,exam_id,material_id,session_date,occurred_at,createdAt:this.now().toISOString(),recordedOrder:String(this.nextRecordedOrder++),payload:this.jsonValue(payload)};
+      this.beforeInsert?.(row);
+      this.records.push(row);
       return [{session_id}];
     }
-    if(query.startsWith('SELECT payload,created_at AS "createdAt"')){
+    if(query.startsWith('UPDATE personal_study_sessions SET payload=')){
+      const payload=query.match(/SET payload=\$(\d+)/);
+      assert.ok(payload,'Repair supplies a bound JSON value');
       let selected=this.records.slice();
-      for(const match of query.matchAll(/\b(owner_hash|idempotency_key|semester_id|exam_id|material_id|session_date)=\$(\d+)/g)){
+      for(const match of query.matchAll(/\b(owner_hash|session_id|request_fingerprint)=\$(\d+)/g))
+        selected=selected.filter(row=>row[match[1]]===params[Number(match[2])-1]);
+      assert.match(query,/owner_hash=\$\d+/,'Repair must be owner-scoped');
+      assert.match(query,/session_id=\$\d+/,'Repair must target the original session');
+      if(query.includes("jsonb_typeof(payload)='string'"))selected=selected.filter(row=>typeof row.payload==='string');
+      for(const row of selected)row.payload=this.jsonValue(params[Number(payload[1])-1]);
+      return selected.map(row=>({session_id:row.session_id,sessionId:row.session_id}));
+    }
+    if(/^SELECT\s/.test(query)&&query.includes('FROM personal_study_sessions')){
+      let selected=this.records.slice();
+      for(const match of query.matchAll(/\b(owner_hash|session_id|idempotency_key|semester_id|exam_id|material_id|session_date)=\$(\d+)/g)){
         selected=selected.filter(row=>row[match[1]]===params[Number(match[2])-1]);
       }
       const tuple=query.match(/\(occurred_at,created_at,recorded_order,session_id\)<\(\$(\d+)::timestamptz,\$(\d+)::timestamptz,\$(\d+)::bigint,\$(\d+)\)/);
@@ -51,7 +78,8 @@ class MemoryPostgres {
       if(query.includes('ORDER BY'))selected.sort((a,b)=>compare(b,a));
       const limit=query.match(/LIMIT \$(\d+)/);
       if(limit)selected=selected.slice(0,params[Number(limit[1])-1]);
-      return structuredClone(selected.map(row=>({payload:row.payload,createdAt:row.createdAt,recordedOrder:row.recordedOrder,request_fingerprint:row.request_fingerprint})));
+      return structuredClone(selected.map(row=>({payload:row.payload,createdAt:row.createdAt,recordedOrder:row.recordedOrder,request_fingerprint:row.request_fingerprint,
+        sessionId:row.session_id,semesterId:row.semester_id,examId:row.exam_id,materialId:row.material_id,sessionDate:row.session_date,occurredAt:row.occurred_at})));
     }
     throw Error('Unsupported test SQL: '+query);
   }
@@ -243,4 +271,68 @@ test('a general knowledge update does not invent another presentation next to on
   assert.equal(result.needsMaterialSelection,false);
   assert.equal(result.materials.length,1);
   assert.equal(result.nextSlide,61);
+});
+
+test('Bun JSON binding keeps a bare string scalar and the store writes an explicit JSON object',async()=>{
+  const {sql,store}=fixture();
+  const encoded=JSON.stringify({id:'example'});
+  assert.equal(sql.jsonValue(encoded),encoded,'A driver-bound JSON string is not JSON.parse input');
+  assert.deepEqual(sql.jsonValue(sql.json({id:'example'})),{id:'example'});
+  const saved=await store.save('owner-a',input('object-binding',{materialId:'1Pipeline.pdf',lastCompletedSlide:90,nextSlide:91}));
+  assert.equal(typeof sql.records[0].payload,'object');
+  assert.equal(sql.records[0].payload.id,saved.session.id);
+  assert.equal(saved.saved,true);
+  assert.equal((await store.history('owner-a',{...subject,materialId:'1Pipeline.pdf'})).sessions[0].id,saved.session.id);
+});
+
+test('a previously encoded JSON string is repaired in place without another session or owner/history changes',async()=>{
+  const data={...catalog,sessions:[{...subject,id:'old-79',date:'2026-10-25',checkpoint:{document:'1Pipeline.pdf',lastExplainedPage:79,nextPage:80,totalPages:107}}]};
+  const originalCatalog=structuredClone(data);
+  const {sql,store}=fixture(data);
+  const request=input('already-saved',{materialId:'1Pipeline.pdf',lastCompletedSlide:90,nextSlide:91,totalSlides:107,title:'Already saved lecture',summary:'Confirmed checkpoint',topics:['Projektionen']});
+  const saved=await store.save('owner-a',request);
+  await store.save('owner-b',input('other-owner',{materialId:'1Pipeline.pdf',lastCompletedSlide:12}));
+  const row=sql.records.find(row=>row.owner_hash==='owner-a'),other=sql.records.find(row=>row.owner_hash==='owner-b');
+  const originalPayload=structuredClone(row.payload);
+  row.payload=JSON.stringify(row.payload);
+  other.payload=JSON.stringify(other.payload);
+  const otherBefore=structuredClone(other);
+  const inserts=sql.calls.filter(call=>call.query.startsWith('INSERT INTO personal_study_sessions')).length;
+  const page=await store.history('owner-a',{...subject,date:'2026-11-06',materialId:'1Pipeline.pdf'});
+  assert.equal(page.sessions.length,1);
+  assert.equal(page.sessions[0].id,saved.session.id);
+  assert.equal(page.sessions[0].lastCompletedSlide,90);
+  assert.equal(page.sessions[0].nextSlide,91);
+  assert.deepEqual(row.payload,originalPayload,'Only representation changes; the original session content and ID remain');
+  assert.deepEqual(other,otherBefore,'Repair never touches another owner');
+  assert.equal(sql.records.length,2);
+  assert.equal(sql.calls.filter(call=>call.query.startsWith('INSERT INTO personal_study_sessions')).length,inserts);
+  const resumed=await store.resume('owner-a',{...subject,materialId:'1Pipeline.pdf'});
+  assert.equal(resumed.positionSession.id,saved.session.id);
+  assert.equal(resumed.lastCompletedSlide,90);
+  assert.equal(resumed.nextSlide,91);
+  const retried=await store.save('owner-a',request);
+  assert.equal(retried.saved,true);
+  assert.equal(retried.created,false);
+  assert.equal(retried.session.id,saved.session.id);
+  assert.deepEqual(data,originalCatalog);
+  assert.equal(sql.calls.some(({query})=>/\b(?:INSERT INTO|UPDATE) (?:study_progress|personal_quiz_)/.test(query)),false);
+});
+
+test('malformed or mismatched stored payloads never produce a successful save acknowledgement',async()=>{
+  for(const corrupt of [row=>{row.payload='not JSON';},row=>{row.payload={...row.payload,id:'wrong-id'};}]){
+    const {sql,store}=fixture();
+    sql.beforeInsert=corrupt;
+    await assert.rejects(()=>store.save('owner-a',input('corrupted-write',{lastCompletedSlide:90})),/session|payload|verif|stored/i);
+  }
+});
+
+test('saved true requires a committed row that can be read back outside the write transaction',async()=>{
+  const {sql,store}=fixture();
+  sql.afterCommit=()=>{sql.records=[];};
+  await assert.rejects(()=>store.save('owner-a',input('commit-not-visible',{lastCompletedSlide:90})),/session|payload|verif|stored/i);
+  const committed=sql.calls.findIndex(call=>call.query==='COMMIT');
+  assert.ok(committed>=0,'The transaction completed before verification');
+  assert.ok(sql.calls.slice(committed+1).some(call=>!call.transaction&&/^SELECT\s/.test(call.query)&&call.query.includes('FROM personal_study_sessions')),
+    'Save must independently read committed storage');
 });

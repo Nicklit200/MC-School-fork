@@ -93,7 +93,7 @@ assert.match(unavailable.error,/same idempotencyKey/);
 assert.doesNotMatch(unavailable.error,/postgres|secret/,'database details must not leak');
 store.save=originalSave;
 
-studyProgressTools.read=async()=>({count:1,progress:[{skillId:'skill-1',mastery:20}],connectorVersion:'1.3.0'});
+studyProgressTools.read=async()=>({count:1,progress:[{skillId:'skill-1',mastery:20}],connectorVersion:'1.3.1'});
 const progress=await runPersonalTool('get_study_progress',{},read);
 assert.equal(progress.data.progress[0].mastery,20);
 assert.equal(progress.data.subjectProgress.subjects[0].nextSlide,61);
@@ -105,12 +105,12 @@ assert.equal((await runPersonalTool('update_study_progress',patch,write)).data.s
 assert.deepEqual(forwardedPatch,[patch,'owner-primary'],'existing mastery updates remain independent');
 
 const health=app.routes.get('GET /health')({json:value=>value});
-assert.equal(health.version,'1.3.0');
+assert.equal(health.version,'1.3.1');
 const rpc=(method,name,args={})=>({req:{method:'POST',header:()=> 'Bearer '+'a'.repeat(64),
   json:async()=>({jsonrpc:'2.0',id:7,method,params:{name,arguments:args}})},
   json:(value,status=200)=>({value,status}),body:(value,status)=>({value,status})});
 const initialize=await app.routes.get('ALL /mcp')(rpc('initialize'));
-assert.equal(initialize.value.result.serverInfo.version,'1.3.0');
+assert.equal(initialize.value.result.serverInfo.version,'1.3.1');
 const listed=await app.routes.get('ALL /mcp')(rpc('tools/list'));
 assert.ok(listed.value.result.tools.some(t=>t.name==='get_study_resume'));
 const called=await app.routes.get('ALL /mcp')(rpc('tools/call','get_study_resume',{semesterId:'ws',examId:'cg'}));
