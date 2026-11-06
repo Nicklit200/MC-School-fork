@@ -143,7 +143,38 @@ function sessionFilter(args = {}) {
   out.limit = args.limit ?? 50; out.cursor = sessionReadCursor(args.cursor);
   return out;
 }
-function sessionRow(row) { return {...row.payload, createdAt:sessionIso(row.createdAt), recordedOrder:String(row.recordedOrder || '0')}; }
+function sessionPayload(row, allowEncodedString = false) {
+  let payload = row.payload;
+  if (typeof payload === 'string' && allowEncodedString) {
+    try { payload = JSON.parse(payload); } catch { /* Reject below. */ }
+  }
+  const invalid = () => sessionFail('Stored study session is malformed; persistence was not confirmed',503);
+  if (!sessionObject(payload) || payload.type !== 'study_session' ||
+      typeof payload.id !== 'string' || !payload.id || !sessionDate(payload.date) ||
+      typeof payload.semesterId !== 'string' || !payload.semesterId ||
+      typeof payload.examId !== 'string' || !payload.examId ||
+      typeof payload.materialId !== 'string' || !payload.materialId ||
+      typeof payload.title !== 'string' || typeof payload.summary !== 'string' ||
+      !Array.isArray(payload.topics) || !payload.topics.every(topic => typeof topic === 'string') ||
+      !Number.isFinite(Date.parse(payload.occurredAt)) ||
+      (payload.lastCompletedSlide !== null && (!Number.isInteger(payload.lastCompletedSlide) || payload.lastCompletedSlide < 0)) ||
+      (payload.nextSlide !== null && (!Number.isInteger(payload.nextSlide) || payload.nextSlide < 1)) ||
+      (payload.totalSlides !== null && (!Number.isInteger(payload.totalSlides) || payload.totalSlides < 1))) invalid();
+  for (const [field,column] of [['id','sessionId'],['semesterId','semesterId'],['examId','examId'],['materialId','materialId'],['date','sessionDate']]) {
+    if (payload[field] !== row[column]) invalid();
+  }
+  if (sessionIso(row.occurredAt) !== payload.occurredAt || !Number.isFinite(Date.parse(sessionIso(row.createdAt))) ||
+      !/^[1-9]\d*$/.test(String(row.recordedOrder))) invalid();
+  if (payload.lastCompletedSlide === null) {
+    if (payload.nextSlide !== null) invalid();
+  } else {
+    if (payload.totalSlides !== null && payload.lastCompletedSlide > payload.totalSlides) invalid();
+    const next = payload.lastCompletedSlide === payload.totalSlides ? null : payload.lastCompletedSlide + 1;
+    if (payload.nextSlide !== next) invalid();
+  }
+  return payload;
+}
+function sessionRow(row) { return {...sessionPayload(row),createdAt:sessionIso(row.createdAt),recordedOrder:String(row.recordedOrder)}; }
 function sessionMerge(catalog, stored) {
   const rows = new Map(legacyStudySessions(catalog).map(row => [row.id,row]));
   for (const row of stored) rows.set(row.id, row);
@@ -161,6 +192,7 @@ export async function loadStudySessionCatalog(site) {
 }
 export function createStudySessionStore({sql, loadCatalog, now = () => new Date()}) {
   let pendingSchema;
+  const columns = 'payload,created_at AS "createdAt",recorded_order::text AS "recordedOrder",request_fingerprint,session_id AS "sessionId",semester_id AS "semesterId",exam_id AS "examId",material_id AS "materialId",session_date::text AS "sessionDate",occurred_at AS "occurredAt"';
   async function schema() {
     if (!pendingSchema) pendingSchema = (async () => {
       await sql.unsafe(`CREATE TABLE IF NOT EXISTS personal_study_sessions (
@@ -174,6 +206,24 @@ export function createStudySessionStore({sql, loadCatalog, now = () => new Date(
     return pendingSchema;
   }
   function ownerRequired(owner) { if (typeof owner !== 'string' || !owner) sessionFail('Unauthorized', 401); }
+  async function committed(owner, sessionId) {
+    const rows = await sql.unsafe('SELECT ' + columns + ' FROM personal_study_sessions WHERE owner_hash=$1 AND session_id=$2',[owner,sessionId]);
+    if (rows.length !== 1) sessionFail('Study session could not be read after commit; persistence was not confirmed',503);
+    sessionPayload(rows[0]);
+    return rows[0];
+  }
+  async function recoverEncodedRow(owner, row) {
+    if (typeof row.payload !== 'string') { sessionPayload(row); return row; }
+    const payload = sessionPayload(row,true);
+    // Repair only the storage encoding of the existing owner-scoped row.
+    // Its ID, dates, checkpoint, topics, ordering and idempotency key stay intact.
+    await sql.begin(async tx => {
+      await tx.unsafe('UPDATE personal_study_sessions SET payload=$3::jsonb WHERE owner_hash=$1 AND session_id=$2 AND request_fingerprint=$4 AND jsonb_typeof(payload)=\'string\'',[owner,row.sessionId,tx.json(payload),row.request_fingerprint]);
+      const rows = await tx.unsafe('SELECT ' + columns + ' FROM personal_study_sessions WHERE owner_hash=$1 AND session_id=$2',[owner,row.sessionId]);
+      if (rows.length !== 1 || await sessionFingerprint(sessionPayload(rows[0])) !== await sessionFingerprint(payload)) sessionFail('Study session encoding repair could not be verified',503);
+    });
+    return committed(owner,row.sessionId);
+  }
   async function stored(owner, args = {}, cursor = null, limit = null) {
     await schema();
     const params = [owner]; let where = 'owner_hash=$1';
@@ -184,9 +234,11 @@ export function createStudySessionStore({sql, loadCatalog, now = () => new Date(
       const offset = params.length; params.push(cursor.occurredAt,cursor.createdAt,cursor.recordedOrder,cursor.id);
       where += ` AND (occurred_at,created_at,recorded_order,session_id)<($${offset+1}::timestamptz,$${offset+2}::timestamptz,$${offset+3}::bigint,$${offset+4})`;
     }
-    let query = 'SELECT payload,created_at AS "createdAt",recorded_order::text AS "recordedOrder" FROM personal_study_sessions WHERE ' + where + ' ORDER BY occurred_at DESC,created_at DESC,recorded_order DESC,session_id DESC';
+    let query = 'SELECT ' + columns + ' FROM personal_study_sessions WHERE ' + where + ' ORDER BY occurred_at DESC,created_at DESC,recorded_order DESC,session_id DESC';
     if (limit !== null) {params.push(limit);query += ' LIMIT $' + params.length;}
-    return (await sql.unsafe(query, params)).map(sessionRow);
+    const rows = await sql.unsafe(query,params), sessions = [];
+    for (const row of rows) sessions.push(sessionRow(await recoverEncodedRow(owner,row)));
+    return sessions;
   }
   async function history(owner, input = {}) {
     ownerRequired(owner); const args = sessionFilter(input); const catalog = await loadCatalog();
@@ -212,11 +264,12 @@ export function createStudySessionStore({sql, loadCatalog, now = () => new Date(
     await schema();
     const fingerprint = await sessionFingerprint(args);
     // Check retry before resolving material IDs, which may change as other sessions arrive.
-    const existing = await sql.unsafe('SELECT payload,created_at AS "createdAt",recorded_order::text AS "recordedOrder",request_fingerprint FROM personal_study_sessions WHERE owner_hash=$1 AND idempotency_key=$2',[owner,args.idempotencyKey]);
+    const existing = await sql.unsafe('SELECT ' + columns + ' FROM personal_study_sessions WHERE owner_hash=$1 AND idempotency_key=$2',[owner,args.idempotencyKey]);
     if (existing.length) {
       if (existing[0].request_fingerprint !== fingerprint) sessionFail('Idempotency key already used with different session data', 409);
-      const session = sessionRow(existing[0]);
-      return {saved:true,created:false,session,resume:await resume(owner,{...subject,materialId:session.materialId})};
+      const repaired = await recoverEncodedRow(owner,existing[0]);
+      const session = sessionRow(await committed(owner,repaired.sessionId));
+      return {saved:true,created:false,verified:{committed:true,readBack:true,sessionId:session.id},session,resume:await resume(owner,{...subject,materialId:session.materialId})};
     }
     const prior = sessionMerge(catalog,await stored(owner,{semesterId:subject.semesterId,examId:subject.examId}));
     const materials = studySessionResume(subject,prior).materials;
@@ -235,13 +288,18 @@ export function createStudySessionStore({sql, loadCatalog, now = () => new Date(
       title:args.title || subject.examTitle + ' — учебная сессия',summary:args.summary || '',topics:args.topics,
       lastCompletedSlide:last,nextSlide:next,totalSlides:total,slideFrom:args.slideFrom ?? null,changes:[]};
     const saved = await sql.begin(async tx => {
-      const created = await tx.unsafe('INSERT INTO personal_study_sessions(owner_hash,session_id,idempotency_key,request_fingerprint,semester_id,exam_id,material_id,session_date,occurred_at,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8::date,$9::timestamptz,$10::jsonb) ON CONFLICT(owner_hash,idempotency_key) DO NOTHING RETURNING session_id',[owner,session.id,args.idempotencyKey,fingerprint,args.semesterId,args.examId,materialId,args.date,session.occurredAt,JSON.stringify(session)]);
-      const rows = await tx.unsafe('SELECT payload,created_at AS "createdAt",recorded_order::text AS "recordedOrder",request_fingerprint FROM personal_study_sessions WHERE owner_hash=$1 AND idempotency_key=$2',[owner,args.idempotencyKey]);
+      const created = await tx.unsafe('INSERT INTO personal_study_sessions(owner_hash,session_id,idempotency_key,request_fingerprint,semester_id,exam_id,material_id,session_date,occurred_at,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8::date,$9::timestamptz,$10::jsonb) ON CONFLICT(owner_hash,idempotency_key) DO NOTHING RETURNING session_id',[owner,session.id,args.idempotencyKey,fingerprint,args.semesterId,args.examId,materialId,args.date,session.occurredAt,tx.json(session)]);
+      const rows = await tx.unsafe('SELECT ' + columns + ' FROM personal_study_sessions WHERE owner_hash=$1 AND idempotency_key=$2',[owner,args.idempotencyKey]);
       if (rows.length !== 1) throw new Error('Study session write could not be verified');
       if (rows[0].request_fingerprint !== fingerprint) sessionFail('Idempotency key already used with different session data', 409);
-      return {session:sessionRow(rows[0]),created:created.length === 1};
+      const persisted = sessionPayload(rows[0]);
+      if (created.length && await sessionFingerprint(persisted) !== await sessionFingerprint(session)) sessionFail('Study session contents could not be verified',503);
+      return {session:sessionRow(rows[0]),created:created.length === 1,contentFingerprint:await sessionFingerprint(persisted)};
     });
-    return {saved:true,...saved,resume:await resume(owner,{...subject,materialId:saved.session.materialId})};
+    const confirmed = await committed(owner,saved.session.id);
+    if (confirmed.request_fingerprint !== fingerprint || await sessionFingerprint(sessionPayload(confirmed)) !== saved.contentFingerprint) sessionFail('Study session contents changed after commit; persistence was not confirmed',503);
+    const verifiedSession = sessionRow(confirmed);
+    return {saved:true,created:saved.created,verified:{committed:true,readBack:true,sessionId:verifiedSession.id},session:verifiedSession,resume:await resume(owner,{...subject,materialId:verifiedSession.materialId})};
   }
   return {save,history,resume,listResume};
 }

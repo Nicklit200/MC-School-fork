@@ -1,0 +1,43 @@
+name: Study sessions PostgreSQL integration
+on:
+  push:
+    branches: [personal-study-map]
+    paths:
+      - 'personal-study-services/**'
+      - '.github/workflows/study-sessions-postgres.yml'
+  pull_request:
+    paths:
+      - 'personal-study-services/**'
+      - '.github/workflows/study-sessions-postgres.yml'
+permissions:
+  contents: read
+concurrency:
+  group: study-sessions-postgres-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: study_sessions_test
+          POSTGRES_USER: study_test
+          POSTGRES_PASSWORD: isolated_integration_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U study_test -d study_sessions_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - name: Real prepared-parameter persistence and compatibility regression
+        env:
+          STUDY_TEST_DATABASE_URL: postgres://study_test:isolated_integration_password@127.0.0.1:5432/study_sessions_test
+        run: bun run personal-study-services/tests/bun-postgres.integration.mjs

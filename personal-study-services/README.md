@@ -16,3 +16,11 @@ The store is append-only and owner-scoped in PostgreSQL. Reads merge existing ca
 HTTP endpoints share the same store: `GET /api/study-sessions`, `GET /api/study-resume`, `POST /api/study-sessions`. They require a valid current account session belonging to the existing primary owner, exactly as quiz v2 does. MCP access continues to require the existing owner lock and OAuth personal read/write scopes.
 
 Run `node --test personal-study-services/tests/*.test.mjs personal-study-map/tests/*.test.mjs` from the repository root. Test fixtures never write personal study data.
+
+## JSONB persistence verification
+
+Study-session writes use Bun's explicit `tx.json(session)` binding. Binding an already stringified session to a PostgreSQL JSONB parameter stores a JSON string, which is not the session object expected by readers. Reads validate the payload against its relational subject/material/date/session columns. Valid older string-encoded session rows are repaired in place for the authenticated owner; IDs, dates, topics, checkpoints, ordering and idempotency keys are preserved.
+
+`saved: true` is returned only after the transaction completes and a separate database read confirms the committed row, JSON object shape, identity and content. Malformed rows or failed readback produce errors. This code never writes skill mastery or old catalog history.
+
+The `Study session PostgreSQL persistence` workflow runs `bun personal-study-services/tests/bun-postgres.integration.mjs` against Bun 1.4.4 and an isolated PostgreSQL 16 database named `study_sessions_test`. It exercises actual driver binding, fresh-client readback, scalar recovery, duplicate retries and rollback on malformed writes. Do not point this integration test at a personal or production database.
