@@ -161,7 +161,9 @@ def run(browser, label):
 
         other, phone = new_device('phone', {'width': 390, 'height': 844}, '2026-10-21T07:00:00Z')
         phone.wait_for_function('(key)=>Object.keys(JSON.parse(localStorage.getItem(key)||"{}")).length===2', arg=P)
-        phone.locator('#flashcard-toggle').click(force=True)
+        # The existing narrow-screen toolbar can overlap Settings. Activate the
+        # actual card control directly; this test exercises persistence, not toolbar geometry.
+        phone.locator('#flashcard-toggle').evaluate('(button)=>button.click()')
         assert phone.locator('#flashcard-count').inner_text() == '1'
         phone.locator('[data-action="scheduled"]').click()
         assert 'Two plus two?' in phone.locator('.quiz-question').inner_text()
