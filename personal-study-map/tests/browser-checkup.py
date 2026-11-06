@@ -39,7 +39,7 @@ def plus_days(day, count):
 
 def run(browser, label):
     cloud = {'snapshot': {'progress': {}, 'invalid': {}, 'deleted': {}, 'overrides': {}, 'custom': []}, 'sessions': []}
-    calls = {'writes': 0, 'reads': 0, 'legacy': 0, 'fail': False, 'bad_ack': False}
+    calls = {'writes': 0, 'reads': 0, 'legacy': 0, 'fail': False, 'bad_ack': False, 'fault_window': False}
     accepted_events = set()
     device_days = {'desktop': '2026-10-20', 'phone': '2026-10-21'}
     errors = []
@@ -126,7 +126,17 @@ def run(browser, label):
         context.route('https://personal-life-api-production.up.railway.app/**', handler(device))
         context.route('**/data/study.json*', lambda route: route.fulfill(content_type='application/json', body=json.dumps(FIXTURE)))
         page = context.new_page()
-        page.on('pageerror', lambda error: errors.append(device + ': ' + str(error)))
+        def record_error(error):
+            message = str(error)
+            # WebKit reports the deliberately interrupted navigation request as
+            # a page error. Only this exact injected fault is expected; all
+            # other JavaScript errors, including later CORS errors, still fail.
+            if (device == 'phone' and calls['fault_window'] and
+                    '/api/quiz-v2/answer' in message and 'access control checks' in message):
+                print('EXPECTED injected offline navigation interruption: ' + message, flush=True)
+            else:
+                errors.append(device + ': ' + message)
+        page.on('pageerror', record_error)
         page.clock.set_fixed_time(moment)
         page.goto(url)
         page.wait_for_function('window.studyBoardCards?.allExams?.().length>0 && window.CardQuizEngine')
@@ -167,6 +177,7 @@ def run(browser, label):
         assert phone.locator('#flashcard-count').inner_text() == '1'
         phone.locator('[data-action="scheduled"]').click()
         assert 'Two plus two?' in phone.locator('.quiz-question').inner_text()
+        calls['fault_window'] = True
         calls['fail'] = True
         phone.locator('[data-action="quick-known"]').click()
         phone.wait_for_function('(key)=>JSON.parse(localStorage.getItem(key)||"[]").length===1', arg=OUTBOX)
@@ -181,6 +192,7 @@ def run(browser, label):
         page.evaluate("window.dispatchEvent(new Event('online'))")
         page.wait_for_function('(key)=>JSON.parse(localStorage.getItem(key))["qa-two"].dueDate==="2026-10-23"', arg=P)
         assert page.locator('#overall-readiness').inner_text() == '100%'
+        calls['fault_window'] = False
         print('PASS ' + label + ' second device/server queue, offline reload, reconnect and stale-tab recovery', flush=True)
 
         page.locator('[data-action="home"]').first.click()
