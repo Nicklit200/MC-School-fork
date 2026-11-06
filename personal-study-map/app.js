@@ -25,6 +25,7 @@ const state = {
   drag: null,
   lectureTasks: [],
   quizTodayBySkill: new Map(),
+  studySessions: new Map(),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -100,6 +101,118 @@ async function api(path, options = {}) {
   });
   if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
   return response.status === 204 ? null : response.json();
+}
+
+// Protected history is kept in memory and is discarded whenever the account changes.
+const STUDY_SESSION_ACCOUNT_KEY = "personal-study-map:account-session:v2";
+const studySessionFeeds = new Map();
+let studySessionAccount = "", studySessionGeneration = 0;
+
+function readStudySessionAccount() {
+  const token = localStorage.getItem(STUDY_SESSION_ACCOUNT_KEY) || "";
+  return /^[a-f0-9]{64}$/.test(token) ? token : "";
+}
+
+function syncStudySessionAccount() {
+  const token = readStudySessionAccount();
+  if (token === studySessionAccount) return false;
+  studySessionAccount = token;
+  studySessionGeneration++;
+  for (const feed of studySessionFeeds.values()) feed.controller?.abort();
+  studySessionFeeds.clear();
+  state.studySessions.clear();
+  return true;
+}
+
+function studySessionFeedKey() {
+  return JSON.stringify([state.semesterId, state.examId]);
+}
+
+function learningSessionsForMap() {
+  syncStudySessionAccount();
+  const rows = new Map();
+  for (const session of state.data?.sessions || []) rows.set(session.id, session);
+  // Server records use the same IDs as imported legacy history.
+  for (const [id, session] of state.studySessions) rows.set(id, session);
+  return [...rows.values()];
+}
+
+function compareLearningSessions(a, b) {
+  const timestamp = value => Number.isFinite(Date.parse(value)) ? Date.parse(value) : 0;
+  const order = value => /^\d+$/.test(String(value ?? ""))
+    ? String(value).replace(/^0+(?=\d)/, "") : "0";
+  const aOrder = order(a.recordedOrder), bOrder = order(b.recordedOrder);
+  return timestamp(b.occurredAt || b.date) - timestamp(a.occurredAt || a.date)
+    || timestamp(b.createdAt) - timestamp(a.createdAt)
+    || bOrder.length - aOrder.length || bOrder.localeCompare(aOrder)
+    || String(b.id || "").localeCompare(String(a.id || ""));
+}
+
+async function loadStudySessions({more = false} = {}) {
+  syncStudySessionAccount();
+  if (!studySessionAccount || !state.data) return;
+  const key = studySessionFeedKey(), token = studySessionAccount;
+  let feed = studySessionFeeds.get(key);
+  if (!feed) {
+    feed = {loading:false, loaded:false, error:"", nextCursor:null, controller:null};
+    studySessionFeeds.set(key, feed);
+  }
+  if (feed.loading || (more && !feed.nextCursor)) return;
+  const generation = studySessionGeneration;
+  const controller = new AbortController();
+  feed.controller = controller;
+  feed.loading = true;
+  feed.error = "";
+  feed.retryMore = more;
+  renderHistory();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const params = new URLSearchParams({limit:"100"});
+    if (state.semesterId) params.set("semesterId", state.semesterId);
+    if (state.examId) params.set("examId", state.examId);
+    if (more) params.set("cursor", feed.nextCursor);
+    const response = await fetch(API_BASE + "/api/study-sessions?" + params, {
+      cache:"no-store", signal:controller.signal,
+      headers:{Authorization:"Bearer " + token}
+    });
+    if (!response.ok) {
+      const error = new Error("Study history HTTP " + response.status);
+      error.status = response.status;
+      throw error;
+    }
+    const result = await response.json();
+    if (!Array.isArray(result.sessions) ||
+        (result.nextCursor != null && typeof result.nextCursor !== "string") ||
+        result.sessions.some(row => !row || typeof row.id !== "string" || !row.id))
+      throw new Error("Invalid study history response");
+    if (generation !== studySessionGeneration || readStudySessionAccount() !== token ||
+        studySessionFeeds.get(key) !== feed) return;
+    for (const session of result.sessions) state.studySessions.set(session.id, session);
+    feed.nextCursor = result.nextCursor || null;
+    feed.loaded = true;
+    feed.lastFetchedAt = Date.now();
+  } catch (error) {
+    if (generation !== studySessionGeneration || readStudySessionAccount() !== token ||
+        studySessionFeeds.get(key) !== feed) return;
+    feed.error = error.status === 401
+      ? "Войди повторно в аккаунт в разделе карточек, чтобы загрузить историю занятий."
+      : "Не удалось обновить историю занятий. Уже загруженные записи остаются доступны.";
+  } finally {
+    clearTimeout(timeout);
+    if (generation === studySessionGeneration && readStudySessionAccount() === token &&
+        studySessionFeeds.get(key) === feed) {
+      feed.loading = false;
+      feed.controller = null;
+      renderHistory();
+      renderCalendar("study");
+    }
+  }
+}
+
+function ensureStudySessionFeed() {
+  syncStudySessionAccount();
+  if (studySessionAccount && !studySessionFeeds.has(studySessionFeedKey()))
+    void loadStudySessions();
 }
 
 async function loadLectureTasks() {
@@ -339,7 +452,7 @@ window.studyBoardCards = {
     semesterId:state.semesterId
   }),
   allExams: () => (state.data?.semesters||[]).flatMap(sem=>sem.exams||[]),
-  learningSessions: () => state.data?.sessions || [],
+  learningSessions: learningSessionsForMap,
   rate:saveStudyCardRating
 };
 
@@ -409,7 +522,7 @@ function shiftCalendarMonth(section, delta) {
 
 function studyActivityDates() {
   const dates = new Set();
-  for (const session of state.data?.sessions || []) {
+  for (const session of learningSessionsForMap()) {
     if (session?.date) dates.add(String(session.date).slice(0, 10));
   }
   for (const task of state.lectureTasks || []) {
@@ -521,8 +634,9 @@ function studyCalendarEvents() {
     if (!events.has(key)) events.set(key, []);
     events.get(key).push({type, title, detail});
   };
-  for (const session of state.data?.sessions || [])
-    add(session.date, "study", session.title || "Учебное занятие", session.summary || "");
+  for (const session of learningSessionsForMap())
+    add(session.date, "study", session.title || "Учебное занятие",
+      [session.summary, ...studySessionPosition(session)].filter(Boolean).join(" · "));
   for (const task of state.lectureTasks || [])
     if (task.done && task.completedAt)
       add(task.completedAt, "task", task.title || "Домашняя работа", "Задание выполнено");
@@ -1617,8 +1731,66 @@ async function addHomeworkTask(title, targetDay) {
 }
 
 
+function studySessionPosition(session) {
+  const lines = [], cp = session.checkpoint || {};
+  const slide = value => Number.isInteger(value) && value >= 0 ? value : null;
+  const material = session.materialTitle || cp.document;
+  if (material) lines.push("Материал: " + material);
+  const total = slide(session.totalSlides ?? cp.totalPages);
+  if (session.type === "study_session") {
+    const completed = slide(session.lastCompletedSlide), next = slide(session.nextSlide);
+    lines.push(completed === null ? "Завершённый слайд не указан"
+      : "Последний завершённый слайд: " + completed + (total ? " из " + total : ""));
+    lines.push(next !== null ? "Продолжить со слайда: " + next
+      : total && completed === total ? "Материал завершён" : "Следующий слайд не указан");
+  } else {
+    // A viewed page and a slide explained in detail do not certify completion.
+    if (slide(cp.page) !== null)
+      lines.push("Где остановились: стр. " + cp.page + (total ? " из " + total : "")
+        + (cp.topic ? " — " + cp.topic : ""));
+    if (slide(cp.lastExplainedPage) !== null)
+      lines.push("Последний подробно разобранный слайд: " + cp.lastExplainedPage);
+    if (slide(cp.nextPage) !== null) lines.push("Продолжить со слайда: " + cp.nextPage);
+    if (cp.slidesCovered) lines.push("Пройдено: " + cp.slidesCovered);
+  }
+  if (cp.note) lines.push(cp.note);
+  return lines;
+}
+
+function renderStudyHistoryStatus(host, feed) {
+  const status = document.createElement("div");
+  status.className = "study-history-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  if (!studySessionAccount) {
+    status.textContent = "История занятий из аккаунта появится после входа в разделе карточек.";
+  } else if (feed?.error) {
+    status.classList.add("has-error");
+    const message = document.createElement("span");
+    message.textContent = feed.error;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Повторить загрузку";
+    retry.onclick = () => void loadStudySessions({more:feed.retryMore});
+    status.append(message, retry);
+  } else if (feed?.loading) {
+    status.textContent = "Загружаем историю занятий…";
+  }
+  if (status.textContent || status.childNodes.length) host.prepend(status);
+  if (feed?.nextCursor && !feed.error) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "study-history-more";
+    more.textContent = feed.loading ? "Загружаем…" : "Показать более ранние записи";
+    more.disabled = feed.loading;
+    more.onclick = () => void loadStudySessions({more:true});
+    host.append(more);
+  }
+}
+
 function renderHistory() {
   const host = $("session-history");
+  ensureStudySessionFeed();
   host.replaceChildren();
   const quizSessions = quizHistoryForMap()
     .filter(s => (!state.examId || s.examId === state.examId))
@@ -1630,39 +1802,64 @@ function renderHistory() {
         ". "+(s.type === "PRACTICE" ? "Прогресс навыков не изменяется." : "Результат учтён в карте навыков."),
       changes:[]
     }));
-  const sessions = [...(state.data?.sessions || []), ...quizSessions]
+  const sessions = [...learningSessionsForMap(), ...quizSessions]
     .filter((s) => (!state.semesterId || s.semesterId === state.semesterId) && (!state.examId || s.examId === state.examId))
     .slice()
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    .sort(compareLearningSessions);
+  const feed = studySessionFeeds.get(studySessionFeedKey());
 
   if (!sessions.length) {
     host.innerHTML = '<div class="no-data">История появится после первого занятия и обновления знаний.</div>';
+    renderStudyHistoryStatus(host, feed);
     return;
   }
 
   for (const session of sessions) {
-    const exam = currentSemester()?.exams?.find((e) => e.id === session.examId);
+    const exam = (state.data?.semesters || []).flatMap(s => s.exams || [])
+      .find(e => e.id === session.examId);
     const item = document.createElement("article");
     item.className = "session";
     item.innerHTML = `
       <div class="session-top">
-        <div class="session-title">${escapeHtml(session.title || exam?.title || "Учебная сессия")}</div>
+        <div class="session-title">${escapeHtml(session.title || session.examTitle || exam?.title || "Учебная сессия")}</div>
         <div class="session-date">${fmtDate(session.date)}</div>
       </div>
       <div class="session-summary">${escapeHtml(session.summary || "")}</div>
       <div class="session-changes"></div>
     `;
-    // Keep exact learning position visible in history, not only in JSON.
-    const cp=session.checkpoint;
-    if (cp?.document && Number.isInteger(Number(cp.page))) {
-      const marker=document.createElement("div");
-      marker.className="session-checkpoint";
-      const heading=document.createElement("strong");
-      heading.textContent=`Где остановились: ${cp.document}, стр. ${cp.page} из ${cp.totalPages || "?"} — ${cp.topic || ""}`;
-      const note=document.createElement("span");
-      note.textContent=`Последний подробно разобранный слайд: ${cp.lastExplainedPage || "?"}. ${cp.note || ""}`;
-      marker.append(heading,note);
+    item.dataset.sessionId = session.id || "";
+    if (session.type === "study_session") {
+      item.classList.add("study-session");
+      const kind = document.createElement("div");
+      kind.className = "session-kind";
+      kind.textContent = "Учебная сессия" + ((session.examTitle || exam?.title)
+        ? " · " + (session.examTitle || exam.title) : "");
+      item.querySelector(".session-top").after(kind);
+    }
+    const positions = studySessionPosition(session);
+    if (positions.length) {
+      const marker = document.createElement("div");
+      marker.className = "session-checkpoint";
+      for (const line of positions) {
+        const row = document.createElement("span");
+        row.textContent = line;
+        marker.append(row);
+      }
       item.querySelector(".session-summary").after(marker);
+    }
+    if (Array.isArray(session.topics) && session.topics.length) {
+      const topics = document.createElement("div");
+      topics.className = "session-topics";
+      const label = document.createElement("strong");
+      label.textContent = "Изученные темы";
+      const list = document.createElement("ul");
+      for (const topic of session.topics) {
+        const row = document.createElement("li");
+        row.textContent = topic;
+        list.append(row);
+      }
+      topics.append(label, list);
+      item.querySelector(".session-changes").before(topics);
     }
     const changes = item.querySelector(".session-changes");
     for (const change of session.changes || []) {
@@ -1674,6 +1871,7 @@ function renderHistory() {
     }
     host.append(item);
   }
+  renderStudyHistoryStatus(host, feed);
 }
 
 function escapeHtml(value) {
@@ -1768,6 +1966,7 @@ $("history-toggle").onclick = () => {
   const willOpen = historyPanel.classList.contains("closed");
   historyPanel.classList.toggle("closed", !willOpen);
   if (willOpen) {
+    void loadStudySessions();
     $("inspector").classList.add("closed");
     $("review-panel").classList.add("closed");
     $("homework-panel").classList.add("closed");
@@ -1956,6 +2155,26 @@ window.addEventListener("study-reviews-updated", () => {
   }
 });
 
+function refreshStudySessionHistory() {
+  const changed = syncStudySessionAccount();
+  if (!state.data) return;
+  if (changed) {
+    renderHistory();
+    renderCalendar("study");
+  }
+  const feed = studySessionFeeds.get(studySessionFeedKey());
+  if (studySessionAccount && (!feed?.lastFetchedAt || Date.now() - feed.lastFetchedAt > 30000))
+    void loadStudySessions();
+}
+window.addEventListener("storage", event => {
+  if (event.key === STUDY_SESSION_ACCOUNT_KEY || event.key === null)
+    refreshStudySessionHistory();
+});
+window.addEventListener("focus", refreshStudySessionHistory);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshStudySessionHistory();
+});
+
 window.addEventListener("resize", applyTransform);
 
 
@@ -2028,3 +2247,4 @@ $("slides-toggle")?.addEventListener("click", () => {
   $("slides-toggle").setAttribute("aria-expanded", String(!catalog.hidden));
   if (!catalog.hidden) renderSlidesCatalog();
 });
+

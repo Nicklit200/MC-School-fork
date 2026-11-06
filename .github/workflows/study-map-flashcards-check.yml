@@ -4,10 +4,12 @@ on:
     branches: [personal-study-map, study-map-checkup-20261020]
     paths:
       - 'personal-study-map/**'
+      - 'personal-study-services/**'
       - '.github/workflows/study-map-flashcards-check.yml'
   pull_request:
     paths:
       - 'personal-study-map/**'
+      - 'personal-study-services/**'
       - '.github/workflows/study-map-flashcards-check.yml'
 permissions:
   contents: read
@@ -16,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -24,9 +26,9 @@ jobs:
         with:
           node-version: '22'
       - name: Check every JavaScript file
-        run: find personal-study-map -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+        run: find personal-study-map personal-study-services -type f \( -name '*.js' -o -name '*.mjs' \) -not -path '*/dist/*' -print0 | xargs -0 -n1 node --check
       - name: Module startup, calendar dates and card integrity
-        run: node --test personal-study-map/tests/*.test.mjs
+        run: node --test personal-study-map/tests/*.test.mjs personal-study-services/tests/*.test.mjs
       - name: Install isolated test browsers
         run: |
           python -m pip install -q playwright==1.55.0
@@ -35,3 +37,4 @@ jobs:
         run: python personal-study-map/tests/browser-checkup.py
       - name: Verify the production image build gate
         run: docker build -t study-map-verified personal-study-map
+

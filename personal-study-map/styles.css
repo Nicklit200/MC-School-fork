@@ -2060,6 +2060,19 @@ body:not([data-section="study"]) .study-card-top-button {display:none!important}
 }
 .session-checkpoint strong{font-size:12px;color:#254467}
 .session-checkpoint span{color:#58718d}
+.session-kind{font-size:10px;color:#54759b;margin-top:5px;font-weight:700;overflow-wrap:anywhere}
+.study-session{border-left:3px solid #688cb9}
+.session-topics{margin-top:10px;font-size:11px;line-height:1.5;color:#52647e;overflow-wrap:anywhere}
+.session-topics strong{color:#354e6b}
+.session-topics ul{margin:4px 0 0;padding-left:18px}
+.session-checkpoint,.session-title,.session-summary{overflow-wrap:anywhere}
+.study-history-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;line-height:1.5;color:#607089;padding:5px 0}
+.study-history-status.has-error{padding:10px;border:1px solid #ead2af;border-radius:9px;background:#fff9ef;color:#765526}
+.study-history-status button,.study-history-more{border:1px solid #ced9e7;border-radius:8px;padding:8px 10px;background:#f8fafc;color:#354e6b;font:inherit;cursor:pointer}
+.study-history-more{font-size:11px;min-height:36px}
+.study-history-more:disabled{opacity:.65;cursor:wait}
+.study-history-status button:focus-visible,.study-history-more:focus-visible{outline:2px solid #4c83d8;outline-offset:2px}
+@media(max-width:720px){.session-top{gap:8px}.session-date{flex:none}.study-history-status button{width:100%}}
 
 
 /* German vocabulary */
@@ -2329,3 +2342,4 @@ body.quiz-learning-active{overflow:hidden}
   box-shadow:none;
   margin-bottom:8px;
 }
+
