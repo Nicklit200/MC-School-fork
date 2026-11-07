@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { KolinContext, KolinTranscriptContext } from '../../api/kolin';
 import type { KolinFailureCode, useKolinChat } from './useKolinChat';
@@ -58,7 +58,8 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
     if (chat.open && nearBottom.current && log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [chat.messages.length, chat.pending, chat.open]);
   useEffect(() => { if (chat.open) input.current?.focus(); }, [chat.open]);
-  const send = () => void chat.send(context);
+  const [format,setFormat]=useState<'pdf'|'interactive'>('pdf');
+  const send = () => void chat.send(format==='interactive'?{...context,format}:context);
 
   return <aside id="kolin-panel" className="answers-panel kolin-panel" aria-label="Kolin">
     <header className="answers-panel__heading">
@@ -94,6 +95,11 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
       </button>
     </div>}
     <form className="kolin-panel__form" onSubmit={event => { event.preventDefault(); send(); }}>
+      <label className="kolin-panel__format">{de?'Aufgabenformat':'Формат заданий'}
+        <select value={format} disabled={chat.pending} onChange={event=>setFormat(event.target.value as 'pdf'|'interactive')}>
+          <option value="pdf">PDF</option><option value="interactive">{de?'Interaktiv':'Интерактив'}</option>
+        </select>
+      </label>
       <textarea ref={input} value={chat.draft} onChange={event => chat.setDraft(event.target.value)} rows={2} maxLength={2000}
         aria-label={de ? 'An Kolin schreiben…' : 'Напишите Kolin…'} placeholder={de ? 'An Kolin schreiben…' : 'Напишите Kolin…'}
         disabled={chat.pending} onKeyDown={event => {

@@ -12,7 +12,7 @@ function failureCode(error: unknown): KolinFailureCode | null {
 
 export interface KolinMessage extends KolinHistoryMessage {
   id: string;
-  type: 'text' | 'worksheet';
+  type: 'text' | 'worksheet' | 'interactive';
   status: 'complete' | 'pending' | 'failed';
   transcriptContext?: KolinTranscriptContext;
   worksheet?: KolinWorksheet;
@@ -89,10 +89,10 @@ export function useKolinChat(classId: string, teacherId: string, enabled: boolea
     }));
     try {
       const result = await kolinApi.send(classId, submission.text, submission.history, submission.context, submission.messageId);
-      if (result.type !== 'text' && result.type !== 'worksheet' || typeof result.text !== 'string'
+      if (result.type !== 'text' && result.type !== 'worksheet' && result.type !== 'interactive' || typeof result.text !== 'string'
           || result.type === 'text' && !result.text.trim()) throw new Error('Empty response');
-      const worksheet = result.type === 'worksheet' ? parseKolinWorksheet(result.worksheet) : undefined;
-      if (result.type === 'worksheet' && !worksheet) throw new Error('Invalid worksheet');
+      const worksheet = result.type !== 'text' ? parseKolinWorksheet(result.worksheet) : undefined;
+      if (result.type !== 'text' && !worksheet) throw new Error('Invalid worksheet');
       const transcriptContext = parseKolinTranscriptContext(result.transcriptContext);
       change(current => ({ ...current, pending: false,
         draft: current.draft.trim() === submission.text ? '' : current.draft,
@@ -116,7 +116,7 @@ export function useKolinChat(classId: string, teacherId: string, enabled: boolea
     if (!enabled || !text || text.length > 2000 || current.pending) return;
     // Page navigation or late board initialization must not create a new request on retry.
     if (current.failed?.text === text && current.failed.context.studentId === context.studentId
-        && current.failed.context.targetType === context.targetType) return run(current.failed, false);
+        && current.failed.context.targetType === context.targetType && current.failed.context.format === context.format) return run(current.failed, false);
     const history = current.messages.filter(message => message.status === 'complete')
       .slice(-8).map(message => ({ role: message.role, text: message.text }));
     return run({ messageId: crypto.randomUUID(), text, history, context: { ...context } }, true);

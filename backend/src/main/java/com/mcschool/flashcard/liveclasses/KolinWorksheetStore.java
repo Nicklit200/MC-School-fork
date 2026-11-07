@@ -14,13 +14,19 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class KolinWorksheetStore {
     public record Worksheet(UUID id, UUID studentId, String studentName, int taskCount, int pageCount,
-                            String state, Integer fromPage, Integer toPage) {}
+                            String state, Integer fromPage, Integer toPage, java.util.List<java.util.Map<String,Object>> interactive) {
+        public Worksheet(UUID id,UUID studentId,String studentName,int taskCount,int pageCount,String state,Integer fromPage,Integer toPage) {
+            this(id,studentId,studentName,taskCount,pageCount,state,fromPage,toPage,null);
+        }
+    }
     public record Reservation(UUID id, UUID attemptId, KolinChatService.Reply cached) {}
     private final KolinWorksheetRepository repository;
     private final OnlineClassAccessService access;
     private final PersonalLessonWorkbookService personal;
     private final KolinWorkbookAppendService append;
     private final ObjectMapper mapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private OnlineClassAnnotationService annotations;
 
     public KolinWorksheetStore(KolinWorksheetRepository repository, OnlineClassAccessService access,
             PersonalLessonWorkbookService personal, KolinWorkbookAppendService append, ObjectMapper mapper) {
@@ -92,6 +98,7 @@ public class KolinWorksheetStore {
         OnlineClass room=access.requireHost(teacher,classId);
         var row=repository.findByIdAndClassIdAndTeacherId(id,classId,teacher.id()).orElseThrow(this::missing);
         requireWorksheet(row); checkPupil(room,row);
+        if(!"worksheet".equals(row.getResultType())) throw missing();
         return preview ? row.getPreviewBytes() : row.getPdfBytes();
     }
 
@@ -102,7 +109,17 @@ public class KolinWorksheetStore {
         requireWorksheet(row); checkPupil(room,row);
         if ("ADDED".equals(row.getState())) return metadata(row);
         requireOpen(room);
-        var result=append.append(teacher,room,row.getStudentId(),row.getPdfBytes());
+        var templates=interactive(row);
+        var result=append.append(teacher,room,row.getStudentId(),templates==null?row.getPdfBytes():blankPages(templates.size()));
+        if(templates!=null) {
+            for(int index=0;index<templates.size();index++) {
+                var document=annotations.openDocument(teacher,classId,AnnotationTargetType.WHITEBOARD,
+                        PersonalBoard.workbookTargetIdFor(row.getStudentId()),result.fromPage()-1+index,595,842);
+                UUID operationId=UUID.nameUUIDFromBytes((row.getId()+":"+index).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                annotations.append(teacher,classId,document.id(),new com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest(
+                        operationId,AnnotationOperationType.ADD,mapper.writeValueAsString(InteractiveTemplateSpec.shape(templates.get(index)))));
+            }
+        }
         row.added(result.fromPage(),result.toPage());
         repository.saveAndFlush(row);
         return metadata(row);
@@ -112,8 +129,11 @@ public class KolinWorksheetStore {
         if (row.getStudentId()!=null) personal.requireClassStudent(room,row.getStudentId());
     }
     private void requireWorksheet(KolinWorksheet row) {
-        if (!"worksheet".equals(row.getResultType()) || !java.util.List.of("READY","ADDED").contains(row.getState())
-                || row.getStudentId()==null || row.getPdfBytes()==null || row.getPreviewBytes()==null) throw missing();
+        if (!("worksheet".equals(row.getResultType()) || "interactive".equals(row.getResultType()))
+                || !("READY".equals(row.getState()) || "ADDED".equals(row.getState()))
+                || row.getStudentId()==null) throw missing();
+        if("worksheet".equals(row.getResultType()) && (row.getPdfBytes()==null || row.getPreviewBytes()==null)) throw missing();
+        if("interactive".equals(row.getResultType())) interactive(row);
     }
     private static void requireOpen(OnlineClass room) {
         if (room.getStatus()==OnlineClassStatus.ENDED || room.getStatus()==OnlineClassStatus.CANCELLED)
@@ -123,12 +143,24 @@ public class KolinWorksheetStore {
         try {
             return new KolinChatService.Reply(row.getResultType(),row.getReplyText(),
                     mapper.readValue(row.getTranscriptMetadata(),KolinTranscriptContextService.Metadata.class),
-                    "worksheet".equals(row.getResultType()) ? metadata(row) : null);
+                    java.util.List.of("worksheet","interactive").contains(row.getResultType()) ? metadata(row) : null);
         } catch (Exception ex) { throw new IllegalStateException("Cannot read Kolin result",ex); }
     }
-    private static Worksheet metadata(KolinWorksheet row) {
+    private Worksheet metadata(KolinWorksheet row) {
         return new Worksheet(row.getId(),row.getStudentId(),row.getStudentName(),row.getTaskCount(),row.getPageCount(),
-                row.getState(),row.getFromPage(),row.getToPage());
+                row.getState(),row.getFromPage(),row.getToPage(),interactive(row));
+    }
+    private java.util.List<java.util.Map<String,Object>> interactive(KolinWorksheet row) {
+        if(!"interactive".equals(row.getResultType())) return null;
+        var content=mapper.readValue(row.getTaskContent(),KolinTaskService.Content.class);
+        if(content.tasks()==null || content.tasks().isEmpty() || content.tasks().size()>5) throw missing();
+        return content.tasks().stream().map(task -> InteractiveTemplateSpec.validate(task.visual())).toList();
+    }
+    private static byte[] blankPages(int count) {
+        try(var pdf=new org.apache.pdfbox.pdmodel.PDDocument();var out=new java.io.ByteArrayOutputStream()) {
+            for(int i=0;i<count;i++) pdf.addPage(new org.apache.pdfbox.pdmodel.PDPage(org.apache.pdfbox.pdmodel.common.PDRectangle.A4));
+            pdf.save(out); return out.toByteArray();
+        } catch(java.io.IOException ex) { throw new IllegalStateException("Cannot prepare interactive page",ex); }
     }
     private ResourceNotFoundException missing() { return new ResourceNotFoundException("Kolin worksheet not found"); }
 }

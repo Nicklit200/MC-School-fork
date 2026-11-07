@@ -26,7 +26,7 @@ public interface KolinWorksheetRepository extends JpaRepository<KolinWorksheet, 
     Optional<KolinWorksheet> findByIdAndClassIdAndTeacherId(UUID id, UUID classId, UUID teacherId);
     interface DraftContext { UUID getStudentId(); String getTaskContent(); }
     @Query("select w.studentId as studentId,w.taskContent as taskContent from KolinWorksheet w "
-            + "where w.classId=:classId and w.teacherId=:teacherId and w.resultType='worksheet' "
+            + "where w.classId=:classId and w.teacherId=:teacherId and w.resultType in ('worksheet','interactive') "
             + "and w.state in ('READY','ADDED') order by w.createdAt desc,w.id desc")
     java.util.List<DraftContext> latestDraftContext(UUID classId,UUID teacherId,org.springframework.data.domain.Pageable page);
 }

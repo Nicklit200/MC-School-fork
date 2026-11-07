@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { kolinApi, type KolinWorksheet } from '../../api/kolin';
 import { openPdf, type PdfDoc } from './pdfDocument';
+import { InteractiveDialog, InteractiveTemplate } from './InteractiveTemplate';
 
 function recipientName(name: string) {
   const first = name.trim().split(/\s+/)[0];
@@ -89,6 +90,7 @@ export function KolinWorksheetCard({ classId, worksheet, appendStatus, de, onAdd
     let cancelled = false;
     let url: string | undefined;
     setThumbnail(undefined);
+    if (worksheet.interactive) return;
     void kolinApi.worksheetPreview(classId, worksheet.id).then(blob => {
       if (cancelled) return;
       url = URL.createObjectURL(blob);
@@ -96,6 +98,19 @@ export function KolinWorksheetCard({ classId, worksheet, appendStatus, de, onAdd
     }).catch(() => { /* The clickable PDF fallback still opens the authorized full preview. */ });
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [classId, worksheet.id]);
+  if (worksheet.interactive) return <div className="kolin-worksheet" data-worksheet-id={worksheet.id}>
+    <button type="button" className="kolin-worksheet__interactive-thumbnail" onClick={()=>setPreview(true)} aria-label={`${de?'Vorschau für':'Предпросмотр для'} ${worksheet.studentName}`}>
+      <InteractiveTemplate spec={worksheet.interactive[0]} disabled/>
+    </button>
+    <strong>{worksheet.studentName}</strong><p>{worksheet.interactive.length} {de?'interaktive Objekte':'интерактивных объектов'}</p>
+    <button type="button" className="kolin-worksheet__add" disabled={worksheet.state==='ADDED'||appendStatus==='pending'} onClick={onAdd}>
+      {worksheet.state==='ADDED'?de?'Hinzugefügt ✓':'Добавлено ✓':appendStatus==='pending'?de?'Wird hinzugefügt…':'Добавляем…':de?`Für ${worksheet.studentName} hinzufügen`:`Добавить ${recipientName(worksheet.studentName)}`}
+    </button>
+    {appendStatus==='failed'&&<p role="alert">{de?'Hinzufügen fehlgeschlagen. Bitte erneut versuchen.':'Не удалось подтвердить добавление. Повторите нажатие.'}</p>}
+    {preview&&<InteractiveDialog title={worksheet.studentName} onClose={()=>setPreview(false)}>
+      {worksheet.interactive.map((spec,index)=><InteractiveTemplate key={index} spec={spec} disabled/>)}
+    </InteractiveDialog>}
+  </div>;
   const added = worksheet.state === 'ADDED';
   return <div className="kolin-worksheet" data-worksheet-id={worksheet.id}>
     <div className="kolin-worksheet__summary">

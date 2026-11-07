@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import { drawInteractive } from './interactiveTemplates';
 import {
   forwardRef,
   useCallback,
@@ -1042,6 +1043,11 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     const opacity = (shape.kind === 'highlighter' ? 0.35 : 1) * (dim ? 0.7 : 1);
 
     switch (shape.kind) {
+      case 'interactive': {
+        if(!shape.interactive)return null;
+        const origin=toPixels({x:shape.x??0,y:shape.y??0},sceneViewport,sceneAspect),box=letterbox(sceneViewport,sceneAspect);
+        return <KonvaShape key={key} sceneFunc={context=>drawInteractive(context._context,shape.interactive!,origin.x,origin.y,(shape.w??0)*box.width,(shape.h??0)*box.height)}/>;
+      }
       case 'pen': {
         const outline = penOutline(shape, sceneViewport, sceneAspect);
         return <KonvaShape key={key} fill={stroke} opacity={opacity}

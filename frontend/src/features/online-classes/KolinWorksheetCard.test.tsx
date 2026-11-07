@@ -40,6 +40,30 @@ async function createCard() {
   return screen.findByRole('button', { name: 'Добавить Виталине' });
 }
 
+it('creates a private interactive preview and only appends to its original pupil after confirmation', async () => {
+  const interactive: KolinWorksheet={...worksheet,taskCount:1,pageCount:1,interactive:[{template:'graph',language:'ru',function:'linear',coefficients:[2,1]}]};
+  vi.mocked(kolinApi.send).mockResolvedValue({type:'interactive',text:'График готов.',worksheet:interactive});
+  vi.mocked(kolinApi.appendWorksheet).mockResolvedValue({...interactive,state:'ADDED'});
+  const view=render(<Harness/>);
+  await userEvent.click(screen.getByRole('button',{name:'Kolin'}));
+  await userEvent.selectOptions(screen.getByRole('combobox',{name:'Формат заданий'}),'interactive');
+  await userEvent.type(screen.getByRole('textbox'),'График для Виталины{Enter}');
+  const add=await screen.findByRole('button',{name:'Добавить Виталине'});
+  expect(vi.mocked(kolinApi.send).mock.calls[0][3]).toMatchObject({targetType:'student',studentId:'alice',format:'interactive'});
+  expect(kolinApi.worksheetPreview).not.toHaveBeenCalled();
+  expect(kolinApi.appendWorksheet).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button',{name:'Предпросмотр для Виталина'}));
+  expect(screen.getByRole('dialog',{name:'Виталина'})).toBeInTheDocument();
+  expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
+  view.rerender(<Harness studentId="bob"/>);
+  await userEvent.click(add);
+  expect(await screen.findByRole('button',{name:'Добавлено ✓'})).toBeDisabled();
+  expect(kolinApi.appendWorksheet).toHaveBeenCalledExactlyOnceWith('class-1','saved-artifact');
+  expect(kolinApi.send).toHaveBeenCalledTimes(1);
+  expect(kolinApi.worksheetPdf).not.toHaveBeenCalled();
+});
+
 it('shows one confirmation action with a small clickable first-page preview and never auto-adds', async () => {
   render(<Harness />);
   await createCard();

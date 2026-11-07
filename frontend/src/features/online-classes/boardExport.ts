@@ -1,4 +1,5 @@
 import type KonvaType from 'konva';
+import { drawInteractive } from './interactiveTemplates';
 import type { Shape as KonvaShape } from 'konva/lib/Shape';
 import { onlineClassesApi, type AnnotationTargetType } from '../../api/onlineClasses';
 import {
@@ -107,6 +108,11 @@ function shapeNode(shape: Shape, viewport: { width: number; height: number }, as
   const box = letterbox(viewport, aspect);
 
   switch (shape.kind) {
+    case 'interactive': {
+      if(!shape.interactive)return null;
+      const at=toPixels({x:shape.x??0,y:shape.y??0},viewport,aspect);
+      return new Konva.Shape({sceneFunc:context=>drawInteractive(context._context,shape.interactive!,at.x,at.y,(shape.w??0)*box.width,(shape.h??0)*box.height)});
+    }
     case 'pen': {
       const outline = penOutline(shape, viewport, aspect);
       return new Konva.Shape({ fill: stroke,

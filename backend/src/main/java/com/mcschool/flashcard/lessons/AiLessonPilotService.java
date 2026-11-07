@@ -486,12 +486,18 @@ public class AiLessonPilotService {
 
     /** One bounded model call chooses a text answer or a teacher-only worksheet draft. */
     public String kolinStructuredReply(String lessonContext, List<Map<String,String>> history, String question) {
+        return kolinStructuredReply(lessonContext,history,question,false);
+    }
+    public String kolinInteractiveReply(String lessonContext,List<Map<String,String>> history,String question) {
+        return kolinStructuredReply(lessonContext,history,question,true);
+    }
+    private String kolinStructuredReply(String lessonContext, List<Map<String,String>> history, String question,boolean interactive) {
         if (apiKey.isBlank()) throw new IllegalStateException("Kolin is not configured");
         Map<String,Object> taskProperties=new LinkedHashMap<>();
         taskProperties.put("kind",Map.of("type","string","enum",List.of("expression","equation","visual")));
         for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,Map.of("type","string"));
         taskProperties.put("restrictions",Map.of("type","array","items",Map.of("type","string")));
-        taskProperties.put("visual",KolinVisualSchema.schema());
+        taskProperties.put("visual",interactive ? Map.of("anyOf",List.of(Map.of("type","null"),com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.schema())) : KolinVisualSchema.schema());
         Map<String,Object> taskSchema=Map.of("type","object","properties",taskProperties,
                 "required",List.copyOf(taskProperties.keySet()),"additionalProperties",false);
         Map<String,Object> schema=Map.of("type","object","properties",Map.of(
@@ -499,7 +505,14 @@ public class AiLessonPilotService {
                 "text",Map.of("type","string"),"studentId",Map.of("type",List.of("string","null")),
                 "tasks",Map.of("type","array","items",taskSchema)),
                 "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false);
-        String instructions=KOLIN_PROMPT+"""
+        String instructions=KOLIN_PROMPT+(interactive ? """
+
+                Верни объект JSON-схемы. Получателя выбирай ТОЛЬКО из roster: явно названная ученица важнее selectedStudentId.
+                Если получатель или тема неясны, уточни коротко: kind=text, studentId=null, tasks=[].
+                Для объекта верни kind=worksheet, РОВНО requestedTaskCount элементов tasks и короткий text с темой.
+                lastGeneratedWorksheet - предыдущий черновик. При изменении верни полный обновлённый набор.
+                Любая просьба добавить создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
+                """+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS : """
 
                 Режим подтверждаемого PDF: верни только объект заданной JSON-схемы.
                 Для обычного вопроса kind=text, короткий text, studentId=null, tasks=[].
@@ -528,7 +541,7 @@ public class AiLessonPilotService {
                 text для worksheet должен кратко описывать тему, без утверждений о добавлении в тетрадь.
                 Любая просьба 'добавь/отправь' создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
                 Исходные PDF и рукопись по-прежнему недоступны. Не утверждай, что изучил записи ученицы.
-                """+KolinVisualSchema.INSTRUCTIONS;
+                """+KolinVisualSchema.INSTRUCTIONS);
         var input=new java.util.ArrayList<Map<String,Object>>();
         input.add(Map.of("role","system","content",instructions));
         input.add(Map.of("role","user","content","Контекст текущего урока и допустимые получатели:\n"+lessonContext));
@@ -536,7 +549,7 @@ public class AiLessonPilotService {
         input.add(Map.of("role","user","content",question));
         Map<String,Object> payload=new LinkedHashMap<>();
         payload.put("model",kolinModel==null || kolinModel.isBlank()?"gpt-4.1-mini":kolinModel.trim());
-        payload.put("store",false); payload.put("max_output_tokens",6500); payload.put("input",input);
+        payload.put("store",false); payload.put("max_output_tokens",interactive?2500:6500); payload.put("input",input);
         payload.put("text",Map.of("format",Map.of("type","json_schema","name","kolin_confirmed_worksheet",
                 "strict",true,"schema",schema)));
         try {

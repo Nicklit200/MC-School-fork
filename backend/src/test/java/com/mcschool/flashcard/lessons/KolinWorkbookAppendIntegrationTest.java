@@ -82,6 +82,78 @@ class KolinWorkbookAppendIntegrationTest {
             PersonalBoard.targetIdFor(student.getId()),page,800,600).id();}
     private PersonalLessonWorkbook workbook(){return workbooks.findByTeacherIdAndEventIdAndStudentId(teacher.getId(),room.getEventId(),student.getId()).orElseThrow();}
 
+    private static final tools.jackson.databind.ObjectMapper JSON=new tools.jackson.databind.ObjectMapper();
+    private java.util.Map<String,Object> graph(double coefficient) {
+        return java.util.Map.of("template","graph","language","ru","function","linear","coefficients",List.of(coefficient,1));
+    }
+    private UUID interactiveDraft() {
+        var reservation=store.begin(host,room.getId(),UUID.randomUUID(),"b".repeat(64));
+        var content=new KolinTaskService.Content("interactive","Graph",student.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),graph(1))));
+        store.complete(host,room.getId(),reservation.id(),reservation.attemptId(),"interactive","Graph",
+            new KolinTranscriptContextService.Metadata("empty",0,false,null,null,null,false),student.getId(),"Pupil",1,1,null,null,JSON.writeValueAsString(content));
+        return reservation.id();
+    }
+    private AnnotationOperationRequest interaction(UUID target,UUID revision,double coefficient) {
+        var shape=new java.util.HashMap<>(InteractiveTemplateSpec.shape(graph(coefficient)));
+        shape.put("targetOperationId",target.toString());shape.put("baseOperationId",revision.toString());
+        return new AnnotationOperationRequest(UUID.randomUUID(),AnnotationOperationType.UPDATE,JSON.writeValueAsString(shape));
+    }
+    @Test void interactiveDraftNeedsConfirmationAndBothViewersReplayTheSameRevision()throws Exception {
+        UUID draft=interactiveDraft();
+        assertThat(workbooks.findByTeacherIdAndEventIdAndStudentId(teacher.getId(),room.getEventId(),student.getId())).isEmpty();
+        assertThat(annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).isEmpty();
+        var added=store.append(host,room.getId(),draft);
+        assertThat(store.append(host,room.getId(),draft)).isEqualTo(added);
+        assertThat(added.interactive()).containsExactly(graph(1));assertThat(workbook().documentVersion()).isEqualTo(1);
+        var page=annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId()).get(0);
+        var initial=annotations.replay(owner,room.getId(),page.getId(),0);
+        assertThat(initial).hasSize(1);UUID target=initial.get(0).operationId();
+        var request=interaction(target,target,2);
+        var saved=annotations.append(owner,room.getId(),page.getId(),request);
+        assertThat(annotations.append(owner,room.getId(),page.getId(),request))
+            .usingRecursiveComparison().ignoringFields("createdAt").isEqualTo(saved);
+        assertThat(annotations.replay(host,room.getId(),page.getId(),0)).isEqualTo(annotations.replay(owner,room.getId(),page.getId(),0));
+        assertThatThrownBy(()->annotations.append(host,room.getId(),page.getId(),interaction(target,target,3)))
+            .isInstanceOf(com.mcschool.flashcard.common.ConflictException.class);
+        annotations.append(host,room.getId(),page.getId(),interaction(target,saved.operationId(),3));
+        assertThat(annotations.replay(owner,room.getId(),page.getId(),0)).hasSize(3);
+        var outsider=users.saveAndFlush(User.managedStudent("Other",teacher));
+        assertThatThrownBy(()->annotations.replay(new AuthenticatedUser(outsider.getId(),null,Role.STUDENT),room.getId(),page.getId(),0))
+            .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(()->annotations.append(owner,room.getId(),page.getId(),new AnnotationOperationRequest(UUID.randomUUID(),AnnotationOperationType.ADD,
+            JSON.writeValueAsString(InteractiveTemplateSpec.shape(graph(1)))))).isInstanceOf(ResourceNotFoundException.class);
+        // Replacing a template with an ordinary text UPDATE must not bypass validation.
+        assertThatThrownBy(()->annotations.append(host,room.getId(),page.getId(),new AnnotationOperationRequest(UUID.randomUUID(),AnnotationOperationType.UPDATE,
+            JSON.writeValueAsString(java.util.Map.of("kind","text","x",0.2,"y",0.2,"text","replacement","targetOperationId",target.toString())))))
+            .isInstanceOf(com.mcschool.flashcard.common.ConflictException.class);
+        try(var pdf=Loader.loadPDF(workbook().getWorkbookPdf())){assertThat(pdf.getNumberOfPages()).isEqualTo(1);}
+    }
+    @Test void concurrentInteractiveChangesHaveOneWinnerAndNeverOverwriteSilently()throws Exception {
+        store.append(host,room.getId(),interactiveDraft());
+        var page=annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId()).get(0);
+        UUID target=annotations.replay(owner,room.getId(),page.getId(),0).get(0).operationId();
+        var start=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);
+        try {
+            var teacherChange=pool.submit(()->{start.await();try{annotations.append(host,room.getId(),page.getId(),interaction(target,target,2));return true;}
+                catch(com.mcschool.flashcard.common.ConflictException ex){return false;}});
+            var pupilChange=pool.submit(()->{start.await();try{annotations.append(owner,room.getId(),page.getId(),interaction(target,target,3));return true;}
+                catch(com.mcschool.flashcard.common.ConflictException ex){return false;}});
+            start.countDown();assertThat(teacherChange.get(15,TimeUnit.SECONDS)^pupilChange.get(15,TimeUnit.SECONDS)).isTrue();
+            assertThat(annotations.replay(owner,room.getId(),page.getId(),0)).hasSize(2);
+        } finally {start.countDown();pool.shutdownNow();}
+    }
+    @Test void failedInteractiveConfirmationRollsBackPdfObjectAndReceiptTogether() {
+        UUID draft=interactiveDraft();
+        assertThatThrownBy(()->new TransactionTemplate(transactions).execute(status->{
+            store.append(host,room.getId(),draft);throw new IllegalStateException("test rollback");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).isEmpty();
+        assertThat(workbooks.findByTeacherIdAndEventIdAndStudentId(teacher.getId(),room.getEventId(),student.getId())).isEmpty();
+        assertThat(store.append(host,room.getId(),draft).state()).isEqualTo("ADDED");
+        assertThat(annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).hasSize(1);
+    }
+
     @Test void firstAssignmentPreservesBackgroundInkBlankPagesAndStaleClientWritesForAnyActiveTeacher()throws Exception{
         byte[] shared=pdf("inherited one","inherited two");
         var prep=LessonPreparation.create(teacher,room.getEventId());prep.attachWorkbook("shared.pdf",shared);preparations.saveAndFlush(prep);

@@ -65,6 +65,25 @@ class KolinOpenAiPayloadTest {
         assertThat(request.timeout()).contains(java.time.Duration.ofSeconds(55));
         verifyNoInteractions(schoolPrompts);
     }
+    @Test void interactiveUsesOneCompactClosedSchemaCallWithoutPdfInstructions() throws Exception {
+        ai.kolinInteractiveReply("{\"roster\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"QA Pupil\"}],\"selectedStudentId\":\"00000000-0000-0000-0000-000000000001\",\"requestedTaskCount\":1}",List.of(),"Создай интерактивный график y=x^2-2x-2 для QA Pupil");
+        String serialized=body(captured());var json=mapper.readTree(serialized);
+        assertThat(json.path("store").asBoolean()).isFalse();
+        assertThat(json.path("max_output_tokens").asInt()).isEqualTo(2500);
+        String system=json.path("input").get(0).path("content").asString();
+        assertThat(system).contains("Интерактивный режим","requestedTaskCount","исключительно по кнопке")
+            .doesNotContain("Режим подтверждаемого PDF","ровно 5 самостоятельных");
+        var templates=json.path("text").path("format").path("schema").path("properties").path("tasks").path("items")
+            .path("properties").path("visual").path("anyOf").get(1).path("anyOf");
+        assertThat(templates.size()).isEqualTo(3);
+        for(var template:templates) assertThat(template.path("additionalProperties").asBoolean()).isFalse();
+        assertThat(serialized).doesNotContain("TEST_SERVER_ONLY_KEY","input_file","input_image");
+        String fixtureDir=System.getProperty("kolin.interactiveFixtureDir");
+        if(fixtureDir!=null) {
+            java.nio.file.Files.createDirectories(java.nio.file.Path.of(fixtureDir));
+            java.nio.file.Files.writeString(java.nio.file.Path.of(fixtureDir,"provider-payload.json"),serialized);
+        }
+    }
     private static String body(HttpRequest request) throws Exception {
         var result=new CompletableFuture<String>();var bytes=new ByteArrayOutputStream();
         request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {

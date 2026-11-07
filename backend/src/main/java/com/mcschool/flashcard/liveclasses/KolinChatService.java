@@ -47,7 +47,10 @@ public class KolinChatService {
     public record HistoryMessage(@NotBlank @Pattern(regexp="user|assistant") String role,
                                  @NotBlank @Size(max=MAX_TEXT_LENGTH) String text) {}
     public record Context(@Pattern(regexp="student|group") String targetType, UUID studentId,
-                          @Min(1) @Max(1000) Integer currentWorkbookPage) {}
+                          @Min(1) @Max(1000) Integer currentWorkbookPage,
+                          @Pattern(regexp="pdf|interactive") String format) {
+        public Context(String targetType,UUID studentId,Integer currentWorkbookPage) { this(targetType,studentId,currentWorkbookPage,null); }
+    }
     public record Request(@NotBlank @Size(max=MAX_TEXT_LENGTH) String text,
                           @Size(max=8) List<@Valid HistoryMessage> history, @Valid Context context, UUID clientMessageId) {
         public Request(String text,List<HistoryMessage> history,Context context) { this(text,history,context,null); }

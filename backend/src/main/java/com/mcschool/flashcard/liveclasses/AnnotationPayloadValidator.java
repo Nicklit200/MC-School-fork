@@ -24,7 +24,7 @@ public class AnnotationPayloadValidator {
     static final int MAX_PAYLOAD_BYTES = OnlineClassAnnotationEvent.MAX_PAYLOAD_LENGTH;
 
     private static final Set<String> KINDS =
-            Set.of("pen", "highlighter", "line", "arrow", "rect", "ellipse", "text", "erase");
+            Set.of("pen", "highlighter", "line", "arrow", "rect", "ellipse", "text", "erase", "interactive");
 
     /** Hex colours only — never arbitrary CSS, which can carry a payload. */
     private static final java.util.regex.Pattern COLOR =
@@ -77,6 +77,16 @@ public class AnnotationPayloadValidator {
             throw new ConflictException("Unsupported annotation kind");
         }
 
+        if("interactive".equals(kind)) {
+            if(operationType!=AnnotationOperationType.ADD && operationType!=AnnotationOperationType.UPDATE) throw new ConflictException("Invalid interactive operation");
+            InteractiveTemplateSpec.validateShape(InteractiveTemplateSpec.payload(payload));
+            if(operationType==AnnotationOperationType.UPDATE) {
+                requireTargetOperationId(root);
+                try { java.util.UUID.fromString(root.path("baseOperationId").asString("")); }
+                catch(IllegalArgumentException ex) { throw new ConflictException("Interactive revision is required"); }
+            } else if(root.has("targetOperationId") || root.has("baseOperationId")) throw new ConflictException("Invalid interactive creation");
+            return payload;
+        }
         validateColor(root);
         validateStrokeWidth(root);
 

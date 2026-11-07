@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/Kolin*'
+      - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/InteractiveTemplateSpec.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/liveclasses/InteractiveTemplateSpecTest.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotService.java'
       - 'backend/src/test/java/com/mcschool/flashcard/**/*Kolin*'
       - 'frontend/src/api/kolin*'
@@ -30,7 +32,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn -B '-Dtest=*Kolin*Test' test
+      - run: mvn -B '-Dtest=*Kolin*Test,InteractiveTemplateSpecTest' test
       - run: mvn -B -DskipTests package
   frontend:
     runs-on: ubuntu-24.04

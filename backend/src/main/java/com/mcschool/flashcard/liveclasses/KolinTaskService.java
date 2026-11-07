@@ -44,13 +44,17 @@ public class KolinTaskService {
             String previous=store.previousDraft(teacher,room.getId());
             Content previousContent=previous==null?null:mapper.readValue(previous,Content.class);
             if(previousContent!=null) context.put("lastGeneratedWorksheet",previousContent);
-            int requiredCount=requestedCount(question,previousContent==null?0:previousContent.tasks().size());
+            boolean interactive=request.context()!=null && "interactive".equals(request.context().format());
+            int requiredCount=requestedCount(question,previousContent==null?0:previousContent.tasks().size(),interactive?1:5);
+            if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
             context.put("requestedTaskCount",requiredCount);
             if(request.context()!=null && request.context().studentId()!=null)
                 context.put("selectedStudentId",request.context().studentId());
             else if(room.getStudent()!=null) context.put("selectedStudentId",room.getStudent().getId());
             stage="MODEL";
-            Content content=mapper.readValue(ai.kolinStructuredReply(mapper.writeValueAsString(context),history,question),Content.class);
+            Content content=mapper.readValue(interactive
+                    ? ai.kolinInteractiveReply(mapper.writeValueAsString(context),history,question)
+                    : ai.kolinStructuredReply(mapper.writeValueAsString(context),history,question),Content.class);
             stage="CONTENT";
             if(content==null || content.kind()==null || content.text()==null || content.text().length()>4000
                     || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolin content");
@@ -69,6 +73,18 @@ public class KolinTaskService {
             UUID target=UUID.fromString(content.studentId());
             var pupil=pupils.stream().filter(item -> item.id().equals(target)).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown worksheet recipient"));
+            if(interactive) {
+                stage="CONTENT";
+                var canonical=new ArrayList<Task>();
+                for(var task:content.tasks()) {
+                    if(!"visual".equals(task.kind())) throw new IllegalArgumentException("Interactive tasks must be visual");
+                    canonical.add(new Task("visual","","",null,"",List.of(),InteractiveTemplateSpec.validate(task.visual())));
+                }
+                var saved=new Content("interactive",content.text(),content.studentId(),canonical);
+                stage="STORE";
+                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"interactive",content.text(),transcript,
+                        pupil.id(),pupil.name(),canonical.size(),canonical.size(),null,null,mapper.writeValueAsString(saved));
+            }
             stage="DOCUMENT";
             String document=mapper.writeValueAsString(document(content.tasks()));
             long started=System.nanoTime();
@@ -199,7 +215,8 @@ public class KolinTaskService {
     static int requestedCount(String question) {
         return requestedCount(question,0);
     }
-    static int requestedCount(String question,int previousCount) {
+    static int requestedCount(String question,int previousCount) { return requestedCount(question,previousCount,5); }
+    static int requestedCount(String question,int previousCount,int defaultCount) {
         var numeric=java.util.regex.Pattern.compile("(?iu)(\\d{1,3})\\s*(?:задан|пример|упражнен|aufgaben|aufgabe|tasks?|exercises?)").matcher(question);
         if(numeric.find()) return Integer.parseInt(numeric.group(1));
         var words=Map.ofEntries(Map.entry("одно",1),Map.entry("один",1),Map.entry("одну",1),Map.entry("два",2),Map.entry("две",2),
@@ -212,6 +229,6 @@ public class KolinTaskService {
         if(previousCount>0 && !question.matches("(?isU).*\\b(?:пару|несколько|paar|einige)\\b.*")
                 && question.matches("(?isu).*(?:втор|перв|треть|четв|пят|измени|передел|услож|упрост|сложнее|проще|schwerer|leichter|ändern).*"))
             return previousCount;
-        return 5;
+        return defaultCount;
     }
 }

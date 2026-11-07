@@ -27,6 +27,19 @@ class KolinTaskServiceTest {
     private final UUID clientId=UUID.randomUUID(),artifact=UUID.randomUUID(),attempt=UUID.randomUUID();
     private final KolinTranscriptContextService.Metadata metadata=KolinTranscriptContextService.unavailable(room).metadata();
 
+    @Test void interactiveTemplateUsesOneProviderCallWithoutPdfRenderingOrAutomaticAppend()throws Exception {
+        reserve();
+        var content=new KolinTaskService.Content("worksheet","Graph",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","untrusted prose","wrong formula",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
+        when(ai.kolinInteractiveReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(content));
+        service.reply(host,room,new KolinChatService.Request("Покажи параболу",List.of(),
+            new KolinChatService.Context("student",pupil.getId(),0,"interactive"),clientId),new java.util.LinkedHashMap<>(),List.of(),"Покажи параболу",metadata);
+        verify(ai,times(1)).kolinInteractiveReply(anyString(),anyList(),anyString());
+        verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("interactive"),eq("Graph"),eq(metadata),eq(pupil.getId()),eq("Виталина"),
+            eq(1),eq(1),isNull(),isNull(),argThat(json->!json.contains("untrusted prose")&&!json.contains("wrong formula")));
+    }
+
     @Test void vagueRequestsAreFiveButExplicitNumbersWin() {
         for(String value:List.of("Дай пару заданий","Дай несколько примеров","Дай ещё задания","Дай Виталине задания"))
             assertThat(KolinTaskService.requestedCount(value)).isEqualTo(5);

@@ -134,12 +134,57 @@ public class OnlineClassAnnotationService {
         User layerOwner = actor;
 
         String payload = validator.validate(request.operationType(), request.payload());
+        validateInteraction(document,request,host,payload);
         long sequence = document.nextRevision();
 
         OnlineClassAnnotationEvent event = eventRepository.save(
                 OnlineClassAnnotationEvent.record(document, request.operationId(), sequence,
                         actor, layerOwner, request.operationType(), payload));
         return AnnotationOperationResponse.from(event);
+    }
+
+    /** Called under the document row lock, so stale editors never silently overwrite a peer's change. */
+    private void validateInteraction(OnlineClassAnnotationDocument document,AnnotationOperationRequest request,boolean host,String payload) {
+        var next=InteractiveTemplateSpec.payload(payload);
+        if(!"interactive".equals(next.get("kind"))) {
+            // Ordinary UPDATEs cannot replace a template and bypass its revision check.
+            if(request.operationType()==AnnotationOperationType.UPDATE && next.get("targetOperationId") instanceof String id) {
+                try { eventRepository.findByDocumentIdAndOperationId(document.getId(),UUID.fromString(id)).ifPresent(original -> {
+                    if("interactive".equals(InteractiveTemplateSpec.payload(original.getPayload()).get("kind")))
+                        throw new ConflictException("Interactive template requires an interactive update");
+                }); } catch(IllegalArgumentException ex) { throw new ConflictException("Invalid update target"); }
+            }
+            return;
+        }
+        if(document.getTargetType()!=AnnotationTargetType.WHITEBOARD || !PersonalBoard.isWorkbook(document.getTargetId()))
+            throw new ConflictException("Interactive templates require a personal workbook");
+        if(request.operationType()==AnnotationOperationType.ADD) {
+            if(!host) throw new ResourceNotFoundException("Annotation document not found");
+            return;
+        }
+        UUID target=UUID.fromString((String)next.get("targetOperationId"));
+        var original=eventRepository.findByDocumentIdAndOperationId(document.getId(),target).orElseThrow(() -> new ConflictException("Template not found"));
+        var initial=InteractiveTemplateSpec.payload(original.getPayload());
+        if(original.getOperationType()!=AnnotationOperationType.ADD || !"interactive".equals(initial.get("kind")))
+            throw new ConflictException("Template not found");
+        InteractiveTemplateSpec.sameTemplate(InteractiveTemplateSpec.read(initial.get("interactive")),InteractiveTemplateSpec.read(next.get("interactive")));
+        var events=eventRepository.findAllByDocumentIdOrderBySequenceAsc(document.getId());
+        if(events.size()>=MAX_REPLAY_OPERATIONS) throw new ConflictException("Please create a new interactive page");
+        UUID revision=target; boolean visible=false,undone=false;
+        for(var event:events) {
+            if(event.getOperationId().equals(target)) visible=true;
+            var data=InteractiveTemplateSpec.payload(event.getPayload());
+            boolean own=event.getLayerOwner().getId().equals(original.getLayerOwner().getId());
+            if(event.getOperationType()==AnnotationOperationType.CLEAR_ALL) { visible=false;undone=false; }
+            if(event.getOperationType()==AnnotationOperationType.CLEAR_LAYER && own) visible=false;
+            if(target.toString().equals(data.get("targetOperationId"))) {
+                if(event.getOperationType()==AnnotationOperationType.UNDO && own && visible) { visible=false;undone=true; }
+                if(event.getOperationType()==AnnotationOperationType.REDO && own && undone) { visible=true;undone=false; }
+                if(event.getOperationType()==AnnotationOperationType.UPDATE && visible) revision=event.getOperationId();
+            }
+        }
+        if(!visible || !revision.toString().equals(next.get("baseOperationId")))
+            throw new ConflictException("Interactive template changed; reopen it to use the current state");
     }
 
     /**

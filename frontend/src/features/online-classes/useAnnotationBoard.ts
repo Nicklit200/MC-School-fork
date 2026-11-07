@@ -1,3 +1,4 @@
+import type { InteractiveSpec } from './interactiveTemplates';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   onlineClassesApi,
@@ -308,6 +309,16 @@ export function useAnnotationBoard({
     [actorId, shapes, submit],
   );
 
+  const interact = useCallback(async (operationId:string,spec:InteractiveSpec,baseOperationId:string) => {
+    const entry=shapes.find(item=>item.operationId===operationId);
+    if(!entry || entry.shape.kind!=='interactive') return;
+    const id=newId();
+    const saved=await submit('UPDATE',JSON.stringify({...entry.shape,interactive:spec,targetOperationId:operationId,baseOperationId}),id);
+    await refreshInteractionRef.current?.();
+    return saved?id:undefined;
+  },[shapes,submit]);
+  const refreshInteractionRef=useRef<(()=>Promise<void>)|null>(null);
+
   const clearMine = useCallback(() => {
     setRedoStack([]);
     return submit('CLEAR_LAYER', '{}');
@@ -337,7 +348,9 @@ export function useAnnotationBoard({
     }
   }, [classId, document, hookScope, merge, pageIndex]);
 
+  refreshInteractionRef.current=refresh;
   return {
+    interact,
     document,
     shapes,
     confirmedStrokeIds,

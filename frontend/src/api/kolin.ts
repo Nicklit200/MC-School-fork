@@ -1,9 +1,11 @@
 import { request, requestBlob } from './client';
+import { parseInteractiveSpec, type InteractiveSpec } from '../features/online-classes/interactiveTemplates';
 
 export interface KolinContext {
   targetType?: 'student' | 'group';
   studentId?: string;
   currentWorkbookPage?: number;
+  format?: 'pdf' | 'interactive';
 }
 
 export interface KolinHistoryMessage {
@@ -30,10 +32,11 @@ export interface KolinWorksheet {
   state: 'READY' | 'ADDED';
   fromPage?: number;
   toPage?: number;
+  interactive?: InteractiveSpec[];
 }
 
 export interface KolinResponse {
-  type: 'text' | 'worksheet';
+  type: 'text' | 'worksheet' | 'interactive';
   text: string;
   transcriptContext?: KolinTranscriptContext;
   worksheet?: KolinWorksheet;
@@ -51,7 +54,9 @@ export function parseKolinWorksheet(value: unknown): KolinWorksheet | undefined 
   const from = source.fromPage, to = source.toPage;
   if (from != null && !positive(from) || to != null && !positive(to)
       || typeof from === 'number' && typeof to === 'number' && from > to) return;
-  return { id: source.id, studentId: source.studentId, studentName: source.studentName,
+  const interactive = source.interactive == null ? undefined : Array.isArray(source.interactive) ? source.interactive.map(parseInteractiveSpec) : [];
+  if (interactive && (interactive.length<1 || interactive.length>5 || interactive.some(spec=>!spec) || interactive.length!==source.taskCount)) return;
+  return { ...(interactive ? {interactive:interactive as InteractiveSpec[]} : {}), id: source.id, studentId: source.studentId, studentName: source.studentName,
     taskCount: source.taskCount, pageCount: source.pageCount, state: source.state,
     ...(typeof from === 'number' ? { fromPage: from } : {}), ...(typeof to === 'number' ? { toPage: to } : {}) };
 }
@@ -86,6 +91,7 @@ export const kolinApi = {
       ...(clientMessageId ? { clientMessageId } : {}),
       history: history.slice(-8).map(message => ({ role: message.role, text: message.text })),
       context: {
+        ...(context.format ? { format: context.format } : {}),
         ...(context.targetType ? { targetType: context.targetType } : {}),
         ...(context.studentId ? { studentId: context.studentId } : {}),
         ...(context.currentWorkbookPage !== undefined ? { currentWorkbookPage: context.currentWorkbookPage } : {}),

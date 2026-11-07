@@ -7,7 +7,10 @@
  * same drawing.
  */
 
+import { parseInteractiveSpec, type InteractiveSpec } from './interactiveTemplates';
+
 export type ShapeKind =
+  | 'interactive'
   | 'pen'
   | 'highlighter'
   | 'line'
@@ -33,6 +36,7 @@ export interface NormalizedPoint {
 
 export interface Shape {
   kind: ShapeKind;
+  interactive?: InteractiveSpec;
   color?: string;
   width?: number;
   points?: [number, number][];
@@ -68,6 +72,7 @@ export interface RenderableShape {
   layerOwnerId: string;
   sequence: number;
   shape: Shape;
+  interactionRevision?: string;
 }
 
 export interface Viewport {
@@ -222,6 +227,7 @@ function foldDetailed(operations: Operation[]): { shapes: RenderableShape[]; app
   const undone = new Set<string>();
   const moves = new Map<string, MoveRecord>();
   const appliedMoves = new Set<string>();
+  const interactiveStates = new Map<string, RenderableShape>();
 
   for (const operation of ordered) {
     switch (operation.operationType) {
@@ -242,6 +248,15 @@ function foldDetailed(operations: Operation[]): { shapes: RenderableShape[]; app
           break;
         }
         const existing = shapes.get(target);
+        if (existing?.shape.kind==='interactive') {
+          const payload=JSON.parse(operation.payload);
+          const spec=parseInteractiveSpec(shape.interactive);
+          if(shape.kind==='interactive' && spec && payload.baseOperationId===(existing.interactionRevision??existing.operationId)) {
+            const next={...existing,shape:{...existing.shape,interactive:spec},interactionRevision:operation.operationId};
+            shapes.set(target,next); interactiveStates.set(target,next);
+          }
+          break;
+        }
         if (existing && existing.layerOwnerId === operation.layerOwnerId) {
           moves.set(operation.operationId, {
             target,
@@ -264,6 +279,7 @@ function foldDetailed(operations: Operation[]): { shapes: RenderableShape[]; app
             sequence: operation.sequence,
             shape,
           });
+          if(shape.kind==='interactive') interactiveStates.set(operation.operationId,shapes.get(operation.operationId)!);
         }
         break;
       }
@@ -313,6 +329,8 @@ function foldDetailed(operations: Operation[]): { shapes: RenderableShape[]; app
         if (!target || !undone.has(target)) break;
         const original = ordered.find((candidate) => candidate.operationId === target);
         if (original && original.layerOwnerId === operation.layerOwnerId) {
+          const interactive=interactiveStates.get(target);
+          if(interactive) { shapes.set(target,interactive); undone.delete(target); break; }
           const shape = latestShape(ordered, target) ?? parseShape(original.payload);
           if (shape) {
             shapes.set(target, {
@@ -349,6 +367,7 @@ export function undoableOperations(operations: Operation[], actorId: string): Op
       (operation) =>
         operation.layerOwnerId === actorId &&
         ['ADD', 'UPDATE', 'ERASE'].includes(operation.operationType) &&
+        !(operation.operationType==='UPDATE' && parseShape(operation.payload)?.kind==='interactive') &&
         (visible.has(operation.operationId) || appliedMoves.has(operation.operationId)),
     )
     .sort((a, b) => a.sequence - b.sequence);
