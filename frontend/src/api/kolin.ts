@@ -25,7 +25,8 @@ export interface KolinTranscriptContext {
 
 export interface KolinWorksheet {
   id: string;
-  studentId: string;
+  studentId: string | null;
+  targetType?: 'student' | 'group';
   studentName: string;
   taskCount: number;
   pageCount: number;
@@ -46,7 +47,9 @@ export interface KolinResponse {
 export function parseKolinWorksheet(value: unknown): KolinWorksheet | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const source = value as Record<string, unknown>;
-  if (typeof source.id !== 'string' || !source.id || typeof source.studentId !== 'string' || !source.studentId
+  const group=source.targetType==='group';
+  if (source.targetType!=null && source.targetType!=='student' && !group) return;
+  if (typeof source.id !== 'string' || !source.id || (group?source.studentId!==null:typeof source.studentId !== 'string' || !source.studentId)
       || typeof source.studentName !== 'string' || !source.studentName.trim()
       || source.state !== 'READY' && source.state !== 'ADDED') return;
   const positive = (item: unknown): item is number => typeof item === 'number' && Number.isSafeInteger(item) && item > 0;
@@ -56,7 +59,7 @@ export function parseKolinWorksheet(value: unknown): KolinWorksheet | undefined 
       || typeof from === 'number' && typeof to === 'number' && from > to) return;
   const interactive = source.interactive == null ? undefined : Array.isArray(source.interactive) ? source.interactive.map(parseInteractiveSpec) : [];
   if (interactive && (interactive.length<1 || interactive.length>5 || interactive.some(spec=>!spec) || interactive.length!==source.taskCount)) return;
-  return { ...(interactive ? {interactive:interactive as InteractiveSpec[]} : {}), id: source.id, studentId: source.studentId, studentName: source.studentName,
+  return { ...(source.targetType?{targetType:group?'group' as const:'student' as const}:{}), ...(interactive ? {interactive:interactive as InteractiveSpec[]} : {}), id: source.id, studentId: source.studentId as string|null, studentName: source.studentName,
     taskCount: source.taskCount, pageCount: source.pageCount, state: source.state,
     ...(typeof from === 'number' ? { fromPage: from } : {}), ...(typeof to === 'number' ? { toPage: to } : {}) };
 }

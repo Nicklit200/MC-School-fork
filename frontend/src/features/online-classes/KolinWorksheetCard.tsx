@@ -86,6 +86,8 @@ export function KolinWorksheetCard({ classId, worksheet, appendStatus, de, onAdd
 }) {
   const [thumbnail, setThumbnail] = useState<string>();
   const [preview, setPreview] = useState(false);
+  const addLabel=worksheet.targetType==='group'?(de?'Zur gemeinsamen Tafel hinzufügen':'На общую доску')
+    :de?`Für ${worksheet.studentName} hinzufügen`:`Добавить ${recipientName(worksheet.studentName)}`;
   useEffect(() => {
     let cancelled = false;
     let url: string | undefined;
@@ -104,7 +106,7 @@ export function KolinWorksheetCard({ classId, worksheet, appendStatus, de, onAdd
     </button>
     <strong>{worksheet.studentName}</strong><p>{worksheet.interactive.length} {de?'interaktive Objekte':'интерактивных объектов'}</p>
     <button type="button" className="kolin-worksheet__add" disabled={worksheet.state==='ADDED'||appendStatus==='pending'} onClick={onAdd}>
-      {worksheet.state==='ADDED'?de?'Hinzugefügt ✓':'Добавлено ✓':appendStatus==='pending'?de?'Wird hinzugefügt…':'Добавляем…':de?`Für ${worksheet.studentName} hinzufügen`:`Добавить ${recipientName(worksheet.studentName)}`}
+      {worksheet.state==='ADDED'?de?'Hinzugefügt ✓':'Добавлено ✓':appendStatus==='pending'?de?'Wird hinzugefügt…':'Добавляем…':addLabel}
     </button>
     {appendStatus==='failed'&&<p role="alert">{de?'Hinzufügen fehlgeschlagen. Bitte erneut versuchen.':'Не удалось подтвердить добавление. Повторите нажатие.'}</p>}
     {preview&&<InteractiveDialog title={worksheet.studentName} onClose={()=>setPreview(false)}>
@@ -122,7 +124,7 @@ export function KolinWorksheetCard({ classId, worksheet, appendStatus, de, onAdd
     </div>
     <button type="button" className="kolin-worksheet__add" disabled={added || appendStatus === 'pending'} onClick={onAdd}>
       {added ? de ? 'Hinzugefügt ✓' : 'Добавлено ✓' : appendStatus === 'pending' ? de ? 'Wird hinzugefügt…' : 'Добавляем…'
-        : de ? `Für ${worksheet.studentName} hinzufügen` : `Добавить ${recipientName(worksheet.studentName)}`}
+        : addLabel}
     </button>
     {appendStatus === 'failed' && <p className="kolin-worksheet__error" role="alert">{de
       ? 'Hinzufügen nicht bestätigt. Drücken Sie die Taste erneut, um es sicher zu wiederholen.'

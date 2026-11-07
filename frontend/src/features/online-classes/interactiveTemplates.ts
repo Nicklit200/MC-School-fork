@@ -2,6 +2,7 @@
 export type InteractiveSpec =
   | { template: 'graph'; language: 'ru' | 'de'; function: 'linear' | 'quadratic'; coefficients: number[] }
   | { template: 'triangle'; language: 'ru' | 'de'; vertices: [number, number][] }
+  | { template: 'cube'; language: 'ru' | 'de'; unfold: number; yaw: number; pitch: number }
   | { template: 'fractionCircle'; language: 'ru' | 'de'; parts: number; selected: number[] };
 const finite = (n: unknown, min: number, max: number): n is number => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
 export const triangleArea = (v: [number, number][]) => Math.abs((v[1][0]-v[0][0])*(v[2][1]-v[0][1])-(v[2][0]-v[0][0])*(v[1][1]-v[0][1]))/2;
@@ -10,6 +11,9 @@ export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefine
   const s = value as Record<string, unknown>;
   if (s.language !== 'ru' && s.language !== 'de') return;
   const keys = (...expected: string[]) => Object.keys(s).sort().join('|') === expected.sort().join('|');
+  if (s.template === 'cube' && keys('template','language','unfold','yaw','pitch')
+    && finite(s.unfold,0,1) && finite(s.yaw,-180,180) && finite(s.pitch,-90,90))
+    return {template:'cube',language:s.language,unfold:s.unfold,yaw:s.yaw,pitch:s.pitch};
   if (s.template === 'graph' && keys('template','language','function','coefficients')
     && (s.function === 'linear' || s.function === 'quadratic') && Array.isArray(s.coefficients)
     && s.coefficients.length === (s.function === 'linear' ? 2 : 3) && s.coefficients.every(n => finite(n,-10,10)))
@@ -26,6 +30,7 @@ export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefine
 }
 export function templateTitle(spec: InteractiveSpec) {
   const de=spec.language==='de';
+  if(spec.template==='cube') return de?'Würfel und sein Netz':'Куб и его развёртка';
   return spec.template==='graph' ? de?'Graph untersuchen':'Исследуем график'
     : spec.template==='triangle' ? de?'Dreieck untersuchen':'Исследуем треугольник' : de?'Bruchteile':'Доли круга';
 }
@@ -59,11 +64,41 @@ export function sectorPath(index:number,parts:number) {
   const a=-Math.PI/2+index*2*Math.PI/parts,b=a+2*Math.PI/parts,r=110;
   return `M 250 210 L ${coord(250+r*Math.cos(a))} ${coord(210+r*Math.sin(a))} A ${r} ${r} 0 ${b-a>Math.PI?1:0} 1 ${coord(250+r*Math.cos(b))} ${coord(210+r*Math.sin(b))} Z`;
 }
+/** Six rigid unit squares joined along hinges, not a morph between pictures. */
+export function cubeFaces(unfold:number): [number,number,number][][] {
+  const a=(1-unfold)*Math.PI/2,c=Math.cos(a),s=Math.sin(a);
+  const square=[[0,0],[1,0],[1,1],[0,1]];
+  const faces: [number,number,number][][]=[
+    square.map(([u,v])=>[u-.5,v-.5,0]),
+    square.map(([u,v])=>[.5+u*c,v-.5,u*s]),
+    square.map(([u,v])=>[-.5-u*c,v-.5,u*s]),
+    square.map(([u,v])=>[u-.5,.5+v*c,v*s]),
+    square.map(([u,v])=>[u-.5,-.5-v*c,v*s]),
+    square.map(([u,v])=>[u-.5,.5+c+v*Math.cos(2*a),s+v*Math.sin(2*a)]),
+  ];
+  return faces.map(face=>face.map(([x,y,z])=>[x,y-.5*unfold,z-.5*(1-unfold)]));
+}
 /** One scene feeds both the editable SVG and the board/PDF canvas snapshot. */
 export function templateScene(spec:InteractiveSpec):Primitive[] {
   const result:Primitive[]=[{kind:'text',x:25,y:30,text:templateTitle(spec),size:19}];
   const text=(x:number,y:number,value:string,size=15) => result.push({kind:'text',x,y,text:value,size});
   const path=(d:string,stroke='#dce3e9',width=1,fill='none',clip=false)=>result.push({kind:'path',d,stroke,width,fill,clip});
+  if(spec.template==='cube') {
+    const yaw=spec.yaw*Math.PI/180,pitch=spec.pitch*Math.PI/180;
+    const projected=cubeFaces(spec.unfold).map((face,index)=>({index,points:face.map(([x,y,z])=>{
+      const rx=x*Math.cos(yaw)+z*Math.sin(yaw),rz=-x*Math.sin(yaw)+z*Math.cos(yaw);
+      return [rx,y*Math.cos(pitch)-rz*Math.sin(pitch),y*Math.sin(pitch)+rz*Math.cos(pitch)];
+    })}));
+    projected.sort((a,b)=>a.points.reduce((n,p)=>n+p[2],0)-b.points.reduce((n,p)=>n+p[2],0));
+    const colors=['#fde68a','#fdba74','#93c5fd','#a7f3d0','#c4b5fd','#fca5a5'];
+    for(const face of projected) {
+      const scale=110-45*spec.unfold;
+      const points=face.points.map(([x,y])=>[250+x*scale,235-y*scale]);
+      path(points.map(([x,y],i)=>`${i?'L':'M'} ${coord(x)} ${coord(y)}`).join(' ')+' Z','#334155',1.5,colors[face.index]);
+    }
+    text(25,410,spec.language==='de'?'6 Flächen · 12 Kanten · 8 Ecken':'6 граней · 12 рёбер · 8 вершин');
+    return result;
+  }
   if(spec.template==='fractionCircle') {
     for(let i=0;i<spec.parts;i++) path(sectorPath(i,spec.parts),'#334155',1.5,spec.selected.includes(i)?'#f9a66d':'#ffffff');
     text(25,390,fractionLabel(spec),23);

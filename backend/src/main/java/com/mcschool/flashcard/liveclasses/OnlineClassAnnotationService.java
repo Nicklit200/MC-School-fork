@@ -156,8 +156,8 @@ public class OnlineClassAnnotationService {
             }
             return;
         }
-        if(document.getTargetType()!=AnnotationTargetType.WHITEBOARD || !PersonalBoard.isWorkbook(document.getTargetId()))
-            throw new ConflictException("Interactive templates require a personal workbook");
+        if(document.getTargetType()!=AnnotationTargetType.WHITEBOARD || !(PersonalBoard.isWorkbook(document.getTargetId()) || "board-1".equals(document.getTargetId())))
+            throw new ConflictException("Interactive templates require a workbook board");
         if(request.operationType()==AnnotationOperationType.ADD) {
             if(!host) throw new ResourceNotFoundException("Annotation document not found");
             return;

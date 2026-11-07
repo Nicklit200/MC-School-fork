@@ -60,6 +60,14 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
           const d=delta[event.key];if(d){event.preventDefault();moveVertex(index,v[0]+d[0],v[1]+d[1]);}}}
         onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>;})}
     </svg>
+    {!disabled&&value.template==='cube'&&<div className="interactive-template__controls">{(['unfold','yaw','pitch'] as const).map(field=><label key={field}>
+      <span>{field==='unfold'?(de?'Entfalten':'Раскрыть'):field==='yaw'?(de?'Drehen':'Поворот'):(de?'Neigen':'Наклон')}: {fmt(value[field])}</span>
+      <input type="range" aria-label={field==='unfold'?'Раскрыть / Entfalten':field==='yaw'?'Поворот / Drehen':'Наклон / Neigen'}
+        min={field==='unfold'?0:field==='yaw'?-180:-90} max={field==='unfold'?1:field==='yaw'?180:90}
+        step={field==='unfold'?.01:1} value={value[field]} disabled={locked}
+        onChange={event=>change({...value,[field]:Number(event.target.value)})}
+        onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>
+    </label>)}</div>}
     {!disabled&&value.template==='graph'&&<div className="interactive-template__controls">{value.coefficients.map((coefficient,index)=><label key={index}>
       <span>{value.function==='linear'?['m','b'][index]:['a','b','c'][index]} = {fmt(coefficient)}</span>
       <input type="range" min={-10} max={10} step={.1} value={coefficient} disabled={locked}
@@ -73,8 +81,9 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
         onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/></label>}
     {!disabled&&value.template==='triangle'&&<p>{de?'Punkte ziehen oder mit den Pfeiltasten bewegen.':'Перетаскивайте точки или двигайте их стрелками клавиатуры.'}</p>}
     {status==='saving'&&<p role="status">{de?'Wird gespeichert…':'Сохраняем…'}</p>}
-    {status==='error'&&<p role="alert">{de?'Nicht gespeichert. Schließen und erneut öffnen, um den aktuellen Stand zu laden.'
-      :'Изменение не сохранено. Закройте и откройте объект, чтобы загрузить актуальное состояние.'}</p>}
+    {status==='error'&&<p role="alert">{de?'Nicht gespeichert. Laden Sie den aktuellen Stand.':'Изменение не сохранено. Загрузите актуальное состояние.'}
+      <button type="button" onClick={()=>{current.current=spec;setValue(spec);base.current=revision;dirty.current=false;setStatus('idle');}}>
+        {de?'Aktuellen Stand laden':'Загрузить актуальное'}</button></p>}
   </div>;
 }
 

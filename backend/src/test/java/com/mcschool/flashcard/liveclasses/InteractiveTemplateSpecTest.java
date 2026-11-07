@@ -7,6 +7,15 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 class InteractiveTemplateSpecTest {
+    @Test void validatesCubeAndInfersSpokenInteractiveRequests() {
+        var cube=new HashMap<String,Object>(Map.of("template","cube","language","ru","unfold",0.5,"yaw",-30,"pitch",25));
+        assertThat(InteractiveTemplateSpec.validate(cube)).isEqualTo(cube);
+        cube.put("unfold",1.01);assertThatThrownBy(()->InteractiveTemplateSpec.validate(cube)).isInstanceOf(ConflictException.class);
+        assertThat(KolinTaskService.interactiveRequest("Раскрой куб для Виталины",null,null)).isTrue();
+        assertThat(KolinTaskService.interactiveRequest("Сделай PDF развёртки куба",null,null)).isFalse();
+        assertThat(KolinTaskService.interactiveRequest("Это на общую доску",null,
+                new KolinTaskService.Content("interactive","","group",List.of()))).isTrue();
+    }
     static Map<String,Object> graph() { return Map.of("template","graph","language","ru","function","quadratic","coefficients",List.of(1,-4,3)); }
     @Test void acceptsAllThreeClosedNumericTemplates() {
         for(var spec:List.of(graph(),Map.of("template","triangle","language","de","vertices",List.of(List.of(0,0),List.of(3,0),List.of(0,4))),

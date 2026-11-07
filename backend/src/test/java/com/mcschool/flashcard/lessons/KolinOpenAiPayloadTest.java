@@ -75,7 +75,7 @@ class KolinOpenAiPayloadTest {
             .doesNotContain("Режим подтверждаемого PDF","ровно 5 самостоятельных");
         var templates=json.path("text").path("format").path("schema").path("properties").path("tasks").path("items")
             .path("properties").path("visual").path("anyOf").get(1).path("anyOf");
-        assertThat(templates.size()).isEqualTo(3);
+        assertThat(templates.size()).isEqualTo(4);
         for(var template:templates) assertThat(template.path("additionalProperties").asBoolean()).isFalse();
         assertThat(serialized).doesNotContain("TEST_SERVER_ONLY_KEY","input_file","input_image");
         String fixtureDir=System.getProperty("kolin.interactiveFixtureDir");

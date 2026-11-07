@@ -53,29 +53,35 @@ public class KolinWorkbookAppendService {
         if (!access.isHost(teacher, room)) throw new ResourceNotFoundException("Online class not found");
         if (room.isTerminal()) throw new ConflictException("This class has ended");
         if (!personal.enabledForTeacher(teacher.id())) throw new ResourceNotFoundException("Personal workbook not found");
-        personal.requireClassStudent(room, studentId);
+        boolean group=studentId==null;
+        if(!group) personal.requireClassStudent(room, studentId);
         requireBytes(generatedPdf);
 
-        PersonalLessonWorkbook current = workbooks.findByTeacherIdAndEventIdAndStudentId(
+        PersonalLessonWorkbook current = group?null:workbooks.findByTeacherIdAndEventIdAndStudentId(
                 teacher.id(), room.getEventId(), studentId).orElse(null);
-        String target = PersonalBoard.workbookTargetIdFor(studentId);
-        String inheritedTarget = PersonalBoard.targetIdFor(studentId);
+        String target = group?"board-1":PersonalBoard.workbookTargetIdFor(studentId);
+        String inheritedTarget = group?"board-1":PersonalBoard.targetIdFor(studentId);
         var all = documents.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId());
         var legacy = pages(all, inheritedTarget);
         var privatePages = pages(all, target);
-        if (current == null && !privatePages.isEmpty())
+        if (!group && current == null && !privatePages.isEmpty())
             throw new ConflictException("A private annotation scope already exists without a workbook; review it before appending");
-        List<OnlineClassAnnotationDocument> activePages = current == null ? legacy : privatePages;
+        // Shared backgrounds are also inherited by pupils without private PDFs. Preserve their blank ink pages.
+        List<OnlineClassAnnotationDocument> activePages = group?all.stream().filter(page ->
+                page.getTargetType()==AnnotationTargetType.WHITEBOARD && !PersonalBoard.isWorkbook(page.getTargetId())).toList()
+                :current == null ? legacy : privatePages;
         long extentLong = activePages.stream().mapToLong(page -> (long) page.getPageIndex() + 1L).max().orElse(0L);
         if (extentLong < 0 || extentLong > MAX_TOTAL_PAGES) throw new ConflictException("The student's board has too many pages");
         int extent = (int) extentLong;
         byte[] base;
+        com.mcschool.flashcard.lessons.LessonPreparation shared=null;
         if (current == null) {
             // Ensure normal lesson/archive metadata without refreshing Calendar or changing shared files.
             preparations.insertIfAbsent(teacher.id(), room.getEventId());
             var inherited = preparations.findByTeacherIdAndEventId(teacher.id(), room.getEventId()).orElseThrow();
             // Keep the inherited background stable against a simultaneous shared PDF upload.
-            entities.refresh(inherited, LockModeType.PESSIMISTIC_READ);
+            entities.refresh(inherited, group?LockModeType.PESSIMISTIC_WRITE:LockModeType.PESSIMISTIC_READ);
+            if(group) shared=inherited;
             base = inherited.hasWorkbook() ? inherited.getWorkbookPdf() : null;
         } else base = current.getWorkbookPdf();
         if (current != null && base == null) throw new ConflictException("The existing private workbook is unreadable");
@@ -99,6 +105,11 @@ public class KolinWorkbookAppendService {
             byte[] bytes = output.toByteArray();
             requireBytes(bytes);
 
+            if(group) {
+                shared.attachWorkbook("lesson-workbook.pdf",bytes);
+                preparations.saveAndFlush(shared);
+                return new Result(previousPages+1,total,shared.getWorkbookVersion());
+            }
             if (current == null) {
                 current = PersonalLessonWorkbook.create(teacher.id(), room.getEventId(), studentId);
                 // Retarget, never copy/delete. Old document IDs and in-flight strokes remain valid.

@@ -9,7 +9,6 @@ import type { InputMode } from './inputPolicy';
 import type { DocumentGesture } from './documentGesture';
 import type { PdfDoc } from './pdfDocument';
 import { useAnnotationBoard } from './useAnnotationBoard';
-import { InteractiveDialog, InteractiveTemplate } from './InteractiveTemplate';
 import { useClassEvents } from './useClassEvents';
 import { useHostUserId } from './useHostUserId';
 import { toLiveShape, useLiveStrokes } from './useLiveStrokes';
@@ -115,7 +114,6 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
   onDocumentReady,
   viewScope,
 }, ref) {
-  const [editingInteractive,setEditingInteractive]=useState<string|null>(null);
   const camera = targetType === 'NOTEBOOK_CAMERA';
   const personal = isPersonalBoard(targetId);
   const ownerId = personalBoardOwner(targetId);
@@ -273,17 +271,10 @@ export const WhiteboardPageSurface = forwardRef<PageSurfaceHandle, WhiteboardPag
       onPointerDownCapture={() => onActivate?.(pageIndex)}
       onFocusCapture={() => onActivate?.(pageIndex)}
     >
-      {board.shapes.filter(entry=>entry.shape.kind==='interactive' && entry.shape.interactive).map(entry=><div key={entry.operationId}>
-        <button type="button" className="interactive-board-open" data-tablet-no-ink="" disabled={!canAnnotate}
-          onClick={()=>setEditingInteractive(entry.operationId)}>Открыть интерактив / Interaktiv öffnen</button>
-        {editingInteractive===entry.operationId&&entry.shape.interactive&&<InteractiveDialog title="Интерактив / Interaktiv" onClose={()=>setEditingInteractive(null)}>
-          <InteractiveTemplate spec={entry.shape.interactive} revision={entry.interactionRevision??entry.operationId} disabled={!canAnnotate}
-            onCommit={(spec,revision)=>board.interact(entry.operationId,spec,revision)}/>
-        </InteractiveDialog>}
-      </div>)}
       <WhiteboardCanvas
         ref={canvasRef}
         shapes={board.shapes}
+        onInteractiveCommit={board.interact}
         pageKey={`${targetType}:${targetId}:${pageIndex}`}
         tool={tool}
         color={settings.color}

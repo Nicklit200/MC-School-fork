@@ -17,6 +17,8 @@ public final class InteractiveTemplateSpec {
     public static Map<String,Object> schema() {
         var language=choice("ru","de");
         return Map.of("anyOf",List.of(
+            object("template",choice("cube"),"language",language,"unfold",Map.of("type","number"),
+                "yaw",Map.of("type","number"),"pitch",Map.of("type","number")),
             object("template",choice("graph"),"language",language,"function",choice("linear","quadratic"),"coefficients",numbers()),
             object("template",choice("triangle"),"language",language,"vertices",Map.of("type","array","items",numbers())),
             object("template",choice("fractionCircle"),"language",language,"parts",Map.of("type","integer"),
@@ -28,6 +30,9 @@ public final class InteractiveTemplateSpec {
         template=graph: function=linear, coefficients=[m,b] для y=mx+b; либо quadratic, coefficients=[a,b,c]. Коэффициенты от -10 до 10.
         template=triangle: vertices=[[x,y],[x,y],[x,y]], координаты от -5 до 5, площадь не меньше 0.05.
         template=fractionCircle: parts от 2 до 24; selected содержит номера закрашенных долей от 0 до parts-1 без повторов.
+        template=cube: unfold от 0 (собранный куб) до 1 (плоская развёртка), yaw от -180 до 180, pitch от -90 до 90.
+        Для куба по умолчанию unfold=0, yaw=-30, pitch=25. У куба 6 квадратных граней, 12 рёбер, 8 вершин.
+        Исправляй неверное количество граней в вопросе. Развёртка куба всегда содержит все 6 граней.
         language=ru или de. Интерфейс сам рисует фигуру, вычисляет значения и даёт управление.
         По умолчанию один интерактивный объект. requestedTaskCount имеет приоритет, максимум пять.
         Не обещай произвольные конструкции, доказательства, автоматическую проверку ответа ученицы или доступ к её рукописи.
@@ -38,6 +43,10 @@ public final class InteractiveTemplateSpec {
         if(spec==null || !("ru".equals(spec.get("language")) || "de".equals(spec.get("language")))) throw invalid();
         String type=Objects.toString(spec.get("template"),"");
         switch(type) {
+            case "cube" -> {
+                keys(spec,"template","language","unfold","yaw","pitch");
+                number(spec.get("unfold"),0,1); number(spec.get("yaw"),-180,180); number(spec.get("pitch"),-90,90);
+            }
             case "graph" -> {
                 keys(spec,"template","language","function","coefficients");
                 if(!("linear".equals(spec.get("function")) || "quadratic".equals(spec.get("function")))) throw invalid();

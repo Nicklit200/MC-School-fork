@@ -1,5 +1,6 @@
 import Konva from 'konva';
-import { drawInteractive } from './interactiveTemplates';
+import { drawInteractive, type InteractiveSpec } from './interactiveTemplates';
+import { InteractiveTemplate } from './InteractiveTemplate';
 import {
   forwardRef,
   useCallback,
@@ -94,6 +95,7 @@ export interface RemoteLaser {
 
 interface Props {
   shapes: RenderableShape[];
+  onInteractiveCommit?: (operationId:string,spec:InteractiveSpec,revision:string)=>Promise<string|undefined>;
   tool: Tool;
   color: string;
   strokeWidth: number;
@@ -157,6 +159,7 @@ interface Props {
 export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(function WhiteboardCanvas(
   {
     shapes,
+    onInteractiveCommit,
     tool,
     color,
     strokeWidth,
@@ -1256,6 +1259,21 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
           })}
         </Layer>
       </Stage>
+      {!projection && onInteractiveCommit && shapes.filter(entry=>entry.shape.kind==='interactive' && entry.shape.interactive).map(entry=>{
+        const shape=entry.shape,origin=toPixels({x:shape.x??0,y:shape.y??0},sceneViewport,sceneAspect);
+        const width=(shape.w??0)*backgroundBox.width,height=(shape.h??0)*backgroundBox.height;
+        const fit=Math.min(width/500,height/440);
+        const x=(origin.x+(width-500*fit)/2)*view.zoom*documentScaleX+view.panX*documentScaleX;
+        const y=(origin.y+(height-440*fit)/2)*view.zoom*documentScaleY+view.panY*documentScaleY;
+        return <div key={entry.operationId} className="interactive-board-inline" data-tablet-no-ink=""
+          style={{left:x,top:y,transform:`scale(${fit*view.zoom*documentScaleX},${fit*view.zoom*documentScaleY})`}}
+          onPointerDown={event=>event.stopPropagation()} onPointerMove={event=>event.stopPropagation()}
+          onPointerUp={event=>event.stopPropagation()} onPointerCancel={event=>event.stopPropagation()}
+          onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()}>
+          <InteractiveTemplate spec={shape.interactive!} revision={entry.interactionRevision??entry.operationId} disabled={effectiveReadOnly}
+            onCommit={(spec,revision)=>onInteractiveCommit(entry.operationId,spec,revision)}/>
+        </div>;
+      })}
 
       {projectionError && <div className="whiteboard__ink-save-alert" role="alert" data-tablet-no-ink=""
         onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>

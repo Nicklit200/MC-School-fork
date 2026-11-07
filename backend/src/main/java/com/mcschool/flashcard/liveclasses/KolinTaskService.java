@@ -18,6 +18,14 @@ public class KolinTaskService {
         }
     }
     public record Content(String kind,String text,String studentId,List<Task> tasks) {}
+    static boolean interactiveRequest(String question,KolinChatService.Context context,Content previous) {
+        String text=question.toLowerCase(Locale.ROOT);
+        if(text.contains("pdf") || text.contains("пдф")) return false;
+        if(text.matches("(?s).*(интерактив|interaktiv|interactive|3d|3д|вращ|разв[её]ртк|раскр.*куб|куб.*раскр).*")) return true;
+        if(previous!=null && "interactive".equals(previous.kind())
+                && text.matches("(?s).*(это|этот|добав|отправ|измени|сложнее|einfügen|hinzufügen).*")) return true;
+        return context!=null && "interactive".equals(context.format());
+    }
     private record Fingerprint(String text,List<KolinChatService.HistoryMessage> history,KolinChatService.Context context) {}
     private final AiLessonPilotService ai;
     private final KolinTaskRoster roster;
@@ -44,7 +52,7 @@ public class KolinTaskService {
             String previous=store.previousDraft(teacher,room.getId());
             Content previousContent=previous==null?null:mapper.readValue(previous,Content.class);
             if(previousContent!=null) context.put("lastGeneratedWorksheet",previousContent);
-            boolean interactive=request.context()!=null && "interactive".equals(request.context().format());
+            boolean interactive=interactiveRequest(question,request.context(),previousContent);
             int requiredCount=requestedCount(question,previousContent==null?0:previousContent.tasks().size(),interactive?1:5);
             if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
             context.put("requestedTaskCount",requiredCount);
@@ -70,9 +78,11 @@ public class KolinTaskService {
             if(content.tasks().size()!=requiredCount)
                 throw new IllegalArgumentException("Unexpected worksheet task count");
             stage="RECIPIENT";
-            UUID target=UUID.fromString(content.studentId());
-            var pupil=pupils.stream().filter(item -> item.id().equals(target)).findFirst()
+            boolean group="group".equals(content.studentId());
+            UUID target=group?null:UUID.fromString(content.studentId());
+            var pupil=group?null:pupils.stream().filter(item -> item.id().equals(target)).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown worksheet recipient"));
+            String recipientName=group?"Общая доска":pupil.name();
             if(interactive) {
                 stage="CONTENT";
                 var canonical=new ArrayList<Task>();
@@ -83,7 +93,7 @@ public class KolinTaskService {
                 var saved=new Content("interactive",content.text(),content.studentId(),canonical);
                 stage="STORE";
                 return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"interactive",content.text(),transcript,
-                        pupil.id(),pupil.name(),canonical.size(),canonical.size(),null,null,mapper.writeValueAsString(saved));
+                        target,recipientName,canonical.size(),canonical.size(),null,null,mapper.writeValueAsString(saved));
             }
             stage="DOCUMENT";
             String document=mapper.writeValueAsString(document(content.tasks()));
@@ -95,7 +105,7 @@ public class KolinTaskService {
             String summary=content.text().isBlank()?"Подготовлено "+content.tasks().size()+" заданий.":content.text();
             stage="STORE";
             var result=store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"worksheet",summary,transcript,
-                    pupil.id(),pupil.name(),content.tasks().size(),rendered.pageCount(),rendered.pdf(),rendered.previewPng(),mapper.writeValueAsString(verifiedContent));
+                    target,recipientName,content.tasks().size(),rendered.pageCount(),rendered.pdf(),rendered.previewPng(),mapper.writeValueAsString(verifiedContent));
             org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolin worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
                     room.getId(),reserved.id(),content.tasks().size(),rendered.pageCount(),(System.nanoTime()-started)/1_000_000);
             return result;

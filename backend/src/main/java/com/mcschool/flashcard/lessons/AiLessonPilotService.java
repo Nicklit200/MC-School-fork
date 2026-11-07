@@ -507,7 +507,7 @@ public class AiLessonPilotService {
                 "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false);
         String instructions=KOLIN_PROMPT+(interactive ? """
 
-                Верни объект JSON-схемы. Получателя выбирай ТОЛЬКО из roster: явно названная ученица важнее selectedStudentId.
+                Верни объект JSON-схемы. Для личной страницы получателя выбирай ТОЛЬКО из roster: явно названная ученица важнее selectedStudentId.
                 Если получатель или тема неясны, уточни коротко: kind=text, studentId=null, tasks=[].
                 Для объекта верни kind=worksheet, РОВНО requestedTaskCount элементов tasks и короткий text с темой.
                 lastGeneratedWorksheet - предыдущий черновик. При изменении верни полный обновлённый набор.
@@ -516,7 +516,7 @@ public class AiLessonPilotService {
 
                 Режим подтверждаемого PDF: верни только объект заданной JSON-схемы.
                 Для обычного вопроса kind=text, короткий text, studentId=null, tasks=[].
-                При просьбе создать/дать задания kind=worksheet, выбери получателя ТОЛЬКО из roster.
+                При просьбе создать/дать задания kind=worksheet, для личной страницы выбери получателя ТОЛЬКО из roster.
                 Явно названная ученица важнее selectedStudentId. Без имени используй selectedStudentId.
                 Если получателя нет, имя неоднозначно или отсутствует в roster, задай короткий вопрос в text.
                 Если тема не дана в запросе, истории или расшифровке, уточни её, не выдумывай.
@@ -542,6 +542,14 @@ public class AiLessonPilotService {
                 Любая просьба 'добавь/отправь' создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
                 Исходные PDF и рукопись по-прежнему недоступны. Не утверждай, что изучил записи ученицы.
                 """+KolinVisualSchema.INSTRUCTIONS);
+        instructions+="""
+                Получатель общей страницы обозначается studentId="group". Явные фразы 'на общую доску', 'для всей группы'
+                имеют приоритет над selectedStudentId. Словоформы имён ('Виталине', 'для Софии') сопоставляй с roster.
+                Для нового задания без имени используй выбранную доску: targetType=group означает общую доску.
+                При 'это добавь Софии/на общую доску' используй lastGeneratedWorksheet, сохрани задания и поменяй получателя.
+                Не выдумывай учеников и не выбирай похожее имя при неоднозначности, уточни коротко.
+                Несколько имён пока требуют уточнения одного получателя; никогда не выбирай первого молча.
+                """;
         var input=new java.util.ArrayList<Map<String,Object>>();
         input.add(Map.of("role","system","content",instructions));
         input.add(Map.of("role","user","content","Контекст текущего урока и допустимые получатели:\n"+lessonContext));

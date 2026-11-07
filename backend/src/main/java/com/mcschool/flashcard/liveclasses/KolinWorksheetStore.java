@@ -14,7 +14,11 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class KolinWorksheetStore {
     public record Worksheet(UUID id, UUID studentId, String studentName, int taskCount, int pageCount,
-                            String state, Integer fromPage, Integer toPage, java.util.List<java.util.Map<String,Object>> interactive) {
+                            String state, Integer fromPage, Integer toPage, java.util.List<java.util.Map<String,Object>> interactive, String targetType) {
+        public Worksheet(UUID id,UUID studentId,String studentName,int taskCount,int pageCount,String state,Integer fromPage,Integer toPage,
+                         java.util.List<java.util.Map<String,Object>> interactive) {
+            this(id,studentId,studentName,taskCount,pageCount,state,fromPage,toPage,interactive,"student");
+        }
         public Worksheet(UUID id,UUID studentId,String studentName,int taskCount,int pageCount,String state,Integer fromPage,Integer toPage) {
             this(id,studentId,studentName,taskCount,pageCount,state,fromPage,toPage,null);
         }
@@ -82,7 +86,7 @@ public class KolinWorksheetStore {
         var rows=repository.latestDraftContext(classId,teacher.id(),org.springframework.data.domain.PageRequest.of(0,1));
         if(rows.isEmpty()) return null;
         var row=rows.get(0);
-        try { personal.requireClassStudent(room,row.getStudentId()); }
+        try { if(row.getStudentId()!=null) personal.requireClassStudent(room,row.getStudentId()); }
         catch(ResourceNotFoundException ex) { return null; }
         return row.getTaskContent();
     }
@@ -114,7 +118,7 @@ public class KolinWorksheetStore {
         if(templates!=null) {
             for(int index=0;index<templates.size();index++) {
                 var document=annotations.openDocument(teacher,classId,AnnotationTargetType.WHITEBOARD,
-                        PersonalBoard.workbookTargetIdFor(row.getStudentId()),result.fromPage()-1+index,595,842);
+                        isGroup(row)?"board-1":PersonalBoard.workbookTargetIdFor(row.getStudentId()),result.fromPage()-1+index,595,842);
                 UUID operationId=UUID.nameUUIDFromBytes((row.getId()+":"+index).getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 annotations.append(teacher,classId,document.id(),new com.mcschool.flashcard.liveclasses.dto.AnnotationOperationRequest(
                         operationId,AnnotationOperationType.ADD,mapper.writeValueAsString(InteractiveTemplateSpec.shape(templates.get(index)))));
@@ -131,7 +135,7 @@ public class KolinWorksheetStore {
     private void requireWorksheet(KolinWorksheet row) {
         if (!("worksheet".equals(row.getResultType()) || "interactive".equals(row.getResultType()))
                 || !("READY".equals(row.getState()) || "ADDED".equals(row.getState()))
-                || row.getStudentId()==null) throw missing();
+                || row.getStudentId()==null && !isGroup(row)) throw missing();
         if("worksheet".equals(row.getResultType()) && (row.getPdfBytes()==null || row.getPreviewBytes()==null)) throw missing();
         if("interactive".equals(row.getResultType())) interactive(row);
     }
@@ -148,7 +152,11 @@ public class KolinWorksheetStore {
     }
     private Worksheet metadata(KolinWorksheet row) {
         return new Worksheet(row.getId(),row.getStudentId(),row.getStudentName(),row.getTaskCount(),row.getPageCount(),
-                row.getState(),row.getFromPage(),row.getToPage(),interactive(row));
+                row.getState(),row.getFromPage(),row.getToPage(),interactive(row),isGroup(row)?"group":"student");
+    }
+    private boolean isGroup(KolinWorksheet row) {
+        return row.getStudentId()==null && row.getTaskContent()!=null
+                && "group".equals(mapper.readValue(row.getTaskContent(),KolinTaskService.Content.class).studentId());
     }
     private java.util.List<java.util.Map<String,Object>> interactive(KolinWorksheet row) {
         if(!"interactive".equals(row.getResultType())) return null;

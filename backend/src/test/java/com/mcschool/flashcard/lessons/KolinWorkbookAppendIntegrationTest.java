@@ -87,17 +87,42 @@ class KolinWorkbookAppendIntegrationTest {
         return java.util.Map.of("template","graph","language","ru","function","linear","coefficients",List.of(coefficient,1));
     }
     private UUID interactiveDraft() {
+        return interactiveDraft(false);
+    }
+    private UUID interactiveDraft(boolean group) {
         var reservation=store.begin(host,room.getId(),UUID.randomUUID(),"b".repeat(64));
-        var content=new KolinTaskService.Content("interactive","Graph",student.getId().toString(),List.of(
+        var content=new KolinTaskService.Content("interactive","Graph",group?"group":student.getId().toString(),List.of(
             new KolinTaskService.Task("visual","","",null,"",List.of(),graph(1))));
         store.complete(host,room.getId(),reservation.id(),reservation.attemptId(),"interactive","Graph",
-            new KolinTranscriptContextService.Metadata("empty",0,false,null,null,null,false),student.getId(),"Pupil",1,1,null,null,JSON.writeValueAsString(content));
+            new KolinTranscriptContextService.Metadata("empty",0,false,null,null,null,false),group?null:student.getId(),group?"Общая доска":"Pupil",1,1,null,null,JSON.writeValueAsString(content));
         return reservation.id();
     }
     private AnnotationOperationRequest interaction(UUID target,UUID revision,double coefficient) {
         var shape=new java.util.HashMap<>(InteractiveTemplateSpec.shape(graph(coefficient)));
         shape.put("targetOperationId",target.toString());shape.put("baseOperationId",revision.toString());
         return new AnnotationOperationRequest(UUID.randomUUID(),AnnotationOperationType.UPDATE,JSON.writeValueAsString(shape));
+    }
+    @Test void sharedConfirmationPreservesInheritedInkAndIsEditableByBothParticipants()throws Exception {
+        var prep=LessonPreparation.create(teacher,room.getEventId());prep.attachWorkbook("shared.pdf",pdf("original"));preparations.saveAndFlush(prep);
+        UUID oldPage=legacyPage(3);annotations.append(owner,room.getId(),oldPage,stroke());
+        UUID draft=interactiveDraft(true);
+        assertThat(store.previousDraft(host,room.getId())).contains("group");
+        var added=store.append(host,room.getId(),draft);
+        assertThat(added.targetType()).isEqualTo("group");assertThat(added.studentId()).isNull();
+        assertThat(added.fromPage()).isEqualTo(5);assertThat(store.append(host,room.getId(),draft)).isEqualTo(added);
+        assertThat(annotations.replay(owner,room.getId(),oldPage,0)).hasSize(1);
+        assertThat(workbooks.findByTeacherIdAndEventIdAndStudentId(teacher.getId(),room.getEventId(),student.getId())).isEmpty();
+        var shared=preparations.findByTeacherIdAndEventId(teacher.getId(),room.getEventId()).orElseThrow();
+        try(var loaded=Loader.loadPDF(shared.getWorkbookPdf())) {
+            assertThat(loaded.getNumberOfPages()).isEqualTo(5);assertThat(new PDFTextStripper().getText(loaded)).contains("original");
+        }
+        var page=annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId()).stream()
+                .filter(p->p.getTargetId().equals("board-1")).findFirst().orElseThrow();
+        var first=annotations.replay(owner,room.getId(),page.getId(),0).get(0);
+        var changed=annotations.append(owner,room.getId(),page.getId(),interaction(first.operationId(),first.operationId(),2));
+        assertThat(annotations.replay(host,room.getId(),page.getId(),0)).hasSize(2);
+        annotations.append(host,room.getId(),page.getId(),interaction(first.operationId(),changed.operationId(),3));
+        assertThat(annotations.replay(owner,room.getId(),page.getId(),0)).hasSize(3);
     }
     @Test void interactiveDraftNeedsConfirmationAndBothViewersReplayTheSameRevision()throws Exception {
         UUID draft=interactiveDraft();
