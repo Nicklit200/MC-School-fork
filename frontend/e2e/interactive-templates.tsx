@@ -4,9 +4,11 @@ import {useEffect,useRef,useState} from 'react';
 import {WhiteboardCanvas} from '../src/features/online-classes/WhiteboardCanvas';
 import {DEFAULT_VIEW} from '../src/features/online-classes/boardView';
 import sceneExamples from './math-scenes.json';
+import solidExamples from './math-solids.json';
 import {drawInteractive,parseInteractiveSpec,type InteractiveSpec} from '../src/features/online-classes/interactiveTemplates';
 const samples:InteractiveSpec[]=[
   ...sceneExamples as InteractiveSpec[],
+  ...solidExamples as InteractiveSpec[],
   {template:'cube',language:'ru',unfold:0,yaw:-30,pitch:25},
   {template:'graph',language:'ru',function:'quadratic',coefficients:[1,-2,-2]},
   {template:'triangle',language:'ru',vertices:[[-3,-2],[3,-2],[0,3]]},
@@ -30,8 +32,8 @@ function App(){
     if(base!==server.current.revision||!parseInteractiveSpec(next))return;
     const id=crypto.randomUUID();server.current={spec:next,revision:id};setSpec(next);setRevision(id);setCommits(n=>n+1);return id;
   };
-  return <main><header><div><small>MINDCRAFTI · KOLIN</small><h1>Один шаблон. Много объяснений.</h1><p>Двигайте точки и ползунки. Изменения видны обеим сторонам, AI для этого не вызывается.</p></div><span className="badge">Локальная проверка</span></header>
-    <nav aria-label="Шаблоны">{['Геометрия','Функции','Данные','Куб 3D','График','Треугольник','Доли круга'].map((label,i)=><button key={label} aria-pressed={index===i} onClick={()=>choose(i)}>{label}</button>)}</nav>
+  return <main><header><div><small>MINDCRAFTI · KOLYN</small><h1>Исследуем фигуры и функции</h1><p>Двигайте точки и ползунки. Изменения видны обеим сторонам, AI для этого не вызывается.</p></div><span className="badge">Локальная проверка</span></header>
+    <nav aria-label="Шаблоны" style={{flexWrap:'wrap'}}>{['Геометрия','Функции','Данные','Пирамида','Призма','Тетраэдр','Пятиугольная пирамида','Куб 3D','График','Треугольник','Доли круга'].map((label,i)=><button key={label} aria-pressed={index===i} onClick={()=>choose(i)}>{label}</button>)}</nav>
     <section><article aria-label="Учитель"><h2>Учитель</h2><Sheet key={'host'+index} spec={spec} revision={revision} save={save}/></article>
       <article aria-label="Ученица"><h2>Ученица</h2><Sheet key={'pupil'+index} spec={spec} revision={revision} save={save}/></article></section>
     <p role="status">Сохранённых изменений: {commits} · AI-запросов: 0</p>

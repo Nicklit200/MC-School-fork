@@ -390,7 +390,7 @@ class McpDirectPdfToolsTest {
         assertThat((List<String>) startSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
         assertThat((List<String>) finishSchema.get("required")).contains("operation", "teacherId", "eventId", "idempotencyKey", "confirm");
         Map<String, Object> initialization = rpc("admin", "initialize", Map.of());
-        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.31.1");
+        assertThat((Map<String, Object>) initialization.get("serverInfo")).containsEntry("version", "1.32.0");
         assertThat((Map<String, Object>) initialization.get("capabilities")).containsKey("resources");
     }
 

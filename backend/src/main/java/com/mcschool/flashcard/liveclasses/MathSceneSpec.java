@@ -8,18 +8,18 @@ import java.util.regex.Pattern;
 public final class MathSceneSpec {
     private MathSceneSpec() {}
     private static final Set<String> FUNCTIONS=Set.of("sin","cos","tan","sqrt","abs","ln","exp");
-    private static Map<String,Object> obj(Object... fields) {
+    static Map<String,Object> obj(Object... fields) {
         var p=new LinkedHashMap<String,Object>();for(int i=0;i<fields.length;i+=2)p.put((String)fields[i],fields[i+1]);
         return Map.of("type","object","properties",p,"required",List.copyOf(p.keySet()),"additionalProperties",false);
     }
-    private static Map<String,Object> str(){return Map.of("type","string");}
-    private static Map<String,Object> str(int max){return Map.of("type","string","maxLength",max);}
-    private static Map<String,Object> nullable(){return Map.of("type",List.of("string","null"));}
-    private static Map<String,Object> num(){return Map.of("type","number");}
-    private static Map<String,Object> choice(String... values){return Map.of("type","string","enum",List.of(values));}
-    private static Map<String,Object> arr(Object items){return Map.of("type","array","items",items);}
+    static Map<String,Object> str(){return Map.of("type","string");}
+    static Map<String,Object> str(int max){return Map.of("type","string","maxLength",max);}
+    static Map<String,Object> nullable(){return Map.of("type",List.of("string","null"));}
+    static Map<String,Object> num(){return Map.of("type","number");}
+    static Map<String,Object> choice(String... values){return Map.of("type","string","enum",List.of(values));}
+    static Map<String,Object> arr(Object items){return Map.of("type","array","items",items);}
     public static Map<String,Object> schema(){
-        return obj("template",choice("scene"),"language",choice("ru","de"),"title",str(48),"prompt",str(120),
+        var scene=obj("template",choice("scene"),"language",choice("ru","de"),"title",str(48),"prompt",str(120),
             "bounds",obj("xMin",num(),"xMax",num(),"yMin",num(),"yMax",num()),
             "parameters",arr(obj("name",Map.of("type","string","pattern","^[a-z][a-z0-9_]{0,11}$"),"label",str(32),"min",num(),"max",num(),"step",num(),"value",num())),
             "points",arr(obj("id",str(),"x",str(),"y",str(),"dragX",nullable(),"dragY",nullable())),
@@ -30,6 +30,13 @@ public final class MathSceneSpec {
                 obj("kind",choice("function"),"expression",str()),
                 obj("kind",choice("bars"),"values",arr(obj("label",str(),"expression",str())))))),
             "metrics",arr(obj("label",str(),"expression",str())),"answer",nullable());
+        @SuppressWarnings("unchecked") var fields=(Map<String,Object>)scene.get("properties");
+        var explanation=new LinkedHashMap<>(fields);explanation.put("answer",Map.of("type","null"));
+        var exercise=new LinkedHashMap<>(fields);exercise.put("answer",str());
+        exercise.put("metrics",Map.of("type","array","items",obj("label",str(),"expression",str()),"maxItems",0));
+        return Map.of("anyOf",List.of(
+            Map.of("type","object","properties",explanation,"required",scene.get("required"),"additionalProperties",false),
+            Map.of("type","object","properties",exercise,"required",scene.get("required"),"additionalProperties",false)));
     }
     public static final String INSTRUCTIONS="""
         По умолчанию для геометрии, функций и данных используй template=scene. Это общий конструктор, а не готовая картинка.
@@ -102,7 +109,12 @@ public final class MathSceneSpec {
         }}
         if(points.isEmpty()&&objects.isEmpty())throw invalid();
         for(var item:list(scene.get("metrics"),3)){var m=map(item);keys(m,"label","expression");text(m.get("label"),32);expression(m.get("expression"),names);}
-        if(scene.get("answer")!=null){expression(scene.get("answer"),names);if(((String)scene.get("prompt")).isEmpty())throw invalid();}
+        if(scene.get("answer")!=null){
+            expression(scene.get("answer"),names);if(((String)scene.get("prompt")).isEmpty())throw invalid();
+            String answer=((String)scene.get("answer")).replaceAll("\\s","");
+            for(var item:list(scene.get("metrics"),3))
+                if(answer.equals(((String)map(item).get("expression")).replaceAll("\\s","")))throw invalid();
+        }
     }
     /** Only values change during a lesson. A pupil cannot replace the task, its answer or recipient. */
     public static void sameConstruction(Map<String,Object> before,Map<String,Object> after){
@@ -120,6 +132,9 @@ public final class MathSceneSpec {
         return Objects.equals(a,b);
     }
     static void expression(Object raw,Set<String> names){
+        var values=new HashMap<String,Double>();names.forEach(name->values.put(name,1d));evaluate(raw,values);
+    }
+    static double evaluate(Object raw,Map<String,Double> values){
         if(!(raw instanceof String source)||source.isEmpty()||source.length()>160)throw invalid();
         var matcher=Pattern.compile("(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?|[a-z][a-z0-9_]*|\\S").matcher(source);
         var tokens=new ArrayList<String>();while(matcher.find())tokens.add(matcher.group());if(tokens.size()>96)throw invalid();
@@ -127,22 +142,26 @@ public final class MathSceneSpec {
             int pos=0;
             String next(){if(pos>=tokens.size())throw invalid();return tokens.get(pos++);}
             int precedence(String s){return switch(s){case "+","-"->1;case "*","/"->2;case "^"->3;default->-1;};}
-            void parse(int min,int depth){
-                if(depth>20)throw invalid();String token=next();
-                if(token.equals("+")||token.equals("-"))parse(3,depth+1);
-                else if(token.equals("(")){parse(0,depth+1);if(!next().equals(")"))throw invalid();}
-                else if(token.matches("[0-9.].*")){try{double n=Double.parseDouble(token);if(!Double.isFinite(n)||Math.abs(n)>1e9)throw invalid();}catch(NumberFormatException ex){throw invalid();}}
-                else if(FUNCTIONS.contains(token)){if(!next().equals("("))throw invalid();parse(0,depth+1);if(!next().equals(")"))throw invalid();}
-                else if(!token.equals("pi")&&!names.contains(token))throw invalid();
-                while(pos<tokens.size()&&precedence(tokens.get(pos))>=min){String op=next();parse(precedence(op)+(op.equals("^")?0:1),depth+1);}
+            double parse(int min,int depth){
+                if(depth>20)throw invalid();String token=next();double result;
+                if(token.equals("+")||token.equals("-")){result=parse(3,depth+1);if(token.equals("-"))result=-result;}
+                else if(token.equals("(")){result=parse(0,depth+1);if(!next().equals(")"))throw invalid();}
+                else if(token.matches("[0-9.].*")){try{result=Double.parseDouble(token);if(!Double.isFinite(result)||Math.abs(result)>1e9)throw invalid();}catch(NumberFormatException ex){throw invalid();}}
+                else if(FUNCTIONS.contains(token)){if(!next().equals("("))throw invalid();double arg=parse(0,depth+1);if(!next().equals(")"))throw invalid();
+                    result=switch(token){case "sin"->Math.sin(arg);case "cos"->Math.cos(arg);case "tan"->Math.tan(arg);case "sqrt"->Math.sqrt(arg);case "abs"->Math.abs(arg);case "ln"->Math.log(arg);default->Math.exp(arg);};}
+                else if(token.equals("pi"))result=Math.PI;
+                else if(values.containsKey(token))result=values.get(token);else throw invalid();
+                while(pos<tokens.size()&&precedence(tokens.get(pos))>=min){String op=next();double b=parse(precedence(op)+(op.equals("^")?0:1),depth+1);
+                    result=switch(op){case "+"->result+b;case "-"->result-b;case "*"->result*b;case "/"->result/b;default->Math.pow(result,b);};}
+                return result;
             }
         }
-        var parser=new Parser();parser.parse(0,0);if(parser.pos!=tokens.size())throw invalid();
+        var parser=new Parser();double result=parser.parse(0,0);if(parser.pos!=tokens.size())throw invalid();return result;
     }
-    @SuppressWarnings("unchecked") private static Map<String,Object> map(Object v){if(!(v instanceof Map<?,?>))throw invalid();return (Map<String,Object>)v;}
-    private static List<?> list(Object v,int max){if(!(v instanceof List<?> l)||l.size()>max)throw invalid();return l;}
-    private static void keys(Map<String,Object> v,String... fields){if(!v.keySet().equals(Set.of(fields)))throw invalid();}
-    private static void text(Object v,int max){if(!(v instanceof String s)||s.length()>max||s.matches("(?s).*[\\x00-\\x1f<>].*"))throw invalid();}
-    private static double number(Object v,double min,double max){if(!(v instanceof Number n)||!Double.isFinite(n.doubleValue())||n.doubleValue()<min||n.doubleValue()>max)throw invalid();return n.doubleValue();}
-    private static ConflictException invalid(){return new ConflictException("Invalid mathematical scene");}
+    @SuppressWarnings("unchecked") static Map<String,Object> map(Object v){if(!(v instanceof Map<?,?>))throw invalid();return (Map<String,Object>)v;}
+    static List<?> list(Object v,int max){if(!(v instanceof List<?> l)||l.size()>max)throw invalid();return l;}
+    static void keys(Map<String,Object> v,String... fields){if(!v.keySet().equals(Set.of(fields)))throw invalid();}
+    static void text(Object v,int max){if(!(v instanceof String s)||s.length()>max||s.matches("(?s).*[\\x00-\\x1f<>].*"))throw invalid();}
+    static double number(Object v,double min,double max){if(!(v instanceof Number n)||!Double.isFinite(n.doubleValue())||n.doubleValue()<min||n.doubleValue()>max)throw invalid();return n.doubleValue();}
+    static ConflictException invalid(){return new ConflictException("Invalid mathematical scene");}
 }

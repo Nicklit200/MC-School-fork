@@ -15,7 +15,7 @@ const worksheet: KolinWorksheet = { id: 'saved-artifact', studentId: 'alice', st
 const destroy = vi.fn();
 function Harness({ studentId = 'alice' }: { studentId?: string }) {
   const chat = useKolinChat('class-1', 'teacher', true);
-  return <I18nProvider><button onClick={chat.toggle}>Kolin</button>
+  return <I18nProvider><button onClick={chat.toggle}>Kolyn</button>
     {chat.open && <KolinPanel chat={chat} context={{ targetType: 'student', studentId }} />}
   </I18nProvider>;
 }
@@ -35,7 +35,7 @@ beforeEach(() => {
     renderPage: vi.fn(async () => ({ canvas: document.createElement('canvas'), aspect: 0.7 })) });
 });
 async function createCard() {
-  await userEvent.click(screen.getByRole('button', { name: 'Kolin' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Kolyn' }));
   await userEvent.type(screen.getByRole('textbox'), 'Создай и добавь три задания{Enter}');
   return screen.findByRole('button', { name: 'Добавить Виталине' });
 }
@@ -45,11 +45,11 @@ it('creates a private interactive preview and only appends to its original pupil
   vi.mocked(kolinApi.send).mockResolvedValue({type:'interactive',text:'График готов.',worksheet:interactive});
   vi.mocked(kolinApi.appendWorksheet).mockResolvedValue({...interactive,state:'ADDED'});
   const view=render(<Harness/>);
-  await userEvent.click(screen.getByRole('button',{name:'Kolin'}));
-  await userEvent.selectOptions(screen.getByRole('combobox',{name:'Формат заданий'}),'interactive');
+  await userEvent.click(screen.getByRole('button',{name:'Kolyn'}));
+  expect(screen.queryByRole('combobox',{name:'Формат заданий'})).not.toBeInTheDocument();
   await userEvent.type(screen.getByRole('textbox'),'График для Виталины{Enter}');
   const add=await screen.findByRole('button',{name:'Добавить Виталине'});
-  expect(vi.mocked(kolinApi.send).mock.calls[0][3]).toMatchObject({targetType:'student',studentId:'alice',format:'interactive'});
+  expect(vi.mocked(kolinApi.send).mock.calls[0][3]).toMatchObject({targetType:'student',studentId:'alice'});
   expect(kolinApi.worksheetPreview).not.toHaveBeenCalled();
   expect(kolinApi.appendWorksheet).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole('button',{name:'Предпросмотр для Виталина'}));
@@ -130,13 +130,13 @@ it('retries the same artifact with the same button after uncertain append, witho
 it('localizes the card and preview and revokes its preview URL after closing the panel', async () => {
   localStorage.setItem('language', 'DE');
   render(<Harness />);
-  await userEvent.click(screen.getByRole('button', { name: 'Kolin' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Kolyn' }));
   await userEvent.type(screen.getByRole('textbox'), 'Drei Aufgaben{Enter}');
   expect(await screen.findByRole('button', { name: 'Für Виталина hinzufügen' })).toBeEnabled();
   expect(await screen.findByAltText('Erste PDF-Seite')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'PDF-Vorschau für Виталина' }));
   expect(screen.getByRole('dialog', { name: 'PDF-Vorschau für Виталина' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Vorschau schließen' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Kolin schließen' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Kolyn schließen' }));
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:authorized-preview');
 });

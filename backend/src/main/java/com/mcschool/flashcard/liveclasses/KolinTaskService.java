@@ -18,14 +18,6 @@ public class KolinTaskService {
         }
     }
     public record Content(String kind,String text,String studentId,List<Task> tasks) {}
-    static boolean interactiveRequest(String question,KolinChatService.Context context,Content previous) {
-        String text=question.toLowerCase(Locale.ROOT);
-        if(text.contains("pdf") || text.contains("пдф")) return false;
-        if(text.matches("(?s).*(интерактив|interaktiv|interactive|3d|3д|вращ|разв[её]ртк|раскр.*куб|куб.*раскр|ползун|подвиж|перетаск|конструктор|slider|dragg).*")) return true;
-        if(previous!=null && "interactive".equals(previous.kind())
-                && text.matches("(?s).*(это|этот|добав|отправ|измени|сложнее|einfügen|hinzufügen).*")) return true;
-        return context!=null && "interactive".equals(context.format());
-    }
     private record Fingerprint(String text,List<KolinChatService.HistoryMessage> history,KolinChatService.Context context) {}
     private final AiLessonPilotService ai;
     private final KolinTaskRoster roster;
@@ -52,32 +44,55 @@ public class KolinTaskService {
             String previous=store.previousDraft(teacher,room.getId());
             Content previousContent=previous==null?null:mapper.readValue(previous,Content.class);
             if(previousContent!=null) context.put("lastGeneratedWorksheet",previousContent);
-            boolean interactive=interactiveRequest(question,request.context(),previousContent);
-            int requiredCount=requestedCount(question,previousContent==null?0:previousContent.tasks().size(),interactive?1:5);
-            if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
-            context.put("requestedTaskCount",requiredCount);
+            int previousCount=previousContent==null?0:previousContent.tasks().size();
+            int pdfCount=requestedCount(question,previousCount,5),interactiveCount=requestedCount(question,previousCount,1);
+            context.put("requestedPdfTaskCount",pdfCount);
+            context.put("requestedInteractiveTaskCount",interactiveCount);
             if(request.context()!=null && request.context().studentId()!=null)
                 context.put("selectedStudentId",request.context().studentId());
             else if(room.getStudent()!=null) context.put("selectedStudentId",room.getStudent().getId());
             stage="MODEL";
-            Content content=mapper.readValue(interactive
-                    ? ai.kolinInteractiveReply(mapper.writeValueAsString(context),history,question)
-                    : ai.kolinStructuredReply(mapper.writeValueAsString(context),history,question),Content.class);
+            Content content=mapper.readValue(ai.kolinStructuredReply(mapper.writeValueAsString(context),history,question),Content.class);
             stage="CONTENT";
             if(content==null || content.kind()==null || content.text()==null || content.text().length()>4000
-                    || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolin content");
+                    || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolyn content");
             if("text".equals(content.kind())) {
                 if(!content.tasks().isEmpty() || content.text().isBlank())
-                    throw new IllegalArgumentException("Invalid Kolin text reply");
+                    throw new IllegalArgumentException("Invalid Kolyn text reply");
                 // Text has no recipient or artifact. Discard model recipient metadata here.
                 stage="STORE";
                 return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",content.text(),transcript,
                         null,null,0,0,null,null);
             }
-            if(!"worksheet".equals(content.kind()) || content.tasks().isEmpty() || content.tasks().size()>20)
-                throw new IllegalArgumentException("Invalid Kolin worksheet");
+            boolean interactive="interactive".equals(content.kind());
+            if(interactive && unsupportedInteractive(question,content.tasks())) {
+                String explanation="Этот интерактив пока не поддерживается. Доступны плоские построения, графики, данные, выпуклые многогранники и развёртка куба. Кривые поверхности и развёртки других тел пока не создаются. Могу объяснить тему текстом или подготовить доступный статичный рисунок в PDF.";
+                if(content.tasks().stream().anyMatch(t->t.visual()!=null&&"de".equals(t.visual().get("language"))))
+                    explanation="Diese interaktive Konstruktion wird noch nicht unterstützt. Möglich sind ebene Konstruktionen, Funktionen, Daten, konvexe Polyeder und das Würfelnetz. Gekrümmte Flächen und andere Körpernetze sind noch nicht verfügbar. Ich kann das Thema erklären oder eine unterstützte statische PDF-Abbildung vorbereiten.";
+                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",explanation,transcript,
+                    null,null,0,0,null,null);
+            }
+            int requiredCount=interactive?interactiveCount:pdfCount;
+            if((!interactive && !"worksheet".equals(content.kind())) || content.tasks().isEmpty() || content.tasks().size()>20)
+                throw new IllegalArgumentException("Invalid Kolyn worksheet");
+            // A question may mention many tasks without asking to generate any.
+            if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
             if(content.tasks().size()!=requiredCount)
                 throw new IllegalArgumentException("Unexpected worksheet task count");
+            if(interactive && needsInteractiveRepair(content)) {
+                // One bounded repair only, before a preview or append can be created. Normal drafts use one call.
+                String recipient=content.studentId();
+                context.put("invalidInteractiveDraft",content);
+                stage="MODEL_REPAIR";
+                content=mapper.readValue(ai.kolinStructuredReply(mapper.writeValueAsString(context),List.of(),
+                    "Исправь invalidInteractiveDraft для запроса: "+question+"\n"
+                    +"Верни весь interactive-черновик с прежним studentId и числом задач. Проверь ссылки: каждая вершина faces и segments обязана существовать в vertices, включая основание высоты O. Проверь выражения, границы, плоские грани и замкнутость. При answer!=null не показывай искомое в measurements или metrics; для демонстрации используй answer=null. Не меняй тему и не добавляй материал на доску."),Content.class);
+                stage="CONTENT";
+                if(content==null || !"interactive".equals(content.kind()) || !Objects.equals(recipient,content.studentId())
+                    || content.text()==null || content.text().length()>4000 || content.tasks()==null
+                    || content.tasks().size()!=requiredCount || needsInteractiveRepair(content) || unsupportedInteractive(question,content.tasks()))
+                    throw new IllegalArgumentException("Invalid repaired interactive draft");
+            }
             stage="RECIPIENT";
             boolean group="group".equals(content.studentId());
             UUID target=group?null:UUID.fromString(content.studentId());
@@ -107,16 +122,16 @@ public class KolinTaskService {
             stage="STORE";
             var result=store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"worksheet",summary,transcript,
                     target,recipientName,content.tasks().size(),rendered.pageCount(),rendered.pdf(),rendered.previewPng(),mapper.writeValueAsString(verifiedContent));
-            org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolin worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
+            org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolyn worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
                     room.getId(),reserved.id(),content.tasks().size(),rendered.pageCount(),(System.nanoTime()-started)/1_000_000);
             return result;
         } catch(Exception ex) {
             var log=org.slf4j.LoggerFactory.getLogger(getClass());
-            log.warn("Kolin generation failed: classId={} artifactId={} stage={} errorType={}",
+            log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={}",
                     room.getId(),reserved.id(),stage,ex.getClass().getSimpleName());
             try { store.fail(teacher,room.getId(),reserved.id(),reserved.attemptId()); }
             catch(RuntimeException recovery) {
-                log.warn("Kolin failure receipt unavailable: classId={} artifactId={} errorType={}",
+                log.warn("Kolyn failure receipt unavailable: classId={} artifactId={} errorType={}",
                         room.getId(),reserved.id(),recovery.getClass().getSimpleName());
             }
             if(ex instanceof KolinRequestException known) throw known;
@@ -226,19 +241,37 @@ public class KolinTaskService {
     static int requestedCount(String question) {
         return requestedCount(question,0);
     }
+    static boolean unsupportedInteractive(String question,List<Task> tasks) {
+        String described=question+" "+tasks.stream().filter(t->t.visual()!=null)
+            .map(t->Objects.toString(t.visual().get("title"),"")+" "+Objects.toString(t.visual().get("prompt"),""))
+            .collect(java.util.stream.Collectors.joining(" "));
+        if(java.util.regex.Pattern.compile("(?iu)\\b(?:конус[\\p{L}]*|цилиндр[\\p{L}]*|сфер[\\p{L}]*|шар(?:а|ом|ы|ов|е|у)?|cones?|cylinders?|spheres?|kegel[\\p{L}]*|zylinder[\\p{L}]*|kugel[\\p{L}]*)\\b")
+            .matcher(described).find())return true;
+        return java.util.regex.Pattern.compile("(?iu)(?:разв[её]ртк|entfalt|körpernetz|unfold|\\bnet\\b)").matcher(described).find()
+            && tasks.stream().noneMatch(t->t.visual()!=null&&"cube".equals(t.visual().get("template")));
+    }
+    static boolean needsInteractiveRepair(Content content) {
+        try {
+            for(var task:content.tasks()) {
+                if(task==null || !"visual".equals(task.kind()))return true;
+                InteractiveTemplateSpec.validate(task.visual());
+            }return false;
+        }catch(com.mcschool.flashcard.common.ConflictException ex){return true;}
+    }
     static int requestedCount(String question,int previousCount) { return requestedCount(question,previousCount,5); }
     static int requestedCount(String question,int previousCount,int defaultCount) {
-        var numeric=java.util.regex.Pattern.compile("(?iu)(\\d{1,3})\\s*(?:задан|пример|упражнен|aufgaben|aufgabe|tasks?|exercises?)").matcher(question);
+        String item="(?:задан|пример|упражнен|интерактив|график|диаграмм|пирамид|призм|фигур|куб|круг|aufgaben|aufgabe|tasks?|exercises?|graph|diagram|pyramid|prism)";
+        var numeric=java.util.regex.Pattern.compile("(?iu)(\\d{1,3})\\s*"+item).matcher(question);
         if(numeric.find()) return Integer.parseInt(numeric.group(1));
         var words=Map.ofEntries(Map.entry("одно",1),Map.entry("один",1),Map.entry("одну",1),Map.entry("два",2),Map.entry("две",2),
                 Map.entry("три",3),Map.entry("четыре",4),Map.entry("пять",5),Map.entry("шесть",6),Map.entry("семь",7),
                 Map.entry("восемь",8),Map.entry("девять",9),Map.entry("десять",10),Map.entry("one",1),Map.entry("two",2),
                 Map.entry("three",3),Map.entry("four",4),Map.entry("five",5),Map.entry("eine",1),Map.entry("zwei",2),
                 Map.entry("drei",3),Map.entry("vier",4),Map.entry("fünf",5));
-        var verbal=java.util.regex.Pattern.compile("(?iu)([\\p{L}]+)\\s+(?:задан|пример|упражнен|aufgaben|aufgabe|tasks?|exercises?)").matcher(question);
+        var verbal=java.util.regex.Pattern.compile("(?iu)([\\p{L}]+)\\s+"+item).matcher(question);
         while(verbal.find()) { Integer count=words.get(verbal.group(1).toLowerCase(Locale.ROOT)); if(count!=null) return count; }
         if(previousCount>0 && !question.matches("(?isU).*\\b(?:пару|несколько|paar|einige)\\b.*")
-                && question.matches("(?isu).*(?:втор|перв|треть|четв|пят|измени|передел|услож|упрост|сложнее|проще|schwerer|leichter|ändern).*"))
+                && question.matches("(?isu).*(?:добав|отправ|сделай\\s+(?:её|ее|его|их|выше|ниже)|втор|перв|треть|четв|пят|измени|передел|услож|упрост|сложнее|проще|schwerer|leichter|ändern|hinzufügen).*"))
             return previousCount;
         return defaultCount;
     }

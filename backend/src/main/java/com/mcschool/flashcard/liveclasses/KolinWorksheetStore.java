@@ -42,14 +42,14 @@ public class KolinWorksheetStore {
         OnlineClass room=access.requireHost(teacher,classId);
         repository.reserve(UUID.randomUUID(),classId,teacher.id(),clientId,hash);
         var row=repository.findRequestForUpdate(classId,teacher.id(),clientId).orElseThrow(this::missing);
-        if (!hash.equals(row.getRequestHash())) throw new ConflictException("Kolin request changed; send a new message");
+        if (!hash.equals(row.getRequestHash())) throw new ConflictException("Kolyn request changed; send a new message");
         if ("READY".equals(row.getState()) || "ADDED".equals(row.getState())) {
             checkPupil(room,row);
             return new Reservation(row.getId(),row.getAttemptId(),reply(row));
         }
         requireOpen(room);
         if ("GENERATING".equals(row.getState()) && row.getUpdatedAt().isAfter(Instant.now().minusSeconds(180)))
-            throw new ConflictException("KOLIN_BUSY","Kolin is still preparing this reply; retry the same message shortly");
+            throw new ConflictException("KOLIN_BUSY","Kolyn is still preparing this reply; retry the same message shortly");
         row.generating();
         repository.saveAndFlush(row);
         return new Reservation(row.getId(),row.getAttemptId(),null);
@@ -69,13 +69,13 @@ public class KolinWorksheetStore {
         OnlineClass room=access.requireHost(teacher,classId);
         var row=repository.findForUpdate(id,classId,teacher.id()).orElseThrow(this::missing);
         if (!attemptId.equals(row.getAttemptId()) || !"GENERATING".equals(row.getState()))
-            throw new ConflictException("Kolin request was retried; reload the result");
+            throw new ConflictException("Kolyn request was retried; reload the result");
         requireOpen(room);
         if (studentId!=null) personal.requireClassStudent(room,studentId);
         try {
             row.complete(type,text,mapper.writeValueAsString(metadata),studentId,studentName,taskCount,pageCount,pdf,preview);
             row.rememberTasks(taskContent);
-        } catch (Exception ex) { throw new IllegalStateException("Cannot store Kolin result",ex); }
+        } catch (Exception ex) { throw new IllegalStateException("Cannot store Kolyn result",ex); }
         repository.saveAndFlush(row);
         return reply(row);
     }
@@ -148,7 +148,7 @@ public class KolinWorksheetStore {
             return new KolinChatService.Reply(row.getResultType(),row.getReplyText(),
                     mapper.readValue(row.getTranscriptMetadata(),KolinTranscriptContextService.Metadata.class),
                     java.util.List.of("worksheet","interactive").contains(row.getResultType()) ? metadata(row) : null);
-        } catch (Exception ex) { throw new IllegalStateException("Cannot read Kolin result",ex); }
+        } catch (Exception ex) { throw new IllegalStateException("Cannot read Kolyn result",ex); }
     }
     private Worksheet metadata(KolinWorksheet row) {
         return new Worksheet(row.getId(),row.getStudentId(),row.getStudentName(),row.getTaskCount(),row.getPageCount(),
@@ -170,5 +170,5 @@ public class KolinWorksheetStore {
             pdf.save(out); return out.toByteArray();
         } catch(java.io.IOException ex) { throw new IllegalStateException("Cannot prepare interactive page",ex); }
     }
-    private ResourceNotFoundException missing() { return new ResourceNotFoundException("Kolin worksheet not found"); }
+    private ResourceNotFoundException missing() { return new ResourceNotFoundException("Kolyn worksheet not found"); }
 }

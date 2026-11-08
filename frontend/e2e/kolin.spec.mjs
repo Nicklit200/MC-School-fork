@@ -10,14 +10,14 @@ const MELISSA = '22222222-2222-4222-8222-222222222222';
 const SECOND_CLASS = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const firstReply = '1) 1/4 + 1/4\n2) 1/3 + 1/6\n3) 2/5 + 1/5';
 const nextReply = 'Второе сложнее: 5/12 + 7/18.';
-const panel = page => page.getByRole('complementary', { name: 'Kolin', exact: true });
-const input = page => panel(page).getByRole('textbox', { name: 'Напишите Kolin…', exact: true });
-const toggle = page => page.getByRole('button', { name: 'Kolin', exact: true });
-const separator = page => page.getByRole('separator', { name: 'Изменить ширину Kolin', exact: true });
+const panel = page => page.getByRole('complementary', { name: 'Kolyn', exact: true });
+const input = page => panel(page).getByRole('textbox', { name: 'Напишите Kolyn…', exact: true });
+const toggle = page => page.getByRole('button', { name: 'Kolyn', exact: true });
+const separator = page => page.getByRole('separator', { name: 'Изменить ширину Kolyn', exact: true });
 function gate() { let release; const promise = new Promise(resolve => { release = resolve; }); return { promise, release }; }
 
 function worksheetPdf() {
-  const content = 'BT /F1 20 Tf 50 740 Td (Kolin worksheet) Tj 0 -40 Td (1. 1/2 + 1/4 = ?) Tj ET';
+  const content = 'BT /F1 20 Tf 50 740 Td (Kolyn worksheet) Tj 0 -40 Td (1. 1/2 + 1/4 = ?) Tj ET';
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${content.length} >>\nstream\n${content}\nendstream`];
@@ -45,7 +45,7 @@ async function setup(page, role = 'teacher') {
       const responseContext = state.transcriptContext;
       state.posts.push({ path, body, contentType: request.headers()['content-type'] });
       if (state.responseGate) await state.responseGate.promise;
-      if (state.failOnce) { state.failOnce = false; return route.fulfill({ status: 503, json: { errorCode: 'KOLIN_UNAVAILABLE', message: 'Kolin временно недоступен. Повторите отправку.' } }); }
+      if (state.failOnce) { state.failOnce = false; return route.fulfill({ status: 503, json: { errorCode: 'KOLIN_UNAVAILABLE', message: 'Kolyn временно недоступен. Повторите отправку.' } }); }
       if (state.worksheet) return route.fulfill({ json: { type: 'worksheet', text: 'Задания готовы.', worksheet: state.worksheet } });
       return route.fulfill({ json: { type: 'text', text: state.posts.length === 1 ? firstReply : nextReply,
         ...(responseContext ? { transcriptContext: responseContext } : {}) } });
@@ -56,7 +56,7 @@ async function setup(page, role = 'teacher') {
         const png = await page.evaluate(() => {
           const canvas = document.createElement('canvas'); canvas.width = 200; canvas.height = 283;
           const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0, 0, 200, 283);
-          context.fillStyle = '#111'; context.font = '8px Arial'; context.fillText('Kolin worksheet', 17, 34);
+          context.fillStyle = '#111'; context.font = '8px Arial'; context.fillText('Kolyn worksheet', 17, 34);
           context.fillText('1. 1/2 + 1/4 = ?', 17, 48);
           return canvas.toDataURL('image/png').split(',')[1];
         });
@@ -147,11 +147,11 @@ async function assertNoOverlap(page) {
 }
 
 for (const viewport of [{ width: 1280, height: 900 }, { width: 820, height: 1180 }, { width: 390, height: 844 }]) {
-  test(`Kolin occupies a resizable right pane without covering the board at ${viewport.width}px`, async ({ page }, testInfo) => {
+  test(`Kolyn occupies a resizable right pane without covering the board at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport); const state = await setup(page);
     const all = page.getByRole('button', { name: 'Все ученики (2×2)', exact: true });
     await expect(all).toBeVisible();
-    expect(await all.evaluate(node => node.nextElementSibling?.textContent?.trim())).toBe('Kolin');
+    expect(await all.evaluate(node => node.nextElementSibling?.textContent?.trim())).toBe('Kolyn');
     const mainBefore = await page.locator('.online-class-room__stage > .online-class-room__main').boundingBox();
     await openKolin(page); await assertNoOverlap(page);
     await expect(panel(page).getByText('AI-помощник преподавателя', { exact: true })).toBeVisible();
@@ -168,11 +168,11 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 820, height: 1180
       await expect.poll(async () => (await panel(page).boundingBox()).width).toBeLessThan(dragged.panel.width);
       await assertNoOverlap(page);
       const chosen = (await panel(page).boundingBox()).width;
-      await panel(page).getByRole('button', { name: 'Закрыть Kolin', exact: true }).click(); await expect(panel(page)).not.toBeVisible();
+      await panel(page).getByRole('button', { name: 'Закрыть Kolyn', exact: true }).click(); await expect(panel(page)).not.toBeVisible();
       await openKolin(page); await expect.poll(async () => (await panel(page).boundingBox()).width).toBeCloseTo(chosen, 0);
     }
     await send(page, state, 'Дай 3 задания на сложение дробей');
-    const log = panel(page).getByRole('log', { name: 'Переписка с Kolin' });
+    const log = panel(page).getByRole('log', { name: 'Переписка с Kolyn' });
     await expect.poll(async () => (await log.boundingBox()).height).toBeGreaterThanOrEqual(64);
     const visibleReplyHeight = await log.evaluate(element => {
       const logBox = element.getBoundingClientRect();
@@ -206,7 +206,7 @@ test('teacher can follow up, switch pupils, reopen and use bounded text-only con
   await page.getByRole('button', { name: 'Доска ученика: София', exact: true }).click();
   await send(page, state, 'Дай 3 задания на сложение дробей');
   expect(state.posts[0].body.context).toMatchObject({ targetType: 'student', studentId: SOPHIA });
-  await panel(page).getByRole('button', { name: 'Закрыть Kolin', exact: true }).click(); await openKolin(page);
+  await panel(page).getByRole('button', { name: 'Закрыть Kolyn', exact: true }).click(); await openKolin(page);
   await expect(panel(page).getByText(firstReply, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Доска ученика: Мелисса', exact: true }).click();
   await send(page, state, 'Сделай второе сложнее');
@@ -239,7 +239,7 @@ test('Enter sends, Shift+Enter adds a line and a failed request can be retried o
   expect(state.errors).toEqual([]);
 });
 
-test('existing board ink survives opening and resizing Kolin without new annotation writes', async ({ page }) => {
+test('existing board ink survives opening and resizing Kolyn without new annotation writes', async ({ page }) => {
   const state = await setup(page);
   const surface = page.locator('.whiteboard__page[aria-current="page"] .whiteboard__surface:visible');
   const box = await surface.boundingBox(), x = box.x + box.width * .35, y = box.y + box.height * .35;
@@ -249,7 +249,7 @@ test('existing board ink survives opening and resizing Kolin without new annotat
   const saved = JSON.stringify(state.annotationWrites);
   await openKolin(page); await separator(page).focus(); await separator(page).press('ArrowLeft');
   await send(page, state, 'Объясни эту тему');
-  await panel(page).getByRole('button', { name: 'Закрыть Kolin', exact: true }).click();
+  await panel(page).getByRole('button', { name: 'Закрыть Kolyn', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.kolinFixture.visibleInkCount())).toBe(1);
   expect(JSON.stringify(state.annotationWrites)).toBe(saved); expect(state.errors).toEqual([]);
 });
@@ -258,7 +258,7 @@ test('late reply and previous history do not cross class or teacher scope', asyn
   const state = await setup(page); await openKolin(page); state.responseGate = gate();
   state.transcriptContext = transcriptSnapshot({ segmentCount: 99 });
   await input(page).fill('Секрет первого урока'); await input(page).press('Enter');
-  await expect.poll(() => state.posts.length).toBe(1); await expect(panel(page).getByText('Kolin думает…', { exact: true })).toBeVisible();
+  await expect.poll(() => state.posts.length).toBe(1); await expect(panel(page).getByText('Kolyn думает…', { exact: true })).toBeVisible();
   await expect(input(page)).toBeDisabled();
   await expect(panel(page).getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
   state.transcriptContext = undefined;
@@ -276,7 +276,7 @@ test('late reply and previous history do not cross class or teacher scope', asyn
   expect(state.errors).toEqual([]);
 });
 
-test('Answers continues to open and resize independently of Kolin', async ({ page }) => {
+test('Answers continues to open and resize independently of Kolyn', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 }); const state = await setup(page);
   const answersToggle = page.getByRole('button', { name: 'Ответы', exact: true }).first(); await expect(answersToggle).toBeEnabled();
   await answersToggle.click(); const answers = page.locator('#answers-panel'); await expect(answers).toBeVisible();
@@ -289,7 +289,7 @@ test('Answers continues to open and resize independently of Kolin', async ({ pag
   expect(state.errors).toEqual([]);
 });
 
-test('student has no Kolin button, pane or API traffic', async ({ page }) => {
+test('student has no Kolyn button, pane or API traffic', async ({ page }) => {
   const state = await setup(page, 'student');
   await expect(toggle(page)).toHaveCount(0); await expect(page.locator('#kolin-panel')).toHaveCount(0);
   await page.getByRole('button', { name: 'Моя доска', exact: true }).click();
@@ -298,11 +298,11 @@ test('student has no Kolin button, pane or API traffic', async ({ page }) => {
   expect(state.errors).toEqual([]);
 });
 
-test('unconfigured Kolin is readable and disabled without sending a message', async ({ page }) => {
+test('unconfigured Kolyn is readable and disabled without sending a message', async ({ page }) => {
   const state = await setup(page); state.configured = false;
   expect(state.requests.filter(request => request.path.includes('/kolin/'))).toEqual([]);
   await openKolin(page);
-  await expect(panel(page).getByText('Kolin пока недоступен.', { exact: true })).toBeVisible();
+  await expect(panel(page).getByText('Kolyn пока недоступен.', { exact: true })).toBeVisible();
   await input(page).fill('Дай задание'); await input(page).press('Enter');
   await expect(panel(page).getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
   expect(state.posts).toEqual([]); expect(state.errors).toEqual([]);
@@ -335,7 +335,7 @@ test('each answer keeps its own transcript coverage and does not resend transcri
   await expect(notes.first()).toContainText('12');
   await expect(notes.first()).toContainText(/фрагмент/i);
   await expect(notes.first().locator('time')).toHaveAttribute('datetime', '2026-11-07T13:20:00Z');
-  await panel(page).getByRole('button', { name: 'Закрыть Kolin', exact: true }).click(); await openKolin(page);
+  await panel(page).getByRole('button', { name: 'Закрыть Kolyn', exact: true }).click(); await openKolin(page);
   await expect(notes.first()).toContainText('12');
   state.transcriptContext = transcriptSnapshot({ segmentCount: 2, truncated: false, transcriptionActive: false,
     latestSegmentAt: '2026-11-07T13:21:00Z', fromMs: 530000, toMs: 540000 });

@@ -433,11 +433,14 @@ public class AiLessonPilotService {
     }
 
     private static final String KOLIN_PROMPT = """
-            Ты Kolin, приватный AI-помощник преподавателя Mindcrafti во время урока.
+            Ты Kolyn, приватный AI-помощник преподавателя Mindcrafti во время урока.
+            Твоё имя пишется Kolyn. На приветствия и вопросы о себе отвечай обычным текстом.
             Помогай быстро: создавай математические задания, давай ответы, предлагай более
             лёгкие или сложные примеры, кратко объясняй решение и способ объяснить тему ребёнку.
             Отвечай на языке запроса, кратко и по делу, без длинного вступления.
             Если просят задания, сразу дай задания. Если просят ответ, сразу дай ответ.
+            Для вопроса «как объяснить» дай шаги, наглядный пример и вопрос для проверки понимания.
+            Проверяй определения и вычисления. Используй простую пунктуацию без длинного тире.
             Для объяснения используй понятные фразы, которые преподаватель может сказать вслух.
             Используй обычный текст и читаемые математические обозначения, например 1/2 и x².
             Дай законченный короткий ответ, который помещается в 500 токенов.
@@ -458,7 +461,7 @@ public class AiLessonPilotService {
 
     /** Text-only, bounded requests share the lesson pilot's configured key and HTTP transport. */
     public String kolinReply(String lessonContext, List<Map<String, String>> history, String question) {
-        if (apiKey.isBlank()) throw new IllegalStateException("Kolin is not configured");
+        if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", kolinModel == null || kolinModel.isBlank() ? "gpt-4.1-mini" : kolinModel.trim());
         payload.put("store", false);
@@ -471,67 +474,70 @@ public class AiLessonPilotService {
         payload.put("input", input);
         try {
             Map<String, Object> body = responses(payload, Duration.ofSeconds(35));
-            if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolin response is incomplete");
+            if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolyn response is incomplete");
             String text = extractOutputText(body).trim();
-            if (text.isEmpty()) throw new IllegalStateException("Kolin returned no text");
+            if (text.isEmpty()) throw new IllegalStateException("Kolyn returned no text");
             return text;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Kolin request interrupted", ex);
+            throw new IllegalStateException("Kolyn request interrupted", ex);
         } catch (Exception ex) {
             // Neither the API response body nor its possibly sensitive error is returned to the browser.
-            throw new IllegalStateException("Kolin request failed", ex);
+            throw new IllegalStateException("Kolyn request failed", ex);
         }
     }
 
     /** One bounded model call chooses a text answer or a teacher-only worksheet draft. */
     public String kolinStructuredReply(String lessonContext, List<Map<String,String>> history, String question) {
-        return kolinStructuredReply(lessonContext,history,question,false);
+        return kolinAutomaticReply(lessonContext,history,question);
     }
     public String kolinInteractiveReply(String lessonContext,List<Map<String,String>> history,String question) {
-        return kolinStructuredReply(lessonContext,history,question,true);
+        return kolinAutomaticReply(lessonContext,history,question);
     }
-    private String kolinStructuredReply(String lessonContext, List<Map<String,String>> history, String question,boolean interactive) {
-        if (apiKey.isBlank()) throw new IllegalStateException("Kolin is not configured");
+    private String kolinAutomaticReply(String lessonContext, List<Map<String,String>> history, String question) {
+        if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         Map<String,Object> taskProperties=new LinkedHashMap<>();
         taskProperties.put("kind",Map.of("type","string","enum",List.of("expression","equation","visual")));
-        for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,interactive
-                ?Map.of("type","string","enum",List.of("")):Map.of("type","string"));
+        for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,Map.of("type","string"));
         taskProperties.put("restrictions",Map.of("type","array","items",Map.of("type","string")));
-        taskProperties.put("visual",interactive ? Map.of("anyOf",List.of(Map.of("type","null"),com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.schema())) : KolinVisualSchema.schema());
+        taskProperties.put("visual",KolinVisualSchema.schema());
         Map<String,Object> taskSchema=Map.of("type","object","properties",taskProperties,
                 "required",List.copyOf(taskProperties.keySet()),"additionalProperties",false);
-        Map<String,Object> taskArray=new LinkedHashMap<>(Map.of("type","array","items",taskSchema));
-        if(interactive) {
-            int count=1;
-            try { count=objectMapper.readTree(lessonContext).path("requestedTaskCount").asInt(1); }
-            catch(Exception ignored) { /* Context is server-generated; retain the safe default. */ }
-            taskArray.put("maxItems",Math.max(1,Math.min(5,count)));
+        var interactiveProperties=new LinkedHashMap<>(taskProperties);
+        interactiveProperties.put("kind",Map.of("type","string","enum",List.of("visual")));
+        for(String field:List.of("instruction","expression","variable"))
+            interactiveProperties.put(field,Map.of("type","string","enum",List.of("")));
+        interactiveProperties.put("restrictions",Map.of("type","array","items",Map.of("type","string"),"maxItems",0));
+        interactiveProperties.put("visual",com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.schema());
+        var interactiveTask=Map.of("type","object","properties",interactiveProperties,
+                "required",List.copyOf(interactiveProperties.keySet()),"additionalProperties",false);
+        // Nested discriminated branches prevent an interactive response from using a static PDF visual.
+        var branches=new java.util.ArrayList<Map<String,Object>>();
+        var recipients=new java.util.ArrayList<String>();recipients.add("group");
+        for(var pupil:objectMapper.readTree(lessonContext).path("roster")) {
+            String id=pupil.path("id").asString();if(id!=null&&!id.isBlank())recipients.add(id);
         }
-        Map<String,Object> schema=Map.of("type","object","properties",Map.of(
-                "kind",Map.of("type","string","enum",List.of("text","worksheet")),
-                "text",Map.of("type","string"),"studentId",Map.of("type",List.of("string","null")),
-                "tasks",taskArray),
-                "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false);
-        String instructions=KOLIN_PROMPT+(interactive ? """
-
-                Верни объект JSON-схемы. Для личной страницы получателя выбирай ТОЛЬКО из roster: явно названная ученица важнее selectedStudentId.
-                Если получатель или тема неясны, уточни коротко: kind=text, studentId=null, tasks=[].
-                Для объекта верни kind=worksheet, РОВНО requestedTaskCount элементов tasks и короткий text с темой.
-                Ограничение ответа в 500 токенов НЕ относится к структурированным заданиям. Верни полный JSON.
-                Одна сцена с несколькими фигурами или графиками - ОДИН элемент tasks. Не добавляй шаблоны-заглушки.
-                lastGeneratedWorksheet - предыдущий черновик. При изменении верни полный обновлённый набор.
-                Любая просьба добавить создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
-                """+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS : """
-
-                Режим подтверждаемого PDF: верни только объект заданной JSON-схемы.
+        for(String kind:List.of("text","worksheet","interactive")) {
+            int max=kind.equals("text")?0:kind.equals("worksheet")?20:5;
+            branches.add(Map.of("type","object","properties",Map.of(
+                "kind",Map.of("type","string","enum",List.of(kind)),"text",Map.of("type","string","minLength",1,"maxLength",4000),
+                "studentId",kind.equals("text")?Map.of("type","null"):Map.of("type","string","enum",recipients),
+                "tasks",Map.of("type","array","items",kind.equals("interactive")?interactiveTask:taskSchema,
+                    "minItems",kind.equals("text")?0:1,"maxItems",max)),
+                "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false));
+        }
+        Map<String,Object> schema=Map.of("type","object","properties",Map.of("result",Map.of("anyOf",branches)),
+                "required",List.of("result"),"additionalProperties",false);
+        String instructions=KOLIN_PROMPT+"""
+                Верни JSON с единственным полем result. В result выбери ровно одну ветку: text, worksheet или interactive.
+                Режим подтверждаемого PDF:
                 Для обычного вопроса kind=text, короткий text, studentId=null, tasks=[].
-                При просьбе создать/дать задания kind=worksheet, для личной страницы выбери получателя ТОЛЬКО из roster.
+                При просьбе создать/дать задания kind=worksheet. Для общей доски studentId="group", для личной выбери id из roster.
                 Явно названная ученица важнее selectedStudentId. Без имени используй selectedStudentId.
                 Если получателя нет, имя неоднозначно или отсутствует в roster, задай короткий вопрос в text.
                 Если тема не дана в запросе, истории или расшифровке, уточни её, не выдумывай.
                 'Пару', 'несколько', 'ещё задания' и запрос без числа означают ровно 5 самостоятельных заданий.
-                requestedTaskCount уже вычислен сервером. Для worksheet верни РОВНО requestedTaskCount элементов tasks.
+                requestedPdfTaskCount уже вычислен сервером. Для worksheet верни РОВНО requestedPdfTaskCount элементов tasks.
                 В этом приложении 'пару' означает 5, НЕ 2. Не переопределяй серверное количество по разговорному значению слова.
                 Ограничение короткого текстового ответа в 500 токенов не относится к JSON с заданиями: верни полный набор.
                 Явно указанное целое число от 1 до 20 имеет приоритет. Для большего количества попроси разбить запрос.
@@ -551,20 +557,47 @@ public class AiLessonPilotService {
                 text для worksheet должен кратко описывать тему, без утверждений о добавлении в тетрадь.
                 Любая просьба 'добавь/отправь' создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
                 Исходные PDF и рукопись по-прежнему недоступны. Не утверждай, что изучил записи ученицы.
-                """+KolinVisualSchema.INSTRUCTIONS);
+                """+KolinVisualSchema.INSTRUCTIONS+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS;
         instructions+="""
                 ГЛАВНОЕ: ты собеседник и методический помощник преподавателя, а не только генератор файлов.
                 Сначала определи намерение ПОСЛЕДНЕГО сообщения. По умолчанию отвечай kind=text, studentId=null, tasks=[].
-                Выбранный PDF/интерактив задаёт лишь формат создаваемого материала, НЕ превращает каждый вопрос в задание.
-                requestedTaskCount и lastGeneratedWorksheet сами по себе НЕ являются просьбой создать новый материал.
+                Сам выбери формат по ПОСЛЕДНЕЙ просьбе и истории. Никакого переключателя формата у преподавателя нет.
+                Обычные вопросы НЕ превращай в задание. Просьба объяснить тему получает text с примером и проверкой понимания.
+                kind=worksheet: набор упражнений, лист для самостоятельного решения, PDF, печать, статичный рисунок.
+                kind=interactive: просьба построить/показать геометрию или график для исследования, вращать фигуру,
+                менять размеры, двигать точки или ползунки. 'Покажи пирамиду с высотой' означает interactive.
+                'Дай пять примеров по дробям' означает worksheet. 'Как объяснить дробь?' означает text.
+                Слово 'интерактив' необязательно. 'Нарисуй график в PDF' явно требует worksheet, а не interactive.
+                При изменении или переносе прежнего материала сохрани lastGeneratedWorksheet.kind и число задач,
+                если преподаватель не попросил новый формат или количество. Не спрашивай о формате без необходимости.
+                При изменении прежнего черновика сохрани и его получателя, если другой не назван явно.
+                Устаревшее поле context.format игнорируй, решение принимается по разговору.
+                Для worksheet число задач = requestedPdfTaskCount (1-20), для interactive = requestedInteractiveTaskCount (1-5).
+                Одна сцена с несколькими объектами - один элемент tasks. Не добавляй пустые шаблоны.
+                Для interactive все tasks имеют kind=visual и visual.template; внешние instruction,expression,variable пусты.
+                Для PDF visual использует type из схемы статичных рисунков, а не template интерактива.
+                Изменяемые данные, столбчатая диаграмма с изменением чисел и средним: interactive, template=scene.
+                Не смешивай PDF type=geometry и интерактив template=solid. Для пирамиды с ползунками нужен solid.
+                Конус, цилиндр, сфера, кривые поверхности, сечения и развёртки произвольных тел НЕ доступны интерактивно.
+                Для такого интерактивного запроса верни text с ограничением, без tasks. Не подменяй конус пирамидой,
+                цилиндр призмой или сферу многогранником. Можно предложить статичный PDF, но не создавать его без просьбы.
+                Исключение: готовый template=cube поддерживает собственную развёртку.
+                Для scene с полем проверки answer!=null всегда metrics=[], чтобы готовый ответ не был показан рядом с задачей.
+                Ограничение в 500 токенов относится лишь к текстовому объяснению, не к полному JSON материала.
+                requestedPdfTaskCount и lastGeneratedWorksheet сами по себе НЕ являются просьбой создать новый материал.
                 На вопросы, сомнения, оценку сложности, просьбы о совете или объяснении отвечай содержательно текстом.
+                'Что ты умеешь?', 'Чем можешь помочь?', 'Ты можешь сделать график?' - вопросы о возможностях,
+                а не команды создать материал. Ответь текстом, без tasks и без выбора получателя.
+                Кратко назови помощь с объяснениями, решениями, сложностью и подготовкой материалов;
+                для PDF и интерактива описывай только поддерживаемые в этом режиме типы из инструкций.
+                Не обещай автоматического чтения PDF или рукописи. Добавление материала требует кнопки преподавателя.
                 Используй условия и проверенные ответы из lastGeneratedWorksheet, если обсуждают предыдущие задания.
                 Не утверждай, что простой пример соответствует Abitur только потому, что так назван предыдущий черновик.
                 Оцени сами условия; признай несоответствие сложности, если оно есть. Не выдумывай требования экзамена.
                 Примеры kind=text: 'Это такие лёгкие в абитуре?', 'Почему так?', 'Как объяснить Виталине?',
                 'Дай совет', 'Она не понимает дроби, что делать?', 'Можно ли сделать сложнее?', 'Объясни второе задание'.
                 Давай объяснение, шаги решения, наводящие вопросы или короткий пример прямо в text, без карточки PDF.
-                kind=worksheet нужен только при просьбе СОЗДАТЬ, ИЗМЕНИТЬ или подготовить к ДОБАВЛЕНИЮ материал:
+                kind=worksheet или kind=interactive нужны только при просьбе СОЗДАТЬ, ИЗМЕНИТЬ или подготовить к ДОБАВЛЕНИЮ материал:
                 'Дай пять заданий', 'Сделай второе сложнее', 'Создай интерактив', 'Это добавь Виталине'.
                 Если одновременно просят объяснить и создать, объясни в text и включи явно запрошенный материал в tasks.
                 Не генерируй замену по одной лишь критике прежнего задания и не повторяй предыдущий черновик вместо ответа.
@@ -582,21 +615,25 @@ public class AiLessonPilotService {
         input.add(Map.of("role","user","content",question));
         Map<String,Object> payload=new LinkedHashMap<>();
         payload.put("model",kolinModel==null || kolinModel.isBlank()?"gpt-4.1-mini":kolinModel.trim());
-        payload.put("store",false); payload.put("max_output_tokens",interactive?2500:6500); payload.put("input",input);
+        payload.put("store",false); payload.put("max_output_tokens",6500); payload.put("input",input);
         payload.put("text",Map.of("format",Map.of("type","json_schema","name","kolin_confirmed_worksheet",
                 "strict",true,"schema",schema)));
         try {
             var body=responses(payload,Duration.ofSeconds(55));
-            if(!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolin response incomplete");
+            if(!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolyn response incomplete");
             String value=extractOutputText(body).trim();
-            if(value.isEmpty() || value.length()>32000) throw new IllegalStateException("Kolin structured response invalid");
-            return value;
+            if(value.isEmpty() || value.length()>32000) throw new IllegalStateException("Kolyn structured response invalid");
+            var parsed=objectMapper.readTree(value);
+            var result=parsed.path("result");
+            if(parsed.size()!=1 || !result.isObject() || !result.has("kind") || !result.has("tasks"))
+                throw new IllegalStateException("Kolyn structured envelope invalid");
+            return objectMapper.writeValueAsString(result);
         } catch(InterruptedException ex) {
-            Thread.currentThread().interrupt(); throw new IllegalStateException("Kolin request interrupted");
-        } catch(Exception ex) { throw new IllegalStateException("Kolin structured request failed",ex); }
+            Thread.currentThread().interrupt(); throw new IllegalStateException("Kolyn request interrupted");
+        } catch(Exception ex) { throw new IllegalStateException("Kolyn structured request failed",ex); }
     }
 
-    /** One HTTP implementation for the existing pilot and Kolin. Pilot payloads remain unchanged. */
+    /** One HTTP implementation for the existing pilot and Kolyn. Pilot payloads remain unchanged. */
     private Map<String, Object> responses(Map<String, Object> payload, Duration timeout) throws Exception {
         var builder = HttpRequest.newBuilder().uri(URI.create(RESPONSES_API))
                 .header("Authorization", "Bearer " + apiKey).header("Content-Type", "application/json")

@@ -55,7 +55,7 @@ class McpPersonalLessonWorkbookToolsTest {
     private static final String EVENT = "exact-lesson-event";
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         owner = User.activeTeacher("Nick", "nick@test.local", "nick", "unused");
         ReflectionTestUtils.setField(owner, "id", AiLessonPilotService.PILOT_TEACHER_ID);
         admin = User.bootstrapAdmin("Admin", "admin@test.local", "unused");
@@ -88,16 +88,37 @@ class McpPersonalLessonWorkbookToolsTest {
         controller.setPersonalLessonAnswersService(personalAnswers);
         controller.setPersonalWorkbookAccess(access);
         controller.setPersonalWorkbookReceipts(receipts);
+        controller.setTeacherGuideService(new McpTeacherGuideService(access,json));
     }
 
     @Test
     void catalogExposesToolsToTeachersAndAdministratorsButNotImportKeyOrStudent() {
         for (String token : List.of("owner", "admin", "other")) {
+            assertThat(toolNames(token)).contains("get_teacher_guide");
             assertThat(toolNames(token)).contains("list_personal_lesson_workbooks", "upload_personal_lesson_workbook", "upload_personal_lesson_answers");
         }
         for (String token : List.of("import-key", "student")) {
+            assertThat(toolNames(token)).doesNotContain("get_teacher_guide");
             assertThat(toolNames(token)).doesNotContain("list_personal_lesson_workbooks", "upload_personal_lesson_workbook", "upload_personal_lesson_answers");
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void teacherGuideIsDiscoverableReadOnlyHelpAndRejectsStudentCalls() {
+        var initialization=request("other","initialize",Map.of());
+        assertThat(initialization.get("instructions").toString()).contains("first call get_teacher_guide","Never execute an action");
+        var guide=call("other","get_teacher_guide",Map.of("topicId","personal-materials"));
+        assertThat(guide.get("isError")).isNotEqualTo(true);
+        assertThat((Map<String,Object>)guide.get("structuredContent")).containsKeys("version","articles");
+        verify(access).requireActor(otherTeacher);
+        var studentResponse=(Map<String,Object>)controller.post("Bearer student",null,Map.of("jsonrpc","2.0","id",1,
+            "method","tools/call","params",Map.of("name","get_teacher_guide","arguments",Map.of()))).getBody();
+        assertThat(studentResponse).containsKey("error").doesNotContainKey("result");
+        var keyResponse=(Map<String,Object>)controller.post(null,"import-key",Map.of("jsonrpc","2.0","id",1,
+            "method","tools/call","params",Map.of("name","get_teacher_guide","arguments",Map.of()))).getBody();
+        assertRejected((Map<String,Object>)keyResponse.get("result"),403);
+        verifyNoInteractions(personal,personalAnswers,receipts);
     }
 
     @Test
@@ -263,7 +284,7 @@ class McpPersonalLessonWorkbookToolsTest {
     void discoveryAndInitializationExplainTwoBoardsAndTheCommonOrBlankFallback() {
         for (String method : List.of("initialize", "server/discover")) {
             Map<String, Object> discovery = request("owner", method, Map.of());
-            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.31.1");
+            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.32.0");
             assertThat(String.valueOf(discovery.get("instructions"))).contains("Shared board and My board (Моя доска)",
                     "takes priority over the common workbook", "uses the common workbook or stays blank",
                     "Shared board continues to show the common workbook to everyone");

@@ -53,12 +53,13 @@ export function parseMathScene(value:unknown):MathScene|undefined {
     }
     if(value.points.length+value.objects.length===0)return;
     for(const m of value.metrics){keys(m,'label,expression');if(!label(m.label,32))return;expression(m.expression);}
-    if(value.answer!==null){expression(value.answer);if(!value.prompt)return;}
+    if(value.answer!==null){expression(value.answer);if(!value.prompt)return;
+      if((value.metrics as {expression:string}[]).some(m=>m.expression.replace(/\s/g,'')===(value.answer as string).replace(/\s/g,'')))return;}
     return structuredClone(value) as MathScene;
   }catch{return;}
 }
 const cache=new Map<string,ReturnType<typeof compileMath>>();
-export function sceneValue(scene:MathScene,expression:string,x?:number):number {
+export function sceneValue(scene:Pick<MathScene,'parameters'>,expression:string,x?:number):number {
   const values=Object.fromEntries(scene.parameters.map(p=>[p.name,p.value]));if(x!==undefined)values.x=x;
   const key=Object.keys(values).sort().join(',')+':'+expression;
   try{let fn=cache.get(key);if(!fn){fn=compileMath(expression,new Set(Object.keys(values)));if(cache.size>=256)cache.clear();cache.set(key,fn);}const n=fn(values);return Number.isFinite(n)&&Math.abs(n)<=1e9?n:NaN;}catch{return NaN;}
@@ -79,7 +80,7 @@ export function sceneProjection(scene:MathScene) {
     fromPixel:(x:number,y:number):[number,number]=>[(x-250)/sx+cx,(220-y)/sy+cy]};
 }
 export function scenePoint(scene:MathScene,p:ScenePoint):[number,number]{return [sceneValue(scene,p.x),sceneValue(scene,p.y)];}
-export function setSceneParameter(scene:MathScene,name:string,value:number):MathScene {
+export function setSceneParameter<T extends {parameters:SceneParameter[]}>(scene:T,name:string,value:number):T {
   return {...scene,parameters:scene.parameters.map(p=>p.name===name?{...p,value:Math.max(p.min,Math.min(p.max,
     Number((p.min+Math.round((value-p.min)/p.step)*p.step).toFixed(9))))}:p)};
 }

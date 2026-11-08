@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { fmt, graphPoint, parseInteractiveSpec, plot, sectorPath, templateScene, templateTitle, type InteractiveSpec } from './interactiveTemplates';
 import './interactive-template.css';
 import {checkSceneAnswer,scenePoint,sceneProjection,setSceneParameter} from './mathScene';
+import {checkSolidAnswer} from './mathSolid';
 
 export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: {
   spec:InteractiveSpec; revision?:string; onCommit?:(spec:InteractiveSpec,baseRevision:string)=>Promise<string|undefined>; disabled?:boolean;
@@ -82,18 +83,24 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
           onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>;
       })}
     </svg>
-    {!disabled&&value.template==='scene'&&<div className="math-scene-controls">
+    {!disabled&&(value.template==='scene'||value.template==='solid')&&<div className="math-scene-controls">
       <div className="math-scene-sliders">{value.parameters.map(p=><label key={p.name}><span>{p.label}: {fmt(p.value)}</span>
         <input type="range" aria-label={p.label} min={p.min} max={p.max} step={p.step} value={p.value} disabled={locked}
           onChange={event=>change(setSceneParameter(value,p.name,Number(event.target.value)))}
           onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/></label>)}</div>
-      {value.answer!==null&&<form className="math-scene-answer" onSubmit={event=>{event.preventDefault();setAnswerStatus(checkSceneAnswer(value,answer));}}>
+      {value.answer!==null&&<form className="math-scene-answer" onSubmit={event=>{event.preventDefault();setAnswerStatus(value.template==='solid'?checkSolidAnswer(value,answer):checkSceneAnswer(value,answer));}}>
         <label>{de?'Deine Zahl':'Ваш числовой ответ'}<input inputMode="decimal" value={answer} onChange={event=>{setAnswer(event.target.value);setAnswerStatus(null);}} maxLength={40}/></label>
         <button type="submit" disabled={locked}>{de?'Prüfen':'Проверить'}</button>
         <small>{de?'Bei Bedarf auf 3 Nachkommastellen runden.':'При необходимости округлите до 3 знаков.'}</small>
         {answerStatus&&<span role="status">{answerStatus==='correct'?(de?'Richtig':'Верно'):answerStatus==='incorrect'?(de?'Noch einmal versuchen':'Попробуйте ещё'):(de?'Zahl oder Parameter prüfen':'Проверьте число или параметры')}</span>}
       </form>}
     </div>}
+    {!disabled&&value.template==='solid'&&<div className="interactive-template__controls">{(['yaw','pitch'] as const).map(field=><label key={field}>
+      {field==='yaw'?(de?'Drehen':'Поворот'):(de?'Neigen':'Наклон')}: {fmt(value[field])}
+      <input type="range" min={field==='yaw'?-180:-90} max={field==='yaw'?180:90} step={1} value={value[field]} disabled={locked}
+        aria-label={field==='yaw'?'Поворот / Drehen':'Наклон / Neigen'} onChange={event=>change({...value,[field]:Number(event.target.value)})}
+        onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>
+    </label>)}</div>}
     {!disabled&&value.template==='cube'&&<div className="interactive-template__controls">{(['unfold','yaw','pitch'] as const).map(field=><label key={field}>
       <span>{field==='unfold'?(de?'Entfalten':'Раскрыть'):field==='yaw'?(de?'Drehen':'Поворот'):(de?'Neigen':'Наклон')}: {fmt(value[field])}</span>
       <input type="range" aria-label={field==='unfold'?'Раскрыть / Entfalten':field==='yaw'?'Поворот / Drehen':'Наклон / Neigen'}

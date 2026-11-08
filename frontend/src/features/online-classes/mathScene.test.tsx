@@ -20,6 +20,7 @@ describe('general mathematical scenes',()=>{
     expect(sceneValue(examples[1],'sin(a*x)+b',Math.PI/2)).toBeCloseTo(1);
     expect(checkSceneAnswer(examples[2],'4')).toBe('correct');expect(checkSceneAnswer(setSceneParameter(examples[2],'a',5),'4')).toBe('incorrect');
     expect(checkSceneAnswer(rect,'')).toBe('invalid');expect(checkSceneAnswer(rect,'1/0')).toBe('invalid');
+    expect(parseMathScene({...examples[2],metrics:[{label:'Ответ',expression:' (a+b+c) / 3 '}]})).toBeUndefined();
     expect(checkSceneAnswer({...rect,answer:'1/3'},'0,333')).toBe('correct');
     expect(checkSceneAnswer({...rect,answer:'1000000'},'1000001')).toBe('incorrect');
     const bars={...setSceneParameter(examples[2],'a',10),bounds:{xMin:0,xMax:4,yMin:0,yMax:7}};

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { KolinContext, KolinTranscriptContext } from '../../api/kolin';
 import type { KolinFailureCode, useKolinChat } from './useKolinChat';
@@ -13,14 +13,14 @@ function lessonTime(milliseconds: number) {
 function failureMessage(code: KolinFailureCode | null, de: boolean) {
   switch (code) {
     case 'KOLIN_BUSY': return de
-      ? 'Kolin bereitet die Antwort noch vor. Versuchen Sie es in ein paar Sekunden erneut.'
-      : 'Kolin ещё готовит ответ. Повторите через несколько секунд.';
+      ? 'Kolyn bereitet die Antwort noch vor. Versuchen Sie es in ein paar Sekunden erneut.'
+      : 'Kolyn ещё готовит ответ. Повторите через несколько секунд.';
     case 'KOLIN_TASK_INVALID': return de
       ? 'Die Aufgaben konnten nicht überprüft werden. Bitte senden Sie die Anfrage erneut.'
       : 'Не удалось проверить задания. Повторите запрос.';
     case 'KOLIN_GENERATION_FAILED': return de
-      ? 'Kolin konnte die Antwort nicht fertigstellen. Bitte senden Sie die Anfrage erneut.'
-      : 'Kolin не смог завершить ответ. Повторите запрос.';
+      ? 'Kolyn konnte die Antwort nicht fertigstellen. Bitte senden Sie die Anfrage erneut.'
+      : 'Kolyn не смог завершить ответ. Повторите запрос.';
     default: return de
       ? 'Die Antwort konnte nicht geladen werden. Bitte erneut versuchen.'
       : 'Не удалось получить ответ. Повторите отправку.';
@@ -58,26 +58,25 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
     if (chat.open && nearBottom.current && log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [chat.messages.length, chat.pending, chat.open]);
   useEffect(() => { if (chat.open) input.current?.focus(); }, [chat.open]);
-  const [format,setFormat]=useState<'pdf'|'interactive'>('pdf');
-  const send = () => void chat.send(format==='interactive'?{...context,format}:context);
+  const send = () => void chat.send(context);
 
-  return <aside id="kolin-panel" className="answers-panel kolin-panel" aria-label="Kolin">
+  return <aside id="kolin-panel" className="answers-panel kolin-panel" aria-label="Kolyn">
     <header className="answers-panel__heading">
-      <div><strong className="kolin-panel__title">Kolin</strong>
+      <div><strong className="kolin-panel__title">Kolyn</strong>
         <p className="kolin-panel__subtitle">{de ? 'KI-Assistent für Lehrkräfte' : 'AI-помощник преподавателя'}</p></div>
       <button type="button" className="answers-panel__close" onClick={chat.close}
-        aria-label={de ? 'Kolin schließen' : 'Закрыть Kolin'}>×</button>
+        aria-label={de ? 'Kolyn schließen' : 'Закрыть Kolyn'}>×</button>
     </header>
-    <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolin' : 'Переписка с Kolin'}
+    <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
       onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
       {!chat.messages.length && <li className="kolin-panel__welcome">{de
-        ? 'Fragen Sie mich zum aktuellen Unterricht oder bitten Sie um eine Aufgabe.'
-        : 'Спросите меня о текущем уроке или попросите создать задание.'}
+        ? 'Ich bin Kolyn. Ich helfe beim Erklären, beim Besprechen von Lösungen und beim Vorbereiten von Aufgaben.'
+        : 'Я Kolyn. Помогу объяснить тему, разобрать решение и подготовить задания.'}
         <p>{de ? 'Bei Ihrer Frage nutze ich das gespeicherte Transkript dieses Unterrichts. Ich gebe keine automatischen Hinweise.'
           : 'Когда вы задаёте вопрос, я использую сохранённую расшифровку этого урока. Автоматических подсказок нет.'}</p></li>}
       {chat.messages.map(message => <li key={message.id} className={`kolin-panel__message kolin-panel__message--${message.role}`}
         data-role={message.role} data-message-type={message.type}>
-        <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolin' : de ? 'Sie' : 'Вы'}</span>
+        <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolyn' : de ? 'Sie' : 'Вы'}</span>
         {message.text && <p>{message.text}</p>}
         {message.role === 'assistant' && message.worksheet && <KolinWorksheetCard classId={chat.classId}
           worksheet={message.worksheet} appendStatus={message.appendStatus} de={de}
@@ -85,9 +84,9 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
         {message.role === 'assistant' && message.transcriptContext && <TranscriptContextNote context={message.transcriptContext} de={de} />}
       </li>)}
     </ol>
-    {chat.pending && <p className="kolin-panel__status" role="status">{de ? 'Kolin denkt nach…' : 'Kolin думает…'}</p>}
-    {chat.availability === 'checking' && <p className="kolin-panel__status" role="status">{de ? 'Kolin wird verbunden…' : 'Подключаем Kolin…'}</p>}
-    {chat.availability === 'unconfigured' && <p className="kolin-panel__status" role="status">{de ? 'Kolin ist noch nicht verfügbar.' : 'Kolin пока недоступен.'}</p>}
+    {chat.pending && <p className="kolin-panel__status" role="status">{de ? 'Kolyn denkt nach…' : 'Kolyn думает…'}</p>}
+    {chat.availability === 'checking' && <p className="kolin-panel__status" role="status">{de ? 'Kolyn wird verbunden…' : 'Подключаем Kolyn…'}</p>}
+    {chat.availability === 'unconfigured' && <p className="kolin-panel__status" role="status">{de ? 'Kolyn ist noch nicht verfügbar.' : 'Kolyn пока недоступен.'}</p>}
     {chat.error && <div className="kolin-panel__error" role="alert">
       <p>{failureMessage(chat.failureCode, de)}</p>
       <button type="button" onClick={() => void chat.retry()} disabled={chat.pending || chat.availability === 'checking'}>
@@ -95,13 +94,8 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
       </button>
     </div>}
     <form className="kolin-panel__form" onSubmit={event => { event.preventDefault(); send(); }}>
-      <label className="kolin-panel__format">{de?'Aufgabenformat':'Формат заданий'}
-        <select value={format} disabled={chat.pending} onChange={event=>setFormat(event.target.value as 'pdf'|'interactive')}>
-          <option value="pdf">PDF</option><option value="interactive">{de?'Interaktiv':'Интерактив'}</option>
-        </select>
-      </label>
       <textarea ref={input} value={chat.draft} onChange={event => chat.setDraft(event.target.value)} rows={2} maxLength={2000}
-        aria-label={de ? 'An Kolin schreiben…' : 'Напишите Kolin…'} placeholder={de ? 'An Kolin schreiben…' : 'Напишите Kolin…'}
+        aria-label={de ? 'An Kolyn schreiben…' : 'Напишите Kolyn…'} placeholder={de ? 'An Kolyn schreiben…' : 'Напишите Kolyn…'}
         disabled={chat.pending} onKeyDown={event => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
           event.stopPropagation();

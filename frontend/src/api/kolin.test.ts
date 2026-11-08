@@ -5,7 +5,7 @@ import { kolinApi, parseKolinTranscriptContext, parseKolinWorksheet, type KolinC
 vi.mock('./client', () => ({ request: vi.fn(), requestBlob: vi.fn() }));
 beforeEach(() => vi.mocked(request).mockReset().mockResolvedValue({ type: 'text', text: 'Answer' }));
 
-describe('compact Kolin API request', () => {
+describe('compact Kolyn API request', () => {
   it('whitelists context and history fields and sends only the last eight messages', async () => {
     const history = Array.from({ length: 12 }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', text: String(index), pdf: 'must not leave', transcript: 'private' })) as KolinHistoryMessage[];
     const context = { targetType: 'student', studentId: 'pupil-1', currentWorkbookPage: 3,
@@ -33,7 +33,7 @@ describe('compact Kolin API request', () => {
   });
 });
 
-describe('server-bound Kolin worksheet metadata', () => {
+describe('server-bound Kolyn worksheet metadata', () => {
   const worksheet = { id: 'artifact', studentId: 'alice', studentName: 'Виталина', taskCount: 3, pageCount: 1, state: 'READY' };
   it('retains only artifact metadata and accepts the confirmed page range', () => {
     expect(parseKolinWorksheet({ ...worksheet, answers: 'private', pdf: 'bytes' })).toEqual(worksheet);
@@ -45,7 +45,7 @@ describe('server-bound Kolin worksheet metadata', () => {
   });
 });
 
-describe('optional Kolin transcript metadata', () => {
+describe('optional Kolyn transcript metadata', () => {
   const valid = { state: 'included', segmentCount: 12, truncated: true,
     latestSegmentAt: '2026-11-07T15:45:00.123456789Z', fromMs: 120000, toMs: 525000, transcriptionActive: false };
 

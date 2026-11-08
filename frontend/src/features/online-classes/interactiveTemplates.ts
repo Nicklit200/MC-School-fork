@@ -1,7 +1,9 @@
 /** Numeric template definitions. The model never supplies executable markup or formulas. */
 import {parseMathScene,renderMathScene,type MathScene} from './mathScene';
+import {parseMathSolid,renderMathSolid,type MathSolid} from './mathSolid';
 export type InteractiveSpec =
   | MathScene
+  | MathSolid
   | { template: 'graph'; language: 'ru' | 'de'; function: 'linear' | 'quadratic'; coefficients: number[] }
   | { template: 'triangle'; language: 'ru' | 'de'; vertices: [number, number][] }
   | { template: 'cube'; language: 'ru' | 'de'; unfold: number; yaw: number; pitch: number }
@@ -10,9 +12,11 @@ const finite = (n: unknown, min: number, max: number): n is number => typeof n =
 export const triangleArea = (v: [number, number][]) => Math.abs((v[1][0]-v[0][0])*(v[2][1]-v[0][1])-(v[2][0]-v[0][0])*(v[1][1]-v[0][1]))/2;
 export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  try {if(JSON.stringify(value).length>14000)return;}catch{return;}
   const s = value as Record<string, unknown>;
   if (s.language !== 'ru' && s.language !== 'de') return;
   if (s.template==='scene') return parseMathScene(s);
+  if (s.template==='solid') return parseMathSolid(s);
   const keys = (...expected: string[]) => Object.keys(s).sort().join('|') === expected.sort().join('|');
   if (s.template === 'cube' && keys('template','language','unfold','yaw','pitch')
     && finite(s.unfold,0,1) && finite(s.yaw,-180,180) && finite(s.pitch,-90,90))
@@ -33,7 +37,7 @@ export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefine
 }
 export function templateTitle(spec: InteractiveSpec) {
   const de=spec.language==='de';
-  if(spec.template==='scene') return spec.title;
+  if(spec.template==='scene'||spec.template==='solid') return spec.title;
   if(spec.template==='cube') return de?'Würfel und sein Netz':'Куб и его развёртка';
   return spec.template==='graph' ? de?'Graph untersuchen':'Исследуем график'
     : spec.template==='triangle' ? de?'Dreieck untersuchen':'Исследуем треугольник' : de?'Bruchteile':'Доли круга';
@@ -85,6 +89,7 @@ export function cubeFaces(unfold:number): [number,number,number][][] {
 /** One scene feeds both the editable SVG and the board/PDF canvas snapshot. */
 export function templateScene(spec:InteractiveSpec):Primitive[] {
   if(spec.template==='scene') return renderMathScene(spec);
+  if(spec.template==='solid') return renderMathSolid(spec);
   const result:Primitive[]=[{kind:'text',x:25,y:30,text:templateTitle(spec),size:19}];
   const text=(x:number,y:number,value:string,size=15) => result.push({kind:'text',x,y,text:value,size});
   const path=(d:string,stroke='#dce3e9',width=1,fill='none',clip=false)=>result.push({kind:'path',d,stroke,width,fill,clip});

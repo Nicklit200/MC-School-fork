@@ -11,6 +11,8 @@ import com.mcschool.flashcard.users.*;
 import java.time.Instant;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import tools.jackson.databind.json.JsonMapper;
 
 class KolinTaskServiceTest {
@@ -29,12 +31,12 @@ class KolinTaskServiceTest {
 
     @Test void interactiveTemplateUsesOneProviderCallWithoutPdfRenderingOrAutomaticAppend()throws Exception {
         reserve();
-        var content=new KolinTaskService.Content("worksheet","Graph",pupil.getId().toString(),List.of(
+        var content=new KolinTaskService.Content("interactive","Graph",pupil.getId().toString(),List.of(
             new KolinTaskService.Task("visual","untrusted prose","wrong formula",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
-        when(ai.kolinInteractiveReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(content));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(content));
         service.reply(host,room,new KolinChatService.Request("Покажи параболу",List.of(),
-            new KolinChatService.Context("student",pupil.getId(),0,"interactive"),clientId),new java.util.LinkedHashMap<>(),List.of(),"Покажи параболу",metadata);
-        verify(ai,times(1)).kolinInteractiveReply(anyString(),anyList(),anyString());
+            new KolinChatService.Context("student",pupil.getId(),0),clientId),new java.util.LinkedHashMap<>(),List.of(),"Покажи параболу",metadata);
+        verify(ai,times(1)).kolinStructuredReply(anyString(),anyList(),anyString());
         verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
         verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("interactive"),eq("Graph"),eq(metadata),eq(pupil.getId()),eq("Виталина"),
             eq(1),eq(1),isNull(),isNull(),argThat(json->!json.contains("untrusted prose")&&!json.contains("wrong formula")));
@@ -48,6 +50,43 @@ class KolinTaskServiceTest {
         assertThat(KolinTaskService.requestedCount("Erstelle zwei Aufgaben")).isEqualTo(2);
         assertThat(KolinTaskService.requestedCount("Сделай второе сложнее",3)).isEqualTo(3);
         assertThat(KolinTaskService.requestedCount("Дай пару заданий посложнее",3)).isEqualTo(5);
+        assertThat(KolinTaskService.requestedCount("Нарисуй в PDF один график y=2*x+1")).isEqualTo(1);
+        assertThat(KolinTaskService.requestedCount("Покажи две пирамиды",0,1)).isEqualTo(2);
+        assertThat(KolinTaskService.requestedCount("Добавь Алисе",3,1)).isEqualTo(3);
+        assertThat(KolinTaskService.requestedCount("Сделай её выше",2,1)).isEqualTo(2);
+    }
+    @Test void unsupportedCurvedBodyBecomesAnExplanationInsteadOfAMislabelledPolyhedron()throws Exception {
+        reserve();
+        var content=new KolinTaskService.Content("interactive","Конус",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),Map.of("template","solid","title","Конус","language","ru"))));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(content));
+        send("Покажи интерактивный конус с развёрткой");
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),contains("пока не поддерживается"),eq(metadata),
+            isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
+        verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());verify(store,never()).fail(any(),any(),any(),any());
+        assertThat(KolinTaskService.unsupportedInteractive("Покажи пирамиду",List.of())).isFalse();
+        assertThat(KolinTaskService.unsupportedInteractive("Покажи развёртку пирамиды",List.of())).isTrue();
+        assertThat(KolinTaskService.unsupportedInteractive("Развёртка куба",List.of(new KolinTaskService.Task("visual","","",null,"",List.of(),Map.of("template","cube"))))).isFalse();
+    }
+    @Test @SuppressWarnings("unchecked") void repairsAMissingVertexOnceBeforeCreatingThePrivateDraft()throws Exception {
+        reserve();
+        var valid=(Map<String,Object>)mapper.readValue(java.nio.file.Files.readString(java.nio.file.Path.of("../frontend/e2e/math-solids.json")),List.class).get(0);
+        var invalid=new LinkedHashMap<>(valid);invalid.put("vertices",((List<Map<String,Object>>)valid.get("vertices")).stream().filter(v->!"O".equals(v.get("id"))).toList());
+        var before=new KolinTaskService.Content("interactive","Пирамида",pupil.getId().toString(),List.of(new KolinTaskService.Task("visual","","",null,"",List.of(),invalid)));
+        var after=new KolinTaskService.Content("interactive","Пирамида",pupil.getId().toString(),List.of(new KolinTaskService.Task("visual","","",null,"",List.of(),valid)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(before),mapper.writeValueAsString(after));
+        send("Покажи пирамиду с высотой");
+        verify(ai,times(2)).kolinStructuredReply(anyString(),anyList(),anyString());
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("interactive"),eq("Пирамида"),eq(metadata),eq(pupil.getId()),eq("Виталина"),eq(1),eq(1),isNull(),isNull(),anyString());
+        verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
+    }
+    @Test void stopsAfterOneUnsuccessfulRepairAndDoesNotCreateAPreview()throws Exception {
+        reserve();
+        var broken=new KolinTaskService.Content("interactive","Пирамида",pupil.getId().toString(),List.of(new KolinTaskService.Task("visual","","",null,"",List.of(),Map.of("template","solid","language","ru"))));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(broken));
+        assertThatThrownBy(()->send("Покажи пирамиду")).isInstanceOf(KolinRequestException.class);
+        verify(ai,times(2)).kolinStructuredReply(anyString(),anyList(),anyString());verify(store).fail(host,room.getId(),artifact,attempt);
+        verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
     }
     @Test void conditionsAreExactlyTheExpressionsPassedToTheVerifierAndAnswersStayPrivate() throws Exception {
         var document=KolinTaskService.document(List.of(task("\\frac{1}{2}+\\frac{1}{4}","3/4")));
@@ -98,15 +137,33 @@ class KolinTaskServiceTest {
         when(store.previousDraft(host,room.getId())).thenReturn(mapper.writeValueAsString(
             new KolinTaskService.Content("worksheet","Уравнения",pupil.getId().toString(),List.of(task("2*x+1=5","2")))));
         String explanation="Это базовое уравнение. Начните с объяснения одинаковых действий с обеими частями.";
-        when(ai.kolinInteractiveReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
             new KolinTaskService.Content("text",explanation,pupil.getId().toString(),List.of())));
         service.reply(host,room,new KolinChatService.Request("Как объяснить второе задание?",List.of(),
             new KolinChatService.Context("student",pupil.getId(),0,"interactive"),clientId),
             new LinkedHashMap<>(),List.of(),"Как объяснить второе задание?",metadata);
-        verify(ai).kolinInteractiveReply(contains("lastGeneratedWorksheet"),anyList(),anyString());
+        verify(ai).kolinStructuredReply(contains("lastGeneratedWorksheet"),anyList(),anyString());
         verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq(explanation),eq(metadata),
             isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
         verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
+    }
+    @ParameterizedTest
+    @CsvSource({"pdf,Что ты умеешь?", "interactive,Что ты умеешь?",
+        "pdf,Как помочь ученице разобраться в дробях?", "interactive,Как объяснить эти 6 заданий?"})
+    void ordinaryQuestionsProduceTextWithoutRecipientOrWorksheetInEitherFormat(String format,String question) throws Exception {
+        reserve();
+        String answer="Я Kolyn. Помогу объяснить тему, разобрать решение и подобрать сложность.";
+        // Providers can retain a selected recipient on text replies. It must not be parsed or applied.
+        String response=mapper.writeValueAsString(new KolinTaskService.Content("text",answer,"irrelevant recipient",List.of()));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(response);
+        service.reply(host,room,new KolinChatService.Request(question,List.of(),
+            new KolinChatService.Context("student",pupil.getId(),0,format),clientId),
+            new LinkedHashMap<>(),List.of(),question,metadata);
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq(answer),eq(metadata),
+            isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
+        verifyNoInteractions(renderer);
+        verify(store,never()).append(any(),any(),any());
+        verify(store,never()).fail(any(),any(),any(),any());
     }
     @Test void createsOnlyAPrivateArtifactEvenWhenTheMessageSaysAddIt() throws Exception {
         reserve();

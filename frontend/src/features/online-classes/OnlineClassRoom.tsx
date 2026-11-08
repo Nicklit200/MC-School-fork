@@ -710,7 +710,7 @@ function RoomBody({
           activeId={activeBoard}
           onChange={selectBoard}
           teacherAction={<button type="button" aria-expanded={kolin.open} aria-controls="kolin-panel"
-            onClick={() => { if (!kolin.open) answers.close(); kolin.toggle(); }}>Kolin</button>}
+            onClick={() => { if (!kolin.open) answers.close(); kolin.toggle(); }}>Kolyn</button>}
         />
         <button type="button" className="online-class-room__videos-toggle" aria-expanded={videosOpen} aria-controls="online-class-videos" onClick={() => setVideosOpen((open) => !open)} title={videosOpen ? 'Скрыть видео участников' : 'Показать видео участников'}>
           {videosOpen ? 'Видео ›' : '‹ Видео'}
@@ -750,7 +750,7 @@ function RoomBody({
               ...(Number.isInteger(studentPages[activeBoard]) ? { currentWorkbookPage: studentPages[activeBoard] + 1 } : {}),
             }} />
             <AnswersPanelResizer storageKey={`kolin:${currentUserId}`} videosOpen={videosOpen} side="right" panelId="kolin-panel"
-              defaultWidth={360} label={language === 'DE' ? 'Breite von Kolin ändern' : 'Изменить ширину Kolin'} />
+              defaultWidth={360} label={language === 'DE' ? 'Breite von Kolyn ändern' : 'Изменить ширину Kolyn'} />
           </>)}
         <div className="online-class-room__main" aria-busy={boardsFrozen}
           ref={element => { if (element) element.inert = boardsFrozen; }}>

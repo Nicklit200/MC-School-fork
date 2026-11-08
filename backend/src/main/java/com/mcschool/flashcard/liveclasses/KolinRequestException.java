@@ -12,7 +12,7 @@ public final class KolinRequestException extends ResponseStatusException {
     public String getErrorCode() { return errorCode; }
     public static KolinRequestException busy() {
         return new KolinRequestException(HttpStatus.TOO_MANY_REQUESTS,"KOLIN_BUSY",
-                "Kolin ещё готовит ответ. Повторите через несколько секунд.");
+                "Kolyn ещё готовит ответ. Повторите через несколько секунд.");
     }
     public static KolinRequestException invalid() {
         return new KolinRequestException(HttpStatus.BAD_GATEWAY,"KOLIN_TASK_INVALID",
@@ -20,6 +20,6 @@ public final class KolinRequestException extends ResponseStatusException {
     }
     public static KolinRequestException failed() {
         return new KolinRequestException(HttpStatus.BAD_GATEWAY,"KOLIN_GENERATION_FAILED",
-                "Kolin не смог завершить ответ. Попробуйте отправить запрос ещё раз.");
+                "Kolyn не смог завершить ответ. Попробуйте отправить запрос ещё раз.");
     }
 }

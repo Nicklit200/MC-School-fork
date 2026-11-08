@@ -38,5 +38,7 @@ class MathSceneSpecTest {
         assertThatThrownBy(()->MathSceneSpec.validate(scene)).isInstanceOf(ConflictException.class);
         var other=examples().get(0);((Map<String,Object>)((List<?>)other.get("parameters")).get(0)).put("value",999);
         assertThatThrownBy(()->MathSceneSpec.validate(other)).isInstanceOf(ConflictException.class);
+        var leaked=examples().get(2);leaked.put("metrics",List.of(Map.of("label","Ответ","expression"," (a+b+c) / 3 ")));
+        assertThatThrownBy(()->MathSceneSpec.validate(leaked)).isInstanceOf(ConflictException.class);
     }
 }

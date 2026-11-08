@@ -6,6 +6,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /** Closed numeric templates shared by model drafts and untrusted board updates. No executable content. */
 public final class InteractiveTemplateSpec {
+    private static final ObjectMapper JSON=new ObjectMapper();
     private InteractiveTemplateSpec() {}
     private static Map<String,Object> object(Object... entries) {
         var fields=new LinkedHashMap<String,Object>();
@@ -18,6 +19,7 @@ public final class InteractiveTemplateSpec {
         var language=choice("ru","de");
         return Map.of("anyOf",List.of(
             MathSceneSpec.schema(),
+            MathSolidSpec.schema(),
             object("template",choice("cube"),"language",language,"unfold",Map.of("type","number"),
                 "yaw",Map.of("type","number"),"pitch",Map.of("type","number")),
             object("template",choice("graph"),"language",language,"function",choice("linear","quadratic"),"coefficients",numbers()),
@@ -26,7 +28,7 @@ public final class InteractiveTemplateSpec {
                 "selected",Map.of("type","array","items",Map.of("type","integer")))));
     }
     public static final String INSTRUCTIONS="""
-        Интерактивный режим: создай готовый шаблон для исследования, kind=worksheet, все tasks имеют kind=visual.
+        Интерактивный режим: создай готовый шаблон для исследования, kind=interactive, все tasks имеют kind=visual.
         visual содержит ТОЛЬКО параметры выбранного интерактивного шаблона. instruction, expression, variable="", restrictions=[].
         template=graph: function=linear, coefficients=[m,b] для y=mx+b; либо quadratic, coefficients=[a,b,c]. Коэффициенты от -10 до 10.
         template=triangle: vertices=[[x,y],[x,y],[x,y]], координаты от -5 до 5, площадь не меньше 0.05.
@@ -35,16 +37,17 @@ public final class InteractiveTemplateSpec {
         Для куба по умолчанию unfold=0, yaw=-30, pitch=25. У куба 6 квадратных граней, 12 рёбер, 8 вершин.
         Исправляй неверное количество граней в вопросе. Развёртка куба всегда содержит все 6 граней.
         language=ru или de. Интерфейс сам рисует фигуру, вычисляет значения и даёт управление.
-        По умолчанию один интерактивный объект. requestedTaskCount имеет приоритет, максимум пять.
+        По умолчанию один интерактивный объект. requestedInteractiveTaskCount имеет приоритет, максимум пять.
         Не обещай неподдерживаемые конструкции, доказательства или доступ к рукописи ученицы.
         Для неподдерживаемого интерактива дай короткий ответ kind=text, tasks=[], studentId=null.
-        """+MathSceneSpec.INSTRUCTIONS;
+        """+MathSceneSpec.INSTRUCTIONS+MathSolidSpec.INSTRUCTIONS;
 
     public static Map<String,Object> validate(Map<String,Object> spec) {
         if(spec==null || !("ru".equals(spec.get("language")) || "de".equals(spec.get("language")))) throw invalid();
         String type=Objects.toString(spec.get("template"),"");
         switch(type) {
             case "scene" -> MathSceneSpec.validate(spec);
+            case "solid" -> MathSolidSpec.validate(spec);
             case "cube" -> {
                 keys(spec,"template","language","unfold","yaw","pitch");
                 number(spec.get("unfold"),0,1); number(spec.get("yaw"),-180,180); number(spec.get("pitch"),-90,90);
@@ -72,6 +75,8 @@ public final class InteractiveTemplateSpec {
             }
             default -> throw invalid();
         }
+        // Leave room for shape coordinates and revision IDs in the existing 16 KiB annotation contract.
+        if(JSON.writeValueAsString(spec).length()>14000)throw invalid();
         return spec;
     }
     @SuppressWarnings("unchecked")
@@ -94,6 +99,7 @@ public final class InteractiveTemplateSpec {
         if(!Objects.equals(original.get("template"),next.get("template")) || !Objects.equals(original.get("language"),next.get("language"))
                 || !Objects.equals(original.get("function"),next.get("function"))) throw invalid();
         if("scene".equals(original.get("template"))) MathSceneSpec.sameConstruction(original,next);
+        if("solid".equals(original.get("template"))) MathSolidSpec.sameConstruction(original,next);
     }
     public static Map<String,Object> payload(String json) { return new ObjectMapper().readValue(json,Map.class); }
     private static void keys(Map<String,Object> spec,String... keys) { if(!spec.keySet().equals(Set.of(keys))) throw invalid(); }

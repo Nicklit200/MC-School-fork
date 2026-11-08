@@ -1,0 +1,406 @@
+[
+  {
+    "template": "solid",
+    "language": "ru",
+    "title": "Пирамида с высотой",
+    "prompt": "Меняйте сторону основания и высоту.",
+    "parameters": [
+      {
+        "name": "a",
+        "label": "Сторона",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 4
+      },
+      {
+        "name": "h",
+        "label": "Высота",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 3
+      }
+    ],
+    "vertices": [
+      {
+        "id": "A",
+        "x": "-a/2",
+        "y": "-a/2",
+        "z": "0"
+      },
+      {
+        "id": "B",
+        "x": "a/2",
+        "y": "-a/2",
+        "z": "0"
+      },
+      {
+        "id": "C",
+        "x": "a/2",
+        "y": "a/2",
+        "z": "0"
+      },
+      {
+        "id": "D",
+        "x": "-a/2",
+        "y": "a/2",
+        "z": "0"
+      },
+      {
+        "id": "S",
+        "x": "0",
+        "y": "0",
+        "z": "h"
+      },
+      {
+        "id": "O",
+        "x": "0",
+        "y": "0",
+        "z": "0"
+      }
+    ],
+    "faces": [
+      [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      [
+        "A",
+        "B",
+        "S"
+      ],
+      [
+        "B",
+        "C",
+        "S"
+      ],
+      [
+        "C",
+        "D",
+        "S"
+      ],
+      [
+        "D",
+        "A",
+        "S"
+      ]
+    ],
+    "segments": [
+      {
+        "a": "S",
+        "b": "O",
+        "label": "h"
+      }
+    ],
+    "measurements": [
+      "volume",
+      "surfaceArea"
+    ],
+    "answer": null,
+    "yaw": -30,
+    "pitch": 25
+  },
+  {
+    "template": "solid",
+    "language": "ru",
+    "title": "Треугольная призма",
+    "prompt": "Меняйте сторону основания и высоту.",
+    "parameters": [
+      {
+        "name": "a",
+        "label": "Катет a",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 4
+      },
+      {
+        "name": "b",
+        "label": "Катет b",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 3
+      },
+      {
+        "name": "h",
+        "label": "Высота",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 5
+      }
+    ],
+    "vertices": [
+      {
+        "id": "A",
+        "x": "0",
+        "y": "0",
+        "z": "0"
+      },
+      {
+        "id": "B",
+        "x": "a",
+        "y": "0",
+        "z": "0"
+      },
+      {
+        "id": "C",
+        "x": "0",
+        "y": "b",
+        "z": "0"
+      },
+      {
+        "id": "D",
+        "x": "0",
+        "y": "0",
+        "z": "h"
+      },
+      {
+        "id": "E",
+        "x": "a",
+        "y": "0",
+        "z": "h"
+      },
+      {
+        "id": "F",
+        "x": "0",
+        "y": "b",
+        "z": "h"
+      }
+    ],
+    "faces": [
+      [
+        "A",
+        "B",
+        "C"
+      ],
+      [
+        "D",
+        "E",
+        "F"
+      ],
+      [
+        "A",
+        "B",
+        "E",
+        "D"
+      ],
+      [
+        "B",
+        "C",
+        "F",
+        "E"
+      ],
+      [
+        "C",
+        "A",
+        "D",
+        "F"
+      ]
+    ],
+    "segments": [],
+    "measurements": [
+      "volume",
+      "surfaceArea"
+    ],
+    "answer": null,
+    "yaw": -30,
+    "pitch": 25
+  },
+  {
+    "template": "solid",
+    "language": "ru",
+    "title": "Тетраэдр",
+    "prompt": "Меняйте сторону основания и высоту.",
+    "parameters": [
+      {
+        "name": "a",
+        "label": "Ребро a",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 4
+      },
+      {
+        "name": "b",
+        "label": "Ребро b",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 3
+      },
+      {
+        "name": "h",
+        "label": "Высота",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 6
+      }
+    ],
+    "vertices": [
+      {
+        "id": "A",
+        "x": "0",
+        "y": "0",
+        "z": "0"
+      },
+      {
+        "id": "B",
+        "x": "a",
+        "y": "0",
+        "z": "0"
+      },
+      {
+        "id": "C",
+        "x": "0",
+        "y": "b",
+        "z": "0"
+      },
+      {
+        "id": "D",
+        "x": "0",
+        "y": "0",
+        "z": "h"
+      }
+    ],
+    "faces": [
+      [
+        "A",
+        "B",
+        "C"
+      ],
+      [
+        "A",
+        "B",
+        "D"
+      ],
+      [
+        "B",
+        "C",
+        "D"
+      ],
+      [
+        "C",
+        "A",
+        "D"
+      ]
+    ],
+    "segments": [],
+    "measurements": [
+      "volume",
+      "surfaceArea"
+    ],
+    "answer": null,
+    "yaw": -30,
+    "pitch": 25
+  },
+  {
+    "template": "solid",
+    "language": "ru",
+    "title": "Пятиугольная пирамида",
+    "prompt": "Меняйте сторону основания и высоту.",
+    "parameters": [
+      {
+        "name": "r",
+        "label": "Радиус основания",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 2
+      },
+      {
+        "name": "h",
+        "label": "Высота",
+        "min": 1,
+        "max": 8,
+        "step": 0.5,
+        "value": 3
+      }
+    ],
+    "vertices": [
+      {
+        "id": "A",
+        "x": "r*cos(2*pi*0/5)",
+        "y": "r*sin(2*pi*0/5)",
+        "z": "0"
+      },
+      {
+        "id": "B",
+        "x": "r*cos(2*pi*1/5)",
+        "y": "r*sin(2*pi*1/5)",
+        "z": "0"
+      },
+      {
+        "id": "C",
+        "x": "r*cos(2*pi*2/5)",
+        "y": "r*sin(2*pi*2/5)",
+        "z": "0"
+      },
+      {
+        "id": "D",
+        "x": "r*cos(2*pi*3/5)",
+        "y": "r*sin(2*pi*3/5)",
+        "z": "0"
+      },
+      {
+        "id": "E",
+        "x": "r*cos(2*pi*4/5)",
+        "y": "r*sin(2*pi*4/5)",
+        "z": "0"
+      },
+      {
+        "id": "S",
+        "x": "0",
+        "y": "0",
+        "z": "h"
+      }
+    ],
+    "faces": [
+      [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      [
+        "A",
+        "B",
+        "S"
+      ],
+      [
+        "B",
+        "C",
+        "S"
+      ],
+      [
+        "C",
+        "D",
+        "S"
+      ],
+      [
+        "D",
+        "E",
+        "S"
+      ],
+      [
+        "E",
+        "A",
+        "S"
+      ]
+    ],
+    "segments": [],
+    "measurements": [
+      "volume",
+      "surfaceArea"
+    ],
+    "answer": null,
+    "yaw": -30,
+    "pitch": 25
+  }
+]

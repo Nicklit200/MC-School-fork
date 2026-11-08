@@ -6,8 +6,11 @@ on:
       - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/Kolin*'
       - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/InteractiveTemplateSpec.java'
       - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/MathSceneSpec.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/liveclasses/MathSolidSpec.java'
       - 'backend/src/test/java/com/mcschool/flashcard/liveclasses/MathSceneSpecTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/liveclasses/MathSolidSpecTest.java'
       - 'frontend/e2e/math-scenes.json'
+      - 'frontend/e2e/math-solids.json'
       - 'backend/src/test/java/com/mcschool/flashcard/liveclasses/InteractiveTemplateSpecTest.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotService.java'
       - 'backend/src/test/java/com/mcschool/flashcard/**/*Kolin*'
@@ -35,7 +38,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn -B '-Dtest=*Kolin*Test,InteractiveTemplateSpecTest,MathSceneSpecTest' test
+      - run: mvn -B '-Dtest=*Kolin*Test,InteractiveTemplateSpecTest,MathSceneSpecTest,MathSolidSpecTest' test
       - run: mvn -B -DskipTests package
   frontend:
     runs-on: ubuntu-24.04

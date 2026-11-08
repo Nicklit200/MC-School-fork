@@ -25,7 +25,7 @@ async function ask(result: { current: ReturnType<typeof useKolinChat> }, text: s
   await act(async () => { await result.current.send(context); });
 }
 
-describe('private Kolin lesson session', () => {
+describe('private Kolyn lesson session', () => {
   it('does no API work until the teacher opens it, and none at all for a pupil', async () => {
     const pupil = renderHook(() => useKolinChat('class-1', 'pupil', false));
     act(() => { pupil.result.current.toggle(); pupil.result.current.setDraft('hello'); });
@@ -246,7 +246,7 @@ describe('private Kolin lesson session', () => {
   });
 });
 
-describe('confirmed Kolin worksheet append', () => {
+describe('confirmed Kolyn worksheet append', () => {
   const worksheet: KolinWorksheet = { id: 'artifact-alice', studentId: 'alice', studentName: 'Виталина', taskCount: 3, pageCount: 1, state: 'READY' };
   const response: KolinResponse = { type: 'worksheet', text: 'Задания готовы.', worksheet };
 
