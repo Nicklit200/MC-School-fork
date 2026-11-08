@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ApiRequestError } from '../../api/client';
-import { kolinApi, parseKolinTranscriptContext, parseKolinWorksheet, type KolinContext, type KolinHistoryMessage, type KolinTranscriptContext, type KolinWorksheet } from '../../api/kolin';
+import { kolinApi, parseKolinTranscriptContext, parseKolinWorksheet, parseKolinMaterials, type KolinContext, type KolinHistoryMessage, type KolinTranscriptContext, type KolinWorksheet } from '../../api/kolin';
 
 export type KolinFailureCode = 'KOLIN_BUSY' | 'KOLIN_TASK_INVALID' | 'KOLIN_GENERATION_FAILED';
 
@@ -12,10 +12,12 @@ function failureCode(error: unknown): KolinFailureCode | null {
 
 export interface KolinMessage extends KolinHistoryMessage {
   id: string;
-  type: 'text' | 'worksheet' | 'interactive';
+  type: 'text' | 'worksheet' | 'interactive' | 'materials';
   status: 'complete' | 'pending' | 'failed';
   transcriptContext?: KolinTranscriptContext;
   worksheet?: KolinWorksheet;
+  materials?: KolinWorksheet[];
+  materialAppendStatus?: Record<string, 'pending' | 'failed' | undefined>;
   appendStatus?: 'pending' | 'failed';
 }
 
@@ -89,16 +91,18 @@ export function useKolinChat(classId: string, teacherId: string, enabled: boolea
     }));
     try {
       const result = await kolinApi.send(classId, submission.text, submission.history, submission.context, submission.messageId);
-      if (result.type !== 'text' && result.type !== 'worksheet' && result.type !== 'interactive' || typeof result.text !== 'string'
+      if (result.type !== 'text' && result.type !== 'worksheet' && result.type !== 'interactive' && result.type !== 'materials' || typeof result.text !== 'string'
           || result.type === 'text' && !result.text.trim()) throw new Error('Empty response');
       const worksheet = result.type !== 'text' ? parseKolinWorksheet(result.worksheet) : undefined;
-      if (result.type !== 'text' && !worksheet) throw new Error('Invalid worksheet');
+      const materials = result.type === 'materials' ? parseKolinMaterials(result.materials) : undefined;
+      if (result.type === 'materials' ? !materials : result.type !== 'text' && !worksheet) throw new Error('Invalid worksheet');
       const transcriptContext = parseKolinTranscriptContext(result.transcriptContext);
       change(current => ({ ...current, pending: false,
         draft: current.draft.trim() === submission.text ? '' : current.draft,
         messages: [...current.messages.map(message => message.id === submission.messageId ? { ...message, status: 'complete' as const } : message),
           { id: crypto.randomUUID(), role: 'assistant', type: result.type, text: result.text, status: 'complete',
             ...(worksheet ? { worksheet } : {}),
+            ...(materials ? { materials } : {}),
             ...(transcriptContext ? { transcriptContext } : {}) }],
       }));
     } catch (error) {
@@ -128,21 +132,24 @@ export function useKolinChat(classId: string, teacherId: string, enabled: boolea
   }, [run, checkAvailability]);
 
   const appendWorksheet = useCallback(async (id: string) => {
-    const worksheet = state.current.messages.find(message => message.worksheet?.id === id)?.worksheet;
+    const worksheet = state.current.messages.flatMap(message => message.materials ?? (message.worksheet ? [message.worksheet] : []))
+      .find(material => material.id === id);
     if (!enabled || !worksheet || worksheet.state === 'ADDED' || appendFlights.current.get(id) === token) return;
     appendFlights.current.set(id, token);
-    change(current => ({ ...current, messages: current.messages.map(message => message.worksheet?.id === id
-      ? { ...message, appendStatus: 'pending' } : message) }));
+    const updateMaterial = (message: KolinMessage, status: 'pending' | 'failed' | undefined, added?: KolinWorksheet): KolinMessage =>
+      message.materials?.some(material => material.id === id)
+        ? { ...message, materialAppendStatus: { ...message.materialAppendStatus, [id]: status },
+          materials: added ? message.materials.map(material => material.id === id ? added : material) : message.materials }
+        : message.worksheet?.id === id ? { ...message, appendStatus: status, worksheet: added ?? message.worksheet } : message;
+    change(current => ({ ...current, messages: current.messages.map(message => updateMaterial(message, 'pending')) }));
     try {
       const added = parseKolinWorksheet(await kolinApi.appendWorksheet(classId, id));
       if (!added || added.id !== id || added.studentId !== worksheet.studentId || added.state !== 'ADDED')
         throw new Error('Invalid append result');
-      change(current => ({ ...current, messages: current.messages.map(message => message.worksheet?.id === id
-        ? { ...message, worksheet: added, appendStatus: undefined } : message) }));
+      change(current => ({ ...current, messages: current.messages.map(message => updateMaterial(message, undefined, added)) }));
       if (latest.current === token) window.dispatchEvent(new Event('mc-workbook-updated'));
     } catch {
-      change(current => ({ ...current, messages: current.messages.map(message => message.worksheet?.id === id
-        ? { ...message, appendStatus: 'failed' } : message) }));
+      change(current => ({ ...current, messages: current.messages.map(message => updateMaterial(message, 'failed')) }));
     } finally {
       if (appendFlights.current.get(id) === token) appendFlights.current.delete(id);
     }

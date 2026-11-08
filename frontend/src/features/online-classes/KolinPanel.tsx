@@ -78,9 +78,10 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
         data-role={message.role} data-message-type={message.type}>
         <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolyn' : de ? 'Sie' : 'Вы'}</span>
         {message.text && <p>{message.text}</p>}
-        {message.role === 'assistant' && message.worksheet && <KolinWorksheetCard classId={chat.classId}
-          worksheet={message.worksheet} appendStatus={message.appendStatus} de={de}
-          onAdd={() => void chat.appendWorksheet(message.worksheet!.id)} />}
+        {message.role === 'assistant' && (message.materials ?? (message.worksheet ? [message.worksheet] : [])).map(worksheet =>
+          <KolinWorksheetCard key={worksheet.id} classId={chat.classId} worksheet={worksheet}
+            appendStatus={message.materials ? message.materialAppendStatus?.[worksheet.id] : message.appendStatus} de={de}
+            onAdd={() => void chat.appendWorksheet(worksheet.id)} />)}
         {message.role === 'assistant' && message.transcriptContext && <TranscriptContextNote context={message.transcriptContext} de={de} />}
       </li>)}
     </ol>

@@ -91,6 +91,60 @@ class KolinWorkbookAppendIntegrationTest {
     private UUID interactiveDraft() {
         return interactiveDraft(false);
     }
+    private List<KolinWorksheetStore.PreparedMaterial> mixedMaterials() throws Exception {
+        var interactive=new KolinTaskService.Content("interactive","Общая сцена","group",List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),graph(1))));
+        var worksheet=new KolinTaskService.Content("worksheet","Личная практика",student.getId().toString(),List.of(
+            new KolinTaskService.Task("expression","Вычислите","1+1","2","",List.of())));
+        return List.of(new KolinWorksheetStore.PreparedMaterial(interactive,null,"Общая доска",1,null,null),
+            new KolinWorksheetStore.PreparedMaterial(worksheet,student.getId(),"Pupil",1,pdf("mixed practice"),new byte[]{1}));
+    }
+    @Test void mixedReplyKeepsPrivateIndependentArtifactsAndReplaysCurrentConfirmationReceipts()throws Exception {
+        UUID client=UUID.randomUUID();String hash="c".repeat(64);
+        var request=store.begin(host,room.getId(),client,hash);
+        var reply=store.completeMaterials(host,room.getId(),request.id(),request.attemptId(),"Both",null,mixedMaterials());
+        assertThat(reply.type()).isEqualTo("materials");assertThat(reply.worksheet()).isNull();
+        assertThat(reply.materials()).hasSize(2);
+        assertThat(reply.materials().get(0).targetType()).isEqualTo("group");
+        assertThat(reply.materials().get(1).studentId()).isEqualTo(student.getId());
+        assertThat(annotationDocuments.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).isEmpty();
+        assertThat(workbooks.findByTeacherIdAndEventIdAndStudentId(teacher.getId(),room.getEventId(),student.getId())).isEmpty();
+        assertThat(store.begin(host,room.getId(),client,hash).cached()).isEqualTo(reply);
+        assertThatThrownBy(()->store.append(host,room.getId(),request.id())).isInstanceOf(ResourceNotFoundException.class);
+        var first=store.append(host,room.getId(),reply.materials().get(0).id());
+        assertThat(first.state()).isEqualTo("ADDED");
+        var partial=store.begin(host,room.getId(),client,hash).cached();
+        assertThat(partial.materials()).extracting(KolinWorksheetStore.Worksheet::state).containsExactly("ADDED","READY");
+        var second=store.append(host,room.getId(),reply.materials().get(1).id());
+        // First private workbook inherits the existing shared page before appending the personal task.
+        assertThat(second.fromPage()).isEqualTo(2);
+        assertThat(store.append(host,room.getId(),reply.materials().get(1).id())).isEqualTo(second);
+        assertThat(workbook().documentVersion()).isEqualTo(1);
+        try(var parsed=Loader.loadPDF(workbook().getWorkbookPdf())) {
+            assertThat(parsed.getNumberOfPages()).isEqualTo(2);
+            assertThat(new PDFTextStripper().getText(parsed)).containsOnlyOnce("mixed practice");
+        }
+        assertThat(store.begin(host,room.getId(),client,hash).cached().materials())
+            .extracting(KolinWorksheetStore.Worksheet::state).containsExactly("ADDED","ADDED");
+        var previous=JSON.readValue(store.previousDraft(host,room.getId()),KolinTaskService.Content.class);
+        assertThat(previous.materials()).extracting(KolinTaskService.Content::kind).containsExactly("interactive","worksheet");
+    }
+    @Test void mixedCompletionRollsBackAllChildrenAndRejectsStaleAttempts()throws Exception {
+        UUID client=UUID.randomUUID();String hash="d".repeat(64);
+        var old=store.begin(host,room.getId(),client,hash);
+        store.fail(host,room.getId(),old.id(),old.attemptId());
+        var request=store.begin(host,room.getId(),client,hash);
+        var parts=mixedMaterials();
+        assertThatThrownBy(()->store.completeMaterials(host,room.getId(),old.id(),old.attemptId(),"Old",null,parts))
+            .isInstanceOf(com.mcschool.flashcard.common.ConflictException.class);
+        assertThatThrownBy(()->new TransactionTemplate(transactions).execute(status->{
+            store.completeMaterials(host,room.getId(),request.id(),request.attemptId(),"Both",null,parts);
+            throw new IllegalStateException("Rollback");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("select count(*) from kolin_worksheets where parent_id=?",Integer.class,request.id())).isZero();
+        assertThat(jdbc.queryForObject("select state from kolin_worksheets where id=?",String.class,request.id())).isEqualTo("GENERATING");
+        assertThat(store.completeMaterials(host,room.getId(),request.id(),request.attemptId(),"Both",null,parts).materials()).hasSize(2);
+    }
     private UUID interactiveDraft(boolean group) {
         return interactiveDraft(group,graph(1));
     }

@@ -44,9 +44,38 @@ class KolinOpenAiPayloadTest {
         return request.getValue();
     }
 
+    @Test void exactCountsAndMixedRequestShapeAreEnforcedByTheProviderContract() throws Exception {
+        when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",
+            "{\"result\":{\"text\":\"Готово\",\"materials\":[]}}")));
+        var cases=List.of(
+            List.of("mixed-cube","А ну дай задачку на Площадь куба одну интерктивную страницу а другую прост ос пару заданий","5"),
+            List.of("mixed-reversed","На общую доску дай 3 задания про площадь поверхности куба в PDF и одну интерактивную страницу, чтобы менять ребро и самому вычислить площадь.","3"),
+            List.of("cube-pdf","Дай пару заданий по площади куба.","5"),
+            List.of("advice","Как объяснить ученице почему площадь поверхности куба равна шести квадратам ребра?","5"));
+        String pupil="00000000-0000-0000-0000-000000000001";
+        for(var example:cases) {
+            clearInvocations(client);
+            ai.kolinStructuredReply(mapper.writeValueAsString(Map.of("roster",List.of(Map.of("id",pupil,"name","QA Pupil")),
+                "selectedStudentId",pupil,"targetType","student","requestedPdfTaskCount",Integer.parseInt(example.get(2)),"requestedInteractiveTaskCount",1)),List.of(),example.get(1));
+            String packet=body(captured());var schema=mapper.readTree(packet).path("text").path("format").path("schema");
+            assertThat(schema.path("$defs").path("worksheet").path("properties").path("tasks").path("minItems").asInt()).isEqualTo(Integer.parseInt(example.get(2)));
+            assertThat(schema.path("$defs").path("interactive").path("properties").path("tasks").path("maxItems").asInt()).isEqualTo(1);
+            if(example.get(0).startsWith("mixed")) {
+                var choices=schema.path("properties").path("result").path("properties").path("materials").path("anyOf");
+                assertThat(choices.get(0).path("maxItems").asInt()).isZero();
+                assertThat(choices.get(1).path("minItems").asInt()).isEqualTo(2);
+            }
+            String dir=System.getProperty("kolin.visualFixtureDir");
+            if(dir!=null) {
+                java.nio.file.Files.createDirectories(java.nio.file.Path.of(dir));
+                java.nio.file.Files.writeString(java.nio.file.Path.of(dir,"provider-"+example.get(0)+".json"),packet);
+            }
+        }
+    }
+
     @Test void confirmedWorksheetsUseOneStrictStructuredCallAndReuseTheExistingTransport() throws Exception {
         when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",
-            "{\"result\":{\"kind\":\"text\",\"text\":\"Уточните тему\",\"studentId\":null,\"tasks\":[]}}")));
+            "{\"result\":{\"text\":\"Уточните тему\",\"materials\":[]}}")));
         ai.kolinStructuredReply("{\"roster\":[]}",List.of(),"Дай пару заданий");
         HttpRequest request=captured(); var json=mapper.readTree(body(request));
         assertThat(json.path("model").asString()).isEqualTo("gpt-4.1-mini");
@@ -55,12 +84,11 @@ class KolinOpenAiPayloadTest {
         assertThat(json.path("text").path("format").path("type").asString()).isEqualTo("json_schema");
         assertThat(json.path("text").path("format").path("strict").asBoolean()).isTrue();
         assertThat(json.path("input").get(0).path("content").asString()).contains("ровно 5","исключительно по кнопке","только линейное",
-            "Это такие лёгкие в абитуре?","По умолчанию отвечай kind=text","Никакого переключателя формата",
-            "Ты Kolyn", "Что ты умеешь?", "без tasks и без выбора получателя");
-        var branches=json.path("text").path("format").path("schema").path("properties").path("result").path("anyOf");
-        assertThat(branches.size()).isEqualTo(3);
-        assertThat(branches.get(0).path("properties").path("tasks").path("maxItems").asInt()).isZero();
-        assertThat(branches.get(1).path("properties").path("tasks").path("items").path("properties")
+            "Это такие лёгкие в абитуре?","Без переключателя формата", "Ты Kolyn", "Что ты умеешь?");
+        var materials=json.path("text").path("format").path("schema").path("properties").path("result").path("properties").path("materials");
+        assertThat(materials.path("maxItems").asInt()).isEqualTo(2);
+        assertThat(materials.path("items").path("anyOf").size()).isEqualTo(2);
+        assertThat(json.path("text").path("format").path("schema").path("$defs").path("worksheet").path("properties").path("tasks").path("items").path("anyOf").get(2).path("properties")
             .path("visual").toString()).doesNotContain("template");
         assertThat(json.path("input").get(0).path("content").asString()).contains("fractionCircle","Geometry:").doesNotContain("Геометрию с рисунками, текстовые задачи");
         String fixtureDir=System.getProperty("kolin.visualFixtureDir");
@@ -74,16 +102,16 @@ class KolinOpenAiPayloadTest {
     }
     @Test void automaticFormatUsesOneClosedSchemaCallForTextPdfAndInteractive() throws Exception {
         when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",
-            "{\"result\":{\"kind\":\"text\",\"text\":\"Пример\",\"studentId\":null,\"tasks\":[]}}")));
+            "{\"result\":{\"text\":\"Пример\",\"materials\":[]}}")));
         ai.kolinInteractiveReply("{\"roster\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"QA Pupil\"}],\"selectedStudentId\":\"00000000-0000-0000-0000-000000000001\",\"requestedInteractiveTaskCount\":1}",List.of(),"Создай интерактивный график y=x^2-2x-2 для QA Pupil");
         String serialized=body(captured());var json=mapper.readTree(serialized);
         assertThat(json.path("store").asBoolean()).isFalse();
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(6500);
         String system=json.path("input").get(0).path("content").asString();
         assertThat(system).contains("Интерактивный режим","requestedInteractiveTaskCount","исключительно по кнопке",
-            "По умолчанию отвечай kind=text","Как объяснить Виталине?", "Ты Kolyn", "Что ты умеешь?")
+            "Как объяснить Виталине?", "Ты Kolyn", "Что ты умеешь?")
             .contains("Режим подтверждаемого PDF","kind=interactive","Покажи пирамиду с высотой","template=solid");
-        var templates=json.path("text").path("format").path("schema").path("properties").path("result").path("anyOf").get(2)
+        var templates=json.path("text").path("format").path("schema").path("$defs").path("interactive")
             .path("properties").path("tasks").path("items").path("properties").path("visual").path("anyOf");
         assertThat(templates.size()).isEqualTo(6);
         for(var template:templates) {
@@ -100,9 +128,12 @@ class KolinOpenAiPayloadTest {
         }
     }
     @Test void unwrapsTheProviderEnvelopeWithoutChangingTheChatContract() throws Exception {
-        String result="{\"kind\":\"text\",\"text\":\"Объяснение\",\"studentId\":null,\"tasks\":[]}";
+        String result="{\"text\":\"Объяснение\",\"materials\":[]}";
         when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text","{\"result\":"+result+"}")));
-        assertThat(mapper.readTree(ai.kolinStructuredReply("{}",List.of(),"Объясни"))).isEqualTo(mapper.readTree(result));
+        var answer=mapper.readTree(ai.kolinStructuredReply("{}",List.of(),"Объясни"));
+        assertThat(answer.path("kind").asString()).isEqualTo("text");
+        assertThat(answer.path("text").asString()).isEqualTo("Объяснение");
+        assertThat(answer.path("tasks").size()).isZero();
         when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",result)));
         assertThatThrownBy(()->ai.kolinStructuredReply("{}",List.of(),"Объясни")).isInstanceOf(IllegalStateException.class);
     }

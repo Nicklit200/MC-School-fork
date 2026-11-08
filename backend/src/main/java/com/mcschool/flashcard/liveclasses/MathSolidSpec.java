@@ -7,12 +7,15 @@ import static com.mcschool.flashcard.liveclasses.MathSceneSpec.*;
 public final class MathSolidSpec {
     private MathSolidSpec() {}
     public static Map<String,Object> schema(){
+        return Map.of("anyOf",List.of(schema(false),schema(true)));
+    }
+    private static Map<String,Object> schema(boolean quiz){
         return obj("template",choice("solid"),"language",choice("ru","de"),"title",str(48),"prompt",str(160),
             "parameters",arr(obj("name",str(),"label",str(32),"min",num(),"max",num(),"step",num(),"value",num())),
             "vertices",arr(obj("id",str(),"x",str(),"y",str(),"z",str())),"faces",arr(arr(str())),
             "segments",arr(obj("a",str(),"b",str(),"label",str(24))),
-            "measurements",arr(choice("volume","surfaceArea")),
-            "answer",Map.of("type",List.of("string","null"),"enum",Arrays.asList("volume","surfaceArea",null)),"yaw",num(),"pitch",num());
+            "measurements",quiz?Map.of("type","array","items",choice("volume","surfaceArea"),"maxItems",0):arr(choice("volume","surfaceArea")),
+            "answer",quiz?choice("volume","surfaceArea"):Map.of("type","null"),"yaw",num(),"pitch",num());
     }
     public static final String INSTRUCTIONS="""
         Для пирамид, призм и других выпуклых многогранников используй template=solid, а не куб и не плоский рисунок.

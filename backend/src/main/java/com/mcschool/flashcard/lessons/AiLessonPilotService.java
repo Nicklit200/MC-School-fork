@@ -496,14 +496,21 @@ public class AiLessonPilotService {
     }
     private String kolinAutomaticReply(String lessonContext, List<Map<String,String>> history, String question) {
         if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
-        Map<String,Object> taskProperties=new LinkedHashMap<>();
-        taskProperties.put("kind",Map.of("type","string","enum",List.of("expression","equation","visual")));
-        for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,Map.of("type","string"));
-        taskProperties.put("restrictions",Map.of("type","array","items",Map.of("type","string")));
-        taskProperties.put("visual",KolinVisualSchema.schema());
-        Map<String,Object> taskSchema=Map.of("type","object","properties",taskProperties,
-                "required",List.copyOf(taskProperties.keySet()),"additionalProperties",false);
-        var interactiveProperties=new LinkedHashMap<>(taskProperties);
+        var staticTasks=new java.util.ArrayList<Map<String,Object>>();
+        for(String kind:List.of("expression","equation","visual")) {
+            var props=new LinkedHashMap<String,Object>();
+            props.put("kind",Map.of("type","string","enum",List.of(kind)));
+            boolean visual=kind.equals("visual");
+            props.put("instruction",visual?Map.of("type","string","enum",List.of(""))
+                :Map.of("type","string","minLength",1,"maxLength",160,"pattern","^[^0-9=<>+*/^\\\\$\\r\\n]+$"));
+            props.put("expression",visual?Map.of("type","string","enum",List.of("")):Map.of("type","string","minLength",1,"maxLength",500));
+            props.put("variable",Map.of("type","string","enum",kind.equals("equation")?List.of("x","y","z","a","b","c","m","n"):List.of("")));
+            props.put("restrictions",Map.of("type","array","items",Map.of("type","string","minLength",1,"maxLength",60),"maxItems",visual?0:4));
+            props.put("visual",visual?KolinVisualSchema.schema():Map.of("type","null"));
+            staticTasks.add(Map.of("type","object","properties",props,"required",List.copyOf(props.keySet()),"additionalProperties",false));
+        }
+        Map<String,Object> taskSchema=Map.of("anyOf",staticTasks);
+        var interactiveProperties=new LinkedHashMap<String,Object>();
         interactiveProperties.put("kind",Map.of("type","string","enum",List.of("visual")));
         for(String field:List.of("instruction","expression","variable"))
             interactiveProperties.put(field,Map.of("type","string","enum",List.of("")));
@@ -511,103 +518,82 @@ public class AiLessonPilotService {
         interactiveProperties.put("visual",com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.schema());
         var interactiveTask=Map.of("type","object","properties",interactiveProperties,
                 "required",List.copyOf(interactiveProperties.keySet()),"additionalProperties",false);
-        // Nested discriminated branches prevent an interactive response from using a static PDF visual.
-        var branches=new java.util.ArrayList<Map<String,Object>>();
         var recipients=new java.util.ArrayList<String>();recipients.add("group");
         for(var pupil:objectMapper.readTree(lessonContext).path("roster")) {
             String id=pupil.path("id").asString();if(id!=null&&!id.isBlank())recipients.add(id);
         }
-        for(String kind:List.of("text","worksheet","interactive")) {
-            int max=kind.equals("text")?0:kind.equals("worksheet")?20:5;
-            branches.add(Map.of("type","object","properties",Map.of(
+        var definitions=new LinkedHashMap<String,Object>();
+        for(String kind:List.of("worksheet","interactive")) {
+            int count=objectMapper.readTree(lessonContext).path(kind.equals("worksheet")?"requestedPdfTaskCount":"requestedInteractiveTaskCount")
+                .asInt(kind.equals("worksheet")?5:1);
+            count=Math.max(1,Math.min(kind.equals("worksheet")?20:5,count));
+            definitions.put(kind,Map.of("type","object","properties",Map.of(
                 "kind",Map.of("type","string","enum",List.of(kind)),"text",Map.of("type","string","minLength",1,"maxLength",4000),
-                "studentId",kind.equals("text")?Map.of("type","null"):Map.of("type","string","enum",recipients),
+                "studentId",Map.of("type","string","enum",recipients),
                 "tasks",Map.of("type","array","items",kind.equals("interactive")?interactiveTask:taskSchema,
-                    "minItems",kind.equals("text")?0:1,"maxItems",max)),
+                    "minItems",count,"maxItems",count)),
                 "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false));
         }
-        Map<String,Object> schema=Map.of("type","object","properties",Map.of("result",Map.of("anyOf",branches)),
-                "required",List.of("result"),"additionalProperties",false);
+        boolean repair=objectMapper.readTree(lessonContext).has("invalidInteractiveDraft");
+        Map<String,Object> materialItems=repair?Map.of("$ref","#/$defs/interactive")
+            :Map.of("anyOf",List.of(Map.of("$ref","#/$defs/worksheet"),Map.of("$ref","#/$defs/interactive")));
+        boolean mixed=!repair && com.mcschool.flashcard.liveclasses.KolinTaskService.requestsMixedMaterials(question);
+        Map<String,Object> materialArray=repair?Map.of("type","array","items",materialItems,"minItems",1,"maxItems",1):mixed?Map.of("anyOf",List.of(
+            Map.of("type","array","items",materialItems,"maxItems",0),
+            Map.of("type","array","items",materialItems,"minItems",2,"maxItems",2)))
+            :Map.of("type","array","items",materialItems,"maxItems",2);
+        // One reply can contain zero, one or both kinds. Definitions are shared to avoid duplicating schema tokens.
+        Map<String,Object> schema=Map.of("type","object","$defs",definitions,"properties",Map.of("result",Map.of(
+            "type","object","properties",Map.of("text",Map.of("type","string","minLength",1,"maxLength",4000),
+                "materials",materialArray),
+            "required",List.of("text","materials"),"additionalProperties",false)),
+            "required",List.of("result"),"additionalProperties",false);
         String instructions=KOLIN_PROMPT+"""
-                Верни JSON с единственным полем result. В result выбери ровно одну ветку: text, worksheet или interactive.
-                Режим подтверждаемого PDF:
-                Для обычного вопроса kind=text, короткий text, studentId=null, tasks=[].
-                При просьбе создать/дать задания kind=worksheet. Для общей доски studentId="group", для личной выбери id из roster.
-                Явно названная ученица важнее selectedStudentId. Без имени используй selectedStudentId.
-                Если получателя нет, имя неоднозначно или отсутствует в roster, задай короткий вопрос в text.
-                Если тема не дана в запросе, истории или расшифровке, уточни её, не выдумывай.
-                'Пару', 'несколько', 'ещё задания' и запрос без числа означают ровно 5 самостоятельных заданий.
-                requestedPdfTaskCount уже вычислен сервером. Для worksheet верни РОВНО requestedPdfTaskCount элементов tasks.
-                В этом приложении 'пару' означает 5, НЕ 2. Не переопределяй серверное количество по разговорному значению слова.
-                Ограничение короткого текстового ответа в 500 токенов не относится к JSON с заданиями: верни полный набор.
-                Явно указанное целое число от 1 до 20 имеет приоритет. Для большего количества попроси разбить запрос.
-                lastGeneratedWorksheet содержит задания прошлого черновика этого урока, а не записи ученицы.
-                При 'сделай второе сложнее/измени' сохрани число и неизменяемые задания прошлого черновика,
-                если новое количество не указано. Возвращай полный обновлённый набор новым черновиком.
-                Нужен простой лист без оформления. Для expression/equation: краткая instruction без чисел/формул,
-                expression с точным условием в LaTeX. Ответы вычисляет сервер, не добавляй их в JSON.
-                kind=expression: вычислить/упростить expression.
-                kind=equation: только линейное уравнение одной переменной с единственным действительным решением;
-                expression содержит ровно один '=', variable обозначает переменную (x,y,z,a,b,c,m,n).
-                Для expression variable="". restrictions содержит явные ограничения области определения, например 'x != 3'.
-                Ответы не включай в instruction или expression. Не добавляй '= ответ' к условию.
-                Используй короткие проверяемые арифметические и алгебраические примеры, дроби, степени, корни.
-                Текстовые задачи, неравенства, неоднозначные/нелинейные уравнения пока объясняй текстом.
-                Условия и решения проверяются кодом, PDF при ошибке не создаётся.
-                text для worksheet должен кратко описывать тему, без утверждений о добавлении в тетрадь.
-                Любая просьба 'добавь/отправь' создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
-                Исходные PDF и рукопись по-прежнему недоступны. Не утверждай, что изучил записи ученицы.
-                """+KolinVisualSchema.INSTRUCTIONS+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS;
-        instructions+="""
-                ГЛАВНОЕ: ты собеседник и методический помощник преподавателя, а не только генератор файлов.
-                Сначала определи намерение ПОСЛЕДНЕГО сообщения. По умолчанию отвечай kind=text, studentId=null, tasks=[].
-                Сам выбери формат по ПОСЛЕДНЕЙ просьбе и истории. Никакого переключателя формата у преподавателя нет.
-                Обычные вопросы НЕ превращай в задание. Просьба объяснить тему получает text с примером и проверкой понимания.
-                kind=worksheet: набор упражнений, лист для самостоятельного решения, PDF, печать, статичный рисунок.
-                kind=interactive: просьба построить/показать геометрию или график для исследования, вращать фигуру,
-                менять размеры, двигать точки или ползунки. 'Покажи пирамиду с высотой' означает interactive.
-                'Дай пять примеров по дробям' означает worksheet. 'Как объяснить дробь?' означает text.
-                Слово 'интерактив' необязательно. 'Нарисуй график в PDF' явно требует worksheet, а не interactive.
-                При изменении или переносе прежнего материала сохрани lastGeneratedWorksheet.kind и число задач,
-                если преподаватель не попросил новый формат или количество. Не спрашивай о формате без необходимости.
-                При изменении прежнего черновика сохрани и его получателя, если другой не назван явно.
-                Устаревшее поле context.format игнорируй, решение принимается по разговору.
-                Для worksheet число задач = requestedPdfTaskCount (1-20), для interactive = requestedInteractiveTaskCount (1-5).
-                Одна сцена с несколькими объектами - один элемент tasks. Не добавляй пустые шаблоны.
-                Для interactive все tasks имеют kind=visual и visual.template; внешние instruction,expression,variable пусты.
-                Для PDF visual использует type из схемы статичных рисунков, а не template интерактива.
-                Изменяемые данные, столбчатая диаграмма с изменением чисел и средним: interactive, template=scene.
-                Не смешивай PDF type=geometry и интерактив template=solid. Для пирамиды с ползунками нужен solid.
-                Конус, цилиндр, сфера, кривые поверхности, сечения и развёртки произвольных тел НЕ доступны интерактивно.
-                Для такого интерактивного запроса верни text с ограничением, без tasks. Не подменяй конус пирамидой,
-                цилиндр призмой или сферу многогранником. Можно предложить статичный PDF, но не создавать его без просьбы.
-                Исключение: готовый template=cube поддерживает собственную развёртку.
-                Для scene с полем проверки answer!=null всегда metrics=[], чтобы готовый ответ не был показан рядом с задачей.
-                Ограничение в 500 токенов относится лишь к текстовому объяснению, не к полному JSON материала.
-                requestedPdfTaskCount и lastGeneratedWorksheet сами по себе НЕ являются просьбой создать новый материал.
-                На вопросы, сомнения, оценку сложности, просьбы о совете или объяснении отвечай содержательно текстом.
-                'Что ты умеешь?', 'Чем можешь помочь?', 'Ты можешь сделать график?' - вопросы о возможностях,
-                а не команды создать материал. Ответь текстом, без tasks и без выбора получателя.
-                Кратко назови помощь с объяснениями, решениями, сложностью и подготовкой материалов;
-                для PDF и интерактива описывай только поддерживаемые в этом режиме типы из инструкций.
-                Не обещай автоматического чтения PDF или рукописи. Добавление материала требует кнопки преподавателя.
-                Используй условия и проверенные ответы из lastGeneratedWorksheet, если обсуждают предыдущие задания.
-                Не утверждай, что простой пример соответствует Abitur только потому, что так назван предыдущий черновик.
-                Оцени сами условия; признай несоответствие сложности, если оно есть. Не выдумывай требования экзамена.
-                Примеры kind=text: 'Это такие лёгкие в абитуре?', 'Почему так?', 'Как объяснить Виталине?',
-                'Дай совет', 'Она не понимает дроби, что делать?', 'Можно ли сделать сложнее?', 'Объясни второе задание'.
-                Давай объяснение, шаги решения, наводящие вопросы или короткий пример прямо в text, без карточки PDF.
-                kind=worksheet или kind=interactive нужны только при просьбе СОЗДАТЬ, ИЗМЕНИТЬ или подготовить к ДОБАВЛЕНИЮ материал:
-                'Дай пять заданий', 'Сделай второе сложнее', 'Создай интерактив', 'Это добавь Виталине'.
-                Если одновременно просят объяснить и создать, объясни в text и включи явно запрошенный материал в tasks.
-                Не генерируй замену по одной лишь критике прежнего задания и не повторяй предыдущий черновик вместо ответа.
-                Получатель общей страницы обозначается studentId="group". Явные фразы 'на общую доску', 'для всей группы'
-                имеют приоритет над selectedStudentId. Словоформы имён ('Виталине', 'для Софии') сопоставляй с roster.
-                Для нового задания без имени используй выбранную доску: targetType=group означает общую доску.
-                При 'это добавь Софии/на общую доску' используй lastGeneratedWorksheet, сохрани задания и поменяй получателя.
-                Не выдумывай учеников и не выбирай похожее имя при неоднозначности, уточни коротко.
-                Несколько имён пока требуют уточнения одного получателя; никогда не выбирай первого молча.
+                КОНТРАКТ ОТВЕТА: JSON {result:{text,materials}}. text отвечает преподавателю, materials содержит
+                только явно запрошенные новые черновики. Обычный разговор: materials=[]. Без переключателя формата.
+                'Что ты умеешь?', 'Это такие лёгкие в абитуре?', 'Как объяснить Виталине?' получают содержательный text,
+                а не новые задания. Для объяснения дай шаги, пример и проверку понимания. Оцени условия честно.
+                PDF/лист/обычные упражнения: элемент materials с kind=worksheet. Исследование с ползунками,
+                вращением или движением точек: элемент с kind=interactive. 'Покажи пирамиду с высотой' - интерактив.
+                Если просят И интерактив, И обычные задания, materials содержит ДВА элемента, по одному каждого вида.
+                'Одну интерктивную страницу, а другую просто с парой заданий' - смешанный запрос, даже с опечатками.
+                Не выбирай один формат за весь ответ. Подготовь обе части в указанном порядке за этот запрос.
+                При одновременном объяснении и создании дай объяснение в text, материалы отдельно.
+                Один интерактивный материал содержит ровно requestedInteractiveTaskCount сцен (1-5).
+                Один PDF содержит ровно requestedPdfTaskCount заданий (1-20). 'Пару' и 'несколько' означают ровно 5,
+                не 2. Число интерактивных страниц не определяет число упражнений в PDF. 500 токенов - только для text.
+                В каждом материале studentId - точный id из roster либо 'group'. Явное имя/общая доска важнее выбора.
+                Без нового адресата используй получателя изменяемого черновика, затем выбранную доску:
+                targetType=group означает общую доску, иначе selectedStudentId. Неясное имя или тема: уточни в text.
+                Несколько учеников для одного материала пока требуют уточнения одного получателя.
+                Даже 'добавь/отправь' создаёт только приватный черновик. Добавление исключительно по кнопке преподавателя.
+                lastGeneratedWorksheet - прошлый черновик, а не рукопись. При materials в нём содержатся обе части.
+                При 'измени второе/сложнее/проще' верни весь изменённый материал, сохрани остальные задания и адресата.
+                Измени только запрошенную часть; при просьбе изменить обе верни обе. Без нового количества сохрани прежнее.
+                При 'это добавь Софии/на общую доску' сохрани содержание и поменяй адресата. Не добавляй сам.
+                Режим подтверждаемого PDF, kind=worksheet:
+                Для геометрии ВСЕ условия берутся из visual. Обязательно используй kind=visual,
+                instruction=expression=variable='', restrictions=[]. Не выдавай формулу площади вместо задачи с размерами.
+                Площадь куба: visual={type:'geometry',language:'ru',figure:'cube',objective:'surface',
+                vertices:[],parameters:[4],index:0}, например для ребра 4 см. Сервер вычислит 6*4^2.
+                Для обычной арифметики kind=expression, instruction краткая БЕЗ чисел и формул,
+                expression - проверяемое условие LaTeX, variable='', visual=null, restrictions - ограничения области.
+                Для уравнения kind=equation: только линейное уравнение одной переменной с единственным решением,
+                ровно один знак '=', variable из x,y,z,a,b,c,m,n. Ответы вычисляет сервер. Не включай их в условие.
+                Неподдерживаемые доказательства, неравенства и текстовые задачи объясняй в text, не подменяй условие.
+                Следующие технические инструкции относятся К ЭЛЕМЕНТАМ materials, а не ко всему result:
+                """+KolinVisualSchema.INSTRUCTIONS+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS+"""
+                Напоминание: result всегда имеет только text и materials. Для объяснения materials=[], а не kind=text.
+                Смешанный запрос возвращает ДВА материала, например интерактивный куб И PDF с пятью задачами на его площадь.
+                Интерактивная задача на площадь куба: template=solid, один параметр a, восемь вершин, шесть квадратных
+                граней, answer=surfaceArea, measurements=[]. Не показывай проверяемый ответ рядом с полем ввода.
+                template=cube служит для развёртки и не заменяет задачу с изменением ребра.
+                Для scene при answer!=null metrics=[]. Неподдерживаемые кривые поверхности, сечения или развёртки
+                произвольных тел объясняй текстом. Не подменяй конус пирамидой, цилиндр призмой или сферу многогранником.
+                Исключение: готовый template=cube поддерживает развёртку куба. Статичный PDF - только если его попросили.
+                Никаких SVG, HTML, URL или кода. Не утверждай, что прочёл PDF или записи на доске.
                 """;
+        if(repair) instructions+="Исправь только invalidInteractiveDraft. materials содержит один interactive-материал с тем же адресатом и числом задач. Остальные части исходного запроса уже подготовлены; не создавай их заново.";
         var input=new java.util.ArrayList<Map<String,Object>>();
         input.add(Map.of("role","system","content",instructions));
         input.add(Map.of("role","user","content","Контекст текущего урока и допустимые получатели:\n"+lessonContext));
@@ -625,9 +611,17 @@ public class AiLessonPilotService {
             if(value.isEmpty() || value.length()>32000) throw new IllegalStateException("Kolyn structured response invalid");
             var parsed=objectMapper.readTree(value);
             var result=parsed.path("result");
-            if(parsed.size()!=1 || !result.isObject() || !result.has("kind") || !result.has("tasks"))
+            if(parsed.size()!=1 || !result.isObject() || !result.path("text").isString()
+                    || result.path("text").asString().isBlank() || !result.path("materials").isArray()
+                    || result.path("materials").size()>2)
                 throw new IllegalStateException("Kolyn structured envelope invalid");
-            return objectMapper.writeValueAsString(result);
+            var parts=new java.util.ArrayList<com.mcschool.flashcard.liveclasses.KolinTaskService.Content>();
+            for(var part:result.path("materials")) parts.add(objectMapper.treeToValue(part,com.mcschool.flashcard.liveclasses.KolinTaskService.Content.class));
+            String replyText=result.path("text").asString();
+            var content=parts.isEmpty()?new com.mcschool.flashcard.liveclasses.KolinTaskService.Content("text",replyText,null,List.of())
+                : parts.size()==1?new com.mcschool.flashcard.liveclasses.KolinTaskService.Content(parts.get(0).kind(),replyText,parts.get(0).studentId(),parts.get(0).tasks())
+                : new com.mcschool.flashcard.liveclasses.KolinTaskService.Content("materials",replyText,null,List.of(),parts);
+            return objectMapper.writeValueAsString(content);
         } catch(InterruptedException ex) {
             Thread.currentThread().interrupt(); throw new IllegalStateException("Kolyn request interrupted");
         } catch(Exception ex) { throw new IllegalStateException("Kolyn structured request failed",ex); }

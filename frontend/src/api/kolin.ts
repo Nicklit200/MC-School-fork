@@ -37,10 +37,19 @@ export interface KolinWorksheet {
 }
 
 export interface KolinResponse {
-  type: 'text' | 'worksheet' | 'interactive';
+  type: 'text' | 'worksheet' | 'interactive' | 'materials';
   text: string;
   transcriptContext?: KolinTranscriptContext;
   worksheet?: KolinWorksheet;
+  materials?: KolinWorksheet[];
+}
+
+export function parseKolinMaterials(value: unknown): KolinWorksheet[] | undefined {
+  if (!Array.isArray(value) || value.length !== 2) return;
+  const parts = value.map(parseKolinWorksheet);
+  if (parts.some(part => !part) || parts[0]!.id === parts[1]!.id
+      || Boolean(parts[0]!.interactive) === Boolean(parts[1]!.interactive)) return;
+  return parts as KolinWorksheet[];
 }
 
 /** Copy only server-owned artifact metadata, never a current board destination. */

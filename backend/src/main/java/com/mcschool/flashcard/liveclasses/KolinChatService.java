@@ -56,7 +56,10 @@ public class KolinChatService {
         public Request(String text,List<HistoryMessage> history,Context context) { this(text,history,context,null); }
     }
     public record Reply(String type, String text, KolinTranscriptContextService.Metadata transcriptContext,
-                        KolinWorksheetStore.Worksheet worksheet) {
+                        KolinWorksheetStore.Worksheet worksheet, List<KolinWorksheetStore.Worksheet> materials) {
+        public Reply(String type,String text,KolinTranscriptContextService.Metadata metadata,KolinWorksheetStore.Worksheet worksheet) {
+            this(type,text,metadata,worksheet,null);
+        }
         public Reply(String type,String text,KolinTranscriptContextService.Metadata metadata) { this(type,text,metadata,null); }
         public Reply(String type, String text) { this(type, text, null,null); }
     }

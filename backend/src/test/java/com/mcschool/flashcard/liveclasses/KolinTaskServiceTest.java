@@ -54,6 +54,40 @@ class KolinTaskServiceTest {
         assertThat(KolinTaskService.requestedCount("Покажи две пирамиды",0,1)).isEqualTo(2);
         assertThat(KolinTaskService.requestedCount("Добавь Алисе",3,1)).isEqualTo(3);
         assertThat(KolinTaskService.requestedCount("Сделай её выше",2,1)).isEqualTo(2);
+        String mixed="А ну дай задачку на Площадь куба одну интерктивную страницу а другую прост ос пару заданий";
+        assertThat(KolinTaskService.requestedCount(mixed,0,5)).isEqualTo(5);
+        assertThat(KolinTaskService.requestedCount(mixed,0,1)).isEqualTo(1);
+        assertThat(KolinTaskService.requestedCount("Сделай 3 задания в PDF и одну интерактивную страницу",0,1)).isEqualTo(1);
+        assertThat(KolinTaskService.requestedCount("Сделай 2 интерактива и 3 задания в PDF",0,5)).isEqualTo(3);
+        assertThat(KolinTaskService.requestedCount("Сделай 2 интерактива и 3 задания в PDF",0,1)).isEqualTo(2);
+    }
+    @Test void mixedRequestPreparesBothMaterialsWithOneCallAndSeparateCounts()throws Exception {
+        reserve();
+        var interactive=new KolinTaskService.Content("interactive","Исследование",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
+        var pdf=new KolinTaskService.Content("worksheet","Практика",pupil.getId().toString(),Collections.nCopies(5,task("6*4^2",null)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("materials","Интерактив и задания",null,List.of(),List.of(interactive,pdf))));
+        when(renderer.renderPlain(anyString())).thenReturn(new OwnerWorkbookPdfRenderService.PlainWorksheet(new byte[]{1},new byte[]{2},1,
+            Map.of("results",Collections.nCopies(5,Map.of("passed",true,"answer","96")))));
+        send("А ну дай задачку на Площадь куба одну интерактивную страницу а другую прост ос пару заданий");
+        verify(ai).kolinStructuredReply(argThat(json->json.contains("\"requestedPdfTaskCount\":5")&&json.contains("\"requestedInteractiveTaskCount\":1")),anyList(),anyString());
+        verify(store).completeMaterials(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("Интерактив и задания"),eq(metadata),
+            argThat(parts->parts.size()==2&&parts.get(0).content().tasks().size()==1&&parts.get(1).content().tasks().size()==5
+                &&parts.get(1).content().tasks().get(0).answer().equals("96")));
+        verify(store,never()).append(any(),any(),any());
+    }
+    @Test void failedSecondMaterialCannotStoreTheFirstHalf()throws Exception {
+        reserve();
+        var interactive=new KolinTaskService.Content("interactive","Graph",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
+        var pdf=new KolinTaskService.Content("worksheet","PDF",pupil.getId().toString(),Collections.nCopies(5,task("1+1",null)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("materials","Both",null,List.of(),List.of(interactive,pdf))));
+        when(renderer.renderPlain(anyString())).thenThrow(new IllegalArgumentException("invalid"));
+        assertThatThrownBy(()->send("Одну интерактивную страницу и пару заданий")).isInstanceOf(KolinRequestException.class);
+        verify(store,never()).completeMaterials(any(),any(),any(),any(),anyString(),any(),anyList());
+        verify(store).fail(host,room.getId(),artifact,attempt);
     }
     @Test void unsupportedCurvedBodyBecomesAnExplanationInsteadOfAMislabelledPolyhedron()throws Exception {
         reserve();
@@ -98,6 +132,25 @@ class KolinTaskServiceTest {
         assertThat(row.toString()).doesNotContain("3/4","answer");
         assertThat(json.path("qa").path("algebra").get(0).path("kind").asString()).isEqualTo("expressionValue");
         assertThat(json.path("qa").path("algebra").get(0).has("answer")).isFalse();
+    }
+    @Test @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="kolin.mixedFixtureDir",matches=".+")
+    void validatesAndExportsCapturedMixedRepliesThroughTheProductionDocumentBuilder()throws Exception {
+        var directory=java.nio.file.Path.of(System.getProperty("kolin.mixedFixtureDir"));
+        int count=0;
+        try(var files=java.nio.file.Files.list(directory.resolve("generated"))) {
+            for(var file:files.filter(p->p.toString().endsWith(".json")).toList()) {
+                var json=mapper.readTree(java.nio.file.Files.readString(file));
+                assertThat(json.path("valid").asBoolean()).as(file.toString()).isTrue();
+                var content=mapper.treeToValue(json.path("content"),KolinTaskService.Content.class);
+                if("text".equals(content.kind())) continue;
+                for(var part:content.materials()==null?List.of(content):content.materials()) {
+                    if("interactive".equals(part.kind())) part.tasks().forEach(task->InteractiveTemplateSpec.validate(task.visual()));
+                    else java.nio.file.Files.writeString(directory.resolve(json.path("name").asString()+"-document.json"),mapper.writeValueAsString(KolinTaskService.document(part.tasks())));
+                    count++;
+                }
+            }
+        }
+        assertThat(count).isEqualTo(5);
     }
     @Test void fiveShortExamplesShareOnePlainPageAndSixUseTwoPages() {
         assertThat((List<?>)KolinTaskService.document(Collections.nCopies(5,task("1+2","3"))).get("workbookPages")).hasSize(1);

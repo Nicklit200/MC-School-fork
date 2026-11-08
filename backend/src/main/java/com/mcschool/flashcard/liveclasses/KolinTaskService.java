@@ -17,7 +17,9 @@ public class KolinTaskService {
             this(kind,instruction,expression,answer,variable,restrictions,null);
         }
     }
-    public record Content(String kind,String text,String studentId,List<Task> tasks) {}
+    public record Content(String kind,String text,String studentId,List<Task> tasks,List<Content> materials) {
+        public Content(String kind,String text,String studentId,List<Task> tasks) { this(kind,text,studentId,tasks,null); }
+    }
     private record Fingerprint(String text,List<KolinChatService.HistoryMessage> history,KolinChatService.Context context) {}
     private final AiLessonPilotService ai;
     private final KolinTaskRoster roster;
@@ -44,8 +46,8 @@ public class KolinTaskService {
             String previous=store.previousDraft(teacher,room.getId());
             Content previousContent=previous==null?null:mapper.readValue(previous,Content.class);
             if(previousContent!=null) context.put("lastGeneratedWorksheet",previousContent);
-            int previousCount=previousContent==null?0:previousContent.tasks().size();
-            int pdfCount=requestedCount(question,previousCount,5),interactiveCount=requestedCount(question,previousCount,1);
+            int pdfCount=requestedCount(question,previousCount(previousContent,"worksheet"),5),
+                interactiveCount=requestedCount(question,previousCount(previousContent,"interactive"),1);
             context.put("requestedPdfTaskCount",pdfCount);
             context.put("requestedInteractiveTaskCount",interactiveCount);
             if(request.context()!=null && request.context().studentId()!=null)
@@ -57,74 +59,96 @@ public class KolinTaskService {
             if(content==null || content.kind()==null || content.text()==null || content.text().length()>4000
                     || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolyn content");
             if("text".equals(content.kind())) {
-                if(!content.tasks().isEmpty() || content.text().isBlank())
+                if(!content.tasks().isEmpty() || content.text().isBlank() || content.materials()!=null && !content.materials().isEmpty())
                     throw new IllegalArgumentException("Invalid Kolyn text reply");
                 // Text has no recipient or artifact. Discard model recipient metadata here.
                 stage="STORE";
                 return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",content.text(),transcript,
                         null,null,0,0,null,null);
             }
-            boolean interactive="interactive".equals(content.kind());
-            if(interactive && unsupportedInteractive(question,content.tasks())) {
-                String explanation="Этот интерактив пока не поддерживается. Доступны плоские построения, графики, данные, выпуклые многогранники и развёртка куба. Кривые поверхности и развёртки других тел пока не создаются. Могу объяснить тему текстом или подготовить доступный статичный рисунок в PDF.";
-                if(content.tasks().stream().anyMatch(t->t.visual()!=null&&"de".equals(t.visual().get("language"))))
-                    explanation="Diese interaktive Konstruktion wird noch nicht unterstützt. Möglich sind ebene Konstruktionen, Funktionen, Daten, konvexe Polyeder und das Würfelnetz. Gekrümmte Flächen und andere Körpernetze sind noch nicht verfügbar. Ich kann das Thema erklären oder eine unterstützte statische PDF-Abbildung vorbereiten.";
-                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",explanation,transcript,
-                    null,null,0,0,null,null);
-            }
-            int requiredCount=interactive?interactiveCount:pdfCount;
-            if((!interactive && !"worksheet".equals(content.kind())) || content.tasks().isEmpty() || content.tasks().size()>20)
-                throw new IllegalArgumentException("Invalid Kolyn worksheet");
-            // A question may mention many tasks without asking to generate any.
-            if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
-            if(content.tasks().size()!=requiredCount)
-                throw new IllegalArgumentException("Unexpected worksheet task count");
-            if(interactive && needsInteractiveRepair(content)) {
-                // One bounded repair only, before a preview or append can be created. Normal drafts use one call.
-                String recipient=content.studentId();
-                context.put("invalidInteractiveDraft",content);
-                stage="MODEL_REPAIR";
-                content=mapper.readValue(ai.kolinStructuredReply(mapper.writeValueAsString(context),List.of(),
-                    "Исправь invalidInteractiveDraft для запроса: "+question+"\n"
-                    +"Верни весь interactive-черновик с прежним studentId и числом задач. Проверь ссылки: каждая вершина faces и segments обязана существовать в vertices, включая основание высоты O. Проверь выражения, границы, плоские грани и замкнутость. При answer!=null не показывай искомое в measurements или metrics; для демонстрации используй answer=null. Не меняй тему и не добавляй материал на доску."),Content.class);
+            boolean bundle="materials".equals(content.kind());
+            String bundleText=content.text();
+            if(bundle && (content.materials()==null || content.materials().size()!=2 || !content.tasks().isEmpty()
+                    || content.materials().stream().anyMatch(m->m==null || !Set.of("worksheet","interactive").contains(m.kind()))
+                    || content.materials().stream().map(Content::kind).distinct().count()!=2))
+                throw new IllegalArgumentException("Invalid mixed materials");
+            var parts=bundle?content.materials():List.of(content);
+            var prepared=new ArrayList<KolinWorksheetStore.PreparedMaterial>();
+            boolean repairUsed=false;
+            for(var part:parts) {
+                content=part;
                 stage="CONTENT";
-                if(content==null || !"interactive".equals(content.kind()) || !Objects.equals(recipient,content.studentId())
-                    || content.text()==null || content.text().length()>4000 || content.tasks()==null
-                    || content.tasks().size()!=requiredCount || needsInteractiveRepair(content) || unsupportedInteractive(question,content.tasks()))
-                    throw new IllegalArgumentException("Invalid repaired interactive draft");
-            }
-            stage="RECIPIENT";
-            boolean group="group".equals(content.studentId());
-            UUID target=group?null:UUID.fromString(content.studentId());
-            var pupil=group?null:pupils.stream().filter(item -> item.id().equals(target)).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unknown worksheet recipient"));
-            String recipientName=group?"Общая доска":pupil.name();
-            if(interactive) {
-                stage="CONTENT";
-                var canonical=new ArrayList<Task>();
-                for(var task:content.tasks()) {
-                    if(!"visual".equals(task.kind())) throw new IllegalArgumentException("Interactive tasks must be visual");
-                    canonical.add(new Task("visual","","",null,"",List.of(),InteractiveTemplateSpec.validate(task.visual())));
+                if(content.text()==null || content.text().length()>4000 || content.tasks()==null
+                        || content.materials()!=null && !content.materials().isEmpty())
+                    throw new IllegalArgumentException("Invalid material content");
+                boolean interactive="interactive".equals(content.kind());
+                if(interactive && unsupportedInteractive(question,content.tasks())) {
+                    String explanation="Этот интерактив пока не поддерживается. Доступны плоские построения, графики, данные, выпуклые многогранники и развёртка куба. Кривые поверхности и развёртки других тел пока не создаются. Могу объяснить тему текстом или подготовить доступный статичный рисунок в PDF.";
+                    if(content.tasks().stream().anyMatch(t->t.visual()!=null&&"de".equals(t.visual().get("language"))))
+                        explanation="Diese interaktive Konstruktion wird noch nicht unterstützt. Möglich sind ebene Konstruktionen, Funktionen, Daten, konvexe Polyeder und das Würfelnetz. Gekrümmte Flächen und andere Körpernetze sind noch nicht verfügbar. Ich kann das Thema erklären oder eine unterstützte statische PDF-Abbildung vorbereiten.";
+                    return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",explanation,transcript,
+                        null,null,0,0,null,null);
                 }
-                var saved=new Content("interactive",content.text(),content.studentId(),canonical);
-                stage="STORE";
-                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"interactive",content.text(),transcript,
-                        target,recipientName,canonical.size(),canonical.size(),null,null,mapper.writeValueAsString(saved));
+                int requiredCount=interactive?interactiveCount:pdfCount;
+                if((!interactive && !"worksheet".equals(content.kind())) || content.tasks().isEmpty() || content.tasks().size()>20)
+                    throw new IllegalArgumentException("Invalid Kolyn worksheet");
+                // A question may mention many tasks without asking to generate any.
+                if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
+                stage="CONTENT_COUNT";
+                if(content.tasks().size()!=requiredCount)
+                    throw new IllegalArgumentException("Unexpected worksheet task count");
+                stage="CONTENT";
+                if(interactive && needsInteractiveRepair(content)) {
+                    if(repairUsed) throw new IllegalArgumentException("Interactive repair budget exhausted");
+                    repairUsed=true;
+                    // One bounded repair only, before a preview or append can be created. Normal drafts use one call.
+                    String recipient=content.studentId();
+                    context.put("invalidInteractiveDraft",content);
+                    stage="MODEL_REPAIR";
+                    content=mapper.readValue(ai.kolinStructuredReply(mapper.writeValueAsString(context),List.of(),
+                        "Исправь invalidInteractiveDraft для запроса: "+question+"\n"
+                        +"Верни весь interactive-черновик с прежним studentId и числом задач. Проверь ссылки: каждая вершина faces и segments обязана существовать в vertices, включая основание высоты O. Проверь выражения, границы, плоские грани и замкнутость. При answer!=null не показывай искомое в measurements или metrics; для демонстрации используй answer=null. Не меняй тему и не добавляй материал на доску."),Content.class);
+                    stage="CONTENT";
+                    if(content==null || !"interactive".equals(content.kind()) || !Objects.equals(recipient,content.studentId())
+                        || content.text()==null || content.text().length()>4000 || content.tasks()==null
+                        || content.tasks().size()!=requiredCount || needsInteractiveRepair(content) || unsupportedInteractive(question,content.tasks()))
+                        throw new IllegalArgumentException("Invalid repaired interactive draft");
+                }
+                stage="RECIPIENT";
+                boolean group="group".equals(content.studentId());
+                UUID target=group?null:UUID.fromString(content.studentId());
+                var pupil=group?null:pupils.stream().filter(item -> item.id().equals(target)).findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("Unknown worksheet recipient"));
+                String recipientName=group?"Общая доска":pupil.name();
+                if(interactive) {
+                    stage="CONTENT";
+                    var canonical=new ArrayList<Task>();
+                    for(var task:content.tasks()) {
+                        if(!"visual".equals(task.kind())) throw new IllegalArgumentException("Interactive tasks must be visual");
+                        canonical.add(new Task("visual","","",null,"",List.of(),InteractiveTemplateSpec.validate(task.visual())));
+                    }
+                    var saved=new Content("interactive",content.text(),content.studentId(),canonical);
+                    prepared.add(new KolinWorksheetStore.PreparedMaterial(saved,target,recipientName,canonical.size(),null,null));
+                    continue;
+                }
+                stage="DOCUMENT";
+                String document=mapper.writeValueAsString(document(content.tasks()));
+                long started=System.nanoTime();
+                stage="RENDER";
+                var rendered=renderer.renderPlain(document);
+                stage="ANSWERS";
+                var verifiedContent=withVerifiedAnswers(content,rendered.qa());
+                String summary=content.text().isBlank()?"Подготовлено "+content.tasks().size()+" заданий.":content.text();
+                prepared.add(new KolinWorksheetStore.PreparedMaterial(new Content("worksheet",summary,content.studentId(),verifiedContent.tasks()),
+                    target,recipientName,rendered.pageCount(),rendered.pdf(),rendered.previewPng()));
+                org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolyn worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
+                        room.getId(),reserved.id(),content.tasks().size(),rendered.pageCount(),(System.nanoTime()-started)/1_000_000);
             }
-            stage="DOCUMENT";
-            String document=mapper.writeValueAsString(document(content.tasks()));
-            long started=System.nanoTime();
-            stage="RENDER";
-            var rendered=renderer.renderPlain(document);
-            stage="ANSWERS";
-            var verifiedContent=withVerifiedAnswers(content,rendered.qa());
-            String summary=content.text().isBlank()?"Подготовлено "+content.tasks().size()+" заданий.":content.text();
             stage="STORE";
-            var result=store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"worksheet",summary,transcript,
-                    target,recipientName,content.tasks().size(),rendered.pageCount(),rendered.pdf(),rendered.previewPng(),mapper.writeValueAsString(verifiedContent));
-            org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolyn worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
-                    room.getId(),reserved.id(),content.tasks().size(),rendered.pageCount(),(System.nanoTime()-started)/1_000_000);
-            return result;
+            if(bundle) return store.completeMaterials(teacher,room.getId(),reserved.id(),reserved.attemptId(),bundleText,transcript,prepared);
+            var material=prepared.get(0); var saved=material.content();
+            return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),saved.kind(),saved.text(),transcript,
+                material.studentId(),material.studentName(),saved.tasks().size(),material.pageCount(),material.pdf(),material.preview(),mapper.writeValueAsString(saved));
         } catch(Exception ex) {
             var log=org.slf4j.LoggerFactory.getLogger(getClass());
             log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={}",
@@ -139,7 +163,7 @@ public class KolinTaskService {
             if(ex instanceof org.springframework.web.server.ResponseStatusException status
                     && (status.getStatusCode().value()==503 || status.getStatusCode().value()==429))
                 throw KolinRequestException.busy();
-            if(Set.of("CONTENT","RECIPIENT","DOCUMENT","RENDER","ANSWERS").contains(stage))
+            if(Set.of("CONTENT","CONTENT_COUNT","RECIPIENT","DOCUMENT","RENDER","ANSWERS").contains(stage))
                 throw KolinRequestException.invalid();
             throw KolinRequestException.failed();
         }
@@ -259,8 +283,26 @@ public class KolinTaskService {
         }catch(com.mcschool.flashcard.common.ConflictException ex){return true;}
     }
     static int requestedCount(String question,int previousCount) { return requestedCount(question,previousCount,5); }
+    /** Clear two-format requests may be answered with both materials or a clarification, never half a draft. */
+    public static boolean requestsMixedMaterials(String question) {
+        return question.matches("(?isu).*(?:интер(?:а)?ктив|interactive|interaktiv).*" )
+            && question.matches("(?isu).*(?:\\bpdf\\b|пдф|печат|статич|обычн|(?:друг|отдельн|плюс)[\\p{L}]*.{0,60}(?:задан|пример|упражнен)|(?:задан|пример|упражнен).{0,60}(?:друг|отдельн)).*");
+    }
+    private static int previousCount(Content previous,String kind) {
+        if(previous==null) return 0;
+        if(kind.equals(previous.kind())) return previous.tasks().size();
+        if(previous.materials()!=null) return previous.materials().stream().filter(p->kind.equals(p.kind()))
+            .mapToInt(p->p.tasks().size()).findFirst().orElse(0);
+        return 0;
+    }
     static int requestedCount(String question,int previousCount,int defaultCount) {
-        String item="(?:задан|пример|упражнен|интерактив|график|диаграмм|пирамид|призм|фигур|куб|круг|aufgaben|aufgabe|tasks?|exercises?|graph|diagram|pyramid|prism)";
+        // A count attached to an interactive page must never become the PDF exercise count.
+        String interactiveItem="(?:интер(?:а)?ктив[\\p{L}]*|interactive[\\p{L}]*|interaktiv[\\p{L}]*)";
+        var explicitInteractive=java.util.regex.Pattern.compile("(?iu)(\\d{1,3}|одно|один|одну|два|две|три|четыре|пять|one|two|three|four|five|eine|zwei|drei|vier|fünf)\\s+"+interactiveItem).matcher(question);
+        String interactiveCountPhrase=explicitInteractive.find()?explicitInteractive.group():null;
+        if(defaultCount==1 && interactiveCountPhrase!=null) question=interactiveCountPhrase;
+        else if(defaultCount==5) question=question.replaceAll("(?iu)(?:\\d{1,3}|[\\p{L}]+)\\s+"+interactiveItem," ");
+        String item="(?:задан|пример|упражнен|интер(?:а)?ктив|interactive|interaktiv|график|диаграмм|пирамид|призм|фигур|куб|круг|aufgaben|aufgabe|tasks?|exercises?|graph|diagram|pyramid|prism)";
         var numeric=java.util.regex.Pattern.compile("(?iu)(\\d{1,3})\\s*"+item).matcher(question);
         if(numeric.find()) return Integer.parseInt(numeric.group(1));
         var words=Map.ofEntries(Map.entry("одно",1),Map.entry("один",1),Map.entry("одну",1),Map.entry("два",2),Map.entry("две",2),

@@ -16,13 +16,19 @@ public final class KolinVisualSchema {
         var language=choice("ru","de");
         var series=object("kind",choice("constant","linear","quadratic","polynomial","sine","cosine","absolute","reciprocal","sqrt","exponential","logarithmic","rational"),
                 "parameters",numbers(),"denominator",numbers());
-        return Map.of("anyOf",List.of(Map.of("type","null"),
+        return Map.of("anyOf",List.of(
                 object("type",choice("graph"),"language",language,"objective",choice("value","zeros","intersections","draw"),
                         "series",Map.of("type","array","items",series),"at",Map.of("type","number"),"xRange",numbers(),"yRange",numbers()),
                 object("type",choice("geometry"),"language",language,
-                        "figure",choice("triangle","rectangle","quadrilateral","polygon","circle","cube","cuboid","cylinder","cone","sphere"),
-                        "objective",choice("area","perimeter","side","angle","volume","surface"),
+                        "figure",choice("triangle","rectangle","quadrilateral","polygon"),
+                        "objective",choice("area","perimeter","side","angle"),
                         "vertices",Map.of("type","array","items",numbers()),"parameters",numbers(),"index",Map.of("type","integer")),
+                object("type",choice("geometry"),"language",language,"figure",choice("circle"),
+                        "objective",choice("area","perimeter"),"vertices",Map.of("type","array","items",numbers(),"maxItems",0),
+                        "parameters",numbers(),"index",Map.of("type","integer","enum",List.of(0))),
+                object("type",choice("geometry"),"language",language,"figure",choice("cube","cuboid","cylinder","cone","sphere"),
+                        "objective",choice("volume","surface"),"vertices",Map.of("type","array","items",numbers(),"maxItems",0),
+                        "parameters",numbers(),"index",Map.of("type","integer","enum",List.of(0))),
                 object("type",choice("fractionCircle"),"language",language,"parts",Map.of("type","integer"),"selected",Map.of("type","integer"))));
     }
     public static final String INSTRUCTIONS="""

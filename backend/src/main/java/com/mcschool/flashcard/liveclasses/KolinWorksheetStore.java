@@ -24,6 +24,8 @@ public class KolinWorksheetStore {
         }
     }
     public record Reservation(UUID id, UUID attemptId, KolinChatService.Reply cached) {}
+    public record PreparedMaterial(KolinTaskService.Content content, UUID studentId, String studentName,
+                                   int pageCount, byte[] pdf, byte[] preview) {}
     private final KolinWorksheetRepository repository;
     private final OnlineClassAccessService access;
     private final PersonalLessonWorkbookService personal;
@@ -86,9 +88,43 @@ public class KolinWorksheetStore {
         var rows=repository.latestDraftContext(classId,teacher.id(),org.springframework.data.domain.PageRequest.of(0,1));
         if(rows.isEmpty()) return null;
         var row=rows.get(0);
-        try { if(row.getStudentId()!=null) personal.requireClassStudent(room,row.getStudentId()); }
+        try {
+            if(row.getStudentId()!=null) personal.requireClassStudent(room,row.getStudentId());
+            var content=mapper.readValue(row.getTaskContent(),KolinTaskService.Content.class);
+            if(content.materials()!=null) for(var part:content.materials())
+                if(!"group".equals(part.studentId())) personal.requireClassStudent(room,UUID.fromString(part.studentId()));
+        }
         catch(ResourceNotFoundException ex) { return null; }
         return row.getTaskContent();
+    }
+
+    /** All parts become visible together. A failed or stale attempt cannot leave half a reply behind. */
+    @Transactional
+    public KolinChatService.Reply completeMaterials(AuthenticatedUser teacher, UUID classId, UUID id, UUID attemptId,
+            String text, KolinTranscriptContextService.Metadata metadata, java.util.List<PreparedMaterial> materials) {
+        var room=access.requireHost(teacher,classId);
+        var parent=repository.findForUpdate(id,classId,teacher.id()).orElseThrow(this::missing);
+        if(!attemptId.equals(parent.getAttemptId()) || !"GENERATING".equals(parent.getState()))
+            throw new ConflictException("Kolyn request was retried; reload the result");
+        requireOpen(room);
+        if(materials.size()!=2 || materials.stream().map(m->m.content().kind()).distinct().count()!=2
+                || materials.stream().anyMatch(m->!java.util.Set.of("worksheet","interactive").contains(m.content().kind())))
+            throw new IllegalArgumentException("Expected one PDF and one interactive material");
+        for(var material:materials) if(material.studentId()!=null) personal.requireClassStudent(room,material.studentId());
+        String transcript=mapper.writeValueAsString(metadata);
+        for(int index=0;index<materials.size();index++) {
+            var material=materials.get(index); var content=material.content();
+            var child=KolinWorksheet.material(parent,index);
+            child.complete(content.kind(),content.text(),transcript,material.studentId(),material.studentName(),
+                content.tasks().size(),material.pageCount(),material.pdf(),material.preview());
+            child.rememberTasks(mapper.writeValueAsString(content));
+            repository.save(child);
+        }
+        parent.complete("materials",text,transcript,null,null,0,0,null,null);
+        parent.rememberTasks(mapper.writeValueAsString(new KolinTaskService.Content("materials",text,null,java.util.List.of(),
+            materials.stream().map(PreparedMaterial::content).toList())));
+        repository.saveAndFlush(parent);
+        return reply(parent);
     }
 
     @Transactional
@@ -131,6 +167,7 @@ public class KolinWorksheetStore {
 
     private void checkPupil(OnlineClass room,KolinWorksheet row) {
         if (row.getStudentId()!=null) personal.requireClassStudent(room,row.getStudentId());
+        if("materials".equals(row.getResultType())) for(var child:children(row)) checkPupil(room,child);
     }
     private void requireWorksheet(KolinWorksheet row) {
         if (!("worksheet".equals(row.getResultType()) || "interactive".equals(row.getResultType()))
@@ -147,8 +184,14 @@ public class KolinWorksheetStore {
         try {
             return new KolinChatService.Reply(row.getResultType(),row.getReplyText(),
                     mapper.readValue(row.getTranscriptMetadata(),KolinTranscriptContextService.Metadata.class),
-                    java.util.List.of("worksheet","interactive").contains(row.getResultType()) ? metadata(row) : null);
+                    java.util.List.of("worksheet","interactive").contains(row.getResultType()) ? metadata(row) : null,
+                    "materials".equals(row.getResultType()) ? children(row).stream().map(this::metadata).toList() : null);
         } catch (Exception ex) { throw new IllegalStateException("Cannot read Kolyn result",ex); }
+    }
+    private java.util.List<KolinWorksheet> children(KolinWorksheet parent) {
+        var rows=repository.findByParentIdAndClassIdAndTeacherIdOrderByMaterialIndex(parent.getId(),parent.getClassId(),parent.getTeacherId());
+        if(rows.size()!=2) throw missing();
+        rows.forEach(this::requireWorksheet); return rows;
     }
     private Worksheet metadata(KolinWorksheet row) {
         return new Worksheet(row.getId(),row.getStudentId(),row.getStudentName(),row.getTaskCount(),row.getPageCount(),

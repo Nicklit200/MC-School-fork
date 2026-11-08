@@ -77,6 +77,28 @@ it('shows one confirmation action with a small clickable first-page preview and 
   expect(screen.queryByRole('button', { name: /Открыть|Изменить|Отменить/ })).not.toBeInTheDocument();
 });
 
+it('shows both materials from one reply and confirms each independently without regenerating', async () => {
+  const interactive: KolinWorksheet={id:'shared-interactive',studentId:null,targetType:'group',studentName:'Общая доска',
+    taskCount:1,pageCount:1,state:'READY',interactive:[{template:'graph',language:'ru',function:'linear',coefficients:[2,1]}]};
+  vi.mocked(kolinApi.send).mockResolvedValue({type:'materials',text:'Интерактив и практика.',materials:[interactive,worksheet]});
+  vi.mocked(kolinApi.appendWorksheet).mockImplementation(async (_classId,id) =>
+    ({...(id===interactive.id?interactive:worksheet),state:'ADDED'}));
+  render(<Harness/>);
+  await userEvent.click(screen.getByRole('button',{name:'Kolyn'}));
+  await userEvent.type(screen.getByRole('textbox'),'Одну интерактивную страницу и пару заданий{Enter}');
+  const shared=await screen.findByRole('button',{name:'На общую доску'});
+  const personal=screen.getByRole('button',{name:'Добавить Виталине'});
+  expect(screen.getAllByText('Интерактив и практика.')).toHaveLength(1);
+  expect(kolinApi.appendWorksheet).not.toHaveBeenCalled();
+  await userEvent.click(shared);
+  expect(await screen.findByRole('button',{name:'Добавлено ✓'})).toBeDisabled();
+  expect(personal).toBeEnabled();
+  await userEvent.click(personal);
+  await waitFor(()=>expect(screen.getAllByRole('button',{name:'Добавлено ✓'})).toHaveLength(2));
+  expect(vi.mocked(kolinApi.appendWorksheet).mock.calls).toEqual([['class-1',interactive.id],['class-1',worksheet.id]]);
+  expect(kolinApi.send).toHaveBeenCalledTimes(1);
+});
+
 it('opens the authorized full PDF preview and closes with Escape or overlay without adding', async () => {
   render(<Harness />);
   await createCard();

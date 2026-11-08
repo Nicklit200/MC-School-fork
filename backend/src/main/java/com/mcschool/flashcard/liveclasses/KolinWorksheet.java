@@ -17,6 +17,8 @@ public class KolinWorksheet {
     @Column(name="class_id", nullable=false) private UUID classId;
     @Column(name="teacher_id", nullable=false) private UUID teacherId;
     @Column(name="client_message_id", nullable=false) private UUID clientMessageId;
+    @Column(name="parent_id") private UUID parentId;
+    @Column(name="material_index") private Integer materialIndex;
     @Column(name="request_hash", nullable=false, length=64) private String requestHash;
     @Column(nullable=false, length=16) private String state;
     @Column(name="result_type", length=16) private String resultType;
@@ -35,6 +37,14 @@ public class KolinWorksheet {
     @Column(name="updated_at", nullable=false) private Instant updatedAt;
     @Column(name="attempt_id") private UUID attemptId;
     @Version private Long version;
+
+    static KolinWorksheet material(KolinWorksheet parent,int index) {
+        var row=new KolinWorksheet();
+        row.id=UUID.randomUUID(); row.clientMessageId=row.id;
+        row.classId=parent.classId; row.teacherId=parent.teacherId; row.requestHash=parent.requestHash;
+        row.parentId=parent.id; row.materialIndex=index; row.createdAt=Instant.now();
+        row.generating(); return row;
+    }
 
     void generating() { state="GENERATING"; attemptId=UUID.randomUUID(); updatedAt=Instant.now(); }
     void failed() { state="FAILED"; updatedAt=Instant.now(); }
