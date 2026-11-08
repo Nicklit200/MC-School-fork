@@ -11,11 +11,14 @@ public final class MathSolidSpec {
     }
     private static Map<String,Object> schema(boolean quiz){
         return obj("template",choice("solid"),"language",choice("ru","de"),"title",str(48),"prompt",str(160),
-            "parameters",arr(obj("name",str(),"label",str(32),"min",num(),"max",num(),"step",num(),"value",num())),
-            "vertices",arr(obj("id",str(),"x",str(),"y",str(),"z",str())),"faces",arr(arr(str())),
-            "segments",arr(obj("a",str(),"b",str(),"label",str(24))),
-            "measurements",quiz?Map.of("type","array","items",choice("volume","surfaceArea"),"maxItems",0):arr(choice("volume","surfaceArea")),
+            "parameters",boundedArray(obj("name",str(),"label",str(32),"min",num(),"max",num(),"step",num(),"value",num()),0,6),
+            "vertices",boundedArray(obj("id",str(),"x",str(),"y",str(),"z",str()),4,24),"faces",boundedArray(boundedArray(str(),3,8),4,24),
+            "segments",boundedArray(obj("a",str(),"b",str(),"label",str(24)),0,6),
+            "measurements",boundedArray(choice("volume","surfaceArea"),0,quiz?0:2),
             "answer",quiz?choice("volume","surfaceArea"):Map.of("type","null"),"yaw",num(),"pitch",num());
+    }
+    private static Map<String,Object> boundedArray(Map<String,Object> items,int minimum,int maximum) {
+        return Map.of("type","array","items",items,"minItems",minimum,"maxItems",maximum);
     }
     public static final String INSTRUCTIONS="""
         Для пирамид, призм и других выпуклых многогранников используй template=solid, а не куб и не плоский рисунок.

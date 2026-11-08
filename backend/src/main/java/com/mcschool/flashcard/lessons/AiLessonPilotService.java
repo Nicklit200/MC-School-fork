@@ -497,13 +497,17 @@ public class AiLessonPilotService {
     private String kolinAutomaticReply(String lessonContext, List<Map<String,String>> history, String question) {
         if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         var staticTasks=new java.util.ArrayList<Map<String,Object>>();
-        for(String kind:List.of("expression","equation","visual")) {
+        boolean repairVisualWorksheet=objectMapper.readTree(lessonContext).path("worksheetRequiresVisual").asBoolean(false);
+        for(String kind:repairVisualWorksheet?List.of("visual"):List.of("expression","equation","visual")) {
             var props=new LinkedHashMap<String,Object>();
             props.put("kind",Map.of("type","string","enum",List.of(kind)));
             boolean visual=kind.equals("visual");
-            props.put("instruction",visual?Map.of("type","string","enum",List.of(""))
-                :Map.of("type","string","minLength",1,"maxLength",160,"pattern","^[^0-9=<>+*/^\\\\$\\r\\n]+$"));
-            props.put("expression",visual?Map.of("type","string","enum",List.of("")):Map.of("type","string","minLength",1,"maxLength",500));
+            props.put("instruction",Map.of("type","string","enum",visual?List.of("")
+                :kind.equals("equation")?List.of("Решите уравнение","Löse die Gleichung","Solve the equation")
+                :List.of("Вычислите","Упростите","Berechne","Vereinfache","Calculate","Simplify")));
+            props.put("expression",visual?Map.of("type","string","enum",List.of(""))
+                :kind.equals("expression")?Map.of("type","string","minLength",1,"maxLength",500,"pattern","^[^=]+$")
+                :Map.of("type","string","minLength",1,"maxLength",500));
             props.put("variable",Map.of("type","string","enum",kind.equals("equation")?List.of("x","y","z","a","b","c","m","n"):List.of("")));
             props.put("restrictions",Map.of("type","array","items",Map.of("type","string","minLength",1,"maxLength",60),"maxItems",visual?0:4));
             props.put("visual",visual?KolinVisualSchema.schema():Map.of("type","null"));
@@ -534,8 +538,10 @@ public class AiLessonPilotService {
                     "minItems",count,"maxItems",count)),
                 "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false));
         }
-        boolean repair=objectMapper.readTree(lessonContext).has("invalidInteractiveDraft");
-        Map<String,Object> materialItems=repair?Map.of("$ref","#/$defs/interactive")
+        var contextNode=objectMapper.readTree(lessonContext);
+        String repairKind=contextNode.has("invalidInteractiveDraft")?"interactive":contextNode.has("invalidWorksheetDraft")?"worksheet":null;
+        boolean repair=repairKind!=null;
+        Map<String,Object> materialItems=repair?Map.of("$ref","#/$defs/"+repairKind)
             :Map.of("anyOf",List.of(Map.of("$ref","#/$defs/worksheet"),Map.of("$ref","#/$defs/interactive")));
         boolean mixed=!repair && com.mcschool.flashcard.liveclasses.KolinTaskService.requestsMixedMaterials(question);
         Map<String,Object> materialArray=repair?Map.of("type","array","items",materialItems,"minItems",1,"maxItems",1):mixed?Map.of("anyOf",List.of(
@@ -592,8 +598,13 @@ public class AiLessonPilotService {
                 произвольных тел объясняй текстом. Не подменяй конус пирамидой, цилиндр призмой или сферу многогранником.
                 Исключение: готовый template=cube поддерживает развёртку куба. Статичный PDF - только если его попросили.
                 Никаких SVG, HTML, URL или кода. Не утверждай, что прочёл PDF или записи на доске.
+                Перед ответом проверь тему каждой части. Для задачи на площадь/объём фигуры PDF использует
+                kind=visual с размерами в visual, а не kind=expression с готовой формулой для подстановки.
+                Например, на площадь куба дай рисунок куба с ребром, не упражнение 'Вычислите 6*3^2'.
+                Прошлый черновик и транскрипция не меняют явно указанную новую тему: после дробей можно попросить куб.
                 """;
-        if(repair) instructions+="Исправь только invalidInteractiveDraft. materials содержит один interactive-материал с тем же адресатом и числом задач. Остальные части исходного запроса уже подготовлены; не создавай их заново.";
+        if(repair) instructions+="Исправь только "+(repairKind.equals("interactive")?"invalidInteractiveDraft":"invalidWorksheetDraft")
+            +". materials содержит один "+repairKind+"-материал с тем же адресатом и числом задач. Остальные части исходного запроса уже подготовлены; не создавай их заново.";
         var input=new java.util.ArrayList<Map<String,Object>>();
         input.add(Map.of("role","system","content",instructions));
         input.add(Map.of("role","user","content","Контекст текущего урока и допустимые получатели:\n"+lessonContext));

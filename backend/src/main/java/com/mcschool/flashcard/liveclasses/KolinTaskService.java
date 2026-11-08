@@ -133,13 +133,40 @@ public class KolinTaskService {
                     prepared.add(new KolinWorksheetStore.PreparedMaterial(saved,target,recipientName,canonical.size(),null,null));
                     continue;
                 }
-                stage="DOCUMENT";
-                String document=mapper.writeValueAsString(document(content.tasks()));
                 long started=System.nanoTime();
-                stage="RENDER";
-                var rendered=renderer.renderPlain(document);
-                stage="ANSWERS";
-                var verifiedContent=withVerifiedAnswers(content,rendered.qa());
+                OwnerWorkbookPdfRenderService.PlainWorksheet rendered;
+                Content verifiedContent;
+                while(true) {
+                    try {
+                        stage="DOCUMENT";
+                        if(requiresVisualConditions(content) && content.tasks().stream().anyMatch(task->!"visual".equals(task.kind())))
+                            throw new IllegalArgumentException("Geometry conditions require checked visual tasks");
+                        String document=mapper.writeValueAsString(document(content.tasks()));
+                        stage="RENDER";
+                        rendered=renderer.renderPlain(document);
+                        stage="ANSWERS";
+                        verifiedContent=withVerifiedAnswers(content,rendered.qa());
+                        break;
+                    } catch(IllegalArgumentException invalid) {
+                        if(repairUsed) throw invalid;
+                        repairUsed=true;
+                        String recipient=content.studentId();
+                        context.remove("invalidInteractiveDraft");
+                        context.put("invalidWorksheetDraft",content);
+                        context.put("worksheetRequiresVisual",requiresVisualConditions(content)
+                            || content.tasks().stream().anyMatch(task->"visual".equals(task.kind())));
+                        context.put("worksheetValidationStage",stage);
+                        stage="MODEL_REPAIR";
+                        content=mapper.readValue(ai.kolinStructuredReply(mapper.writeValueAsString(context),List.of(),
+                            "Исправь invalidWorksheetDraft для запроса: "+question+"\n"
+                            +"Верни только worksheet-материал с прежним studentId и числом задач. Сохрани тему и сложность. Все условия геометрии задай через visual с числовыми размерами. В expression не должно быть знака равенства или готового ответа, equation содержит только линейное уравнение. instruction использует только разрешённую короткую команду, без условий, чисел, Unicode-дробей и формул. Проверь выражения, размеры и область определения. Ответы вычисляет сервер, ничего не добавляй на доску."),Content.class);
+                        stage="CONTENT";
+                        if(content==null || !"worksheet".equals(content.kind()) || !Objects.equals(recipient,content.studentId())
+                                || content.text()==null || content.text().length()>4000 || content.tasks()==null
+                                || content.tasks().size()!=requiredCount || content.materials()!=null && !content.materials().isEmpty())
+                            throw new IllegalArgumentException("Invalid repaired worksheet draft");
+                    }
+                }
                 String summary=content.text().isBlank()?"Подготовлено "+content.tasks().size()+" заданий.":content.text();
                 prepared.add(new KolinWorksheetStore.PreparedMaterial(new Content("worksheet",summary,content.studentId(),verifiedContent.tasks()),
                     target,recipientName,rendered.pageCount(),rendered.pdf(),rendered.previewPng()));
@@ -153,8 +180,8 @@ public class KolinTaskService {
                 material.studentId(),material.studentName(),saved.tasks().size(),material.pageCount(),material.pdf(),material.preview(),mapper.writeValueAsString(saved));
         } catch(Exception ex) {
             var log=org.slf4j.LoggerFactory.getLogger(getClass());
-            log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={}",
-                    room.getId(),reserved.id(),stage,ex.getClass().getSimpleName());
+            log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={} reason={}",
+                    room.getId(),reserved.id(),stage,ex.getClass().getSimpleName(),validationReason(ex));
             try { store.fail(teacher,room.getId(),reserved.id(),reserved.attemptId()); }
             catch(RuntimeException recovery) {
                 log.warn("Kolyn failure receipt unavailable: classId={} artifactId={} errorType={}",
@@ -182,7 +209,9 @@ public class KolinTaskService {
                 Task task=tasks.get(i);
                 if(task.visual()!=null) throw new IllegalArgumentException("Unexpected visual on algebra task");
                 requireText(task.instruction(),160); requireText(task.expression(),500);
-                if(task.instruction().codePoints().anyMatch(value -> Character.isDigit(value) || "=<>+*/^\\$".indexOf(value)>=0))
+                if(task.instruction().codePoints().anyMatch(value -> Character.isDigit(value)
+                        || Character.getType(value)==Character.OTHER_NUMBER || Character.getType(value)==Character.LETTER_NUMBER
+                        || "=<>+*/^\\$×÷−⁄".indexOf(value)>=0))
                     throw new IllegalArgumentException("Math belongs in the checked expression field");
                 if(task.restrictions()==null || task.restrictions().size()>4) throw new IllegalArgumentException("Invalid restrictions");
                 task.restrictions().forEach(value -> requireText(value,60));
@@ -248,6 +277,27 @@ public class KolinTaskService {
     }
     private static void requireText(String value,int maximum) {
         if(value==null || value.isBlank() || value.length()>maximum) throw new IllegalArgumentException("Invalid task text");
+    }
+    /** Only application-owned constant reasons may enter logs; never provider text or renderer output. */
+    static String validationReason(Exception error) {
+        return switch(Objects.toString(error.getMessage(),"")) {
+            case "Math belongs in the checked expression field" -> "MATH_IN_INSTRUCTION";
+            case "Expression contains a hidden answer" -> "EQUALITY_IN_EXPRESSION";
+            case "Invalid task text" -> "TASK_TEXT";
+            case "Unexpected visual on algebra task" -> "UNEXPECTED_VISUAL";
+            case "Invalid restrictions" -> "RESTRICTIONS";
+            case "Unsupported checked math task" -> "UNSUPPORTED_TASK";
+            case "Visual conditions must come exclusively from checked parameters" -> "MISSING_VISUAL";
+            case "Unexpected worksheet task count" -> "TASK_COUNT";
+            case "Geometry conditions require checked visual tasks" -> "GEOMETRY_CONDITIONS";
+            default -> "UNCLASSIFIED";
+        };
+    }
+    /** A material advertised as a geometry problem must actually carry checked geometric conditions. */
+    static boolean requiresVisualConditions(Content content) {
+        String description=Objects.toString(content.text(),"").toLowerCase(Locale.ROOT);
+        return description.matches("(?su).*(?:площад|объ[её]м|периметр|угл|угол|surface|area|volume|perimeter|fläche|umfang|volumen|winkel).*")
+            && description.matches("(?su).*(?:куб|прямоуголь|треуголь|многоуголь|пирамид|призм|окружност|круг|цилиндр|конус|сфер|геометр|cube|cuboid|triangle|rectangle|polygon|pyramid|prism|circle|cylinder|cone|sphere|würfel|quader|dreieck|rechteck|kreis|kegel|kugel|geometr).*");
     }
     static Content withVerifiedAnswers(Content content,Map<String,Object> qa) {
         if(!(qa.get("results") instanceof List<?> results) || results.size()!=content.tasks().size())

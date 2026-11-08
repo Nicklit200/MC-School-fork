@@ -167,6 +167,25 @@ class KolinTaskServiceTest {
         }
         assertThat(count).isEqualTo(5);
     }
+    @Test @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="kolin.contextFixtureDir",matches=".+")
+    void validatesCapturedCubeRequestsAfterAnUnrelatedFractionsDraft()throws Exception {
+        var directory=java.nio.file.Path.of(System.getProperty("kolin.contextFixtureDir"));
+        for(int index=1;index<=2;index++) {
+            var result=mapper.readTree(java.nio.file.Files.readString(directory.resolve("context-repro-"+index+".json")));
+            assertThat(result.path("materials").size()).isEqualTo(2);
+            for(var value:result.path("materials")) {
+                var part=mapper.treeToValue(value,KolinTaskService.Content.class);
+                if("interactive".equals(part.kind())) part.tasks().forEach(task->InteractiveTemplateSpec.validate(task.visual()));
+                else {
+                    assertThat(part.tasks()).hasSize(5).allSatisfy(task->{
+                        assertThat(task.kind()).isEqualTo("visual");
+                        assertThat(task.visual()).containsEntry("figure","cube").containsEntry("objective","surface");
+                    });
+                    java.nio.file.Files.writeString(directory.resolve("context-repro-"+index+"-document.json"),mapper.writeValueAsString(KolinTaskService.document(part.tasks())));
+                }
+            }
+        }
+    }
     @Test void fiveShortExamplesShareOnePlainPageAndSixUseTwoPages() {
         assertThat((List<?>)KolinTaskService.document(Collections.nCopies(5,task("1+2","3"))).get("workbookPages")).hasSize(1);
         assertThat((List<?>)KolinTaskService.document(Collections.nCopies(6,task("1+2","3"))).get("workbookPages")).hasSize(2);
@@ -179,7 +198,7 @@ class KolinTaskServiceTest {
         assertThatThrownBy(()->KolinTaskService.withVerifiedAnswers(content,Map.of())).isInstanceOf(IllegalArgumentException.class);
     }
     @Test void unverifiedMathCannotHideInAnInstructionAndEquationsRequireCompleteLinearQa() throws Exception {
-        for (String instruction : List.of("Вычисли 2+2", "Вычисли\n2+2", "Вычисли\n\\frac{1}{2}"))
+        for (String instruction : List.of("Вычисли 2+2", "Вычисли\n2+2", "Вычисли\n\\frac{1}{2}","Ребро ³⁄₂ см","Ребро ٣ см","Ребро Ⅳ см"))
             assertThatThrownBy(()->KolinTaskService.document(List.of(new KolinTaskService.Task("expression",instruction,"1+1","2","",List.of()))))
                     .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->KolinTaskService.document(List.of(task("1+1=2","2")))).isInstanceOf(IllegalArgumentException.class);
@@ -191,6 +210,55 @@ class KolinTaskServiceTest {
         when(store.begin(eq(host),eq(room.getId()),eq(clientId),anyString())).thenReturn(new KolinWorksheetStore.Reservation(artifact,attempt,cached));
         assertThat(send("Дай пару заданий")).isSameAs(cached);
         verifyNoInteractions(ai,roster,renderer);
+    }
+    @Test void automaticallyRepairsAnInvalidPdfPartWithoutRegeneratingTheValidInteractive()throws Exception {
+        reserve();
+        var interactive=new KolinTaskService.Content("interactive","Graph",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
+        var badTask=new KolinTaskService.Task("expression","Вычислите","6*(1.5)^2",null,"",List.of());
+        var invalid=new KolinTaskService.Content("worksheet","Площадь поверхности куба",pupil.getId().toString(),Collections.nCopies(5,badTask));
+        var cube=Map.<String,Object>of("type","geometry","language","ru","figure","cube","objective","surface","vertices",List.of(),"parameters",List.of(3),"index",0);
+        var repaired=new KolinTaskService.Content("worksheet","Cube",pupil.getId().toString(),Collections.nCopies(5,
+            new KolinTaskService.Task("visual","","",null,"",List.of(),cube)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("materials","Both",null,List.of(),List.of(interactive,invalid))),mapper.writeValueAsString(repaired));
+        when(renderer.renderPlain(anyString())).thenReturn(new OwnerWorkbookPdfRenderService.PlainWorksheet(new byte[]{1},new byte[]{2},3,
+            Map.of("results",Collections.nCopies(5,Map.of("passed",true,"answer","54")))));
+        send("Одну интерактивную страницу, другую с парой заданий на площадь куба");
+        verify(ai,times(2)).kolinStructuredReply(anyString(),anyList(),anyString());
+        verify(ai).kolinStructuredReply(contains("invalidWorksheetDraft"),eq(List.of()),contains("Исправь invalidWorksheetDraft"));
+        verify(ai).kolinStructuredReply(contains("\"worksheetRequiresVisual\":true"),eq(List.of()),contains("Исправь invalidWorksheetDraft"));
+        verify(renderer,times(1)).renderPlain(anyString());
+        verify(store).completeMaterials(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("Both"),eq(metadata),
+            argThat(parts->parts.get(0).content().tasks().get(0).visual().equals(InteractiveTemplateSpecTest.graph())
+                &&parts.get(1).content().tasks().get(0).answer().equals("54")));
+        verify(store,never()).append(any(),any(),any());
+    }
+    @Test void pdfRepairHasOneAttemptAndCannotChangeTheRecipient()throws Exception {
+        reserve();
+        var invalid=new KolinTaskService.Content("worksheet","Bad",pupil.getId().toString(),Collections.nCopies(5,task("x=2",null)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(invalid));
+        assertThatThrownBy(()->send("Дай пару заданий")).isInstanceOf(KolinRequestException.class);
+        verify(ai,times(2)).kolinStructuredReply(anyString(),anyList(),anyString());verifyNoInteractions(renderer);
+        clearInvocations(ai,store);
+        var wrongTarget=new KolinTaskService.Content("worksheet","Bad target",UUID.randomUUID().toString(),Collections.nCopies(5,task("1+2",null)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(invalid),mapper.writeValueAsString(wrongTarget));
+        assertThatThrownBy(()->send("Дай пару заданий")).isInstanceOf(KolinRequestException.class);
+        verify(ai,times(2)).kolinStructuredReply(anyString(),anyList(),anyString());verifyNoInteractions(renderer);
+        verify(store).fail(host,room.getId(),artifact,attempt);
+    }
+    @Test void mixedMaterialsShareOneRepairBudget()throws Exception {
+        reserve();
+        var broken=new KolinTaskService.Content("interactive","Graph",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),Map.of("template","graph","language","ru"))));
+        var fixed=new KolinTaskService.Content("interactive","Graph",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
+        var pdf=new KolinTaskService.Content("worksheet","Bad",pupil.getId().toString(),Collections.nCopies(5,task("x=2",null)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("materials","Both",null,List.of(),List.of(broken,pdf))),mapper.writeValueAsString(fixed));
+        assertThatThrownBy(()->send("Одну интерактивную страницу и PDF с парой заданий")).isInstanceOf(KolinRequestException.class);
+        verify(ai,times(2)).kolinStructuredReply(anyString(),anyList(),anyString());verifyNoInteractions(renderer);
+        verify(store,never()).completeMaterials(any(),any(),any(),any(),anyString(),any(),anyList());
     }
     @Test void clarificationIsSavedAndNeverGeneratesOrAppendsAnything() throws Exception {
         reserve();

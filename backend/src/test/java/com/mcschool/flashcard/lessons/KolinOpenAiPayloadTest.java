@@ -72,6 +72,38 @@ class KolinOpenAiPayloadTest {
             }
         }
     }
+    @Test void repairSchemaContainsOnlyTheInvalidMaterialEvenForAMixedOriginalRequest()throws Exception {
+        when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",
+            "{\"result\":{\"text\":\"Исправлено\",\"materials\":[]}}")));
+        for(String kind:List.of("worksheet","interactive")) {
+            clearInvocations(client);
+            String field=kind.equals("worksheet")?"invalidWorksheetDraft":"invalidInteractiveDraft";
+            ai.kolinStructuredReply(mapper.writeValueAsString(Map.of(field,Map.of("kind",kind),"requestedPdfTaskCount",5,"requestedInteractiveTaskCount",1)),
+                List.of(),"Исправь черновик для запроса: одну интерактивную страницу и PDF");
+            var packet=mapper.readTree(body(captured()));
+            var schema=packet.path("text").path("format").path("schema");
+            var array=schema.path("properties").path("result").path("properties").path("materials");
+            assertThat(array.path("minItems").asInt()).isEqualTo(1);
+            assertThat(array.path("maxItems").asInt()).isEqualTo(1);
+            assertThat(array.path("items").path("$ref").asString()).isEqualTo("#/$defs/"+kind);
+            var expression=schema.path("$defs").path("worksheet").path("properties").path("tasks").path("items").path("anyOf").get(0).path("properties");
+            assertThat(expression.path("instruction").path("enum").toString()).contains("Вычислите").doesNotContain("³");
+            assertThat(expression.path("expression").path("pattern").asString()).isEqualTo("^[^=]+$");
+        }
+    }
+    @Test void geometryRepairCannotFallBackToUnrelatedAlgebra()throws Exception {
+        when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",
+            "{\"result\":{\"text\":\"Исправлено\",\"materials\":[]}}")));
+        ai.kolinStructuredReply("{\"invalidWorksheetDraft\":{},\"worksheetRequiresVisual\":true,\"requestedPdfTaskCount\":5,\"roster\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"QA Pupil\"}]}",
+            List.of(),"Исправь invalidWorksheetDraft для запроса: площадь куба");
+        String serialized=body(captured());var packet=mapper.readTree(serialized);
+        var variants=packet.path("text").path("format").path("schema").path("$defs").path("worksheet")
+            .path("properties").path("tasks").path("items").path("anyOf");
+        assertThat(variants.size()).isEqualTo(1);
+        assertThat(variants.get(0).path("properties").path("kind").path("enum").get(0).asString()).isEqualTo("visual");
+        String dir=System.getProperty("kolin.visualFixtureDir");
+        if(dir!=null) java.nio.file.Files.writeString(java.nio.file.Path.of(dir,"provider-repair-geometry.json"),serialized);
+    }
 
     @Test void confirmedWorksheetsUseOneStrictStructuredCallAndReuseTheExistingTransport() throws Exception {
         when(response.body()).thenReturn(mapper.writeValueAsString(Map.of("status","completed","output_text",

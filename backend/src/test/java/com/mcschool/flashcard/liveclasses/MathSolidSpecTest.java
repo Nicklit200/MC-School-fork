@@ -6,6 +6,14 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 import com.mcschool.flashcard.common.ConflictException;
 class MathSolidSpecTest {
+    @Test void providerCannotGenerateTwelveAuxiliarySegmentsForACube() {
+        var schema=new ObjectMapper().valueToTree(MathSolidSpec.schema());
+        for(var branch:schema.path("anyOf")) {
+            assertThat(branch.path("properties").path("segments").path("maxItems").asInt()).isEqualTo(6);
+            assertThat(branch.path("properties").path("vertices").path("maxItems").asInt()).isEqualTo(24);
+            assertThat(branch.path("properties").path("faces").path("items").path("maxItems").asInt()).isEqualTo(8);
+        }
+    }
     @SuppressWarnings("unchecked") private List<Map<String,Object>> fixtures()throws Exception{return new ObjectMapper().readValue(Files.readString(Path.of("../frontend/e2e/math-solids.json")),List.class);}
     @Test void acceptsTheSameFourMeshesAsTheBrowser()throws Exception{for(var s:fixtures())assertThatCode(()->InteractiveTemplateSpec.validate(s)).doesNotThrowAnyException();}
     @Test @SuppressWarnings("unchecked") void allowsOnlyParameterValuesAndCameraUpdates()throws Exception{
