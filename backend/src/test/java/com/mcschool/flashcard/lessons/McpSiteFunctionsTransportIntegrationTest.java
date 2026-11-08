@@ -122,6 +122,22 @@ class McpSiteFunctionsTransportIntegrationTest {
     }
 
     @Test
+    void teacherHandbookWorksThroughHttpWithoutDisclosingStudentRecords() throws Exception {
+        for(String actor:List.of("admin","teacher-a","teacher-b")) {
+            var guide=value(call(actor,"get_teacher_guide",Map.of("topicId","personal-materials")));
+            assertThat(guide.path("found").asBoolean()).isTrue();
+            assertThat(guide.path("articles").get(0).path("id").asText()).isEqualTo("personal-materials");
+            assertThat(guide.toString()).doesNotContain(studentA.getId().toString(),studentB.getId().toString(),"Student A","Student B");
+        }
+        tokens.put("student-a",studentA.getId());
+        http.perform(post("/api/v1/mcp").header("Authorization","Bearer student-a")
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("jsonrpc","2.0","id",1,
+                "method","tools/call","params",Map.of("name","get_teacher_guide","arguments",Map.of())))))
+            .andExpect(status().isUnauthorized());
+        rejected(call("teacher-a","get_teacher_guide",Map.of("query","x".repeat(301))),400);
+    }
+
+    @Test
     void refreshedCatalogIncludesSchedulingExistingToolsAndBothAdminBridgeTools() throws Exception {
         JsonNode tools = request("admin", "tools/list", Map.of()).path("tools");
         List<String> names = tools.valueStream().map(item -> item.path("name").asText()).toList();
@@ -134,7 +150,7 @@ class McpSiteFunctionsTransportIntegrationTest {
         assertThat(execute.path("inputSchema").path("properties").path("file").path("required").toString())
                 .contains("download_url", "file_id");
         JsonNode state = value(call("admin", "mindcrafti_status", Map.of()));
-        assertThat(state.path("version").asText()).isEqualTo("1.31.1");
+        assertThat(state.path("version").asText()).isEqualTo("1.32.0");
         assertThat(state.path("availableToolCount").asInt()).isEqualTo(names.size());
         JsonNode catalog = value(call("admin", "list_site_functions", Map.of("limit", 100)));
         assertThat(catalog.path("total").asInt()).isGreaterThan(150);

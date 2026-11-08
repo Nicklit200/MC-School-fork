@@ -54,7 +54,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.31.1";
+    private static final String SERVER_VERSION = "1.32.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
     private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
     private static final String FILE_TRANSFER_MIME = "text/html;profile=mcp-app";
@@ -140,6 +140,10 @@ public class MindcraftiMcpController {
     private SkillMasteryMcpService skillMasteryMcpService;
     private McpLessonScheduleService lessonScheduleService;
     private McpSiteFunctionsService siteFunctionsService;
+    private McpTeacherGuideService teacherGuideService;
+
+    @Autowired
+    public void setTeacherGuideService(McpTeacherGuideService service) { this.teacherGuideService=service; }
     private PersonalLessonWorkbookService personalLessonWorkbookService;
     private PersonalLessonAnswersService personalLessonAnswersService;
     private McpAccessService personalWorkbookAccess;
@@ -281,7 +285,7 @@ public class MindcraftiMcpController {
         result.put("instructions", authenticated
                 ? "For the curriculum skills board, always read get_skill_board fresh before answering from it or using edit_skill_board. Edit only explicitly requested items, using the exact returned revision. Preserve unrelated content and read back after saving. A stale revision means reconcile, not blind retry. This catalog does not contain pupil mastery. Mindcrafti school tools include lessons, structured monthly plans for students and groups, school prompts, the current school Brand Guide, the current approved 3-slide Mindcrafti Stories PPTX via get_story_template_info and get_story_template_chunk, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. When preparing the next lesson for a student or group, use get_month_plan for the current month when a plan exists, then combine it with recent lesson/homework evidence and the current school prompt. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with the most specific lessonType: group or individual for lesson logic, workbook for a workbook/worksheet, homework for homework, diagnostic for a diagnostic lesson, or error_correction for work on mistakes, and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. For ANY Mindcrafti-branded document or visual material (PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document, parent report, internal document or other branded artifact), first call get_brand_guide and follow the current Brand Guide for visual design. Do not reuse a Brand Guide from chat history. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
-        if (authenticated) result.put("instructions", result.get("instructions") + schedulingInstructions());
+        if (authenticated) result.put("instructions", result.get("instructions") + schedulingInstructions() + McpTeacherGuideService.INSTRUCTIONS);
         return result;
     }
 
@@ -591,6 +595,7 @@ public class MindcraftiMcpController {
             if (lessonScheduleService != null) tools.addAll(McpLessonScheduleService.definitions());
             if (siteFunctionsService != null) tools.addAll(McpSiteFunctionsService.definitions());
         }
+        if (fileTransferActorAllowed(auth) && teacherGuideService != null) tools.add(McpTeacherGuideService.definition());
         if (fileTransferActorAllowed(auth)) tools.addAll(fileTransferTools());
         if (uiDiagnosticActorAllowed(auth)) tools.addAll(uiDiagnosticTools());
         tools.addAll(SkillBoardMcpService.definitions());
@@ -874,6 +879,13 @@ public class MindcraftiMcpController {
             } catch (Exception failure) {
                 return siteToolFailure(failure);
             }
+        }
+        if (McpTeacherGuideService.TOOL.equals(name)) {
+            try {
+                if(!fileTransferActorAllowed(auth))throw new org.springframework.security.access.AccessDeniedException("School OAuth teacher or administrator sign-in is required");
+                if(teacherGuideService==null)throw new IllegalStateException("Teacher guide is unavailable");
+                return toolResult(teacherGuideService.read(auth.user(),auth.apiKey(),arguments));
+            }catch(Exception failure){return siteToolFailure(failure);}
         }
         if (McpLessonScheduleService.handles(name) || McpSiteFunctionsService.handles(name)) {
             try {

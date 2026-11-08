@@ -9,6 +9,7 @@ on:
       - 'backend/src/main/java/com/mcschool/flashcard/auth/Mcp*'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/*Mcp*'
       - 'backend/src/main/resources/db/migration/V91__*'
+      - 'backend/src/main/resources/mcp/teacher-guide.json'
       - '.github/workflows/mch3-site-functions.yml'
   workflow_dispatch:
 
