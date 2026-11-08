@@ -1,9 +1,9 @@
-# Confirmed Kolin worksheets
+# Confirmed Kolyn worksheets
 
 The teacher's private chat can return a text answer or a saved PDF draft. A request
 such as "дай пару заданий" means five exercises; an explicit supported count wins.
 Follow-up edits retain the last draft's count unless the teacher requests another.
-Kolin uses the current lesson's saved final transcript and its last generated draft.
+Kolyn uses the current lesson's saved final transcript and its last generated draft.
 It does not read the pupil's source PDF or handwriting in this version.
 
 The UI shows a cropped, clickable preview and one action naming the exact recipient.
@@ -20,7 +20,7 @@ one A4 page; its remaining area is blank for solving. A cached PNG crops the emp
 bottom area so the chat preview remains readable. Opening or confirming reuses the
 saved bytes and never calls the model or renderer again.
 
-One structured call uses the existing Kolin model, credential and HTTP transport.
+One structured call uses the existing Kolyn model, credential and HTTP transport.
 The model supplies conditions only. The existing bounded symbolic engine computes
 private reference answers from each exact visible expression or affine equation;
 model-suggested answers are never trusted. Every task must pass that checker and the
@@ -70,7 +70,7 @@ and the workbook-updated event refresh the pupil's live document.
 
 ## Checks before release
 
-Run focused Kolin, append, document authorization and renderer tests; real PostgreSQL
+Run focused Kolyn, append, document authorization and renderer tests; real PostgreSQL
 tests must cover row locks, rollback, legacy annotation promotion and repeated confirmation.
 Run the frontend suite plus desktop/mobile browser cases. Render the plain fixtures
 with the production WeasyPrint runtime and visually review the PDF and cropped PNG.

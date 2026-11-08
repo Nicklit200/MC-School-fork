@@ -54,7 +54,6 @@ public class KolinTaskService {
             if(previousContent!=null) context.put("lastGeneratedWorksheet",previousContent);
             boolean interactive=interactiveRequest(question,request.context(),previousContent);
             int requiredCount=requestedCount(question,previousContent==null?0:previousContent.tasks().size(),interactive?1:5);
-            if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
             context.put("requestedTaskCount",requiredCount);
             if(request.context()!=null && request.context().studentId()!=null)
                 context.put("selectedStudentId",request.context().studentId());
@@ -65,16 +64,19 @@ public class KolinTaskService {
                     : ai.kolinStructuredReply(mapper.writeValueAsString(context),history,question),Content.class);
             stage="CONTENT";
             if(content==null || content.kind()==null || content.text()==null || content.text().length()>4000
-                    || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolin content");
+                    || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolyn content");
             if("text".equals(content.kind())) {
-                if(!content.tasks().isEmpty() || content.studentId()!=null || content.text().isBlank())
-                    throw new IllegalArgumentException("Invalid Kolin text reply");
+                if(!content.tasks().isEmpty() || content.text().isBlank())
+                    throw new IllegalArgumentException("Invalid Kolyn text reply");
+                // Text has no recipient or artifact. Discard model recipient metadata here.
                 stage="STORE";
                 return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",content.text(),transcript,
                         null,null,0,0,null,null);
             }
             if(!"worksheet".equals(content.kind()) || content.tasks().isEmpty() || content.tasks().size()>20)
-                throw new IllegalArgumentException("Invalid Kolin worksheet");
+                throw new IllegalArgumentException("Invalid Kolyn worksheet");
+            // A question may mention many tasks without asking to generate any.
+            if(interactive && (requiredCount<1 || requiredCount>5)) throw new IllegalArgumentException("At most five interactive templates");
             if(content.tasks().size()!=requiredCount)
                 throw new IllegalArgumentException("Unexpected worksheet task count");
             stage="RECIPIENT";
@@ -106,16 +108,16 @@ public class KolinTaskService {
             stage="STORE";
             var result=store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"worksheet",summary,transcript,
                     target,recipientName,content.tasks().size(),rendered.pageCount(),rendered.pdf(),rendered.previewPng(),mapper.writeValueAsString(verifiedContent));
-            org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolin worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
+            org.slf4j.LoggerFactory.getLogger(getClass()).info("Kolyn worksheet ready: classId={} artifactId={} tasks={} pages={} renderMs={}",
                     room.getId(),reserved.id(),content.tasks().size(),rendered.pageCount(),(System.nanoTime()-started)/1_000_000);
             return result;
         } catch(Exception ex) {
             var log=org.slf4j.LoggerFactory.getLogger(getClass());
-            log.warn("Kolin generation failed: classId={} artifactId={} stage={} errorType={}",
+            log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={}",
                     room.getId(),reserved.id(),stage,ex.getClass().getSimpleName());
             try { store.fail(teacher,room.getId(),reserved.id(),reserved.attemptId()); }
             catch(RuntimeException recovery) {
-                log.warn("Kolin failure receipt unavailable: classId={} artifactId={} errorType={}",
+                log.warn("Kolyn failure receipt unavailable: classId={} artifactId={} errorType={}",
                         room.getId(),reserved.id(),recovery.getClass().getSimpleName());
             }
             if(ex instanceof KolinRequestException known) throw known;

@@ -11,6 +11,8 @@ import com.mcschool.flashcard.users.*;
 import java.time.Instant;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import tools.jackson.databind.json.JsonMapper;
 
 class KolinTaskServiceTest {
@@ -92,6 +94,40 @@ class KolinTaskServiceTest {
         verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq("По какой теме?"),eq(metadata),isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
         verifyNoInteractions(renderer);
         verify(store,never()).append(any(),any(),any());
+    }
+    @Test void adviceAfterADraftRemainsTextEvenWithInteractiveFormatSelected() throws Exception {
+        reserve();
+        when(store.previousDraft(host,room.getId())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("worksheet","Уравнения",pupil.getId().toString(),List.of(task("2*x+1=5","2")))));
+        String explanation="Это базовое уравнение. Начните с объяснения одинаковых действий с обеими частями.";
+        when(ai.kolinInteractiveReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("text",explanation,pupil.getId().toString(),List.of())));
+        service.reply(host,room,new KolinChatService.Request("Как объяснить второе задание?",List.of(),
+            new KolinChatService.Context("student",pupil.getId(),0,"interactive"),clientId),
+            new LinkedHashMap<>(),List.of(),"Как объяснить второе задание?",metadata);
+        verify(ai).kolinInteractiveReply(contains("lastGeneratedWorksheet"),anyList(),anyString());
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq(explanation),eq(metadata),
+            isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
+        verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
+    }
+    @ParameterizedTest
+    @CsvSource({"pdf,Что ты умеешь?", "interactive,Что ты умеешь?",
+        "pdf,Как помочь ученице разобраться в дробях?", "interactive,Как объяснить эти 6 заданий?"})
+    void ordinaryQuestionsProduceTextWithoutRecipientOrWorksheetInEitherFormat(String format,String question) throws Exception {
+        reserve();
+        String answer="Я Kolyn. Помогу объяснить тему, разобрать решение и подобрать сложность.";
+        // Providers can retain a selected recipient on text replies. It must not be parsed or applied.
+        String response=mapper.writeValueAsString(new KolinTaskService.Content("text",answer,"irrelevant recipient",List.of()));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(response);
+        when(ai.kolinInteractiveReply(anyString(),anyList(),anyString())).thenReturn(response);
+        service.reply(host,room,new KolinChatService.Request(question,List.of(),
+            new KolinChatService.Context("student",pupil.getId(),0,format),clientId),
+            new LinkedHashMap<>(),List.of(),question,metadata);
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq(answer),eq(metadata),
+            isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
+        verifyNoInteractions(renderer);
+        verify(store,never()).append(any(),any(),any());
+        verify(store,never()).fail(any(),any(),any(),any());
     }
     @Test void createsOnlyAPrivateArtifactEvenWhenTheMessageSaysAddIt() throws Exception {
         reserve();

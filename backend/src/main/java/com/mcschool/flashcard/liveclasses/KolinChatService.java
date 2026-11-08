@@ -72,7 +72,7 @@ public class KolinChatService {
         String question = text(request.text());
         List<Map<String, String>> history = history(request.history());
         if (!ai.isConfigured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Kolin пока не настроен. Обратитесь к администратору.");
+                "Kolyn пока не настроен. Обратитесь к администратору.");
         if (!pendingTeachers.add(teacher.id())) throw KolinRequestException.busy();
         try {
             var transcript = transcript(room);
@@ -83,7 +83,7 @@ public class KolinChatService {
         } catch (KolinRequestException | com.mcschool.flashcard.common.ConflictException ex) {
             throw ex;
         } catch (Exception ex) {
-            LoggerFactory.getLogger(getClass()).warn("Kolin request failed: classId={} errorType={}", classId, ex.getClass().getSimpleName());
+            LoggerFactory.getLogger(getClass()).warn("Kolyn request failed: classId={} errorType={}", classId, ex.getClass().getSimpleName());
             throw KolinRequestException.failed();
         } finally {
             pendingTeachers.remove(teacher.id());
@@ -94,7 +94,7 @@ public class KolinChatService {
         try {
             return transcripts.read(room);
         } catch (RuntimeException ex) {
-            LoggerFactory.getLogger(getClass()).warn("Kolin transcript unavailable: classId={} errorType={}",
+            LoggerFactory.getLogger(getClass()).warn("Kolyn transcript unavailable: classId={} errorType={}",
                     room.getId(), ex.getClass().getSimpleName());
             return KolinTranscriptContextService.unavailable(room);
         }
@@ -150,6 +150,6 @@ public class KolinChatService {
         return value.strip();
     }
     private static ResponseStatusException badRequest() {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректный запрос Kolin.");
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректный запрос Kolyn.");
     }
 }

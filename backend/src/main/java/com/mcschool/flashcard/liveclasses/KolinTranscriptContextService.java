@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
-/** A bounded, current-room snapshot. Called only after Kolin has checked the owning teacher. */
+/** A bounded, current-room snapshot. Called only after Kolyn has checked the owning teacher. */
 @Service
 public class KolinTranscriptContextService {
     static final int MAX_SEGMENTS = 120;

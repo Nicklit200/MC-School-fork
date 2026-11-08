@@ -1,4 +1,4 @@
-/* Kolin uses the same space-taking panel and width variable as Answers. */
+/* Kolyn uses the same space-taking panel and width variable as Answers. */
 .online-class-room--original-v3 .online-class-room__stage > .kolin-panel { order:2; border-right:0; border-left:1px solid #3b4348; }
 .answers-panel-resizer--right { order:1; }
 /* Keep the existing floating cameras over the board while the right panel is open. */

@@ -52,7 +52,9 @@ class KolinOpenAiPayloadTest {
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(6500);
         assertThat(json.path("text").path("format").path("type").asString()).isEqualTo("json_schema");
         assertThat(json.path("text").path("format").path("strict").asBoolean()).isTrue();
-        assertThat(json.path("input").get(0).path("content").asString()).contains("ровно 5","исключительно по кнопке","только линейное");
+        assertThat(json.path("input").get(0).path("content").asString()).contains("ровно 5","исключительно по кнопке","только линейное",
+            "Это такие лёгкие в абитуре?","По умолчанию отвечай kind=text","НЕ превращает каждый вопрос в задание",
+            "Ты Kolyn", "Что ты умеешь?", "без tasks и без выбора получателя");
         assertThat(json.path("text").path("format").path("schema").path("properties").path("tasks").path("items")
                 .path("properties").path("visual").path("anyOf").size()).isEqualTo(4);
         assertThat(json.path("input").get(0).path("content").asString()).contains("fractionCircle","Geometry:").doesNotContain("Геометрию с рисунками, текстовые задачи");
@@ -71,7 +73,8 @@ class KolinOpenAiPayloadTest {
         assertThat(json.path("store").asBoolean()).isFalse();
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(2500);
         String system=json.path("input").get(0).path("content").asString();
-        assertThat(system).contains("Интерактивный режим","requestedTaskCount","исключительно по кнопке")
+        assertThat(system).contains("Интерактивный режим","requestedTaskCount","исключительно по кнопке",
+            "По умолчанию отвечай kind=text","Как объяснить Виталине?", "Ты Kolyn", "Что ты умеешь?")
             .doesNotContain("Режим подтверждаемого PDF","ровно 5 самостоятельных");
         var templates=json.path("text").path("format").path("schema").path("properties").path("tasks").path("items")
             .path("properties").path("visual").path("anyOf").get(1).path("anyOf");
@@ -107,7 +110,7 @@ class KolinOpenAiPayloadTest {
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(500);
         assertThat(json.path("store").asBoolean()).isFalse();
         assertThat(json.path("input").size()).isEqualTo(11);
-        assertThat(json.path("input").get(0).path("content").asString()).contains("Kolin","попроси написать условие","недоступны");
+        assertThat(json.path("input").get(0).path("content").asString()).contains("Kolyn","попроси написать условие","недоступны");
         assertThat(json.path("input").get(1).path("content").asString()).contains("Fractions","Виталина");
         assertThat(json.path("input").get(2).path("content").asString()).isEqualTo("message-0");
         assertThat(json.path("input").get(10).path("content").asString()).isEqualTo("Сделай второе сложнее");
@@ -119,20 +122,20 @@ class KolinOpenAiPayloadTest {
     @Test void doesNotReturnTruncatedMathWhenOutputBudgetRunsOut() {
         when(response.body()).thenReturn("{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"output_text\":\"1/2 +\"}");
         assertThatThrownBy(()->ai.kolinReply("{}",List.of(),"Дай задания"))
-                .isInstanceOf(IllegalStateException.class).hasMessage("Kolin request failed");
+                .isInstanceOf(IllegalStateException.class).hasMessage("Kolyn request failed");
     }
 
     @Test void refusalOrEmptyReplyIsARecoverableErrorInsteadOfAnEmptyBubble() {
         when(response.body()).thenReturn("{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"No\"}]}]}");
         assertThatThrownBy(()->ai.kolinReply("{}",List.of(),"Вопрос"))
-                .isInstanceOf(IllegalStateException.class).hasMessage("Kolin request failed");
+                .isInstanceOf(IllegalStateException.class).hasMessage("Kolyn request failed");
     }
 
     @Test void upstreamErrorsNeverAppearInKolinExceptionMessage() {
         when(response.statusCode()).thenReturn(429);
         when(response.body()).thenReturn("{\"error\":{\"message\":\"TEST_SERVER_ONLY_KEY provider internal detail\"}}");
         assertThatThrownBy(()->ai.kolinReply("{}",List.of(),"Вопрос"))
-                .isInstanceOf(IllegalStateException.class).hasMessage("Kolin request failed");
+                .isInstanceOf(IllegalStateException.class).hasMessage("Kolyn request failed");
     }
 
     @Test void sharedTransportPreservesExistingPilotPayloadAndItsModel() throws Exception {

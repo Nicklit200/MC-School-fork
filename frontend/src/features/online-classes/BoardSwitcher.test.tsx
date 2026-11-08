@@ -20,12 +20,12 @@ function renderSwitcher(isHost: boolean, activeId = 'board-1', onChange = vi.fn(
 
 describe('BoardSwitcher', () => {
   it('puts the optional teacher action immediately after All and never renders it to a pupil', () => {
-    const props = { currentUserId: 'me', students, activeId: 'board-1', onChange: vi.fn(), teacherAction: <button>Kolin</button> };
+    const props = { currentUserId: 'me', students, activeId: 'board-1', onChange: vi.fn(), teacherAction: <button>Kolyn</button> };
     const view = render(<I18nProvider><BoardSwitcher {...props} isHost /></I18nProvider>);
     const all = screen.getByRole('button', { name: 'Все ученики (2×2)' });
-    expect(all.nextElementSibling).toBe(screen.getByRole('button', { name: 'Kolin' }));
+    expect(all.nextElementSibling).toBe(screen.getByRole('button', { name: 'Kolyn' }));
     view.rerender(<I18nProvider><BoardSwitcher {...props} isHost={false} /></I18nProvider>);
-    expect(screen.queryByRole('button', { name: 'Kolin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Kolyn' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(2);
   });
   it('lets a student choose between the shared board and only their own', async () => {

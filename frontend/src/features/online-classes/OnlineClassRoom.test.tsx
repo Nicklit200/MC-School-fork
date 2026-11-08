@@ -907,7 +907,7 @@ describe('OnlineClassRoom', () => {
     mount(true);
     await screen.findByRole('button', { name: 'Доска ученика: Boris' });
     const switcher = screen.getByRole('group', { name: 'Доска' });
-    expect(within(switcher).getAllByRole('button').map(button => button.textContent)).toEqual(['Общая группа', 'Alice', 'Boris', 'Все', 'Kolin']);
+    expect(within(switcher).getAllByRole('button').map(button => button.textContent)).toEqual(['Общая группа', 'Alice', 'Boris', 'Все', 'Kolyn']);
     const controls = switcher.parentElement!;
     expect(controls.firstElementChild).toBe(switcher);
     expect(within(controls).getByRole('button', { name: /Видео/ })).toBe(controls.lastElementChild);

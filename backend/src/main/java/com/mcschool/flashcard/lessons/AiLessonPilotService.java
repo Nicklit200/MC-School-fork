@@ -433,7 +433,8 @@ public class AiLessonPilotService {
     }
 
     private static final String KOLIN_PROMPT = """
-            Ты Kolin, приватный AI-помощник преподавателя Mindcrafti во время урока.
+            Ты Kolyn, приватный AI-помощник преподавателя Mindcrafti во время урока.
+            Твоё имя пишется Kolyn. На приветствия и вопросы о себе отвечай обычным текстом.
             Помогай быстро: создавай математические задания, давай ответы, предлагай более
             лёгкие или сложные примеры, кратко объясняй решение и способ объяснить тему ребёнку.
             Отвечай на языке запроса, кратко и по делу, без длинного вступления.
@@ -458,7 +459,7 @@ public class AiLessonPilotService {
 
     /** Text-only, bounded requests share the lesson pilot's configured key and HTTP transport. */
     public String kolinReply(String lessonContext, List<Map<String, String>> history, String question) {
-        if (apiKey.isBlank()) throw new IllegalStateException("Kolin is not configured");
+        if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", kolinModel == null || kolinModel.isBlank() ? "gpt-4.1-mini" : kolinModel.trim());
         payload.put("store", false);
@@ -471,16 +472,16 @@ public class AiLessonPilotService {
         payload.put("input", input);
         try {
             Map<String, Object> body = responses(payload, Duration.ofSeconds(35));
-            if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolin response is incomplete");
+            if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolyn response is incomplete");
             String text = extractOutputText(body).trim();
-            if (text.isEmpty()) throw new IllegalStateException("Kolin returned no text");
+            if (text.isEmpty()) throw new IllegalStateException("Kolyn returned no text");
             return text;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Kolin request interrupted", ex);
+            throw new IllegalStateException("Kolyn request interrupted", ex);
         } catch (Exception ex) {
             // Neither the API response body nor its possibly sensitive error is returned to the browser.
-            throw new IllegalStateException("Kolin request failed", ex);
+            throw new IllegalStateException("Kolyn request failed", ex);
         }
     }
 
@@ -492,7 +493,7 @@ public class AiLessonPilotService {
         return kolinStructuredReply(lessonContext,history,question,true);
     }
     private String kolinStructuredReply(String lessonContext, List<Map<String,String>> history, String question,boolean interactive) {
-        if (apiKey.isBlank()) throw new IllegalStateException("Kolin is not configured");
+        if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         Map<String,Object> taskProperties=new LinkedHashMap<>();
         taskProperties.put("kind",Map.of("type","string","enum",List.of("expression","equation","visual")));
         for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,Map.of("type","string"));
@@ -543,6 +544,26 @@ public class AiLessonPilotService {
                 Исходные PDF и рукопись по-прежнему недоступны. Не утверждай, что изучил записи ученицы.
                 """+KolinVisualSchema.INSTRUCTIONS);
         instructions+="""
+                ГЛАВНОЕ: ты собеседник и методический помощник преподавателя, а не только генератор файлов.
+                Сначала определи намерение ПОСЛЕДНЕГО сообщения. По умолчанию отвечай kind=text, studentId=null, tasks=[].
+                Выбранный PDF/интерактив задаёт лишь формат создаваемого материала, НЕ превращает каждый вопрос в задание.
+                requestedTaskCount и lastGeneratedWorksheet сами по себе НЕ являются просьбой создать новый материал.
+                На вопросы, сомнения, оценку сложности, просьбы о совете или объяснении отвечай содержательно текстом.
+                'Что ты умеешь?', 'Чем можешь помочь?', 'Ты можешь сделать график?' - вопросы о возможностях,
+                а не команды создать материал. Ответь текстом, без tasks и без выбора получателя.
+                Кратко назови помощь с объяснениями, решениями, сложностью и подготовкой материалов;
+                для PDF и интерактива описывай только поддерживаемые в этом режиме типы из инструкций.
+                Не обещай автоматического чтения PDF или рукописи. Добавление материала требует кнопки преподавателя.
+                Используй условия и проверенные ответы из lastGeneratedWorksheet, если обсуждают предыдущие задания.
+                Не утверждай, что простой пример соответствует Abitur только потому, что так назван предыдущий черновик.
+                Оцени сами условия; признай несоответствие сложности, если оно есть. Не выдумывай требования экзамена.
+                Примеры kind=text: 'Это такие лёгкие в абитуре?', 'Почему так?', 'Как объяснить Виталине?',
+                'Дай совет', 'Она не понимает дроби, что делать?', 'Можно ли сделать сложнее?', 'Объясни второе задание'.
+                Давай объяснение, шаги решения, наводящие вопросы или короткий пример прямо в text, без карточки PDF.
+                kind=worksheet нужен только при просьбе СОЗДАТЬ, ИЗМЕНИТЬ или подготовить к ДОБАВЛЕНИЮ материал:
+                'Дай пять заданий', 'Сделай второе сложнее', 'Создай интерактив', 'Это добавь Виталине'.
+                Если одновременно просят объяснить и создать, объясни в text и включи явно запрошенный материал в tasks.
+                Не генерируй замену по одной лишь критике прежнего задания и не повторяй предыдущий черновик вместо ответа.
                 Получатель общей страницы обозначается studentId="group". Явные фразы 'на общую доску', 'для всей группы'
                 имеют приоритет над selectedStudentId. Словоформы имён ('Виталине', 'для Софии') сопоставляй с roster.
                 Для нового задания без имени используй выбранную доску: targetType=group означает общую доску.
@@ -562,16 +583,16 @@ public class AiLessonPilotService {
                 "strict",true,"schema",schema)));
         try {
             var body=responses(payload,Duration.ofSeconds(55));
-            if(!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolin response incomplete");
+            if(!"completed".equals(body.get("status"))) throw new IllegalStateException("Kolyn response incomplete");
             String value=extractOutputText(body).trim();
-            if(value.isEmpty() || value.length()>32000) throw new IllegalStateException("Kolin structured response invalid");
+            if(value.isEmpty() || value.length()>32000) throw new IllegalStateException("Kolyn structured response invalid");
             return value;
         } catch(InterruptedException ex) {
-            Thread.currentThread().interrupt(); throw new IllegalStateException("Kolin request interrupted");
-        } catch(Exception ex) { throw new IllegalStateException("Kolin structured request failed",ex); }
+            Thread.currentThread().interrupt(); throw new IllegalStateException("Kolyn request interrupted");
+        } catch(Exception ex) { throw new IllegalStateException("Kolyn structured request failed",ex); }
     }
 
-    /** One HTTP implementation for the existing pilot and Kolin. Pilot payloads remain unchanged. */
+    /** One HTTP implementation for the existing pilot and Kolyn. Pilot payloads remain unchanged. */
     private Map<String, Object> responses(Map<String, Object> payload, Duration timeout) throws Exception {
         var builder = HttpRequest.newBuilder().uri(URI.create(RESPONSES_API))
                 .header("Authorization", "Bearer " + apiKey).header("Content-Type", "application/json")
