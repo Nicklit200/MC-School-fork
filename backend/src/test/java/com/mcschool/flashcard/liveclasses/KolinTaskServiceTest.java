@@ -93,6 +93,21 @@ class KolinTaskServiceTest {
         verifyNoInteractions(renderer);
         verify(store,never()).append(any(),any(),any());
     }
+    @Test void adviceAfterADraftRemainsTextEvenWithInteractiveFormatSelected() throws Exception {
+        reserve();
+        when(store.previousDraft(host,room.getId())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("worksheet","Уравнения",pupil.getId().toString(),List.of(task("2*x+1=5","2")))));
+        String explanation="Это базовое уравнение. Начните с объяснения одинаковых действий с обеими частями.";
+        when(ai.kolinInteractiveReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("text",explanation,pupil.getId().toString(),List.of())));
+        service.reply(host,room,new KolinChatService.Request("Как объяснить второе задание?",List.of(),
+            new KolinChatService.Context("student",pupil.getId(),0,"interactive"),clientId),
+            new LinkedHashMap<>(),List.of(),"Как объяснить второе задание?",metadata);
+        verify(ai).kolinInteractiveReply(contains("lastGeneratedWorksheet"),anyList(),anyString());
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq(explanation),eq(metadata),
+            isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
+        verifyNoInteractions(renderer);verify(store,never()).append(any(),any(),any());
+    }
     @Test void createsOnlyAPrivateArtifactEvenWhenTheMessageSaysAddIt() throws Exception {
         reserve();
         var content=new KolinTaskService.Content("worksheet","Дроби",pupil.getId().toString(),Collections.nCopies(5,task("1/2+1/4","3/4")));

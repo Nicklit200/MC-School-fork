@@ -8,6 +8,8 @@ Inline controls share the canvas zoom and page coordinates. Pointer events on th
 
 ## General mathematical scenes
 
+Kolin remains a conversational teaching assistant in both PDF and interactive formats. The selector controls the format only when material is requested. Questions such as `Это такие лёгкие в абитуре?`, requests for advice, explanations and discussion of a previous draft receive a text reply without creating a new artifact. Explicit requests such as `Сделай второе сложнее` still create a replacement draft for review. This intent choice uses the same single provider request, with the previous canonical draft and lesson context available; no separate classification call is added.
+
 The fifth family, `scene`, combines up to 6 parameters, 12 named points and 12 objects on one page. Objects include segments, polygons, circles, function plots and one bar chart with up to 8 values. Coordinates, radii, graph formulas and up to 3 displayed measurements depend on the same parameters. Points can control a parameter by dragging or arrow keys. Example requests:
 
 - `Для Виталины создай интерактивный прямоугольник с диагональю и описанной окружностью. Дай менять стороны и найти площадь.`

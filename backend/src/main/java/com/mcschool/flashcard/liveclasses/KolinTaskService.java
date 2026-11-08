@@ -67,8 +67,9 @@ public class KolinTaskService {
             if(content==null || content.kind()==null || content.text()==null || content.text().length()>4000
                     || content.tasks()==null) throw new IllegalArgumentException("Invalid Kolin content");
             if("text".equals(content.kind())) {
-                if(!content.tasks().isEmpty() || content.studentId()!=null || content.text().isBlank())
+                if(!content.tasks().isEmpty() || content.text().isBlank())
                     throw new IllegalArgumentException("Invalid Kolin text reply");
+                // Text has no recipient or artifact. Discard model recipient metadata here.
                 stage="STORE";
                 return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",content.text(),transcript,
                         null,null,0,0,null,null);

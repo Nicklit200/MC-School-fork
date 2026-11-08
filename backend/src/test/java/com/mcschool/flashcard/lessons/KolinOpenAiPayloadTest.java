@@ -52,7 +52,8 @@ class KolinOpenAiPayloadTest {
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(6500);
         assertThat(json.path("text").path("format").path("type").asString()).isEqualTo("json_schema");
         assertThat(json.path("text").path("format").path("strict").asBoolean()).isTrue();
-        assertThat(json.path("input").get(0).path("content").asString()).contains("ровно 5","исключительно по кнопке","только линейное");
+        assertThat(json.path("input").get(0).path("content").asString()).contains("ровно 5","исключительно по кнопке","только линейное",
+            "Это такие лёгкие в абитуре?","По умолчанию отвечай kind=text","НЕ превращает каждый вопрос в задание");
         assertThat(json.path("text").path("format").path("schema").path("properties").path("tasks").path("items")
                 .path("properties").path("visual").path("anyOf").size()).isEqualTo(4);
         assertThat(json.path("input").get(0).path("content").asString()).contains("fractionCircle","Geometry:").doesNotContain("Геометрию с рисунками, текстовые задачи");
@@ -71,7 +72,8 @@ class KolinOpenAiPayloadTest {
         assertThat(json.path("store").asBoolean()).isFalse();
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(2500);
         String system=json.path("input").get(0).path("content").asString();
-        assertThat(system).contains("Интерактивный режим","requestedTaskCount","исключительно по кнопке")
+        assertThat(system).contains("Интерактивный режим","requestedTaskCount","исключительно по кнопке",
+            "По умолчанию отвечай kind=text","Как объяснить Виталине?")
             .doesNotContain("Режим подтверждаемого PDF","ровно 5 самостоятельных");
         var templates=json.path("text").path("format").path("schema").path("properties").path("tasks").path("items")
             .path("properties").path("visual").path("anyOf").get(1).path("anyOf");
