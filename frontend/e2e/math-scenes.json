@@ -1,0 +1,50 @@
+[
+  {
+    "template":"scene","language":"ru","title":"Прямоугольник и описанная окружность",
+    "prompt":"Измените стороны. Чему равна площадь прямоугольника?",
+    "bounds":{"xMin":-1,"xMax":9,"yMin":-1,"yMax":7},
+    "parameters":[
+      {"name":"a","label":"Ширина","min":1,"max":8,"step":0.1,"value":4},
+      {"name":"b","label":"Высота","min":1,"max":6,"step":0.1,"value":3}
+    ],
+    "points":[
+      {"id":"O","x":"0","y":"0","dragX":null,"dragY":null},
+      {"id":"A","x":"a","y":"0","dragX":"a","dragY":null},
+      {"id":"B","x":"a","y":"b","dragX":"a","dragY":"b"},
+      {"id":"C","x":"0","y":"b","dragX":null,"dragY":"b"},
+      {"id":"M","x":"a/2","y":"b/2","dragX":null,"dragY":null}
+    ],
+    "objects":[
+      {"kind":"polygon","points":["O","A","B","C"]},
+      {"kind":"segment","a":"O","b":"B"},
+      {"kind":"circle","center":"M","radius":"sqrt(a^2+b^2)/2"}
+    ],
+    "metrics":[{"label":"Периметр","expression":"2*(a+b)"},{"label":"Диагональ","expression":"sqrt(a^2+b^2)"}],
+    "answer":"a*b"
+  },
+  {
+    "template":"scene","language":"ru","title":"Синусоида и движущаяся точка",
+    "prompt":"Меняйте частоту и сдвиг. Двигайте точку P вдоль графика.",
+    "bounds":{"xMin":-7,"xMax":7,"yMin":-4,"yMax":4},
+    "parameters":[
+      {"name":"a","label":"Частота","min":0.1,"max":3,"step":0.1,"value":1},
+      {"name":"b","label":"Сдвиг","min":-2,"max":2,"step":0.1,"value":0},
+      {"name":"t","label":"Координата точки","min":-6,"max":6,"step":0.1,"value":0}
+    ],
+    "points":[{"id":"P","x":"t","y":"sin(a*t)+b","dragX":"t","dragY":null}],
+    "objects":[{"kind":"function","expression":"sin(a*x)+b"},{"kind":"function","expression":"x/2"}],
+    "metrics":[{"label":"Значение в точке P","expression":"sin(a*t)+b"}],"answer":null
+  },
+  {
+    "template":"scene","language":"ru","title":"Данные и среднее значение",
+    "prompt":"Измените три значения и найдите их среднее арифметическое.",
+    "bounds":{"xMin":0,"xMax":4,"yMin":-1,"yMax":11},
+    "parameters":[
+      {"name":"a","label":"Понедельник","min":0,"max":10,"step":1,"value":2},
+      {"name":"b","label":"Вторник","min":0,"max":10,"step":1,"value":4},
+      {"name":"c","label":"Среда","min":0,"max":10,"step":1,"value":6}
+    ],"points":[],
+    "objects":[{"kind":"bars","values":[{"label":"Пн","expression":"a"},{"label":"Вт","expression":"b"},{"label":"Ср","expression":"c"}]}],
+    "metrics":[{"label":"Сумма","expression":"a+b+c"}],"answer":"(a+b+c)/3"
+  }
+]

@@ -21,7 +21,7 @@ public class KolinTaskService {
     static boolean interactiveRequest(String question,KolinChatService.Context context,Content previous) {
         String text=question.toLowerCase(Locale.ROOT);
         if(text.contains("pdf") || text.contains("пдф")) return false;
-        if(text.matches("(?s).*(интерактив|interaktiv|interactive|3d|3д|вращ|разв[её]ртк|раскр.*куб|куб.*раскр).*")) return true;
+        if(text.matches("(?s).*(интерактив|interaktiv|interactive|3d|3д|вращ|разв[её]ртк|раскр.*куб|куб.*раскр|ползун|подвиж|перетаск|конструктор|slider|dragg).*")) return true;
         if(previous!=null && "interactive".equals(previous.kind())
                 && text.matches("(?s).*(это|этот|добав|отправ|измени|сложнее|einfügen|hinzufügen).*")) return true;
         return context!=null && "interactive".equals(context.format());

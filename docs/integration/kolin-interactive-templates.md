@@ -4,7 +4,21 @@ In the private teacher chat, select **Интерактив / Interaktiv** or exp
 
 Controls appear directly on the workbook page, with no open-editor button. Teacher and admitted pupil can change personal objects; shared objects use existing shared-board permissions. The graph supports linear and quadratic coefficients from -10 to 10. Triangle vertices stay within [-5, 5] and cannot become degenerate. Fraction circles contain 2 to 24 sectors. The cube has six rigid square faces, continuous folding, yaw and pitch. No model requests run when moving controls. A short model request selects the template and numeric parameters; the existing Kolin context and transport are reused.
 
-Inline controls share the canvas zoom and page coordinates. Pointer events on the controls do not draw ink. Writing remains available outside the object. Chat previews still open in a dialog. These four template families do not support arbitrary constructions, solids or sections yet. The model does not read workbook handwriting. The saved transcript continues to be used on teacher requests.
+Inline controls share the canvas zoom and page coordinates. Pointer events on the controls do not draw ink. Writing remains available outside the object. Chat previews still open in a dialog. The model does not read workbook handwriting. The saved transcript continues to be used on teacher requests.
+
+## General mathematical scenes
+
+The fifth family, `scene`, combines up to 6 parameters, 12 named points and 12 objects on one page. Objects include segments, polygons, circles, function plots and one bar chart with up to 8 values. Coordinates, radii, graph formulas and up to 3 displayed measurements depend on the same parameters. Points can control a parameter by dragging or arrow keys. Example requests:
+
+- `Для Виталины создай интерактивный прямоугольник с диагональю и описанной окружностью. Дай менять стороны и найти площадь.`
+- `На общую доску создай интерактив sin(a*x)+b с ползунками a и b и подвижной точкой на графике.`
+- `Сделай интерактивную диаграмму значений 2, 4, 6 и задание найти среднее.`
+
+The model returns a bounded declarative description, never executable source. The local expression parser supports numbers, parameters, pi, arithmetic, powers, sin/cos/tan, sqrt, abs, ln and exp. Trigonometry uses radians. Expressions have length, token and depth limits; unknown symbols and references fail validation. Geometry uses equal axis scales; bar-only scenes can scale axes independently. Graph sampling is bounded and breaks at undefined or out-of-range values.
+
+An optional numerical answer expression is evaluated locally for the current parameters, with absolute tolerance 0.000500001 (rounding to 3 decimal places). This is practice feedback, not a protected assessment or a proof checker. Undefined expressions do not produce a correct result. The teacher should review the proposed mathematical construction before adding it: structural validation cannot prove that every model-generated formula matches the intended question.
+
+During board interaction, only parameter values can change. Task structure, formulas and answer expressions are immutable; requesting a different construction creates a new draft. All existing confirmation, ownership, revision and PDF export paths are reused. One model call creates a draft; dragging, sliders and answer checking make no model calls. General 3D solids, arbitrary proofs and unsupported operators remain outside this constructor; the existing six-face cube is retained.
 
 ## Persistence and privacy
 
@@ -17,6 +31,7 @@ The board's PDF export includes the current rendered object and annotations. The
 ## Verification
 
 - `InteractiveTemplateSpecTest`: closed schemas, numeric limits and revision payloads.
+- `MathSceneSpecTest` and `mathScene.test.tsx`: shared geometry/function/data fixtures, bounded expression grammar, dependent coordinates, answer tolerance and immutable construction. PostgreSQL integration also covers scene replay and rejection of pupil formula edits.
 - `KolinOpenAiPayloadTest`: one structured request, no attachments, compact interactive prompt and 2500-token output ceiling.
 - `KolinTaskServiceTest`: private draft with no PDF renderer or automatic append.
 - `KolinWorkbookAppendIntegrationTest`: real PostgreSQL, confirmation idempotency, teacher/pupil replay, stale and concurrent edits, access restrictions and atomic rollback.

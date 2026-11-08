@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt, graphPoint, parseInteractiveSpec, plot, sectorPath, templateScene, templateTitle, type InteractiveSpec } from './interactiveTemplates';
 import './interactive-template.css';
+import {checkSceneAnswer,scenePoint,sceneProjection,setSceneParameter} from './mathScene';
 
 export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: {
   spec:InteractiveSpec; revision?:string; onCommit?:(spec:InteractiveSpec,baseRevision:string)=>Promise<string|undefined>; disabled?:boolean;
@@ -11,6 +12,8 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
   const drag=useRef<{id:number;vertex:number}|null>(null),svg=useRef<SVGSVGElement>(null);
   const clip=useId().replace(/:/g,'');
   const de=value.language==='de';
+  const [answer,setAnswer]=useState(''),[answerStatus,setAnswerStatus]=useState<string|null>(null);
+  useEffect(()=>setAnswerStatus(null),[value]);
   useEffect(()=>{if(!dirty.current&&!flight.current){current.current=spec;setValue(spec);base.current=revision;}},[spec,revision]);
   const change=(next:InteractiveSpec)=>{
     if(disabled || flight.current || !parseInteractiveSpec(next)) return;
@@ -27,7 +30,14 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
     } catch {setStatus('error');} finally {flight.current=false;}
   };
   const moveVertex=(index:number,x:number,y:number)=>{
-    const v=current.current;if(v.template!=='triangle')return;
+    const v=current.current;
+    if(v.template==='scene') {
+      const p=v.points[index];let next=v;
+      if(p.dragX)next=setSceneParameter(next,p.dragX,x);
+      if(p.dragY)next=setSceneParameter(next,p.dragY,y);
+      change(next);return;
+    }
+    if(v.template!=='triangle')return;
     const clamp=(n:number)=>Math.round(Math.max(-5,Math.min(5,n))*10)/10;
     change({...v,vertices:v.vertices.map((p,i)=>i===index?[clamp(x),clamp(y)]:p)});
   };
@@ -36,7 +46,8 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
     const box=svg.current.getBoundingClientRect(),scale=Math.min(box.width/500,box.height/440);
     const x=(event.clientX-box.left-(box.width-500*scale)/2)/scale;
     const y=(event.clientY-box.top-(box.height-440*scale)/2)/scale;
-    moveVertex(active.vertex,(x-plot.cx)/plot.scale,(plot.cy-y)/plot.scale);
+    if(current.current.template==='scene')moveVertex(active.vertex,...sceneProjection(current.current).fromPixel(x,y));
+    else moveVertex(active.vertex,(x-plot.cx)/plot.scale,(plot.cy-y)/plot.scale);
   };
   const release=(event:React.PointerEvent<SVGSVGElement>)=>{
     if(drag.current?.id===event.pointerId){drag.current=null;void commit();}
@@ -45,7 +56,7 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
   return <div className="interactive-template" data-template={value.template}>
     <svg ref={svg} viewBox="0 0 500 440" role={disabled?'img':'group'} aria-label={templateTitle(value)}
       onPointerMove={move} onPointerUp={release} onPointerCancel={release}>
-      <defs><clipPath id={clip}><rect x={plot.left} y={plot.top} width={plot.width} height={plot.height}/></clipPath></defs>
+      <defs><clipPath id={clip}><rect x={plot.left} y={value.template==='scene'?100:plot.top} width={plot.width} height={value.template==='scene'?240:plot.height}/></clipPath></defs>
       {templateScene(value).map((p,i)=>p.kind==='text'?<text key={i} x={p.x} y={p.y} fontSize={p.size??15} fill={p.fill??'#172033'}>{p.text}</text>
         :p.kind==='circle'?<circle key={i} cx={p.x} cy={p.y} r={p.r} fill={p.fill}/>
         :<path key={i} d={p.d} stroke={p.stroke} strokeWidth={p.width??1} fill={p.fill??'none'} clipPath={p.clip?`url(#${clip})`:undefined}/>)}
@@ -59,7 +70,30 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
         onKeyDown={event=>{const delta:Record<string,[number,number]>={ArrowLeft:[-.1,0],ArrowRight:[.1,0],ArrowUp:[0,.1],ArrowDown:[0,-.1]};
           const d=delta[event.key];if(d){event.preventDefault();moveVertex(index,v[0]+d[0],v[1]+d[1]);}}}
         onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>;})}
+      {!locked&&value.template==='scene'&&value.points.map((p,index)=>{
+        if(!p.dragX&&!p.dragY)return null;const point=scenePoint(value,p),[x,y]=sceneProjection(value).toPixel(...point);
+        if(!Number.isFinite(x)||!Number.isFinite(y)||x<50||x>450||y<100||y>340)return null;
+        return <circle key={p.id} cx={x} cy={y} r={15} fill="transparent" className="interactive-template__handle" role="button" tabIndex={0}
+          aria-label={`${de?'Punkt':'Точка'} ${p.id}`}
+          onPointerDown={event=>{event.preventDefault();if(drag.current)return;drag.current={id:event.pointerId,vertex:index};svg.current?.setPointerCapture(event.pointerId);}}
+          onKeyDown={event=>{const delta:Record<string,[number,number]>={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};
+            const d=delta[event.key];if(d){event.preventDefault();const dx=value.parameters.find(v=>v.name===p.dragX)?.step??0,dy=value.parameters.find(v=>v.name===p.dragY)?.step??0;
+              moveVertex(index,point[0]+d[0]*dx,point[1]+d[1]*dy);}}}
+          onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>;
+      })}
     </svg>
+    {!disabled&&value.template==='scene'&&<div className="math-scene-controls">
+      <div className="math-scene-sliders">{value.parameters.map(p=><label key={p.name}><span>{p.label}: {fmt(p.value)}</span>
+        <input type="range" aria-label={p.label} min={p.min} max={p.max} step={p.step} value={p.value} disabled={locked}
+          onChange={event=>change(setSceneParameter(value,p.name,Number(event.target.value)))}
+          onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/></label>)}</div>
+      {value.answer!==null&&<form className="math-scene-answer" onSubmit={event=>{event.preventDefault();setAnswerStatus(checkSceneAnswer(value,answer));}}>
+        <label>{de?'Deine Zahl':'Ваш числовой ответ'}<input inputMode="decimal" value={answer} onChange={event=>{setAnswer(event.target.value);setAnswerStatus(null);}} maxLength={40}/></label>
+        <button type="submit" disabled={locked}>{de?'Prüfen':'Проверить'}</button>
+        <small>{de?'Bei Bedarf auf 3 Nachkommastellen runden.':'При необходимости округлите до 3 знаков.'}</small>
+        {answerStatus&&<span role="status">{answerStatus==='correct'?(de?'Richtig':'Верно'):answerStatus==='incorrect'?(de?'Noch einmal versuchen':'Попробуйте ещё'):(de?'Zahl oder Parameter prüfen':'Проверьте число или параметры')}</span>}
+      </form>}
+    </div>}
     {!disabled&&value.template==='cube'&&<div className="interactive-template__controls">{(['unfold','yaw','pitch'] as const).map(field=><label key={field}>
       <span>{field==='unfold'?(de?'Entfalten':'Раскрыть'):field==='yaw'?(de?'Drehen':'Поворот'):(de?'Neigen':'Наклон')}: {fmt(value[field])}</span>
       <input type="range" aria-label={field==='unfold'?'Раскрыть / Entfalten':field==='yaw'?'Поворот / Drehen':'Наклон / Neigen'}

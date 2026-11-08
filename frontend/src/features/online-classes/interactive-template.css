@@ -6,6 +6,11 @@
 .interactive-template label{display:grid;gap:4px;min-height:44px}
 .interactive-template input[type=range]{width:100%;min-height:36px;accent-color:#e8722d;touch-action:pan-y}
 .interactive-template p{margin:8px 0 0}
+.math-scene-controls{max-height:185px;overflow:auto;overscroll-behavior:contain;padding:6px;background:white}
+.math-scene-sliders{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}
+.math-scene-answer{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px}
+.math-scene-answer input{max-width:140px;color:#172033;background:white;border:1px solid #94a3b8;border-radius:4px;padding:6px}
+.math-scene-answer button{background:#fff;color:#172033;border:1px solid #e8722d;border-radius:6px;padding:8px}
 .interactive-board-inline{position:absolute;width:500px;transform-origin:0 0;z-index:2}
 .interactive-board-inline .interactive-template{padding:0;border-radius:0}
 .interactive-board-inline .interactive-template svg{width:500px;height:440px;max-height:none}

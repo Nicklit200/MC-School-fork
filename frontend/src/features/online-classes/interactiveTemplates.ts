@@ -1,5 +1,7 @@
 /** Numeric template definitions. The model never supplies executable markup or formulas. */
+import {parseMathScene,renderMathScene,type MathScene} from './mathScene';
 export type InteractiveSpec =
+  | MathScene
   | { template: 'graph'; language: 'ru' | 'de'; function: 'linear' | 'quadratic'; coefficients: number[] }
   | { template: 'triangle'; language: 'ru' | 'de'; vertices: [number, number][] }
   | { template: 'cube'; language: 'ru' | 'de'; unfold: number; yaw: number; pitch: number }
@@ -10,6 +12,7 @@ export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefine
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const s = value as Record<string, unknown>;
   if (s.language !== 'ru' && s.language !== 'de') return;
+  if (s.template==='scene') return parseMathScene(s);
   const keys = (...expected: string[]) => Object.keys(s).sort().join('|') === expected.sort().join('|');
   if (s.template === 'cube' && keys('template','language','unfold','yaw','pitch')
     && finite(s.unfold,0,1) && finite(s.yaw,-180,180) && finite(s.pitch,-90,90))
@@ -30,6 +33,7 @@ export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefine
 }
 export function templateTitle(spec: InteractiveSpec) {
   const de=spec.language==='de';
+  if(spec.template==='scene') return spec.title;
   if(spec.template==='cube') return de?'Würfel und sein Netz':'Куб и его развёртка';
   return spec.template==='graph' ? de?'Graph untersuchen':'Исследуем график'
     : spec.template==='triangle' ? de?'Dreieck untersuchen':'Исследуем треугольник' : de?'Bruchteile':'Доли круга';
@@ -80,6 +84,7 @@ export function cubeFaces(unfold:number): [number,number,number][][] {
 }
 /** One scene feeds both the editable SVG and the board/PDF canvas snapshot. */
 export function templateScene(spec:InteractiveSpec):Primitive[] {
+  if(spec.template==='scene') return renderMathScene(spec);
   const result:Primitive[]=[{kind:'text',x:25,y:30,text:templateTitle(spec),size:19}];
   const text=(x:number,y:number,value:string,size=15) => result.push({kind:'text',x,y,text:value,size});
   const path=(d:string,stroke='#dce3e9',width=1,fill='none',clip=false)=>result.push({kind:'path',d,stroke,width,fill,clip});
@@ -131,7 +136,7 @@ export function drawInteractive(ctx:CanvasRenderingContext2D,spec:InteractiveSpe
     ctx.save();
     if(p.kind==='text') {ctx.fillStyle=p.fill??'#172033';ctx.font=`${p.size??15}px Arial, sans-serif`;ctx.fillText(p.text,p.x,p.y);}
     else if(p.kind==='circle') {ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.fill;ctx.fill();}
-    else {if(p.clip) {ctx.beginPath();ctx.rect(plot.left,plot.top,plot.width,plot.height);ctx.clip();}
+    else {if(p.clip) {ctx.beginPath();ctx.rect(plot.left,spec.template==='scene'?100:plot.top,plot.width,spec.template==='scene'?240:plot.height);ctx.clip();}
       const path=new Path2D(p.d);if(p.fill && p.fill!=='none') {ctx.fillStyle=p.fill;ctx.fill(path);}ctx.strokeStyle=p.stroke;ctx.lineWidth=p.width??1;ctx.stroke(path);}
     ctx.restore();
   }

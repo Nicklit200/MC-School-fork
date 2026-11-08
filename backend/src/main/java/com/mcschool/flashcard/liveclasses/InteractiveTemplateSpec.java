@@ -17,6 +17,7 @@ public final class InteractiveTemplateSpec {
     public static Map<String,Object> schema() {
         var language=choice("ru","de");
         return Map.of("anyOf",List.of(
+            MathSceneSpec.schema(),
             object("template",choice("cube"),"language",language,"unfold",Map.of("type","number"),
                 "yaw",Map.of("type","number"),"pitch",Map.of("type","number")),
             object("template",choice("graph"),"language",language,"function",choice("linear","quadratic"),"coefficients",numbers()),
@@ -35,14 +36,15 @@ public final class InteractiveTemplateSpec {
         Исправляй неверное количество граней в вопросе. Развёртка куба всегда содержит все 6 граней.
         language=ru или de. Интерфейс сам рисует фигуру, вычисляет значения и даёт управление.
         По умолчанию один интерактивный объект. requestedTaskCount имеет приоритет, максимум пять.
-        Не обещай произвольные конструкции, доказательства, автоматическую проверку ответа ученицы или доступ к её рукописи.
+        Не обещай неподдерживаемые конструкции, доказательства или доступ к рукописи ученицы.
         Для неподдерживаемого интерактива дай короткий ответ kind=text, tasks=[], studentId=null.
-        """;
+        """+MathSceneSpec.INSTRUCTIONS;
 
     public static Map<String,Object> validate(Map<String,Object> spec) {
         if(spec==null || !("ru".equals(spec.get("language")) || "de".equals(spec.get("language")))) throw invalid();
         String type=Objects.toString(spec.get("template"),"");
         switch(type) {
+            case "scene" -> MathSceneSpec.validate(spec);
             case "cube" -> {
                 keys(spec,"template","language","unfold","yaw","pitch");
                 number(spec.get("unfold"),0,1); number(spec.get("yaw"),-180,180); number(spec.get("pitch"),-90,90);
@@ -91,6 +93,7 @@ public final class InteractiveTemplateSpec {
     public static void sameTemplate(Map<String,Object> original,Map<String,Object> next) {
         if(!Objects.equals(original.get("template"),next.get("template")) || !Objects.equals(original.get("language"),next.get("language"))
                 || !Objects.equals(original.get("function"),next.get("function"))) throw invalid();
+        if("scene".equals(original.get("template"))) MathSceneSpec.sameConstruction(original,next);
     }
     public static Map<String,Object> payload(String json) { return new ObjectMapper().readValue(json,Map.class); }
     private static void keys(Map<String,Object> spec,String... keys) { if(!spec.keySet().equals(Set.of(keys))) throw invalid(); }

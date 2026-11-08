@@ -495,21 +495,31 @@ public class AiLessonPilotService {
         if (apiKey.isBlank()) throw new IllegalStateException("Kolin is not configured");
         Map<String,Object> taskProperties=new LinkedHashMap<>();
         taskProperties.put("kind",Map.of("type","string","enum",List.of("expression","equation","visual")));
-        for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,Map.of("type","string"));
+        for (String field:List.of("instruction","expression","variable")) taskProperties.put(field,interactive
+                ?Map.of("type","string","enum",List.of("")):Map.of("type","string"));
         taskProperties.put("restrictions",Map.of("type","array","items",Map.of("type","string")));
         taskProperties.put("visual",interactive ? Map.of("anyOf",List.of(Map.of("type","null"),com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.schema())) : KolinVisualSchema.schema());
         Map<String,Object> taskSchema=Map.of("type","object","properties",taskProperties,
                 "required",List.copyOf(taskProperties.keySet()),"additionalProperties",false);
+        Map<String,Object> taskArray=new LinkedHashMap<>(Map.of("type","array","items",taskSchema));
+        if(interactive) {
+            int count=1;
+            try { count=objectMapper.readTree(lessonContext).path("requestedTaskCount").asInt(1); }
+            catch(Exception ignored) { /* Context is server-generated; retain the safe default. */ }
+            taskArray.put("maxItems",Math.max(1,Math.min(5,count)));
+        }
         Map<String,Object> schema=Map.of("type","object","properties",Map.of(
                 "kind",Map.of("type","string","enum",List.of("text","worksheet")),
                 "text",Map.of("type","string"),"studentId",Map.of("type",List.of("string","null")),
-                "tasks",Map.of("type","array","items",taskSchema)),
+                "tasks",taskArray),
                 "required",List.of("kind","text","studentId","tasks"),"additionalProperties",false);
         String instructions=KOLIN_PROMPT+(interactive ? """
 
                 Верни объект JSON-схемы. Для личной страницы получателя выбирай ТОЛЬКО из roster: явно названная ученица важнее selectedStudentId.
                 Если получатель или тема неясны, уточни коротко: kind=text, studentId=null, tasks=[].
                 Для объекта верни kind=worksheet, РОВНО requestedTaskCount элементов tasks и короткий text с темой.
+                Ограничение ответа в 500 токенов НЕ относится к структурированным заданиям. Верни полный JSON.
+                Одна сцена с несколькими фигурами или графиками - ОДИН элемент tasks. Не добавляй шаблоны-заглушки.
                 lastGeneratedWorksheet - предыдущий черновик. При изменении верни полный обновлённый набор.
                 Любая просьба добавить создаёт только черновик. Добавление возможно исключительно по кнопке преподавателя.
                 """+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS : """
