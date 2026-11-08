@@ -82,7 +82,9 @@ public class KolinTaskService {
                         || content.materials()!=null && !content.materials().isEmpty())
                     throw new IllegalArgumentException("Invalid material content");
                 boolean interactive="interactive".equals(content.kind());
-                if(interactive && unsupportedInteractive(question,content.tasks())) {
+                // A supported static cone/cylinder in the PDF must not reject a different interactive scene.
+                String materialQuestion=bundle?content.text():question;
+                if(interactive && unsupportedInteractive(materialQuestion,content.tasks())) {
                     String explanation="Этот интерактив пока не поддерживается. Доступны плоские построения, графики, данные, выпуклые многогранники и развёртка куба. Кривые поверхности и развёртки других тел пока не создаются. Могу объяснить тему текстом или подготовить доступный статичный рисунок в PDF.";
                     if(content.tasks().stream().anyMatch(t->t.visual()!=null&&"de".equals(t.visual().get("language"))))
                         explanation="Diese interaktive Konstruktion wird noch nicht unterstützt. Möglich sind ebene Konstruktionen, Funktionen, Daten, konvexe Polyeder und das Würfelnetz. Gekrümmte Flächen und andere Körpernetze sind noch nicht verfügbar. Ich kann das Thema erklären oder eine unterstützte statische PDF-Abbildung vorbereiten.";
@@ -111,7 +113,7 @@ public class KolinTaskService {
                     stage="CONTENT";
                     if(content==null || !"interactive".equals(content.kind()) || !Objects.equals(recipient,content.studentId())
                         || content.text()==null || content.text().length()>4000 || content.tasks()==null
-                        || content.tasks().size()!=requiredCount || needsInteractiveRepair(content) || unsupportedInteractive(question,content.tasks()))
+                        || content.tasks().size()!=requiredCount || needsInteractiveRepair(content) || unsupportedInteractive(materialQuestion,content.tasks()))
                         throw new IllegalArgumentException("Invalid repaired interactive draft");
                 }
                 stage="RECIPIENT";

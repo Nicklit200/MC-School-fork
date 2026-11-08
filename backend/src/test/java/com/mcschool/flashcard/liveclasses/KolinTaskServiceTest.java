@@ -89,6 +89,21 @@ class KolinTaskServiceTest {
         verify(store,never()).completeMaterials(any(),any(),any(),any(),anyString(),any(),anyList());
         verify(store).fail(host,room.getId(),artifact,attempt);
     }
+    @Test void staticConeExercisesDoNotRejectAnUnrelatedInteractiveGraph()throws Exception {
+        reserve();
+        var interactive=new KolinTaskService.Content("interactive","График",pupil.getId().toString(),List.of(
+            new KolinTaskService.Task("visual","","",null,"",List.of(),InteractiveTemplateSpecTest.graph())));
+        var cone=Map.<String,Object>of("type","geometry","language","ru","figure","cone","objective","volume",
+            "vertices",List.of(),"parameters",List.of(3,4),"index",0);
+        var pdf=new KolinTaskService.Content("worksheet","Конусы",pupil.getId().toString(),Collections.nCopies(5,
+            new KolinTaskService.Task("visual","","",null,"",List.of(),cone)));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString())).thenReturn(mapper.writeValueAsString(
+            new KolinTaskService.Content("materials","График и PDF",null,List.of(),List.of(interactive,pdf))));
+        when(renderer.renderPlain(anyString())).thenReturn(new OwnerWorkbookPdfRenderService.PlainWorksheet(new byte[]{1},new byte[]{2},3,
+            Map.of("results",Collections.nCopies(5,Map.of("passed",true,"answer","12*pi")))));
+        send("Сделай интерактивный график и PDF с парой задач на объём конуса");
+        verify(store).completeMaterials(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("График и PDF"),eq(metadata),anyList());
+    }
     @Test void unsupportedCurvedBodyBecomesAnExplanationInsteadOfAMislabelledPolyhedron()throws Exception {
         reserve();
         var content=new KolinTaskService.Content("interactive","Конус",pupil.getId().toString(),List.of(
