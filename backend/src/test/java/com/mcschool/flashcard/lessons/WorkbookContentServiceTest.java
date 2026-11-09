@@ -120,6 +120,25 @@ class WorkbookContentServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void normalizesSingleEqualityTasksBySyntaxInsteadOfFailingOnModelKind() {
+        var lesson=new WorkbookContentService.CompactLesson(
+                "Brüche","", "", "",
+                List.of(
+                        new WorkbookContentService.CompactTask("expression","Gleichwertigkeit","Prüfe.","2/3=4/6","","",List.of()),
+                        new WorkbookContentService.CompactTask("expression","Unbekannt","Bestimme x.","x/3=2/6","","",List.of()),
+                        new WorkbookContentService.CompactTask("expression","Plus","Berechne.","1+1","","",List.of()),
+                        new WorkbookContentService.CompactTask("equation","Gleichung","Löse.","x+1=3","","x",List.of())
+                ));
+        assertDoesNotThrow(()->WorkbookContentService.validateCompact(lesson));
+        Map<String,Object> doc=WorkbookContentService.document(lesson,Map.of("calendarDurationMinutes",60));
+        Map<String,Object> qa=(Map<String,Object>)doc.get("qa");
+        List<Map<String,Object>> assertions=(List<Map<String,Object>>)qa.get("algebra");
+        assertEquals(List.of("relationValue","linearValue","expressionValue","linearValue"),
+                assertions.stream().map(row->String.valueOf(row.get("kind"))).toList());
+    }
+
+    @Test
     void rejectsWrongCompactShapeBeforeRendering() throws Exception {
         HttpClient http=mock(HttpClient.class);
         HttpResponse<String> response=mock(HttpResponse.class);
