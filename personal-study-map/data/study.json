@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "Николай",
-  "updatedAt": "2026-10-25",
+  "updatedAt": "2026-11-09",
   "semesters": [
     {
       "id": "ws-2026-27",
@@ -6349,7 +6349,27 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-01",
+                  "question": "Was ist eine View Matrix?",
+                  "answer": "Преобразует координаты мира относительно положения и ориентации камеры.",
+                  "wrongAnswer1": "Задаёт форму 3D-объекта.",
+                  "wrongAnswer2": "Рассчитывает скорость движения.",
+                  "wrongAnswer3": "Хранит данные о материале.",
+                  "explanation": "View Matrix задаёт преобразование из мировой системы координат в систему камеры."
+                },
+                {
+                  "id": "cg-20261109-f91-106-02",
+                  "question": "Was macht die Projection Matrix?",
+                  "answer": "Определяет перспективную или параллельную проекцию 3D-сцены.",
+                  "wrongAnswer1": "Определяет позицию всех Entities.",
+                  "wrongAnswer2": "Обновляет физические столкновения.",
+                  "wrongAnswer3": "Хранит вершины модели.",
+                  "explanation": "Проекция преобразует координаты в пространство отсечения, затем выполняется перспективное деление."
+                }
+              ]
             },
             {
               "id": "cg-camera-05",
@@ -6367,7 +6387,36 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-03",
+                  "question": "Wofür verwendet man lookAt(eye, center, up)?",
+                  "answer": "Чтобы задать положение камеры, точку взгляда и направление вверх.",
+                  "wrongAnswer1": "Чтобы выбрать цвет пикселей.",
+                  "wrongAnswer2": "Чтобы создать новый Shader.",
+                  "wrongAnswer3": "Чтобы изменить размер Viewport.",
+                  "explanation": "eye — позиция, center — точка взгляда, up — направление вверх."
+                },
+                {
+                  "id": "cg-20261109-f91-106-04",
+                  "question": "In welche Richtung schaut die OpenGL-Standardkamera?",
+                  "answer": "Из начала координат (0,0,0) вдоль отрицательной оси Z.",
+                  "wrongAnswer1": "Вдоль положительной оси Z.",
+                  "wrongAnswer2": "Вдоль положительной оси X.",
+                  "wrongAnswer3": "Вдоль отрицательной оси Y.",
+                  "explanation": "В стандартном OpenGL eye-space взгляд направлен вдоль -Z."
+                },
+                {
+                  "id": "cg-20261109-f91-106-05",
+                  "question": "Was bedeuten Yaw, Pitch und Roll?",
+                  "answer": "Yaw — влево/вправо; Pitch — вверх/вниз; Roll — наклон набок.",
+                  "wrongAnswer1": "Три масштаба по осям XYZ.",
+                  "wrongAnswer2": "Три типа геометрических примитивов.",
+                  "wrongAnswer3": "Три границы Clipping.",
+                  "explanation": "Обычно Yaw — поворот вокруг вертикальной оси, Pitch — наклон вверх-вниз, Roll — крен."
+                }
+              ]
             },
             {
               "id": "cg-camera-06",
@@ -6385,7 +6434,54 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-06",
+                  "question": "Was ist die Window-Viewport-Transformation?",
+                  "answer": "Преобразование координат области проекции в координаты области экрана.",
+                  "wrongAnswer1": "Переход от Entity к Component.",
+                  "wrongAnswer2": "Создание нормалей геометрии.",
+                  "wrongAnswer3": "Операция умножения Quaternionen.",
+                  "explanation": "Viewport Transformation масштабирует и сдвигает координаты в экранную область."
+                },
+                {
+                  "id": "cg-20261109-f91-106-07",
+                  "question": "Was ist der Unterschied zwischen Window und Viewport?",
+                  "answer": "Window — выбранная область проекции; Viewport — область экрана.",
+                  "wrongAnswer1": "Оба обозначают только камеру.",
+                  "wrongAnswer2": "Window — материал, Viewport — Shader.",
+                  "wrongAnswer3": "Window — скорость, Viewport — позиция.",
+                  "explanation": "Window задаёт область координат; Viewport — место и размер её отображения."
+                },
+                {
+                  "id": "cg-20261109-f91-106-08",
+                  "question": "Was ist der Unterschied zwischen Clipping und Culling?",
+                  "answer": "Clipping обрезает геометрию; Culling полностью отбрасывает объекты или примитивы.",
+                  "wrongAnswer1": "Оба меняют угол камеры.",
+                  "wrongAnswer2": "Clipping создаёт Entity, Culling — Component.",
+                  "wrongAnswer3": "Оба изменяют цвет текстуры.",
+                  "explanation": "Clipping усекает примитивы по границам; culling исключает примитивы/объекты по критерию."
+                },
+                {
+                  "id": "cg-20261109-f91-106-09",
+                  "question": "Was macht glViewport(x, y, width, height)?",
+                  "answer": "Задаёт положение и размер прямоугольной области вывода OpenGL.",
+                  "wrongAnswer1": "Создаёт Projection Matrix автоматически.",
+                  "wrongAnswer2": "Перемещает камеру в 3D-мире.",
+                  "wrongAnswer3": "Выполняет поворот модели.",
+                  "explanation": "В OpenGL координаты x,y для viewport задаются от нижнего левого угла."
+                },
+                {
+                  "id": "cg-20261109-f91-106-10",
+                  "question": "Wie berechnet man das Aspect Ratio?",
+                  "answer": "aspect = width / height. Например, 1920 / 1080 ≈ 1,78.",
+                  "wrongAnswer1": "aspect = height + width.",
+                  "wrongAnswer2": "aspect = near / far.",
+                  "wrongAnswer3": "aspect = FOV × 2.",
+                  "explanation": "Отношение ширины к высоте должно согласовываться с перспективной проекцией."
+                }
+              ]
             },
             {
               "id": "cg-ecs-01",
@@ -6403,7 +6499,27 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-11",
+                  "question": "Warum sind viele Indirektionen problematisch?",
+                  "answer": "Много косвенных обращений к памяти могут замедлять обработку данных.",
+                  "wrongAnswer1": "Они запрещают использовать шейдеры.",
+                  "wrongAnswer2": "Они автоматически вызывают Gimbal Lock.",
+                  "wrongAnswer3": "Они исключают геометрию из кадра.",
+                  "explanation": "Цепочки указателей могут ухудшать локальность данных и производительность."
+                },
+                {
+                  "id": "cg-20261109-f91-106-12",
+                  "question": "Was ist ein Cache Miss?",
+                  "answer": "Нужных данных нет в кэше CPU, поэтому их приходится загружать из другого уровня памяти.",
+                  "wrongAnswer1": "Данные уже найдены в кэше CPU.",
+                  "wrongAnswer2": "Shader не может скомпилироваться.",
+                  "wrongAnswer3": "Viewport выходит за границу экрана.",
+                  "explanation": "Cache miss заставляет процессор обращаться к более медленному уровню памяти."
+                }
+              ]
             },
             {
               "id": "cg-ecs-02",
@@ -6421,7 +6537,36 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-13",
+                  "question": "Was ist eine Entity in ECS?",
+                  "answer": "Объект, представленный уникальным идентификатором.",
+                  "wrongAnswer1": "Класс для вычисления проекции.",
+                  "wrongAnswer2": "Функция GPU для окраски пикселя.",
+                  "wrongAnswer3": "Только массив вершин объекта.",
+                  "explanation": "Entity связывает набор компонентов через идентификатор."
+                },
+                {
+                  "id": "cg-20261109-f91-106-14",
+                  "question": "Was ist eine Component in ECS?",
+                  "answer": "Структура данных объекта, например Position, Velocity или Geometry.",
+                  "wrongAnswer1": "Внешний цикл отрисовки кадров.",
+                  "wrongAnswer2": "Уникальный идентификатор без данных.",
+                  "wrongAnswer3": "Обязательно виртуальный базовый класс.",
+                  "explanation": "Компоненты хранят данные, а системы обычно работают с ними."
+                },
+                {
+                  "id": "cg-20261109-f91-106-15",
+                  "question": "Was macht ein System in ECS?",
+                  "answer": "Обрабатывает Entities с нужными компонентами и выполняет логику.",
+                  "wrongAnswer1": "Хранит только ID сущности.",
+                  "wrongAnswer2": "Задаёт исключительно границы Viewport.",
+                  "wrongAnswer3": "Всегда содержит одну 3D-вершину.",
+                  "explanation": "Система выбирает компоненты подходящих Entities и обрабатывает их."
+                }
+              ]
             },
             {
               "id": "cg-ecs-03",
@@ -6439,7 +6584,18 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-16",
+                  "question": "Was machen registry.create(), emplace() und view()?",
+                  "answer": "create — создаёт Entity; emplace — добавляет компонент; view — выбирает Entities.",
+                  "wrongAnswer1": "create — рисует; emplace — удаляет; view — освещает.",
+                  "wrongAnswer2": "create — компилирует; emplace — масштабирует; view — вращает.",
+                  "wrongAnswer3": "Все три вызывают только шейдер.",
+                  "explanation": "Это основные операции EnTT registry для создания и отбора сущностей."
+                }
+              ]
             },
             {
               "id": "cg-ecs-04",
@@ -6457,7 +6613,18 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-17",
+                  "question": "Welche Aufgaben haben Geometry, Shader und Renderable in SORS?",
+                  "answer": "Geometry — форма; Shader — GPU-программа; Renderable — компонент отрисовки.",
+                  "wrongAnswer1": "Geometry — камера; Shader — скорость; Renderable — позиция.",
+                  "wrongAnswer2": "Все три описывают только освещение.",
+                  "wrongAnswer3": "Geometry — звук; Shader — сеть; Renderable — физика.",
+                  "explanation": "SORS связывает компоненты объекта для дальнейшей отрисовки."
+                }
+              ]
             },
             {
               "id": "cg-ecs-05",
@@ -6493,7 +6660,18 @@
                 "repetition": 0,
                 "dueDate": null,
                 "lastResult": null
-              }
+              },
+              "flashcards": [
+                {
+                  "id": "cg-20261109-f91-106-18",
+                  "question": "Wozu dienen Relationship und TransformationSystem?",
+                  "answer": "Relationship связывает Parent–Child; TransformationSystem обновляет преобразования.",
+                  "wrongAnswer1": "Они выполняют только Clipping.",
+                  "wrongAnswer2": "Они задают ширину и высоту Viewport.",
+                  "wrongAnswer3": "Они компилируют материалы.",
+                  "explanation": "Иерархические связи позволяют учитывать трансформацию родителя при расчёте дочернего объекта."
+                }
+              ]
             }
           ],
           "relations": [
