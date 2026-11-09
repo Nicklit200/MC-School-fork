@@ -132,10 +132,11 @@ function geometryTask(s,de) {
   }
   if(!Number.isFinite(value)||value<=0)throw Error('Invalid geometry result');
   geometrySvg(diagram);
+  const vertexCount=Array.isArray(s.vertices)&&s.vertices.length?s.vertices.length:1;
   const labels=de?{area:'Bestimme den Flächeninhalt.',perimeter:'Bestimme den Umfang.',volume:'Bestimme das Volumen.',surface:'Bestimme den gesamten Oberflächeninhalt.',
-    side:`Bestimme die Länge ${names[index]}${names[(index+1)%s.vertices.length]}.`,angle:`Bestimme den Innenwinkel bei ${names[index]}.`}:
+    side:`Bestimme die Länge ${names[index]}${names[(index+1)%vertexCount]}.`,angle:`Bestimme den Innenwinkel bei ${names[index]}.`}:
     {area:'Найди площадь фигуры.',perimeter:'Найди периметр.',volume:'Найди объём.',surface:'Найди площадь полной поверхности.',
-      side:`Найди длину ${names[index]}${names[(index+1)%s.vertices.length]}.`,angle:`Найди внутренний угол при вершине ${names[index]}.`};
+      side:`Найди длину ${names[index]}${names[(index+1)%vertexCount]}.`,angle:`Найди внутренний угол при вершине ${names[index]}.`};
   return result([text(labels[objective]),text(facts),diagram],`≈ ${fmt(value)} ${unit}`,
     {...diagram,label:'MUSTERLÖSUNG – GEOMETRIE'});
 }
