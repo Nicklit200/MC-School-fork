@@ -110,13 +110,16 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .exercise-content { padding: 0.5mm 1.4mm 0 2mm; }
 /* A work line must never share the formula row: long SVGs can exceed 56mm. */
 .task-row {
-  display: grid; grid-template-columns: 8mm minmax(0, 1fr);
+  /* Labels may be a), 1. or Aufgabe. Size the first column to its
+     actual content rather than letting a long label cover the formula. */
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
   grid-template-rows: auto auto; align-items: center;
   column-gap: 3mm; min-height: 16.1mm;
 }
 .task-row .item-label {
   grid-column: 1; grid-row: 1; color: var(--orange);
-  font-weight: 700; font-size: 11px; width: 8mm;
+  font-weight: 700; font-size: 11px; width: auto;
+  min-width: 8mm; max-width: 24mm; white-space: normal; overflow-wrap: anywhere;
 }
 .task-row .expression-wrap {
   grid-column: 2; grid-row: 1; display: flex;
@@ -236,7 +239,7 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .layout-grid > .block, .layout-stack > .block { margin-top:0; }
 .layout-stack { display:flex; flex-direction:column; gap:3mm; min-width:0; }
 .layout-grid .example-inner { width: 100%; }
-.layout-grid .task-row { grid-template-columns: 7mm minmax(0, 1fr); }
+.layout-grid .task-row { grid-template-columns: max-content minmax(0, 1fr); }
 .layout-grid .expression-wrap { width: 100%; min-width: 0; max-width: 100%; }
 .layout-grid .formula { font-size:18px; }
 .layout-grid .inline-math { font-size:inherit; }
