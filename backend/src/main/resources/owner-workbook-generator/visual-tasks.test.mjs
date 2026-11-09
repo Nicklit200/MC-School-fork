@@ -52,6 +52,64 @@ test('pizza sectors count and reduce correctly including empty and whole circles
     assert.ok(!JSON.stringify(r.blocks).includes(answer));
   }
 });
+
+test('visual tasks accept minimal ChatGPT graph and geometry specs without irrelevant optional fields',()=>{
+  const draw=compileVisual({type:'graph',language:'de',objective:'draw',
+    series:[{kind:'linear',parameters:[2,1]}],xRange:[-5,5],yRange:[-5,5]});
+  assert.equal(draw.blocks[2].type,'coordinateGrid');
+  assert.ok(!JSON.stringify(draw.blocks).includes('polyline'));
+  assert.equal(draw.teacherDiagram.type,'graph');
+  const tri=compileVisual({type:'geometry',language:'de',figure:'triangle',objective:'area',
+    vertices:[[0,0],[6,0],[0,8]]});
+  assert.equal(tri.answer,'≈ 24 cm²');
+  assert.equal(tri.teacherDiagram.type,'geometry');
+  const circle=compileVisual({type:'geometry',language:'de',figure:'circle',objective:'area',parameters:[3]});
+  assert.equal(circle.teacherDiagram.figure,'circle');
+  assert.throws(()=>compileVisual({type:'graph',language:'de',objective:'value',
+    series:[{kind:'linear',parameters:[2,1]}],xRange:[-5,5],yRange:[-5,5]}),/Invalid visual number/);
+});
+
+test('teacher gets computed solution diagrams, student receives no answer markers',()=>{
+  const drawSpec={type:'graph',language:'de',objective:'draw',
+    series:[{kind:'linear',parameters:[2,1]}],xRange:[-5,5],yRange:[-5,5]};
+  const crossSpec={type:'graph',language:'de',objective:'intersections',
+    series:[{kind:'linear',parameters:[2,-1]},{kind:'linear',parameters:[-1,5]}],
+    xRange:[-5,5],yRange:[-5,6]};
+  const geoSpec={type:'geometry',language:'de',figure:'triangle',objective:'area',
+    vertices:[[0,0],[6,0],[0,8]]};
+  const lesson={
+    workbookPages:[{title:'Konstruktion',blocks:[
+      {type:'visualTask',number:1,spec:drawSpec},
+      {type:'visualTask',number:2,spec:crossSpec},
+      {type:'visualTask',number:3,spec:geoSpec}
+    ]}],
+    teacherPages:[{title:'Bestehende Lösungen',blocks:[{type:'teacherNote',label:'',text:'Bestehende Inhalte bleiben erhalten.'}]}],
+    qa:{algebra:[{kind:'visualValue',number:1},{kind:'visualValue',number:2},{kind:'visualValue',number:3}]}
+  };
+  const before=lesson.teacherPages[0].blocks;
+  const visual=prepareVisualTasks(lesson);
+  assert.equal(visual.results.size,3);
+  assert.strictEqual(lesson.teacherPages[0].blocks,before);
+  assert.equal(lesson.teacherPages.length,2);
+  assert.equal(lesson.qa.algebra.length,0);
+  const student=JSON.stringify(lesson.workbookPages);
+  assert.ok(student.includes('"type":"coordinateGrid"'));
+  assert.ok(!student.includes('MUSTERLÖSUNG') && !student.includes('"points"') && !student.includes('"showIntersections":true'));
+  const teachers=lesson.teacherPages[1].blocks;
+  assert.equal(teachers.filter(b=>b.type==='graph').length,2);
+  assert.equal(teachers.filter(b=>b.type==='geometry').length,1);
+  assert.equal(teachers.filter(b=>b.type==='callout').length,3);
+  assert.equal(teachers[1].series[0].m,2);
+  assert.equal(teachers[3].points.length,1);
+  assert.equal(teachers[3].points[0].x,2);
+  assert.equal(teachers[3].points[0].y,3);
+  assert.ok(teachers[5].vertices.length===3);
+  assert.ok(JSON.stringify(teachers).includes('≈ 24 cm²'));
+  const graphSvgRef=teachers.filter(b=>b.type==='graph');
+  assert.ok(graphSvgRef.every(g=>g.label.includes('MUSTERLÖSUNG')));
+  assert.ok(visual.results.get(2)==='(2; 3)');
+});
+
 test('invalid shapes, hidden answer channels, unsafe inputs and undefined graph tasks fail closed',()=>{
   for(const s of [
     geo('triangle','area',[],[[0,0],[1,1],[2,2]]),geo('rectangle','area',[],[[0,0],[8,0],[7,4],[0,4]]),
