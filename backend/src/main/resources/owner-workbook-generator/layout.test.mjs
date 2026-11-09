@@ -109,6 +109,42 @@ test('physical branded A4 PDFs succeed with mixed graph, intersection, geometry 
   }finally{await rm(dir,{recursive:true,force:true});}
 });
 
+
+test('HOMEWORK mode creates one physical A4 page per day without printing student name, group or dates',async()=>{
+  await mkdir(join(root,'out'),{recursive:true});
+  const dir=await mkdtemp(join(root,'out','homework-a4-'));
+  try{
+    const lesson=basic();
+    lesson.meta.group='Sofia Muster';lesson.meta.date='09.11.2026';
+    lesson.meta.homeworkMode=true;lesson.meta.homeworkDay=1;
+    lesson.meta.homeworkEstimatedMinutes=8;
+    lesson.workbookPages=[{title:'Hausaufgaben',subtitle:'Übe das Zusammenfassen.',blocks:[
+      {type:'callout',label:'Merke',text:'Сначала вычисли. Zähler и Nenner используются только по знакомым правилам.'},
+      {type:'exercise',number:1,title:'Berechne.',rows:[{label:'',math:{latex:'2+3'},work:true}],writeLines:6},
+      {type:'exercise',number:2,title:'Berechne.',rows:[{label:'',math:{latex:'3+4'},work:true}],writeLines:6}
+    ]}];
+    lesson.teacherPages=[{title:'Lösungen',blocks:[{type:'solutions',section:'QA',title:'Antworten',
+      items:[{label:'1',math:{latex:'2+3=5'}},{label:'2',math:{latex:'3+4=7'}}]}]}];
+    lesson.qa={algebra:[{kind:'equivalence',number:1,expression:'2+3',answer:'5',restrictions:[]},
+                        {kind:'equivalence',number:2,expression:'3+4',answer:'7',restrictions:[]}]};
+    await writeFile(join(dir,'day.json'),JSON.stringify(lesson));
+    const run=spawnSync(process.execPath,[join(root,'generate.mjs'),'--lesson='+join(dir,'day.json'),
+      '--out='+dir,'--basename=Homework'],{encoding:'utf8',timeout:115000,env:process.env});
+    assert.equal(run.status,0,run.stderr||run.stdout||run.error?.message);
+    const layout=JSON.parse(await readFile(join(dir,'Homework_layout-qa.json'),'utf8'));
+    assert.equal(layout.passed,true);
+    assert.equal(layout.documents[0].pageCount,1,'Daily homework must remain exactly one physical A4 page');
+    const pupil=await readFile(join(dir,'Homework_Arbeitsheft_60min.html'),'utf8');
+    const answers=await readFile(join(dir,'Homework_Lehrerloesungen_60min.html'),'utf8');
+    assert.match(pupil,/HAUSAUFGABEN/);
+    assert.ok(!pupil.includes('Sofia Muster'));
+    assert.ok(!pupil.includes('09.11.2026'));
+    assert.ok(!pupil.includes('Tag 01'));
+    assert.ok(!pupil.includes('2+3=5'));
+    assert.match(answers,/2\+3/);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
 test('bounded layout schema rejects unsafe CSS and ambiguous math',()=>{
   assert.equal(columns(['42%','58%']),'42fr 58fr');
   assert.throws(()=>columns(['60%','60%']),/total/);
