@@ -147,6 +147,7 @@ public class WorkbookGenerationJobService {
             if(message.startsWith("Server content generation is not configured"))return "AI_NOT_CONFIGURED";
             if(message.contains("Algebra QA")||message.contains("Algebra validation"))return "MATH_QA_FAILED";
             if(message.contains("Layout QA")||message.contains("layout check")||message.contains("overflow A4"))return "LAYOUT_QA_FAILED";
+            if(message.matches("COMPACT_[A-Z_]{2,48}")) return message;
             if(ex instanceof IllegalArgumentException)return "VALIDATION_FAILED";
         }
         return "GENERATION_FAILED";
@@ -175,6 +176,12 @@ public class WorkbookGenerationJobService {
                 case "MATH_QA_FAILED" -> "The generated tasks or answers did not pass mathematical validation.";
                 case "LAYOUT_QA_FAILED" -> "The PDF would contain clipped or overlapping content. Reduce content per page.";
                 case "VALIDATION_FAILED" -> "The task content or fresh lesson context failed validation.";
+                case "COMPACT_TASK_COUNT", "COMPACT_TITLE", "COMPACT_SUBTITLE", "COMPACT_NOTES",
+                     "COMPACT_TASK_KIND", "COMPACT_TASK_TITLE", "COMPACT_TASK_INSTRUCTION",
+                     "COMPACT_TASK_EXPRESSION", "COMPACT_TASK_ANSWER", "COMPACT_RESTRICTIONS",
+                     "COMPACT_EQUATION_EQUALS", "COMPACT_EQUATION_VARIABLE", "COMPACT_EXPRESSION_EQUALS",
+                     "COMPACT_DOCUMENT_SCHEMA", "COMPACT_TEXT" ->
+                        "The compact task response failed a safe structural validation stage.";
                 case "INTERRUPTED" -> "The server stopped before completion was committed. No automatic regeneration was started.";
                 default -> "Workbook generation failed. The job ID identifies the server diagnostic without exposing pupil data.";
             });
