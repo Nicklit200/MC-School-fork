@@ -1169,7 +1169,7 @@ public class MindcraftiMcpController {
                 visibleNames.add("update_brand_guide");
             }
             if(auth.user()!=null && workbookJobs!=null)
-                status.put("workbookQueue",workbookJobs.capacity(auth.user()));
+                status.put("workbookQueue",workbookJobs.capacity(personalWorkbookAccess.requireActor(auth.user())));
             status.put("availableToolCount", visibleNames.size());
             status.put("availableToolNames", visibleNames);
             return toolResult(status);
