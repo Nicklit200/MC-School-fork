@@ -32,6 +32,30 @@ def document(content):
 
 
 class LayoutRejectionTests(unittest.TestCase):
+    def test_aufgabe_label_stays_separate_from_formula_in_normal_and_nested_rows(self):
+        """Long ChatGPT-authored task labels must never cover formula glyphs."""
+        css = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        for nested in (False, True):
+            with self.subTest(nested_grid=nested):
+                task = ('<div class="task-row">'
+                        '<span class="item-label">Aufgabe</span>'
+                        '<div class="expression-wrap"><span class="formula">'
+                        '3(2x - 4) - 2(x + 5) + 7'
+                        '</span></div></div>')
+                if nested:
+                    task = '<div class="layout-grid" style="grid-template-columns:1fr">' + task + '</div>'
+                html = ('<meta charset="utf-8"><style>' + css + '</style>'
+                        '<article class="sheet student"><main class="paper-content">'
+                        + task + '</main></article>')
+                pdf_bytes = HTML(string=html).write_pdf()
+                with fitz.open(stream=pdf_bytes, filetype='pdf') as pdf:
+                    spans = [span for block in pdf[0].get_text('dict')['blocks']
+                             for line in block.get('lines', []) for span in line.get('spans', [])]
+                label = next(span['bbox'] for span in spans if span['text'].strip() == 'Aufgabe')
+                expression = next(span['bbox'] for span in spans if span['text'].strip().startswith('3(2x'))
+                self.assertGreaterEqual(expression[0], label[2] - 0.5,
+                                        'Task label overlaps the mathematical expression')
+
     def test_batch_render_checks_the_second_document_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
