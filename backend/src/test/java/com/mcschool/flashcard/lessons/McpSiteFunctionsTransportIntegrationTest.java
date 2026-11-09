@@ -168,15 +168,20 @@ class McpSiteFunctionsTransportIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM mcp_operation_receipts WHERE operation='publish_personal_lesson_draft'",Integer.class)).isZero();
     }
 
-    @Test void teacherHttpGenerationQueuesWithoutAiAndCanPollOnlyTheirOwnJob()throws Exception {
+    @Test void teacherHttpGenerationRequiresChatGptContentAndNeverQueuesServerAi()throws Exception {
         var args=personalDraft(transcriptPdf("Teacher answers"));
-        var queued=value(call("teacher-a","generate_lesson_workbook_draft",Map.of("eventId",args.get("eventId"),"idempotencyKey","queued-http")));
-        assertThat(queued.path("status").asText()).isEqualTo("QUEUED");assertThat(queued.has("draftId")).isFalse();
-        var statusArgs=Map.<String,Object>of("jobId",queued.path("jobId").asText());
-        assertThat(value(call("teacher-a","get_lesson_workbook_job",statusArgs)).path("status").asText()).isEqualTo("QUEUED");
-        rpcFailure("teacher-b","get_lesson_workbook_job",statusArgs);
-        for(var tool:request("teacher-a","tools/list",Map.of()).path("tools"))if("publish_personal_lesson_draft".equals(tool.path("name").asText())) {
-            assertThat(tool.path("_meta").has("openai/fileParams")).isFalse();assertThat(tool.path("inputSchema").path("properties").has("draftId")).isTrue();
+        int previous=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs",Integer.class);
+        rpcFailure("teacher-a","generate_lesson_workbook_draft",Map.of("eventId",args.get("eventId"),"idempotencyKey","queued-http"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs",Integer.class)).isEqualTo(previous);
+        for(var tool:request("teacher-a","tools/list",Map.of()).path("tools")) {
+            if("generate_lesson_workbook_draft".equals(tool.path("name").asText())) {
+                assertThat(tool.path("inputSchema").path("required").toString()).contains("lessonJson","contextToken");
+                assertThat(tool.path("description").asText()).contains("ChatGPT");
+            }
+            if("publish_personal_lesson_draft".equals(tool.path("name").asText())) {
+                assertThat(tool.path("_meta").has("openai/fileParams")).isFalse();
+                assertThat(tool.path("inputSchema").path("properties").has("draftId")).isTrue();
+            }
         }
     }
 
