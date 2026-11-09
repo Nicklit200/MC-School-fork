@@ -30,20 +30,20 @@ class OwnerWorkbookPdfRenderServiceTest {
     }
 
     @Test
-    void fourthConcurrentRenderIsRejectedBeforeBrandIoOrDraftCreationAndSlotsAreReleased() throws Exception {
+    void fifthConcurrentRenderIsRejectedBeforeBrandIoOrDraftCreationAndSlotsAreReleased() throws Exception {
         ObjectMapper json = new ObjectMapper();
         LessonPdfDraftService drafts = mock(LessonPdfDraftService.class);
         SchoolBrandGuideService brand = mock(SchoolBrandGuideService.class);
         var service = new OwnerWorkbookPdfRenderService(json, drafts, brand);
         var teacher = new AuthenticatedUser(UUID.randomUUID(), "teacher@test.local", Role.TEACHER);
         String lesson = json.writeValueAsString(document(60));
-        CountDownLatch entered = new CountDownLatch(3), release = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(4), release = new CountDownLatch(1);
         when(brand.readForStaff(teacher)).thenAnswer(invocation -> {
             entered.countDown();
             if (!release.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Timed out waiting for test release");
             throw new IllegalStateException("Controlled brand read failure");
         });
-        var workers = Executors.newFixedThreadPool(3);
+        var workers = Executors.newFixedThreadPool(4);
         try {
             var first = workers.submit(() -> assertThrows(IllegalStateException.class,
                     () -> service.create(teacher, "lesson-one", lesson, "", "")));
@@ -51,21 +51,24 @@ class OwnerWorkbookPdfRenderServiceTest {
                     () -> service.create(teacher, "lesson-two", lesson, "", "")));
             var third = workers.submit(() -> assertThrows(IllegalStateException.class,
                     () -> service.create(teacher, "lesson-three", lesson, "", "")));
-            assertTrue(entered.await(5, TimeUnit.SECONDS), "All three background render slots should be occupied");
+            var fourth = workers.submit(() -> assertThrows(IllegalStateException.class,
+                    () -> service.create(teacher, "lesson-four", lesson, "", "")));
+            assertTrue(entered.await(5, TimeUnit.SECONDS), "All four renderer permits should be occupied");
             ResponseStatusException busy = assertThrows(ResponseStatusException.class,
-                    () -> service.create(teacher, "lesson-four", lesson, "", ""));
+                    () -> service.create(teacher, "lesson-five", lesson, "", ""));
             assertEquals(503, busy.getStatusCode().value());
             assertTrue(busy.getReason().contains("same idempotencyKey"));
-            verify(brand, times(3)).readForStaff(teacher);
+            verify(brand, times(4)).readForStaff(teacher);
             verify(brand, never()).pdfForStaff(any());
             verifyNoInteractions(drafts);
             release.countDown();
             first.get(5, TimeUnit.SECONDS);
             second.get(5, TimeUnit.SECONDS);
             third.get(5, TimeUnit.SECONDS);
+            fourth.get(5, TimeUnit.SECONDS);
             assertThrows(IllegalStateException.class,
                     () -> service.create(teacher, "lesson-after-release", lesson, "", ""));
-            verify(brand, times(4)).readForStaff(teacher);
+            verify(brand, times(5)).readForStaff(teacher);
             verifyNoInteractions(drafts);
         } finally {
             release.countDown();
