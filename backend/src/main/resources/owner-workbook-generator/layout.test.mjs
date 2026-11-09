@@ -68,6 +68,47 @@ test('visual graph and geometry tasks render empty pupil grids and plotted priva
   assert.ok((teacher.match(/class="diagram-svg"/g)||[]).length>=3);
 });
 
+
+test('physical branded A4 PDFs succeed with mixed graph, intersection, geometry and private solutions',async()=>{
+  await mkdir(join(root,'out'),{recursive:true});
+  const dir=await mkdtemp(join(root,'out','visual-a4-'));
+  try {
+    const lesson=basic();
+    lesson.workbookPages=[{title:'QA: Graphen und Geometrie',blocks:[
+      {type:'exercise',number:'0',title:'Kontrollaufgabe',
+        rows:[{label:'a)',math:{latex:'2+2'},work:true}],writeLines:2},
+      {type:'visualTask',number:1,spec:{type:'graph',language:'de',objective:'draw',
+        series:[{kind:'linear',parameters:[2,1]}],xRange:[-5,5],yRange:[-5,5]}},
+      {type:'visualTask',number:2,spec:{type:'graph',language:'de',objective:'intersections',
+        series:[{kind:'linear',parameters:[2,-1]},{kind:'linear',parameters:[-1,5]}],
+        xRange:[-5,5],yRange:[-5,6]}},
+      {type:'visualTask',number:3,spec:{type:'geometry',language:'de',figure:'triangle',
+        objective:'area',vertices:[[0,0],[6,0],[0,8]]}}
+    ]}];
+    lesson.teacherPages=[{title:'QA: Kontrollantworten',blocks:[
+      {type:'solutions',section:'QA',title:'Ergebnisse',items:[{label:'0a',math:{latex:'2+2=4'}}]}
+    ]}];
+    lesson.qa={algebra:[{kind:'equivalence',expression:'2+2',answer:'4',restrictions:[]},
+      {kind:'visualValue',number:1},{kind:'visualValue',number:2},{kind:'visualValue',number:3}]};
+    const file=join(dir,'lesson.json');await writeFile(file,JSON.stringify(lesson));
+    const run=spawnSync(process.execPath,[join(root,'generate.mjs'),'--lesson='+file,
+      '--out='+dir,'--basename=VisualA4'],{encoding:'utf8',timeout:115000,env:process.env});
+    assert.equal(run.status,0,run.stderr||run.stdout||run.error?.message);
+    const names=await readdir(dir);
+    assert.ok(names.includes('VisualA4_Arbeitsheft_60min.pdf'));
+    assert.ok(names.includes('VisualA4_Lehrerloesungen_60min.pdf'));
+    const qa=JSON.parse(await readFile(join(dir,'VisualA4_math-qa.json'),'utf8'));
+    assert.equal(qa.passed,true);assert.equal(qa.visualChecked,3);assert.equal(qa.checked,4);
+    const layout=JSON.parse(await readFile(join(dir,'VisualA4_layout-qa.json'),'utf8'));
+    assert.equal(layout.passed,true);assert.ok(layout.documents[1].pageCount>=4);
+    const pupil=await readFile(join(dir,'VisualA4_Arbeitsheft_60min.html'),'utf8');
+    const teacher=await readFile(join(dir,'VisualA4_Lehrerloesungen_60min.html'),'utf8');
+    assert.ok(!pupil.includes('MUSTERLÖSUNG')&&!pupil.includes('graph-intersection'));
+    assert.ok((teacher.match(/class="diagram-svg"/g)||[]).length>=3);
+    assert.match(teacher,/MUSTERLÖSUNG/);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
 test('bounded layout schema rejects unsafe CSS and ambiguous math',()=>{
   assert.equal(columns(['42%','58%']),'42fr 58fr');
   assert.throws(()=>columns(['60%','60%']),/total/);
