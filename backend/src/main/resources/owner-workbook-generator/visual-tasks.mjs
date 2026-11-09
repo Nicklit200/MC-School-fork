@@ -185,11 +185,13 @@ export function prepareVisualTasks(lesson) {
   if(results.size)lesson.qa.algebra=assertions.filter(c=>c.kind!=='visualValue');
   // Only private teacher pages contain the plotted answer markers and
   // reference geometry. Rendered by the same SVG generator as student work.
-  // Group four references into one logical page; A4 auto-pagination safely
-  // splits these blocks further when needed.
+  // Keep at most two full-size diagrams on each teacher page. The legacy
+  // --plain renderer skips auto-pagination, so every page must fit A4 already.
   if(referenceDiagrams.length && Array.isArray(lesson.teacherPages)){
-    for(let start=0;start<referenceDiagrams.length;start+=4){
-      const chunk=referenceDiagrams.slice(start,start+4);
+    if(lesson.teacherPages.length + Math.ceil(referenceDiagrams.length/2) > 20)
+      throw Error('Too many teacher pages for visual reference diagrams; reduce visual tasks or combine existing answer pages');
+    for(let start=0;start<referenceDiagrams.length;start+=2){
+      const chunk=referenceDiagrams.slice(start,start+2);
       lesson.teacherPages.push({title:'Grafik & Geometrie – Musterlösungen',
         subtitle:'Automatisch aus den Aufgabendaten berechnet · nur Lehrkräfte',
         blocks:chunk.flatMap(({number,answer,diagram})=>[
