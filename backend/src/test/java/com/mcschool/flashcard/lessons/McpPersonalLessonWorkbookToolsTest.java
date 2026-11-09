@@ -307,7 +307,7 @@ class McpPersonalLessonWorkbookToolsTest {
     void discoveryAndInitializationExplainTwoBoardsAndTheCommonOrBlankFallback() {
         for (String method : List.of("initialize", "server/discover")) {
             Map<String, Object> discovery = request("owner", method, Map.of());
-            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.34.0");
+            assertThat((Map<String, Object>) discovery.get("serverInfo")).containsEntry("version", "1.35.0");
             assertThat(String.valueOf(discovery.get("instructions"))).contains("Shared board and My board (Моя доска)",
                     "takes priority over the common workbook", "uses the common workbook or stays blank",
                     "Shared board continues to show the common workbook to everyone");
