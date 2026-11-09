@@ -90,7 +90,7 @@ test('teacher gets computed solution diagrams, student receives no answer marker
   const visual=prepareVisualTasks(lesson);
   assert.equal(visual.results.size,3);
   assert.strictEqual(lesson.teacherPages[0].blocks,before);
-  assert.equal(lesson.teacherPages.length,3);
+  assert.equal(lesson.teacherPages.length,4);
   assert.equal(lesson.qa.algebra.length,0);
   const student=JSON.stringify(lesson.workbookPages);
   assert.ok(student.includes('"type":"coordinateGrid"'));
