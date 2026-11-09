@@ -94,12 +94,12 @@ class WorkbookTeacherWorkflowTest {
 
     @Test
     void ordinaryTeacherCanGenerateOnlyOwnLessonWithoutPublishingAndRetryReusesDraft() throws Exception {
-        Map<String,Object> args=Map.of("eventId","lesson-a","instruction","Mehr Graphen","idempotencyKey","generation-one");
+        String token=contextToken();
+        Map<String,Object> args=Map.of("eventId","lesson-a","instruction","Mehr Graphen","idempotencyKey","generation-one",
+                "lessonJson",preparedJson(),"contextToken",token);
         assertThat(call(a,"generate_lesson_workbook_draft",args)).doesNotContainKey("error");
         assertThat(call(a,"generate_lesson_workbook_draft",args)).doesNotContainKey("error");
-        verify(content,times(1)).generate(argThat(ctx->ctx.get("teachingPrompt").equals("individual-current")
-                && ctx.get("workbookPrompt").equals("workbook-current") && Boolean.FALSE.equals(ctx.get("monthPlanAvailable"))
-                && !((Map<?,?>)ctx.get("brandGuide")).containsKey("base64")),eq("Mehr Graphen"));
+        verifyNoInteractions(content);
         verify(renderer,times(1)).create(eq(principal(a)),eq("lesson-a"),anyString(),eq(""),eq(""));
         verifyNoInteractions(preparation);
     }
@@ -112,10 +112,23 @@ class WorkbookTeacherWorkflowTest {
         Map<String,Object> queued=Map.of("jobId",jobId,"status","QUEUED","teacherId",a.getId().toString(),"eventId","lesson-a","published",false);
         when(jobs.enqueue(eq(principal(a)),eq(a.getId()),eq("lesson-a"),eq("queued-one"),anyMap())).thenReturn(queued);
         when(jobs.status(eq(principal(a)),eq(UUID.fromString(jobId)))).thenReturn(queued);
-        assertThat(call(a,"generate_lesson_workbook_draft",Map.of("eventId","lesson-a","idempotencyKey","queued-one"))).doesNotContainKey("error");
+        String token=contextToken();
+        assertThat(call(a,"generate_lesson_workbook_draft",Map.of("eventId","lesson-a","idempotencyKey","queued-one",
+                "lessonJson",preparedJson(),"contextToken",token))).doesNotContainKey("error");
         assertThat(call(a,"get_lesson_workbook_job",Map.of("jobId",jobId))).doesNotContainKey("error");
         verifyNoInteractions(content,renderer,preparation,receipts);
         verify(jobs).enqueue(eq(principal(a)),eq(a.getId()),eq("lesson-a"),eq("queued-one"),argThat(args->a.getId().toString().equals(args.get("teacherId"))));
+    }
+
+    @Test
+    void missingChatGptLessonJsonNeverQueuesServerAiGeneration() {
+        var jobs=mock(WorkbookGenerationJobService.class);
+        controller.setWorkbookJobs(jobs);
+        assertThat(call(a,"generate_lesson_workbook_draft",Map.of("eventId","lesson-a","idempotencyKey","no-ai"))).containsKey("error");
+        assertThat(call(admin,"generate_lesson_workbook_draft",Map.of("teacherId",a.getId().toString(),
+                "eventId","lesson-a","idempotencyKey","admin-no-ai"))).containsKey("error");
+        verify(jobs,never()).enqueue(any(),any(),anyString(),anyString(),anyMap());
+        verifyNoInteractions(content,renderer,receipts);
     }
 
     @Test
@@ -137,7 +150,9 @@ class WorkbookTeacherWorkflowTest {
 
     @Test
     void adminCanGenerateForSelectedTeacherAndTeacherCannotFetchSources() throws Exception {
-        assertThat(call(admin,"generate_lesson_workbook_draft",Map.of("teacherId",a.getId().toString(),"eventId","lesson-a","idempotencyKey","admin-gen"))).doesNotContainKey("error");
+        String token=contextToken();
+        assertThat(call(admin,"generate_lesson_workbook_draft",Map.of("teacherId",a.getId().toString(),"eventId","lesson-a",
+                "idempotencyKey","admin-gen","lessonJson",preparedJson(),"contextToken",token))).doesNotContainKey("error");
         verify(renderer).create(eq(principal(a)),eq("lesson-a"),anyString(),anyString(),anyString());
         assertThat(call(a,"get_owner_workbook_generator",Map.of())).containsKey("error");
         assertThat(call(admin,"get_owner_workbook_generator",Map.of())).doesNotContainKey("error");
