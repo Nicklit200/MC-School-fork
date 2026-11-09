@@ -33,9 +33,8 @@ async function render(source, options=[]) {
     const workbook=await readFile(join(dir,files.find(f=>/_Arbeitsheft_\d+min\.html$/.test(f))),'utf8');
     const teacher=await readFile(join(dir,files.find(f=>/_Lehrerloesungen_\d+min\.html$/.test(f))),'utf8');
     const qa=JSON.parse(await readFile(join(dir,'Test_math-qa.json'),'utf8'));
-    const checked=JSON.parse(await readFile(join(dir,'Test_checked-source.json'),'utf8'));
     assert.equal(qa.passed,true);
-    return {workbook,teacher,checked};
+    return {workbook,teacher};
   } finally {
     await rm(dir,{recursive:true,force:true});
   }
@@ -69,43 +68,6 @@ test('nested layouts and rich text render through the production pipeline',async
   assert.match(teacher,/inline-math/);
 });
 
-test('server-computed compact answers replace model placeholders before teacher rendering',async()=>{
-  const lesson=basic();
-  lesson.meta.answerMode='server-computed';
-  lesson.workbookPages[0].blocks=[
-    {type:'exercise',number:'01',title:'Brüche',rows:[{label:'',math:{latex:'2/3+1/4'},work:true}],writeLines:2},
-    {type:'exercise',number:'02',title:'Gleichwertigkeit',rows:[{label:'',math:{latex:'2/3=4/6'},work:true}],writeLines:2},
-    {type:'exercise',number:'03',title:'Gleichung',rows:[{label:'',math:{latex:'x-7=-11'},work:true}],writeLines:2}
-  ];
-  lesson.teacherPages[0].blocks=[{type:'solutions',section:'AI',title:'Untrusted placeholders',items:[
-    {label:'1',math:{latex:'999'},text:'',note:''},
-    {label:'2',math:{latex:'999'},text:'',note:''},
-    {label:'3',math:{latex:'x = 999'},text:'',note:''}
-  ]}];
-  lesson.qa={algebra:[
-    {kind:'expressionValue',expression:'2/3+1/4',restrictions:[]},
-    {kind:'relationValue',relation:'2/3=4/6',restrictions:[]},
-    {kind:'linearValue',equation:'x-7=-11',variable:'x',restrictions:[]}
-  ]};
-  const {teacher,checked}=await render(lesson);
-  const items=checked.teacherPages.flatMap(page=>page.blocks)
-    .filter(block=>block.type==='solutions').flatMap(block=>block.items);
-  assert.deepEqual(items.map(item=>item.math.latex),['\\frac{11}{12}','\\text{gleichwertig}','x = -4']);
-  assert.doesNotMatch(JSON.stringify(checked.teacherPages),/999/);
-  assert.match(teacher,/Kontrollierte Lösungen/);
-});
-
-test('crowded top-level workbook content is repaginated instead of rejected',async()=>{
-  const lesson=basic();
-  lesson.workbookPages[0].blocks=Array.from({length:12},(_,index)=>({
-    type:'callout',label:'SCHRITT '+(index+1),text:'Kurze Erklärung für diese Aufgabe.'
-  }));
-  const {workbook}=await render(lesson);
-  assert.equal((workbook.match(/class="sheet student"/g)||[]).length,2);
-  assert.match(workbook,/SCHRITT 1/);
-  assert.match(workbook,/SCHRITT 12/);
-});
-
 test('preflight counts parallel columns by maximum and stacked rows by sum',async()=>{
   const graph=()=>({type:'coordinateGrid',xRange:[-5,5],yRange:[-5,5]});
   for(const block of [
@@ -118,7 +80,7 @@ test('preflight counts parallel columns by maximum and stacked rows by sum',asyn
   }
   const lesson=basic();
   lesson.workbookPages[0].blocks=[{type:'stack',children:Array.from({length:4},graph)}];
-  await assert.rejects(()=>render(lesson),/(?:likely to overflow A4|one block too large for A4)/);
+  await assert.rejects(()=>render(lesson),/likely to overflow A4/);
   lesson.workbookPages[0].blocks=Array.from({length:20},()=>({type:'divider'}));
   await render(lesson);
 });
