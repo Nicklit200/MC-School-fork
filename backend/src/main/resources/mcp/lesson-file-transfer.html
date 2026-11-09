@@ -369,8 +369,9 @@
       if (key === contextKey) return;
       if (busy) { pending = c; return; }
       context = c; contextKey = key; selected = {}; uploaded = false; lastResult = null; attempted = false; phase = 'ready';
-      $('title').textContent = homework(c) ? 'Домашнее задание' : 'Материалы урока';
-      $('note').textContent = homework(c)
+      const titleNode = $('title'), noteNode = $('note');
+      if (titleNode) titleNode.textContent = homework(c) ? 'Домашнее задание' : 'Материалы урока';
+      if (noteNode) noteNode.textContent = homework(c)
         ? 'PDF назначаются на выбранные даты. Другие домашние задания и материалы урока остаются на месте.'
         : 'Файлы сохраняются в выбранном уроке. Другие материалы остаются на месте.';
       const saved = window.openai?.widgetState;
