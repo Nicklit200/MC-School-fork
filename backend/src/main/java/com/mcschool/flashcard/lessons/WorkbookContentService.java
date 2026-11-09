@@ -21,7 +21,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Service
 public class WorkbookContentService {
-    private static final Set<String> KINDS = Set.of("expression", "equation");
+    private static final Set<String> KINDS = Set.of("expression", "equation", "relation");
     private final String apiKey;
     private final String model;
     private final ObjectMapper json;
@@ -67,8 +67,9 @@ public class WorkbookContentService {
                 Supported fast task kinds:
                 - expression: expression is a safe plain mathematical expression such as 2/3+1/4, 27/36, 5*(3+2). answer is its exact
                   simplified value/expression.
-                - equation: expression is one linear equation with exactly one '=' such as x-7=-11. variable is its single variable and
-                  answer is the exact value of that variable.
+                - equation: expression is one linear equation with exactly one '=' such as x-7=-11. variable is its single variable.
+                - relation: expression is one numeric equality with exactly one '=' such as 2/3=4/6. Use it for Gleichwertigkeit tasks.
+                  It must contain no variables; the server decides whether the relation is true or false.
                 Use ^ for powers and / for fractions. Do not put LaTeX commands in expression or answer.
                 Put the full German word-problem wording in instruction when needed; the checked calculation remains in expression.
                 restrictions contains only explicit domain exclusions such as "x != 3"; otherwise [].
@@ -81,7 +82,7 @@ public class WorkbookContentService {
         Map<String,Object> taskSchema = Map.of(
                 "type","object",
                 "properties",Map.of(
-                        "kind",Map.of("type","string","enum",List.of("expression","equation")),
+                        "kind",Map.of("type","string","enum",List.of("expression","equation","relation")),
                         "title",Map.of("type","string"),
                         "instruction",Map.of("type","string"),
                         "expression",Map.of("type","string"),
@@ -186,11 +187,14 @@ public class WorkbookContentService {
             if (task.restrictions() == null || task.restrictions().size() > 4
                     || task.restrictions().stream().anyMatch(v -> v == null || v.length() > 60))
                 throw compact("RESTRICTIONS");
+            long equals = task.expression().chars().filter(ch -> ch == '=').count();
             if ("equation".equals(task.kind())) {
-                if (task.expression().chars().filter(ch -> ch == '=').count() != 1)
-                    throw compact("EQUATION_EQUALS");
+                if (equals != 1) throw compact("EQUATION_EQUALS");
                 variableOf(task);
-            } else if (task.expression().contains("=")) {
+            } else if ("relation".equals(task.kind())) {
+                if (equals != 1) throw compact("RELATION_EQUALS");
+                if (containsSupportedVariable(task.expression())) throw compact("RELATION_VARIABLE");
+            } else if (equals != 0) {
                 throw compact("EXPRESSION_EQUALS");
             }
         }
@@ -214,7 +218,9 @@ public class WorkbookContentService {
                         : " (" + String.join(", ", task.restrictions()) + ")";
                 String taskTitle = blank(task.title()) ? "Aufgabe " + (i+1) : task.title().trim();
                 String instruction = blank(task.instruction())
-                        ? ("equation".equals(task.kind()) ? "Löse die Gleichung." : "Berechne.")
+                        ? ("equation".equals(task.kind()) ? "Löse die Gleichung."
+                            : "relation".equals(task.kind()) ? "Prüfe, ob die Brüche gleichwertig sind."
+                            : "Berechne.")
                         : task.instruction().trim();
                 blocks.add(Map.of(
                         "type","exercise",
@@ -261,6 +267,11 @@ public class WorkbookContentService {
                         "equation",task.expression(),
                         "variable",variableOf(task),
                         "restrictions",task.restrictions()));
+            } else if ("relation".equals(task.kind())) {
+                assertions.add(Map.of(
+                        "kind","relationValue",
+                        "relation",task.expression(),
+                        "restrictions",task.restrictions()));
             } else {
                 assertions.add(Map.of(
                         "kind","expressionValue",
@@ -283,6 +294,14 @@ public class WorkbookContentService {
         result.put("teacherPages",teacherPages);
         result.put("qa",Map.of("algebra",assertions));
         return result;
+    }
+
+    private static boolean containsSupportedVariable(String expression) {
+        for (String candidate : Set.of("x","y","z","a","b","c","m","n")) {
+            if (java.util.regex.Pattern.compile("(?<![A-Za-z])"+candidate+"(?![A-Za-z])").matcher(expression).find())
+                return true;
+        }
+        return false;
     }
 
     private static String variableOf(CompactTask task) {
