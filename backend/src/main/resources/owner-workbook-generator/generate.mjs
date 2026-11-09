@@ -203,7 +203,7 @@ function pageChrome({ index, count, title, subtitle, time, teacher }) {
 function workbookPage(p, idx, pages) {
   if (plain) return `<article class="sheet student plain" data-page="${idx+1}"><main class="paper-content">${p.blocks.map((b,i)=>renderWorkbookBlock(b,i,idx)).join('')}</main></article>`;
   const c = pageChrome({index: idx, count: pages.length, title:p.title,subtitle:p.subtitle,time:p.time,teacher:false});
-  return `<article class="sheet student" data-page="${idx+1}">${c.top}${c.heading}${c.pill}${c.progress}<main class="paper-content">${p.blocks.map((b,i)=>renderWorkbookBlock(b,i,idx)).join('')}</main>${c.footer}</article>`;
+  return `<article class="sheet student${lesson.meta.homeworkMode===true ? ' homework' : ''}" data-page="${idx+1}">${c.top}${c.heading}${c.pill}${c.progress}<main class="paper-content">${p.blocks.map((b,i)=>renderWorkbookBlock(b,i,idx)).join('')}</main>${c.footer}</article>`;
 }
 function teacherPage(p, idx, pages) {
   if (plain) return `<article class="sheet teacher plain" data-page="${idx+1}"><main class="paper-content">${p.blocks.map(teacherBlock).join('')}</main></article>`;
