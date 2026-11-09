@@ -55,7 +55,7 @@ public class WorkbookGenerationJobService {
     @Autowired
     public WorkbookGenerationJobService(JdbcTemplate jdbc, McpAccessService access, ObjectMapper json,
             PlatformTransactionManager transactions,
-            @Value("${app.workbook-jobs.concurrency:2}") int maxConcurrentJobs,
+            @Value("${app.workbook-jobs.concurrency:3}") int maxConcurrentJobs,
             @Value("${app.workbook-jobs.max-pending-per-actor:24}") int maxPendingPerActor,
             @Value("${app.workbook-jobs.max-global-active:60}") int maxGlobalActiveJobs) {
         if (maxConcurrentJobs < 1 || maxConcurrentJobs > 4)
@@ -78,7 +78,7 @@ public class WorkbookGenerationJobService {
     /** Compatibility constructor for focused unit tests and local callers. */
     public WorkbookGenerationJobService(JdbcTemplate jdbc, McpAccessService access, ObjectMapper json,
                                          PlatformTransactionManager transactions) {
-        this(jdbc,access,json,transactions,2,24,60);
+        this(jdbc,access,json,transactions,3,24,60);
     }
     public void setGenerator(Generator generator) { this.generator=Objects.requireNonNull(generator); }
 
