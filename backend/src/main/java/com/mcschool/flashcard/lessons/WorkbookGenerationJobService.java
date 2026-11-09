@@ -10,7 +10,6 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
