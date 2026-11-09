@@ -58,7 +58,7 @@ test('visual graph and geometry tasks render empty pupil grids and plotted priva
   lesson.teacherPages[0].blocks=[{type:'teacherNote',label:'ERGEBNISSE',text:'Nur für Lehrkräfte'}];
   lesson.qa={algebra:[{kind:'visualValue',number:1},{kind:'visualValue',number:2},{kind:'visualValue',number:3}]};
   const {workbook,teacher}=await render(lesson);
-  assert.match(workbook,/KOORDINATENSYSTEM/);
+  assert.match(workbook,/Leeres Koordinatensystem/);
   assert.match(workbook,/diagram-svg/);
   assert.ok(!workbook.includes('MUSTERLÖSUNG') && !workbook.includes('AUFGABE 1') && !workbook.includes('graph-intersection'));
   assert.match(teacher,/MUSTERLÖSUNG/);
