@@ -40,7 +40,7 @@ class WorkbookContentServiceTest {
         when(response.body()).thenReturn(providerResponse(List.of(
                 task("expression","Kürzen","Kürze vollständig.","27/36","3/4",""),
                 task("expression","Addieren","Berechne.","2/3+1/4","11/12",""),
-                task("equation","Gleichung","Löse die Gleichung.","x-7=-11","-4","x"),
+                task("equation","","","x-7=-11","-4",""),
                 task("expression","Subtrahieren","Berechne.","5/6-1/4","7/12",""))));
 
         var output=service.generate(Map.of(
@@ -54,6 +54,9 @@ class WorkbookContentServiceTest {
         var qa=(Map<String,Object>)doc.get("qa");
         assertEquals(4,((List<?>)qa.get("algebra")).size());
         assertTrue(output.lessonJson().contains("linearSolution"));
+        assertTrue(output.lessonJson().contains("x = -4"));
+        assertTrue(output.lessonJson().contains("Aufgabe 3"));
+        assertTrue(output.lessonJson().contains("Löse die Gleichung."));
         assertTrue(output.lessonJson().contains("3/4"));
         assertEquals("Evidenced notes",output.lessonPlan());
 
