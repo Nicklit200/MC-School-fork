@@ -139,7 +139,7 @@ class AlgebraTests(unittest.TestCase):
             'qa': {'algebra': [{'kind': 'equivalence', 'expression': '3/4', 'answer': '3/4'}]},
             'teacherPages': [{'blocks': [{'type': 'grid', 'children': [
                 {'type': 'solutions', 'items': [
-                    {'label': '1a', 'math': {'latex': r'\\frac{1}{2}+\\frac{1}{4}=\\frac{3}{4}'}},
+                    {'label': '1a', 'math': {'latex': r'\frac{1}{2}+\frac{1}{4}=\frac{3}{4}'}},
                     {'label': '1b', 'math': ['6', '+', '8', '+', '10', '=', '24']},
                 ]}
             ]}]}],
