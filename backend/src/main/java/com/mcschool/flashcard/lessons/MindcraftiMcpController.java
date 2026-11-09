@@ -1230,6 +1230,11 @@ public class MindcraftiMcpController {
                     if (lessonScheduleService == null) throw new IllegalStateException("Scheduling is unavailable");
                     return toolResult(lessonScheduleService.call(name, arguments, auth.user(), auth.apiKey()));
                 }
+                // Existing ChatGPT installations can still invoke four new homework
+                // operations through their PRE-EXISTING site function bridge tools.
+                // They do not need to re-install MCH3 or expose new tool schemas.
+                if (homeworkBridgeRequest(name,arguments))
+                    return toolResult(homeworkBridge(name,arguments,auth));
                 if (siteFunctionsService == null) throw new IllegalStateException("Website functions are unavailable");
                 return toolResult(siteFunctionsService.call(name, arguments, auth.user(), auth.apiKey()));
             } catch (Exception failure) {
