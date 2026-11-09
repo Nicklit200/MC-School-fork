@@ -73,8 +73,9 @@ public class WorkbookContentService {
                 Put the full German word-problem wording in instruction when needed; the checked calculation remains in expression.
                 restrictions contains only explicit domain exclusions such as "x != 3"; otherwise [].
                 answer must be mathematically correct. The server independently verifies every answer and rejects the whole draft if any
-                answer is wrong. Keep title <= 80 chars, subtitle <= 160, each task title <= 80, instruction <= 500,
-                expression <= 500 and answer <= 200. Do not return homework, schedules or commands.
+                answer is wrong. Keep title <= 160 chars, subtitle <= 300, each task title <= 160, instruction <= 1500,
+                expression <= 500 and answer <= 500. Keep lessonPlan and difficulties concise but complete. Do not return homework,
+                schedules or commands.
                 """;
 
         Map<String,Object> taskSchema = Map.of(
@@ -163,22 +164,22 @@ public class WorkbookContentService {
     static void validateCompact(CompactLesson lesson) {
         if (lesson == null || lesson.tasks() == null || lesson.tasks().size() < 4 || lesson.tasks().size() > 20)
             throw new IllegalArgumentException("Generated compact workbook must contain 4 to 20 tasks");
-        if (lesson.title() == null || lesson.title().length() > 80)
+        if (lesson.title() == null || lesson.title().length() > 160)
             throw new IllegalArgumentException("Invalid workbook title");
-        if (lesson.subtitle() == null || lesson.subtitle().length() > 160)
+        if (lesson.subtitle() == null || lesson.subtitle().length() > 300)
             throw new IllegalArgumentException("Invalid workbook subtitle");
-        if (lesson.lessonPlan() == null || lesson.lessonPlan().length() > 4000
-                || lesson.difficulties() == null || lesson.difficulties().length() > 4000)
+        if (lesson.lessonPlan() == null || lesson.lessonPlan().length() > 12000
+                || lesson.difficulties() == null || lesson.difficulties().length() > 12000)
             throw new IllegalArgumentException("Invalid workbook notes");
         for (CompactTask task : lesson.tasks()) {
             if (task == null || !KINDS.contains(task.kind()))
                 throw new IllegalArgumentException("Unsupported compact workbook task");
-            if (task.title() == null || task.title().length() > 80)
+            if (task.title() == null || task.title().length() > 160)
                 throw new IllegalArgumentException("Invalid compact task title");
-            if (task.instruction() == null || task.instruction().length() > 500)
+            if (task.instruction() == null || task.instruction().length() > 1500)
                 throw new IllegalArgumentException("Invalid compact task instruction");
             requireText(task.expression(),500,"task expression");
-            requireText(task.answer(),200,"task answer");
+            requireText(task.answer(),500,"task answer");
             if (task.restrictions() == null || task.restrictions().size() > 4
                     || task.restrictions().stream().anyMatch(v -> v == null || v.length() > 60))
                 throw new IllegalArgumentException("Invalid compact task restrictions");
