@@ -316,6 +316,68 @@ def validate(assertion):
     return {'kind': kind, 'passed': True}
 
 
+def verify_teacher_numeric_solutions(document):
+    """Verify arithmetic equalities in private teacher PDFs, even when an
+    unrelated qa.algebra assertion happens to be valid. Symbolic equations
+    are left to explicit qa.algebra assertions and teacher review.
+    """
+    checked = 0
+    failures = []
+
+    def check_item(item, position):
+        nonlocal checked
+        if not isinstance(item, dict):
+            return
+        value = item.get('math')
+        if isinstance(value, dict):
+            raw = value.get('latex')
+            if raw is None and isinstance(value.get('tokens'), list):
+                raw = ''.join(str(x) for x in value['tokens'])
+        elif isinstance(value, list):
+            raw = ''.join(str(x) for x in value) if all(isinstance(x, str) for x in value) else None
+        else:
+            raw = value if isinstance(value, str) else None
+        if not raw or '=' not in raw or len(raw) > 2000:
+            return
+        parts = [part.strip() for part in raw.split('=')]
+        if not 2 <= len(parts) <= 8 or any(not part for part in parts):
+            return
+        try:
+            values = [parse(part)[0] for part in parts]
+        except (ValueError, TypeError, KeyError, NotImplementedError):
+            # Some teacher equations contain symbols or notation outside the
+            # bounded parser. Never claim these were automatically verified.
+            return
+        if any(v.free_symbols for v in values):
+            return
+        checked += 1
+        if any(v.is_real is not True or v.is_finite is not True for v in values):
+            failures.append({'position': position, 'error': 'Non-finite numeric teacher solution'})
+        elif any(s.simplify(a - b) != 0 for a, b in zip(values, values[1:])):
+            failures.append({'position': position, 'error': 'Incorrect numeric teacher solution'})
+
+    def walk(node, depth=0):
+        if depth > 24:
+            raise ValueError('Teacher solution nesting limit exceeded')
+        if isinstance(node, list):
+            for child in node:
+                walk(child, depth + 1)
+        elif isinstance(node, dict):
+            if node.get('type') == 'solutions':
+                items = node.get('items', [])
+                if not isinstance(items, list) or len(items) > 200:
+                    raise ValueError('Invalid teacher solution list')
+                for i, item in enumerate(items):
+                    check_item(item, i + 1)
+            for key in ('blocks', 'children', 'left', 'right'):
+                if key in node:
+                    walk(node[key], depth + 1)
+
+    for page in document.get('teacherPages', []):
+        walk(page)
+    return {'checked': checked, 'failed': failures}
+
+
 def verify_document(document):
     assertions = list(document.get('qa', {}).get('algebra', []))
     def walk(node, depth=0):
@@ -339,8 +401,11 @@ def verify_document(document):
             results.append({'index': index, **validate(assertion)})
         except (ValueError, KeyError, TypeError, NotImplementedError) as error:
             results.append({'index': index, 'passed': False, 'error': str(error)})
-    return {'passed': all(item['passed'] for item in results), 'checked': len(results),
-            'coverage': 'explicit assertions only' if results else 'no algebra assertions supplied', 'results': results}
+    numeric = verify_teacher_numeric_solutions(document)
+    return {'passed': all(item['passed'] for item in results) and not numeric['failed'],
+            'checked': len(results), 'teacherNumericSolutions': numeric,
+            'coverage': 'explicit assertions and parseable teacher numeric equalities' if results else 'teacher numeric equalities only',
+            'results': results}
 
 
 if __name__ == '__main__':
