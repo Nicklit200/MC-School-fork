@@ -64,7 +64,7 @@ class WorkbookContentServiceTest {
         assertTrue(output.lessonJson().contains("relationValue"));
         assertFalse(output.lessonJson().contains("x = -4"));
         assertFalse(output.lessonJson().contains("11/12"));
-        assertTrue(output.lessonJson().contains("Aufgabe 4"));
+        assertTrue(output.lessonJson().contains("Aufgabe 5"));
         assertTrue(output.lessonJson().contains("Löse die Gleichung."));
         assertEquals("Evidenced notes",output.lessonPlan());
 
