@@ -145,6 +145,7 @@ public class WorkbookGenerationJobService {
             String message=Objects.toString(ex.getMessage(),"");
             if(message.contains("exceeded 115 seconds")||message.contains("timed out"))return "TIMEOUT";
             if(message.startsWith("Server content generation is not configured"))return "AI_NOT_CONFIGURED";
+            if(message.startsWith("Workbook content provider response was incomplete after one retry"))return "AI_RESPONSE_INCOMPLETE";
             if(message.contains("Algebra QA")||message.contains("Algebra validation"))return "MATH_QA_FAILED";
             if(message.contains("Layout QA")||message.contains("layout check")||message.contains("overflow A4"))return "LAYOUT_QA_FAILED";
             if(message.matches("COMPACT_[A-Z_]{2,48}")) return message;
@@ -173,6 +174,7 @@ public class WorkbookGenerationJobService {
                 case "ACCESS_CHANGED" -> "The school account or lesson access changed before generation finished.";
                 case "TIMEOUT" -> "The content model or PDF renderer exceeded its time limit.";
                 case "AI_NOT_CONFIGURED" -> "Server content generation is not configured. Prepare lessonJson with prepare_workbook_context instead.";
+                case "AI_RESPONSE_INCOMPLETE" -> "The content provider returned an incomplete structured response twice. No workbook was published.";
                 case "MATH_QA_FAILED" -> "The generated tasks or answers did not pass mathematical validation.";
                 case "LAYOUT_QA_FAILED" -> "The PDF would contain clipped or overlapping content. Reduce content per page.";
                 case "VALIDATION_FAILED" -> "The task content or fresh lesson context failed validation.";
