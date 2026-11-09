@@ -5,12 +5,17 @@ The source-code retrieval endpoint remains owner/admin only (OAuth ADMIN).
 Students, parents and import API keys have no workbook generator or draft access.
 
 1. Find the exact teacher/event using `find_lessons`.
-2. Call `generate_lesson_workbook_draft` with `eventId`, optional `instruction`, and a stable `idempotencyKey` when server AI is configured.
+2. ALWAYS call `prepare_workbook_context` for the exact owned event and read the fresh
+   `rendererContract`, school prompts, Brand Guide and available student evidence.
+   ChatGPT itself authors the lesson content and answers in `lessonJson` with nonempty
+   `qa.algebra` assertions and passes `lessonJson`, its fresh `contextToken`,
+   the same `eventId`, and stable `idempotencyKey` to `generate_lesson_workbook_draft`.
+   This is the ONLY high-level generator path, equally for TEACHER and ADMIN.
    A teacher may omit `teacherId`; an administrator selects the accessible teacher explicitly.
-   Without a server AI key, call `prepare_workbook_context` first. ChatGPT uses its current evidence and
-   declarative `rendererContract` to prepare `lessonJson`, then calls the same high-level generation tool
-   with `lessonJson` and `contextToken`. This route requires no separate AI API key and exposes no generator source.
-   The server re-reads all relevant context and rejects the token if prompts, Brand Guide, plan or evidence changed.
+   The server validates and renders, never authors exercises with a server AI model.
+   Calling with only `eventId` / `instruction` is rejected BEFORE enqueueing a job.
+   No Railway, GitHub or separate OpenAI API access is needed by the teacher.
+   The server re-reads context and rejects stale tokens if prompts, brand, plan or evidence changed.
 3. Open both signed PDF download URLs in the returned `workbook` and `answers` metadata and review them.
    Links expire after five minutes. `get_lesson_draft` refreshes them without regenerating the files.
    `download_lesson_draft_pdf` retains the legacy base64 response for compatible clients.
@@ -50,9 +55,10 @@ The backend image installs the pinned Node dependencies and Python renderer/QA d
 `MINDCRAFTI_WORKBOOK_MODULES` points to the installed `node_modules` directory
 (default `/opt/mindcrafti-workbook/node_modules`). Jobs use isolated temporary directories and bounded execution time.
 Each backend instance admits at most two concurrent render jobs; a busy renderer returns 503 before reading the Brand Guide or creating a draft, and the unchanged request can be retried with the same idempotency key.
-For single-call server content generation configure `OPENAI_API_KEY` and `WORKBOOK_OPENAI_MODEL`
-(or reuse an explicitly configured `OPENAI_MODEL`). No model name is guessed.
-Missing configuration returns instructions for the ChatGPT-prepared JSON route; the service never substitutes a sample workbook.
+The high-level MCH3 workbook tool does NOT invoke server AI or require
+`WORKBOOK_OPENAI_MODEL` / `OPENAI_MODEL`. ChatGPT supplies the full validated
+`lessonJson` in every call. Absent `lessonJson` or `contextToken` is an actionable
+validation error, not `AI_NOT_CONFIGURED`, and no job is queued.
 Signed previews use `WORKBOOK_DOWNLOAD_SECRET` or the existing configured `JWT_SECRET` (at least 32 bytes).
 There is no generated or development-secret fallback. Every download verifies the HMAC and five-minute expiry
 before reading draft data, then checks the issuing account is still active staff and the selected teacher still
