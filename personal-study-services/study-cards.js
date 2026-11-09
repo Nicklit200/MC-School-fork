@@ -58,8 +58,9 @@ export function createStudyCardStore({sql,loadCatalog}) {
     })().catch(error => { ready = null; throw error; });
     await ready;
   }
-  async function snapshot(db,owner,lock = false) {
+  async function snapshot(db,owner,lock = false,required = false) {
     const rows = await db.unsafe('SELECT payload FROM personal_quiz_snapshots WHERE owner_hash=$1' + (lock ? ' FOR UPDATE' : ''),[owner]);
+    if (required && rows.length !== 1) throw Error('Committed snapshot readback failed');
     const value = rows[0]?.payload ?? {};
     if (!cardObject(value) || (value.custom !== undefined && !Array.isArray(value.custom))) throw Error('Invalid quiz snapshot');
     return value;
@@ -148,7 +149,7 @@ export function createStudyCardStore({sql,loadCatalog}) {
       if (operation === 'add') await tx.unsafe('INSERT INTO personal_study_card_operations(owner_hash,idempotency_key,request,result) VALUES($1,$2,$3::jsonb,$4::jsonb)',[owner,normalized.idempotencyKey,tx.json(normalized),tx.json(output)]);
       return output;
     });
-    const persisted = studyCardRows(catalog,await snapshot(sql,owner));
+    const persisted = studyCardRows(catalog,await snapshot(sql,owner,false,true));
     if (operation === 'add') {
       for (const id of result.cardIds) if (!persisted.some(x => x.id === id)) throw Error('Committed card readback failed');
       for (const expected of expectedCards) {

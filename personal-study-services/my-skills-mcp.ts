@@ -108,7 +108,7 @@ app.post("/oauth/token",async ctx=>{
  return ctx.json(await issueTokens(p.owner,p.client,p.scopes));
 });
 
-app.get("/health",c=>c.json({ok:true,service:"my-skills-mcp",version:"1.3.1"}));
+app.get("/health",c=>c.json({ok:true,service:"my-skills-mcp",version:"1.4.0"}));
 app.all("/mcp",async c=>{
   const identity=await authorized(c);
   if(!identity)return c.json({error:"Unauthorized"},401,{"WWW-Authenticate":'Bearer resource_metadata="https://my-skills-mcp-production.up.railway.app/.well-known/oauth-protected-resource", scope="quiz:read personal:read personal:write"'});
@@ -117,7 +117,7 @@ app.all("/mcp",async c=>{
   const message=await c.req.json().catch(()=>null);
   if(!message||message.jsonrpc!=="2.0")return c.json({error:"Invalid JSON-RPC"},400);
   const id=message.id??null;
-  if(message.method==="initialize")return c.json(reply(id,{protocolVersion:"2025-03-26",capabilities:{tools:{}},serverInfo:{name:"my-skills-mcp",version:"1.3.1"}}));
+  if(message.method==="initialize")return c.json(reply(id,{protocolVersion:"2025-03-26",capabilities:{tools:{}},serverInfo:{name:"my-skills-mcp",version:"1.4.0"}}));
   if(message.method==="notifications/initialized")return c.body(null,202);
   if(message.method==="ping")return c.json(reply(id,{}));
   const tools=personalTools;
@@ -482,7 +482,7 @@ function createStudyProgressTools({sql, site, fetcher = fetch, now = () => Date.
     const resolved = resolveStudyProgress(data, saved, quiz.state), cards = cardRows(quiz.state);
     return {...resolved, count:resolved.progress.length, cards, cardCount:cards.length,
       cardProgressUpdatedAt:quiz.updatedAt, catalogUpdatedAt:data.updatedAt || null,
-      catalogUrl:site + '/data/study.json', connectorVersion:'1.3.1'};
+      catalogUrl:site + '/data/study.json', connectorVersion:'1.4.0'};
   }
   async function update(args, owner) {
     const patch = validateStudyPatch(args);
@@ -509,7 +509,7 @@ function createStudyProgressTools({sql, site, fetcher = fetch, now = () => Date.
       return {row:saved[0], changed:true};
     });
     const progress = resolveStudyProgress(data, [result.row], quiz.state).progress.find(row => row.skillId === patch.skillId);
-    return {saved:true, changed:result.changed, progress, connectorVersion:'1.3.1'};
+    return {saved:true, changed:result.changed, progress, connectorVersion:'1.4.0'};
   }
   return {read, update};
 }

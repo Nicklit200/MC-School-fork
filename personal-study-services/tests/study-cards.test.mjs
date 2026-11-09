@@ -29,3 +29,9 @@ db.unsafe=async(q,p)=>committed&&q.startsWith('SELECT payload')?[]:unsafe(q,p);
 const store=createStudyCardStore({sql:db,loadCatalog:async()=>({semesters:[{id:'s',exams:[{id:'e',skills:[{id:'k'}]}]}]})});
 await assert.rejects(store.add('owner',{semesterId:'s',examId:'e',idempotencyKey:'key',cards:[{skillId:'k',question:'Q',answer:'A',wrongAnswer1:'B',wrongAnswer2:'C',wrongAnswer3:'D',explanation:'E'}]}),/readback/);
 console.log('PASS no success when committed readback fails');
+
+const duplicateDb=fakeDatabase();let duplicateCommitted=false;const duplicateUnsafe=duplicateDb.unsafe.bind(duplicateDb);const duplicateBegin=duplicateDb.begin;
+duplicateDb.begin=async fn=>{const result=await duplicateBegin(fn);duplicateCommitted=true;return result;};
+duplicateDb.unsafe=async(q,p)=>duplicateCommitted&&q.startsWith('SELECT payload')?[]:duplicateUnsafe(q,p);
+const duplicateStore=createStudyCardStore({sql:duplicateDb,loadCatalog:async()=>({semesters:[{id:'s',exams:[{id:'e',skills:[{id:'k',flashcards:[{id:'existing',question:'Q',answer:'A'}]}]}]}]})});
+await assert.rejects(duplicateStore.add('owner',{semesterId:'s',examId:'e',idempotencyKey:'duplicates-only',cards:[{skillId:'k',question:'Q',answer:'A',wrongAnswer1:'B',wrongAnswer2:'C',wrongAnswer3:'D',explanation:'E'}]}),/readback/);
