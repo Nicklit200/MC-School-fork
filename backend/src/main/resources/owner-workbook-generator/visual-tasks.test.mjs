@@ -90,12 +90,12 @@ test('teacher gets computed solution diagrams, student receives no answer marker
   const visual=prepareVisualTasks(lesson);
   assert.equal(visual.results.size,3);
   assert.strictEqual(lesson.teacherPages[0].blocks,before);
-  assert.equal(lesson.teacherPages.length,2);
+  assert.equal(lesson.teacherPages.length,3);
   assert.equal(lesson.qa.algebra.length,0);
   const student=JSON.stringify(lesson.workbookPages);
   assert.ok(student.includes('"type":"coordinateGrid"'));
   assert.ok(!student.includes('MUSTERLÖSUNG') && !student.includes('"points"') && !student.includes('"showIntersections":true'));
-  const teachers=lesson.teacherPages[1].blocks;
+  const teachers=lesson.teacherPages.slice(1).flatMap(page=>page.blocks);
   assert.equal(teachers.filter(b=>b.type==='graph').length,2);
   assert.equal(teachers.filter(b=>b.type==='geometry').length,1);
   assert.equal(teachers.filter(b=>b.type==='callout').length,3);
