@@ -9,7 +9,8 @@ for (const name of ['personal-life-api','my-skills-mcp']) {
   const source = readFileSync(path.join(root,name + '.ts'),'utf8');
   const pattern = /^import\s*\{\s*createStudySessionStore\s*,\s*loadStudySessionCatalog\s*\}\s*from\s*['"]\.\/study-sessions\.js['"];?\r?\n/m;
   if (!pattern.test(source)) throw Error('Shared store import not found in ' + name);
-  const bundled = source.replace(pattern,() => core + '\n');
+  let bundled = source.replace(pattern,() => core + '\n');
+  bundled = bundled.replace(/^import \{ createStudyCardStore \} from ".\/study-cards\.js";\r?\n/m, () => readFileSync(path.join(root,'study-cards.js'),'utf8').replace(/^export /gm,'') + '\n');
   if (/from ['"]\.\//.test(bundled)) throw Error('Railway Functions must be self-contained');
   writeFileSync(path.join(output,name + '.tsx'),bundled);
   console.log('Built ' + name + ' (' + Buffer.byteLength(bundled) + ' bytes)');

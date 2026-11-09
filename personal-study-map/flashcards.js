@@ -58,7 +58,8 @@
   let accountOnline=false,accountFlight=null,accountSetupInfo=null;
   let serverQueue=readJson(QUEUE_KEY,null);
   const outbox=()=>readJson(OUTBOX_KEY,[]);
-  const metadata=()=>({invalid:getInvalidCards(),deleted:getDeletedCards(),
+  let cardContentRevision=Number(localStorage.getItem("personal-study-map:card-content-revision:v1"))||0;
+  const metadata=()=>({cardContentRevision,invalid:getInvalidCards(),deleted:getDeletedCards(),
     overrides:getOverrides(),custom:getCustomCards(),sessions:storedHistory().slice(0,100)});
   async function accountRequest(path,method="GET",body){
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
@@ -73,6 +74,8 @@
   }
   function hydrateAccount(result){
     const s=result.snapshot||{};
+    cardContentRevision=Number(s.cardContentRevision)||0;
+    localStorage.setItem("personal-study-map:card-content-revision:v1",String(cardContentRevision));
     applyingRemote=true;
     try{
       for(const [key,name] of [[KEY_PROGRESS,"progress"],[KEY_OVERRIDES,"overrides"],
@@ -133,6 +136,12 @@
       }catch(error){
         accountOnline=false;lastSyncError=true;
         console.warn("Server sync failed; unsent data retained",error);
+        if(error.status===409){
+          localStorage.setItem(META_KEY+":conflict-backup",JSON.stringify(readJson(META_KEY,null)));
+          localStorage.removeItem(META_KEY);
+          hydrateAccount(await accountRequest("/state"));
+          ui.notice="Карточки изменились на сервере. Обновлены данные; повтори правку. Черновик сохранён локально.";
+        }
         if(error.status===401){
           accountToken="";localStorage.removeItem(ACCOUNT_KEY);
           ui.notice="Время входа истекло. Войди повторно, сохранённые ответы останутся.";

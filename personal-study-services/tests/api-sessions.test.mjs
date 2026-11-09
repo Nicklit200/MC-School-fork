@@ -45,7 +45,7 @@ class FakeHono {
 for(const verb of ['get','post','put','patch','delete','options','all'])
   FakeHono.prototype[verb]=function(path,handler){this.routes.set(verb.toUpperCase()+' '+path,handler);return this;};
 const context={Hono:FakeHono,SQL:function(){return database;},Bun:{env:{}},
-  cors:()=>()=>{},webpush:{},createStudySessionStore:()=>store,loadStudySessionCatalog:()=>{throw Error('Unexpected catalog fetch');},
+  cors:()=>()=>{},webpush:{},createStudyCardStore:()=>({}),createStudySessionStore:()=>store,loadStudySessionCatalog:()=>{throw Error('Unexpected catalog fetch');},
   crypto:webcrypto,TextEncoder,URL,Date,Intl,AbortSignal,Response,
   console:{info(){},error(){},log(){}},fetch:()=>{throw Error('Unexpected network request');}};
 vm.createContext(context);

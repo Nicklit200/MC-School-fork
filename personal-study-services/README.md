@@ -24,3 +24,15 @@ Study-session writes use Bun's explicit `tx.json(session)` binding. Binding an a
 `saved: true` is returned only after the transaction completes and a separate database read confirms the committed row, JSON object shape, identity and content. Malformed rows or failed readback produce errors. This code never writes skill mastery or old catalog history.
 
 The `Study session PostgreSQL persistence` workflow runs `bun personal-study-services/tests/bun-postgres.integration.mjs` against Bun 1.4.4 and an isolated PostgreSQL 16 database named `study_sessions_test`. It exercises actual driver binding, fresh-client readback, scalar recovery, duplicate retries and rollback on malformed writes. Do not point this integration test at a personal or production database.
+
+## Study card content API
+
+MCP exposes `add_study_cards`, `get_study_cards`, `update_study_card`, and `delete_study_card` through the existing owner lock and personal read/write scopes. Resolve course and skill IDs with `get_study_progress`. Add accepts 1–100 cards and a required idempotency key. All fields are validated before writes. Questions are compared after NFKC normalization, whitespace collapse and case folding within the subject; duplicates (including soft-deleted cards) are counted in `skippedDuplicates`. Invalid input rejects the whole operation. Reusing a key with different content fails. `cardIds` contains only newly created IDs. Retries return the original receipt.
+
+The catalog remains the source for bundled cards. Owner-created content uses the existing PostgreSQL `personal_quiz_snapshots.custom` array; catalog edits use `overrides`. IDs remain stable. Deletion requires `confirm:true` and writes only a tombstone in `deleted`: content, review progress, answer events and session records remain intact. The interface already merges these fields. No catalog import or parallel card store is introduced. The small operations table stores only idempotency receipts and requests.
+
+Writes share the quiz owner's transaction lock, preserve all non-content fields and read the committed snapshot back before reporting `saved:true, verified:true`. Content revisions reject stale browser edits with HTTP 409; the browser saves the rejected draft locally under the metadata key plus `:conflict-backup`, reloads server content and asks the user to repeat the edit. Legacy snapshot replacement is blocked after content revisioning starts. Deploy the API before the MCP function; deploy the matching frontend via the existing branch.
+
+Run the normal Node test suite, then `bun personal-study-services/tests/bun-cards.integration.mjs` with `STUDY_TEST_DATABASE_URL` pointing only to the isolated `study_sessions_test` database. The existing PostgreSQL Actions workflow runs both session and card integration tests.
+
+The 18 Computergrafik cards from commit `2f988edd24a437722df9fa9f42d06e11cf814c34` were verified against the deployed catalog on 2026-11-09 (IDs `cg-20261109-f91-106-01` through `-18`). They are catalog-backed, not imported custom rows.

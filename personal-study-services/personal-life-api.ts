@@ -718,6 +718,8 @@ import {createStudySessionStore, loadStudySessionCatalog} from './study-sessions
       Array.isArray(session.review) && session.review.length<=500
     );
     await ensureQuizTables();
+    const currentCards=await sql.unsafe("SELECT payload FROM personal_quiz_snapshots WHERE owner_hash=$1",[owner]);
+    if(currentCards[0]?.payload?.cardContentRevision)return c.json({error:"Use quiz-v2 to sync card content"},409);
     if(Object.keys(snapshot).length){
       const json=JSON.stringify(snapshot);
       await sql.unsafe(`INSERT INTO personal_quiz_snapshots(owner_hash,payload)
@@ -740,7 +742,7 @@ import {createStudySessionStore, loadStudySessionCatalog} from './study-sessions
               ON old_record.key=new_record.key
             CROSS JOIN LATERAL (SELECT COALESCE(old_record.key,new_record.key) id) ids
           ), true
-        ),updated_at=NOW()`,[owner,json]);
+        ),updated_at=NOW() WHERE COALESCE((personal_quiz_snapshots.payload->>'cardContentRevision')::bigint,0)=0`,[owner,json]);
     }
     for(const s of validSessions){
       await sql.unsafe("INSERT INTO personal_quiz_sessions(owner_hash,session_id,session_date,payload) VALUES($1,$2,$3::date,$4::jsonb) ON CONFLICT(owner_hash,session_id) DO UPDATE SET payload=EXCLUDED.payload",[owner,s.id,s.date,JSON.stringify(s)]);
@@ -798,13 +800,14 @@ import {createStudySessionStore, loadStudySessionCatalog} from './study-sessions
     return out;
   }
   function mergeMeta(old,added){
+    if ((Number(old?.cardContentRevision)||0) !== (Number(added?.cardContentRevision)||0)) return {...old};
     const out={...(isObject(old)?old:{})};
     for(const k of ["invalid","deleted","overrides"])
       if(isObject(added?.[k]))out[k]={...(isObject(out[k])?out[k]:{}),...added[k]};
     if(Array.isArray(added?.custom)){
       const cards=new Map((Array.isArray(out.custom)?out.custom:[]).filter(x=>isObject(x)&&x.id).map(x=>[x.id,x]));
       for(const x of added.custom)if(isObject(x)&&typeof x.id==="string"&&x.id.length<=180)cards.set(x.id,x);
-      out.custom=[...cards.values()].slice(0,5000);
+      out.custom=[...cards.values()];
     }
     return out;
   }
@@ -935,15 +938,18 @@ import {createStudySessionStore, loadStudySessionCatalog} from './study-sessions
     const owner=await v2Owner(c);if(!owner)return c.json({error:"Требуется вход"},401);
     const b=await c.req.json().catch(()=>({}));
     if(!isObject(b))return c.json({error:"Неверный формат"},400);
-    await sql.begin(async tx=>{
+    const synchronized=await sql.begin(async tx=>{
       await tx.unsafe("SELECT pg_advisory_xact_lock(hashtext($1))",[owner]);
       await tx.unsafe("INSERT INTO personal_quiz_snapshots(owner_hash,payload) VALUES($1,'{}'::jsonb) ON CONFLICT DO NOTHING",[owner]);
       const old=(await tx.unsafe("SELECT payload FROM personal_quiz_snapshots WHERE owner_hash=$1 FOR UPDATE",[owner]))[0]?.payload||{};
+      if((Number(old.cardContentRevision)||0)!==(Number(b.cardContentRevision)||0))return false;
       // Progress is never accepted from the browser after migration.
       const next=mergeMeta(old,b);
       await tx.unsafe("UPDATE personal_quiz_snapshots SET payload=$2::jsonb,updated_at=NOW() WHERE owner_hash=$1",[owner,JSON.stringify(next)]);
       await storeSessions(tx,owner,b.sessions);
+      return true;
     });
+    if(!synchronized)return c.json({error:"Card content changed on the server. Reload before editing.",code:"card_content_conflict"},409);
     return c.json({ok:true});
   });
   app.post("/api/quiz-v2/queue",async c=>{

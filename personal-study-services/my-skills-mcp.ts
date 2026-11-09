@@ -1,3 +1,4 @@
+import { createStudyCardStore } from "./study-cards.js";
 import { Hono } from "hono@4";
 import { SQL } from "bun";
 import { createStudySessionStore, loadStudySessionCatalog } from "./study-sessions.js";
@@ -156,7 +157,12 @@ const descriptor=(name,description,properties,required,write=false,destructive=f
  inputSchema:{type:"object",properties,required,additionalProperties:false}
 });
 const field=(description,type="string")=>({type,description});
+const cardInputProperties = Object.fromEntries(['question','answer','wrongAnswer1','wrongAnswer2','wrongAnswer3','explanation'].map(key => [key,{type:'string',minLength:1,maxLength:10000}]));
 const personalTools=[
+ descriptor("add_study_cards","Create 1–100 cards in the existing study map. Resolve semesterId/examId/skillId using get_study_progress first. Reuse idempotencyKey only for an identical retry. Duplicate normalized questions within the subject are skipped, including deleted cards. Never claim success without saved and verified. Does not change review progress.",{semesterId:field("Existing semester ID"),examId:field("Existing subject ID"),idempotencyKey:field("Unique operation key"),cards:{type:"array",minItems:1,maxItems:100,items:{type:"object",properties:{skillId:field("Existing skill in this subject"),...cardInputProperties},required:['skillId',...Object.keys(cardInputProperties)],additionalProperties:false}}},['semesterId','examId','cards','idempotencyKey'],true),
+ descriptor("get_study_cards","Read existing active cards, stable cardId, content and subject/skill binding.",{semesterId:field("Existing semester ID"),examId:field("Existing subject ID"),skillId:field("Optional skill ID")},['semesterId','examId']),
+ descriptor("update_study_card","Edit card content by stable cardId; omitted fields and all review progress are preserved.",{cardId:field("Stable card ID"),...cardInputProperties},['cardId'],true),
+ descriptor("delete_study_card","Hide a card only after explicit user confirmation. Requires confirm=true; preserves content, review events, progress and test history.",{cardId:field("Stable card ID"),confirm:{type:"boolean",const:true}},['cardId','confirm'],true,true),
  {name:"get_quiz_results",description:"Get owner's completed quiz sessions and first-try correctness, excluding invalid questions.",securitySchemes:[{type:"oauth2",scopes:["quiz:read"]}],annotations:{readOnlyHint:true},inputSchema:{type:"object",properties:{date:field("Optional YYYY-MM-DD")},additionalProperties:false}},
  descriptor("get_nutrition_entries","Read the personal site's saved nutrition entries and calorie total for a selected day.",{date:field("YYYY-MM-DD date in Europe/Berlin")},["date"]),
  descriptor("add_nutrition_entry","Save food and calories DIRECTLY in the owner's personal My Skills diary. For photo-based estimates write uncertainty in notes. Use a unique stable idempotencyKey per eating occasion so retries do not duplicate.",{date:field("YYYY-MM-DD in Europe/Berlin"),name:field("Food description"),kcal:field("Estimated kcal for entire serving","number"),meal:field("Breakfast, lunch, dinner or snack"),quantity:field("Number of pieces, or numeric weight","number"),unit:field("Unit, e.g. шт. or г"),protein:field("Protein grams, if known","number"),carbs:field("Carbohydrate grams, if known","number"),fat:field("Fat grams, if known","number"),notes:field("Additional ingredients and uncertainty"),idempotencyKey:field("Stable unique key for this eating occasion, reused only for a retry")},["date","name","kcal","idempotencyKey"],true),
@@ -213,6 +219,12 @@ async function runPersonalTool(name,args,identity){
  if(!identity.scopes.has(requiredScope))return {error:"Missing "+requiredScope+" permission. Reconnect the existing My Skills app and approve personal data access."};
  const owners=await sql.unsafe("SELECT owner_hash FROM oauth_personal_owner_lock WHERE name='primary'");
  if(owners[0]?.owner_hash!==identity.owner)return {error:"This personal diary is linked to another account."};
+ if(['add_study_cards','get_study_cards','update_study_card','delete_study_card'].includes(name)){
+   try {
+     const method={add_study_cards:'add',get_study_cards:'get',update_study_card:'update',delete_study_card:'delete'}[name];
+     return {data:await studyCardStore[method](identity.owner,args)};
+   } catch(error) { return {error:error?.name==='StudyCardError'?error.message:'Study cards unavailable. No successful write confirmed; retry creation with the same idempotencyKey.'}; }
+ }
  if(name==="save_study_session"||name==="get_study_sessions"||name==="get_study_resume"){
    try{
      const method=name==="save_study_session"?"save":name==="get_study_sessions"?"history":"resume";
@@ -505,3 +517,5 @@ const studyProgressTools = createStudyProgressTools({sql, site:SITE});
 const studySessionStore = createStudySessionStore({sql, loadCatalog:() => loadStudySessionCatalog(SITE)});
 
 export default app;
+
+const studyCardStore = createStudyCardStore({sql,loadCatalog:() => loadStudySessionCatalog(SITE)});

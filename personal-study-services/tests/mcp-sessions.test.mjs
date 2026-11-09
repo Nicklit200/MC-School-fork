@@ -28,7 +28,7 @@ class FakeHono {
   all(path,handler){this.routes.set('ALL '+path,handler);return this;}
 }
 const context={Hono:FakeHono,SQL:function(){return database;},Bun:{env:{}},
-  createStudySessionStore:()=>store,loadStudySessionCatalog:async()=>({semesters:[]}),
+  createStudyCardStore:()=>({add:async()=>({saved:true,verified:true}),get:async()=>({cards:[]}),update:async()=>({saved:true}),delete:async()=>({saved:true})}),createStudySessionStore:()=>store,loadStudySessionCatalog:async()=>({semesters:[]}),
   crypto:webcrypto,TextEncoder,URL,btoa,AbortSignal,console,fetch:()=>{throw Error('Unexpected network request');}};
 vm.createContext(context);
 new vm.Script(source.replace(/^import .*;\r?\n/gm,'').replace('export default app;','')+
@@ -121,3 +121,14 @@ const denied=await app.routes.get('ALL /mcp')(rpc('tools/call','save_study_sessi
 assert.equal(denied.value.error.code,-32602);
 assert.match(denied.value.error.message,/Missing personal:write/);
 console.log('MCP study-session discovery, dispatch, scope and owner isolation checks passed');
+
+for(const name of ['add_study_cards','get_study_cards','update_study_card','delete_study_card']) {
+ const writing=name!=='get_study_cards';
+ assert.ok(tool(name));
+ assert.equal(tool(name).annotations.destructiveHint,name==='delete_study_card');
+ assert.match((await runPersonalTool(name,{},writing?read:write)).error,/Missing personal:/);
+ owner='other';assert.match((await runPersonalTool(name,{},writing?write:read)).error,/another account/);owner='owner-primary';
+ assert.ok((await runPersonalTool(name,{},writing?write:read)).data);
+}
+assert.equal(tool('add_study_cards').inputSchema.properties.cards.maxItems,100);
+assert.equal(tool('delete_study_card').inputSchema.properties.confirm.const,true);
