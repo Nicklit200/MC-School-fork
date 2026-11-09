@@ -74,19 +74,23 @@ test('server-computed compact answers replace model placeholders before teacher 
   lesson.meta.answerMode='server-computed';
   lesson.workbookPages[0].blocks=[
     {type:'exercise',number:'01',title:'Brüche',rows:[{label:'',math:{latex:'2/3+1/4'},work:true}],writeLines:2},
-    {type:'exercise',number:'02',title:'Gleichung',rows:[{label:'',math:{latex:'x-7=-11'},work:true}],writeLines:2}
+    {type:'exercise',number:'02',title:'Gleichwertigkeit',rows:[{label:'',math:{latex:'2/3=4/6'},work:true}],writeLines:2},
+    {type:'exercise',number:'03',title:'Gleichung',rows:[{label:'',math:{latex:'x-7=-11'},work:true}],writeLines:2}
   ];
   lesson.teacherPages[0].blocks=[{type:'solutions',section:'AI',title:'Untrusted placeholders',items:[
-    {label:'1',math:{latex:'999'},text:'',note:''},{label:'2',math:{latex:'x = 999'},text:'',note:''}
+    {label:'1',math:{latex:'999'},text:'',note:''},
+    {label:'2',math:{latex:'999'},text:'',note:''},
+    {label:'3',math:{latex:'x = 999'},text:'',note:''}
   ]}];
   lesson.qa={algebra:[
     {kind:'expressionValue',expression:'2/3+1/4',restrictions:[]},
+    {kind:'relationValue',relation:'2/3=4/6',restrictions:[]},
     {kind:'linearValue',equation:'x-7=-11',variable:'x',restrictions:[]}
   ]};
   const {teacher,checked}=await render(lesson);
   const items=checked.teacherPages.flatMap(page=>page.blocks)
     .filter(block=>block.type==='solutions').flatMap(block=>block.items);
-  assert.deepEqual(items.map(item=>item.math.latex),['\\frac{11}{12}','x = -4']);
+  assert.deepEqual(items.map(item=>item.math.latex),['\\frac{11}{12}','\\text{gleichwertig}','x = -4']);
   assert.doesNotMatch(JSON.stringify(checked.teacherPages),/999/);
   assert.match(teacher,/Kontrollierte Lösungen/);
 });
