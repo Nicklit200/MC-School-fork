@@ -147,6 +147,19 @@ class OwnerWorkbookPdfRenderServiceTest {
     }
 
     @Test
+    void visualOnlyWorkbooksCountAsExercisesAndTeacherBlocksStayPrivate() {
+        var lesson = new java.util.LinkedHashMap<String,Object>(document(60));
+        lesson.put("workbookPages", List.of(Map.of("title","Graphs only","blocks",List.of(
+                Map.of("type","visualTask","number",1,"spec",Map.of("type","graph","objective","draw")),
+                Map.of("type","visualTask","number",2,"spec",Map.of("type","geometry","figure","triangle"))
+        ))));
+        assertEquals(2,OwnerWorkbookPdfRenderService.validateDocument(lesson));
+        lesson.put("workbookPages",List.of(Map.of("blocks",List.of(Map.of("type","visualTask",
+                "number",1,"children",List.of(Map.of("type","teacherNote")))))));
+        assertThrows(IllegalArgumentException.class,()->OwnerWorkbookPdfRenderService.validateDocument(lesson));
+    }
+
+    @Test
     void plainSupplementUsesNoBrandOrDraftSideEffectsAndReleasesSlotsAfterFailure() throws Exception {
         var drafts = mock(LessonPdfDraftService.class);
         var brand = mock(SchoolBrandGuideService.class);
