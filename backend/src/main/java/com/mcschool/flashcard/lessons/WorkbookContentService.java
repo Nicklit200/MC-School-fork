@@ -221,12 +221,12 @@ public class WorkbookContentService {
                     || task.restrictions().stream().anyMatch(v -> v == null || v.length() > 60))
                 throw compact("RESTRICTIONS");
             long equals = task.expression().chars().filter(ch -> ch == '=').count();
-            if ("equation".equals(task.kind())) {
+            String kind = effectiveKind(task);
+            if ("equation".equals(kind)) {
                 if (equals != 1) throw compact("EQUATION_EQUALS");
                 variableOf(task);
-            } else if ("relation".equals(task.kind())) {
+            } else if ("relation".equals(kind)) {
                 if (equals != 1) throw compact("RELATION_EQUALS");
-                if (containsSupportedVariable(task.expression())) variableOf(task);
             } else if (equals != 0) {
                 throw compact("EXPRESSION_EQUALS");
             }
@@ -250,9 +250,10 @@ public class WorkbookContentService {
                 String restriction = task.restrictions().isEmpty() ? ""
                         : " (" + String.join(", ", task.restrictions()) + ")";
                 String taskTitle = blank(task.title()) ? "Aufgabe " + (i+1) : task.title().trim();
+                String kind = effectiveKind(task);
                 String instruction = blank(task.instruction())
-                        ? ("equation".equals(task.kind()) ? "Löse die Gleichung."
-                            : "relation".equals(task.kind()) ? "Prüfe, ob die Brüche gleichwertig sind."
+                        ? ("equation".equals(kind) ? "Löse die Gleichung."
+                            : "relation".equals(kind) ? "Prüfe, ob die Brüche gleichwertig sind."
                             : "Berechne.")
                         : task.instruction().trim();
                 blocks.add(Map.of(
@@ -294,25 +295,18 @@ public class WorkbookContentService {
         }
 
         for (CompactTask task : lesson.tasks()) {
-            if ("equation".equals(task.kind())) {
+            String kind = effectiveKind(task);
+            if ("equation".equals(kind)) {
                 assertions.add(Map.of(
                         "kind","linearValue",
                         "equation",task.expression(),
                         "variable",variableOf(task),
                         "restrictions",task.restrictions()));
-            } else if ("relation".equals(task.kind())) {
-                if (containsSupportedVariable(task.expression())) {
-                    assertions.add(Map.of(
-                            "kind","linearValue",
-                            "equation",task.expression(),
-                            "variable",variableOf(task),
-                            "restrictions",task.restrictions()));
-                } else {
-                    assertions.add(Map.of(
-                            "kind","relationValue",
-                            "relation",task.expression(),
-                            "restrictions",task.restrictions()));
-                }
+            } else if ("relation".equals(kind)) {
+                assertions.add(Map.of(
+                        "kind","relationValue",
+                        "relation",task.expression(),
+                        "restrictions",task.restrictions()));
             } else {
                 assertions.add(Map.of(
                         "kind","expressionValue",
@@ -335,6 +329,14 @@ public class WorkbookContentService {
         result.put("teacherPages",teacherPages);
         result.put("qa",Map.of("algebra",assertions));
         return result;
+    }
+
+    private static String effectiveKind(CompactTask task) {
+        long equals = task.expression().chars().filter(ch -> ch == '=').count();
+        boolean variable = containsSupportedVariable(task.expression());
+        if ("expression".equals(task.kind()) && equals == 1) return variable ? "equation" : "relation";
+        if ("relation".equals(task.kind()) && variable) return "equation";
+        return task.kind();
     }
 
     private static boolean containsSupportedVariable(String expression) {
