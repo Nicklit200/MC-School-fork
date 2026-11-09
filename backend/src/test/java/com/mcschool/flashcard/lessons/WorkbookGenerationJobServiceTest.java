@@ -110,7 +110,7 @@ class WorkbookGenerationJobServiceTest {
         AuthenticatedUser owner=new AuthenticatedUser(UUID.randomUUID(),"teacher@test.local",Role.TEACHER);
         when(access.requireCurrentActor(owner)).thenReturn(owner);
         when(access.requireTeacher(owner,owner.id())).thenReturn(owner);
-        when(jdbc.query(any(String.class),any(RowMapper.class),any(),any(),any())).thenReturn(List.of());
+        when(jdbc.query(any(String.class),any(RowMapper.class),any(Object[].class))).thenReturn(List.of());
         when(jdbc.queryForObject(contains("actor_id"),eq(Integer.class),eq(owner.id()))).thenReturn(24);
         WorkbookGenerationJobService service=new WorkbookGenerationJobService(
                 jdbc,access,new ObjectMapper(),transactions(),3,24,60);
@@ -130,7 +130,7 @@ class WorkbookGenerationJobServiceTest {
         AuthenticatedUser owner=new AuthenticatedUser(UUID.randomUUID(),"teacher@test.local",Role.TEACHER);
         when(access.requireCurrentActor(owner)).thenReturn(owner);
         when(access.requireTeacher(owner,owner.id())).thenReturn(owner);
-        when(jdbc.query(any(String.class),any(RowMapper.class),any(),any(),any())).thenReturn(List.of());
+        when(jdbc.query(any(String.class),any(RowMapper.class),any(Object[].class))).thenReturn(List.of());
         when(jdbc.queryForObject(contains("actor_id"),eq(Integer.class),eq(owner.id()))).thenReturn(2);
         when(jdbc.queryForObject(contains("state IN ('QUEUED','RUNNING')"),eq(Integer.class))).thenReturn(60);
         WorkbookGenerationJobService service=new WorkbookGenerationJobService(
