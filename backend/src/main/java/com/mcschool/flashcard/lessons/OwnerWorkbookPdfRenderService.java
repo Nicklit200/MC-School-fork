@@ -45,7 +45,9 @@ public class OwnerWorkbookPdfRenderService {
     private final ObjectMapper mapper;
     private final LessonPdfDraftService drafts;
     private final SchoolBrandGuideService brandGuide;
-    private final Semaphore renderSlots = new Semaphore(2);
+    // Three background workbook jobs run in parallel. Keep one additional
+    // permit available for live Kolin/teacher-triggered worksheet rendering.
+    private final Semaphore renderSlots = new Semaphore(4, true);
     private final Object runtimeLock = new Object();
     private volatile Path runtimeDirectory;
     private volatile CachedLogo cachedLogo;
