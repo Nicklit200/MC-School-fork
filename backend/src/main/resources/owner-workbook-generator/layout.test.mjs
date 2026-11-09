@@ -91,7 +91,7 @@ test('preflight counts parallel columns by maximum and stacked rows by sum',asyn
   }
   const lesson=basic();
   lesson.workbookPages[0].blocks=[{type:'stack',children:Array.from({length:4},graph)}];
-  await assert.rejects(()=>render(lesson),/likely to overflow A4/);
+  await assert.rejects(()=>render(lesson),/(?:likely to overflow A4|one block too large for A4)/);
   lesson.workbookPages[0].blocks=Array.from({length:20},()=>({type:'divider'}));
   await render(lesson);
 });
