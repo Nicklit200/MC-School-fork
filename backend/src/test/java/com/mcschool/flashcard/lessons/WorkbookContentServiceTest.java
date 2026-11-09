@@ -51,6 +51,9 @@ class WorkbookContentServiceTest {
         assertEquals("Sofia",((Map<String,Object>)doc.get("meta")).get("group"));
         assertEquals(1,((List<?>)doc.get("workbookPages")).size());
         assertEquals(1,((List<?>)doc.get("teacherPages")).size());
+        var workbookPage=(Map<String,Object>)((List<?>)doc.get("workbookPages")).get(0);
+        var firstExercise=(Map<String,Object>)((List<?>)workbookPage.get("blocks")).get(0);
+        assertEquals(8,firstExercise.get("writeLines"));
         var qa=(Map<String,Object>)doc.get("qa");
         assertEquals(4,((List<?>)qa.get("algebra")).size());
         assertTrue(output.lessonJson().contains("linearSolution"));
