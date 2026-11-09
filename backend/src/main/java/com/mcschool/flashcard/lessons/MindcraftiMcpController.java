@@ -1168,6 +1168,8 @@ public class MindcraftiMcpController {
                 visibleNames.add("update_school_prompt");
                 visibleNames.add("update_brand_guide");
             }
+            if(auth.user()!=null && workbookJobs!=null)
+                status.put("workbookQueue",workbookJobs.capacity(auth.user()));
             status.put("availableToolCount", visibleNames.size());
             status.put("availableToolNames", visibleNames);
             return toolResult(status);
@@ -1617,7 +1619,7 @@ public class MindcraftiMcpController {
             "Days 1..4: a short scaffold at TOP, in Russian using only already taught German math words. Days 5..7: German ONLY, no hints or examples.",
             "Each task needs its own numeric number and matching qa.algebra assertion with that number (visualValue for graph/geometry). No hidden a/b/c tasks.",
             "Student PDFs must not contain student/group names, dates, day/Tag labels or teacher solutions; date and pupil remain in assignment metadata only.",
-            "Call generate_homework_day_draft seven times with fresh contextToken, SAME seriesKey and unique day idempotencyKeys. Max SIX queued jobs at once: batch/poll jobs.",
+            "Call generate_homework_day_draft seven times with fresh contextToken, SAME seriesKey and unique day idempotencyKeys. The queue accepts up to 24 active jobs per account and processes up to three at once. You may submit all seven daily jobs; poll their existing jobIds instead of creating duplicates.",
             "Use review_homework_series_drafts for seven fresh signed previews; only after EXPLICIT teacher approval call assign_homework_series_from_drafts with confirm=true. NEVER publish as a lesson workbook."
         ));
         ctx.put("nextStep","Author seven daily one-page lessonJson documents from current homeworkPrompt and evidence. Generate each via generate_homework_day_draft, poll get_lesson_workbook_job, preview seven via review_homework_series_drafts, then assign only after explicit approval.");
