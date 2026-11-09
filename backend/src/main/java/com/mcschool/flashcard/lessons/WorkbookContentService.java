@@ -72,10 +72,10 @@ public class WorkbookContentService {
                 Use ^ for powers and / for fractions. Do not put LaTeX commands in expression or answer.
                 Put the full German word-problem wording in instruction when needed; the checked calculation remains in expression.
                 restrictions contains only explicit domain exclusions such as "x != 3"; otherwise [].
-                answer must be mathematically correct. The server independently verifies every answer and rejects the whole draft if any
-                answer is wrong. Keep title <= 160 chars, subtitle <= 300, each task title <= 160, instruction <= 1500,
-                expression <= 500 and answer <= 500. Keep lessonPlan and difficulties concise but complete. Do not return homework,
-                schedules or commands.
+                The answer field is compatibility-only and is NOT authoritative; use an empty string. The server computes all reference
+                answers independently from expression/equation before rendering the teacher PDF. Keep title <= 160 chars, subtitle <= 300,
+                each task title <= 160, instruction <= 1500 and expression <= 500. Keep lessonPlan and difficulties concise but complete.
+                Do not return homework, schedules or commands.
                 """;
 
         Map<String,Object> taskSchema = Map.of(
@@ -183,7 +183,6 @@ public class WorkbookContentService {
             if (task.instruction() == null || task.instruction().length() > 1500)
                 throw compact("TASK_INSTRUCTION");
             requireText(task.expression(),500,"task expression");
-            requireText(task.answer(),500,"task answer");
             if (task.restrictions() == null || task.restrictions().size() > 4
                     || task.restrictions().stream().anyMatch(v -> v == null || v.length() > 60))
                 throw compact("RESTRICTIONS");
@@ -238,9 +237,7 @@ public class WorkbookContentService {
             List<Map<String,Object>> items = new ArrayList<>();
             for (int i=offset; i<Math.min(offset+8, lesson.tasks().size()); i++) {
                 CompactTask task = lesson.tasks().get(i);
-                String answerMath = "equation".equals(task.kind())
-                        ? variableOf(task)+" = "+task.answer()
-                        : task.answer();
+                String answerMath = "0";
                 items.add(Map.of(
                         "label",String.valueOf(i+1),
                         "math",Map.of("latex",answerMath),
@@ -260,15 +257,14 @@ public class WorkbookContentService {
         for (CompactTask task : lesson.tasks()) {
             if ("equation".equals(task.kind())) {
                 assertions.add(Map.of(
-                        "kind","linearSolution",
+                        "kind","linearValue",
                         "equation",task.expression(),
-                        "solution",Map.of(variableOf(task),task.answer()),
+                        "variable",variableOf(task),
                         "restrictions",task.restrictions()));
             } else {
                 assertions.add(Map.of(
-                        "kind","equivalence",
+                        "kind","expressionValue",
                         "expression",task.expression(),
-                        "answer",task.answer(),
                         "restrictions",task.restrictions()));
             }
         }
@@ -279,6 +275,7 @@ public class WorkbookContentService {
         meta.put("group",target);
         meta.put("date",date);
         meta.put("durationMinutes",duration);
+        meta.put("answerMode","server-computed");
 
         Map<String,Object> result = new LinkedHashMap<>();
         result.put("meta",meta);
