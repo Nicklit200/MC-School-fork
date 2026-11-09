@@ -43,6 +43,31 @@ test('ChatGPT math normalization does not bypass strict formula safety or invali
   await assert.rejects(()=>render(wrong),/Algebra QA failed|Incorrect math/);
 });
 
+
+test('visual graph and geometry tasks render empty pupil grids and plotted private teacher answers',async()=>{
+  const lesson=basic();
+  lesson.workbookPages=[{title:'Grafiken und Geometrie',blocks:[
+    {type:'visualTask',number:1,spec:{type:'graph',language:'de',objective:'draw',
+      series:[{kind:'linear',parameters:[2,1]}],xRange:[-5,5],yRange:[-5,5]}},
+    {type:'visualTask',number:2,spec:{type:'graph',language:'de',objective:'intersections',
+      series:[{kind:'linear',parameters:[2,-1]},{kind:'linear',parameters:[-1,5]}],
+      xRange:[-5,5],yRange:[-5,6]}},
+    {type:'visualTask',number:3,spec:{type:'geometry',language:'de',figure:'triangle',
+      objective:'area',vertices:[[0,0],[6,0],[0,8]]}}
+  ]}];
+  lesson.teacherPages[0].blocks=[{type:'teacherNote',label:'ERGEBNISSE',text:'Nur für Lehrkräfte'}];
+  lesson.qa={algebra:[{kind:'visualValue',number:1},{kind:'visualValue',number:2},{kind:'visualValue',number:3}]};
+  const {workbook,teacher}=await render(lesson);
+  assert.match(workbook,/KOORDINATENSYSTEM/);
+  assert.match(workbook,/diagram-svg/);
+  assert.ok(!workbook.includes('MUSTERLÖSUNG') && !workbook.includes('AUFGABE 1') && !workbook.includes('graph-intersection'));
+  assert.match(teacher,/MUSTERLÖSUNG/);
+  assert.match(teacher,/GEOMETRIE/);
+  assert.match(teacher,/S1/);
+  assert.match(teacher,/24 cm²/);
+  assert.ok((teacher.match(/class="diagram-svg"/g)||[]).length>=3);
+});
+
 test('bounded layout schema rejects unsafe CSS and ambiguous math',()=>{
   assert.equal(columns(['42%','58%']),'42fr 58fr');
   assert.throws(()=>columns(['60%','60%']),/total/);
