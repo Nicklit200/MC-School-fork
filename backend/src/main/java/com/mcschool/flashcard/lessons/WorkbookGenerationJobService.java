@@ -13,6 +13,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,10 +34,11 @@ public class WorkbookGenerationJobService {
     private final ObjectMapper json;
     private final TransactionTemplate tx;
     private final UUID workerId = UUID.randomUUID();
-    private final AtomicReference<UUID> running = new AtomicReference<>();
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "mch3-workbook-generator"); thread.setDaemon(true); return thread;
-    });
+    private final Set<UUID> running = ConcurrentHashMap.newKeySet();
+    private final ExecutorService executor;
+    private final int maxConcurrentJobs;
+    private final int maxPendingPerActor;
+    private final int maxGlobalActiveJobs;
     private volatile Generator generator;
 
     @FunctionalInterface public interface Generator {
@@ -44,9 +47,38 @@ public class WorkbookGenerationJobService {
     record Job(UUID id, UUID actorId, Role actorRole, UUID teacherId, String eventId, String hash,
                String request, String state, UUID draftId, String failure, Instant createdAt) {}
 
+    /**
+     * Production defaults are deliberately modest: two render workers match the
+     * renderer's two background slots. A third renderer slot is reserved for
+     * interactive Kolin work (configured in OwnerWorkbookPdfRenderService).
+     */
+    @Autowired
+    public WorkbookGenerationJobService(JdbcTemplate jdbc, McpAccessService access, ObjectMapper json,
+            PlatformTransactionManager transactions,
+            @Value("${app.workbook-jobs.concurrency:2}") int maxConcurrentJobs,
+            @Value("${app.workbook-jobs.max-pending-per-actor:24}") int maxPendingPerActor,
+            @Value("${app.workbook-jobs.max-global-active:60}") int maxGlobalActiveJobs) {
+        if (maxConcurrentJobs < 1 || maxConcurrentJobs > 4)
+            throw new IllegalArgumentException("Workbook job concurrency must be between 1 and 4");
+        if (maxPendingPerActor < maxConcurrentJobs || maxPendingPerActor > 100)
+            throw new IllegalArgumentException("Workbook per-account queue limit must be between concurrency and 100");
+        if (maxGlobalActiveJobs < maxPendingPerActor || maxGlobalActiveJobs > 500)
+            throw new IllegalArgumentException("Workbook global queue limit must be between per-account limit and 500");
+        this.jdbc=jdbc; this.access=access; this.json=json; this.tx=new TransactionTemplate(transactions);
+        this.maxConcurrentJobs=maxConcurrentJobs;
+        this.maxPendingPerActor=maxPendingPerActor;
+        this.maxGlobalActiveJobs=maxGlobalActiveJobs;
+        java.util.concurrent.atomic.AtomicInteger threadNumber=new java.util.concurrent.atomic.AtomicInteger();
+        this.executor=Executors.newFixedThreadPool(maxConcurrentJobs,r->{
+            Thread thread=new Thread(r,"mch3-workbook-generator-"+threadNumber.incrementAndGet());
+            thread.setDaemon(true);return thread;
+        });
+    }
+
+    /** Compatibility constructor for focused unit tests and local callers. */
     public WorkbookGenerationJobService(JdbcTemplate jdbc, McpAccessService access, ObjectMapper json,
                                          PlatformTransactionManager transactions) {
-        this.jdbc=jdbc; this.access=access; this.json=json; this.tx=new TransactionTemplate(transactions);
+        this(jdbc,access,json,transactions,2,24,60);
     }
     public void setGenerator(Generator generator) { this.generator=Objects.requireNonNull(generator); }
 
@@ -59,7 +91,10 @@ public class WorkbookGenerationJobService {
         if(request.getBytes(StandardCharsets.UTF_8).length>750000)throw new IllegalArgumentException("Workbook request is too large");
         String hash=hash(request);
         return tx.execute(status -> {
-            // Serialize only short claims for this actor, never the long generation.
+            // Serialize only short enqueue checks. Global lock first makes the
+            // school-wide capacity check atomic across different teacher accounts.
+            // Generation/rendering never runs while either advisory lock is held.
+            jdbc.queryForObject("SELECT pg_advisory_xact_lock(hashtext(?))",Object.class,"mch3-workbook-generation-global");
             jdbc.queryForObject("SELECT pg_advisory_xact_lock(hashtext(?))",Object.class,current.id().toString());
             var existing=jdbc.query("SELECT * FROM workbook_generation_jobs WHERE actor_id=? AND teacher_id=? AND idempotency_key=?",
                     this::row,current.id(),teacherId,key);
@@ -67,8 +102,14 @@ public class WorkbookGenerationJobService {
                 if(!existing.get(0).hash().equals(hash))throw new ResponseStatusException(HttpStatus.CONFLICT,"This idempotencyKey belongs to a different request");
                 return info(existing.get(0));
             }
-            Integer count=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs WHERE actor_id=? AND state IN ('QUEUED','RUNNING')",Integer.class,current.id());
-            if(count!=null&&count>=6)throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Wait for existing workbook jobs before starting more");
+            Integer actorCount=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs WHERE actor_id=? AND state IN ('QUEUED','RUNNING')",Integer.class,current.id());
+            if(actorCount!=null&&actorCount>=maxPendingPerActor)
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "This account already has "+actorCount+" active workbook jobs. The per-account limit is "+maxPendingPerActor+"; wait for completed jobs before submitting more.");
+            Integer globalCount=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs WHERE state IN ('QUEUED','RUNNING')",Integer.class);
+            if(globalCount!=null&&globalCount>=maxGlobalActiveJobs)
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "The school workbook queue is full ("+globalCount+"/"+maxGlobalActiveJobs+" active jobs). Existing jobs remain safe; retry after some complete.");
             UUID id=UUID.randomUUID();
             jdbc.update("INSERT INTO workbook_generation_jobs(id,actor_id,actor_role,teacher_id,event_id,idempotency_key,payload_hash,request_json) VALUES (?,?,?,?,?,?,?,?)",
                     id,current.id(),current.role().name(),teacherId,eventId,key,hash,request);
@@ -89,24 +130,36 @@ public class WorkbookGenerationJobService {
     @Scheduled(fixedDelayString="${app.workbook-jobs.poll-ms:2000}",initialDelayString="${app.workbook-jobs.initial-ms:5000}")
     public synchronized void tick() {
         if(generator==null||executor.isShutdown())return;
-        UUID active=running.get();
-        if(active!=null) {
+
+        // Keep every in-flight worker's lease alive. A job can legitimately
+        // take 115 seconds, and concurrent jobs must not expire one another.
+        for(UUID active:running) {
             jdbc.update("UPDATE workbook_generation_jobs SET lease_until=CURRENT_TIMESTAMP+INTERVAL '90 seconds' WHERE id=? AND state='RUNNING' AND worker_id=?",active,workerId);
-            return;
         }
+
         // Never repeat a possibly charged API call after a process crash.
         jdbc.update("UPDATE workbook_generation_jobs SET state='FAILED', failure_code='INTERRUPTED', completed_at=CURRENT_TIMESTAMP, request_json=NULL WHERE state='RUNNING' AND lease_until<CURRENT_TIMESTAMP");
-        Job claimed=tx.execute(status -> {
-            var jobs=jdbc.query("SELECT * FROM workbook_generation_jobs WHERE state='QUEUED' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row);
-            if(jobs.isEmpty())return null;
-            Job job=jobs.get(0);
-            jdbc.update("UPDATE workbook_generation_jobs SET state='RUNNING',started_at=CURRENT_TIMESTAMP,worker_id=?,lease_until=CURRENT_TIMESTAMP+INTERVAL '90 seconds' WHERE id=?",workerId,job.id());
-            return job;
-        });
-        if(claimed==null)return;
-        running.set(claimed.id());
-        try { executor.execute(()->run(claimed)); }
-        catch(RejectedExecutionException stopped) { fail(claimed,"INTERRUPTED",stopped,0); running.set(null); }
+
+        // Claim only as many jobs as there are free worker slots. SKIP LOCKED
+        // keeps this safe if Railway ever runs more than one backend replica.
+        while(running.size()<maxConcurrentJobs) {
+            Job claimed=tx.execute(status -> {
+                var jobs=jdbc.query("SELECT * FROM workbook_generation_jobs WHERE state='QUEUED' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row);
+                if(jobs.isEmpty())return null;
+                Job job=jobs.get(0);
+                jdbc.update("UPDATE workbook_generation_jobs SET state='RUNNING',started_at=CURRENT_TIMESTAMP,worker_id=?,lease_until=CURRENT_TIMESTAMP+INTERVAL '90 seconds' WHERE id=?",workerId,job.id());
+                return job;
+            });
+            if(claimed==null)return;
+            running.add(claimed.id());
+            try {
+                executor.execute(()->run(claimed));
+            } catch(RejectedExecutionException stopped) {
+                running.remove(claimed.id());
+                fail(claimed,"INTERRUPTED",stopped,0);
+                return;
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -130,7 +183,7 @@ public class WorkbookGenerationJobService {
             LOG.info("MCH3 workbook job={} state=SUCCEEDED durationMs={}",job.id(),(System.nanoTime()-start)/1_000_000);
         } catch(Exception ex) {
             fail(job,failureCode(ex),ex,(System.nanoTime()-start)/1_000_000);
-        } finally { SecurityContextHolder.clearContext(); running.set(null); }
+        } finally { SecurityContextHolder.clearContext(); running.remove(job.id()); }
     }
     private void fail(Job job,String code,Exception ex,long duration) {
         jdbc.update("UPDATE workbook_generation_jobs SET state='FAILED',failure_code=?,completed_at=CURRENT_TIMESTAMP,request_json=NULL WHERE id=? AND state='RUNNING' AND worker_id=?",code,job.id(),workerId);
@@ -192,6 +245,22 @@ public class WorkbookGenerationJobService {
         }
         return result;
     }
+    /** Aggregate queue telemetry only; no pupil, teacher or job identifiers are exposed. */
+    public Map<String,Object> capacity(AuthenticatedUser actor) {
+        AuthenticatedUser current=access.requireCurrentActor(actor);
+        Integer own=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs WHERE actor_id=? AND state IN ('QUEUED','RUNNING')",Integer.class,current.id());
+        Integer queued=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs WHERE state='QUEUED'",Integer.class);
+        Integer active=jdbc.queryForObject("SELECT count(*) FROM workbook_generation_jobs WHERE state='RUNNING'",Integer.class);
+        Map<String,Object> result=new LinkedHashMap<>();
+        result.put("activeForAccount",own==null?0:own);
+        result.put("maxPendingPerAccount",maxPendingPerActor);
+        result.put("queuedSchoolWide",queued==null?0:queued);
+        result.put("runningSchoolWide",active==null?0:active);
+        result.put("maxGlobalActive",maxGlobalActiveJobs);
+        result.put("workersPerBackend",maxConcurrentJobs);
+        return result;
+    }
+
     private static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch(java.security.NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
