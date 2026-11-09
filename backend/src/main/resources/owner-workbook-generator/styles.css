@@ -173,6 +173,34 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 /* footer */
 .footer { position: absolute; bottom: 13.2mm; left: 15.8mm; right: 15.8mm; border-top: .22mm solid var(--border); padding-top: 3.1mm; display: flex; align-items: center; justify-content: space-between; font-size: 9.5px; font-weight: 700; color: var(--gray-text); }
 .footer .page-index { font-weight: 400; }
+/* Homework is one short daily A4 sheet. Preserve the original school logo
+   and a FULL 8mm between handwriting baselines, but remove the lesson-only
+   timeline and unused header whitespace. Two exercises x six lines must fit.
+   This style is pupil-only, teacher answers keep the existing layout. */
+.sheet.student.homework { padding-top: 14mm; padding-bottom: 14mm; }
+.sheet.student.homework .brandbar { height: 15mm; padding-bottom: 2.2mm; }
+.sheet.student.homework .brandbar img { height: 11.5mm; }
+.sheet.student.homework .page-heading { height: 17mm; padding-top: 1.3mm; }
+.sheet.student.homework .page-heading h1 { font-size: 23px; margin-bottom: 1.2mm; }
+.sheet.student.homework .page-subtitle { font-size: 11.5px; }
+.sheet.student.homework .progress { display:none; }
+.sheet.student.homework .paper-content { padding-top: 1.5mm; }
+.sheet.student.homework .block { margin-top: 2mm; }
+.sheet.student.homework .block:first-child { margin-top: 0; }
+.sheet.student.homework .callout { padding: 3.1mm 4mm; min-height: 0; }
+.sheet.student.homework .callout p { font-size: 11.5px; line-height: 1.35; }
+.sheet.student.homework .exercise { padding: 2.8mm 3mm 2.4mm; }
+.sheet.student.homework .exercise-head { margin-bottom: .6mm; }
+.sheet.student.homework .exercise-number { width: 7mm; height: 7mm; flex-basis: 7mm; min-width: 7mm; }
+.sheet.student.homework .exercise-title { font-size: 13px; margin-top: 1mm; }
+.sheet.student.homework .task-row { min-height: 12mm; }
+.sheet.student.homework .task-row .expression-wrap { min-height: 8mm; }
+.sheet.student.homework .response-lines {
+  margin: 1.4mm 2mm 0 2mm; gap: 5.6mm; padding-bottom: 0;
+}
+/* Each .response-lines child remains 2.4mm high: 2.4 + 5.6 = 8mm. */
+.sheet.student.homework .footer { bottom: 12mm; padding-top: 2.5mm; }
+
 /* teacher pages use the same brand identity but compact answer layout */
 .teacher .page-heading { height: 26mm; }
 .teacher .paper-content { padding-top: 1mm; }
