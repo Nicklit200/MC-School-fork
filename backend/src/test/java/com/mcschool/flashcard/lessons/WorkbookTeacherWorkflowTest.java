@@ -210,6 +210,74 @@ class WorkbookTeacherWorkflowTest {
     }
 
     @SuppressWarnings("unchecked")
+    @Test
+    @SuppressWarnings("unchecked")
+    void frozenMcpClientsDiscoverAllFourHomeworkActionsUsingExistingTools() {
+        Map<String,Object> envelope=call(a,"list_site_functions",Map.of("domain","homework_generator"));
+        assertThat(envelope).doesNotContainKey("error");
+        Map<String,Object> catalog=(Map<String,Object>)((Map<?,?>)envelope.get("result")).get("structuredContent");
+        assertThat(catalog).containsEntry("total",4);
+        List<Map<String,Object>> items=(List<Map<String,Object>>)catalog.get("functions");
+        assertThat(items).extracting(row->row.get("functionId"))
+                .containsExactly("homework_generator.prepare_context","homework_generator.generate_day",
+                        "homework_generator.review_series","homework_generator.assign_series");
+        assertThat(items).extracting(row->row.get("readOnly"))
+                .containsExactly(true,false,true,false);
+
+        for(var item:items){
+            String functionId=String.valueOf(item.get("functionId"));
+            Map<String,Object> info=call(a,"get_site_function",Map.of("functionId",functionId));
+            assertThat(info).doesNotContainKey("error");
+            Map<String,Object> described=(Map<String,Object>)((Map<?,?>)info.get("result")).get("structuredContent");
+            assertThat(described).containsEntry("functionId",functionId).containsKey("argumentsSchema");
+        }
+        Map<String,Object> paging=call(a,"list_site_functions",Map.of("domain","homework_generator","limit",2,"offset",1));
+        Map<String,Object> page=(Map<String,Object>)((Map<?,?>)paging.get("result")).get("structuredContent");
+        assertThat((List<?>)page.get("functions")).hasSize(2);
+        verifyNoInteractions(renderer,receipts);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void cachedChatClientCanReadCorrectHomeworkPromptAndContextOverExistingSiteBridge() {
+        when(prompts.readForMcp()).thenReturn(new SchoolPromptSettingsResponse(
+                "group-current","individual-current","","","workbook-current","seven-day-homework-prompt",Instant.now()));
+        Map<String,Object> response=call(a,"read_site_function",Map.of(
+                "functionId","homework_generator.prepare_context",
+                "arguments",Map.of("eventId","lesson-a")));
+        assertThat(response).doesNotContainKey("error");
+        Map<String,Object> content=(Map<String,Object>)((Map<?,?>)response.get("result")).get("structuredContent");
+        assertThat(content).containsEntry("materialType","homework")
+                .containsEntry("homeworkPrompt","seven-day-homework-prompt")
+                .containsEntry("homeworkDays",7)
+                .containsKey("contextToken");
+        assertThat(String.valueOf(content.get("nextStep"))).contains("generate_homework_day_draft");
+        verifyNoInteractions(renderer,receipts);
+    }
+
+    @Test
+    void fallbackToolEnforcesOAuthOwnershipAndWriteConfirmationBeforeQueuingAnything() {
+        Map<String,Object> listing=call(student,"list_site_functions",Map.of("domain","homework_generator"));
+        assertThat(listing).containsKey("error");
+        Map<String,Object> чужой=call(b,"read_site_function",Map.of(
+                "functionId","homework_generator.prepare_context",
+                "teacherId",a.getId().toString(),
+                "arguments",Map.of("eventId","lesson-a")));
+        assertThat(((Map<?,?>)чужой.get("result")).get("isError")).isEqualTo(true);
+        Map<String,Object> missingConfirmation=call(a,"execute_site_function",Map.of(
+                "functionId","homework_generator.generate_day",
+                "arguments",Map.of("eventId","lesson-a","day",1),
+                "idempotencyKey","homework-day-one-bridge"));
+        assertThat(((Map<?,?>)missingConfirmation.get("result")).get("isError")).isEqualTo(true);
+        Map<String,Object> wrongReadMode=call(a,"read_site_function",Map.of(
+                "functionId","homework_generator.assign_series",
+                "arguments",Map.of("eventId","lesson-a")));
+        assertThat(((Map<?,?>)wrongReadMode.get("result")).get("isError")).isEqualTo(true);
+        Map<String,Object> unknown=call(a,"get_site_function",Map.of("functionId","homework_generator.admin_override"));
+        assertThat(((Map<?,?>)unknown.get("result")).get("isError")).isEqualTo(true);
+        verifyNoInteractions(renderer,receipts);
+    }
+
     private String contextToken() {
         Map<String,Object> envelope=call(a,"prepare_workbook_context",Map.of("eventId","lesson-a"));
         assertThat(envelope).doesNotContainKey("error");
