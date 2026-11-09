@@ -35,7 +35,7 @@ function graphTask(s,de) {
   graphSvg(graph); // The same domain, clipping and function checks used to draw the PDF.
   // Only value-at-x tasks need an evaluation point. A drawing or
   // intersection exercise should not fail because ChatGPT omitted at.
-  if(s.at!==undefined)num(s.at);
+  if(s.objective==='value'||s.at!==undefined)num(s.at);
   if(s.objective==='draw') {
     if(series.length!==1)throw Error('Draw requires one function');
     return result([text(de?'Zeichne den Graphen der Funktion.':'Построй график функции.'),text(functionLabel(series[0])),
