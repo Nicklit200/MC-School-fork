@@ -113,8 +113,36 @@ public class WorkbookContentService {
                 "text", Map.of("format", Map.of(
                         "type","json_schema","name","mindcrafti_fast_workbook","strict",true,"schema",schema)));
 
+        CompactLesson compact = requestCompact(payload);
+        validateCompact(compact);
+        String lessonJson = json.writeValueAsString(document(compact, context));
+        @SuppressWarnings("unchecked")
+        Map<String,Object> document = json.readValue(lessonJson, Map.class);
+        try {
+            OwnerWorkbookPdfRenderService.validateDocument(document);
+        } catch (IllegalArgumentException invalidDocument) {
+            throw compact("DOCUMENT_SCHEMA");
+        }
+        return new Content(lessonJson, compact.lessonPlan(), compact.difficulties());
+    }
+
+    private CompactLesson requestCompact(Map<String,Object> payload) throws Exception {
+        try {
+            return requestCompactOnce(payload, Duration.ofSeconds(40));
+        } catch (java.net.http.HttpTimeoutException | IncompleteProviderResponse firstFailure) {
+            try {
+                return requestCompactOnce(payload, Duration.ofSeconds(55));
+            } catch (IncompleteProviderResponse secondFailure) {
+                throw new IllegalStateException(
+                        "Workbook content provider response was incomplete after one retry", secondFailure);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private CompactLesson requestCompactOnce(Map<String,Object> payload, Duration timeout) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.openai.com/v1/responses"))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(timeout)
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload))).build();
@@ -127,25 +155,30 @@ public class WorkbookContentService {
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300)
             throw new IllegalStateException("Workbook content provider returned HTTP " + response.statusCode());
-        if (response.body().length() > 250_000)
+        String raw = response.body();
+        if (raw == null || raw.isBlank()) throw new IncompleteProviderResponse(null);
+        if (raw.length() > 250_000)
             throw new IllegalStateException("Workbook content provider response is too large");
 
-        @SuppressWarnings("unchecked")
-        Map<String,Object> body = json.readValue(response.body(), Map.class);
+        Map<String,Object> body;
+        try {
+            body = json.readValue(raw, Map.class);
+        } catch (Exception malformedEnvelope) {
+            throw new IncompleteProviderResponse(malformedEnvelope);
+        }
         if (!"completed".equals(body.get("status")))
             throw new IllegalStateException("Workbook content generation did not complete");
 
-        CompactLesson compact = json.readValue(outputText(body), CompactLesson.class);
-        validateCompact(compact);
-        String lessonJson = json.writeValueAsString(document(compact, context));
-        @SuppressWarnings("unchecked")
-        Map<String,Object> document = json.readValue(lessonJson, Map.class);
+        String output = outputText(body);
         try {
-            OwnerWorkbookPdfRenderService.validateDocument(document);
-        } catch (IllegalArgumentException invalidDocument) {
-            throw compact("DOCUMENT_SCHEMA");
+            return json.readValue(output, CompactLesson.class);
+        } catch (Exception malformedStructuredOutput) {
+            throw new IncompleteProviderResponse(malformedStructuredOutput);
         }
-        return new Content(lessonJson, compact.lessonPlan(), compact.difficulties());
+    }
+
+    private static final class IncompleteProviderResponse extends Exception {
+        private IncompleteProviderResponse(Throwable cause) { super(cause); }
     }
 
     /** Keep only compact lesson evidence; huge renderer contracts and binary metadata never go to the fast model. */
