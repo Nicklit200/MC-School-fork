@@ -60,10 +60,10 @@
     const rpcPending = new Map();
     let rpcSequence = 0, bridgeReady = false, bridgeFailed = false, serverToolsAvailable = false, bufferedResult = null;
     const operations = new Set(['prepare_lesson', 'upload_personal_lesson_workbook', 'upload_personal_lesson_answers',
-      'lesson_preparation.uploadWorkbook', 'lesson_preparation.uploadAnswers']);
-    const contextFields = ['operation', 'teacherId', 'eventId', 'studentId', 'idempotencyKey', 'confirm',
-      'workbookFileId', 'answersFileId', 'pdfFileId', 'workbookFilename', 'answersFilename', 'filename',
-      'homeworkNotes', 'difficulties', 'lessonPlan'];
+      'lesson_preparation.uploadWorkbook', 'lesson_preparation.uploadAnswers', 'assign_homework_series']);
+    const contextFields = ['operation', 'teacherId', 'eventId', 'studentId', 'targetType', 'targetId', 'startDate', 'days',
+      'idempotencyKey', 'confirm', 'workbookFileId', 'answersFileId', 'pdfFileId', 'pdfFileIds', 'filenames',
+      'workbookFilename', 'answersFilename', 'filename', 'homeworkNotes', 'difficulties', 'lessonPlan'];
     let context = null, contextKey = '', pending = null, busy = false, uploaded = false;
     let selected = {}, lastResult = null, phase = 'waiting', attempted = false;
     let startupTimer = null, startupDeadline = Date.now() + 15000;
@@ -72,6 +72,7 @@
     const idValid = value => typeof value === 'string' && value.length > 0 && value.length <= 512
       && !/^(?:[\\/]|https?:|file:|sandbox:)/i.test(value) && !/[\u0000-\u001f]/.test(value);
     const personal = c => c.operation.startsWith('upload_personal_lesson_');
+    const homework = c => c.operation === 'assign_homework_series';
     const safeCount = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
 
     function problem(code) { const error = new Error(code); error.transferCode = code; return error; }
@@ -114,6 +115,19 @@
       return (stem || 'document') + '.pdf';
     }
     function slots(c) {
+      if (homework(c)) {
+        const ids = Array.isArray(c.pdfFileIds) ? c.pdfFileIds : [];
+        const names = Array.isArray(c.filenames) ? c.filenames : [];
+        return ids.map((id, index) => {
+          const date = c.startDate && Number.isInteger(c.days)
+            ? new Date(c.startDate + 'T12:00:00Z') : null;
+          if (date) date.setUTCDate(date.getUTCDate() + Math.min(index, Math.max(0, c.days - 1)));
+          const fallback = date ? 'homework-' + date.toISOString().slice(0, 10) + '.pdf' : 'homework.pdf';
+          const explicit = names.length ? names[names.length === 1 ? 0 : index] : '';
+          return { field: 'pdfFiles[' + index + ']', id, kind: 'homework', label: 'Домашнее задание ' + (index + 1),
+            name: cleanFilename(explicit, fallback), named: !!explicit };
+        });
+      }
       if (c.operation === 'prepare_lesson') return [
         ...(c.workbookFileId ? [{ field: 'workbookFile', id: c.workbookFileId, kind: 'workbook', label: 'Рабочий лист',
           name: cleanFilename(c.workbookFilename, 'lesson-workbook.pdf'), named: !!c.workbookFilename }] : []),
@@ -128,14 +142,19 @@
     }
     function validContext(raw) {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.confirm !== true || !operations.has(raw.operation)) return null;
-      if (!text(raw.teacherId) || !text(raw.eventId) || !text(raw.idempotencyKey)) return null;
+      if (!text(raw.teacherId) || !text(raw.idempotencyKey)) return null;
       const c = {};
       for (const key of contextFields) if (raw[key] !== undefined) c[key] = raw[key];
+      if (homework(c)) {
+        if (!['student','group'].includes(c.targetType) || !text(c.targetId) || !/^\d{4}-\d{2}-\d{2}$/.test(text(c.startDate))
+          || !Number.isInteger(c.days) || c.days < 1 || c.days > 31 || !Array.isArray(c.pdfFileIds)
+          || (c.pdfFileIds.length !== 1 && c.pdfFileIds.length !== c.days)) return null;
+      } else if (!text(raw.eventId)) return null;
       if (personal(c) && !text(c.studentId)) return null;
       const documents = slots(c);
       if (!documents.length || documents.some(file => !idValid(file.id))) return null;
       if (c.operation === 'prepare_lesson' && c.pdfFileId) return null;
-      if (c.operation !== 'prepare_lesson' && (c.workbookFileId || c.answersFileId)) return null;
+      if (!homework(c) && c.operation !== 'prepare_lesson' && (c.workbookFileId || c.answersFileId)) return null;
       return c;
     }
     function effectiveSlots(c) {
@@ -149,8 +168,8 @@
           hashes[part] = Math.imul(hashes[part] ^ (value.charCodeAt(index) + part), 16777619 + part * 2);
         }
       }
-      return JSON.stringify([c.operation, c.teacherId, c.eventId, c.studentId || '', c.idempotencyKey,
-        value.length, hashes.map(hash => hash >>> 0)]);
+      return JSON.stringify([c.operation, c.teacherId, c.eventId || '', c.studentId || '', c.targetType || '',
+        c.targetId || '', c.startDate || '', c.days || 0, c.idempotencyKey, value.length, hashes.map(hash => hash >>> 0)]);
     }
     function setStatus(message, tone = '') {
       $('status').textContent = message;
@@ -183,7 +202,7 @@
     function persist() {
       if (!context || typeof window.openai?.setWidgetState !== 'function') return;
       // Persist only safe document metadata and IDs. Temporary URLs never leave the local call payload.
-      const state = { modelContent: { status: phase, eventId: context.eventId, operation: context.operation,
+      const state = { modelContent: { status: phase, eventId: context.eventId || '', operation: context.operation,
         documents: lastResult || [] }, privateContent: { contextMarker: stateMarker(context), selected, uploaded } };
       try { window.openai.setWidgetState(state); } catch (_) { /* state persistence is optional */ }
     }
@@ -223,7 +242,15 @@
     async function call(name, args) {
       return unwrap(await request('tools/call', { name, arguments: args }));
     }
-    async function readBack(c, files) {
+    async function readBack(c, files, completionResult = null) {
+      if (homework(c)) {
+        const rows = completionResult?.verifiedAssignments;
+        if (!completionResult?.verified || !Array.isArray(rows) || rows.length === 0 || rows.some(row => row.verified !== true)) {
+          throw problem('verification');
+        }
+        return rows.map((row, index) => ({ kind: 'homework', label: 'Домашнее задание ' + (index + 1),
+          present: true, filename: text(row.filename), sizeBytes: 0, version: 1, assignedDate: text(row.assignedDate) }));
+      }
       let metadata;
       if (personal(c)) {
         const output = await call('list_personal_lesson_workbooks', { teacherId: c.teacherId, eventId: c.eventId });
@@ -274,15 +301,22 @@
           const references = await Promise.all(files.map(reference));
           if (!bridgeReady || key !== contextKey) throw problem('bridge');
           const args = {};
-          for (const field of contextFields) if (!field.endsWith('FileId') && c[field] !== undefined) args[field] = c[field];
-          files.forEach((file, index) => { args[file.field] = references[index]; });
-          phase = 'uploading'; setStatus('Сохраняем PDF в уроке.');
-          try { await call('complete_lesson_file_transfer', args); }
-          finally { for (const file of files) delete args[file.field]; references.length = 0; }
+          for (const field of contextFields) if (!field.endsWith('FileId') && field !== 'pdfFileIds' && c[field] !== undefined) args[field] = c[field];
+          if (homework(c)) args.pdfFiles = references;
+          else files.forEach((file, index) => { args[file.field] = references[index]; });
+          phase = 'uploading'; setStatus(homework(c) ? 'Назначаем PDF домашнего задания.' : 'Сохраняем PDF в уроке.');
+          let completionResult;
+          try { completionResult = await call(homework(c) ? 'complete_homework_series_file_transfer' : 'complete_lesson_file_transfer', args); }
+          finally {
+            if (homework(c)) delete args.pdfFiles;
+            else for (const file of files) delete args[file.field];
+            references.length = 0;
+          }
           uploaded = true;
+          lastResult = completionResult;
         }
         phase = 'verifying'; setStatus('Проверяем сохранённые документы.');
-        const rows = await readBack(c, files);
+        const rows = await readBack(c, files, lastResult);
         if (key !== contextKey) return;
         lastResult = rows; phase = 'success';
         renderDocuments(rows, true); setStatus('Готово. PDF сохранены, результат проверен.', 'success');
