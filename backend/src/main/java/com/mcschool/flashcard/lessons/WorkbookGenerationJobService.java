@@ -179,8 +179,8 @@ public class WorkbookGenerationJobService {
                 case "COMPACT_TASK_COUNT", "COMPACT_TITLE", "COMPACT_SUBTITLE", "COMPACT_NOTES",
                      "COMPACT_TASK_KIND", "COMPACT_TASK_TITLE", "COMPACT_TASK_INSTRUCTION",
                      "COMPACT_TASK_EXPRESSION", "COMPACT_TASK_ANSWER", "COMPACT_RESTRICTIONS",
-                     "COMPACT_EQUATION_EQUALS", "COMPACT_EQUATION_VARIABLE", "COMPACT_EXPRESSION_EQUALS",
-                     "COMPACT_DOCUMENT_SCHEMA", "COMPACT_TEXT" ->
+                     "COMPACT_EQUATION_EQUALS", "COMPACT_EQUATION_VARIABLE", "COMPACT_RELATION_EQUALS",
+                     "COMPACT_RELATION_VARIABLE", "COMPACT_EXPRESSION_EQUALS", "COMPACT_DOCUMENT_SCHEMA", "COMPACT_TEXT" ->
                         "The compact task response failed a safe structural validation stage.";
                 case "INTERRUPTED" -> "The server stopped before completion was committed. No automatic regeneration was started.";
                 default -> "Workbook generation failed. The job ID identifies the server diagnostic without exposing pupil data.";
