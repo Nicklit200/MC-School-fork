@@ -49,6 +49,7 @@ class WorkbookContentServiceTest {
         Map<String,Object> doc=json.readValue(output.lessonJson(),Map.class);
         assertEquals(60,((Map<String,Object>)doc.get("meta")).get("durationMinutes"));
         assertEquals("Sofia",((Map<String,Object>)doc.get("meta")).get("group"));
+        assertEquals("server-computed",((Map<String,Object>)doc.get("meta")).get("answerMode"));
         assertEquals(1,((List<?>)doc.get("workbookPages")).size());
         assertEquals(1,((List<?>)doc.get("teacherPages")).size());
         var workbookPage=(Map<String,Object>)((List<?>)doc.get("workbookPages")).get(0);
@@ -56,11 +57,12 @@ class WorkbookContentServiceTest {
         assertEquals(8,firstExercise.get("writeLines"));
         var qa=(Map<String,Object>)doc.get("qa");
         assertEquals(4,((List<?>)qa.get("algebra")).size());
-        assertTrue(output.lessonJson().contains("linearSolution"));
-        assertTrue(output.lessonJson().contains("x = -4"));
+        assertTrue(output.lessonJson().contains("linearValue"));
+        assertTrue(output.lessonJson().contains("expressionValue"));
+        assertFalse(output.lessonJson().contains("x = -4"));
+        assertFalse(output.lessonJson().contains("11/12"));
         assertTrue(output.lessonJson().contains("Aufgabe 3"));
         assertTrue(output.lessonJson().contains("Löse die Gleichung."));
-        assertTrue(output.lessonJson().contains("3/4"));
         assertEquals("Evidenced notes",output.lessonPlan());
 
         var request=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);
