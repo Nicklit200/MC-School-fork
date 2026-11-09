@@ -384,6 +384,9 @@
           }
         }
         uploaded = saved.privateContent.uploaded === true;
+        if (homework(c) && uploaded && Array.isArray(saved?.modelContent?.documents)) {
+          lastResult = saved.modelContent.documents;
+        }
       }
       renderDocuments(effectiveSlots(c)); buttons();
       if (!attempted) void run(uploaded);
