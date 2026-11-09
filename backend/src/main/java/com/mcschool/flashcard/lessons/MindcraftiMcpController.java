@@ -333,7 +333,7 @@ public class MindcraftiMcpController {
     }
 
     private String workbookInstructions() {
-        return " Server workbook generation returns a durable jobId. Poll get_lesson_workbook_job after retryAfterSeconds; never duplicate a generation after a timeout. For several pupils, wait for all jobs and refresh get_lesson_draft for every PDF just before presenting its five-minute signed link. After explicit approval, attach server-generated personal materials with publish_personal_lesson_draft using draftId and the exact pupil. It directly stores both worksheet and private teacher answers; no file download, re-upload or widget is needed. Use publish_lesson_draft only for common lesson materials. Never claim a file was published without successful write and readback.";
+        return " MANDATORY for TEACHER and ADMIN: ChatGPT itself writes the lesson content, the server ONLY verifies/renders PDFs. ALWAYS call prepare_workbook_context for the exact lesson BEFORE generate_lesson_workbook_draft; read its rendererContract and prepare complete lessonJson with workbookPages, teacherPages, and qa.algebra. ALWAYS call generate_lesson_workbook_draft with lessonJson AND the fresh contextToken, eventId and stable idempotencyKey. NEVER call generation with only eventId/instruction, never ask teachers for Railway/GitHub or an OpenAI API key, and never use server-side AI to author exercises. Server workbook generation returns a durable jobId. Poll get_lesson_workbook_job after retryAfterSeconds; never duplicate a generation after a timeout. For several pupils, wait for all jobs and refresh get_lesson_draft for every PDF just before presenting its five-minute signed link. After explicit approval, attach server-generated personal materials with publish_personal_lesson_draft using draftId and the exact pupil. It directly stores both worksheet and private teacher answers; no file download, re-upload or widget is needed. Use publish_lesson_draft only for common lesson materials. Never claim a file was published without successful write and readback.";
     }
 
     private boolean fileTransferActorAllowed(AuthContext auth) {
@@ -886,20 +886,20 @@ public class MindcraftiMcpController {
         }
         if (workbookStaff(auth) && ownerWorkbookPdfRenderService != null) {
             tools.add(tool("prepare_workbook_context",
-                    "Read the EXACT owned lesson, current school prompt, Brand Guide, available monthly plan, prior lesson notes and documented card/homework evidence. Teachers see only their own students and lessons; ADMIN selects teacherId. Handwritten PDFs are NOT graded. Teachers should use the server-side workbook generation tool. The source-code retrieval endpoint remains owner/admin only.",
+                    "MANDATORY FIRST STEP for workbook creation by TEACHER or ADMIN. Read the exact owned lesson, current school prompt, Brand Guide, plan and student evidence. Then ChatGPT must generate full structured lessonJson matching rendererContract with workbookPages, teacherPages and qa.algebra, and pass it with this fresh contextToken to generate_lesson_workbook_draft. NEVER start a job without lessonJson and contextToken. No separate Railway or server AI access is needed. Teachers see only their own lessons; ADMIN selects teacherId.",
                     schema(Map.of(
                             "teacherId", property("string", "Exact teacher UUID from find_lessons"),
                             "eventId", property("string", "Exact eventId from find_lessons")),
                             List.of("eventId")), readOnlyAnnotations()));
             tools.add(tool("generate_lesson_workbook_draft",
-                    "Start a durable background job producing two unpublished, mathematically checked PDFs for one exact owned lesson. Returns jobId/status quickly, NOT finished PDFs. Poll get_lesson_workbook_job after retryAfterSeconds until SUCCEEDED or FAILED. Reuse the exact idempotencyKey on identical retries; never launch duplicates after a timeout. Reads fresh school prompt, Brand Guide, monthly plan and student evidence. With server AI configured, eventId/instruction suffice. Alternatively supply lessonJson/contextToken from prepare_workbook_context. For multiple pupils, finish all jobs then refresh every get_lesson_draft immediately before presenting the five-minute links. Never publish without the user's explicit instruction.",
+                    "REQUIRED: first call prepare_workbook_context for the exact owned lesson, then ChatGPT writes lessonJson using rendererContract and sends lessonJson + fresh contextToken + eventId + idempotencyKey to this tool. The server performs math QA, A4 layout and TWO unpublished PDF drafts; it does NOT generate exercise content through its own AI. Calling with only eventId/instruction is invalid. Both ADMIN and TEACHER follow this same workflow; teachers need only MCH3, not Railway. Poll get_lesson_workbook_job after retryAfterSeconds, reuse idempotencyKey for identical retries. For multiple pupils refresh signed links before presenting. Never publish without explicit approval.",
                     schema(Map.of("teacherId", property("string", "ADMIN selects teacher UUID; teachers may omit it for themselves"),
                             "eventId", property("string", "Exact lesson eventId from find_lessons"),
                             "instruction", property("string", "Optional additional lesson instructions, at most 6000 characters"),
-                            "lessonJson", property("string", "Optional content prepared by ChatGPT according to prepare_workbook_context.rendererContract, never executable source. Requires contextToken."),
-                            "contextToken", property("string", "Required with lessonJson. Exact fresh token from prepare_workbook_context; binds lesson, current prompts, Brand Guide and student evidence."),
+                            "lessonJson", property("string", "REQUIRED. Full structured math content authored by ChatGPT using fresh prepare_workbook_context.rendererContract, including student workbookPages, private teacherPages and correct qa.algebra assertions. Server only renders/validates; no server AI."),
+                            "contextToken", property("string", "REQUIRED. Fresh exact token from prepare_workbook_context for this lesson. Never use a remembered or stale token."),
                             "idempotencyKey", property("string", "Stable unique key for this generation; reuse unchanged on identical retries")),
-                            List.of("eventId", "idempotencyKey")), writeAnnotations()));
+                            List.of("eventId", "idempotencyKey", "lessonJson", "contextToken")), writeAnnotations()));
             if(workbookJobs!=null)tools.add(tool("get_lesson_workbook_job",
                     "Read your workbook generation job without regenerating anything. QUEUED/RUNNING means wait retryAfterSeconds and poll again. SUCCEEDED returns a saved draft with freshly signed PDF links. FAILED is terminal; explain errorCode and do not automatically spend another generation. Rechecks current account and exact lesson ownership. Never publishes.",
                     schema(Map.of("jobId",property("string","Exact jobId from generate_lesson_workbook_draft")),List.of("jobId")),readOnlyAnnotations()));
@@ -1600,7 +1600,7 @@ public class MindcraftiMcpController {
                 "Generate exactly two PDFs, workbook + teacher answers; do not generate or assign homework or cards.",
                 "Use canonical generator v3 SVG/CSS; download both unpublished draft PDFs and review before publication.",
                 "If pupil level, topic, date or duration is ambiguous, stop and ask the teacher to decide."));
-        result.put("nextStep", "Teachers should call generate_lesson_workbook_draft with the exact eventId and any additional instruction; it reads fresh context and stores two unpublished PDF previews. Inspect handwritten homework separately before claiming errors.");
+        result.put("nextStep", "MANDATORY: ChatGPT must author lessonJson from this exact rendererContract and current lesson evidence (student workbookPages, teacherPages, qa.algebra), then call generate_lesson_workbook_draft with lessonJson, this fresh contextToken, eventId and a stable idempotencyKey. Server AI authoring is disabled. The school server renders only two unpublished PDF previews; do not publish until approved.");
         result.put("rendererContract",workbookRendererContract());
         result.put("contextToken",workbookContextToken(result));
         return result;
@@ -1658,7 +1658,7 @@ public class MindcraftiMcpController {
         selectedWorkbookLesson(teacher,eventId);
         String instruction=string(args.get("instruction"));
         if(instruction.length()>6000)throw new IllegalArgumentException("instruction is too long");
-        if(args.containsKey("lessonJson")!=args.containsKey("contextToken"))throw new IllegalArgumentException("lessonJson and contextToken must be supplied together");
+        if(!args.containsKey("lessonJson") || !args.containsKey("contextToken"))throw new IllegalArgumentException("MCH3 requires ChatGPT-authored lessonJson and fresh contextToken from prepare_workbook_context. Do not start server AI generation using eventId/instruction alone.");
         Map<String,Object> normalized=new TreeMap<>();
         normalized.put("teacherId",teacher.id().toString());normalized.put("eventId",eventId);
         normalized.put("instruction",instruction);normalized.put("idempotencyKey",required(args,"idempotencyKey"));
@@ -1704,7 +1704,7 @@ public class MindcraftiMcpController {
         if (instruction.length() > 6000) throw new IllegalArgumentException("instruction is too long");
         String key = required(args, "idempotencyKey");
         boolean suppliedContent=args.containsKey("lessonJson");
-        if(suppliedContent != args.containsKey("contextToken")) throw new IllegalArgumentException("lessonJson and contextToken must be supplied together");
+        if(!suppliedContent || !args.containsKey("contextToken")) throw new IllegalArgumentException("MCH3 requires ChatGPT-authored lessonJson and fresh contextToken from prepare_workbook_context; server AI authoring is disabled.");
         String suppliedJson=suppliedContent?required(args,"lessonJson"):"";
         String suppliedToken=suppliedContent?required(args,"contextToken"):"";
         if(suppliedJson.length()>OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS) throw new IllegalArgumentException("lessonJson is too large");
@@ -1725,17 +1725,11 @@ public class MindcraftiMcpController {
                     try {
                         Map<String,Object> scoped = Map.of("teacherId", teacher.id().toString(), "eventId", eventId);
                         Map<String,Object> context = prepareWorkbookContext(scoped, auth);
-                        WorkbookContentService.Content content;
-                        if(suppliedContent) {
-                            requireFreshWorkbookToken(context,suppliedToken);
-                            @SuppressWarnings("unchecked") Map<String,Object> prepared=objectMapper.readValue(suppliedJson,Map.class);
-                            if(!(prepared.get("qa") instanceof Map<?,?> qa) || !(qa.get("algebra") instanceof List<?> checks) || checks.isEmpty())
-                                throw new IllegalArgumentException("Prepared lessonJson must include explicit qa.algebra assertions from its actual tasks and answers");
-                            content=new WorkbookContentService.Content(suppliedJson,"","");
-                        } else {
-                            if(workbookContentService==null) throw new IllegalStateException("Call prepare_workbook_context and supply lessonJson/contextToken to generate_lesson_workbook_draft");
-                            content=workbookContentService.generate(context,instruction);
-                        }
+                        requireFreshWorkbookToken(context,suppliedToken);
+                        @SuppressWarnings("unchecked") Map<String,Object> prepared=objectMapper.readValue(suppliedJson,Map.class);
+                        if(!(prepared.get("qa") instanceof Map<?,?> qa) || !(qa.get("algebra") instanceof List<?> checks) || checks.isEmpty())
+                            throw new IllegalArgumentException("Prepared lessonJson must include explicit qa.algebra assertions from its actual tasks and answers");
+                        WorkbookContentService.Content content=new WorkbookContentService.Content(suppliedJson,"","");
                         Map<String,Object> generation = new LinkedHashMap<>(scoped);
                         generation.put("contextToken", context.get("contextToken"));
                         generation.put("lessonJson", content.lessonJson());
