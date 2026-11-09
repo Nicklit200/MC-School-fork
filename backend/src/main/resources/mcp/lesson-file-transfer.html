@@ -244,6 +244,10 @@
     }
     async function readBack(c, files, completionResult = null) {
       if (homework(c)) {
+        if (Array.isArray(completionResult) && completionResult.length > 0
+          && completionResult.every(row => row?.kind === 'homework' && row?.present === true && text(row.filename))) {
+          return completionResult;
+        }
         const rows = completionResult?.verifiedAssignments;
         if (!completionResult?.verified || !Array.isArray(rows) || rows.length === 0 || rows.some(row => row.verified !== true)) {
           throw problem('verification');
@@ -365,6 +369,10 @@
       if (key === contextKey) return;
       if (busy) { pending = c; return; }
       context = c; contextKey = key; selected = {}; uploaded = false; lastResult = null; attempted = false; phase = 'ready';
+      $('title').textContent = homework(c) ? 'Домашнее задание' : 'Материалы урока';
+      $('note').textContent = homework(c)
+        ? 'PDF назначаются на выбранные даты. Другие домашние задания и материалы урока остаются на месте.'
+        : 'Файлы сохраняются в выбранном уроке. Другие материалы остаются на месте.';
       const saved = window.openai?.widgetState;
       if (saved?.privateContent?.contextMarker === stateMarker(c)) {
         const priorSelection = saved.privateContent.selected;
