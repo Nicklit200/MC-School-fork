@@ -4,11 +4,44 @@ import {readFile,writeFile,mkdir,mkdtemp,rm,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {validateLesson,columns,length} from './schema.mjs';
+import {validateLesson,normalizeLessonMath,columns,length} from './schema.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const rich={type:'richText',content:[{text:'Prüfe '},{math:'x+1=2'},{text:'.'}]};
 const basic=()=>({meta:{school:'MINDCRAFTI SCHOOL',subject:'MATHEMATIK',group:'Test',date:'05.11.2026',durationMinutes:60},workbookPages:[{title:'Test',blocks:[]}],teacherPages:[{title:'Antworten',blocks:[]}]});
+
+
+test('ChatGPT plain math strings normalize without touching solutions or algebra assertions', async()=>{
+  const lesson=basic();
+  lesson.workbookPages[0].blocks=[{type:'exercise',number:'1',title:'Berechne.',rows:[
+    {label:'a)',math:'\\frac{1}{2}+\\frac{1}{3}',work:true}
+  ],writeLines:8}];
+  lesson.teacherPages[0].blocks=[{type:'solutions',title:'Antworten',items:[
+    {label:'1a',math:'\\frac{1}{2}+\\frac{1}{3}=\\frac{5}{6}'}
+  ]}];
+  lesson.qa={algebra:[{kind:'equivalence',expression:'1/2+1/3',answer:'5/6',restrictions:[]}]};
+  const source=JSON.stringify(lesson.qa);
+  normalizeLessonMath(lesson);
+  assert.deepEqual(lesson.workbookPages[0].blocks[0].rows[0].math,{latex:'\\frac{1}{2}+\\frac{1}{3}'});
+  assert.deepEqual(lesson.teacherPages[0].blocks[0].items[0].math,{latex:'\\frac{1}{2}+\\frac{1}{3}=\\frac{5}{6}'});
+  assert.equal(JSON.stringify(lesson.qa),source,'normalization never edits math QA proofs');
+  const {workbook,teacher}=await render(lesson);
+  assert.match(workbook,/class="[^"]*math-latex/);
+  assert.match(teacher,/class="[^"]*math-latex/);
+});
+
+test('ChatGPT math normalization does not bypass strict formula safety or invalid math QA', async()=>{
+  const lesson=basic();
+  lesson.workbookPages[0].blocks=[{type:'exercise',number:'1',rows:[
+    {label:'a)',math:'\\href{https://invalid.example}{x}',work:true}
+  ],writeLines:8}];
+  assert.throws(()=>normalizeLessonMath(lesson),/Unsafe or unsupported TeX/);
+  const wrong=basic();
+  wrong.workbookPages[0].blocks=[{type:'exercise',number:'1',rows:[{label:'a)',math:'1+1',work:true}],writeLines:8}];
+  wrong.teacherPages[0].blocks=[{type:'solutions',items:[{label:'1a',math:'1+1=3'}]}];
+  wrong.qa={algebra:[{kind:'equivalence',expression:'1+1',answer:'3',restrictions:[]}]};
+  await assert.rejects(()=>render(wrong),/Algebra QA failed|Incorrect math/);
+});
 
 test('bounded layout schema rejects unsafe CSS and ambiguous math',()=>{
   assert.equal(columns(['42%','58%']),'42fr 58fr');
