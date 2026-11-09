@@ -9,11 +9,11 @@ const keys=(v,allowed)=>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.ke
 const range=v=>{const [a,b]=list(v,2,2);if(b-a<1||b-a>20)throw Error('Invalid graph range');return [a,b];};
 const array=(v,min,max)=>{if(!Array.isArray(v)||v.length<min||v.length>max)throw Error('Invalid visual collection');return v;};
 const text=t=>({type:'text',text:t});
-const result=(blocks,answer)=>({blocks,answer});
+const result=(blocks,answer,teacherDiagram=null)=>({blocks,answer,teacherDiagram});
 
 export function seriesDefinition(s) {
   keys(s,['kind','parameters','denominator']);
-  const p=list(s.parameters,1,5), d=list(s.denominator,0,5);
+  const p=list(s.parameters,1,5), d=list(s.denominator ?? [],0,5);
   const spec={kind:s.kind};
   const fields={constant:['value'],linear:['m','b'],quadratic:['a','b','c'],sine:['amplitude','frequency','phase','offset'],
     cosine:['amplitude','frequency','phase','offset'],absolute:['a','h','k'],reciprocal:['a','h','k'],sqrt:['a','h','k'],exponential:['a','h','k','base'],logarithmic:['a','h','k','base']};
@@ -33,17 +33,19 @@ function graphTask(s,de) {
   const series=array(s.series,1,2).map(seriesDefinition), xRange=range(s.xRange), yRange=range(s.yRange);
   const graph={type:'graph',label:'',series,xRange,yRange,gridStep:Math.max(1,Math.ceil(Math.max(xRange[1]-xRange[0],yRange[1]-yRange[0])/10))};
   graphSvg(graph); // The same domain, clipping and function checks used to draw the PDF.
-  num(s.at);
+  // Only value-at-x tasks need an evaluation point. A drawing or
+  // intersection exercise should not fail because ChatGPT omitted at.
+  if(s.at!==undefined)num(s.at);
   if(s.objective==='draw') {
     if(series.length!==1)throw Error('Draw requires one function');
     return result([text(de?'Zeichne den Graphen der Funktion.':'Построй график функции.'),text(functionLabel(series[0])),
-      {type:'coordinateGrid',label:'',xRange,yRange,gridStep:graph.gridStep}],functionLabel(series[0]));
+      {type:'coordinateGrid',label:'',xRange,yRange,gridStep:graph.gridStep}],functionLabel(series[0]),{...graph,label:'MUSTERLÖSUNG – GRAPH'});
   }
   if(s.objective==='value') {
     if(series.length!==1||s.at<xRange[0]||s.at>xRange[1])throw Error('Invalid graph evaluation point');
     const y=functionAt(series[0],s.at);
     if(y===null||!Number.isFinite(y)||y<yRange[0]||y>yRange[1])throw Error('Requested graph value is not visible');
-    return result([text(de?`Bestimme f(${fmt(s.at)}).`:`Найди f(${fmt(s.at)}).`),graph],`f(${fmt(s.at)}) ≈ ${fmt(y)}`);
+    return result([text(de?`Bestimme f(${fmt(s.at)}).`:`Найди f(${fmt(s.at)}).`),graph],`f(${fmt(s.at)}) ≈ ${fmt(y)}`,{...graph,label:'MUSTERLÖSUNG – GRAPH',points:[{x:s.at,y,seriesIndex:0,label:`P(${fmt(s.at)} | ${fmt(y)})`}]});
   }
   if(!['zeros','intersections'].includes(s.objective))throw Error('Unknown graph objective');
   if(series.some(f=>!['constant','linear','quadratic','polynomial','rational'].includes(f.kind)))
@@ -57,8 +59,12 @@ function graphTask(s,de) {
   if(!points.length)throw Error('Select a range containing isolated visible solutions');
   const title=s.objective==='zeros'?(de?'Bestimme die Nullstellen im dargestellten Bereich.':'Найди нули функции в показанной области.'):
     (de?'Bestimme die Schnittpunkte im dargestellten Bereich.':'Найди точки пересечения в показанной области.');
-  return result([text(title+' '+(de?'Näherungswerte sind erlaubt.':'Можно записать приближённые значения.')),graph],
-    points.map(p=>s.objective==='zeros'?`x ≈ ${fmt(p.x)}`:`(${fmt(p.x)}; ${fmt(p.y)})`).join('; '));
+  const answer=points.map(p=>s.objective==='zeros'?`x ≈ ${fmt(p.x)}`:`(${fmt(p.x)}; ${fmt(p.y)})`).join('; ');
+  // Visible answers belong in the teacher-only reference diagram, never the
+  // student graph. Mark only actual numerically verified visible solutions.
+  const teacherPoints=points.slice(0,12).map((p,i)=>({x:p.x,y:p.y,seriesIndex:0,label:points.length<=3?`${s.objective==='zeros'?'N':'S'}${i+1}`:undefined}));
+  return result([text(title+' '+(de?'Näherungswerte sind erlaubt.':'Можно записать приближённые значения.')),graph],answer,
+    {...graph,label:'MUSTERLÖSUNG – GRAPH',points:teacherPoints});
 }
 
 function polygonData(vertices) {
@@ -82,27 +88,28 @@ function polygonData(vertices) {
 
 function geometryTask(s,de) {
   keys(s,['type','language','figure','objective','vertices','parameters','index']);
-  const p=list(s.parameters,0,3), figure=s.figure, objective=s.objective;
-  if(!Number.isInteger(s.index)||s.index<0||s.index>7)throw Error('Invalid geometry index');
+  const p=list(s.parameters ?? [],0,3), figure=s.figure, objective=s.objective;
+  const index=s.index ?? 0;
+  if(!Number.isInteger(index)||index<0||index>7)throw Error('Invalid geometry index');
   let diagram={type:'geometry',figure,label:'',unit:'cm'}, facts='',value,unit='';
   const names='ABCDEFGH';
   if(['triangle','rectangle','quadrilateral','polygon'].includes(figure)) {
     if(p.length)throw Error('Polygon needs coordinates only');
     const {pts,lengths,area}=polygonData(s.vertices);
     if((figure==='triangle'&&pts.length!==3)||(['rectangle','quadrilateral'].includes(figure)&&pts.length!==4))throw Error('Incorrect vertex count');
-    if(s.index>=pts.length)throw Error('Geometry index outside figure');
+    if(index>=pts.length)throw Error('Geometry index outside figure');
     diagram={...diagram,vertices:pts.map((q,i)=>({x:q[0],y:q[1],label:names[i]})),showSideLabels:false,showAngleLabels:false};
     facts=pts.map((q,i)=>`${names[i]}(${fmt(q[0])}; ${fmt(q[1])})`).join(', ')+'. '+(de?'Koordinaten in cm.':'Координаты в см.');
     if(objective==='area'){value=area;unit='cm²';}
     else if(objective==='perimeter'){value=lengths.reduce((a,b)=>a+b,0);unit='cm';}
-    else if(objective==='side'){value=lengths[s.index];unit='cm';}
+    else if(objective==='side'){value=lengths[index];unit='cm';}
     else if(objective==='angle') {
-      const n=pts.length,a=pts[(s.index+n-1)%n],b=pts[s.index],c=pts[(s.index+1)%n];
+      const n=pts.length,a=pts[(index+n-1)%n],b=pts[index],c=pts[(index+1)%n];
       const dot=(a[0]-b[0])*(c[0]-b[0])+(a[1]-b[1])*(c[1]-b[1]);
-      value=Math.acos(Math.max(-1,Math.min(1,dot/(lengths[(s.index+n-1)%n]*lengths[s.index]))))*180/Math.PI;unit='°';
+      value=Math.acos(Math.max(-1,Math.min(1,dot/(lengths[(index+n-1)%n]*lengths[index]))))*180/Math.PI;unit='°';
     } else throw Error('Unsupported polygon objective');
   } else {
-    if(!Array.isArray(s.vertices)||s.vertices.length||s.index!==0)throw Error('Unexpected geometry coordinates');
+    if(!Array.isArray(s.vertices ?? [])||(s.vertices ?? []).length||index!==0)throw Error('Unexpected geometry coordinates');
     p.forEach(positive);
     const dimensions={circle:1,cube:1,cuboid:3,cylinder:2,cone:2,sphere:1};
     if(p.length!==dimensions[figure])throw Error('Invalid geometry dimensions');
@@ -126,10 +133,11 @@ function geometryTask(s,de) {
   if(!Number.isFinite(value)||value<=0)throw Error('Invalid geometry result');
   geometrySvg(diagram);
   const labels=de?{area:'Bestimme den Flächeninhalt.',perimeter:'Bestimme den Umfang.',volume:'Bestimme das Volumen.',surface:'Bestimme den gesamten Oberflächeninhalt.',
-    side:`Bestimme die Länge ${names[s.index]}${names[(s.index+1)%s.vertices.length]}.`,angle:`Bestimme den Innenwinkel bei ${names[s.index]}.`}:
+    side:`Bestimme die Länge ${names[index]}${names[(index+1)%s.vertices.length]}.`,angle:`Bestimme den Innenwinkel bei ${names[index]}.`}:
     {area:'Найди площадь фигуры.',perimeter:'Найди периметр.',volume:'Найди объём.',surface:'Найди площадь полной поверхности.',
-      side:`Найди длину ${names[s.index]}${names[(s.index+1)%s.vertices.length]}.`,angle:`Найди внутренний угол при вершине ${names[s.index]}.`};
-  return result([text(labels[objective]),text(facts),diagram],`≈ ${fmt(value)} ${unit}`);
+      side:`Найди длину ${names[index]}${names[(index+1)%s.vertices.length]}.`,angle:`Найди внутренний угол при вершине ${names[index]}.`};
+  return result([text(labels[objective]),text(facts),diagram],`≈ ${fmt(value)} ${unit}`,
+    {...diagram,label:'MUSTERLÖSUNG – GEOMETRIE'});
 }
 
 function fractionTask(s,de) {
@@ -137,7 +145,8 @@ function fractionTask(s,de) {
   if(!Number.isInteger(s.parts)||s.parts<2||s.parts>24||!Number.isInteger(s.selected)||s.selected<0||s.selected>s.parts)throw Error('Invalid fraction circle');
   let a=s.selected,b=s.parts;while(b){const t=a%b;a=b;b=t;}
   return result([text(de?'Welcher Bruchteil ist gefärbt? Kürze den Bruch.':'Какая доля круга закрашена? Сократи дробь.'),
-    {type:'geometry',figure:'fractionCircle',label:'',parts:s.parts,selected:s.selected}],`${s.selected/safeGcd(a)}/${s.parts/safeGcd(a)}`);
+    {type:'geometry',figure:'fractionCircle',label:'',parts:s.parts,selected:s.selected}],`${s.selected/safeGcd(a)}/${s.parts/safeGcd(a)}`,
+    {type:'geometry',figure:'fractionCircle',label:'MUSTERLÖSUNG – BRÜCHE',parts:s.parts,selected:s.selected});
 }
 const safeGcd=a=>a||1;
 
@@ -152,11 +161,13 @@ export function compileVisual(s) {
 /** Replace placeholders with ordinary renderer blocks. No model answer is ever trusted. */
 export function prepareVisualTasks(lesson) {
   const results=new Map();
+  const referenceDiagrams=[];
   function walk(items) {
     return items.flatMap(block=>{
       if(block.type==='visualTask') {
         if(!Number.isInteger(block.number)||block.number<1||block.number>20||results.has(block.number))throw Error('Invalid visual task identity');
         const compiled=compileVisual(block.spec);results.set(block.number,compiled.answer);
+        referenceDiagrams.push({number:block.number,answer:compiled.answer,diagram:compiled.teacherDiagram});
         compiled.blocks[0].text=`${block.number}. ${compiled.blocks[0].text}`;
         return compiled.blocks;
       }
@@ -172,6 +183,21 @@ export function prepareVisualTasks(lesson) {
   }
   if(results.size!==seen.size)throw Error('Missing visual checks');
   if(results.size)lesson.qa.algebra=assertions.filter(c=>c.kind!=='visualValue');
+  // Only private teacher pages contain the plotted answer markers and
+  // reference geometry. Rendered by the same SVG generator as student work.
+  // Group four references into one logical page; A4 auto-pagination safely
+  // splits these blocks further when needed.
+  if(referenceDiagrams.length && Array.isArray(lesson.teacherPages)){
+    for(let start=0;start<referenceDiagrams.length;start+=4){
+      const chunk=referenceDiagrams.slice(start,start+4);
+      lesson.teacherPages.push({title:'Grafik & Geometrie – Musterlösungen',
+        subtitle:'Automatisch aus den Aufgabendaten berechnet · nur Lehrkräfte',
+        blocks:chunk.flatMap(({number,answer,diagram})=>[
+          {type:'callout',label:`AUFGABE ${number}`,text:answer},
+          diagram
+        ])});
+    }
+  }
   return {results,assertions};
 }
 
