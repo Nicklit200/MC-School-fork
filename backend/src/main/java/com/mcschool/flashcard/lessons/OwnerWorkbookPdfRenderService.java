@@ -364,7 +364,7 @@ public class OwnerWorkbookPdfRenderService {
             String type = String.valueOf(map.get("type"));
             if (List.of("solutions", "schedule", "teacherNote").contains(type))
                 throw new IllegalArgumentException("Teacher-only block in student PDF: " + type);
-            if ("exercise".equals(type) || "taskCard".equals(type))
+            if ("exercise".equals(type) || "taskCard".equals(type) || "visualTask".equals(type))
                 count = map.get("rows") instanceof List<?> rows && !rows.isEmpty() ? rows.size() : 1;
             for (Object value : map.values()) if (value instanceof Map<?,?> || value instanceof List<?>)
                 count += inspectStudentTree(value, depth + 1);
