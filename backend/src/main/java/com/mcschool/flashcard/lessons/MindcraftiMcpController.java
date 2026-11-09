@@ -55,7 +55,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.34.0";
+    private static final String SERVER_VERSION = "1.35.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
     private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
     private static final String FILE_TRANSFER_MIME = "text/html;profile=mcp-app";
@@ -309,7 +309,7 @@ public class MindcraftiMcpController {
                 "resources", Map.of()));
         result.put("serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION));
         result.put("instructions", authenticated
-                ? "For the curriculum skills board, always read get_skill_board fresh before answering from it or using edit_skill_board. Edit only explicitly requested items, using the exact returned revision. Preserve unrelated content and read back after saving. A stale revision means reconcile, not blind retry. This catalog does not contain pupil mastery. Mindcrafti school tools include lessons, structured monthly plans for students and groups, school prompts, the current school Brand Guide, the current approved 3-slide Mindcrafti Stories PPTX via get_story_template_info and get_story_template_chunk, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. When preparing the next lesson for a student or group, use get_month_plan for the current month when a plan exists, then combine it with recent lesson/homework evidence and the current school prompt. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with the most specific lessonType: group or individual for lesson logic, workbook for a workbook/worksheet, homework for homework, diagnostic for a diagnostic lesson, or error_correction for work on mistakes, and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. For ANY Mindcrafti-branded document or visual material (PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document, parent report, internal document or other branded artifact), first call get_brand_guide and follow the current Brand Guide for visual design. Do not reuse a Brand Guide from chat history. When ChatGPT creates homework PDFs, assign them directly with assign_homework_series using pdfBase64; Google Drive is optional."
+                ? "For the curriculum skills board, always read get_skill_board fresh before answering from it or using edit_skill_board. Edit only explicitly requested items, using the exact returned revision. Preserve unrelated content and read back after saving. A stale revision means reconcile, not blind retry. This catalog does not contain pupil mastery. Mindcrafti school tools include lessons, structured monthly plans for students and groups, school prompts, the current school Brand Guide, the current approved 3-slide Mindcrafti Stories PPTX via get_story_template_info and get_story_template_chunk, homework assignment, direct PDF homework upload, explicit replacement/update/deletion of existing homework, submitted homework PDFs, rendered submission pages, read-only student analytics and admin-only public funnel analytics. When preparing the next lesson for a student or group, use get_month_plan for the current month when a plan exists, then combine it with recent lesson/homework evidence and the current school prompt. IMPORTANT: when a teacher asks to create a lesson, homework, worksheet or other teaching material 'по промту', 'по школьному промту', 'using the prompt', or clearly asks to use the school's prompt, first call get_school_prompt with the most specific lessonType: group or individual for lesson logic, workbook for a workbook/worksheet, homework for homework, diagnostic for a diagnostic lesson, or error_correction for work on mistakes, and then follow the returned prompt as the base instruction. Apply any extra teacher instructions on top of that prompt. If the teacher explicitly says 'без промта' or 'without the prompt', do not call get_school_prompt. Do not assume or reuse an old prompt from chat history; fetch the current prompt each time the teacher asks to work 'по промту'. For ANY Mindcrafti-branded document or visual material (PDF, homework, diagnostic, worksheet, report, presentation, work-on-mistakes document, parent report, internal document or other branded artifact), first call get_brand_guide and follow the current Brand Guide for visual design. Do not reuse a Brand Guide from chat history. When ChatGPT creates homework PDFs, prefer assign_homework_series_file_transfer with real ChatGPT file IDs. It uses the same secure host-file bridge as lesson workbooks, so no base64 or Google Drive intermediate is needed. Keep assign_homework_series only as a legacy/base64-or-Drive fallback."
                 : "The connector is in diagnostic mode. Sign in with Mindcrafti OAuth to access school data tools.");
         if (authenticated) result.put("instructions", result.get("instructions") + schedulingInstructions() + workbookInstructions() + McpTeacherGuideService.INSTRUCTIONS);
         return result;
@@ -503,6 +503,241 @@ public class MindcraftiMcpController {
         return List.of(start, finish);
     }
 
+
+    private Map<String, Object> homeworkFileTransferProperties(boolean completion) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("teacherId", property("string", "Exact teacher UUID returned by find_homework_targets."));
+        properties.put("targetType", Map.of("type", "string", "enum", List.of("student", "group"),
+                "description", "Homework target type."));
+        properties.put("targetId", property("string", "Exact student or group UUID returned by find_homework_targets."));
+        properties.put("startDate", property("string", "First homework date in YYYY-MM-DD format."));
+        properties.put("days", Map.of("type", "integer", "minimum", 1, "maximum", 31,
+                "description", "Number of consecutive calendar days to assign."));
+        properties.put("filenames", arrayProperty("Optional PDF display filenames: empty, one filename for all days, or exactly one per day."));
+        properties.put("idempotencyKey", Map.of("type", "string", "minLength", 8, "maxLength", 128,
+                "description", "Stable key for this exact approved homework upload. Reuse unchanged files and arguments on retries."));
+        properties.put("confirm", Map.of("type", "boolean", "enum", List.of(true),
+                "description", "True only after the teacher explicitly approved assigning these PDFs."));
+        if (completion) {
+            properties.put("pdfFiles", Map.of("type", "array", "minItems", 1, "maxItems", 31,
+                    "items", ChatGptPdfResolver.fileSchema(),
+                    "description", "Complete runtime ChatGPT PDF file objects obtained by the file-transfer panel."));
+        } else {
+            properties.put("pdfFileIds", Map.of("type", "array", "minItems", 1, "maxItems", 31,
+                    "items", Map.of("type", "string", "minLength", 1, "maxLength", 512),
+                    "description", "Real opaque ChatGPT file IDs. Supply one PDF for all days or exactly one PDF per day."));
+        }
+        return properties;
+    }
+
+    private List<Map<String, Object>> homeworkFileTransferTools() {
+        List<String> startRequired = List.of("teacherId", "targetType", "targetId", "startDate", "days",
+                "pdfFileIds", "idempotencyKey", "confirm");
+        Map<String, Object> startSchema = schema(homeworkFileTransferProperties(false), startRequired);
+        Map<String, Object> start = tool("assign_homework_series_file_transfer",
+                "Preferred direct transfer for homework PDFs that already have real ChatGPT file IDs. Uses the same secure host-file bridge and PDF resolver as lesson workbooks, without Google Drive or base64. Supply one PDF for all days or exactly one PDF per day. Requires explicit confirm=true and performs a database read-back before reporting success.",
+                startSchema, writeAnnotations());
+        start.put("outputSchema", startSchema);
+        start.put("_meta", Map.of("ui", Map.of("resourceUri", FILE_TRANSFER_RESOURCE, "visibility", List.of("model", "app")),
+                "openai/outputTemplate", FILE_TRANSFER_RESOURCE, "openai/widgetAccessible", true,
+                "openai/toolInvocation/invoking", "Подготовка домашнего задания", "openai/toolInvocation/invoked", "Открыта загрузка домашнего задания"));
+
+        List<String> finishRequired = List.of("teacherId", "targetType", "targetId", "startDate", "days",
+                "pdfFiles", "idempotencyKey", "confirm");
+        Map<String, Object> finish = tool("complete_homework_series_file_transfer",
+                "App-only completion for the approved homework file-transfer panel. Accepts runtime ChatGPT file objects, rechecks target ownership, downloads and validates PDFs server-side, assigns the series atomically, then reads the saved homework back from Mindcrafti before success.",
+                schema(homeworkFileTransferProperties(true), finishRequired), writeAnnotations());
+        finish.put("outputSchema", Map.of("type", "object", "additionalProperties", true));
+        finish.put("_meta", Map.of("ui", Map.of("visibility", List.of("app")),
+                "openai/visibility", "private", "openai/widgetAccessible", true));
+        return List.of(start, finish);
+    }
+
+    private Map<String, Object> prepareHomeworkFileTransfer(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        Map<String, Object> context = homeworkFileTransferContext(arguments, auth, false);
+        Map<String, Object> result = toolResult(context);
+        result.put("content", List.of(Map.of("type", "text", "text",
+                "The approved homework PDF transfer panel is ready. Assignment is not complete until its database read-back succeeds.")));
+        return result;
+    }
+
+    private Object completeHomeworkFileTransfer(Map<String, Object> arguments, AuthContext auth) throws Exception {
+        Map<String, Object> context = homeworkFileTransferContext(arguments, auth, true);
+        if (chatGptPdfResolver == null || personalWorkbookReceipts == null || personalWorkbookAccess == null) {
+            throw new IllegalStateException("Direct homework PDF transfer is unavailable");
+        }
+        String targetType = required(context, "targetType");
+        UUID targetId = uuid(required(context, "targetId"), "targetId");
+        AuthenticatedUser teacher = homeworkTeacher(context, auth, targetType, targetId);
+        AuthenticatedUser actor = personalWorkbookAccess.requireActor(auth.user());
+        LocalDate startDate = LocalDate.parse(required(context, "startDate"));
+        int days = integer(context.get("days"), "days");
+        List<String> filenames = context.containsKey("filenames") ? stringList(context.get("filenames"), "filenames") : List.of();
+        List<?> rawFiles = (List<?>) context.get("pdfFiles");
+
+        List<ChatGptFileReference> references = new ArrayList<>();
+        for (int i = 0; i < rawFiles.size(); i++) {
+            String explicit = filenames.isEmpty() ? null : filenames.get(filenames.size() == 1 ? 0 : i);
+            String fallback = "homework-" + startDate.plusDays(Math.min(i, days - 1)) + ".pdf";
+            references.add(chatGptPdfResolver.reference(rawFiles.get(i), "pdfFiles[" + i + "]", explicit, fallback));
+        }
+
+        Map<String, Object> identity = new LinkedHashMap<>();
+        identity.put("teacherId", teacher.id().toString());
+        identity.put("targetType", targetType);
+        identity.put("targetId", targetId.toString());
+        identity.put("startDate", startDate.toString());
+        identity.put("days", days);
+        identity.put("filenames", filenames);
+        identity.put("pdfFiles", references.stream().map(ChatGptFileReference::identity).toList());
+
+        String key = required(context, "idempotencyKey");
+        return personalWorkbookReceipts.execute(actor, teacher.id(), "assign_homework_series_files", key, identity,
+                () -> homeworkTeacher(context, auth, targetType, targetId),
+                () -> {
+                    try {
+                        List<byte[]> pdfs = references.stream().map(chatGptPdfResolver::resolve).map(PdfInput::bytes).toList();
+                        Map<String, Object> assigned = homeworkSeriesService.assignDirectSeries(
+                                teacher, targetType, targetId, startDate, days, pdfs, filenames);
+                        return verifyHomeworkSeriesReadBack(assigned, auth, startDate, days);
+                    } catch (RuntimeException failure) {
+                        throw failure;
+                    } catch (Exception failure) {
+                        throw new IllegalStateException("Homework PDF assignment failed", failure);
+                    }
+                });
+    }
+
+    private Map<String, Object> homeworkFileTransferContext(Map<String, Object> arguments, AuthContext auth, boolean completion) {
+        if (!fileTransferActorAllowed(auth) || personalWorkbookAccess == null || personalWorkbookReceipts == null) {
+            throw new org.springframework.security.access.AccessDeniedException("School OAuth sign-in is required for homework file transfers");
+        }
+        if (!Boolean.TRUE.equals(arguments.get("confirm"))) {
+            throw new IllegalArgumentException("confirm=true is required for the approved homework upload");
+        }
+        Set<String> allowed = new java.util.HashSet<>(Set.of("teacherId", "targetType", "targetId", "startDate",
+                "days", "filenames", "idempotencyKey", "confirm", completion ? "pdfFiles" : "pdfFileIds"));
+        if (!allowed.containsAll(arguments.keySet())) throw new IllegalArgumentException("Unsupported homework file-transfer arguments");
+
+        String targetType = normalize(required(arguments, "targetType"));
+        if (!Set.of("student", "group").contains(targetType)) {
+            throw new IllegalArgumentException("targetType must be 'student' or 'group'");
+        }
+        UUID targetId = uuid(required(arguments, "targetId"), "targetId");
+        AuthenticatedUser teacher = homeworkTeacher(arguments, auth, targetType, targetId);
+        LocalDate startDate;
+        try { startDate = LocalDate.parse(required(arguments, "startDate")); }
+        catch (RuntimeException ex) { throw new IllegalArgumentException("startDate must use YYYY-MM-DD format"); }
+        int days = integer(arguments.get("days"), "days");
+        if (days < 1 || days > 31) throw new IllegalArgumentException("days must be between 1 and 31");
+
+        String key = required(arguments, "idempotencyKey");
+        if (key.length() < 8 || key.length() > 128 || key.codePoints().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("idempotencyKey must contain 8 to 128 printable characters");
+        }
+        List<String> filenames = arguments.containsKey("filenames") ? stringList(arguments.get("filenames"), "filenames") : List.of();
+        if (!filenames.isEmpty() && filenames.size() != 1 && filenames.size() != days) {
+            throw new IllegalArgumentException("filenames must be empty, contain one name, or contain one name per day");
+        }
+        filenames = filenames.stream().map(name -> ChatGptPdfResolver.filename(name, "homework.pdf")).toList();
+
+        String fileField = completion ? "pdfFiles" : "pdfFileIds";
+        Object raw = arguments.get(fileField);
+        if (!(raw instanceof List<?> files) || files.isEmpty() || files.size() > 31) {
+            throw new IllegalArgumentException(fileField + " must contain between 1 and 31 PDFs");
+        }
+        if (files.size() != 1 && files.size() != days) {
+            throw new IllegalArgumentException("Provide either one PDF for all days or exactly one PDF per day");
+        }
+        List<Object> normalizedFiles = new ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            Object value = files.get(i);
+            if (completion) {
+                if (!(value instanceof Map<?, ?>)) {
+                    throw new IllegalArgumentException(fileField + "[" + i + "] must be a complete ChatGPT file object");
+                }
+                normalizedFiles.add(value);
+            } else {
+                if (!(value instanceof String fileId)) {
+                    throw new IllegalArgumentException(fileField + "[" + i + "] must be a ChatGPT file ID");
+                }
+                fileId = fileId.trim();
+                if (fileId.isBlank() || fileId.length() > 512 || !fileId.matches("[A-Za-z0-9_-]+")) {
+                    throw new IllegalArgumentException(fileField + "[" + i + "] must be an opaque ChatGPT file ID, not a URL or local path");
+                }
+                normalizedFiles.add(fileId);
+            }
+        }
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("operation", "assign_homework_series");
+        context.put("teacherId", teacher.id().toString());
+        context.put("targetType", targetType);
+        context.put("targetId", targetId.toString());
+        context.put("startDate", startDate.toString());
+        context.put("days", days);
+        context.put("filenames", filenames);
+        context.put("idempotencyKey", key);
+        context.put("confirm", true);
+        context.put(fileField, normalizedFiles);
+        return context;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> verifyHomeworkSeriesReadBack(
+            Map<String, Object> assigned, AuthContext auth, LocalDate startDate, int days) {
+        Object rawAssignments = assigned.get("assignments");
+        if (!(rawAssignments instanceof List<?> rows)) {
+            throw new IllegalStateException("Homework assignment result did not contain assignment rows");
+        }
+        LocalDate endDate = startDate.plusDays(days - 1L);
+        Map<UUID, Map<String, Object>> snapshots = new LinkedHashMap<>();
+        List<Map<String, Object>> verification = new ArrayList<>();
+
+        for (Object rawRow : rows) {
+            if (!(rawRow instanceof Map<?, ?> rawMap)) throw new IllegalStateException("Invalid homework assignment row");
+            Map<String, Object> expected = (Map<String, Object>) rawMap;
+            UUID studentId = uuid(required(expected, "studentId"), "studentId");
+            Map<String, Object> snapshot = snapshots.computeIfAbsent(studentId, id ->
+                    homeworkReadService.findStudentHomeworks(auth.user(), auth.apiKey(), id, startDate, endDate));
+            Object rawHomeworks = snapshot.get("homeworks");
+            if (!(rawHomeworks instanceof List<?> homeworks)) throw new IllegalStateException("Homework read-back is unavailable");
+
+            String date = required(expected, "date");
+            String expectedId = string(expected.get("homeworkId")).trim();
+            String status = string(expected.get("status"));
+            Map<String, Object> actual = null;
+            for (Object rawHomework : homeworks) {
+                if (!(rawHomework instanceof Map<?, ?> homeworkMap)) continue;
+                Map<String, Object> candidate = (Map<String, Object>) homeworkMap;
+                if (!date.equals(string(candidate.get("assignedDate"))) || !Boolean.TRUE.equals(candidate.get("hasWorksheet"))) continue;
+                if (!expectedId.isBlank() && !expectedId.equals(string(candidate.get("homeworkId")))) continue;
+                actual = candidate;
+                break;
+            }
+            if (actual == null) throw new IllegalStateException("Homework read-back failed for student " + studentId + " on " + date);
+            String actualFilename = string(actual.get("worksheetFilename"));
+            if (!"skipped_existing".equals(status) && !required(expected, "filename").equals(actualFilename)) {
+                throw new IllegalStateException("Homework filename read-back mismatch for student " + studentId + " on " + date);
+            }
+            Map<String, Object> verified = new LinkedHashMap<>();
+            verified.put("studentId", studentId.toString());
+            verified.put("studentName", expected.get("studentName"));
+            verified.put("assignedDate", date);
+            verified.put("homeworkId", actual.get("homeworkId"));
+            verified.put("filename", actualFilename);
+            verified.put("status", status);
+            verified.put("verified", true);
+            verification.add(verified);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>(assigned);
+        result.put("verified", true);
+        result.put("verifiedAssignments", verification);
+        result.put("verificationSource", "mindcrafti_database");
+        return result;
+    }
+
     private Map<String, Object> prepareLessonFileTransfer(Map<String, Object> arguments, AuthContext auth) throws Exception {
         Map<String, Object> context = fileTransferContext(arguments, auth, false);
         Map<String, Object> result = toolResult(context);
@@ -636,7 +871,7 @@ public class MindcraftiMcpController {
             tools.add(McpTeacherGuideService.definition());
             tools.add(McpTeacherGuideService.showDefinition());
         }
-        if (fileTransferActorAllowed(auth)) tools.addAll(fileTransferTools());
+        if (fileTransferActorAllowed(auth)) { tools.addAll(fileTransferTools()); tools.addAll(homeworkFileTransferTools()); }
         if (uiDiagnosticActorAllowed(auth)) tools.addAll(uiDiagnosticTools());
         tools.addAll(SkillBoardMcpService.definitions());
         tools.addAll(SkillMasteryMcpService.definitions());
@@ -907,6 +1142,15 @@ public class MindcraftiMcpController {
             }
         }
         if (!auth.authenticated()) throw new IllegalArgumentException("This Mindcrafti tool requires authentication");
+        if ("assign_homework_series_file_transfer".equals(name) || "complete_homework_series_file_transfer".equals(name)) {
+            try {
+                return "assign_homework_series_file_transfer".equals(name)
+                        ? prepareHomeworkFileTransfer(arguments, auth)
+                        : toolResult(completeHomeworkFileTransfer(arguments, auth));
+            } catch (Exception failure) {
+                return siteToolFailure(failure);
+            }
+        }
         if ("prepare_lesson_file_transfer".equals(name) || "complete_lesson_file_transfer".equals(name)) {
             try {
                 return "prepare_lesson_file_transfer".equals(name)
