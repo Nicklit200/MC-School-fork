@@ -124,6 +124,39 @@ test('resolves both real IDs, completes with canonical objects, then verifies sa
   assert.ok(!JSON.stringify(env.states).includes('download_url'));
 });
 
+test('homework series resolves seven file IDs once and completes with verified database rows', async () => {
+  const homework = {
+    operation: 'assign_homework_series', teacherId: base.teacherId, targetType: 'student',
+    targetId: 'student-homework', startDate: '2026-11-10', days: 7,
+    pdfFileIds: Array.from({ length: 7 }, (_, index) => 'file_homework_' + (index + 1)),
+    filenames: Array.from({ length: 7 }, (_, index) => 'Hausaufgabe_' + (index + 1) + '.pdf'),
+    idempotencyKey: 'homework-series-001', confirm: true
+  };
+  const verifiedAssignments = Array.from({ length: 7 }, (_, index) => ({
+    studentId: homework.targetId, studentName: 'Student', assignedDate: '2026-11-' + String(10 + index).padStart(2, '0'),
+    homeworkId: 'homework-' + (index + 1), filename: homework.filenames[index], status: 'created', verified: true
+  }));
+  const env = environment(homework, { tool: async (name, args) => {
+    assert.equal(name, 'complete_homework_series_file_transfer');
+    assert.equal(args.pdfFiles.length, 7);
+    assert.ok(!Object.keys(args).includes('pdfFileIds'));
+    for (let index = 0; index < 7; index++) {
+      assert.equal(args.pdfFiles[index].file_id, homework.pdfFileIds[index]);
+      assert.equal(args.pdfFiles[index].file_name, homework.filenames[index]);
+      assert.match(args.pdfFiles[index].download_url, /^https:\/\/files\.oaiusercontent\.com\//);
+    }
+    return { structuredContent: { verified: true, verifiedAssignments } };
+  } });
+  await settled();
+  assert.deepEqual(env.downloads.map(item => item.fileId), homework.pdfFileIds);
+  assert.deepEqual(env.calls.map(call => call.name), ['complete_homework_series_file_transfer']);
+  assert.equal(env.elements.status.dataset.tone, 'success');
+  assert.match(env.rendered(), /Hausaufgabe_1\.pdf/);
+  assert.match(env.rendered(), /Hausaufgabe_7\.pdf/);
+  assert.ok(!env.rendered().includes('URL-SECRET'));
+  assert.ok(!JSON.stringify(env.states).includes('download_url'));
+});
+
 test('global updates do not duplicate an in-flight upload', async () => {
   const waiting = [];
   const env = environment(base, { download: args => new Promise(resolve => waiting.push(() => resolve({
