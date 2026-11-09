@@ -14,7 +14,7 @@ import { dirname, join, resolve, basename } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { renderDiagram, computeIntersections, graphWarnings } from './diagrams.mjs';
 import { primeMath, renderMath as math, richText } from './math.mjs';
-import { validateLesson, length, integer, columns } from './schema.mjs';
+import { validateLesson, normalizeLessonMath, length, integer, columns } from './schema.mjs';
 import { prepareVisualTasks, mergeVisualQa } from './visual-tasks.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -28,6 +28,9 @@ const logoPath = resolve(option('logo', join(root, 'assets', 'logo-m.png')));
 const out = resolve(option('out', join(root, 'out')));
 const plain = args.includes('--plain');
 const lesson = JSON.parse(await readFile(lessonPath, 'utf8'));
+// Match the teacher/admin ChatGPT contract before strict schema and math QA.
+// This changes only representation, never mathematical content or answers.
+normalizeLessonMath(lesson);
 validateLesson(lesson);
 const visualQa = prepareVisualTasks(lesson);
 const css = await readFile(join(root, 'styles.css'), 'utf8');
