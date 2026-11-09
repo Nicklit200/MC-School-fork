@@ -241,6 +241,18 @@ def validate(assertion):
         validate({'kind': 'equivalence', 'expression': assertion['expression'],
                   'answer': answer, 'restrictions': assertion.get('restrictions', [])})
         return {'kind': kind, 'passed': True, 'answer': answer}
+    elif kind == 'relationValue':
+        sides = assertion['relation'].split('=')
+        if len(sides) != 2:
+            raise ValueError('Relation must have exactly one equals sign')
+        left, _ = parse(sides[0])
+        right, _ = parse(sides[1])
+        if left.free_symbols or right.free_symbols:
+            raise ValueError('Relation tasks must be numeric')
+        difference = bounded(s.simplify(left - right))
+        if difference.has(s.zoo, s.nan, s.oo, -s.oo):
+            raise ValueError('Relation is not finite')
+        return {'kind': kind, 'passed': True, 'answer': 'true' if difference == 0 else 'false'}
     elif kind == 'linearValue':
         sides = assertion['equation'].split('=')
         if len(sides) != 2:
