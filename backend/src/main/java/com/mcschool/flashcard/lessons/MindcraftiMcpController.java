@@ -1450,6 +1450,144 @@ public class MindcraftiMcpController {
         return result;
     }
 
+    // ChatGPT can cache an older subset of MCP tool definitions even when the
+    // live Mindcrafti tools/list has newer methods. Reuse existing, already
+    // exposed list/get/read/execute_site_function tools as a secure fallback.
+    // This bridge invokes the SAME core homework operations and validations.
+    private static final String HOMEWORK_BRIDGE_DOMAIN="homework_generator";
+    private static final List<String> HOMEWORK_BRIDGE_IDS=List.of(
+            "homework_generator.prepare_context",
+            "homework_generator.generate_day",
+            "homework_generator.review_series",
+            "homework_generator.assign_series");
+
+    private boolean homeworkBridgeRequest(String name,Map<String,Object> args) {
+        if("list_site_functions".equals(name))
+            return HOMEWORK_BRIDGE_DOMAIN.equals(normalize(string(args.get("domain"))));
+        return Set.of("get_site_function","read_site_function","execute_site_function").contains(name)
+                && string(args.get("functionId")).startsWith(HOMEWORK_BRIDGE_DOMAIN+".");
+    }
+
+    private Map<String,Object> homeworkBridgeSummary(int index) {
+        String id=HOMEWORK_BRIDGE_IDS.get(index);
+        boolean readOnly=index==0||index==2;
+        Map<String,Object> result=new LinkedHashMap<>();
+        result.put("functionId",id);
+        result.put("domain",HOMEWORK_BRIDGE_DOMAIN);
+        result.put("scope","TEACHER");
+        result.put("readOnly",readOnly);
+        result.put("destructive",false);
+        result.put("externalEffect",index==3);
+        result.put("adminRequiresTeacherId",true);
+        result.put("preferredDedicatedTools",switch(index){
+            case 0 -> "prepare_homework_context";
+            case 1 -> "generate_homework_day_draft";
+            case 2 -> "review_homework_series_drafts";
+            default -> "assign_homework_series_from_drafts";
+        });
+        return result;
+    }
+
+    private Map<String,Object> homeworkBridgeSchema(int index) {
+        Map<String,Object> properties=new LinkedHashMap<>();
+        properties.put("eventId",property("string","Exact owned source lesson eventId from find_lessons"));
+        List<String> required=new ArrayList<>(List.of("eventId"));
+        if(index==1){
+            properties.put("day",Map.of("type","integer","minimum",1,"maximum",7));
+            properties.put("seriesKey",property("string","Same stable series key across seven days"));
+            properties.put("lessonJson",property("string","ChatGPT-authored one-day one-A4-page homework and private teacher solutions, qa.algebra included"));
+            properties.put("contextToken",property("string","Fresh token from prepare_context"));
+            required.addAll(List.of("day","seriesKey","lessonJson","contextToken"));
+        }else if(index>=2){
+            properties.put("seriesKey",property("string","Identical seriesKey supplied during daily generation"));
+            properties.put("draftIds",Map.of("type","array","minItems",7,"maxItems",7,
+                    "items",Map.of("type","string","format","uuid")));
+            required.addAll(List.of("seriesKey","draftIds"));
+            if(index==3){
+                properties.put("targetType",Map.of("type","string","enum",List.of("student","group")));
+                properties.put("targetId",property("string","Student/group UUID matching source lesson"));
+                properties.put("startDate",property("string","First date YYYY-MM-DD; next six days consecutive"));
+                required.addAll(List.of("targetType","targetId","startDate"));
+            }
+        }
+        return schema(properties,required);
+    }
+
+    private Object homeworkBridge(String name,Map<String,Object> args,AuthContext auth) throws Exception {
+        requireWorkbookStaff(auth);
+        if("list_site_functions".equals(name)){
+            if(!Set.of("domain","limit","offset").containsAll(args.keySet()))
+                throw new IllegalArgumentException("Unknown homework generator catalog argument");
+            int limit=args.containsKey("limit")?integer(args.get("limit"),"limit"):100;
+            int offset=args.containsKey("offset")?integer(args.get("offset"),"offset"):0;
+            if(limit<1||limit>100||offset<0)
+                throw new IllegalArgumentException("Catalog limit must be 1..100 and offset nonnegative");
+            List<Map<String,Object>> records=new ArrayList<>();
+            for(int i=offset;i<Math.min(HOMEWORK_BRIDGE_IDS.size(),offset+limit);i++)
+                records.add(homeworkBridgeSummary(i));
+            Map<String,Object> result=new LinkedHashMap<>();
+            result.put("total",HOMEWORK_BRIDGE_IDS.size());
+            result.put("functions",records);
+            result.put("domain",HOMEWORK_BRIDGE_DOMAIN);
+            result.put("limit",limit);result.put("offset",offset);
+            result.put("nextOffset",Math.min(HOMEWORK_BRIDGE_IDS.size(),offset+limit));
+            result.put("exceptions",McpSiteFunctionsService.exceptions());
+            result.put("message","If your ChatGPT MCH3 catalog does not expose the new homework tools, call these same actions through the existing read_site_function / execute_site_function. No reconnect, Railway, GitHub or API key required.");
+            return result;
+        }
+        String functionId=required(args,"functionId");
+        int index=HOMEWORK_BRIDGE_IDS.indexOf(functionId);
+        if(index<0)throw new IllegalArgumentException("Unknown homework generator site function");
+        boolean readOnly=index==0||index==2;
+        if("get_site_function".equals(name)){
+            Map<String,Object> result=new LinkedHashMap<>(homeworkBridgeSummary(index));
+            result.put("argumentsSchema",homeworkBridgeSchema(index));
+            result.put("limits",Map.of("textCharacters",OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS,
+                    "fileBytes",15*1024*1024,"totalFileBytes",30*1024*1024,
+                    "files",7,"collectionItems",2000));
+            result.put("description",switch(index){
+                case 0 -> "Read homework-only school prompt, recent real lesson evidence, student mistakes and renderer contract. Use read_site_function; no changes.";
+                case 1 -> "Generate ONE unpublished homework day using mathematical PDF renderer. Use execute_site_function with confirm=true and unique stable idempotencyKey. Poll get_lesson_workbook_job.";
+                case 2 -> "Validate all seven day-specific saved draft IDs and return fresh student PDF and private answers preview links. Use read_site_function; no assignment.";
+                default -> "Assign seven approved server PDF drafts with readback, ONLY after explicitly showing previews to and receiving approval from the teacher. Use execute_site_function confirm=true and stable idempotencyKey.";
+            });
+            return result;
+        }
+        if(readOnly && !"read_site_function".equals(name))
+            throw new IllegalArgumentException("This homework generator function is read-only; use read_site_function");
+        if(!readOnly && !"execute_site_function".equals(name))
+            throw new IllegalArgumentException("This homework generator function is a write; use execute_site_function");
+        if(!Set.of("functionId","teacherId","arguments",
+                "confirm","idempotencyKey","file").containsAll(args.keySet()))
+            throw new IllegalArgumentException("Unsupported site function input");
+        if(args.containsKey("file"))
+            throw new IllegalArgumentException("Server-generated homework requires no file upload");
+        Map<String,Object> supplied=map(args.get("arguments"));
+        @SuppressWarnings("unchecked")
+        Map<String,Object> properties=(Map<String,Object>)homeworkBridgeSchema(index).get("properties");
+        if(!properties.keySet().containsAll(supplied.keySet()))
+            throw new IllegalArgumentException("Unknown homework generator argument");
+        Map<String,Object> forward=new LinkedHashMap<>(supplied);
+        if(args.containsKey("teacherId"))
+            forward.put("teacherId",required(args,"teacherId"));
+        if(!readOnly){
+            if(!Boolean.TRUE.equals(args.get("confirm")))
+                throw new IllegalArgumentException("Explicit confirm=true required for homework generation/assignment");
+            String key=required(args,"idempotencyKey");
+            if(key.length()<8||key.length()>128)
+                throw new IllegalArgumentException("idempotencyKey length must be 8..128");
+            forward.put("idempotencyKey",key);
+            if(index==3)forward.put("confirm",true);
+        }
+        return switch(index){
+            case 0 -> prepareHomeworkContext(forward,auth);
+            case 1 -> generateHomeworkDayDraft(forward,auth);
+            case 2 -> reviewHomeworkSeriesDrafts(forward,auth);
+            case 3 -> assignHomeworkSeriesFromDrafts(forward,auth);
+            default -> throw new IllegalStateException("Invalid homework generator function");
+        };
+    }
+
     private Map<String,Object> prepareHomeworkContext(Map<String,Object> args, AuthContext auth) throws Exception {
         requireWorkbookStaff(auth);
         Map<String,Object> ctx=new LinkedHashMap<>(prepareWorkbookContext(args,auth));
