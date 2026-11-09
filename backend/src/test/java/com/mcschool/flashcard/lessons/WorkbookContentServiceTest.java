@@ -78,6 +78,48 @@ class WorkbookContentServiceTest {
     }
 
     @Test
+    void retriesOneTruncatedProviderResponseWithLongerTransportTimeout() throws Exception {
+        HttpClient http=mock(HttpClient.class);
+        HttpResponse<String> first=mock(HttpResponse.class);
+        HttpResponse<String> second=mock(HttpResponse.class);
+        when(http.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(first,second);
+        when(first.statusCode()).thenReturn(200);
+        when(first.body()).thenReturn("{\"status\":\"completed\",\"output\":[");
+        when(second.statusCode()).thenReturn(200);
+        when(second.body()).thenReturn(providerResponse(List.of(
+                task("expression","1","Berechne.","1+1","",""),
+                task("expression","2","Berechne.","2+2","",""),
+                task("expression","3","Berechne.","3+3","",""),
+                task("expression","4","Berechne.","4+4","",""))));
+        var service=new WorkbookContentService("server-secret","configured-model",json,http);
+
+        var output=service.generate(Map.of("calendarDurationMinutes",60),"");
+        assertNotNull(output.lessonJson());
+
+        var requests=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http,times(2)).send(requests.capture(),any(HttpResponse.BodyHandler.class));
+        assertEquals(java.time.Duration.ofSeconds(40),requests.getAllValues().get(0).timeout().orElseThrow());
+        assertEquals(java.time.Duration.ofSeconds(55),requests.getAllValues().get(1).timeout().orElseThrow());
+    }
+
+    @Test
+    void stopsAfterOneRetryWhenProviderResponseRemainsTruncated() throws Exception {
+        HttpClient http=mock(HttpClient.class);
+        HttpResponse<String> first=mock(HttpResponse.class);
+        HttpResponse<String> second=mock(HttpResponse.class);
+        when(http.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(first,second);
+        when(first.statusCode()).thenReturn(200);
+        when(second.statusCode()).thenReturn(200);
+        when(first.body()).thenReturn("{\"status\":\"completed\",\"output\":[");
+        when(second.body()).thenReturn("{\"status\":\"completed\",\"output\":[");
+        var service=new WorkbookContentService("server-secret","configured-model",json,http);
+
+        var failure=assertThrows(IllegalStateException.class,()->service.generate(Map.of("calendarDurationMinutes",60),""));
+        assertTrue(failure.getMessage().contains("incomplete after one retry"));
+        verify(http,times(2)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+    }
+
+    @Test
     void rejectsWrongCompactShapeBeforeRendering() throws Exception {
         HttpClient http=mock(HttpClient.class);
         HttpResponse<String> response=mock(HttpResponse.class);
