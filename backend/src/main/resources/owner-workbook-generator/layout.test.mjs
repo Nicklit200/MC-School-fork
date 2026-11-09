@@ -68,6 +68,17 @@ test('nested layouts and rich text render through the production pipeline',async
   assert.match(teacher,/inline-math/);
 });
 
+test('crowded top-level workbook content is repaginated instead of rejected',async()=>{
+  const lesson=basic();
+  lesson.workbookPages[0].blocks=Array.from({length:12},(_,index)=>({
+    type:'callout',label:'SCHRITT '+(index+1),text:'Kurze Erklärung für diese Aufgabe.'
+  }));
+  const {workbook}=await render(lesson);
+  assert.equal((workbook.match(/class="sheet student"/g)||[]).length,2);
+  assert.match(workbook,/SCHRITT 1/);
+  assert.match(workbook,/SCHRITT 12/);
+});
+
 test('preflight counts parallel columns by maximum and stacked rows by sum',async()=>{
   const graph=()=>({type:'coordinateGrid',xRange:[-5,5],yRange:[-5,5]});
   for(const block of [
@@ -80,7 +91,7 @@ test('preflight counts parallel columns by maximum and stacked rows by sum',asyn
   }
   const lesson=basic();
   lesson.workbookPages[0].blocks=[{type:'stack',children:Array.from({length:4},graph)}];
-  await assert.rejects(()=>render(lesson),/likely to overflow A4/);
+  await assert.rejects(()=>render(lesson),/(?:likely to overflow A4|one block too large for A4)/);
   lesson.workbookPages[0].blocks=Array.from({length:20},()=>({type:'divider'}));
   await render(lesson);
 });
