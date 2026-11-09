@@ -139,7 +139,11 @@ public class WorkbookContentService {
         String lessonJson = json.writeValueAsString(document(compact, context));
         @SuppressWarnings("unchecked")
         Map<String,Object> document = json.readValue(lessonJson, Map.class);
-        OwnerWorkbookPdfRenderService.validateDocument(document);
+        try {
+            OwnerWorkbookPdfRenderService.validateDocument(document);
+        } catch (IllegalArgumentException invalidDocument) {
+            throw compact("DOCUMENT_SCHEMA");
+        }
         return new Content(lessonJson, compact.lessonPlan(), compact.difficulties());
     }
 
@@ -163,32 +167,32 @@ public class WorkbookContentService {
 
     static void validateCompact(CompactLesson lesson) {
         if (lesson == null || lesson.tasks() == null || lesson.tasks().size() < 4 || lesson.tasks().size() > 20)
-            throw new IllegalArgumentException("Generated compact workbook must contain 4 to 20 tasks");
+            throw compact("TASK_COUNT");
         if (lesson.title() == null || lesson.title().length() > 160)
-            throw new IllegalArgumentException("Invalid workbook title");
+            throw compact("TITLE");
         if (lesson.subtitle() == null || lesson.subtitle().length() > 300)
-            throw new IllegalArgumentException("Invalid workbook subtitle");
+            throw compact("SUBTITLE");
         if (lesson.lessonPlan() == null || lesson.lessonPlan().length() > 12000
                 || lesson.difficulties() == null || lesson.difficulties().length() > 12000)
-            throw new IllegalArgumentException("Invalid workbook notes");
+            throw compact("NOTES");
         for (CompactTask task : lesson.tasks()) {
             if (task == null || !KINDS.contains(task.kind()))
-                throw new IllegalArgumentException("Unsupported compact workbook task");
+                throw compact("TASK_KIND");
             if (task.title() == null || task.title().length() > 160)
-                throw new IllegalArgumentException("Invalid compact task title");
+                throw compact("TASK_TITLE");
             if (task.instruction() == null || task.instruction().length() > 1500)
-                throw new IllegalArgumentException("Invalid compact task instruction");
+                throw compact("TASK_INSTRUCTION");
             requireText(task.expression(),500,"task expression");
             requireText(task.answer(),500,"task answer");
             if (task.restrictions() == null || task.restrictions().size() > 4
                     || task.restrictions().stream().anyMatch(v -> v == null || v.length() > 60))
-                throw new IllegalArgumentException("Invalid compact task restrictions");
+                throw compact("RESTRICTIONS");
             if ("equation".equals(task.kind())) {
                 if (task.expression().chars().filter(ch -> ch == '=').count() != 1)
-                    throw new IllegalArgumentException("Compact equation must contain exactly one equals sign");
+                    throw compact("EQUATION_EQUALS");
                 variableOf(task);
             } else if (task.expression().contains("=")) {
-                throw new IllegalArgumentException("Invalid compact expression task");
+                throw compact("EXPRESSION_EQUALS");
             }
         }
     }
@@ -292,7 +296,7 @@ public class WorkbookContentService {
             if (java.util.regex.Pattern.compile("(?<![A-Za-z])"+candidate+"(?![A-Za-z])").matcher(task.expression()).find())
                 found.add(candidate);
         }
-        if (found.size()!=1) throw new IllegalArgumentException("Invalid compact equation variable");
+        if (found.size()!=1) throw compact("EQUATION_VARIABLE");
         return found.iterator().next();
     }
     private static boolean blank(String value) { return value == null || value.isBlank(); }
@@ -305,8 +309,17 @@ public class WorkbookContentService {
         return text.isEmpty() ? fallback : text;
     }
     private static void requireText(String value,int max,String field) {
-        if (value == null || value.isBlank() || value.length() > max)
-            throw new IllegalArgumentException("Invalid workbook " + field);
+        if (value == null || value.isBlank() || value.length() > max) {
+            String code = switch (field) {
+                case "task expression" -> "TASK_EXPRESSION";
+                case "task answer" -> "TASK_ANSWER";
+                default -> "TEXT";
+            };
+            throw compact(code);
+        }
+    }
+    private static IllegalArgumentException compact(String code) {
+        return new IllegalArgumentException("COMPACT_" + code);
     }
 
     static String outputText(Map<String,Object> body) {
