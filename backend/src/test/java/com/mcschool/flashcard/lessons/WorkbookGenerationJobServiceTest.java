@@ -104,6 +104,47 @@ class WorkbookGenerationJobServiceTest {
     }
 
     @Test
+    void enforcesPerAccountLimitBeforeAcceptingMoreJobs() {
+        JdbcTemplate jdbc=mock(JdbcTemplate.class);
+        McpAccessService access=mock(McpAccessService.class);
+        AuthenticatedUser owner=new AuthenticatedUser(UUID.randomUUID(),"teacher@test.local",Role.TEACHER);
+        when(access.requireCurrentActor(owner)).thenReturn(owner);
+        when(access.requireTeacher(owner,owner.id())).thenReturn(owner);
+        when(jdbc.query(any(String.class),any(RowMapper.class),any(),any(),any())).thenReturn(List.of());
+        when(jdbc.queryForObject(contains("actor_id"),eq(Integer.class),eq(owner.id()))).thenReturn(24);
+        WorkbookGenerationJobService service=new WorkbookGenerationJobService(
+                jdbc,access,new ObjectMapper(),transactions(),3,24,60);
+        try {
+            assertThatThrownBy(()->service.enqueue(owner,owner.id(),"lesson","queue-limit-account",Map.of("lessonJson","{}")))
+                    .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                    .hasMessageContaining("per-account limit is 24");
+        } finally {
+            service.close();
+        }
+    }
+
+    @Test
+    void enforcesSchoolWideLimitBeforeAcceptingMoreJobs() {
+        JdbcTemplate jdbc=mock(JdbcTemplate.class);
+        McpAccessService access=mock(McpAccessService.class);
+        AuthenticatedUser owner=new AuthenticatedUser(UUID.randomUUID(),"teacher@test.local",Role.TEACHER);
+        when(access.requireCurrentActor(owner)).thenReturn(owner);
+        when(access.requireTeacher(owner,owner.id())).thenReturn(owner);
+        when(jdbc.query(any(String.class),any(RowMapper.class),any(),any(),any())).thenReturn(List.of());
+        when(jdbc.queryForObject(contains("actor_id"),eq(Integer.class),eq(owner.id()))).thenReturn(2);
+        when(jdbc.queryForObject(contains("state IN ('QUEUED','RUNNING')"),eq(Integer.class))).thenReturn(60);
+        WorkbookGenerationJobService service=new WorkbookGenerationJobService(
+                jdbc,access,new ObjectMapper(),transactions(),3,24,60);
+        try {
+            assertThatThrownBy(()->service.enqueue(owner,owner.id(),"lesson","queue-limit-global",Map.of("lessonJson","{}")))
+                    .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                    .hasMessageContaining("school workbook queue is full");
+        } finally {
+            service.close();
+        }
+    }
+
+    @Test
     void rejectsUnsafeWorkerAndQueueConfigurations() {
         JdbcTemplate jdbc=mock(JdbcTemplate.class);
         McpAccessService access=mock(McpAccessService.class);
