@@ -1450,7 +1450,20 @@ public class MindcraftiMcpController {
         Map<String,Object> ctx=new LinkedHashMap<>(prepareWorkbookContext(args,auth));
         String prompt=schoolPromptSettingsService.readForMcp().homeworkPrompt();
         if(prompt==null || prompt.isBlank())throw new IllegalStateException("School homework prompt is not configured");
-        ctx.put("workbookOnlyRules",ctx.remove("rules"));
+        // The shared workbook context includes workbook-specific warnings like
+        // "do not generate homework". Do not show them to ChatGPT alongside
+        // homework instructions: replace them with the correct daily contract.
+        ctx.remove("rules");
+        Object originalContract=ctx.get("rendererContract");
+        if(originalContract instanceof Map<?,?> rawContract) {
+            Map<String,Object> dailyContract=new LinkedHashMap<>();
+            for(var entry:rawContract.entrySet())
+                if(entry.getKey() instanceof String k)dailyContract.put(k,entry.getValue());
+            dailyContract.put("pages","Exactly ONE A4 student workbookPages entry per day; 1-2 tasks, each with 6+ full-width lines at 8mm spacing. Teacher pages contain private solutions. No lesson progress bars.");
+            dailyContract.put("meta","school:MINDCRAFTI SCHOOL, subject:MATHEMATIK, durationMinutes: reference lesson's calendarDurationMinutes, homeworkEstimatedMinutes:1..10. homeworkMode/homeworkDay are set by the server; omit pupil identity/day/date from student text.");
+            dailyContract.put("publication","HOMEWORK DRAFT ONLY: render and preview seven daily PDF pairs, do not publish lesson workbooks or assign homework before explicit approval via assign_homework_series_from_drafts.");
+            ctx.put("rendererContract",dailyContract);
+        }
         ctx.put("homeworkPrompt",prompt);
         ctx.put("materialType","homework");
         ctx.put("homeworkDays",7);
