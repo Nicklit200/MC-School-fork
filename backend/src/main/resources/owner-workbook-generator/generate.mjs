@@ -265,7 +265,9 @@ function applyServerComputedAnswers(data, algebraQa) {
       const number=offset+index+1;
       const answer=row.kind==='linearValue'
         ? `${row.variable} = ${exactAnswerLatex(row.answer)}`
-        : exactAnswerLatex(row.answer);
+        : row.kind==='relationValue'
+          ? (row.answer==='true' ? '\\text{gleichwertig}' : '\\text{nicht gleichwertig}')
+          : exactAnswerLatex(row.answer);
       return {label:String(number),math:{latex:answer},text:'',note:''};
     });
     pages.push({title:'Lösungen',subtitle,blocks:[{
