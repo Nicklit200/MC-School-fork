@@ -48,9 +48,8 @@ public class WorkbookGenerationJobService {
                String request, String state, UUID draftId, String failure, Instant createdAt) {}
 
     /**
-     * Production defaults are deliberately modest: two render workers match the
-     * renderer's two background slots. A third renderer slot is reserved for
-     * interactive Kolin work (configured in OwnerWorkbookPdfRenderService).
+     * Production runs at most three background jobs in parallel. The renderer has
+     * four permits, leaving one available for interactive Kolin work.
      */
     @Autowired
     public WorkbookGenerationJobService(JdbcTemplate jdbc, McpAccessService access, ObjectMapper json,
@@ -58,8 +57,8 @@ public class WorkbookGenerationJobService {
             @Value("${app.workbook-jobs.concurrency:3}") int maxConcurrentJobs,
             @Value("${app.workbook-jobs.max-pending-per-actor:24}") int maxPendingPerActor,
             @Value("${app.workbook-jobs.max-global-active:60}") int maxGlobalActiveJobs) {
-        if (maxConcurrentJobs < 1 || maxConcurrentJobs > 4)
-            throw new IllegalArgumentException("Workbook job concurrency must be between 1 and 4");
+        if (maxConcurrentJobs < 1 || maxConcurrentJobs > 3)
+            throw new IllegalArgumentException("Workbook job concurrency must be between 1 and 3");
         if (maxPendingPerActor < maxConcurrentJobs || maxPendingPerActor > 100)
             throw new IllegalArgumentException("Workbook per-account queue limit must be between concurrency and 100");
         if (maxGlobalActiveJobs < maxPendingPerActor || maxGlobalActiveJobs > 500)
@@ -258,6 +257,10 @@ public class WorkbookGenerationJobService {
         result.put("runningSchoolWide",active==null?0:active);
         result.put("maxGlobalActive",maxGlobalActiveJobs);
         result.put("workersPerBackend",maxConcurrentJobs);
+        Long oldestWaitSeconds=jdbc.queryForObject(
+                "SELECT COALESCE(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-MIN(created_at))),0)::bigint FROM workbook_generation_jobs WHERE state='QUEUED'",
+                Long.class);
+        result.put("oldestQueuedSeconds",oldestWaitSeconds==null?0:oldestWaitSeconds);
         return result;
     }
 
