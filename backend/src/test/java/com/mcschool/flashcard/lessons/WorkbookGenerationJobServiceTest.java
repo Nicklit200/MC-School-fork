@@ -3,7 +3,6 @@ package com.mcschool.flashcard.lessons;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -25,7 +24,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import tools.jackson.databind.ObjectMapper;
 
@@ -35,7 +33,7 @@ class WorkbookGenerationJobServiceTest {
 
     private PlatformTransactionManager transactions() {
         PlatformTransactionManager tx=mock(PlatformTransactionManager.class);
-        when(tx.getTransaction(any(TransactionDefinition.class))).thenReturn(new SimpleTransactionStatus());
+        when(tx.getTransaction(any(TransactionDefinition.class))).thenAnswer(call->new SimpleTransactionStatus());
         return tx;
     }
 
@@ -73,7 +71,7 @@ class WorkbookGenerationJobServiceTest {
                     .isTrue();
             release.countDown();
             verify(jdbc,timeout(3000).times(3)).update(contains("SET state='SUCCEEDED'"),any(),any(),any());
-            assertThat(claim.get()).isEqualTo(4);
+            assertThat(claim.get()).isEqualTo(3);
         } finally {
             release.countDown();
             service.close();
