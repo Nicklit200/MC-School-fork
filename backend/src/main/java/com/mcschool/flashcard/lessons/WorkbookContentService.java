@@ -146,7 +146,7 @@ public class WorkbookContentService {
     static Map<String,Object> compactContext(Map<String,Object> context) {
         Map<String,Object> result = new LinkedHashMap<>();
         for (String key : List.of("targetType","targetName","lessonTitle","lessonDate","calendarDurationMinutes",
-                "teachingPrompt","workbookPrompt","monthPlan","recentLessons","studentEvidence","students","profile",
+                "teachingPrompt","workbookPrompt","monthPlan","currentPreparation","previousLesson","recentLessons","studentEvidence","students","profile",
                 "recentHomework","recentCardEvidence","transcriptSummary")) {
             Object value = context.get(key);
             if (value != null) result.put(key, value);
@@ -221,7 +221,7 @@ public class WorkbookContentService {
                                 "label","",
                                 "math",Map.of("latex",task.expression()),
                                 "work",true)),
-                        "writeLines",2));
+                        "writeLines",8));
             }
             workbookPages.add(Map.of(
                     "title",lessonTitle,
