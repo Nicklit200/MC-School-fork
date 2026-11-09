@@ -42,9 +42,10 @@ class McpHomeworkDraftValidatorTest {
 
     @Test void validatesLastThreeDaysWithoutRussianHelp()throws Exception {
         for(int day=5;day<=7;day++){
-            assertDoesNotThrow(()->McpHomeworkDraftValidator.normalize(mapper,document(day,1,5,false),day,"Sofia"));
+            final int currentDay=day;
+            assertDoesNotThrow(()->McpHomeworkDraftValidator.normalize(mapper,document(currentDay,1,5,false),currentDay,"Sofia"));
             assertThrows(IllegalArgumentException.class,
-                    ()->McpHomeworkDraftValidator.normalize(mapper,document(day,1,5,true),day,"Sofia"));
+                    ()->McpHomeworkDraftValidator.normalize(mapper,document(currentDay,1,5,true),currentDay,"Sofia"));
         }
     }
 
