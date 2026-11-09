@@ -1891,7 +1891,11 @@ public class MindcraftiMcpController {
         if(!"SUCCEEDED".equals(job.get("status")))return job;
         Map<String,Object> result=new LinkedHashMap<>(job);
         result.put("draft",draftInfo(Map.of("teacherId",job.get("teacherId"),"draftId",job.get("draftId")),auth));
-        result.put("nextStep","Both PDFs are saved drafts, not published. Review them. When preparing several pupils, refresh all get_lesson_draft links immediately before the final answer; signed links last five minutes.");
+        Object draftRaw=result.get("draft");
+        boolean homeworkDraft=draftRaw instanceof Map<?,?> map && Boolean.TRUE.equals(map.get("homeworkOnly"));
+        result.put("nextStep",homeworkDraft
+                ? "This ONE day has two private PDFs saved as a HOMEWORK draft. Generate the remaining days, then call review_homework_series_drafts. Never publish to a lesson or assign before explicit teacher approval."
+                : "Both PDFs are saved drafts, not published. Review them. When preparing several pupils, refresh all get_lesson_draft links immediately before the final answer; signed links last five minutes.");
         return result;
     }
 
@@ -1913,8 +1917,13 @@ public class MindcraftiMcpController {
         String suppliedJson=suppliedContent?required(args,"lessonJson"):"";
         String suppliedToken=suppliedContent?required(args,"contextToken"):"";
         if(suppliedJson.length()>OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS) throw new IllegalArgumentException("lessonJson is too large");
-        Map<String,Object> normalized = Map.of("teacherId", teacher.id().toString(), "eventId", eventId, "instruction", instruction,
-                "lessonJson",suppliedJson,"contextToken",suppliedToken);
+        Map<String,Object> normalized = new LinkedHashMap<>(Map.of("teacherId", teacher.id().toString(), "eventId", eventId, "instruction", instruction,
+                "lessonJson",suppliedJson,"contextToken",suppliedToken));
+        if(args.containsKey("homeworkDay") || args.containsKey("homeworkSeriesKey")) {
+            int day=integer(args.get("homeworkDay"),"homeworkDay");
+            normalized.put("homeworkDay",day);
+            normalized.put("homeworkSeriesKey",required(args,"homeworkSeriesKey"));
+        }
         Map<String,Object> result=(Map<String,Object>) personalWorkbookReceipts.execute(actor, teacher.id(), "generate_lesson_workbook_draft", key, normalized,
                 () -> {
                     selectedWorkbookLesson(personalWorkbookAccess.requireTeacher(actor, teacher.id()), eventId);
