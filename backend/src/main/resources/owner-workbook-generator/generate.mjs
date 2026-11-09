@@ -310,7 +310,11 @@ function preflightPages(pages, teacher = false) {
  * Nested diagrams/grids remain intact and are never split.
  */
 function autoPaginatePages(pages, teacher = false) {
-  const targetUnits = teacher ? 14.5 : 12.5;
+  // Reserve physical A4 headroom for handwritten work; a pair of 8-line
+  // exercises exceeded measured geometry QA despite passing the old estimate.
+  // With this limit, short tasks can still share a page, while long
+  // handwritten solutions get a separate sheet without shrinking text.
+  const targetUnits = teacher ? 14.5 : 8.5;
   const hardMax = teacher ? 18 : 16;
   const output = [];
   for (const [pageIndex,page] of pages.entries()) {
