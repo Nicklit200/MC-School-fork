@@ -51,7 +51,7 @@ class WorkbookContentServiceTest {
         assertEquals(60,((Map<String,Object>)doc.get("meta")).get("durationMinutes"));
         assertEquals("Sofia",((Map<String,Object>)doc.get("meta")).get("group"));
         assertEquals("server-computed",((Map<String,Object>)doc.get("meta")).get("answerMode"));
-        assertEquals(1,((List<?>)doc.get("workbookPages")).size());
+        assertEquals(2,((List<?>)doc.get("workbookPages")).size());
         assertEquals(1,((List<?>)doc.get("teacherPages")).size());
         var workbookPage=(Map<String,Object>)((List<?>)doc.get("workbookPages")).get(0);
         var firstExercise=(Map<String,Object>)((List<?>)workbookPage.get("blocks")).get(0);
