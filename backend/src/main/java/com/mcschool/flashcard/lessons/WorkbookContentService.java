@@ -193,7 +193,7 @@ public class WorkbookContentService {
                 variableOf(task);
             } else if ("relation".equals(task.kind())) {
                 if (equals != 1) throw compact("RELATION_EQUALS");
-                if (containsSupportedVariable(task.expression())) throw compact("RELATION_VARIABLE");
+                if (containsSupportedVariable(task.expression())) variableOf(task);
             } else if (equals != 0) {
                 throw compact("EXPRESSION_EQUALS");
             }
@@ -268,10 +268,18 @@ public class WorkbookContentService {
                         "variable",variableOf(task),
                         "restrictions",task.restrictions()));
             } else if ("relation".equals(task.kind())) {
-                assertions.add(Map.of(
-                        "kind","relationValue",
-                        "relation",task.expression(),
-                        "restrictions",task.restrictions()));
+                if (containsSupportedVariable(task.expression())) {
+                    assertions.add(Map.of(
+                            "kind","linearValue",
+                            "equation",task.expression(),
+                            "variable",variableOf(task),
+                            "restrictions",task.restrictions()));
+                } else {
+                    assertions.add(Map.of(
+                            "kind","relationValue",
+                            "relation",task.expression(),
+                            "restrictions",task.restrictions()));
+                }
             } else {
                 assertions.add(Map.of(
                         "kind","expressionValue",
