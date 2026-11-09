@@ -163,7 +163,8 @@ public class WorkbookContentService {
     static void validateCompact(CompactLesson lesson) {
         if (lesson == null || lesson.tasks() == null || lesson.tasks().size() < 4 || lesson.tasks().size() > 20)
             throw new IllegalArgumentException("Generated compact workbook must contain 4 to 20 tasks");
-        requireText(lesson.title(),80,"title");
+        if (lesson.title() == null || lesson.title().length() > 80)
+            throw new IllegalArgumentException("Invalid workbook title");
         if (lesson.subtitle() == null || lesson.subtitle().length() > 160)
             throw new IllegalArgumentException("Invalid workbook subtitle");
         if (lesson.lessonPlan() == null || lesson.lessonPlan().length() > 4000
@@ -172,19 +173,20 @@ public class WorkbookContentService {
         for (CompactTask task : lesson.tasks()) {
             if (task == null || !KINDS.contains(task.kind()))
                 throw new IllegalArgumentException("Unsupported compact workbook task");
-            requireText(task.title(),80,"task title");
-            requireText(task.instruction(),500,"task instruction");
+            if (task.title() == null || task.title().length() > 80)
+                throw new IllegalArgumentException("Invalid compact task title");
+            if (task.instruction() == null || task.instruction().length() > 500)
+                throw new IllegalArgumentException("Invalid compact task instruction");
             requireText(task.expression(),500,"task expression");
             requireText(task.answer(),200,"task answer");
             if (task.restrictions() == null || task.restrictions().size() > 4
                     || task.restrictions().stream().anyMatch(v -> v == null || v.length() > 60))
                 throw new IllegalArgumentException("Invalid compact task restrictions");
             if ("equation".equals(task.kind())) {
-                if (!Set.of("x","y","z","a","b","c","m","n").contains(task.variable()))
-                    throw new IllegalArgumentException("Invalid compact equation variable");
                 if (task.expression().chars().filter(ch -> ch == '=').count() != 1)
                     throw new IllegalArgumentException("Compact equation must contain exactly one equals sign");
-            } else if (task.expression().contains("=") || task.variable() == null) {
+                variableOf(task);
+            } else if (task.expression().contains("=")) {
                 throw new IllegalArgumentException("Invalid compact expression task");
             }
         }
@@ -198,17 +200,23 @@ public class WorkbookContentService {
         List<Map<String,Object>> teacherPages = new ArrayList<>();
         List<Map<String,Object>> assertions = new ArrayList<>();
 
+        String lessonTitle = blank(lesson.title()) ? "Mathematik" : lesson.title().trim();
+        String lessonSubtitle = lesson.subtitle() == null ? "" : lesson.subtitle().trim();
         for (int offset=0; offset<lesson.tasks().size(); offset+=4) {
             List<Map<String,Object>> blocks = new ArrayList<>();
             for (int i=offset; i<Math.min(offset+4, lesson.tasks().size()); i++) {
                 CompactTask task = lesson.tasks().get(i);
                 String restriction = task.restrictions().isEmpty() ? ""
                         : " (" + String.join(", ", task.restrictions()) + ")";
+                String taskTitle = blank(task.title()) ? "Aufgabe " + (i+1) : task.title().trim();
+                String instruction = blank(task.instruction())
+                        ? ("equation".equals(task.kind()) ? "Löse die Gleichung." : "Berechne.")
+                        : task.instruction().trim();
                 blocks.add(Map.of(
                         "type","exercise",
                         "number",String.format("%02d",i+1),
-                        "title",task.title(),
-                        "description",task.instruction()+restriction,
+                        "title",taskTitle,
+                        "description",instruction+restriction,
                         "rows",List.of(Map.of(
                                 "label","",
                                 "math",Map.of("latex",task.expression()),
@@ -216,8 +224,8 @@ public class WorkbookContentService {
                         "writeLines",2));
             }
             workbookPages.add(Map.of(
-                    "title",lesson.title(),
-                    "subtitle",lesson.subtitle(),
+                    "title",lessonTitle,
+                    "subtitle",lessonSubtitle,
                     "blocks",blocks));
         }
 
@@ -226,7 +234,7 @@ public class WorkbookContentService {
             for (int i=offset; i<Math.min(offset+8, lesson.tasks().size()); i++) {
                 CompactTask task = lesson.tasks().get(i);
                 String answerMath = "equation".equals(task.kind())
-                        ? task.variable()+" = "+task.answer()
+                        ? variableOf(task)+" = "+task.answer()
                         : task.answer();
                 items.add(Map.of(
                         "label",String.valueOf(i+1),
@@ -236,7 +244,7 @@ public class WorkbookContentService {
             }
             teacherPages.add(Map.of(
                     "title","Lösungen",
-                    "subtitle",lesson.title(),
+                    "subtitle",lessonTitle,
                     "blocks",List.of(Map.of(
                             "type","solutions",
                             "section","AUFGABEN",
@@ -249,7 +257,7 @@ public class WorkbookContentService {
                 assertions.add(Map.of(
                         "kind","linearSolution",
                         "equation",task.expression(),
-                        "solution",Map.of(task.variable(),task.answer()),
+                        "solution",Map.of(variableOf(task),task.answer()),
                         "restrictions",task.restrictions()));
             } else {
                 assertions.add(Map.of(
@@ -274,6 +282,19 @@ public class WorkbookContentService {
         result.put("qa",Map.of("algebra",assertions));
         return result;
     }
+
+    private static String variableOf(CompactTask task) {
+        Set<String> allowed = Set.of("x","y","z","a","b","c","m","n");
+        if (task.variable() != null && allowed.contains(task.variable().trim())) return task.variable().trim();
+        var found = new java.util.LinkedHashSet<String>();
+        for (String candidate : allowed) {
+            if (java.util.regex.Pattern.compile("(?<![A-Za-z])"+candidate+"(?![A-Za-z])").matcher(task.expression()).find())
+                found.add(candidate);
+        }
+        if (found.size()!=1) throw new IllegalArgumentException("Invalid compact equation variable");
+        return found.iterator().next();
+    }
+    private static boolean blank(String value) { return value == null || value.isBlank(); }
 
     private static int number(Object value,int fallback) {
         return value instanceof Number n ? n.intValue() : fallback;
