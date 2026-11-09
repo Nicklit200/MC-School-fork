@@ -137,7 +137,7 @@ public class WorkbookGenerationJobService {
         // Exception text can contain task content, model responses or a signed URL. Never log it.
         LOG.warn("MCH3 workbook job={} state=FAILED code={} errorType={} durationMs={}",job.id(),code,ex.getClass().getSimpleName(),duration);
     }
-    private static String failureCode(Throwable error) {
+    static String failureCode(Throwable error) {
         for(Throwable ex=error;ex!=null;ex=ex.getCause()) {
             if(ex instanceof org.springframework.security.access.AccessDeniedException)return "ACCESS_CHANGED";
             if(ex instanceof java.net.http.HttpTimeoutException||ex instanceof TimeoutException)return "TIMEOUT";
