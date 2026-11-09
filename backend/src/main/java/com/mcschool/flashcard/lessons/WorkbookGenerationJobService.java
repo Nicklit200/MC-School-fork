@@ -145,7 +145,7 @@ public class WorkbookGenerationJobService {
             String message=Objects.toString(ex.getMessage(),"");
             if(message.contains("exceeded 115 seconds")||message.contains("timed out"))return "TIMEOUT";
             if(message.startsWith("Server content generation is not configured"))return "AI_NOT_CONFIGURED";
-            if(message.contains("Algebra QA")||message.contains("Algebra validation"))return "MATH_QA_FAILED";
+            if(message.contains("Algebra QA")||message.contains("Algebra validation")||message.contains("Incorrect math in "))return "MATH_QA_FAILED";
             if(message.contains("Layout QA")||message.contains("layout check")||message.contains("overflow A4"))return "LAYOUT_QA_FAILED";
             if(ex instanceof IllegalArgumentException)return "VALIDATION_FAILED";
         }
@@ -178,7 +178,14 @@ public class WorkbookGenerationJobService {
                 case "INTERRUPTED" -> "The server stopped before completion was committed. No automatic regeneration was started.";
                 default -> "Workbook generation failed. The job ID identifies the server diagnostic without exposing pupil data.";
             });
-            result.put("nextStep","Generation stopped; no workbook was published. Explain errorMessage. Do not automatically retry with a new idempotencyKey. An explicit retry starts a new job; correct content/context first for validation errors.");
+            result.put("nextStep",switch(job.failure()) {
+                case "MATH_QA_FAILED" -> "No workbook was published. Recheck the exact mathematical results and qa.algebra assertions in your local lessonJson; regenerate only after correcting the content, using a fresh key for the changed request.";
+                case "LAYOUT_QA_FAILED" -> "No workbook was published. Give each exercise enough A4 space, put large graphics or multiline work on separate pages, then request a new draft. Never shrink the required handwriting space.";
+                case "VALIDATION_FAILED" -> "No workbook was published. Refresh prepare_workbook_context, check its rendererContract, correct the schema and actual lesson duration, then request a new draft with a new key.";
+                case "AI_NOT_CONFIGURED" -> "No workbook was published. Use prepare_workbook_context, let ChatGPT prepare content-only lessonJson with qa.algebra, and call generate_lesson_workbook_draft with the fresh contextToken. No server-side AI is needed.";
+                case "TIMEOUT" -> "No workbook was published. Check the requested page count and task complexity; do not automatically launch duplicate jobs. Simplify only after teacher review.";
+                default -> "Generation stopped; no workbook was published. Do not automatically retry with a new idempotencyKey. Correct the cause before an explicit retry.";
+            });
         } else if(!"SUCCEEDED".equals(job.state())) {
             result.put("retryAfterSeconds",5);
             result.put("nextStep","Call get_lesson_workbook_job with this jobId after at least 5 seconds. Do not start another generation. For multiple pupils, finish all jobs then refresh each get_lesson_draft immediately before presenting the five-minute download links.");
