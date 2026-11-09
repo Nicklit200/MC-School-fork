@@ -300,6 +300,38 @@ function preflightPages(pages, teacher = false) {
     if (units > maxUnits) throw new Error(`Page ${index + 1} is likely to overflow A4 before rendering (layout weight ${units.toFixed(1)} > ${maxUnits})`);
   });
 }
+
+/**
+ * AI chooses teaching content, not physical page packing. Repack top-level
+ * blocks with deliberate headroom before the expensive PDF pass.
+ * Nested diagrams/grids remain intact and are never split.
+ */
+function autoPaginatePages(pages, teacher = false) {
+  const targetUnits = teacher ? 14.5 : 12.5;
+  const hardMax = teacher ? 18 : 16;
+  const output = [];
+  for (const [pageIndex,page] of pages.entries()) {
+    if (!page || !Array.isArray(page.blocks)) throw new TypeError(`Page ${pageIndex + 1} must contain blocks[]`);
+    if (!page.blocks.length) { output.push(page); continue; }
+    let current = [], units = 0;
+    const flush = () => {
+      if (!current.length) return;
+      output.push({...page, blocks: current});
+      current = []; units = 0;
+    };
+    for (const block of page.blocks) {
+      const weight = blockWeight(block, teacher);
+      if (weight > hardMax) {
+        throw new Error(`Page ${pageIndex + 1} contains one block too large for A4 (layout weight ${weight.toFixed(1)} > ${hardMax})`);
+      }
+      if (current.length && units + weight > targetUnits) flush();
+      current.push(block);
+      units += weight;
+    }
+    flush();
+  }
+  return output;
+}
 function runProcess(command, args, timeoutMs, errorPrefix) {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe']});
@@ -343,6 +375,10 @@ function findChromium(){
   return null;
 }
 await mkdir(out,{recursive:true});
+if (!plain) {
+  lesson.workbookPages = autoPaginatePages(lesson.workbookPages, false);
+  lesson.teacherPages = autoPaginatePages(lesson.teacherPages, true);
+}
 preflightPages(lesson.workbookPages, false);
 preflightPages(lesson.teacherPages, true);
 const arithmeticChains = checkAnswerMath(lesson);
@@ -350,8 +386,8 @@ const dateKey = String(lesson.meta.date || 'undated').replace(/[^0-9]/g,'') || '
 const groupKey = String(lesson.meta.group || 'Gruppe').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50) || 'Gruppe';
 const base = basename(option('basename', `Mindcrafti_${groupKey}_${dateKey}`))
   .replace(/[^A-Za-z0-9_-]/g,'_').slice(0,90);
-const checkedLessonPath=visualQa.results.size ? join(out,`${base}_checked-source.json`) : lessonPath;
-if(visualQa.results.size)await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
+const checkedLessonPath=join(out,`${base}_checked-source.json`);
+await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
 const algebraRun=await runProcess(process.env.PYTHON_BIN || 'python3',[join(root,'algebra_qa.py'),checkedLessonPath],45000,'Algebra QA failed');
 const graphQaWarnings=[...lesson.workbookPages,...lesson.teacherPages].flatMap(p=>[...flattenBlocks(p.blocks)]).filter(b=>b.type==='graph').flatMap(graphWarnings);
 const mathQa={...mergeVisualQa(JSON.parse(algebraRun.stdout),visualQa),arithmeticChains,graphWarnings:graphQaWarnings};
@@ -386,7 +422,7 @@ if(process.argv.includes('--html-only')) {
 if (!process.argv.includes('--html-only')) {
   // Prevent export of a document with overlapping mathematical symbols or
   // cropped A4 content. Always verify PDF geometry automatically before success.
-  const check = await runProcess(process.env.PYTHON_BIN || 'python3', [join(root, 'verify_pdf.py'), lessonPath, out, `--basename=${base}`, ...(plain ? ['--plain'] : [])],120000,'Generated PDF failed the mandatory layout check');
+  const check = await runProcess(process.env.PYTHON_BIN || 'python3', [join(root, 'verify_pdf.py'), checkedLessonPath, out, `--basename=${base}`, ...(plain ? ['--plain'] : [])],120000,'Generated PDF failed the mandatory layout check');
   console.log(check.stdout.trim());
 }
 console.log(`Done. Source: ${lessonPath}. Change lesson JSON for exercises; styles.css controls design.`);
