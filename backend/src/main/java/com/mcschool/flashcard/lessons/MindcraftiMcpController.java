@@ -593,7 +593,7 @@ public class MindcraftiMcpController {
 
         String key = required(context, "idempotencyKey");
         return personalWorkbookReceipts.execute(actor, teacher.id(), "assign_homework_series_files", key, identity,
-                () -> homeworkTeacher(context, auth, targetType, targetId),
+                () -> { homeworkTeacher(context, auth, targetType, targetId); },
                 () -> {
                     try {
                         List<byte[]> pdfs = references.stream().map(chatGptPdfResolver::resolve).map(PdfInput::bytes).toList();
