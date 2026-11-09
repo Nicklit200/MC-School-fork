@@ -196,6 +196,37 @@ public class LessonPdfDraftService {
 
     public record PreviewFile(String eventId,String filename,byte[] bytes) {}
 
+    /**
+     * Mark a complete, QA-verified workbook draft as one unassigned homework day.
+     * Never attach it to lesson slots: homework assignment is a separate, explicit action.
+     */
+    @Transactional
+    public void markHomeworkDraft(AuthenticatedUser teacher, UUID draftId,
+                                  String eventId, int day, String seriesKey) {
+        Draft draft=requireDraft(teacher,draftId,true);
+        if(!eventId.equals(draft.eventId()) || !"DRAFT".equals(draft.status()))
+            throw new IllegalArgumentException("Homework draft must be unpublished and belong to the exact source lesson");
+        String marker=McpHomeworkDraftValidator.seriesMarker(seriesKey,day);
+        if(draft.lessonPlan()!=null && draft.lessonPlan().startsWith(McpHomeworkDraftValidator.MARKER))
+            throw new IllegalArgumentException("Homework draft was already assigned to a day");
+        int changed=jdbc.update("UPDATE lesson_pdf_drafts SET lesson_plan=? WHERE id=? AND teacher_id=? AND status='DRAFT'",
+                marker,draftId,teacher.id());
+        if(changed!=1)throw new IllegalStateException("Could not mark the approved homework preview");
+    }
+
+    @Transactional(readOnly=true)
+    public PreviewFile homeworkPreviewFile(AuthenticatedUser teacher,UUID draftId,
+                                            String eventId,int day,String seriesKey) {
+        Draft draft=requireDraft(teacher,draftId,false);
+        String expected=McpHomeworkDraftValidator.seriesMarker(seriesKey,day);
+        if(!eventId.equals(draft.eventId()) || !"DRAFT".equals(draft.status()) ||
+                !expected.equals(draft.lessonPlan()))
+            throw new IllegalArgumentException("Homework PDF is not an approved day from this exact series and owned lesson");
+        if(draft.workbook()==null || draft.workbook().length==0)
+            throw new IllegalArgumentException("Homework PDF is unavailable");
+        return new PreviewFile(draft.eventId(),draft.workbookName(),draft.workbook());
+    }
+
     @Transactional(readOnly=true)
     public PreviewFile previewFile(AuthenticatedUser teacher,UUID draftId,String kind) {
         Draft draft=requireDraft(teacher,draftId,false);
@@ -215,6 +246,8 @@ public class LessonPdfDraftService {
         Draft draft = requireDraft(teacher, draftId, true);
         if ("PUBLISHED".equals(draft.status())) return publicationResult(teacher, draft, true);
         if (!"DRAFT".equals(draft.status())) throw new IllegalStateException("Draft is not publishable");
+        if(draft.lessonPlan()!=null && draft.lessonPlan().startsWith(McpHomeworkDraftValidator.MARKER))
+            throw new IllegalArgumentException("Homework drafts cannot be published as lesson workbooks; use the explicit seven-day homework assignment tool");
 
         // The two PDFs were generated and verified on create; recheck integrity before uploading.
         BufferedImage logo = extractOfficialLogo(guideService.pdfForStaff(teacher).bytes());
