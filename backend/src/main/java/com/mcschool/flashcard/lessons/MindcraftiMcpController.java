@@ -55,7 +55,7 @@ public class MindcraftiMcpController {
 
     private static final String API_KEY_HEADER = "X-Mindcrafti-Api-Key";
     private static final String SERVER_NAME = "mindcrafti-lessons";
-    private static final String SERVER_VERSION = "1.35.0";
+    private static final String SERVER_VERSION = "1.36.0";
     private static final int MAX_DIRECT_PDF_BYTES = 15 * 1024 * 1024;
     private static final String FILE_TRANSFER_RESOURCE = "ui://mindcrafti/lesson-file-transfer-v2.html";
     private static final String FILE_TRANSFER_MIME = "text/html;profile=mcp-app";
@@ -906,7 +906,7 @@ public class MindcraftiMcpController {
             homeworkDaySchema.put("contextToken",property("string","Exact fresh token from prepare_homework_context"));
             homeworkDaySchema.put("idempotencyKey",property("string","Unique stable key PER DAY (reuse unchanged on retries)"));
             tools.add(tool("generate_homework_day_draft",
-                    "One of SEVEN daily HOMEWORK drafts. ChatGPT authors content based on current homework prompt and last lesson evidence. Server strictly enforces <=2 independent tasks, <=10min, 6+ handwriting lines per task, first four days support at TOP, days 5-7 fully German/no hints, and one pupil A4 PDF with NO name/date/day label. Uses the SAME mathematically checked vector PDF renderer as lessons and saves teacher-only answers. Returns durable jobId; poll get_lesson_workbook_job. Run 7 jobs without exceeding actor's 6 pending-job cap. DO NOT ASSIGN until approved.",
+                    "One of SEVEN daily HOMEWORK drafts. ChatGPT authors content based on current homework prompt and last lesson evidence. Server strictly enforces <=2 independent tasks, <=10min, 6+ handwriting lines per task, first four days support at TOP, days 5-7 fully German/no hints, and one pupil A4 PDF with NO name/date/day label. Uses the SAME mathematically checked vector PDF renderer as lessons and saves teacher-only answers. Returns durable jobId; poll get_lesson_workbook_job. Queue accepts up to 24 active jobs per account (60 school-wide) and processes up to three jobs concurrently; all seven daily jobs may be submitted without batching. DO NOT ASSIGN until approved.",
                     schema(homeworkDaySchema,List.of("eventId","day","seriesKey","lessonJson","contextToken","idempotencyKey")),writeAnnotations()));
             Map<String,Object> homeworkDraftSchema=new LinkedHashMap<>();
             homeworkDraftSchema.put("teacherId",property("string","ADMIN teacher UUID; TEACHER may omit"));
