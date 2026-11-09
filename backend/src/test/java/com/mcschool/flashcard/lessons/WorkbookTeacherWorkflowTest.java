@@ -209,7 +209,6 @@ class WorkbookTeacherWorkflowTest {
         verifyNoInteractions(content,preparation);
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     @SuppressWarnings("unchecked")
     void frozenMcpClientsDiscoverAllFourHomeworkActionsUsingExistingTools() {
