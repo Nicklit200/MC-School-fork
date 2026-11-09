@@ -177,6 +177,12 @@ public class LessonPdfDraftService {
         result.put("taskCount", draft.taskCount());
         result.put("homeworkCount", 0);
         result.put("qaPassed", true);
+        if(draft.lessonPlan()!=null && draft.lessonPlan().startsWith(McpHomeworkDraftValidator.MARKER)) {
+            String[] dayMarker=draft.lessonPlan().split(":",3);
+            result.put("homeworkOnly",true);
+            result.put("homeworkDay",Integer.parseInt(dayMarker[1]));
+            result.put("assignmentStatus","UNASSIGNED_DRAFT");
+        }
         return result;
     }
 
