@@ -241,42 +241,6 @@ function checkAnswerMath(data){
   return checked;
 }
 
-function exactAnswerLatex(value) {
-  const text=String(value ?? '').trim();
-  if(!text || text.length>500)throw new Error('Computed reference answer is unavailable');
-  const fraction=text.match(/^(-?\d+)\/(-?\d+)$/);
-  if(fraction) {
-    let n=BigInt(fraction[1]),d=BigInt(fraction[2]);
-    if(d===0n)throw new Error('Computed reference answer has zero denominator');
-    if(d<0n){n=-n;d=-d;}
-    return `\\frac{${n}}{${d}}`;
-  }
-  return text.replace(/\*\*/g,'^').replace(/sqrt\(([^()]+)\)/g,'\\sqrt{$1}');
-}
-function applyServerComputedAnswers(data, algebraQa) {
-  if(data?.meta?.answerMode!=='server-computed')return;
-  const results=algebraQa?.results;
-  if(!Array.isArray(results) || !results.length || results.some(row=>row?.passed!==true || typeof row?.answer!=='string'))
-    throw new Error('Server-computed reference answers are incomplete');
-  const subtitle=data.workbookPages?.[0]?.title || 'Mathematik';
-  const pages=[];
-  for(let offset=0;offset<results.length;offset+=8) {
-    const items=results.slice(offset,offset+8).map((row,index)=>{
-      const number=offset+index+1;
-      const answer=row.kind==='linearValue'
-        ? `${row.variable} = ${exactAnswerLatex(row.answer)}`
-        : row.kind==='relationValue'
-          ? (row.answer==='true' ? '\\text{gleichwertig}' : '\\text{nicht gleichwertig}')
-          : exactAnswerLatex(row.answer);
-      return {label:String(number),math:{latex:answer},text:'',note:''};
-    });
-    pages.push({title:'Lösungen',subtitle,blocks:[{
-      type:'solutions',section:'AUFGABEN',title:'Kontrollierte Lösungen',items
-    }]});
-  }
-  data.teacherPages=pages;
-}
-
 function blockWeight(block, teacher = false) {
   const type = String(block?.type || '');
   const sum = (items, gapMm = 3.6) => (items || []).reduce((total,child)=>total+blockWeight(child,teacher),0) + Math.max(0,(items || []).length-1)*gapMm/14;
@@ -336,39 +300,6 @@ function preflightPages(pages, teacher = false) {
     if (units > maxUnits) throw new Error(`Page ${index + 1} is likely to overflow A4 before rendering (layout weight ${units.toFixed(1)} > ${maxUnits})`);
   });
 }
-
-/**
- * AI chooses teaching content, not physical page packing. Repack top-level
- * blocks with deliberate headroom before the expensive PDF pass. This is the
- * same principle as Kolyn's fast worksheets: deterministic layout after one
- * model response. Nested diagrams/grids remain intact and are never split.
- */
-function autoPaginatePages(pages, teacher = false) {
-  const targetUnits = teacher ? 14.5 : 12.5;
-  const hardMax = teacher ? 18 : 16;
-  const output = [];
-  for (const [pageIndex,page] of pages.entries()) {
-    if (!page || !Array.isArray(page.blocks)) throw new TypeError(`Page ${pageIndex + 1} must contain blocks[]`);
-    if (!page.blocks.length) { output.push(page); continue; }
-    let current = [], units = 0;
-    const flush = () => {
-      if (!current.length) return;
-      output.push({...page, blocks: current});
-      current = []; units = 0;
-    };
-    for (const block of page.blocks) {
-      const weight = blockWeight(block, teacher);
-      if (weight > hardMax) {
-        throw new Error(`Page ${pageIndex + 1} contains one block too large for A4 (layout weight ${weight.toFixed(1)} > ${hardMax})`);
-      }
-      if (current.length && units + weight > targetUnits) flush();
-      current.push(block);
-      units += weight;
-    }
-    flush();
-  }
-  return output;
-}
 function runProcess(command, args, timeoutMs, errorPrefix) {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe']});
@@ -412,34 +343,19 @@ function findChromium(){
   return null;
 }
 await mkdir(out,{recursive:true});
+preflightPages(lesson.workbookPages, false);
+preflightPages(lesson.teacherPages, true);
+const arithmeticChains = checkAnswerMath(lesson);
 const dateKey = String(lesson.meta.date || 'undated').replace(/[^0-9]/g,'') || 'undated';
 const groupKey = String(lesson.meta.group || 'Gruppe').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50) || 'Gruppe';
 const base = basename(option('basename', `Mindcrafti_${groupKey}_${dateKey}`))
   .replace(/[^A-Za-z0-9_-]/g,'_').slice(0,90);
-
-// Algebra runs before PDF layout. Compact workbooks use the same answerless
-// expressionValue/linearValue contract as Kolyn; their teacher answers are
-// rebuilt only from this trusted result.
-const qaSourcePath=join(out,`${base}_qa-source.json`);
-await writeFile(qaSourcePath,JSON.stringify(lesson),'utf8');
-const algebraRun=await runProcess(process.env.PYTHON_BIN || 'python3',[join(root,'algebra_qa.py'),qaSourcePath],45000,'Algebra QA failed');
-const algebraQa=JSON.parse(algebraRun.stdout);
-if(algebraQa.passed!==true)throw new Error('Algebra QA did not pass');
-applyServerComputedAnswers(lesson,algebraQa);
-
-if (!plain) {
-  lesson.workbookPages = autoPaginatePages(lesson.workbookPages, false);
-  lesson.teacherPages = autoPaginatePages(lesson.teacherPages, true);
-}
-preflightPages(lesson.workbookPages, false);
-preflightPages(lesson.teacherPages, true);
-const arithmeticChains = checkAnswerMath(lesson);
+const checkedLessonPath=visualQa.results.size ? join(out,`${base}_checked-source.json`) : lessonPath;
+if(visualQa.results.size)await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
+const algebraRun=await runProcess(process.env.PYTHON_BIN || 'python3',[join(root,'algebra_qa.py'),checkedLessonPath],45000,'Algebra QA failed');
 const graphQaWarnings=[...lesson.workbookPages,...lesson.teacherPages].flatMap(p=>[...flattenBlocks(p.blocks)]).filter(b=>b.type==='graph').flatMap(graphWarnings);
-const mathQa={...mergeVisualQa(algebraQa,visualQa),arithmeticChains,graphWarnings:graphQaWarnings};
+const mathQa={...mergeVisualQa(JSON.parse(algebraRun.stdout),visualQa),arithmeticChains,graphWarnings:graphQaWarnings};
 if(mathQa.passed!==true)throw new Error('Algebra QA did not pass');
-
-const checkedLessonPath=join(out,`${base}_checked-source.json`);
-await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
 await primeMath(lesson);
 await writeFile(join(out,`${base}_math-qa.json`),JSON.stringify(mathQa,null,2),'utf8');
 const durationMinutes = Number(lesson.meta.durationMinutes);
@@ -470,7 +386,7 @@ if(process.argv.includes('--html-only')) {
 if (!process.argv.includes('--html-only')) {
   // Prevent export of a document with overlapping mathematical symbols or
   // cropped A4 content. Always verify PDF geometry automatically before success.
-  const check = await runProcess(process.env.PYTHON_BIN || 'python3', [join(root, 'verify_pdf.py'), checkedLessonPath, out, `--basename=${base}`, ...(plain ? ['--plain'] : [])],120000,'Generated PDF failed the mandatory layout check');
+  const check = await runProcess(process.env.PYTHON_BIN || 'python3', [join(root, 'verify_pdf.py'), lessonPath, out, `--basename=${base}`, ...(plain ? ['--plain'] : [])],120000,'Generated PDF failed the mandatory layout check');
   console.log(check.stdout.trim());
 }
 console.log(`Done. Source: ${lessonPath}. Change lesson JSON for exercises; styles.css controls design.`);
