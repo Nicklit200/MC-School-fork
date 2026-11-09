@@ -112,6 +112,23 @@ test('crowded top-level workbook content is repaginated instead of rejected',asy
   assert.match(workbook,/SCHRITT 12/);
 });
 
+
+test('A4 pagination gives eight-line handwritten solutions separate pages',async()=>{
+  const lesson=basic();
+  lesson.workbookPages[0].blocks=Array.from({length:4},(_,index)=>({
+    type:'exercise',number:String(index+1),title:'Kürze vollständig.',
+    subtitle:'Schreibe jeden Rechenschritt auf.',
+    rows:[{label:'a)',math:['6/8','=','_____'],work:true}],
+    writeLines:8
+  }));
+  lesson.teacherPages[0].blocks=[{type:'solutions',items:[
+    {label:'1a',math:['6/8','=','3/4']}
+  ]}];
+  const {workbook}=await render(lesson);
+  assert.equal((workbook.match(/class="sheet student"/g)||[]).length,4);
+  assert.equal((workbook.match(/class="response-lines"/g)||[]).length,4);
+});
+
 test('preflight counts parallel columns by maximum and stacked rows by sum',async()=>{
   const graph=()=>({type:'coordinateGrid',xRange:[-5,5],yRange:[-5,5]});
   for(const block of [
