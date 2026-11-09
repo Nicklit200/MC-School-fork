@@ -20,6 +20,33 @@ export function columns(value) {
   if (Math.abs(value.reduce((s,v)=>s+parseFloat(v),0)-100)>0.01) throw new TypeError('split.columns must total 100%');
   return value.map(v=>parseFloat(v)+'fr').join(' ');
 }
+/**
+ * Normalize only display-math fields produced by ChatGPT. Do not touch
+ * qa.algebra assertions or solve/alter any exercise: the algebra checker must
+ * still reject incorrect mathematics and unsafe TeX stays blocked by MathJax.
+ * Both TEACHER and ADMIN use this same renderer entrypoint.
+ */
+export function normalizeLessonMath(data) {
+  const asMath = value => typeof value === 'string' ? normalizeMath({latex:value}) : value;
+  function visit(value, depth=0) {
+    if (depth>24 || !value || typeof value!=='object') return;
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child,depth+1);
+      return;
+    }
+    // Canonicalize bare TeX strings only where the renderer expects formulas.
+    if (typeof value.math==='string') value.math=asMath(value.math);
+    if (value.type==='math' && typeof value.expression==='string')
+      value.expression=asMath(value.expression);
+    if (value.type==='example' && Array.isArray(value.expressions))
+      value.expressions=value.expressions.map(asMath);
+    for(const child of Object.values(value)) visit(child,depth+1);
+  }
+  visit(data?.workbookPages);
+  visit(data?.teacherPages);
+  return data;
+}
+
 export function validateLesson(data) {
   let count=0;
   function walk(v, depth=0) {
