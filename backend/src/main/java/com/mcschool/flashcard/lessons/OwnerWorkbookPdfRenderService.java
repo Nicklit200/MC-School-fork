@@ -3,6 +3,7 @@ package com.mcschool.flashcard.lessons;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.settings.SchoolBrandGuideService;
 import java.awt.image.BufferedImage;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -289,6 +290,15 @@ public class OwnerWorkbookPdfRenderService {
             byte[] answers = Files.readAllBytes(answersPath);
             if (workbook.length > MAX_DOCUMENT_BYTES || answers.length > MAX_DOCUMENT_BYTES)
                 throw new IllegalArgumentException("One generated PDF exceeds the 15 MB limit");
+            // A homework day must remain ONE physical A4 student PDF page, even
+            // after the generator's safety-driven auto-pagination. Never silently
+            // turn a 10-minute daily homework into a multi-page worksheet.
+            if(Boolean.TRUE.equals(requireMap(document.get("meta"),"meta").get("homeworkMode"))) {
+                try(PDDocument oneDay=Loader.loadPDF(workbook)) {
+                    if(oneDay.getNumberOfPages()!=1)
+                        throw new IllegalArgumentException("Homework day must fit on exactly one A4 student page; reduce tasks or visual size");
+                }
+            }
             @SuppressWarnings("unchecked") Map<String,Object> mathQa=mapper.readValue(Files.readString(output.resolve(basename+"_math-qa.json")),Map.class);
             if(!Boolean.TRUE.equals(mathQa.get("passed"))) throw new IllegalStateException("Renderer math QA report did not pass");
             Map<String, Object> result = drafts.createFromRenderer(teacher, eventId, workbook,
