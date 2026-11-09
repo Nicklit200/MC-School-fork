@@ -101,7 +101,7 @@ final class McpHomeworkDraftValidator {
             if ("exercise".equals(b.get("type")) && b.get("writeLines") instanceof Number n && n.intValue() >= 6)
                 lines++;
             if ("answerLines".equals(b.get("type")) && b.get("lines") instanceof Number n && n.intValue() >= 6) {
-                String spacing = String.valueOf(b.getOrDefault("spacing","8mm"));
+                String spacing = String.valueOf(b.containsKey("spacing") ? b.get("spacing") : "8mm");
                 if (!"8mm".equals(spacing) && !"9mm".equals(spacing) && !"10mm".equals(spacing))
                     throw new IllegalArgumentException("Homework answer lines require at least 8 mm spacing");
                 lines++;
