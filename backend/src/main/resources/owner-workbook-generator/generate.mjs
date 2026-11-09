@@ -386,7 +386,11 @@ function findChromium(){
 }
 await mkdir(out,{recursive:true});
 if (!plain) {
-  lesson.workbookPages = autoPaginatePages(lesson.workbookPages, false);
+  // A HOMEWORK day is exactly one A4 pupil PDF. Never silently split it into
+  // two physical pages: preflight plus WeasyPrint/PDF geometry QA must either
+  // confirm it fits or reject the draft for revision.
+  if (lesson.meta.homeworkMode !== true)
+    lesson.workbookPages = autoPaginatePages(lesson.workbookPages, false);
   lesson.teacherPages = autoPaginatePages(lesson.teacherPages, true);
 }
 preflightPages(lesson.workbookPages, false);
