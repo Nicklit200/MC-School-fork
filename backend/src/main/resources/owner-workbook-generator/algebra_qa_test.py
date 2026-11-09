@@ -121,6 +121,44 @@ class AlgebraTests(unittest.TestCase):
         self.assertEqual(result['checked'], 2)
         self.assertEqual([(item['index'], item['answer']) for item in result['results']], [(0, '3/4'), (1, '1/3')])
 
+    def test_wrong_teacher_answer_is_not_hidden_by_unrelated_correct_assertion(self):
+        document = {
+            'qa': {'algebra': [{'kind': 'equivalence', 'expression': '1+1', 'answer': '2'}]},
+            'teacherPages': [{'blocks': [{'type': 'solutions', 'items': [
+                {'label': '1a', 'math': {'latex': '2+2=5'}},
+            ]}]}],
+        }
+        result = verify_document(document)
+        self.assertFalse(result['passed'])
+        self.assertEqual(result['checked'], 1)
+        self.assertEqual(result['teacherNumericSolutions']['checked'], 1)
+        self.assertEqual(result['teacherNumericSolutions']['failed'][0]['position'], 1)
+
+    def test_mathjax_fractions_and_nested_teacher_solutions_are_verified(self):
+        document = {
+            'qa': {'algebra': [{'kind': 'equivalence', 'expression': '3/4', 'answer': '3/4'}]},
+            'teacherPages': [{'blocks': [{'type': 'grid', 'children': [
+                {'type': 'solutions', 'items': [
+                    {'label': '1a', 'math': {'latex': r'\\frac{1}{2}+\\frac{1}{4}=\\frac{3}{4}'}},
+                    {'label': '1b', 'math': ['6', '+', '8', '+', '10', '=', '24']},
+                ]}
+            ]}]}],
+        }
+        result = verify_document(document)
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['teacherNumericSolutions'], {'checked': 2, 'failed': []})
+
+    def test_symbolic_equation_is_not_mistaken_for_identity(self):
+        document = {
+            'qa': {'algebra': [{'kind': 'solution', 'equation': '2*x+3=7', 'solution': {'x': 2}}]},
+            'teacherPages': [{'blocks': [{'type': 'solutions', 'items': [
+                {'label': '1a', 'math': {'latex': '2x+3=7'}},
+            ]}]}],
+        }
+        result = verify_document(document)
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['teacherNumericSolutions']['checked'], 0)
+
     def test_rejects_wrong_equivalence(self):
         with self.assertRaises(ValueError):
             validate({'kind': 'equivalence', 'expression': '(x+3)^2', 'answer': 'x^2+9'})
