@@ -1741,21 +1741,7 @@ public class MindcraftiMcpController {
                         generation.put("lessonJson", content.lessonJson());
                         generation.put("lessonPlan", content.lessonPlan());
                         generation.put("difficulties", content.difficulties());
-                        Map<String,Object> draftResult;
-                        try {
-                            draftResult = generateWorkbook(generation, auth);
-                        } catch (IllegalArgumentException firstFailure) {
-                            if (suppliedContent || !workbookMathQaFailure(firstFailure)) throw firstFailure;
-                            // Same bounded recovery strategy as Kolyn: one repair pass only.
-                            // No invalid task text is copied into the repair request or logs.
-                            WorkbookContentService.Content repaired = workbookContentService.generate(
-                                    context, workbookMathRepairInstruction(instruction));
-                            generation.put("lessonJson", repaired.lessonJson());
-                            generation.put("lessonPlan", repaired.lessonPlan());
-                            generation.put("difficulties", repaired.difficulties());
-                            draftResult = generateWorkbook(generation, auth);
-                            draftResult.put("mathRepairUsed", true);
-                        }
+                        Map<String,Object> draftResult = generateWorkbook(generation, auth);
                         draftResult.put("contextVersion", context.get("contextVersion"));
                         draftResult.put("published", false);
                         return draftResult;
@@ -1763,30 +1749,6 @@ public class MindcraftiMcpController {
                     catch (Exception ex) { throw new IllegalStateException("Workbook generation failed", ex); }
                 }));
         return withWorkbookDownloadLinks(result,actor,teacher);
-    }
-
-    static boolean workbookMathQaFailure(Throwable error) {
-        for (Throwable current=error; current!=null; current=current.getCause()) {
-            String message=java.util.Objects.toString(current.getMessage(),"");
-            if (message.contains("Algebra QA") || message.contains("Algebra validation")) return true;
-        }
-        return false;
-    }
-
-    static String workbookMathRepairInstruction(String original) {
-        String base=original==null?"":original.strip();
-        if(base.length()>4200) base=base.substring(0,4200);
-        String repair="""
-                Previous server-generated compact draft failed independent algebra QA. Regenerate the whole task list once.
-                Preserve the requested topic, pupil evidence, progression and approximate task count. Use only the supported checked math:
-                expression = numeric expression with NO '='; relation = exactly one '=' and NO variables; equation = exactly one '=' and
-                exactly one supported variable, with an affine linear equation only. Use explicit * for multiplication, / for fractions
-                and ^ for powers. No implicit multiplication, units, prose, mixed-number notation or answer text inside expression.
-                For word problems keep all wording in instruction and put only the checked calculation/equation in expression.
-                The compatibility answer field must be empty; the server computes all reference answers. Do not change lesson context.
-                """;
-        String combined=base.isBlank()?repair:base+"\n\n"+repair;
-        return combined.length()<=6000?combined:combined.substring(0,6000);
     }
 
     @SuppressWarnings("unchecked")
