@@ -32,7 +32,10 @@ public final class InteractiveTemplateSpec {
         visual содержит ТОЛЬКО параметры выбранного интерактивного шаблона. instruction, expression, variable="", restrictions=[].
         template=graph: function=linear, coefficients=[m,b] для y=mx+b; либо quadratic, coefficients=[a,b,c]. Коэффициенты от -10 до 10.
         template=triangle: vertices=[[x,y],[x,y],[x,y]], координаты от -5 до 5, площадь не меньше 0.05.
-        template=fractionCircle: parts от 2 до 24; selected содержит номера закрашенных долей от 0 до parts-1 без повторов.
+        template=fractionCircle: parts от 1 до 24; selected содержит индексы закрашенных кусочков от 0 до (parts*4-1) без повторов.
+        Для 3/8: parts=8, selected=[0,1,2]. Для неправильной дроби 7/4: parts=4, selected=[0,1,2,3,4,5,6].
+        До 4 пицц, в каждой parts равных кусочков. Поля числителя и знаменателя преподаватель
+        сможет изменить самостоятельно. Не преобразуй неправильную дробь в число меньше единицы.
         template=cube: unfold от 0 (собранный куб) до 1 (плоская развёртка), yaw от -180 до 180, pitch от -90 до 90.
         Для куба по умолчанию unfold=0, yaw=-30, pitch=25. У куба 6 квадратных граней, 12 рёбер, 8 вершин.
         Исправляй неверное количество граней в вопросе. Развёртка куба всегда содержит все 6 граней.
@@ -68,10 +71,10 @@ public final class InteractiveTemplateSpec {
             }
             case "fractionCircle" -> {
                 keys(spec,"template","language","parts","selected");
-                int parts=integer(spec.get("parts"),2,24);
-                if(!(spec.get("selected") instanceof List<?> selected) || selected.size()>parts) throw invalid();
+                int parts=integer(spec.get("parts"),1,24);
+                if(!(spec.get("selected") instanceof List<?> selected) || selected.size()>parts*4) throw invalid();
                 var seen=new HashSet<Integer>();
-                for(var value:selected) if(!seen.add(integer(value,0,parts-1))) throw invalid();
+                for(var value:selected) if(!seen.add(integer(value,0,parts*4-1))) throw invalid();
             }
             default -> throw invalid();
         }
