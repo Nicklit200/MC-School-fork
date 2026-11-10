@@ -339,9 +339,12 @@ if(process.argv.includes('--html-only')) {
   // A retry is internal to this same generation job, preserving its idempotency key,
   // its lesson content, the original logo, and every handwriting line.
   let rendered=false;
+  // Never re-render an already verified PDF when only its sibling overflows.
+  // Both PDF reports are still checked and hash-bound by verify_pdf.py.
+  let pendingTargets=targets;
   for(let attempt=0;attempt<4;attempt++){
     await writeHtml();
-    const renderArgs=[helper,...targets.flatMap(t=>[t.htmlPath,t.pdfPath])];
+    const renderArgs=[helper,...pendingTargets.flatMap(t=>[t.htmlPath,t.pdfPath])];
     try{
       await runProcess(process.env.PYTHON_BIN || 'python3',renderArgs,120000,'WeasyPrint PDF failed');
       rendered=true;
@@ -353,9 +356,7 @@ if(process.argv.includes('--html-only')) {
         try{return JSON.parse(await readFile(t.pdfPath+'.layout.json','utf8'));}
         catch{return null;}
       }));
-      if(attempt===3 || reports.some(x=>!x)){
-        throw error;
-      }
+      if(attempt===3 || reports.some(x=>!x))throw error;
       const studentReport=reports[0],teacherReport=reports[1];
       const studentRecovery=lesson.meta.homeworkMode===true
         ? {changed:false,pages:lesson.workbookPages}
@@ -364,6 +365,7 @@ if(process.argv.includes('--html-only')) {
       if(!studentRecovery.changed && !teacherRecovery.changed)throw error;
       lesson.workbookPages=studentRecovery.pages;
       lesson.teacherPages=teacherRecovery.pages;
+      pendingTargets=targets.filter((t,i)=>i===0 ? studentRecovery.changed : teacherRecovery.changed);
       preflightPages(lesson.workbookPages,false);
       preflightPages(lesson.teacherPages,true);
       await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
