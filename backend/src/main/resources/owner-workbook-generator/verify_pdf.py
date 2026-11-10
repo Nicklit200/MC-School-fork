@@ -90,7 +90,10 @@ def verify_file(path, expected_count, plain=False):
             # hard-coded y>185 px. Minimal orange pages may contain only a
             # short prompt at the top followed by intentionally empty writing
             # space: that is a valid task, not an accidental blank page.
-            body_top = page_layout['contentTop'] * .75
+            # Older QA fixtures predate the measured contentTop field.
+            # Production reports always include contentTop; preserve the
+            # rejection tests' fixed fallback for synthetic PDF fixtures.
+            body_top = page_layout.get('contentTop', 180) * .75
             blocks = [b for b in page.get_text('blocks') if b[4].strip()
                       and b[1] >= body_top - 2 and b[1] < footer_top - 1]
             for block in blocks:
