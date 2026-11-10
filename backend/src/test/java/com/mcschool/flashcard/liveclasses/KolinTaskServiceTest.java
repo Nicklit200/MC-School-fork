@@ -80,7 +80,7 @@ class KolinTaskServiceTest {
         assertThatThrownBy(()->send("Объясни задание 7"))
             .isInstanceOf(KolinRequestException.class)
             .satisfies(error->assertThat(((KolinRequestException)error).getErrorCode()).isEqualTo("KOLIN_GENERATION_FAILED"))
-            .hasMessageNotContaining("PRIVATE_API_ERROR","secret-key");
+            .hasMessageNotContaining("PRIVATE_API_ERROR").hasMessageNotContaining("secret-key");
         verify(store).fail(host,room.getId(),artifact,attempt);
     }
 
