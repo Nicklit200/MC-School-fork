@@ -50,6 +50,21 @@ class LessonPdfDraftServiceTest {
     }
 
     @Test
+    void minimalOrangeWorkbookWorksWithoutAnyEmbeddedLogo() throws Exception {
+        List<LessonPdfDraftService.Task> exercises=List.of(
+            new LessonPdfDraftService.Task("Berechne 5 + 7.", "12", 6));
+        byte[] student=LessonPdfDraftService.render("Mathematik", "Sofia", exercises, null, false, "");
+        byte[] answers=LessonPdfDraftService.render("Mathematik", "Sofia", exercises, null, true, "");
+        assertEquals(1, LessonPdfDraftService.verifyPdf(student, null, "Arbeitsblatt"));
+        assertEquals(1, LessonPdfDraftService.verifyPdf(answers, null, "Loesungen"));
+        try(var pdf=Loader.loadPDF(student)) {
+            assertTrue(new PDFTextStripper().getText(pdf).contains("MINDCRAFTI SCHOOL"));
+            assertFalse(pdf.getPage(0).getResources().getXObjectNames().iterator().hasNext(),
+                "Logo-free output must not include any embedded image");
+        }
+    }
+
+    @Test
     void rejectsNonPdf() {
         assertThrows(IllegalArgumentException.class,
             () -> LessonPdfDraftService.verifyPdf(new byte[]{1,2,3},fakeArtwork(),"Arbeitsblatt"));
