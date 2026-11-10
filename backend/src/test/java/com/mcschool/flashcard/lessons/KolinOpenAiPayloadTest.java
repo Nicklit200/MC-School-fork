@@ -50,7 +50,7 @@ class KolinOpenAiPayloadTest {
         var request=captured();var packet=mapper.readTree(body(request));
         assertThat(packet.path("store").asBoolean(true)).isFalse();
         assertThat(packet.path("max_output_tokens").asInt()).isEqualTo(12000);
-        assertThat(packet.path("model").asString()).isEqualTo("gpt-6-astra");
+        assertThat(packet.path("model").asString()).isEqualTo("gpt-6-luna");
         assertThat(packet.has("text")).isFalse();
         var input=packet.path("input");var content=input.get(input.size()-1).path("content");
         assertThat(content.size()).isEqualTo(3);
@@ -127,7 +127,7 @@ class KolinOpenAiPayloadTest {
             "{\"result\":{\"text\":\"Уточните тему\",\"materials\":[]}}")));
         ai.kolinStructuredReply("{\"roster\":[]}",List.of(),"Дай пару заданий");
         HttpRequest request=captured(); var json=mapper.readTree(body(request));
-        assertThat(json.path("model").asString()).isEqualTo("gpt-6-astra");
+        assertThat(json.path("model").asString()).isEqualTo("gpt-6-luna");
         assertThat(json.path("store").asBoolean()).isFalse();
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(16384);
         assertThat(json.path("text").path("format").path("type").asString()).isEqualTo("json_schema");
@@ -205,7 +205,7 @@ class KolinOpenAiPayloadTest {
         assertThat(request.uri().toString()).isEqualTo("https://api.openai.com/v1/responses");
         assertThat(request.headers().firstValue("Authorization")).contains("Bearer TEST_SERVER_ONLY_KEY");
         assertThat(request.timeout()).contains(java.time.Duration.ofSeconds(75));
-        assertThat(json.path("model").asString()).isEqualTo("gpt-6-astra");
+        assertThat(json.path("model").asString()).isEqualTo("gpt-6-luna");
         assertThat(json.path("max_output_tokens").asInt()).isEqualTo(8192);
         assertThat(json.path("store").asBoolean()).isFalse();
         assertThat(json.path("input").size()).isEqualTo(11);
