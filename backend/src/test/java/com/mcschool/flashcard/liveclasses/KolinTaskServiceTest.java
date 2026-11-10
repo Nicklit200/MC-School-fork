@@ -43,6 +43,46 @@ class KolinTaskServiceTest {
                 isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
     }
 
+
+    @Test void explanationOfTaskSevenUsesTextChatWithoutJsonClassifierOrGenerator() throws Exception {
+        reserve();
+        String answer="Для x=-3 квадратный корень равен 3, не -3: sqrt(x^2)=|x|.";
+        when(ai.kolinReply(anyString(),anyList(),eq("Объясни задание 7"))).thenReturn(answer);
+        var context=new LinkedHashMap<String,Object>();
+        context.put("lessonDocuments",Map.of("relevantPages",List.of(
+            Map.of("source","Рабочая тетрадь","pageNumber",2,"text","7a) sqrt(x²)=x"))));
+        service.reply(host,room,new KolinChatService.Request("Объясни задание 7",List.of(),
+                new KolinChatService.Context("student",pupil.getId(),2),clientId),
+                context,List.of(),"Объясни задание 7",metadata);
+        verify(ai).kolinReply(contains("sqrt(x²)=x"),anyList(),eq("Объясни задание 7"));
+        verify(ai,never()).kolinDialogue(anyString(),anyList(),anyString());
+        verify(ai,never()).kolinStructuredReply(anyString(),anyList(),anyString());
+        verifyNoInteractions(renderer);
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("text"),eq(answer),eq(metadata),
+                isNull(),isNull(),eq(0),eq(0),isNull(),isNull());
+    }
+
+    @Test void explanationShortcutNeverActivatesForRequestsThatMutateMaterials() throws Exception {
+        assertThat(KolinTaskService.isReadOnlyExplanation("Объясни задание 7")).isTrue();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Объясни, почему sqrt(x²) не x")).isTrue();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Warum ist das falsch?")).isFalse();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Объясни задание 7 и добавь два новых примера")).isFalse();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Создай рабочую тетрадь")).isFalse();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Покажи параболу")).isFalse();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Объясни и нарисуй график")).isFalse();
+    }
+
+    @Test void explanationProviderFailureCannotExposeRawProviderMessages() throws Exception {
+        reserve();
+        when(ai.kolinReply(anyString(),anyList(),anyString()))
+            .thenThrow(new IllegalStateException("PRIVATE_API_ERROR secret-key"));
+        assertThatThrownBy(()->send("Объясни задание 7"))
+            .isInstanceOf(KolinRequestException.class)
+            .satisfies(error->assertThat(((KolinRequestException)error).getErrorCode()).isEqualTo("KOLIN_GENERATION_FAILED"))
+            .hasMessageNotContaining("PRIVATE_API_ERROR","secret-key");
+        verify(store).fail(host,room.getId(),artifact,attempt);
+    }
+
     @Test void reviewUsesVisionOnceAndCachedRetryKeepsTheOriginalPageWithoutAnyBoardWrites() throws Exception {
         var reviews=mock(KolinBoardReviewService.class);
         org.springframework.test.util.ReflectionTestUtils.setField(service,"reviews",reviews);
