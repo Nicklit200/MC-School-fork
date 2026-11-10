@@ -83,6 +83,19 @@ class KolinTaskServiceTest {
         verify(store).fail(host,room.getId(),artifact,attempt);
     }
 
+
+    @Test void providerDiagnosticsClassifyErrorsWithoutLoggingPrivateResponseBodies() {
+        var http=new IllegalStateException("Kolyn dialogue failed",
+            new IllegalStateException("OpenAI API вернул HTTP 400: PRIVATE_USER_DATA key=secret"));
+        assertThat(KolinTaskService.providerStatus(http)).isEqualTo("HTTP_400");
+        assertThat(KolinTaskService.providerStatus(new IllegalStateException("Kolyn dialogue failed",
+            new IllegalStateException("Invalid dialogue")))).isEqualTo("INVALID_DIALOGUE");
+        assertThat(KolinTaskService.providerStatus(new IllegalStateException("Unclassified SECRET")))
+            .isEqualTo("UNKNOWN");
+        assertThat(KolinTaskService.providerStatus(new IllegalStateException("Kolyn dialogue failed",
+            new java.net.http.HttpTimeoutException("PRIVATE_DATA")))).isEqualTo("TIMEOUT");
+    }
+
     @Test void reviewUsesVisionOnceAndCachedRetryKeepsTheOriginalPageWithoutAnyBoardWrites() throws Exception {
         var reviews=mock(KolinBoardReviewService.class);
         org.springframework.test.util.ReflectionTestUtils.setField(service,"reviews",reviews);
