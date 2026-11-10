@@ -245,7 +245,7 @@ public class KolinTaskService {
     static boolean isReadOnlyExplanation(String question) {
         if (question == null) return false;
         boolean explain=java.util.regex.Pattern.compile(
-            "(?iu)^\\s*(?:об[ъь]?ясн\\p{L}*|поясн\\p{L}*|почему\\b|разъясн\\p{L}*|erkl[aä]r\\p{L}*|explain\\b|why\\b)"
+            "(?iu)^\\s*(?:об[ъь]?[яе]сн\\p{L}*|поясн\\p{L}*|почему\\b|разъясн\\p{L}*|erkl[aä]r\\p{L}*|explain\\b|why\\b)"
         ).matcher(question).find();
         boolean mutate=java.util.regex.Pattern.compile(
             "(?iu)(?:создай|создать|сделай|добавь|добавить|измени|изменить|подготовь|сгенерируй|генерир|нарисуй|построй|перенеси|загрузи|erstelle|create|generate|add\\s+to|modify|edit)"
