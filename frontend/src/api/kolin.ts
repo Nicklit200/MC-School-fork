@@ -46,15 +46,16 @@ export interface KolinResponse {
 }
 
 export interface KolinBoardSnapshot {
-  studentId: string;
+  studentId: string | null;
   boardId: string;
   pageNumber: number;
   documentVersion: number;
   revision: number;
-  observedAt: string;
+  observedAt: string | null;
   capturedAt: string;
   imageDataUrl: string;
-  scope: 'current_page' | 'workbook';
+  scope: 'current_page' | 'first_page' | 'workbook';
+  sharedDocumentVersion?: number | null;
   totalPageCount: number;
   additionalPages: { pageNumber: number; revision: number; imageDataUrl: string }[];
 }
@@ -68,7 +69,7 @@ export interface KolinReviewTarget {
   studentId?: string;
   studentName?: string;
   message?: string;
-  scope?: 'current_page' | 'workbook';
+  scope?: 'current_page' | 'first_page' | 'workbook';
 }
 
 export function parseKolinMaterials(value: unknown): KolinWorksheet[] | undefined {
