@@ -20,6 +20,10 @@ public class KolinBoardReviewService {
     private static final String JPEG = "data:image/jpeg;base64,";
     private static final Pattern REVIEW = Pattern.compile("(?iu)(провер[ьиья]|проверь|посмотр|разбер|разоб[ер]|оцени|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|check|review|mistake|wrong|prüf|pruf|kontrollier|schau|fehler)");
     private static final Pattern WHOLE = Pattern.compile("(?iu)(всю|весь|всех.{0,10}страниц|тетрад|документ|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|workbook|document|all.{0,10}page|mistake|wrong|fehler|heft|gesamte)");
+    private static final Pattern EXPLAIN = Pattern.compile("(?iu)(об[ъь]?[яе]сн|поясн|разъясн|покаж|найди|где|erklär|erklar|explain|show|find|where)");
+    private static final Pattern FIRST_PAGE = Pattern.compile("(?iu)(?:перв\\p{L}*|задани\\p{L}*\\s*(?:№\\s*)?1\\b|страниц\\p{L}*\\s*(?:№\\s*)?1\\b|лист\\p{L}*\\s*(?:№\\s*)?1\\b|first\\s+(?:page|sheet|task|exercise))");
+    private static final Pattern EXERCISE = Pattern.compile("(?iu)(?:задан|упражнен|пример|страниц|лист|доск|worksheet|exercise|task|page|board|seite|aufgab)");
+    private static final Pattern EXPLICIT_SHARED = Pattern.compile("(?iu)(?:общ\\p{L}*\\s+(?:доск|тетрад|лист|страниц|задан)|на\\s+общ\\p{L}*|shared\\s+(?:board|worksheet)|group\\s+(?:board|worksheet))");
     private static final Pattern WORK = Pattern.compile("(?iu)(задан|решени|реша|доск|страниц|тетрад|работ|ошиб|напис|правиль|aufgab|lös|losung|seite|tafel|heft|arbeit|fehler|work|page|board|solution|answer)");
     private final OnlineClassAccessService access;
     private final KolinTaskRoster roster;
@@ -35,9 +39,14 @@ public class KolinBoardReviewService {
     public record Page(int pageNumber,long revision,@Size(max=2000022) String imageDataUrl) {}
     public record Snapshot(UUID studentId, String boardId, int pageNumber, long documentVersion, long revision,
                            Instant observedAt, Instant capturedAt, @Size(max=2000022) String imageDataUrl,
-                           String scope,int totalPageCount,@Size(max=39) List<@jakarta.validation.Valid Page> additionalPages) {
+                           String scope,int totalPageCount,@Size(max=39) List<@jakarta.validation.Valid Page> additionalPages,
+                           Long sharedDocumentVersion) {
         public Snapshot(UUID id,String board,int page,long version,long revision,Instant observed,Instant captured,String image) {
-            this(id,board,page,version,revision,observed,captured,image,"current_page",page,List.of());
+            this(id,board,page,version,revision,observed,captured,image,"current_page",page,List.of(),null);
+        }
+        public Snapshot(UUID id,String board,int page,long version,long revision,Instant observed,Instant captured,String image,
+                        String scope,int total,List<Page> extras) {
+            this(id,board,page,version,revision,observed,captured,image,scope,total,extras,null);
         }
     }
     public record PageMetadata(int pageNumber,long revision,String imageSha256) {}
@@ -49,13 +58,16 @@ public class KolinBoardReviewService {
         return resolve(access.requireHost(teacher,classId),request.text(),request.context());
     }
     Target resolve(OnlineClass room, String text, KolinChatService.Context context) {
-        if (!REVIEW.matcher(text).find()) return new Target("not_requested",null,null,null);
+        boolean namedPage=FIRST_PAGE.matcher(text).find();
+        boolean explainMaterial=EXPLAIN.matcher(text).find() && EXERCISE.matcher(text).find();
+        if (!REVIEW.matcher(text).find() && !explainMaterial) return new Target("not_requested",null,null,null);
         if(Pattern.compile("(?iu)(транскрип|расшифров|сказал|произнес|gesagt|transcript|said)").matcher(text).find()
                 && !Pattern.compile("(?iu)(доск|тетрад|страниц|board|page|heft|seite)").matcher(text).find())
             return new Target("not_requested",null,null,null);
         if(Pattern.compile("(?iu)^\\s*(дай|создай|сделай|подготовь|erstelle|create|generate).*(задан|pdf|интерактив|aufgab|worksheet)").matcher(text).find())
             return new Target("not_requested",null,null,null);
-        String scope=WHOLE.matcher(text).find()?"workbook":"current_page";
+        String scope=namedPage?"first_page":WHOLE.matcher(text).find()?"workbook":"current_page";
+        boolean explicitlyShared=EXPLICIT_SHARED.matcher(text).find();
         var pupils=roster.read(room);
         var words=Arrays.stream(normalize(text).split("[^a-z0-9]+")).filter(s->!s.isBlank()).toList();
         var matches=pupils.stream().filter(p->Arrays.stream(normalize(p.name()).split("[^a-z]+")).filter(n->n.length()>=3)
@@ -63,15 +75,19 @@ public class KolinBoardReviewService {
         // Unicode word boundaries changed in Java 19. Keep Cyrillic names identical on Java 17/21.
         boolean explicit=Pattern.compile("(?iuU)\\b(у|для|von|bei|for|of)\\s+\\p{L}+").matcher(text).find()
                 || hasUnresolvedRecipient(text);
-        if(matches.isEmpty() && !explicit && !Pattern.compile("(?iu)(проверь|посмотри|разбери|оцени|check|review|prüf|kontrollier|schau)").matcher(text).find())
+        if(matches.isEmpty() && !explicit && !explainMaterial && !Pattern.compile("(?iu)(проверь|посмотри|разбери|оцени|check|review|prüf|kontrollier|schau)").matcher(text).find())
             return new Target("not_requested",null,null,null);
         if (matches.isEmpty() && !WORK.matcher(text).find() && !explicit)
             return new Target("not_requested",null,null,null);
-        if (matches.isEmpty() && !explicit && text.matches("(?s).*\\d.*")
+        if (matches.isEmpty() && !explicit && !namedPage && !explicitlyShared && text.matches("(?s).*\\d.*")
                 && !Pattern.compile("(?iu)(доск|страниц|тетрад|учени|tafel|seite|heft|schüler|board|page|pupil)").matcher(text).find())
             return new Target("not_requested",null,null,null);
+        if (matches.size()>1) return clarify();
+        if (explicitlyShared) return new Target("ready",null,"Общая доска",null,scope);
         if (matches.size()==1) return ready(matches.get(0),scope);
-        if (matches.size()>1 || explicit) return clarify();
+        if (explicit) return clarify();
+        if (context!=null && "group".equals(context.targetType()))
+            return new Target("ready",null,"Общая доска",null,scope);
         UUID selected=context==null?null:context.studentId();
         if(selected==null && room.getStudent()!=null) selected=room.getStudent().getId();
         UUID id=selected;
@@ -88,7 +104,8 @@ public class KolinBoardReviewService {
         var generic=Set.of("пожалуйста","сейчас","заодно","ещё","еще","тоже","у","для","на","в","из","с","по","и",
                 "это","этот","эту","эти","текущее","текущую","всю","весь","все","всё","его","её","ее","мое","моё","мои",
                 "решение","решения","задание","задания","работу","работы","тетрадь","страницу","страницы","ответ","ответы",
-                "вычисления","правильность","полностью","целиком","ниже","выше","что","как","верно","правильно");
+                "вычисления","правильность","полностью","целиком","ниже","выше","что","как","верно","правильно",
+                "первую","первого","первое","первой","первый","первые","вторую","второго","второе","второй","вторые");
         while(mentions.find()) if(!generic.contains(mentions.group(1).toLowerCase(Locale.ROOT))) return true;
         return false;
     }
@@ -116,11 +133,15 @@ public class KolinBoardReviewService {
     public Metadata validate(OnlineClass room, String text, KolinChatService.Context context, Snapshot snapshot) {
         var target=resolve(room,text,context);
         if(!"ready".equals(target.state()) || snapshot==null || !Objects.equals(target.studentId(),snapshot.studentId())
-                || !PersonalBoard.ownerOf(snapshot.boardId()).filter(target.studentId()::equals).isPresent()
+                || (target.studentId()==null ? !"board-1".equals(snapshot.boardId())
+                    : !PersonalBoard.ownerOf(snapshot.boardId()).filter(target.studentId()::equals).isPresent())
                 || snapshot.pageNumber()<1 || snapshot.pageNumber()>1000 || snapshot.documentVersion()<0 || snapshot.revision()<0
                 || snapshot.capturedAt()==null || !Objects.equals(target.scope(),snapshot.scope())
                 || snapshot.totalPageCount()<snapshot.pageNumber() || snapshot.totalPageCount()>1000
-                || !"workbook".equals(snapshot.scope()) && (snapshot.observedAt()==null
+                || "first_page".equals(snapshot.scope()) && snapshot.pageNumber()!=1
+                || snapshot.sharedDocumentVersion()!=null && snapshot.sharedDocumentVersion()<0
+                || target.studentId()==null && snapshot.sharedDocumentVersion()!=null
+                || !"workbook".equals(snapshot.scope()) && !"first_page".equals(snapshot.scope()) && (snapshot.observedAt()==null
                     || snapshot.observedAt().isAfter(snapshot.capturedAt().plusSeconds(5))
                     || snapshot.observedAt().isBefore(snapshot.capturedAt().minusSeconds(30)))) throw KolinRequestException.reviewUnavailable();
         var pages=new ArrayList<Page>();pages.add(new Page(snapshot.pageNumber(),snapshot.revision(),snapshot.imageDataUrl()));
@@ -161,9 +182,18 @@ public class KolinBoardReviewService {
         Instant now=Instant.now();
         if(snapshot.capturedAt().isBefore(now.minusSeconds(300)) || snapshot.capturedAt().isAfter(now.plusSeconds(60)))
             throw KolinRequestException.reviewUnavailable();
+        if(snapshot.studentId()==null) {
+            if(!"board-1".equals(snapshot.boardId())
+                    || documents.workbookVersion(teacher,classId,"board-1")!=snapshot.documentVersion())
+                throw KolinRequestException.reviewUnavailable();
+            return;
+        }
         long personal=documents.workbookVersion(teacher,classId,PersonalBoard.workbookTargetIdFor(snapshot.studentId()));
         String expected=personal>0?PersonalBoard.workbookTargetIdFor(snapshot.studentId()):PersonalBoard.targetIdFor(snapshot.studentId());
         long version=personal>0?personal:documents.workbookVersion(teacher,classId,expected);
         if(!expected.equals(snapshot.boardId()) || version!=snapshot.documentVersion()) throw KolinRequestException.reviewUnavailable();
+        Long shared=personal>0?null:documents.workbookVersion(teacher,classId,"board-1");
+        if(!Objects.equals(snapshot.sharedDocumentVersion(),shared!=null&&shared>0?shared:null))
+            throw KolinRequestException.reviewUnavailable();
     }
 }
