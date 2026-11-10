@@ -141,7 +141,7 @@ public class KolinBoardReviewService {
                 || "first_page".equals(snapshot.scope()) && snapshot.pageNumber()!=1
                 || snapshot.sharedDocumentVersion()!=null && snapshot.sharedDocumentVersion()<0
                 || target.studentId()==null && snapshot.sharedDocumentVersion()!=null
-                || !"workbook".equals(snapshot.scope()) && !"first_page".equals(snapshot.scope()) && (snapshot.observedAt()==null
+                || target.studentId()!=null && !"workbook".equals(snapshot.scope()) && !"first_page".equals(snapshot.scope()) && (snapshot.observedAt()==null
                     || snapshot.observedAt().isAfter(snapshot.capturedAt().plusSeconds(5))
                     || snapshot.observedAt().isBefore(snapshot.capturedAt().minusSeconds(30)))) throw KolinRequestException.reviewUnavailable();
         var pages=new ArrayList<Page>();pages.add(new Page(snapshot.pageNumber(),snapshot.revision(),snapshot.imageDataUrl()));
