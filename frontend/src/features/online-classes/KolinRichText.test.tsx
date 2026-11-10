@@ -25,4 +25,33 @@ describe('Kolyn rich explanation renderer', () => {
   it('keeps plain responses as paragraphs', () => {
     expect(parseKolinBlocks('Просто ответ.')).toEqual([{ kind: 'paragraph', text: 'Просто ответ.' }]);
   });
+  it('renders the actual multi-line formula syntax used for Mark homework without raw delimiters', () => {
+    const source = [
+      '### Марк, страница 1, задание № 1',
+      '1. **Складываем меньшие стороны:**',
+      '\\[',
+      ' 4+6=10\\text{ см}.',
+      '\\]',
+      '**Ответ:** треугольник не существует.',
+    ].join('\n');
+    const view = render(<KolinRichText text={source} />);
+    expect(screen.getByText('Марк, страница 1, задание № 1').tagName).toBe('H4');
+    expect(screen.getByText('Складываем меньшие стороны:').tagName).toBe('STRONG');
+    const formula = view.container.querySelector('.kolin-rich__formula');
+    expect(formula).not.toBeNull();
+    expect(formula).toHaveTextContent('4+6=10 см.');
+    expect(view.container).not.toHaveTextContent('\\[');
+    expect(view.container).not.toHaveTextContent('\\text{');
+    expect(screen.getByText('Ответ:').tagName).toBe('STRONG');
+  });
+
+  it('handles display math on a single line and dollar-delimited math as well', () => {
+    const view = render(<KolinRichText text={'\\[x^2=9\\]\n$$\\frac{1}{2}+\\text{ см}$$'} />);
+    const formulas = view.container.querySelectorAll('.kolin-rich__formula');
+    expect(formulas).toHaveLength(2);
+    expect(formulas[0]).toHaveTextContent('x²=9');
+    expect(formulas[1]).toHaveTextContent('см');
+    expect(formulas[1].querySelector('.kolin-rich__fraction')).not.toBeNull();
+  });
+
 });
