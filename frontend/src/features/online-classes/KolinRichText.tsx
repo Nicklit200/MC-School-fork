@@ -60,7 +60,7 @@ export function parseKolinBlocks(value: string): KolinBlock[] {
     const heading = trimmed.match(/^#{1,4}\s+(.+)$/);
     if (heading) { flush(); blocks.push({ kind: 'heading', text: heading[1] }); continue; }
 
-    const number = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
+    const number = trimmed.match(/^(\d+)\.\s+(.+)$/);
     if (number) { flush(); blocks.push({ kind: 'numbered', text: number[2], number: Number(number[1]) }); continue; }
 
     const bullet = trimmed.match(/^[-*]\s+(.+)$/);
