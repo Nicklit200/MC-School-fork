@@ -4,6 +4,7 @@ import type { KolinContext, KolinTranscriptContext } from '../../api/kolin';
 import type { KolinFailureCode, useKolinChat } from './useKolinChat';
 import { KolinWorksheetCard } from './KolinWorksheetCard';
 import { KolinReviewCard } from './KolinReviewCard';
+import { KolinRichText } from './KolinRichText';
 import './kolin-panel.css';
 
 function lessonTime(milliseconds: number) {
@@ -86,7 +87,7 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
       {chat.messages.map(message => <li key={message.id} className={`kolin-panel__message kolin-panel__message--${message.role}`}
         data-role={message.role} data-message-type={message.type}>
         <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolyn' : de ? 'Sie' : 'Вы'}</span>
-        {message.text && <p>{message.text}</p>}
+        {message.text && (message.role === 'assistant' ? <KolinRichText text={message.text} /> : <p>{message.text}</p>)}
         {message.role === 'assistant' && message.boardContext && <KolinReviewCard context={message.boardContext} preview={message.boardPreview} pages={message.boardPreviews} de={de} />}
         {message.role === 'assistant' && (message.materials ?? (message.worksheet ? [message.worksheet] : [])).map(worksheet =>
           <KolinWorksheetCard key={worksheet.id} classId={chat.classId} worksheet={worksheet}
