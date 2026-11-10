@@ -91,7 +91,7 @@ public class KolinChatService {
             if (request.boardReview()!=null) {
                 if(request.clientMessageId()==null) throw KolinRequestException.reviewUnavailable();
                 board=reviews.validate(room,question,request.context(),request.boardReview());
-                context.put("targetType","student");
+                context.put("targetType",board.studentId()==null?"group":"student");
                 context.put("targetName",board.studentName());
                 context.put("currentWorkbookPage",board.pageNumber());
                 context.put("boardReview",board);
