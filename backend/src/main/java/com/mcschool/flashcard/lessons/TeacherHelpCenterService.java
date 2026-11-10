@@ -31,7 +31,8 @@ public class TeacherHelpCenterService {
     public Map<String,McpTeacherGuideService.Article> published() {
         var result=new LinkedHashMap<String,McpTeacherGuideService.Article>();
         jdbc.query("SELECT article_id,published_json FROM teacher_help_articles WHERE published_json IS NOT NULL",
-            rs -> result.put(rs.getString(1), parseArticle(rs.getString(2))));
+            (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                result.put(rs.getString(1), parseArticle(rs.getString(2))));
         return result;
     }
 
