@@ -38,6 +38,7 @@ export function TeacherShell({ children, user, isImpersonating, returningToAdmin
     { to: '/teacher/lessons', label: de ? 'Online-Unterricht' : 'Онлайн-уроки', icon: 'lessons' },
 
     { to: '/skills', label: de ? 'Kompetenzen' : 'Карта навыков', icon: 'skills' },
+    { to: '/teacher/help', label: de ? 'Hilfe' : 'Справка', icon: 'settings' },
     { to: '/teacher/settings', label: de ? 'Einstellungen' : 'Настройки', icon: 'settings' },
   ];
   const mainLinks = [links[0], links[2], links[3]];
