@@ -244,19 +244,26 @@ export async function exportBoardPdf({
 }
 
 /** An on-demand saved-board snapshot; it never opens or navigates a visible board. */
-export async function captureBoardPage(classId: string, studentId: string, boardId: string, pageIndex: number,
-  observedAt: string, scope: 'current_page' | 'workbook' = 'current_page'): Promise<KolinBoardSnapshot> {
+export async function captureBoardPage(classId: string, studentId: string | null, boardId: string, pageIndex: number,
+  observedAt: string | null, scope: 'current_page' | 'first_page' | 'workbook' = 'current_page'): Promise<KolinBoardSnapshot> {
   if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= 1000) throw new Error('Invalid review page');
-  const privateBoard = personalWorkbookBoardId(studentId);
-  const privateVersion = (await onlineClassesApi.documentVersion(classId, privateBoard)).version;
-  const expectedBoard = privateVersion > 0 ? privateBoard : personalBoardId(studentId);
+  const shared = studentId === null;
+  const privateBoard = shared ? null : personalWorkbookBoardId(studentId);
+  const privateVersion = privateBoard ? (await onlineClassesApi.documentVersion(classId, privateBoard)).version : 0;
+  const expectedBoard = shared ? 'board-1' : privateVersion > 0 ? privateBoard! : personalBoardId(studentId);
   if (scope === 'current_page' && boardId !== expectedBoard) throw new Error('Review source changed');
   boardId = expectedBoard;
-  const version = privateVersion > 0 ? privateVersion : (await onlineClassesApi.documentVersion(classId, boardId)).version;
+  // Legacy personal boards inherit the common lesson PDF. They do not own a
+  // second copy of that PDF, and its version must be checked independently.
+  const version = (await onlineClassesApi.documentVersion(classId, boardId)).version;
+  const sharedDocumentVersion = !shared && !privateVersion
+    ? (await onlineClassesApi.documentVersion(classId, 'board-1')).version : null;
+  const pdfVersion = sharedDocumentVersion || version;
+  const pdfBoard = sharedDocumentVersion ? 'board-1' : boardId;
   let pdf: PdfDoc | null = null;
   try {
-    if (version > 0) {
-      const bytes = await onlineClassesApi.documentBytes(classId, boardId);
+    if (pdfVersion > 0) {
+      const bytes = await onlineClassesApi.documentBytes(classId, pdfBoard);
       if (!bytes) throw new Error('Review PDF unavailable');
       pdf = await openPdf(bytes);
     }
@@ -264,6 +271,7 @@ export async function captureBoardPage(classId: string, studentId: string, board
       .filter(item => item.targetType === 'WHITEBOARD' && item.targetId === boardId);
     const totalPageCount = annotationPageCount(documents, 'WHITEBOARD', boardId, pdf?.pageCount ?? 1);
     if (scope === 'workbook' && totalPageCount > 40) throw new Error('REVIEW_TOO_LARGE');
+    if (scope === 'first_page') pageIndex = 0;
     if (scope === 'workbook') pageIndex = Math.min(pageIndex, totalPageCount - 1);
     const indices = scope === 'workbook' ? Array.from({ length: totalPageCount }, (_, i) => i) : [pageIndex];
     const captured: KolinBoardSnapshot['additionalPages'] = [];
@@ -289,11 +297,14 @@ export async function captureBoardPage(classId: string, studentId: string, board
       if (dataUrlToBytes(imageDataUrl).length > 1_500_000 || imageChars > 16_000_000) throw new Error('REVIEW_TOO_LARGE');
       captured.push({ pageNumber: index + 1, revision: operations.at(-1)?.sequence ?? 0, imageDataUrl });
     }
-    const afterPrivate = (await onlineClassesApi.documentVersion(classId, privateBoard)).version;
-    const after = afterPrivate > 0 ? afterPrivate : (await onlineClassesApi.documentVersion(classId, boardId)).version;
-    if (afterPrivate !== privateVersion || after !== version) throw new Error('Review source changed');
+    const afterPrivate = privateBoard ? (await onlineClassesApi.documentVersion(classId, privateBoard)).version : 0;
+    const after = (await onlineClassesApi.documentVersion(classId, boardId)).version;
+    const afterShared = sharedDocumentVersion !== null ? (await onlineClassesApi.documentVersion(classId, 'board-1')).version : null;
+    if (afterPrivate !== privateVersion || after !== version || afterShared !== sharedDocumentVersion)
+      throw new Error('Review source changed');
     const primary = captured.find(page => page.pageNumber === pageIndex + 1)!;
     return { studentId, boardId, ...primary, documentVersion: version, scope, totalPageCount,
+      ...(sharedDocumentVersion ? { sharedDocumentVersion } : {}),
       additionalPages: captured.filter(page => page !== primary), observedAt, capturedAt: new Date().toISOString() };
   } finally { pdf?.destroy(); }
 }
