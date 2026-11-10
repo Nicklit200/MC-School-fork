@@ -21,10 +21,39 @@ public class McpTeacherGuideService {
     private final McpAccessService access;
     private final ObjectMapper json;
     private final Guide guide;
+    private final TeacherHelpCenterService helpCenter;
+
+    /** Always use the latest published database content, never unpublished drafts. */
+    public Guide currentGuide() {
+        var overrides=helpCenter.published();
+        var uploadedImages=helpCenter.customImages();
+        if(overrides.isEmpty() && uploadedImages.isEmpty())return guide;
+        var articles=new LinkedHashMap<String,Article>();
+        guide.articles().forEach(a->articles.put(a.id(),a));
+        overrides.forEach(articles::put);
+        var images=new LinkedHashMap<String,GuideImage>();
+        guide.images().forEach(i->images.put(i.id(),i));
+        uploadedImages.forEach(i->images.put(i.id(),i));
+        return new Guide(guide.version()+"+published",java.time.LocalDate.now().toString(),
+            guide.verifiedRelease(),List.copyOf(articles.values()),List.copyOf(images.values()));
+    }
+
+    public record ImageContent(String mimeType,byte[] bytes) {}
+    public ImageContent imageContent(String id) throws java.io.IOException {
+        if(id==null||!id.matches("[a-z0-9-]{1,80}")||
+            currentGuide().images().stream().noneMatch(i->i.id().equals(id)))
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND,"Guide image not found");
+        var stored=helpCenter.image(id);
+        if(stored.isPresent())return new ImageContent(stored.get().mimeType(),stored.get().bytes());
+        try(var in=imageResource(id).getInputStream()){
+            return new ImageContent("image/jpeg",in.readAllBytes());
+        }
+    }
     private static final Set<String> STOP=Set.of("как","что","это","для","мне","мой","мои","все","или","при","его","она","они","чтобы","можно","нужно","пожалуйста","the","how","can","with","and","der","die","das","wie","ich","ein","eine","und");
 
-    public McpTeacherGuideService(McpAccessService access,ObjectMapper json) throws java.io.IOException {
-        this.access=access;this.json=json;
+    public McpTeacherGuideService(McpAccessService access,ObjectMapper json,TeacherHelpCenterService helpCenter) throws java.io.IOException {
+        this.access=access;this.json=json;this.helpCenter=helpCenter;
         try(var input=new ClassPathResource("mcp/teacher-guide.json").getInputStream()) {guide=json.readValue(input,Guide.class);}
         var ids=new HashSet<String>();
         for(var article:guide.articles()) {
@@ -78,17 +107,19 @@ public class McpTeacherGuideService {
         if(!args.keySet().equals(Set.of("imageIds"))||!(args.get("imageIds") instanceof List<?> ids)
                 ||ids.isEmpty()||ids.size()>6||new HashSet<>(ids).size()!=ids.size())
             throw new IllegalArgumentException("Use 1-6 distinct imageIds from get_teacher_guide");
+        var active=currentGuide();
         var selected=new ArrayList<GuideImage>();
         for(Object value:ids) {
             if(!(value instanceof String id)||id.length()>80)throw new IllegalArgumentException("Invalid guide image id");
-            selected.add(guide.images().stream().filter(i->i.id().equals(id)).findFirst()
+            selected.add(active.images().stream().filter(i->i.id().equals(id)).findFirst()
                 .orElseThrow(()->new IllegalArgumentException("Unknown guide image id")));
         }
         var assets=new LinkedHashMap<String,String>();
-        for(var image:selected)try(var input=imageResource(image.id()).getInputStream()) {
-            assets.put(image.id(),"data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(input.readAllBytes()));
+        for(var image:selected) {
+            var content=imageContent(image.id());
+            assets.put(image.id(),"data:"+content.mimeType()+";base64,"+Base64.getEncoder().encodeToString(content.bytes()));
         }
-        var value=Map.of("version",guide.version(),"images",selected,"presentationState","prepared",
+        var value=Map.of("version",active.version(),"images",selected,"presentationState","prepared",
             "presentation",PRESENTATION,"scope","Synthetic lesson screenshots, not the user's current lesson.");
         return Map.of("content",List.of(Map.of("type","text","text",json.writeValueAsString(value))),
             "structuredContent",value,"_meta",Map.of("mindcrafti/teacherGuideImages",assets),"isError",false);
@@ -103,21 +134,22 @@ public class McpTeacherGuideService {
         String query=argument(args,"query",300),id=argument(args,"topicId",80),imageId=argument(args,"imageId",80);
         if(java.util.stream.Stream.of(query,id,imageId).filter(s->!s.isEmpty()).count()>1)
             throw new IllegalArgumentException("Use only query, topicId or imageId");
+        var active=currentGuide();
         var result=new LinkedHashMap<String,Object>();
-        result.put("version",guide.version());result.put("reviewedOn",guide.reviewedOn());result.put("verifiedRelease",guide.verifiedRelease());
+        result.put("version",active.version());result.put("reviewedOn",active.reviewedOn());result.put("verifiedRelease",active.verifiedRelease());
         result.put("scope","Product documentation only. Does not check the current account, room, files or connection state.");
         if(!imageId.isEmpty()) {
-            var image=guide.images().stream().filter(i->i.id().equals(imageId)).findFirst();
+            var image=active.images().stream().filter(i->i.id().equals(imageId)).findFirst();
             result.put("found",image.isPresent());image.ifPresent(i->result.put("image",i));
             if(image.isEmpty())result.put("topics",index());
         }else if(!id.isEmpty()) {
-            var article=guide.articles().stream().filter(a->a.id().equals(id)).findFirst();
+            var article=active.articles().stream().filter(a->a.id().equals(id)).findFirst();
             result.put("found",article.isPresent());result.put("articles",article.stream().toList());
             if(article.isEmpty())result.put("topics",index());
         }else if(!query.isEmpty()) {
             var tokens=Arrays.stream(normalize(query).split("[^\\p{L}\\p{N}]+"))
                 .filter(t->(t.length()>=3||Set.of("дз","ии","3d").contains(t))&&!STOP.contains(t)).distinct().limit(30).toList();
-            var matches=guide.articles().stream().filter(a->score(a,tokens)>0)
+            var matches=active.articles().stream().filter(a->score(a,tokens)>0)
                 .sorted(Comparator.comparingInt((Article a)->score(a,tokens)).reversed()).toList();
             result.put("found",!matches.isEmpty());result.put("articles",matches.stream().limit(3).toList());
             result.put("moreTopics",matches.stream().skip(3).map(this::entry).toList());
@@ -125,7 +157,7 @@ public class McpTeacherGuideService {
         }else result.put("topics",index());
         if(result.get("articles") instanceof List<?> articles) {
             var selected=articles.stream().map(Article.class::cast).flatMap(a->a.imageIds().stream()).collect(java.util.stream.Collectors.toSet());
-            result.put("images",guide.images().stream().filter(i->selected.contains(i.id())).toList());
+            result.put("images",active.images().stream().filter(i->selected.contains(i.id())).toList());
         }
         if(result.containsKey("images")||result.containsKey("image"))result.put("presentation",PRESENTATION);
         return result;
@@ -136,14 +168,14 @@ public class McpTeacherGuideService {
         var content=new ArrayList<Map<String,Object>>();
         content.add(Map.of("type","text","text",json.writeValueAsString(value)));
         if(value.get("image") instanceof GuideImage image) {
-            try(var input=imageResource(image.id()).getInputStream()) {
-                content.add(Map.of("type","image","mimeType","image/jpeg","data",Base64.getEncoder().encodeToString(input.readAllBytes())));
-            }
+            var data=imageContent(image.id());
+            content.add(Map.of("type","image","mimeType",data.mimeType(),
+                "data",Base64.getEncoder().encodeToString(data.bytes())));
         }
         return Map.of("content",content,"structuredContent",value,"isError",false);
     }
     private static ClassPathResource imageResource(String id){return new ClassPathResource("mcp/teacher-guide-images/"+id+".jpg");}
-    private List<Map<String,String>> index(){return guide.articles().stream().map(this::entry).toList();}
+    private List<Map<String,String>> index(){return currentGuide().articles().stream().map(this::entry).toList();}
     private Map<String,String> entry(Article a){return Map.of("id",a.id(),"title",a.title(),"summary",a.summary());}
     private static String argument(Map<String,Object> args,String key,int limit){
         if(!args.containsKey(key))return "";
