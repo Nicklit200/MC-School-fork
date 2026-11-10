@@ -80,6 +80,7 @@ class McpSiteFunctionsTransportIntegrationTest {
     @BeforeEach
     void fixtures() {
         jdbc.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE TABLE teacher_help_history, teacher_help_articles RESTART IDENTITY CASCADE");
         admin = users.save(User.bootstrapAdmin("Admin", "admin@test.local", "unused"));
         teacherA = users.save(User.activeTeacher("Teacher A", "a@test.local", "teacher-a", "unused"));
         teacherB = users.save(User.activeTeacher("Teacher B", "b@test.local", "teacher-b", "unused"));
