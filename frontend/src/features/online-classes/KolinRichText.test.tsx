@@ -4,7 +4,7 @@ import { KolinRichText, parseKolinBlocks } from './KolinRichText';
 
 describe('Kolyn rich explanation renderer', () => {
   it('renders meaningful success, error and caution labels with separate styles', () => {
-    render(<KolinRichText text={'## Проверка\\n✅ Правильно: $2+3=5$\\n❌ Ошибка: пропущен знак минус\\n💡 Совет: повторите правило\\n⚠️ Не удалось проверить: рукопись размыта'.replaceAll('\\n', '\n')} />);
+    render(<KolinRichText text={'## Проверка\\n✅ Правильно: $2+3=5$\\n❌ Ошибка: пропущен знак минус\\n💡 Совет: повторите правило\\n⚠️ Не удалось проверить: рукопись размыта'.replace(/\\n/g, '\n')} />);
     expect(screen.getByText('Проверка')).toBeInTheDocument();
     expect(screen.getByText(/Правильно:/).closest('.kolin-rich__callout')).toHaveClass('kolin-rich__callout--correct');
     expect(screen.getByText(/Ошибка:/).closest('.kolin-rich__callout')).toHaveClass('kolin-rich__callout--incorrect');
