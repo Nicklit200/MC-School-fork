@@ -16,7 +16,7 @@ from zipfile import ZipFile
 
 RESOURCE_PREFIX = 'BOOT-INF/classes/owner-workbook-generator/'
 RESOURCE_FILES = (
-    'generate.mjs', 'math.mjs', 'schema.mjs', 'diagrams.mjs', 'visual-tasks.mjs', 'styles.css',
+    'generate.mjs', 'pagination.mjs', 'math.mjs', 'schema.mjs', 'diagrams.mjs', 'visual-tasks.mjs', 'styles.css',
     'render_pdf.py', 'verify_pdf.py', 'algebra_qa.py', 'package.json',
     'lesson.sample.json', 'examples/production-layout-demo.json', 'assets/logo-m.png',
 )
