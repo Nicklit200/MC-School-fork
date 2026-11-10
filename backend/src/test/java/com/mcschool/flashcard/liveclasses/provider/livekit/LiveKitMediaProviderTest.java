@@ -301,4 +301,33 @@ class LiveKitMediaProviderTest {
         assertThatThrownBy(() -> adapter.listParticipantIdentities(ROOM)).isInstanceOf(MediaProviderException.class);
     }
 
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void reportsLiveMicrophoneTrackStateWithoutGuessingDeviceSwitch() throws Exception {
+        RoomServiceClient client = mock(RoomServiceClient.class);
+        Call<java.util.List<LivekitModels.ParticipantInfo>> operation = mock(Call.class);
+        when(client.listParticipants(ROOM)).thenReturn(operation);
+        LivekitModels.TrackInfo muted = LivekitModels.TrackInfo.newBuilder()
+                .setType(LivekitModels.TrackType.AUDIO)
+                .setSource(LivekitModels.TrackSource.MICROPHONE)
+                .setMuted(true).build();
+        LivekitModels.TrackInfo camera = LivekitModels.TrackInfo.newBuilder()
+                .setType(LivekitModels.TrackType.VIDEO)
+                .setSource(LivekitModels.TrackSource.CAMERA).build();
+        when(operation.execute()).thenReturn(retrofit2.Response.success(java.util.List.of(
+                LivekitModels.ParticipantInfo.newBuilder().setIdentity("pupil|device")
+                        .addTracks(muted).build(),
+                LivekitModels.ParticipantInfo.newBuilder().setIdentity("other|device")
+                        .addTracks(camera).build())));
+        OnlineClassProperties props = new OnlineClassProperties(
+                true, "wss://example.livekit.cloud", API_KEY, API_SECRET,
+                false, false, null, null, Duration.ofMinutes(10), null, null, false);
+        var actual = new LiveKitMediaProvider(props,client).listParticipantMedia(ROOM);
+        assertThat(actual).hasSize(2);
+        assertThat(actual.get(0).microphonePublished()).isTrue();
+        assertThat(actual.get(0).microphoneMuted()).isTrue();
+        assertThat(actual.get(1).microphonePublished()).isFalse();
+        assertThat(actual.get(1).microphoneMuted()).isFalse();
+    }
+
 }
