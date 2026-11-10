@@ -219,8 +219,8 @@ public class KolinTaskService {
                 material.studentId(),material.studentName(),saved.tasks().size(),material.pageCount(),material.pdf(),material.preview(),mapper.writeValueAsString(saved));
         } catch(Exception ex) {
             var log=org.slf4j.LoggerFactory.getLogger(getClass());
-            log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={} reason={}",
-                    room.getId(),reserved.id(),stage,ex.getClass().getSimpleName(),validationReason(ex));
+            log.warn("Kolyn generation failed: classId={} artifactId={} stage={} errorType={} reason={} providerStatus={}",
+                    room.getId(),reserved.id(),stage,ex.getClass().getSimpleName(),validationReason(ex),providerStatus(ex));
             try { store.fail(teacher,room.getId(),reserved.id(),reserved.attemptId()); }
             catch(RuntimeException recovery) {
                 log.warn("Kolyn failure receipt unavailable: classId={} artifactId={} errorType={}",
@@ -334,6 +334,24 @@ public class KolinTaskService {
         if(value==null || value.isBlank() || value.length()>maximum) throw new IllegalArgumentException("Invalid task text");
     }
     /** Only application-owned constant reasons may enter logs; never provider text or renderer output. */
+    /** Error classification only: never log provider bodies, task content or API credentials. */
+    static String providerStatus(Exception error) {
+        Throwable current=error;
+        for(int depth=0;current!=null && depth<8;depth++,current=current.getCause()) {
+            if(current instanceof java.net.http.HttpTimeoutException ||
+                    current instanceof java.net.SocketTimeoutException) return "TIMEOUT";
+            if(current instanceof java.io.IOException) return "TRANSPORT_ERROR";
+            String message=current.getMessage();
+            if(message==null) continue;
+            var status=java.util.regex.Pattern.compile("OpenAI API вернул HTTP ([1-5][0-9]{2})\\b").matcher(message);
+            if(status.find()) return "HTTP_"+status.group(1);
+            if("Incomplete dialogue".equals(message) || "Kolyn response incomplete".equals(message))
+                return "INCOMPLETE_RESPONSE";
+            if("Invalid dialogue".equals(message)) return "INVALID_DIALOGUE";
+        }
+        return "UNKNOWN";
+    }
+
     static String validationReason(Exception error) {
         return switch(Objects.toString(error.getMessage(),"")) {
             case "Math belongs in the checked expression field" -> "MATH_IN_INSTRUCTION";
