@@ -295,3 +295,74 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .matching-connections { width:100%; align-self:start; overflow:visible; }
 .intersection-result { font-size:13px; line-height:1.5; }
 .math-block { text-align:left; }
+
+
+/* Mindcrafti minimal orange: white paper, no decorative task cards,
+   empty handwriting space (same physical area as former 8–10 mm ruled lines).
+   Keep original school branding, readable maths, and footer checks. */
+.sheet:not(.plain) .brandbar {
+  height: 14mm;
+  padding-bottom: 2mm;
+  border-color: #ff6a00;
+}
+.sheet:not(.plain) .page-heading { height: 22mm; padding-top: 2mm; }
+.sheet:not(.plain) .page-heading h1 {
+  font-size: 22px;
+  line-height: 1.22;
+  letter-spacing: -0.25px;
+  color: #ff6a00;
+  margin: 0 0 2mm;
+}
+.sheet:not(.plain) .page-subtitle { font-size: 11.5px; line-height: 1.3; }
+.sheet:not(.plain) .paper-content { padding-top: 3mm; }
+.sheet:not(.plain) .exercise,
+.sheet:not(.plain) .exercise.exit,
+.sheet:not(.plain) .exit .task-row {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.sheet:not(.plain) .exercise { margin-top: 6mm; }
+.sheet:not(.plain) .exercise:first-child { margin-top: 0; }
+.sheet:not(.plain) .exercise-head { margin-bottom: 2mm; gap: 2.5mm; }
+.sheet:not(.plain) .exercise-number {
+  min-width: 7mm;
+  width: 7mm;
+  height: auto;
+  min-height: 6mm;
+  flex-basis: 7mm;
+  border-radius: 0;
+  background: transparent;
+  color: #ff6a00;
+  font-size: 13px;
+  justify-content: flex-start;
+}
+.sheet:not(.plain) .exercise-title { font-size: 14px; margin-top: 0; }
+.sheet:not(.plain) .exercise-subtitle { font-size: 12px; margin-top: 1.5mm; color: #31343b; }
+.sheet:not(.plain) .exercise-content { padding: 0; }
+.sheet:not(.plain) .callout {
+  min-height: 0;
+  background: transparent;
+  border-left: .7mm solid #ff6a00;
+  border-radius: 0;
+  padding: 2mm 4mm;
+}
+.sheet:not(.plain) .callout .eyebrow { color: #ff6a00; }
+.sheet:not(.plain) .response-lines {
+  display: block;
+  margin: 4mm 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  break-inside: avoid;
+}
+.sheet:not(.plain) .task-row .workline,
+.sheet:not(.plain) .correction-line {
+  border-bottom: 0;
+}
+.sheet:not(.plain) .task-row .workline { height: 6mm; }
+.sheet:not(.plain) .footer { border-color: #ff6a00; font-weight: 400; }
+.sheet:not(.plain) .teacher-note { background: #fff8f1; border-radius: 0; border-left: .7mm solid #ff6a00; }
+.sheet:not(.plain) .teacher-schedule { border: 0; border-radius: 0; padding: 2mm 0; }
+.sheet:not(.plain) .example-box { border: 0; border-radius: 0; background: #fff8f1; }
