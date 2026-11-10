@@ -306,8 +306,14 @@ if (!plain) {
     lesson.workbookPages = autoPaginatePages(lesson.workbookPages, false);
   lesson.teacherPages = autoPaginatePages(lesson.teacherPages, true);
 }
-preflightPages(lesson.workbookPages, false);
-preflightPages(lesson.teacherPages, true);
+// The conservative branded-page estimator is not valid for compact one-page
+// homework or Kolin's intentionally plain, full-height worksheet format.
+// Those routes still undergo real WeasyPrint geometry QA and homework stays
+// restricted to exactly one physical student A4 page.
+if (!plain && lesson.meta.homeworkMode !== true)
+  preflightPages(lesson.workbookPages, false);
+if (!plain)
+  preflightPages(lesson.teacherPages, true);
 const arithmeticChains = checkAnswerMath(lesson);
 const dateKey = String(lesson.meta.date || 'undated').replace(/[^0-9]/g,'') || 'undated';
 const groupKey = String(lesson.meta.group || 'Gruppe').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50) || 'Gruppe';
