@@ -3,6 +3,7 @@ import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { LearningTimeAdminPage } from './pages/admin/LearningTimeAdminPage';
 import { LearningTimeStudentPage } from './pages/admin/LearningTimeStudentPage';
 import { SkillsPage } from './pages/SkillsPage';
+import { TeacherHelpCenterPage } from './pages/TeacherHelpCenterPage';
 import { PublicSkillProgressPage } from './pages/PublicSkillProgressPage';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
@@ -77,6 +78,8 @@ export function App() {
       <Route path="/phone-camera/:cameraId?" element={<Suspense fallback={<p>Открываем камеру…</p>}><PhoneCameraPage /></Suspense>} />
       <Route path="/lesson-notebook/:eventId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={<p>Открываем тетрадь…</p>}><NotebookCameraPage /></Suspense></Layout></ProtectedRoute>} />
 
+      <Route path="/teacher/help" element={<ProtectedRoute role={['ADMIN', 'TEACHER']}><Layout><TeacherHelpCenterPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/help" element={<ProtectedRoute role="ADMIN"><Layout><TeacherHelpCenterPage admin /></Layout></ProtectedRoute>} />
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/learning-time" element={<ProtectedRoute role="ADMIN"><Layout><LearningTimeAdminPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/learning-time/:studentId" element={<ProtectedRoute role="ADMIN"><Layout><LearningTimeStudentPage /></Layout></ProtectedRoute>} />
