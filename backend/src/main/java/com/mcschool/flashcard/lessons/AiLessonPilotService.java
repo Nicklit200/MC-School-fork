@@ -41,8 +41,8 @@ public class AiLessonPilotService {
 
     private final String apiKey;
     private final String model;
-    @Value("${KOLIN_MODEL:gpt-6-astra}")
-    private String kolinModel = "gpt-6-astra";
+    @Value("${KOLIN_MODEL:gpt-6-luna}")
+    private String kolinModel = "gpt-6-luna";
     private final ObjectMapper objectMapper;
     private final GoogleCalendarLessonService lessonService;
     private final LessonPreparationService preparationService;
@@ -537,7 +537,7 @@ public class AiLessonPilotService {
         }
     }
 
-    private String kolinModelName() { return kolinModel==null || kolinModel.isBlank()?"gpt-6-astra":kolinModel.trim(); }
+    private String kolinModelName() { return kolinModel==null || kolinModel.isBlank()?"gpt-6-luna":kolinModel.trim(); }
     private void kolinReasoning(Map<String,Object> payload,String effort) {
         if(kolinModelName().startsWith("gpt-6") || kolinModelName().startsWith("gpt-5")) payload.put("reasoning",Map.of("effort",effort));
     }
