@@ -105,4 +105,37 @@ class KolinBoardReviewServiceTest {
             assertThatThrownBy(()->service.validate(room,"Проверь всю тетрадь у Мелиссы",null,incomplete)).isInstanceOf(KolinRequestException.class);
         }
     }
+    @Test void firstTwoExercisesResolveOnSharedBoardWithoutInventingPupil() {
+        var group=new KolinChatService.Context("group",null,1);
+        var first=service.resolve(room,"Объясни первое и второе задание",group);
+        assertThat(first.state()).isEqualTo("ready");
+        assertThat(first.studentId()).isNull();
+        assertThat(first.scope()).isEqualTo("first_page");
+        var explicit=service.resolve(room,"Посмотри первую страницу на общей доске",new KolinChatService.Context("student",melissa.getId(),1));
+        assertThat(explicit.studentId()).isNull();
+        assertThat(explicit.scope()).isEqualTo("first_page");
+        var named=service.resolve(room,"Объясни первое задание Мелиссы",group);
+        assertThat(named.studentId()).isEqualTo(melissa.getId());
+    }
+
+    @Test void sharedBoardSnapshotHasNoPupilAndCannotBeReplacedByPersonalSnapshot() throws Exception {
+        String image=jpeg(80,120);
+        var shot=new KolinBoardReviewService.Snapshot(null,"board-1",1,7,2,null,Instant.now(),image,
+                "first_page",4,List.of());
+        var result=service.validate(room,"Посмотри первую страницу на общей доске",
+                new KolinChatService.Context("group",null,1),shot);
+        assertThat(result.studentId()).isNull();
+        assertThat(result.boardId()).isEqualTo("board-1");
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(7L);
+        service.requireCurrent(host,room.getId(),shot);
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(8L);
+        assertThatThrownBy(()->service.requireCurrent(host,room.getId(),shot))
+                .isInstanceOf(KolinRequestException.class);
+        var spoof=new KolinBoardReviewService.Snapshot(melissa.getId(),PersonalBoard.workbookTargetIdFor(melissa.getId()),
+                1,7,2,null,Instant.now(),image,"first_page",4,List.of());
+        assertThatThrownBy(()->service.validate(room,"Посмотри первую страницу на общей доске",
+                new KolinChatService.Context("group",null,1),spoof))
+                .isInstanceOf(KolinRequestException.class);
+    }
+
 }
