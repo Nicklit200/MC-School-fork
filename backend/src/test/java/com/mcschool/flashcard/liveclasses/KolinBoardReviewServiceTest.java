@@ -118,6 +118,31 @@ class KolinBoardReviewServiceTest {
         assertThat(named.studentId()).isEqualTo(melissa.getId());
     }
 
+    @Test void serverLocatesAndValidatesNumberedTaskOnTheCorrectSavedPupilPage() throws Exception {
+        var index=mock(KolinLessonContextService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"lessonContext",index);
+        var context=new KolinChatService.Context("group",null,1);
+        String question="Проверь задание 7";
+        when(index.locateTask(host,room,question,context))
+            .thenReturn(Optional.of(new KolinLessonContextService.TaskLocation(melissa.getId(),"Мелисса",3)));
+        var target=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(question,context));
+        assertThat(target).extracting(KolinBoardReviewService.Target::state).isEqualTo("ready");
+        assertThat(target.studentId()).isEqualTo(melissa.getId());
+        assertThat(target).extracting(KolinBoardReviewService.Target::scope).isEqualTo("task_page");
+        assertThat(target.pageNumber()).isEqualTo(3);
+        String image=jpeg(80,100), privateBoard=PersonalBoard.workbookTargetIdFor(melissa.getId());
+        var snapshot=new KolinBoardReviewService.Snapshot(melissa.getId(),privateBoard,
+            3,5,2,null,Instant.now(),image,"task_page",5,List.of());
+        var validated=service.validate(host,room,question,context,snapshot);
+        assertThat(validated.scope()).isEqualTo("task_page");
+        assertThat(validated.pageNumber()).isEqualTo(3);
+        var spoof=new KolinBoardReviewService.Snapshot(melissa.getId(),privateBoard,
+            2,5,2,null,Instant.now(),image,"task_page",5,List.of());
+        assertThatThrownBy(()->service.validate(host,room,question,context,spoof))
+            .isInstanceOf(KolinRequestException.class);
+        verify(index,atLeast(2)).locateTask(host,room,question,context);
+    }
+
     @Test void sharedBoardSnapshotHasNoPupilAndCannotBeReplacedByPersonalSnapshot() throws Exception {
         String image=jpeg(80,120);
         var shot=new KolinBoardReviewService.Snapshot(null,"board-1",1,7,2,null,Instant.now(),image,
