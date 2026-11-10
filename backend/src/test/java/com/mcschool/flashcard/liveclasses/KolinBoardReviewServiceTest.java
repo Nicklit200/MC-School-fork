@@ -143,6 +143,26 @@ class KolinBoardReviewServiceTest {
         verify(index,atLeast(2)).locateTask(host,room,question,context);
     }
 
+    @Test void aPupilStrokeAfterTaskPageSnapshotInvalidatesTheReviewBeforeVision() throws Exception {
+        var annotations=mock(OnlineClassAnnotationDocumentRepository.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"annotations",annotations);
+        String board=PersonalBoard.workbookTargetIdFor(melissa.getId());
+        var image=jpeg(80,120);
+        var shot=new KolinBoardReviewService.Snapshot(melissa.getId(),board,
+            3,5,2,null,Instant.now(),image,"task_page",5,List.of());
+        when(documents.workbookVersion(host,room.getId(),board)).thenReturn(5L);
+        var before=OnlineClassAnnotationDocument.create(room,AnnotationTargetType.WHITEBOARD,board,2);
+        before.nextRevision();before.nextRevision();
+        var edited=OnlineClassAnnotationDocument.create(room,AnnotationTargetType.WHITEBOARD,board,2);
+        edited.nextRevision();edited.nextRevision();edited.nextRevision();
+        when(annotations.findByOnlineClassIdAndTargetTypeAndTargetIdAndPageIndex(
+            room.getId(),AnnotationTargetType.WHITEBOARD,board,2))
+            .thenReturn(Optional.of(before),Optional.of(edited));
+        service.requireCurrent(host,room.getId(),shot);
+        assertThatThrownBy(()->service.requireCurrent(host,room.getId(),shot))
+            .isInstanceOf(KolinRequestException.class);
+    }
+
     @Test void sharedBoardSnapshotHasNoPupilAndCannotBeReplacedByPersonalSnapshot() throws Exception {
         String image=jpeg(80,120);
         var shot=new KolinBoardReviewService.Snapshot(null,"board-1",1,7,2,null,Instant.now(),image,
