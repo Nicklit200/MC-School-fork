@@ -227,13 +227,19 @@ public class KolinLessonContextService {
         sources.add(source(teacher,room,"Общая доска","board-1",true));
         for(var pupil:pupils)
             sources.add(source(teacher,room,pupil.name(),PersonalBoard.workbookTargetIdFor(pupil.id()),false));
-        var match=resolveTask(number,sources,selectedBoard(question,requested,pupils),
+        String selected=selectedBoard(question,requested,pupils);
+        var match=resolveTask(number,sources,selected,
             requested!=null&&requested.currentWorkbookPage()!=null?requested.currentWorkbookPage():1);
         if(match.resolved()==null) return java.util.Optional.empty();
         var found=match.resolved();
-        UUID owner=found.source().shared()?null:PersonalBoard.ownerOf(found.source().boardId()).orElse(null);
+        // A pupil may work on their private ink layer over the common PDF:
+        // a task found in that shared source must review their private marks,
+        // not the unrelated group's board.
+        UUID owner=PersonalBoard.ownerOf(found.source().shared()?selected:found.source().boardId()).orElse(null);
         if(!found.source().shared() && owner==null) return java.util.Optional.empty();
-        return java.util.Optional.of(new TaskLocation(owner,found.source().name(),found.task().pageNumber()));
+        String label=owner==null?found.source().name():pupils.stream().filter(p -> p.id().equals(owner))
+            .map(KolinTaskRoster.Pupil::name).findFirst().orElse(found.source().name());
+        return java.util.Optional.of(new TaskLocation(owner,label,found.task().pageNumber()));
     }
 
     private Source source(AuthenticatedUser teacher, OnlineClass room, String name, String boardId, boolean shared) {
