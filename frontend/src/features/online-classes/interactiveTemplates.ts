@@ -85,7 +85,7 @@ const coord=(n:number)=>Math.round(n*1000)/1000;
 export function fractionDiscs(spec:Extract<InteractiveSpec,{template:'fractionCircle'}>) {
   const highest=spec.selected.length ? Math.max(...spec.selected) : -1;
   const count=Math.min(MAX_PIZZA_CIRCLES,Math.max(1,Math.floor(highest/spec.parts)+1));
-  const positions=count===1?[[250,210,110]]:
+  const positions:Array<[number,number,number]>=count===1?[[250,210,110]]:
     count===2?[[138,210,101],[362,210,101]]:
     [[138,145,72],[362,145,72],[138,303,72],[362,303,72]].slice(0,count);
   return positions.map(([cx,cy,r],index)=>({cx,cy,r,offset:index*spec.parts,pizza:index+1}));
