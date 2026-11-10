@@ -229,6 +229,10 @@ test('A4 pagination gives eight-line handwritten solutions separate pages',async
   const {workbook}=await render(lesson);
   assert.equal((workbook.match(/class="sheet student"/g)||[]).length,4);
   assert.equal((workbook.match(/class="response-lines"/g)||[]).length,4);
+  assert.equal((workbook.match(/data-qa="blank-workspace"/g)||[]).length,4);
+  assert.doesNotMatch(workbook, /class="response-lines"[^>]*><div>/, 'No decorative writing rules under tasks');
+  assert.doesNotMatch(workbook, /class="progress"/, 'No progress bar artwork');
+  assert.doesNotMatch(workbook, /class="time-pill"/, 'No time badge artwork');
 });
 
 test('preflight counts parallel columns by maximum and stacked rows by sum',async()=>{
