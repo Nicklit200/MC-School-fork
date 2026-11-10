@@ -59,6 +59,24 @@ it('does not capture ordinary conversation or ambiguous recipients', async () =>
   }
   expect(mocks.capture).not.toHaveBeenCalled();
 });
+it('captures the exact numbered assignment page without needing a live pupil view', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: pupil, studentName: 'Мелисса', scope: 'task_page', pageNumber: 5 });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Проверь задание 7', { targetType: 'group', currentWorkbookPage: 1 });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 4, null, 'task_page');
+});
+it('uses the server selected group task page, not the physical number of the exercise', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: null, scope: 'task_page', pageNumber: 2 });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Проверь задание 7', { targetType: 'group', currentWorkbookPage: 7 });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', null, 'board-1', 1, null, 'task_page');
+});
+it('rejects an invalid server exercise page number before capturing anything', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: pupil, scope: 'task_page', pageNumber: 0 });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await expect(result.current('Проверь задание 7', {})).rejects.toBeInstanceOf(KolinReviewUnavailable);
+  expect(mocks.capture).not.toHaveBeenCalled();
+});
 it('drops a capture when the pupil changes page or the teacher changes lesson', async () => {
   let finish!: (value: KolinBoardSnapshot) => void;
   mocks.capture.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
