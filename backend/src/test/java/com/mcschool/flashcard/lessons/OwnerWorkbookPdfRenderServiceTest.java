@@ -123,6 +123,23 @@ class OwnerWorkbookPdfRenderServiceTest {
     }
 
     @Test
+    void oversizedBlankSpacerIsRejectedBeforeOpeningPdfRenderer() {
+        var original = new java.util.LinkedHashMap<String,Object>(document(90));
+        for (String height : List.of("66mm", "82mm", "96mm", "300px")) {
+            var task = Map.<String,Object>of("type", "exercise", "title", "Rechne.");
+            var spacer = Map.<String,Object>of("type", "spacer", "height", height);
+            original.put("workbookPages", List.of(Map.of("blocks", List.of(task, spacer))));
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                    () -> OwnerWorkbookPdfRenderService.validateDocument(original));
+            assertTrue(failure.getMessage().contains("spacer.height exceeds 60mm"), height);
+        }
+        original.put("workbookPages", List.of(Map.of("blocks", List.of(
+                Map.of("type", "exercise", "title", "Rechne."),
+                Map.of("type", "spacer", "height", "60mm")))));
+        assertEquals(1, OwnerWorkbookPdfRenderService.validateDocument(original));
+    }
+
+    @Test
     void forbidsHomeworkAndInvalidLengths() {
         var lesson = new java.util.LinkedHashMap<String,Object>(document(90));
         lesson.put("homework", "assign immediately");
