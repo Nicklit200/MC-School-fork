@@ -592,6 +592,10 @@ function RoomBody({
     setMainView('board');
   }, [ownNotebook, notebookScope, currentUserId]);
   const [studentPages, setStudentPages] = useState<Record<string, number>>({});
+  const [teacherPages, setTeacherPages] = useState<Record<string, number>>({});
+  const rememberTeacherPage = useCallback((boardId: string, page: number) => {
+    setTeacherPages(current => current[boardId] === page ? current : { ...current, [boardId]: page });
+  }, []);
   useClassEvents(classId, VIEW_TOPIC, ({ event, senderIdentity }) => {
     if (!connection.host || event.type !== 'view' || !event.boardId.startsWith('personal-')) return;
     // A student may announce only their own page; never trust an arbitrary data packet.
@@ -748,8 +752,9 @@ function RoomBody({
           </>)}
           {connection.host && kolin.open && (<>
             <KolinPanel chat={kolin} context={{
-              ...(personalBoardOwner(activeBoard) ? { targetType: 'student', studentId: personalBoardOwner(activeBoard)! } : {}),
-              ...(Number.isInteger(studentPages[activeBoard]) ? { currentWorkbookPage: studentPages[activeBoard] + 1 } : {}),
+              ...(personalBoardOwner(activeBoard) ? { targetType: 'student' as const, studentId: personalBoardOwner(activeBoard)! } : { targetType: 'group' as const }),
+              ...(Number.isInteger(teacherPages[activeBoard] ?? studentPages[activeBoard])
+                ? { currentWorkbookPage: (teacherPages[activeBoard] ?? studentPages[activeBoard]) + 1 } : {}),
             }} />
             <AnswersPanelResizer storageKey={`kolin:${currentUserId}`} videosOpen={videosOpen} side="right" panelId="kolin-panel"
               defaultWidth={360} label={language === 'DE' ? 'Breite von Kolyn ändern' : 'Изменить ширину Kolyn'} />
@@ -774,6 +779,7 @@ function RoomBody({
                     canAnnotate={!boardsFrozen}
                     fileAction={visible ? fileAction : undefined}
                     active={visible}
+                    onPageChange={page => rememberTeacherPage(boardId, page)}
                     observedPages={studentPages}
                     onSaveLessonDocuments={connection.host ? archiveBoards : undefined}
                     savingLessonDocuments={archiving || exitPending}
@@ -820,6 +826,7 @@ function RoomBody({
                 observedPages={studentPages}
                 canAnnotate={!compact && !boardsFrozen}
                 active={active}
+                onPageChange={page => rememberTeacherPage(personalBoardId(studentId), page)}
                 fileAction={active && !compact ? fileAction : undefined}
                 onSaveLessonDocuments={!compact ? archiveBoards : undefined}
                 savingLessonDocuments={archiving || exitPending}
