@@ -132,8 +132,8 @@ public class TeacherHelpCenterService {
         var keywords=cleanList(a.keywords(),60,120);
         var related=cleanList(a.related(),50,80);
         var imageIds=cleanList(a.imageIds(),30,80);
-        related.forEach(this::validateId);
-        imageIds.forEach(this::validateId);
+        related.forEach(TeacherHelpCenterService::validateId);
+        imageIds.forEach(TeacherHelpCenterService::validateId);
         // Administrators write guidance, not claims that code files were verified.
         return new McpTeacherGuideService.Article(id,title,summary,keywords,
             "/teacher/help",body,related,List.of("Administrator-published Mindcrafti handbook"),imageIds);
