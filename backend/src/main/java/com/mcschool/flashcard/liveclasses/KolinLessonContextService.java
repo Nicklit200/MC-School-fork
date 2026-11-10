@@ -131,6 +131,14 @@ public class KolinLessonContextService {
             catalog.add(item);
             for (var page : parsed.pages()) {
                 if (page.text().isBlank()) continue;
+                // A numbered question about a selected pupil must not accidentally
+                // show the same exercise number from somebody else's workbook.
+                if (task.number()!=null && !"board-1".equals(selected)
+                    && !source.boardId().equals(selected) && !source.shared()) continue;
+                if (task.resolved()!=null &&
+                    !source.boardId().equals(task.resolved().source().boardId())) continue;
+                if ("ambiguous".equals(task.state()) && task.candidates().stream()
+                    .noneMatch(hit -> hit.source().boardId().equals(source.boardId()))) continue;
                 int rank = relevance(question, page.text(), page.number(), currentPage);
                 // Explicitly selected recipient takes precedence. Shared sheet remains
                 // available because personal boards can inherit the group PDF.
