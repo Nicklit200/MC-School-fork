@@ -219,6 +219,13 @@ export const onlineClassesApi = {
       deviceId: deviceId(),
     }),
 
+  /** Authenticated, fixed-category browser diagnostics. Never send raw error messages. */
+  reportDiagnostic: (classId: string, category:
+    'MEDIA_AUTHORIZATION' | 'MEDIA_SIGNALING' | 'MEDIA_NETWORK' |
+    'MEDIA_DEVICES' | 'MEDIA_UNKNOWN' | 'CONNECTION_LOST' |
+    'PDF_RENDER' | 'TRANSCRIPTION_START' | 'AUDIO_FOCUS') =>
+    request<void>('POST', `/online-classes/${classId}/kolyn/diagnostics`, { category }),
+
   /** Host-only probe. It checks LiveKit's server API, not the user's WebRTC path. */
   mediaDiagnostics: (classId: string) =>
     request<{ mediaApiReachable: boolean; diagnosticStatus: 'OK' | 'NOT_CONFIGURED' | 'AUTH_REJECTED' | 'UNREACHABLE' }>('POST', `/online-classes/${classId}/media-diagnostics`),
