@@ -47,6 +47,24 @@ class KolinLessonContextServiceTest {
         }
     }
 
+    private byte[] pdfPages(String... texts) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            for (String text : texts) {
+                var sheet=new PDPage();
+                document.addPage(sheet);
+                try (PDPageContentStream canvas = new PDPageContentStream(document,sheet)) {
+                    canvas.beginText();
+                    canvas.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA),12);
+                    canvas.newLineAtOffset(44,700);
+                    canvas.showText(text);
+                    canvas.endText();
+                }
+            }
+            document.save(out);
+            return out.toByteArray();
+        }
+    }
+
     private void rosterAndInk() {
         when(roster.read(room)).thenReturn(List.of(
             new KolinTaskRoster.Pupil(melissa.getId(),melissa.getFullName()),
@@ -70,6 +88,79 @@ class KolinLessonContextServiceTest {
         assertThat(pages.get(0)).containsEntry("source","Мелисса").containsEntry("pageNumber",1);
         assertThat(pages.toString()).contains("25/5=5","4+6=10");
         assertThat(pages.toString()).doesNotContain(melissa.getId().toString(),teacher.getEmail(),"answers.pdf");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test void explainsTaskSevenFromItsActualPdfPageNotPageSevenOrTheFirstPage() throws Exception {
+        when(roster.read(room)).thenReturn(List.of());
+        when(annotations.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).thenReturn(List.of());
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(8L);
+        when(documents.workbook(host,room.getId(),"board-1")).thenReturn(Optional.of(pdfPages(
+            "TASK 1: Compute 4+6",
+            "7 Erklaere warum sqrt(x^2)=x nicht immer gilt.",
+            "TASK 9: Berechne sqrt(49)"
+        )));
+        var context=service.read(host,room,"Объясни задание 7",
+            new KolinChatService.Context("group",null,1));
+        var task=(Map<String,Object>)context.get("taskReference");
+        assertThat(task).containsEntry("state","resolved").containsEntry("requestedNumber",7)
+            .containsEntry("pageNumber",2).containsEntry("source","Общая доска");
+        assertThat(task.get("taskId")).asString().matches("task-[a-f0-9]{24}");
+        assertThat(task.get("statement")).asString().contains("sqrt(x^2)=x");
+        var pages=(List<Map<String,Object>>)context.get("relevantPages");
+        assertThat(pages.get(0)).containsEntry("pageNumber",2);
+        assertThat(pages.get(0).get("exerciseReferences").toString()).contains("number=7")
+            .doesNotContain("teacher@test.local");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test void explicitlySelectedPupilOverridesSimilarNumbersOnSharedPage() throws Exception {
+        rosterAndInk();
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(2L);
+        when(documents.workbook(host,room.getId(),"board-1")).thenReturn(Optional.of(pdf("TASK 7: Group fractions")));
+        String personal=PersonalBoard.workbookTargetIdFor(melissa.getId());
+        when(documents.workbookVersion(host,room.getId(),personal)).thenReturn(4L);
+        when(documents.workbook(host,room.getId(),personal)).thenReturn(Optional.of(pdf("TASK 7: Personal roots")));
+        var output=service.read(host,room,"Объясни задание 7 Мелиссы",
+            new KolinChatService.Context("group",null,1));
+        var task=(Map<String,Object>)output.get("taskReference");
+        assertThat(task).containsEntry("state","resolved").containsEntry("source","Мелисса");
+        assertThat(task.get("statement")).asString().contains("Personal roots").doesNotContain("Group fractions");
+        assertThat(((List<Map<String,Object>>)output.get("relevantPages")).get(0))
+            .containsEntry("source","Мелисса");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test void ambiguousRepeatedTaskNumbersRequireClarificationRatherThanAnInventedPage() throws Exception {
+        when(roster.read(room)).thenReturn(List.of());
+        when(annotations.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).thenReturn(List.of());
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(4L);
+        when(documents.workbook(host,room.getId(),"board-1")).thenReturn(Optional.of(pdfPages(
+            "7. Task about fractions",
+            "7. Task about quadratic roots"
+        )));
+        var ambiguous=service.read(host,room,"Объясни задание 7",new KolinChatService.Context("group",null,3));
+        var task=(Map<String,Object>)ambiguous.get("taskReference");
+        assertThat(task).containsEntry("state","ambiguous").containsEntry("requestedNumber",7);
+        assertThat(task).doesNotContainKey("statement");
+        assertThat((List<?>)task.get("alternatives")).hasSize(2);
+        var current=service.read(host,room,"Объясни задание 7",new KolinChatService.Context("group",null,2));
+        assertThat((Map<String,Object>)current.get("taskReference"))
+            .containsEntry("state","resolved").containsEntry("pageNumber",2);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test void cannotResolveTaskFromAnotherPupilWhenTeacherSelectedDifferentPupil() throws Exception {
+        rosterAndInk();
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(0L);
+        var sofiaBoard=PersonalBoard.workbookTargetIdFor(sofia.getId());
+        when(documents.workbookVersion(host,room.getId(),sofiaBoard)).thenReturn(2L);
+        when(documents.workbook(host,room.getId(),sofiaBoard)).thenReturn(Optional.of(pdf("TASK 7: Sofia secret problem")));
+        var result=service.read(host,room,"Объясни задание 7",
+            new KolinChatService.Context("student",melissa.getId(),1));
+        var task=(Map<String,Object>)result.get("taskReference");
+        assertThat(task).containsEntry("state","not_found_in_selected_document");
+        assertThat(task).doesNotContainKey("statement");
     }
 
     @Test void preservesARevisionKeyedCacheAndReloadsAfterPdfReplacement() throws Exception {
