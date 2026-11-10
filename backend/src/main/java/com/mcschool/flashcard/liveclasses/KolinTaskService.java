@@ -67,6 +67,18 @@ public class KolinTaskService {
             String previous=store.previousDraft(teacher,room.getId());
             Content previousContent=previous==null?null:mapper.readValue(previous,Content.class);
             if(previousContent!=null) context.put("lastGeneratedWorksheet",previousContent);
+            // Explanations are read-only: answer directly like a normal chat, without
+            // first paying for a structured answer-vs-generator classification call.
+            // Keep actual material creation and editing behind the existing guarded path.
+            if (isReadOnlyExplanation(question)) {
+                stage="TEXT_MODEL";
+                String explanation=ai.kolinReply(mapper.writeValueAsString(context),history,question);
+                if (explanation==null || explanation.isBlank() || explanation.length()>10000)
+                    throw new IllegalStateException("Invalid Kolyn explanation");
+                stage="STORE";
+                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",explanation,transcript,
+                    null,null,0,0,null,null);
+            }
             stage="DIALOGUE";
             var dialogue=ai.kolinDialogue(mapper.writeValueAsString(context),history,question);
             if("answer".equals(dialogue.mode())) {
@@ -223,6 +235,22 @@ public class KolinTaskService {
                 throw KolinRequestException.invalid();
             throw KolinRequestException.failed();
         }
+    }
+
+    /**
+     * Conservative, non-mutating shortcut. A pure explanation must not depend on
+     * JSON-mode intent routing; generation/editing verbs keep their guarded path.
+     * The teacher's current document/transcript context is still supplied in full.
+     */
+    static boolean isReadOnlyExplanation(String question) {
+        if (question == null) return false;
+        boolean explain=java.util.regex.Pattern.compile(
+            "(?iu)^\\s*(?:об[ъь]?ясн\\p{L}*|поясн\\p{L}*|почему\\b|разъясн\\p{L}*|erkl[aä]r\\p{L}*|explain\\b|why\\b)"
+        ).matcher(question).find();
+        boolean mutate=java.util.regex.Pattern.compile(
+            "(?iu)(?:создай|создать|сделай|добавь|добавить|измени|изменить|подготовь|сгенерируй|генерир|нарисуй|построй|перенеси|загрузи|erstelle|create|generate|add\\s+to|modify|edit)"
+        ).matcher(question).find();
+        return explain && !mutate;
     }
 
     /** Validation assertions are built from the exact expressions displayed to pupils. */
