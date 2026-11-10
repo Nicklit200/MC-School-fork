@@ -22,7 +22,7 @@ class InteractiveTemplateSpecTest {
         var extra=new HashMap<>(graph());extra.put("html","<script>alert(1)</script>");
         for(var spec:List.of(extra,Map.of("template","triangle","language","ru","vertices",List.of(List.of(0,0),List.of(1,1),List.of(2,2))),
             Map.of("template","fractionCircle","language","ru","parts",12,"selected",List.of(1,1)),
-            Map.of("template","fractionCircle","language","ru","parts",12,"selected",List.of(12)),
+            Map.of("template","fractionCircle","language","ru","parts",12,"selected",List.of(48)),
             Map.of("template","graph","language","ru","function","linear","coefficients",List.of(Double.NaN,0)),
             Map.of("template","graph","function","linear","coefficients",List.of(1,0))))
             assertThatThrownBy(()->InteractiveTemplateSpec.validate(spec)).isInstanceOf(ConflictException.class);
