@@ -38,6 +38,10 @@ export function blockHeightMm(b, teacher=false) {
     case 'example': return b.text ? 34 + 5*(wrapped(b.text,85)-1) : 27;
     case 'strips': return 40;
     case 'graph': case 'coordinateGrid': return 85;
+    case 'visualTask': return 104; // Includes its own checked vector graph / geometric figure.
+    case 'diagram': return 90;
+    case 'fractionStrips': return 40;
+    case 'numberLine': return 38;
     case 'geometry': return 78;
     case 'facts': return 35 + 6*(((b.given||[]).length+(b.find||[]).length)/2);
     case 'teacherNote': {
