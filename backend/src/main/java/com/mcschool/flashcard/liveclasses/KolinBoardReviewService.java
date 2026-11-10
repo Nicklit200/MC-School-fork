@@ -30,6 +30,8 @@ public class KolinBoardReviewService {
     private final OnlineClassDocumentService documents;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
     private KolinLessonContextService lessonContext;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private OnlineClassAnnotationDocumentRepository annotations;
 
     public KolinBoardReviewService(OnlineClassAccessService access, KolinTaskRoster roster, OnlineClassDocumentService documents) {
         this.access=access; this.roster=roster; this.documents=documents;
@@ -221,6 +223,7 @@ public class KolinBoardReviewService {
             if(!"board-1".equals(snapshot.boardId())
                     || documents.workbookVersion(teacher,classId,"board-1")!=snapshot.documentVersion())
                 throw KolinRequestException.reviewUnavailable();
+            requireInkUnchanged(classId,snapshot);
             return;
         }
         long personal=documents.workbookVersion(teacher,classId,PersonalBoard.workbookTargetIdFor(snapshot.studentId()));
@@ -230,5 +233,20 @@ public class KolinBoardReviewService {
         Long shared=personal>0?null:documents.workbookVersion(teacher,classId,"board-1");
         if(!Objects.equals(snapshot.sharedDocumentVersion(),shared!=null&&shared>0?shared:null))
             throw KolinRequestException.reviewUnavailable();
+        requireInkUnchanged(classId,snapshot);
+    }
+
+    /** A concurrent pupil edit invalidates the captured task-page image. */
+    private void requireInkUnchanged(UUID classId, Snapshot snapshot) {
+        if(!"task_page".equals(snapshot.scope()) || annotations==null) return;
+        var pages=new ArrayList<Page>();
+        pages.add(new Page(snapshot.pageNumber(),snapshot.revision(),snapshot.imageDataUrl()));
+        if(snapshot.additionalPages()!=null) pages.addAll(snapshot.additionalPages());
+        for(var page:pages) {
+            long current=annotations.findByOnlineClassIdAndTargetTypeAndTargetIdAndPageIndex(
+                    classId,AnnotationTargetType.WHITEBOARD,snapshot.boardId(),page.pageNumber()-1)
+                .map(OnlineClassAnnotationDocument::getRevision).orElse(0L);
+            if(current!=page.revision()) throw KolinRequestException.reviewUnavailable();
+        }
     }
 }
