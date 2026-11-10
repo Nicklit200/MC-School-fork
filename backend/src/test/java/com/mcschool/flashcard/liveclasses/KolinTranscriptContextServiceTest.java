@@ -45,7 +45,7 @@ class KolinTranscriptContextServiceTest {
         var result = contexts.read(room);
         var page = ArgumentCaptor.forClass(Pageable.class);
         verify(rows).findByOnlineClassIdOrderByStartMsDescIdDesc(eq(room.getId()), page.capture());
-        assertThat(page.getValue().getPageSize()).isEqualTo(1001);
+        assertThat(page.getValue().getPageSize()).isEqualTo(101);
         assertThat(page.getValue().getOffset()).isZero();
         assertThat(result.segments()).extracting(KolinTranscriptContextService.Turn::speakerName).containsExactly("Учитель", "Виталина");
         assertThat(result.segments()).extracting(KolinTranscriptContextService.Turn::speakerRole).containsExactly("teacher", "student");
@@ -57,18 +57,18 @@ class KolinTranscriptContextServiceTest {
     }
 
     @Test void largeLessonFitsAndTheExtraRowMarksTruncationWithoutEnteringContext() {
-        var descending = IntStream.range(0, 1001).mapToObj(i -> segment(1000-i, 1001-i, teacher, null,
+        var descending = IntStream.range(0, 101).mapToObj(i -> segment(100-i, 101-i, teacher, null,
                 "turn-" + (1000-i), now)).toList();
         when(rows.findByOnlineClassIdOrderByStartMsDescIdDesc(eq(room.getId()), any()))
-                .thenReturn(descending.subList(0, 1000), descending);
+                .thenReturn(descending.subList(0, 100), descending);
         var exact = contexts.read(room);
-        assertThat(exact.metadata().segmentCount()).isEqualTo(1000);
+        assertThat(exact.metadata().segmentCount()).isEqualTo(100);
         assertThat(exact.metadata().truncated()).isFalse();
         var more = contexts.read(room);
-        assertThat(more.metadata().segmentCount()).isEqualTo(1000);
+        assertThat(more.metadata().segmentCount()).isEqualTo(100);
         assertThat(more.metadata().truncated()).isTrue();
         assertThat(more.segments().get(0).text()).isEqualTo("turn-1");
-        assertThat(more.segments().get(999).text()).isEqualTo("turn-1000");
+        assertThat(more.segments().get(99).text()).isEqualTo("turn-100");
         assertThat(more.segments()).noneMatch(turn -> turn.text().equals("turn-0"));
     }
 
