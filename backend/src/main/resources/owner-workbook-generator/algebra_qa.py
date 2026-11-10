@@ -46,6 +46,25 @@ def plain_tex(text):
     text = re.sub(r'\\(?:div|colon)(?![A-Za-z])', '/', text)
     text = re.sub(r'\\(?:dfrac|tfrac)(?![A-Za-z])', lambda _: r'\frac', text)
     text = text.replace(r'\left', '').replace(r'\right', '').replace(r'\cdot', '*').replace(r'\times', '*')
+    # A whole number directly followed by a numeric proper fraction is a
+    # mixed number: 1\frac{7}{12} = 1 + 7/12, NOT 1 * 7/12.
+    # This also accepts 1 7/12 and spacing commands such as 1\,\frac{7}{12}.
+    # Explicit multiplication (1 * \frac{7}{12}) and symbolic coefficients
+    # (x\frac{7}{12}) retain their existing multiplication semantics.
+    def mixed_number(match):
+        whole, numerator, denominator = match.groups()
+        if int(denominator) == 0:
+            raise ValueError('Zero denominator')
+        return f'({whole}+({numerator}/{denominator}))'
+
+    text = re.sub(
+        r'(?<![A-Za-z0-9_.\)])(\d+)(?:[ \t]|\\[,; ]|\\quad)*\\frac\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}',
+        mixed_number, text
+    )
+    text = re.sub(
+        r'(?<![A-Za-z0-9_.\)])(\d+)[ \t]+(\d+)[ \t]*/[ \t]*(\d+)(?![A-Za-z0-9_.])',
+        mixed_number, text
+    )
     def group(pos):
         while pos < len(text) and text[pos].isspace():
             pos += 1
