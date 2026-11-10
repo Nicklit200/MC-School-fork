@@ -67,3 +67,22 @@
 .kolin-review__dialog::backdrop { background: #000a; }
 .kolin-review__dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .kolin-review__dialog > img { display: block; width: 100%; height: auto; }
+
+/* Rich, accessible math feedback. Visual status is always labelled, not colour-only. */
+.kolin-rich { display:grid; gap:9px; font-size:13px; line-height:1.65; }
+.kolin-rich p { margin:0; overflow-wrap:anywhere; white-space:pre-wrap; }
+.kolin-rich h4 { margin:10px 0 0; font-size:13px; font-weight:750; color:var(--v3-text); }
+.kolin-rich__callout { display:flex; align-items:flex-start; gap:9px; border:1px solid transparent; border-radius:8px; padding:9px 11px; }
+.kolin-rich__callout-icon { flex:0 0 17px; font-size:14px; font-weight:750; line-height:1.6; }
+.kolin-rich__callout--correct { background:rgba(22,163,74,.13); border-color:rgba(74,222,128,.35); color:#bbf7d0; }
+.kolin-rich__callout--incorrect { background:rgba(220,38,38,.12); border-color:rgba(248,113,113,.36); color:#fecaca; }
+.kolin-rich__callout--tip { background:rgba(59,130,246,.13); border-color:rgba(147,197,253,.3); color:#dbeafe; }
+.kolin-rich__callout--warning { background:rgba(234,179,8,.12); border-color:rgba(253,224,71,.33); color:#fef08a; }
+.kolin-rich__list-item { display:flex; gap:7px; align-items:flex-start; }
+.kolin-rich__list-item > span { min-width:16px; font-weight:750; opacity:.8; }
+.kolin-rich__math,.kolin-rich__formula { font-family:"Cambria Math", "STIX Two Math", Georgia,serif; font-size:1.08em; }
+.kolin-rich__formula { padding:8px 11px; text-align:center; overflow-wrap:anywhere; background:rgba(255,255,255,.05); border-radius:7px; }
+.kolin-rich__fraction { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; vertical-align:middle; font-size:.85em; line-height:1.1; margin:0 .12em; }
+.kolin-rich__fraction > span:first-child { border-bottom:1px solid currentColor; padding:0 .15em .08em; }
+.kolin-rich__fraction > span:last-child { padding:.08em .15em 0; }
+.kolin-rich code { font-family:ui-monospace,monospace; font-size:.94em; background:rgba(255,255,255,.08); border-radius:4px; padding:1px 4px; }
