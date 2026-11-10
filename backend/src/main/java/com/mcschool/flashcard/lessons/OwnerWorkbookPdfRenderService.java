@@ -359,6 +359,10 @@ public class OwnerWorkbookPdfRenderService {
         String school = String.valueOf(meta.get("school"));
         if (!"MINDCRAFTI SCHOOL".equalsIgnoreCase(school.trim()))
             throw new IllegalArgumentException("meta.school must be MINDCRAFTI SCHOOL");
+        // Fail unsupported physical dimensions before queuing or opening a PDF
+        // renderer. All paths (MCH3 drafts, homework and direct renderer) share
+        // the same schema bounds as schema.mjs.
+        validateSpacerLimits(document, 0);
         List<?> studentPages = requirePages(document.get("workbookPages"), "workbookPages", 18);
         List<?> teacherPages = requirePages(document.get("teacherPages"), "teacherPages", 12);
         int count = 0;
@@ -374,6 +378,40 @@ public class OwnerWorkbookPdfRenderService {
         }
         if (count < 1 || count > 120) throw new IllegalArgumentException("Workbook needs 1..120 student exercises");
         return count;
+    }
+
+    private static final java.util.regex.Pattern SPACER_LENGTH =
+            java.util.regex.Pattern.compile("^(\\d+(?:\\.\\d+)?)(mm|px|em)$");
+
+    private static void validateSpacerLimits(Object raw, int depth) {
+        if (depth > 32) throw new IllegalArgumentException("Workbook layout is too deeply nested");
+        if (raw instanceof Map<?, ?> map) {
+            if ("spacer".equals(map.get("type"))) {
+                Object height = map.get("height");
+                if (height != null) {
+                    if (!(height instanceof String text))
+                        throw new IllegalArgumentException("spacer.height must be a length such as 40mm; maximum 60mm");
+                    var matcher = SPACER_LENGTH.matcher(text);
+                    if (!matcher.matches())
+                        throw new IllegalArgumentException("spacer.height must be a length such as 40mm; maximum 60mm");
+                    double amount = Double.parseDouble(matcher.group(1));
+                    double multiplier = switch (matcher.group(2)) {
+                        case "px" -> 25.4 / 96;
+                        case "em" -> 16 * 25.4 / 96;
+                        default -> 1.0;
+                    };
+                    if (amount * multiplier > 60)
+                        throw new IllegalArgumentException("spacer.height exceeds 60mm; use exercise.writeLines for large handwriting areas");
+                }
+            }
+            for (Object child : map.values())
+                if (child instanceof Map<?, ?> || child instanceof List<?>)
+                    validateSpacerLimits(child, depth + 1);
+        } else if (raw instanceof List<?> list) {
+            for (Object child : list)
+                if (child instanceof Map<?, ?> || child instanceof List<?>)
+                    validateSpacerLimits(child, depth + 1);
+        }
     }
 
     /** Inspect all nested layout containers, not only the top-level block list. */
