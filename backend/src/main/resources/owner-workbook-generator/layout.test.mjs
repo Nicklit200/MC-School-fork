@@ -229,6 +229,9 @@ test('A4 pagination gives eight-line handwritten solutions separate pages',async
   const {workbook}=await render(lesson);
   assert.equal((workbook.match(/class="sheet student"/g)||[]).length,4);
   assert.equal((workbook.match(/class="response-lines"/g)||[]).length,4);
+  assert.doesNotMatch(workbook, /<img[^>]+Original Mindcrafti M logo/, 'Student pages must have no logo image');
+  assert.doesNotMatch(teacher, /<img[^>]+Original Mindcrafti M logo/, 'Teacher pages must have no logo image');
+  assert.match(workbook, /MINDCRAFTI SCHOOL/, 'School name must remain visible');
   assert.equal((workbook.match(/data-qa="blank-workspace"/g)||[]).length,4);
   assert.doesNotMatch(workbook, /class="response-lines"[^>]*><div>/, 'No decorative writing rules under tasks');
   assert.doesNotMatch(workbook, /class="progress"/, 'No progress bar artwork');
