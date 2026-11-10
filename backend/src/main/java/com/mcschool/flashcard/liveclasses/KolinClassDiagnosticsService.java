@@ -102,7 +102,15 @@ public class KolinClassDiagnosticsService {
         Map<UUID, LiveClassMediaProvider.MediaParticipant> observed = new HashMap<>();
         for (var item : live) {
             UUID identity = ParticipantIdentity.userId(item.identity()).orElse(null);
-            if (identity != null && allowed.contains(identity)) observed.put(identity, item);
+            if (identity != null && allowed.contains(identity)) {
+                // Multiple tabs/devices of one pupil can each publish a microphone.
+                // Report audible if ANY is published and unmuted; no arbitrary last-tab wins.
+                observed.merge(identity, item, (a, b) ->
+                    new LiveClassMediaProvider.MediaParticipant(a.identity(),
+                        a.microphonePublished() || b.microphonePublished(),
+                        (!a.microphonePublished() || a.microphoneMuted())
+                            && (!b.microphonePublished() || b.microphoneMuted())));
+            }
         }
 
         List<Map<String, Object>> statuses = new ArrayList<>();
