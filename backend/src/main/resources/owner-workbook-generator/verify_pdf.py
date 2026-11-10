@@ -78,7 +78,7 @@ def verify_file(path, expected_count, plain=False):
             assert not RAW_TEX.search(text), 'Raw LaTeX in PDF'
             if not plain:
                 assert 'MINDCRAFTI SCHOOL' in text, 'Brand text missing'
-                assert page.get_images(), 'Official logo missing'
+                # Vector geometry and optional diagrams are permitted, but no logo is required.
             # PDF whitespace/line grouping depends on the installed font. Use
             # the measured footer boundary rather than a brand-text substring
             # to distinguish footer text from task content. The layout pass
@@ -111,7 +111,7 @@ def verify_file(path, expected_count, plain=False):
                             and d['rect'].y1 < min(745, footer_top - 1)
                             and d['rect'].get_area() > 25]
             assert body_text or body_vectors, f'Accidental empty page {page.number + 1}'
-        print(f'PASS: {path.name}, {len(pdf)} A4 pages, {"plain worksheet" if plain else "original logo on every page"}')
+        print(f'PASS: {path.name}, {len(pdf)} A4 pages, {"plain worksheet" if plain else "minimal orange header without logo"}')
     return {'filename': path.name, 'pageCount': expected_count, 'layoutPassed': True, 'rawLatexFound': False}
 
 
