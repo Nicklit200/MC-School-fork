@@ -185,6 +185,46 @@ class McpSiteFunctionsTransportIntegrationTest {
         }
     }
 
+    @Test void publishedTeacherHelpIsSharedBetweenWebsiteAndMch3WhileWritesRequireAdmin() throws Exception {
+        // Production MCH3 reads the currently published guide, not the admin's draft.
+        String id="lesson-flow";
+        String previous=value(call("teacher-a","get_teacher_guide",Map.of("topicId",id)))
+                .path("articles").get(0).path("body").asText();
+        assertThat(previous).isNotBlank();
+
+        Map<String,Object> draft=Map.of(
+            "id",id,"title","Как завершить урок","summary","Актуальный порядок завершения",
+            "body","Нажмите «Завершить урок для всех». Дождитесь сохранения PDF.",
+            "keywords",List.of("урок","завершить"),"route","/teacher/help",
+            "related",List.of(),"verifiedSources",List.of(),"imageIds",List.of());
+        Map<String,Object> save=Map.of("functionId","teacher_help.draft",
+            "arguments",Map.of("id",id,"body",draft),
+            "confirm",true,"idempotencyKey","guide-draft-verified-20261110");
+        rpcFailure("teacher-a","execute_site_function",save);
+        assertThat(value(call("admin","execute_site_function",save)).path("draft").path("body").asText())
+            .contains("Завершить урок для всех");
+        assertThat(value(call("teacher-a","get_teacher_guide",Map.of("topicId",id)))
+            .path("articles").get(0).path("body").asText()).isEqualTo(previous);
+
+        Map<String,Object> publish=Map.of("functionId","teacher_help.publish",
+            "arguments",Map.of("id",id),"confirm",true,
+            "idempotencyKey","guide-publish-verified-20261110");
+        rpcFailure("teacher-a","execute_site_function",publish);
+        assertThat(value(call("admin","execute_site_function",publish))
+            .path("published").path("body").asText()).contains("Завершить урок для всех");
+
+        String live=value(call("teacher-a","get_teacher_guide",Map.of("topicId",id)))
+            .path("articles").get(0).path("body").asText();
+        assertThat(live).contains("Завершить урок для всех");
+        assertThat(value(call("teacher-a","read_site_function",Map.of(
+            "functionId","teacher_help.published","arguments",Map.of()))
+            .path("articles").toString()).contains("Завершить урок для всех");
+        assertThat(value(call("admin","read_site_function",Map.of(
+            "functionId","teacher_help.history","arguments",Map.of("id",id)))
+            .get(0).path("revision").asLong()).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM teacher_help_history WHERE article_id=?",Integer.class,id)).isEqualTo(1);
+    }
+
     private void rejected(JsonNode result, int code) {
         assertThat(result.path("isError").asBoolean()).as(result.toString()).isTrue();
         assertThat(result.path("structuredContent").path("status").asInt()).isEqualTo(code);
