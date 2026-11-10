@@ -53,7 +53,6 @@ public class OwnerWorkbookPdfRenderService {
     private final Semaphore renderSlots = new Semaphore(4, true);
     private final Object runtimeLock = new Object();
     private volatile Path runtimeDirectory;
-    private volatile CachedLogo cachedLogo;
 
     public OwnerWorkbookPdfRenderService(ObjectMapper mapper, LessonPdfDraftService drafts,
                                          SchoolBrandGuideService brandGuide) {
@@ -100,19 +99,6 @@ public class OwnerWorkbookPdfRenderService {
         }
     }
 
-    private BufferedImage officialLogo(AuthenticatedUser teacher) throws IOException {
-        var guide = brandGuide.readForStaff(teacher);
-        if (guide == null || !guide.hasPdf()) throw new IllegalArgumentException("Original Mindcrafti Brand Guide PDF is missing");
-        CachedLogo current = cachedLogo;
-        if (current != null && Objects.equals(current.updatedAt(), guide.updatedAt())) return current.image();
-        synchronized (this) {
-            current = cachedLogo;
-            if (current != null && Objects.equals(current.updatedAt(), guide.updatedAt())) return current.image();
-            BufferedImage image = LessonPdfDraftService.extractOfficialLogo(brandGuide.pdfForStaff(teacher).bytes());
-            cachedLogo = new CachedLogo(guide.updatedAt(), image);
-            return image;
-        }
-    }
 
     public Map<String, Object> create(AuthenticatedUser teacher, String eventId,
                                       String lessonJson, String planSummary,
@@ -240,13 +226,11 @@ public class OwnerWorkbookPdfRenderService {
         Map<String, Object> document = mapper.readValue(lessonJson, Map.class);
         int exerciseCount = validateDocument(document);
 
-        BufferedImage officialLogo = officialLogo(teacher);
+        // Branded text and orange header remain, but all workbook image logos are disabled.
+        // Do not fetch or rasterize the Brand Guide PDF for each generated worksheet.
         Path runtime = runtimeDirectory();
         Path workspace = Files.createTempDirectory("mindcrafti-workbook-job-");
         try {
-            Path logoPath = workspace.resolve("logo.png");
-            if (!ImageIO.write(officialLogo, "png", logoPath.toFile()))
-                throw new IllegalStateException("Cannot encode official school logo");
             Path dataPath = workspace.resolve("lesson.json");
             Files.writeString(dataPath, lessonJson, StandardCharsets.UTF_8);
             Path output = Files.createDirectory(workspace.resolve("out"));
@@ -256,7 +240,7 @@ public class OwnerWorkbookPdfRenderService {
             String basename = "Mindcrafti_Workbook_v3";
             ProcessBuilder pb = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
                     "--lesson=" + dataPath, "--out=" + output,
-                    "--basename=" + basename, "--logo=" + logoPath);
+                    "--basename=" + basename);
             pb.directory(runtime.toFile());
             pb.redirectErrorStream(true);
             Path logs = workspace.resolve("renderer.log");
@@ -307,7 +291,7 @@ public class OwnerWorkbookPdfRenderService {
             @SuppressWarnings("unchecked") Map<String,Object> mathQa=mapper.readValue(Files.readString(output.resolve(basename+"_math-qa.json")),Map.class);
             if(!Boolean.TRUE.equals(mathQa.get("passed"))) throw new IllegalStateException("Renderer math QA report did not pass");
             Map<String, Object> result = drafts.createFromRenderer(teacher, eventId, workbook,
-                    answers, planSummary, difficultySummary, exerciseCount, officialLogo);
+                    answers, planSummary, difficultySummary, exerciseCount, null);
             result.put("generator", "Mindcrafti SVG/A4 workbook " + VERSION);
             result.put("lessonDurationMinutes", Integer.parseInt(duration));
             result.put("durationMinutes", Integer.parseInt(duration));
@@ -447,5 +431,4 @@ public class OwnerWorkbookPdfRenderService {
             throw new IllegalArgumentException("Each page must contain 1..35 blocks");
         return blocks;
     }
-    private record CachedLogo(Instant updatedAt, BufferedImage image) {}
 }
