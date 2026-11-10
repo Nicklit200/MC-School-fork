@@ -60,7 +60,7 @@ export function triangleMeasures(v:[number,number][]) {
 const gcd=(a:number,b:number):number=>b?gcd(b,a%b):a;
 export const MAX_PIZZA_CIRCLES = 4;
 export function fractionFromInputs(numerator:string,denominator:string):{parts:number;selected:number[]}|undefined {
-  if(!/^\\d{1,3}$/.test(numerator.trim()) || !/^\\d{1,2}$/.test(denominator.trim())) return;
+  if(!/^\d{1,3}$/.test(numerator.trim()) || !/^\d{1,2}$/.test(denominator.trim())) return;
   const n=Number(numerator.trim()),parts=Number(denominator.trim());
   if(!Number.isSafeInteger(n) || !Number.isSafeInteger(parts) || parts<1 || parts>24 || n>parts*MAX_PIZZA_CIRCLES) return;
   return {parts,selected:Array.from({length:n},(_,index)=>index)};
@@ -73,7 +73,7 @@ export function fractionLabel(spec: Extract<InteractiveSpec,{template:'fractionC
     const remainingDenominator=spec.parts/gcd(n%spec.parts,spec.parts);
     return `${n}/${spec.parts} = ${whole} ${remainder}/${remainingDenominator}`;
   }
-  return `${n}/${spec.parts} = ${denominator===1?reduced:`${reduced}/${denominator}`}`;
+  return `${n}/${spec.parts} = ${reduced}/${denominator}`;
 }
 export type Primitive =
   | {kind:'path'; d:string; stroke:string; fill?:string; width?:number; clip?:boolean}
