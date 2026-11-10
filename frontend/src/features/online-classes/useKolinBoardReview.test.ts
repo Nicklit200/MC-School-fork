@@ -74,3 +74,23 @@ it('drops a capture when the pupil changes page or the teacher changes lesson', 
   rerender({ classId: 'another' }); finish({} as KolinBoardSnapshot);
   await expect(next).rejects.toBeInstanceOf(KolinReviewUnavailable);
 });
+
+it('reads the first saved page of a named pupil without a live page announcement', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: pupil, scope: 'first_page' });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Объясни первое и второе задание у Мелиссы', { studentId: pupil });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 0, null, 'first_page');
+});
+
+it('reads a shared group page without inventing a pupil identity', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: null, studentName: 'Общая доска', scope: 'first_page' });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Посмотри первую страницу на общей доске', { targetType: 'group' });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', null, 'board-1', 0, null, 'first_page');
+});
+it('takes the teacher-selected page in a group rather than a guessed private page', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: null, scope: 'current_page' });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Посмотри текущую страницу', { targetType: 'group', currentWorkbookPage: 3 });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', null, 'board-1', 2, null, 'current_page');
+});
