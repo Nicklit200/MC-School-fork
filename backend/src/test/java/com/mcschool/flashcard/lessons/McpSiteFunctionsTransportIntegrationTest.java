@@ -217,10 +217,10 @@ class McpSiteFunctionsTransportIntegrationTest {
             .path("articles").get(0).path("body").asText();
         assertThat(live).contains("Завершить урок для всех");
         assertThat(value(call("teacher-a","read_site_function",Map.of(
-            "functionId","teacher_help.published","arguments",Map.of()))
+            "functionId","teacher_help.published","arguments",Map.of())))
             .path("articles").toString()).contains("Завершить урок для всех");
         assertThat(value(call("admin","read_site_function",Map.of(
-            "functionId","teacher_help.history","arguments",Map.of("id",id)))
+            "functionId","teacher_help.history","arguments",Map.of("id",id))))
             .get(0).path("revision").asLong()).isEqualTo(1L);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM teacher_help_history WHERE article_id=?",Integer.class,id)).isEqualTo(1);
     }
