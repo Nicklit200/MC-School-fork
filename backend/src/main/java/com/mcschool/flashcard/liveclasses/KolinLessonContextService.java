@@ -44,10 +44,12 @@ public class KolinLessonContextService {
 
     private record Key(UUID classId, String boardId, long version) {}
     private record Page(int number, String text) {}
-    private record Parsed(int totalPages, List<Page> pages, boolean truncated, String status) {}
+    private record Parsed(int totalPages, List<Page> pages, List<KolinExerciseIndex.Exercise> exercises, boolean truncated, String status) {}
     private record Source(String name, String boardId, boolean shared, Parsed parsed, long version) {}
     private record Ink(long revision, Instant updated) {}
     private record Candidate(Source source, Page page, int score) {}
+    private record IndexedExercise(Source source, KolinExerciseIndex.Exercise task) {}
+    private record TaskResolution(String state, Integer number, IndexedExercise resolved, List<IndexedExercise> candidates) {}
 
     /** Parsed text only, no PDF bytes. Old versions become unreachable after a version change. */
     private final Map<Key, Parsed> cache = Collections.synchronizedMap(new LinkedHashMap<Key, Parsed>(32, .75f, true) {
@@ -106,6 +108,10 @@ public class KolinLessonContextService {
         String selected = selectedBoard(question, requested, pupils);
         int currentPage = requested != null && requested.currentWorkbookPage() != null
             ? requested.currentWorkbookPage() : 1;
+        // Exercise numbers refer to document content, NOT physical PDF page indices.
+        // Resolve against the server-authorized, version-keyed text index before
+        // selecting model-visible pages so a task on a later page is not lost.
+        TaskResolution task = resolveTask(KolinExerciseIndex.requestedNumber(question),sources,selected,currentPage);
         List<Map<String, Object>> catalog = new ArrayList<>();
         List<Candidate> candidates = new ArrayList<>();
         for (var source : sources) {
@@ -118,6 +124,10 @@ public class KolinLessonContextService {
             item.put("indexedPageCount", parsed.pages().size());
             item.put("truncated", parsed.truncated());
             item.put("savedInkPageCount", ink.getOrDefault(source.boardId(), Map.of()).size());
+            item.put("indexedExerciseCount",parsed.exercises().size());
+            item.put("exerciseLocations",parsed.exercises().stream().limit(40).map(exercise ->
+                Map.of("number",exercise.number(),"pageNumber",exercise.pageNumber(),
+                    "taskId",KolinExerciseIndex.id(source.boardId(),source.version(),exercise))).toList());
             catalog.add(item);
             for (var page : parsed.pages()) {
                 if (page.text().isBlank()) continue;
@@ -126,6 +136,12 @@ public class KolinLessonContextService {
                 // available because personal boards can inherit the group PDF.
                 rank += Objects.equals(selected, source.boardId()) ? 100 :
                     source.shared() ? 45 : 0;
+                if (task.resolved()!=null
+                    && Objects.equals(task.resolved().source().boardId(),source.boardId())
+                    && task.resolved().task().pageNumber()==page.number()) rank += 2000;
+                else if (task.candidates().stream().anyMatch(hit ->
+                    Objects.equals(hit.source().boardId(),source.boardId()) && hit.task().pageNumber()==page.number()))
+                    rank += 600;
                 candidates.add(new Candidate(source, page, rank));
             }
         }
@@ -150,6 +166,11 @@ public class KolinLessonContextService {
             page.put("pageNumber", candidate.page().number());
             page.put("text", text);
             page.put("textTruncated", text.length() < candidate.page().text().length());
+            page.put("exerciseReferences",candidate.source().parsed().exercises().stream()
+                .filter(ex -> ex.pageNumber()==candidate.page().number()).limit(40)
+                .map(ex -> Map.of("number",ex.number(),
+                    "taskId",KolinExerciseIndex.id(candidate.source().boardId(),candidate.source().version(),ex)))
+                .toList());
             Ink saved = ink.getOrDefault(candidate.source().boardId(), Map.of()).get(candidate.page().number());
             page.put("savedHandwritingPresent", saved != null);
             if (saved != null) {
@@ -165,6 +186,8 @@ public class KolinLessonContextService {
         result.put("state", !anyPdf ? "no_saved_documents" : anyText ? "text_context_available" : "image_only_or_empty");
         result.put("catalog", catalog);
         result.put("relevantPages", selectedPages);
+        result.put("taskReference", taskReference(task));
+        result.put("exerciseIndexFormat","text_layer_only; stable per authorized document version and page");
         result.put("selectedPageCount", selectedPages.size());
         result.put("totalAvailablePageCount", sources.stream().mapToInt(s -> s.parsed().totalPages()).sum());
         result.put("handwritingContentReadable", false);
@@ -197,7 +220,7 @@ public class KolinLessonContextService {
         }
     }
 
-    private static Parsed empty(String state) { return new Parsed(0, List.of(), false, state); }
+    private static Parsed empty(String state) { return new Parsed(0, List.of(), List.of(), false, state); }
 
     private static Parsed extract(byte[] bytes) {
         if (bytes.length == 0 || bytes.length > MAX_PDF_BYTES) return empty("too_large");
@@ -205,6 +228,7 @@ public class KolinLessonContextService {
             int total = pdf.getNumberOfPages(), count = Math.min(total, MAX_INDEX_PAGES);
             var stripper = new PDFTextStripper();
             var pages = new ArrayList<Page>(count);
+            var exercises = new ArrayList<KolinExerciseIndex.Exercise>();
             for (int page = 1; page <= count; page++) {
                 stripper.setStartPage(page);
                 stripper.setEndPage(page);
@@ -213,13 +237,67 @@ public class KolinLessonContextService {
                 extracted = extracted.replaceAll("[\\p{Cntrl}&&[^\\r\\n\\t]]", " ").strip();
                 if (extracted.length() > MAX_PAGE_CHARS) extracted = extracted.substring(0, MAX_PAGE_CHARS);
                 pages.add(new Page(page, extracted));
+                if (exercises.size()<120) {
+                    var pageTasks=KolinExerciseIndex.fromPage(page,extracted);
+                    exercises.addAll(pageTasks.subList(0,Math.min(120-exercises.size(),pageTasks.size())));
+                }
             }
             boolean readable = pages.stream().anyMatch(p -> !p.text().isBlank());
-            return new Parsed(total, List.copyOf(pages), total > count,
+            return new Parsed(total, List.copyOf(pages), List.copyOf(exercises), total > count || exercises.size()>=120,
                 readable ? "text_indexed" : "no_embedded_text");
         } catch (IOException | RuntimeException failure) {
             return empty("unreadable_pdf");
         }
+    }
+
+    /** Restrict named pupils to their own document; only the common sheet may be a fallback. */
+    private static TaskResolution resolveTask(Integer number, List<Source> sources, String selected, int currentPage) {
+        if (number == null) return new TaskResolution("not_requested", null, null, List.of());
+        List<IndexedExercise> hits = new ArrayList<>();
+        for (var source : sources) for (var ex : source.parsed().exercises()) if (ex.number()==number)
+            hits.add(new IndexedExercise(source,ex));
+        if (hits.isEmpty()) return new TaskResolution("not_found",number,null,List.of());
+        var chosen = hits.stream().filter(h -> h.source().boardId().equals(selected)).toList();
+        if (chosen.isEmpty()) {
+            // If a selected pupil has no personal workbook, they may work on the shared PDF.
+            // Never attribute another pupil's material to the selected pupil.
+            var common = hits.stream().filter(h -> h.source().shared()).toList();
+            if (!common.isEmpty()) chosen=common;
+            else if ("board-1".equals(selected)) chosen=hits;
+            else return new TaskResolution("not_found_in_selected_document",number,null,List.of());
+        }
+        if (chosen.size()>1) {
+            var visible=chosen.stream().filter(h -> h.task().pageNumber()==currentPage).toList();
+            if (visible.size()==1) chosen=visible;
+        }
+        if (chosen.size()==1) return new TaskResolution("resolved",number,chosen.get(0),List.copyOf(chosen));
+        return new TaskResolution("ambiguous",number,null,List.copyOf(chosen));
+    }
+
+    private static Map<String,Object> taskReference(TaskResolution resolution) {
+        var details=new LinkedHashMap<String,Object>();
+        details.put("state",resolution.state());
+        if (resolution.number()==null) return details;
+        details.put("requestedNumber",resolution.number());
+        if (resolution.resolved()!=null) {
+            var hit=resolution.resolved();
+            details.put("taskId",KolinExerciseIndex.id(hit.source().boardId(),hit.source().version(),hit.task()));
+            details.put("source",hit.source().name());
+            details.put("kind",hit.source().shared()?"shared":"personal");
+            details.put("pageNumber",hit.task().pageNumber());
+            details.put("statement",hit.task().text());
+            details.put("statementTruncated",hit.task().truncated());
+            details.put("documentVersion",hit.source().version());
+            details.put("documentState",hit.source().parsed().status());
+        } else if ("ambiguous".equals(resolution.state())) {
+            details.put("alternatives",resolution.candidates().stream().limit(10).map(hit ->
+                Map.of("source",hit.source().name(),"kind",hit.source().shared()?"shared":"personal",
+                       "pageNumber",hit.task().pageNumber(),
+                       "taskId",KolinExerciseIndex.id(hit.source().boardId(),hit.source().version(),hit.task())))
+                .toList());
+        }
+        details.put("limitations","Only saved PDF text was indexed. Handwriting and scanned pages are not recognized.");
+        return details;
     }
 
     private static String selectedBoard(String question, KolinChatService.Context requested,
