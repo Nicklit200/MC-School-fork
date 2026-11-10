@@ -161,6 +161,7 @@ class KolinLessonContextServiceTest {
         var task=(Map<String,Object>)result.get("taskReference");
         assertThat(task).containsEntry("state","not_found_in_selected_document");
         assertThat(task).doesNotContainKey("statement");
+        assertThat(result.get("relevantPages").toString()).doesNotContain("Sofia secret problem");
     }
 
     @Test void preservesARevisionKeyedCacheAndReloadsAfterPdfReplacement() throws Exception {
