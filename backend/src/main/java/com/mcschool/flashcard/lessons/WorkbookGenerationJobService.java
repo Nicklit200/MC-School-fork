@@ -163,7 +163,8 @@ public class WorkbookGenerationJobService {
     @SuppressWarnings("unchecked")
     private void run(Job job) {
         long start=System.nanoTime();
-        LOG.info("MCH3 workbook job={} state=RUNNING",job.id());
+        LOG.info("MCH3 workbook job={} state=RUNNING queueWaitMs={}",job.id(),
+                Math.max(0,java.time.Duration.between(job.createdAt(),Instant.now()).toMillis()));
         try {
             // Commit the draft, existing idempotency receipt, and job completion together.
             tx.executeWithoutResult(status -> {
