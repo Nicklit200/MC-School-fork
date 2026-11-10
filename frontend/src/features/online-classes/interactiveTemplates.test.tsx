@@ -47,7 +47,7 @@ describe('interactive templates',()=>{
   it('rejects scripts, unknown fields, nonfinite values and degenerate triangles',()=>{
     for(const value of [{...graph,html:'<script/>'},{...graph,coefficients:[Infinity,1,2]},
       {...triangle,vertices:[[0,0],[1,1],[2,2]]},{...fractions,selected:[0,0]},{...fractions,parts:25},
-      {...fractions,selected:[12]},{...graph,coefficients:['1',2,3]}]) expect(parseInteractiveSpec(value)).toBeUndefined();
+      {...fractions,selected:[48]},{...graph,coefficients:['1',2,3]}]) expect(parseInteractiveSpec(value)).toBeUndefined();
     [graph,triangle,fractions].forEach(spec=>expect(parseInteractiveSpec(spec)).toEqual(spec));
   });
   it('makes no requests while dragging coefficients and commits once on release',async()=>{
