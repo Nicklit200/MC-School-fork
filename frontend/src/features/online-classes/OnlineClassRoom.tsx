@@ -52,6 +52,15 @@ import { useClassEvents } from './useClassEvents';
 import { DOCUMENT_TOPIC, documentEvent, VIEW_TOPIC } from './events';
 import type { TranslationKey } from '../../i18n/translations';
 
+/** Report only a fixed diagnostic category, never raw LiveKit errors or signed media URLs. */
+function reportKolinDiagnostic(classId: string, category: Parameters<typeof onlineClassesApi.reportDiagnostic>[1]) {
+  if (typeof onlineClassesApi.reportDiagnostic === 'function') {
+    void onlineClassesApi.reportDiagnostic(classId, category).catch(() => {
+      // Diagnosis telemetry must not interfere with class operation.
+    });
+  }
+}
+
 // Konva is ~300 kB; the board gets its own lazy boundary inside the already-lazy
 // class route.
 const WhiteboardPanel = lazy(() =>
@@ -206,6 +215,7 @@ function RoomBody({
           retryTimer = setTimeout(() => { void start(); }, attempts * 500);
         } else {
           setTranscriptionAutoError(true);
+          reportKolinDiagnostic(classId, 'TRANSCRIPTION_START');
         }
         return;
       }
@@ -263,10 +273,13 @@ function RoomBody({
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
   useEffect(() => {
-    const report = (event: Event) => setMaterialError((event as CustomEvent<string>).detail);
+    const report = (event: Event) => {
+      setMaterialError((event as CustomEvent<string>).detail);
+      reportKolinDiagnostic(classId, 'PDF_RENDER');
+    };
     window.addEventListener('mc-workbook-render-error', report);
     return () => window.removeEventListener('mc-workbook-render-error', report);
-  }, []);
+  }, [classId]);
   const uploadMaterial = async (files: File[], targetId: string) => {
     if (!eventId) { setMaterialError('Урок не связан с календарём. Загрузка недоступна.'); return; }
     const studentId = personalWorkbookData?.enabled && isPersonalWorkbookBoard(targetId) ? personalBoardOwner(targetId) : null;
@@ -378,6 +391,9 @@ function RoomBody({
   const wasSharing = useRef(false);
   const hostUserId = useHostUserId(classId);
   const audioFocus = useClassAudioFocus(classId, hostUserId, connection.host);
+  useEffect(() => {
+    if (audioFocus.error) reportKolinDiagnostic(classId, 'AUDIO_FOCUS');
+  }, [audioFocus.error, classId]);
   const audioRestore = useRef(false);
   useEffect(() => { audioRestore.current = false; }, [classId]);
   useEffect(() => {
@@ -1035,7 +1051,16 @@ export function OnlineClassRoom({
       onError={(error) => {
         // Send a category only, never the provider's raw potentially sensitive
         // error message, token or room URL to the page.
-        onMediaError?.(categorizeLiveKitError(error));
+        const category = categorizeLiveKitError(error);
+        onMediaError?.(category);
+        const incident = ({
+          authorization: 'MEDIA_AUTHORIZATION',
+          signaling: 'MEDIA_SIGNALING',
+          network: 'MEDIA_NETWORK',
+          devices: 'MEDIA_DEVICES',
+          unknown: 'MEDIA_UNKNOWN',
+        } as const)[category];
+        reportKolinDiagnostic(classId, incident);
       }}
       onDisconnected={(reason) => {
         // Code 0 means UNKNOWN, not a confirmed network or permission error.
