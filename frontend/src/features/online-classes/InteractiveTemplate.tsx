@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { fmt, graphPoint, parseInteractiveSpec, plot, sectorPath, templateScene, templateTitle, type InteractiveSpec } from './interactiveTemplates';
+import { fmt, fractionDiscs, fractionFromInputs, graphPoint, parseInteractiveSpec, plot, sectorPath, templateScene, templateTitle, type InteractiveSpec } from './interactiveTemplates';
 import './interactive-template.css';
 import {checkSceneAnswer,scenePoint,sceneProjection,setSceneParameter} from './mathScene';
 import {checkSolidAnswer} from './mathSolid';
@@ -14,6 +14,16 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
   const clip=useId().replace(/:/g,'');
   const de=value.language==='de';
   const [answer,setAnswer]=useState(''),[answerStatus,setAnswerStatus]=useState<string|null>(null);
+  const [numerator,setNumerator]=useState(spec.template==='fractionCircle'?String(spec.selected.length):'0');
+  const [denominator,setDenominator]=useState(spec.template==='fractionCircle'?String(spec.parts):'4');
+  const [fractionError,setFractionError]=useState<string|null>(null);
+  const activeParts=value.template==='fractionCircle'?value.parts:0;
+  const activeNumerator=value.template==='fractionCircle'?value.selected.length:0;
+  useEffect(()=>{
+    if(value.template==='fractionCircle') {
+      setNumerator(String(value.selected.length));setDenominator(String(value.parts));setFractionError(null);
+    }
+  },[activeNumerator,activeParts,value.template]);
   useEffect(()=>setAnswerStatus(null),[value]);
   useEffect(()=>{if(!dirty.current&&!flight.current){current.current=spec;setValue(spec);base.current=revision;}},[spec,revision]);
   const change=(next:InteractiveSpec)=>{
@@ -29,6 +39,27 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
       if(!saved) {setStatus('error');return;}
       base.current=saved;dirty.current=false;setStatus('idle');
     } catch {setStatus('error');} finally {flight.current=false;}
+  };
+  const setFraction=(parts:number,amount:number)=>{
+    const next=fractionFromInputs(String(amount),String(parts));
+    const v=current.current;
+    if(v.template!=='fractionCircle'||!next)return;
+    setFractionError(null);
+    change({...v,...next});
+    void commit();
+  };
+  const applyFraction=(event:React.FormEvent<HTMLFormElement>)=>{
+    event.preventDefault();
+    const next=fractionFromInputs(numerator,denominator);
+    if(!next) {
+      setFractionError(de?'Nenner 1–24, Zähler 0–4 × Nenner.':'Знаменатель 1–24, числитель от 0 до четырёх целых.');
+      return;
+    }
+    const v=current.current;
+    if(v.template!=='fractionCircle')return;
+    setFractionError(null);
+    change({...v,...next});
+    void commit();
   };
   const moveVertex=(index:number,x:number,y:number)=>{
     const v=current.current;
@@ -61,10 +92,18 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
       {templateScene(value).map((p,i)=>p.kind==='text'?<text key={i} x={p.x} y={p.y} fontSize={p.size??15} fill={p.fill??'#172033'}>{p.text}</text>
         :p.kind==='circle'?<circle key={i} cx={p.x} cy={p.y} r={p.r} fill={p.fill}/>
         :<path key={i} d={p.d} stroke={p.stroke} strokeWidth={p.width??1} fill={p.fill??'none'} clipPath={p.clip?`url(#${clip})`:undefined}/>)}
-      {!locked&&value.template==='fractionCircle'&&Array.from({length:value.parts},(_,index)=><path key={index} d={sectorPath(index,value.parts)}
-        fill="transparent" role="button" tabIndex={0} aria-label={`${de?'Teil':'Доля'} ${index+1}`} aria-pressed={value.selected.includes(index)}
-        onClick={()=>{const v=current.current;if(v.template!=='fractionCircle')return;change({...v,selected:v.selected.includes(index)?v.selected.filter(n=>n!==index):[...v.selected,index]});void commit();}}
-        onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.currentTarget.dispatchEvent(new MouseEvent('click',{bubbles:true}));}}}/>)}
+      {!locked&&value.template==='fractionCircle'&&fractionDiscs(value).flatMap(pizza=>
+        Array.from({length:value.parts},(_,index)=>{
+          const sector=pizza.offset+index;
+          return <path key={sector} d={sectorPath(index,value.parts,pizza.cx,pizza.cy,pizza.r)}
+            fill="transparent" role="button" tabIndex={0}
+            aria-label={`${de?'Pizza':'Пицца'} ${pizza.pizza}, ${de?'Teil':'кусочек'} ${index+1}`}
+            aria-pressed={value.selected.includes(sector)}
+            onClick={()=>{const v=current.current;if(v.template!=='fractionCircle')return;
+              change({...v,selected:v.selected.includes(sector)?v.selected.filter(n=>n!==sector):[...v.selected,sector]});
+              void commit();}}
+            onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.currentTarget.dispatchEvent(new MouseEvent('click',{bubbles:true}));}}}/>;
+        }))}
       {!locked&&value.template==='triangle'&&value.vertices.map((v,index)=>{const [x,y]=graphPoint(...v);return <circle key={index} cx={x} cy={y} r={17}
         fill="transparent" className="interactive-template__handle" role="button" tabIndex={0} aria-label={`${de?'Punkt':'Точка'} ${'ABC'[index]}`}
         onPointerDown={event=>{event.preventDefault();if(drag.current)return;drag.current={id:event.pointerId,vertex:index};svg.current?.setPointerCapture(event.pointerId);}}
@@ -116,10 +155,48 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
         onChange={event=>change({...value,coefficients:value.coefficients.map((n,i)=>i===index?Number(event.target.value):n)})}
         onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>
     </label>)}</div>}
-    {!disabled&&value.template==='fractionCircle'&&<label className="interactive-template__parts">{de?'Anzahl der Teile':'Количество долей'}: {value.parts}
-      <input type="range" min={2} max={24} step={1} value={value.parts} disabled={locked} aria-label={de?'Anzahl der Teile':'Количество долей'}
-        onChange={event=>{const parts=Number(event.target.value);change({...value,parts,selected:value.selected.filter(n=>n<parts)});}}
-        onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/></label>}
+    {!disabled&&value.template==='fractionCircle'&&<div className="interactive-template__fractions">
+      <form className="interactive-template__fraction-form" onSubmit={applyFraction}>
+        <label>{de?'Zähler':'Числитель'}
+          <input type="number" min={0} max={value.parts*4} step={1} inputMode="numeric" pattern="[0-9]*"
+            value={numerator} disabled={locked} aria-label={de?'Zähler':'Числитель'}
+            onChange={event=>{setNumerator(event.target.value);setFractionError(null);}}/></label>
+        <span className="interactive-template__fraction-slash" aria-hidden="true">/</span>
+        <label>{de?'Nenner':'Знаменатель'}
+          <input type="number" min={1} max={24} step={1} inputMode="numeric" pattern="[0-9]*"
+            value={denominator} disabled={locked} aria-label={de?'Nenner':'Знаменатель'}
+            onChange={event=>{setDenominator(event.target.value);setFractionError(null);}}/></label>
+        <button type="submit" disabled={locked}>{de?'Anwenden':'Применить дробь'}</button>
+      </form>
+      <div className="interactive-template__fraction-sliders">
+        <label>{de?'Teile pro Pizza':'Частей в пицце'}: {value.parts}
+          <input type="range" min={1} max={24} step={1} value={value.parts} disabled={locked}
+            aria-label={de?'Teile pro Pizza':'Частей в пицце'}
+            onChange={event=>{const parts=Number(event.target.value);change({...value,parts,
+              selected:Array.from({length:Math.min(value.selected.length,parts*4)},(_,i)=>i)});}}
+            onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/></label>
+        <label>{de?'Gefärbte Stücke':'Закрашенных кусочков'}: {value.selected.length}
+          <input type="range" min={0} max={value.parts*4} step={1} value={value.selected.length} disabled={locked}
+            aria-label={de?'Gefärbte Stücke':'Закрашенных кусочков'}
+            onChange={event=>change({...value,selected:Array.from({length:Number(event.target.value)},(_,i)=>i)})}
+            onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/></label>
+      </div>
+      <div className="interactive-template__fraction-actions">
+        <button type="button" disabled={locked||value.selected.length===0}
+          onClick={()=>setFraction(value.parts,Math.max(0,value.selected.length-1))}>{de?'− 1 Stück':'− 1 кусочек'}</button>
+        <button type="button" disabled={locked||value.selected.length>=value.parts*4}
+          onClick={()=>setFraction(value.parts,value.selected.length+1)}>{de?'+ 1 Stück':'+ 1 кусочек'}</button>
+        <button type="button" disabled={locked||value.selected.length===0}
+          onClick={()=>setFraction(value.parts,0)}>{de?'Alles löschen':'Очистить'}</button>
+        <button type="button" disabled={locked||value.selected.length>=value.parts*4}
+          onClick={()=>setFraction(value.parts,Math.min(value.parts*4,value.selected.length+value.parts))}>
+          {de?'+ 1 Pizza':'+ 1 пицца'}</button>
+      </div>
+      <p className="interactive-template__fraction-hint">
+        {de?'Eigene Brüche, auch 7/4, sind möglich. Bis zu 4 Pizzen.':'Введите любую дробь, например 3/8 или 7/4. До 4 пицц.'}
+      </p>
+      {fractionError&&<p role="alert">{fractionError}</p>}
+    </div>}
     {!disabled&&value.template==='triangle'&&<p>{de?'Punkte ziehen oder mit den Pfeiltasten bewegen.':'Перетаскивайте точки или двигайте их стрелками клавиатуры.'}</p>}
     {status==='saving'&&<p role="status">{de?'Wird gespeichert…':'Сохраняем…'}</p>}
     {status==='error'&&<p role="alert">{de?'Nicht gespeichert. Laden Sie den aktuellen Stand.':'Изменение не сохранено. Загрузите актуальное состояние.'}
