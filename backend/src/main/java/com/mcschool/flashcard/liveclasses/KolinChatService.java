@@ -40,6 +40,8 @@ public class KolinChatService {
     private KolinBoardReviewService reviews;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
     private KolinLessonContextService lessonContext;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinClassDiagnosticsService classDiagnostics;
     private final Set<UUID> pendingTeachers = ConcurrentHashMap.newKeySet();
 
     public KolinChatService(OnlineClassAccessService access, StudentGroupRepository groups,
@@ -119,6 +121,19 @@ public class KolinChatService {
                             classId, ex.getClass().getSimpleName());
                     context.put("lessonDocuments", Map.of("state","unavailable",
                             "limitations","Saved lesson materials could not be retrieved for this request."));
+                }
+            }
+            // Fresh server-observed media status and sanitized recent client failures.
+            // Availability is always explicit: missing provider data never means "student muted".
+            if (classDiagnostics != null) {
+                try {
+                    context.put("classDiagnostics", classDiagnostics.read(teacher, room, question));
+                } catch (RuntimeException ex) {
+                    context.put("classDiagnostics", Map.of("state", "unavailable",
+                        "note", "System status could not be checked; never guess its cause."));
+                    LoggerFactory.getLogger(getClass()).warn(
+                        "Kolyn class diagnostics unavailable: classId={} errorType={}",
+                        classId, ex.getClass().getSimpleName());
                 }
             }
             LoggerFactory.getLogger(getClass()).info("Kolyn context: classId={} transcriptState={} transcriptSegments={} transcriptTruncated={} transcriptionActive={} boardPages={}",
