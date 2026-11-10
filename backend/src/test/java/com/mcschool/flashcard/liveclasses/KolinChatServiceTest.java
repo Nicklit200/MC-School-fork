@@ -75,6 +75,29 @@ class KolinChatServiceTest {
         verifyNoMoreInteractions(groups);
     }
 
+    @Test void everyQuestionAutomaticallyIncludesRelevantSavedLessonPages() throws Exception {
+        var index=mock(KolinLessonContextService.class);
+        ReflectionTestUtils.setField(chat,"lessonContext",index);
+        var chosen=new KolinChatService.Context("group",null,1);
+        when(index.read(eq(host),eq(room),eq("Что в первом задании?"),eq(chosen))).thenReturn(Map.of(
+                "state","text_context_available",
+                "relevantPages",List.of(Map.of("source","Общая доска","pageNumber",1,"text","TASK 1: 4+6")),
+                "handwritingContentReadable",false));
+        chat.send(host,room.getId(),question("Что в первом задании?",chosen));
+        verify(index).read(eq(host),eq(room),eq("Что в первом задании?"),eq(chosen));
+        verify(ai).kolinReply(argThat(value->value.contains("TASK 1: 4+6") && value.contains("lessonDocuments")
+                && value.contains("handwritingContentReadable")),anyList(),eq("Что в первом задании?"));
+    }
+
+    @Test void pdfIndexUnavailableFailsOpenWithoutPretendingToReadIt() throws Exception {
+        var index=mock(KolinLessonContextService.class);
+        ReflectionTestUtils.setField(chat,"lessonContext",index);
+        when(index.read(eq(host),eq(room),anyString(),any())).thenThrow(new IllegalStateException("PRIVATE_PDF_CONTENT"));
+        chat.send(host,room.getId(),question("Объясни сложение дробей",new KolinChatService.Context("group",null,1)));
+        verify(ai).kolinReply(argThat(value->value.contains("lessonDocuments") &&
+                value.contains("unavailable") && !value.contains("PRIVATE_PDF_CONTENT")),anyList(),anyString());
+    }
+
     @Test void defaultGroupContextUsesExistingRoomBinding() {
         chat.send(host,room.getId(),question("Дай 3 задания",null));
         verify(ai).kolinReply(contains("Group 1"),eq(List.of()),eq("Дай 3 задания"));
