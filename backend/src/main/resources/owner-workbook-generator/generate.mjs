@@ -91,7 +91,13 @@ function exercise(b) {
   const classes = ['block','exercise', ['relaxed','compact'].includes(b.size) ? b.size : '', isExit ? 'exit' : '', isError ? 'error-detective' : ''].join(' ');
   const head = b.title ? `<div class="exercise-head"><div class="exercise-number">${richText(b.number)}</div><div class="exercise-head-text"><div class="exercise-title">${richText(b.title)}</div>${b.subtitle ? `<div class="exercise-subtitle">${richText(b.subtitle)}</div>` : ''}</div></div>` : '';
   const rows = (b.rows ?? []).map(studentTaskRow).join('');
-  const lines = b.writeLines ? `<div class="response-lines">${Array.from({length:b.writeLines}, ()=>'<div></div>').join('')}</div>` : '';
+  // Render one measured blank writing area rather than N decorative rules.
+  // Retain the exact previous height, including full handwriting spacing.
+  const n = Number(b.writeLines ?? 0);
+  if(!Number.isInteger(n) || n<0 || n>30)throw new TypeError('Invalid writing line count');
+  const gap = lesson.meta.homeworkMode===true && !plain ? 5.6 : 7.2;
+  const height = n ? (2.4*n + gap*(n-1) + (lesson.meta.homeworkMode===true && !plain ? 0 : 1)) : 0;
+  const lines = n ? `<div class="response-lines" data-qa="blank-workspace" style="height:${height.toFixed(2)}mm"></div>` : '';
   const mini = b.extra ? `<div class="mini-check"><span class="small-pill">${richText(b.extra.label)}</span>${math(b.extra.math)}</div>` : '';
   const selfRating = b.selfRating ? (() => {
     const [intro,...choices] = b.selfRating.split('□');
@@ -194,8 +200,9 @@ function pageChrome({ index, count, title, subtitle, time, teacher }) {
   const subjectLabel = teacher ? 'LEHRERLÖSUNGEN' : homeworkStudent ? 'HAUSAUFGABEN' : 'ARBEITSHEFT';
   const top = `<div class="brandbar"><img src="data:image/png;base64,${logo}" alt="Original Mindcrafti M logo"><div class="brand-lines"><div class="school-name">${richText(meta.school)}</div><div class="school-kind">${richText(meta.subject)} &nbsp;/&nbsp; ${subjectLabel}</div></div></div>`;
   const heading = `<div class="page-heading"><h1>${richText(title)}</h1><p class="page-subtitle">${richText(subtitle)}</p></div>`;
-  const progress = teacher ? '' : `<div class="progress" style="grid-template-columns:repeat(${Math.max(1,count)},1fr)" aria-hidden="true">${Array.from({length:count}, (_,i) => `<span class="${i === index ? 'current' : i < index ? 'done' : ''}"></span>`).join('')}</div>`;
-  const pill = time && !homeworkStudent ? `<div class="time-pill">${richText(time)}</div>` : '';
+  // Page index remains in the footer; omit the per-page progress bar and time badge.
+  const progress = '';
+  const pill = '';
   const footer = homeworkStudent
     ? `<footer class="footer"><span>${richText(meta.school)} &nbsp;/&nbsp; MATHEMATIK</span><span class="page-index">${pad2(index+1)} / ${pad2(count)}</span></footer>`
     : `<footer class="footer"><span>${richText(meta.school)} &nbsp;/&nbsp; ${richText(meta.group)}</span><span class="page-index">${pad2(index+1)} / ${pad2(count)} &nbsp; • &nbsp; ${richText(meta.date)}</span></footer>`;
