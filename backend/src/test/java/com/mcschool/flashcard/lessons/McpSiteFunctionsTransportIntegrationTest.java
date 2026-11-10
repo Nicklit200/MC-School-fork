@@ -201,7 +201,7 @@ class McpSiteFunctionsTransportIntegrationTest {
         Map<String,Object> save=Map.of("functionId","teacher_help.draft",
             "arguments",Map.of("id",id,"body",draft),
             "confirm",true,"idempotencyKey","guide-draft-verified-20261110");
-        rpcFailure("teacher-a","execute_site_function",save);
+        rejected(call("teacher-a","execute_site_function",save),404);
         assertThat(value(call("admin","execute_site_function",save)).path("draft").path("body").asText())
             .contains("Завершить урок для всех");
         assertThat(value(call("teacher-a","get_teacher_guide",Map.of("topicId",id)))
@@ -210,7 +210,7 @@ class McpSiteFunctionsTransportIntegrationTest {
         Map<String,Object> publish=Map.of("functionId","teacher_help.publish",
             "arguments",Map.of("id",id),"confirm",true,
             "idempotencyKey","guide-publish-verified-20261110");
-        rpcFailure("teacher-a","execute_site_function",publish);
+        rejected(call("teacher-a","execute_site_function",publish),404);
         assertThat(value(call("admin","execute_site_function",publish))
             .path("published").path("body").asText()).contains("Завершить урок для всех");
 
