@@ -207,6 +207,30 @@ public class LiveKitMediaProvider implements LiveClassMediaProvider {
         }
     }
 
+    @Override
+    public List<LiveClassMediaProvider.MediaParticipant> listParticipantMedia(String roomName) {
+        try {
+            Response<List<LivekitModels.ParticipantInfo>> response =
+                    roomServiceClient.listParticipants(roomName).execute();
+            if (response.isSuccessful() && response.body() != null) {
+                return response.body().stream().map(participant -> {
+                    var microphone = participant.getTracksList().stream()
+                            .filter(track -> track.getType() == LivekitModels.TrackType.AUDIO
+                                    && track.getSource() == LivekitModels.TrackSource.MICROPHONE)
+                            .findFirst();
+                    return new LiveClassMediaProvider.MediaParticipant(
+                        participant.getIdentity(), microphone.isPresent(),
+                        microphone.map(LivekitModels.TrackInfo::getMuted).orElse(false)
+                    );
+                }).toList();
+            }
+            if (response.code() == 404 && isMissingRoom(response.errorBody())) return List.of();
+            throw new MediaProviderException("LiveKit media diagnostic failed with HTTP " + response.code());
+        } catch (java.io.IOException e) {
+            throw new MediaProviderException("LiveKit media diagnostic failed", e);
+        }
+    }
+
     private static boolean isMissingRoom(okhttp3.ResponseBody body) {
         if (body == null) return false;
         try (body) {
