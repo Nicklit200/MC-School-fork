@@ -30,8 +30,9 @@ export function parseInteractiveSpec(value: unknown): InteractiveSpec | undefine
     const vertices = s.vertices.map(p => [...p] as [number,number]);
     if (triangleArea(vertices) >= .05) return {template:s.template,language:s.language,vertices};
   }
-  if (s.template === 'fractionCircle' && keys('template','language','parts','selected') && finite(s.parts,2,24) && Number.isInteger(s.parts)
-    && Array.isArray(s.selected) && s.selected.every(n => finite(n,0,(s.parts as number)-1) && Number.isInteger(n))
+  if (s.template === 'fractionCircle' && keys('template','language','parts','selected') && finite(s.parts,1,24) && Number.isInteger(s.parts)
+    && Array.isArray(s.selected) && s.selected.length <= (s.parts as number)*4
+    && s.selected.every(n => finite(n,0,(s.parts as number)*4-1) && Number.isInteger(n))
     && new Set(s.selected).size === s.selected.length)
     return {template:s.template,language:s.language,parts:s.parts,selected:[...s.selected]};
 }
@@ -57,9 +58,22 @@ export function triangleMeasures(v:[number,number][]) {
   return {sides,angles,area:triangleArea(v),perimeter:sides.reduce((a,b)=>a+b,0)};
 }
 const gcd=(a:number,b:number):number=>b?gcd(b,a%b):a;
+export const MAX_PIZZA_CIRCLES = 4;
+export function fractionFromInputs(numerator:string,denominator:string):{parts:number;selected:number[]}|undefined {
+  if(!/^\\d{1,3}$/.test(numerator.trim()) || !/^\\d{1,2}$/.test(denominator.trim())) return;
+  const n=Number(numerator.trim()),parts=Number(denominator.trim());
+  if(!Number.isSafeInteger(n) || !Number.isSafeInteger(parts) || parts<1 || parts>24 || n>parts*MAX_PIZZA_CIRCLES) return;
+  return {parts,selected:Array.from({length:n},(_,index)=>index)};
+}
 export function fractionLabel(spec: Extract<InteractiveSpec,{template:'fractionCircle'}>) {
-  const n=spec.selected.length,d=gcd(n,spec.parts);
-  return `${n}/${spec.parts} = ${n/d}/${spec.parts/d}`;
+  const n=spec.selected.length,divisor=gcd(n,spec.parts);
+  const reduced=n/divisor,denominator=spec.parts/divisor;
+  if(n>spec.parts && n%spec.parts!==0) {
+    const whole=Math.floor(n/spec.parts),remainder=(n%spec.parts)/gcd(n%spec.parts,spec.parts);
+    const remainingDenominator=spec.parts/gcd(n%spec.parts,spec.parts);
+    return `${n}/${spec.parts} = ${whole} ${remainder}/${remainingDenominator}`;
+  }
+  return `${n}/${spec.parts} = ${denominator===1?reduced:`${reduced}/${denominator}`}`;
 }
 export type Primitive =
   | {kind:'path'; d:string; stroke:string; fill?:string; width?:number; clip?:boolean}
@@ -68,9 +82,18 @@ export type Primitive =
 export const plot = {cx:250,cy:210,scale:25,left:50,top:70,width:400,height:280};
 export const graphPoint=(x:number,y:number):[number,number]=>[plot.cx+x*plot.scale,plot.cy-y*plot.scale];
 const coord=(n:number)=>Math.round(n*1000)/1000;
-export function sectorPath(index:number,parts:number) {
-  const a=-Math.PI/2+index*2*Math.PI/parts,b=a+2*Math.PI/parts,r=110;
-  return `M 250 210 L ${coord(250+r*Math.cos(a))} ${coord(210+r*Math.sin(a))} A ${r} ${r} 0 ${b-a>Math.PI?1:0} 1 ${coord(250+r*Math.cos(b))} ${coord(210+r*Math.sin(b))} Z`;
+export function fractionDiscs(spec:Extract<InteractiveSpec,{template:'fractionCircle'}>) {
+  const highest=spec.selected.length ? Math.max(...spec.selected) : -1;
+  const count=Math.min(MAX_PIZZA_CIRCLES,Math.max(1,Math.floor(highest/spec.parts)+1));
+  const positions=count===1?[[250,210,110]]:
+    count===2?[[138,210,101],[362,210,101]]:
+    [[138,145,72],[362,145,72],[138,303,72],[362,303,72]].slice(0,count);
+  return positions.map(([cx,cy,r],index)=>({cx,cy,r,offset:index*spec.parts,pizza:index+1}));
+}
+export function sectorPath(index:number,parts:number,cx=250,cy=210,r=110) {
+  if(parts===1) return `M ${cx} ${coord(cy-r)} A ${r} ${r} 0 1 1 ${cx} ${coord(cy+r)} A ${r} ${r} 0 1 1 ${cx} ${coord(cy-r)} Z`;
+  const a=-Math.PI/2+index*2*Math.PI/parts,b=a+2*Math.PI/parts;
+  return `M ${cx} ${cy} L ${coord(cx+r*Math.cos(a))} ${coord(cy+r*Math.sin(a))} A ${r} ${r} 0 ${b-a>Math.PI?1:0} 1 ${coord(cx+r*Math.cos(b))} ${coord(cy+r*Math.sin(b))} Z`;
 }
 /** Six rigid unit squares joined along hinges, not a morph between pictures. */
 export function cubeFaces(unfold:number): [number,number,number][][] {
@@ -110,8 +133,10 @@ export function templateScene(spec:InteractiveSpec):Primitive[] {
     return result;
   }
   if(spec.template==='fractionCircle') {
-    for(let i=0;i<spec.parts;i++) path(sectorPath(i,spec.parts),'#334155',1.5,spec.selected.includes(i)?'#f9a66d':'#ffffff');
-    text(25,390,fractionLabel(spec),23);
+    for(const pizza of fractionDiscs(spec))
+      for(let i=0;i<spec.parts;i++) path(sectorPath(i,spec.parts,pizza.cx,pizza.cy,pizza.r),
+        '#88552f',1.6,spec.selected.includes(pizza.offset+i)?'#f9a66d':'#fff7e8');
+    text(25,419,fractionLabel(spec),23);
     return result;
   }
   for(let x=-8;x<=8;x++) {const [px]=graphPoint(x,0);path(`M ${px} 70 V 350`,x===0?'#526074':'#e4e9ee',x===0?1.5:1);
