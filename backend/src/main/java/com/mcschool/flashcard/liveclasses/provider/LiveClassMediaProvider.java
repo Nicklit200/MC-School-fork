@@ -43,6 +43,15 @@ public interface LiveClassMediaProvider {
     /** Identities currently connected, used to reconcile attendance. */
     List<String> listParticipantIdentities(String roomName);
 
+    /** Server-observed LiveKit published microphone tracks, not mic permissions or audio levels. */
+    record MediaParticipant(String identity, boolean microphonePublished, boolean microphoneMuted) {}
+
+    /** Default for alternative providers: never infer a student's actual mic state. */
+    default List<MediaParticipant> listParticipantMedia(String roomName) {
+        throw new MediaProviderException("Media track inspection is unavailable");
+    }
+
+
     /**
      * Sends a server-authored data packet to the room (control notifications).
      *
