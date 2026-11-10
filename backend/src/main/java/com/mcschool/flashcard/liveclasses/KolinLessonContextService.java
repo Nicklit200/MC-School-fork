@@ -183,7 +183,11 @@ public class KolinLessonContextService {
             Parsed cached = cache.get(key);
             if (cached != null) return new Source(name, boardId, shared, cached, version);
             byte[] bytes = documents.workbook(teacher, room.getId(), boardId).orElse(null);
+            // Another teacher action may replace the workbook during extraction.
+            // Never cache/show text under a revision that no longer owns those bytes.
             Parsed parsed = bytes == null ? empty("no_document") : extract(bytes);
+            if (documents.workbookVersion(teacher, room.getId(), boardId) != version)
+                return new Source(name, boardId, shared, empty("changed_during_read"), version);
             cache.put(key, parsed);
             return new Source(name, boardId, shared, parsed, version);
         } catch (RuntimeException ex) {
