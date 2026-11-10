@@ -89,7 +89,11 @@ class McpPersonalLessonWorkbookToolsTest {
         controller.setPersonalLessonAnswersService(personalAnswers);
         controller.setPersonalWorkbookAccess(access);
         controller.setPersonalWorkbookReceipts(receipts);
-        controller.setTeacherGuideService(new McpTeacherGuideService(access,json));
+        var helpCenter = mock(TeacherHelpCenterService.class);
+        when(helpCenter.published()).thenReturn(java.util.Map.of());
+        when(helpCenter.customImages()).thenReturn(java.util.List.of());
+        when(helpCenter.image(anyString())).thenReturn(java.util.Optional.empty());
+        controller.setTeacherGuideService(new McpTeacherGuideService(access,json,helpCenter));
     }
 
     @Test
