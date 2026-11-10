@@ -44,17 +44,22 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
     const observed = current();
     const whole = target.scope === 'workbook';
     const first = target.scope === 'first_page';
-    if (!shared && !whole && !first && (!observed || Date.now() - observed.receivedAt > REVIEW_PAGE_MAX_AGE))
+    const taskPage = target.scope === 'task_page';
+    if (taskPage && (typeof target.pageNumber !== 'number'
+      || !Number.isSafeInteger(target.pageNumber) || target.pageNumber < 1 || target.pageNumber > 1000))
+      throw new KolinReviewUnavailable();
+    if (!shared && !whole && !first && !taskPage && (!observed || Date.now() - observed.receivedAt > REVIEW_PAGE_MAX_AGE))
       throw new KolinReviewUnavailable();
     try {
       const { captureBoardPage } = await import('./boardExport');
-      const boardId = shared ? 'board-1' : observed?.boardId ?? '';
-      const index = first ? 0 : shared ? Math.max(0, (context.currentWorkbookPage ?? 1) - 1) : observed?.page ?? 0;
+      const boardId = shared ? 'board-1' : taskPage ? '' : observed?.boardId ?? '';
+      const index = taskPage ? target.pageNumber! - 1 :
+        first ? 0 : shared ? Math.max(0, (context.currentWorkbookPage ?? 1) - 1) : observed?.page ?? 0;
       const snapshot = await captureBoardPage(classId, target.studentId ?? null, boardId, index,
-        observed ? new Date(observed.receivedAt).toISOString() : null,
-        whole ? 'workbook' : first ? 'first_page' : 'current_page');
+        taskPage ? null : observed ? new Date(observed.receivedAt).toISOString() : null,
+        taskPage ? 'task_page' : whole ? 'workbook' : first ? 'first_page' : 'current_page');
       const latest = current();
-      if (pages.current.scope !== scope || !shared && !whole && !first
+      if (pages.current.scope !== scope || !shared && !whole && !first && !taskPage
         && (!latest || latest.boardId !== observed!.boardId || latest.page !== observed!.page
           || Date.now() - latest.receivedAt > REVIEW_PAGE_MAX_AGE)) throw new KolinReviewUnavailable();
       return snapshot;
