@@ -75,7 +75,7 @@ class KolinLessonContextServiceTest {
     @Test void preservesARevisionKeyedCacheAndReloadsAfterPdfReplacement() throws Exception {
         when(roster.read(room)).thenReturn(List.of());
         when(annotations.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).thenReturn(List.of());
-        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(5L,5L,6L);
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(5L,5L,5L,6L,6L);
         when(documents.workbook(host,room.getId(),"board-1")).thenReturn(
             Optional.of(pdf("Old lesson task")),Optional.of(pdf("Updated lesson task")));
         var first = service.read(host,room,"task",null);
@@ -85,6 +85,16 @@ class KolinLessonContextServiceTest {
         assertThat(again.toString()).contains("Old lesson task");
         assertThat(updated.toString()).contains("Updated lesson task").doesNotContain("Old lesson task");
         verify(documents,times(2)).workbook(host,room.getId(),"board-1");
+    }
+
+    @Test void replacementDuringReadDoesNotLeakAnOldPdfUnderTheNewVersion() throws Exception {
+        when(roster.read(room)).thenReturn(List.of());
+        when(annotations.findAllByOnlineClassIdOrderByPageIndexAsc(room.getId())).thenReturn(List.of());
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(3L,4L);
+        when(documents.workbook(host,room.getId(),"board-1")).thenReturn(Optional.of(pdf("Stale lesson conditions")));
+        var result = service.read(host,room,"Give the problem",null);
+        assertThat(result.get("relevantPages").toString()).doesNotContain("Stale lesson conditions");
+        assertThat(result.get("catalog").toString()).contains("changed_during_read");
     }
 
     @Test void neverFetchesFilesOfStudentsOutsideTheServerRoomRoster() throws Exception {
