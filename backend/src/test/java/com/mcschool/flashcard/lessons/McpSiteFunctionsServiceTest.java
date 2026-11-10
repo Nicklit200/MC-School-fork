@@ -96,6 +96,34 @@ class McpSiteFunctionsServiceTest {
     }
 
     @Test
+    void handbookEditorialOperationsAreAdminOnlyAndUseConfirmedMcpWrites() {
+        var ids=McpSiteFunctionRegistry.functions().stream()
+                .filter(fn->fn.domain().equals("teacher_help")).toList();
+        assertThat(ids).extracting(McpSiteFunctionRegistry.Function::id)
+                .contains("teacher_help.published", "teacher_help.editor", "teacher_help.draft",
+                        "teacher_help.publish", "teacher_help.restore", "teacher_help.history", "teacher_help.upload");
+        assertThat(ids).filteredOn(fn->fn.scope()==McpSiteFunctionRegistry.Scope.CALLER)
+                .extracting(McpSiteFunctionRegistry.Function::id).containsExactly("teacher_help.published");
+        assertThat(ids).filteredOn(fn->fn.scope()==McpSiteFunctionRegistry.Scope.ADMIN).hasSize(6);
+        assertThatThrownBy(()->service.call("get_site_function",
+                Map.of("functionId","teacher_help.publish"),oauth,false)).hasMessageContaining("404");
+        when(access.requireActor(oauth)).thenReturn(admin);
+        var publication=(Map<?,?>)service.call("get_site_function",
+                Map.of("functionId","teacher_help.publish"),oauth,false);
+        assertThat(publication.get("readOnly")).isEqualTo(false);
+        assertThat(publication.toString()).contains("id");
+        var article=(Map<?,?>)service.call("get_site_function",
+                Map.of("functionId","teacher_help.draft"),oauth,false);
+        assertThat(article.toString()).contains("body","title","summary");
+        assertThatThrownBy(()->service.call("read_site_function",
+                Map.of("functionId","teacher_help.publish","arguments",Map.of("id","lesson-flow")),
+                oauth,false)).hasMessageContaining("400");
+        assertThatThrownBy(()->service.call("execute_site_function",
+                Map.of("functionId","teacher_help.publish","arguments",Map.of("id","lesson-flow"),
+                        "idempotencyKey","help-publish-first"),oauth,false)).hasMessageContaining("400");
+    }
+
+    @Test
     void teacherCatalogFiltersAdministrativeFunctionsAndReturnsDiscoverableSchema() {
         Map<?, ?> catalog = (Map<?, ?>) service.call("list_site_functions", Map.of("domain", "teachers"), oauth, false);
         assertThat(catalog.get("total")).isEqualTo(0);
