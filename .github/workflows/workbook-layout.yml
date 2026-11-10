@@ -1,0 +1,29 @@
+name: Mindcrafti workbook layout regression
+on:
+  pull_request:
+    branches: [integration/railway-and-ux]
+    paths:
+      - 'backend/src/main/resources/owner-workbook-generator/**'
+      - '.github/workflows/workbook-layout.yml'
+  workflow_dispatch:
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/src/main/resources/owner-workbook-generator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PDF renderer and math dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'weasyprint==70.0' pymupdf sympy
+          npm install --no-audit --no-fund
+      - name: Node and PDF layout regressions
+        run: npm test
