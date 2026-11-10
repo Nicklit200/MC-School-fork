@@ -2019,6 +2019,12 @@ public class MindcraftiMcpController {
         if(args.containsKey("lessonJson")) {
             String source=required(args,"lessonJson");
             if(source.length()>OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS)throw new IllegalArgumentException("lessonJson is too large");
+            // Reject malformed lessons immediately, before occupying a queue worker.
+            // This shares the canonical validation with the production renderer and
+            // prevents multi-minute failures for out-of-range blank writing spaces.
+            @SuppressWarnings("unchecked")
+            Map<String,Object> candidate=objectMapper.readValue(source,Map.class);
+            OwnerWorkbookPdfRenderService.validateDocument(candidate);
             normalized.put("lessonJson",source);normalized.put("contextToken",required(args,"contextToken"));
         }
         if(args.containsKey("homeworkDay") || args.containsKey("homeworkSeriesKey")) {
