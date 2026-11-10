@@ -58,7 +58,7 @@ class KolinTranscriptContextServiceTest {
 
     @Test void largeLessonFitsAndTheExtraRowMarksTruncationWithoutEnteringContext() {
         var descending = IntStream.range(0, 101).mapToObj(i -> segment(100-i, 101-i, teacher, null,
-                "turn-" + (1000-i), now)).toList();
+                "turn-" + (100-i), now)).toList();
         when(rows.findByOnlineClassIdOrderByStartMsDescIdDesc(eq(room.getId()), any()))
                 .thenReturn(descending.subList(0, 100), descending);
         var exact = contexts.read(room);
