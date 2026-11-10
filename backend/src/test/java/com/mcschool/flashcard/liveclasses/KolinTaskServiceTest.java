@@ -64,6 +64,7 @@ class KolinTaskServiceTest {
 
     @Test void explanationShortcutNeverActivatesForRequestsThatMutateMaterials() throws Exception {
         assertThat(KolinTaskService.isReadOnlyExplanation("Объясни задание 7")).isTrue();
+        assertThat(KolinTaskService.isReadOnlyExplanation("Обьесни задание 7")).isTrue();
         assertThat(KolinTaskService.isReadOnlyExplanation("Объясни, почему sqrt(x²) не x")).isTrue();
         assertThat(KolinTaskService.isReadOnlyExplanation("Warum ist das falsch?")).isFalse();
         assertThat(KolinTaskService.isReadOnlyExplanation("Объясни задание 7 и добавь два новых примера")).isFalse();
