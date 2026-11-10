@@ -97,6 +97,7 @@ export function Layout({ children }: { children: ReactNode }) {
             { to: '/admin/site-visits', label: language === 'DE' ? 'Besuche' : 'Попытки посетителей' },
             { to: '/admin/stories', label: 'Шаблоны Stories' },
             { to: '/admin/prompts', label: language === 'DE' ? 'Prompts' : 'Промты школы' },
+            { to: '/admin/help', label: language === 'DE' ? 'Hilfe verwalten' : 'База знаний' },
             { to: '/skills', label: language === 'DE' ? 'Kompetenzen' : 'Навыки' },
           ]
         : [{ to: '/teachers', label: 'nav.teachers' }];
