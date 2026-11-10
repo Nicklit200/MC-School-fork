@@ -38,6 +38,8 @@ public class KolinChatService {
     private KolinTaskService tasks;
     @org.springframework.beans.factory.annotation.Autowired
     private KolinBoardReviewService reviews;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinLessonContextService lessonContext;
     private final Set<UUID> pendingTeachers = ConcurrentHashMap.newKeySet();
 
     public KolinChatService(OnlineClassAccessService access, StudentGroupRepository groups,
@@ -107,6 +109,18 @@ public class KolinChatService {
         try {
             var transcript = transcript(room);
             context.put("transcript", transcript);
+            // Read-only lesson retrieval for EVERY question. PDF text pages are indexed and
+            // ranked server-side; old documents and unverified handwriting are never invented.
+            if (lessonContext != null) {
+                try {
+                    context.put("lessonDocuments", lessonContext.read(teacher, room, question, request.context()));
+                } catch (RuntimeException ex) {
+                    LoggerFactory.getLogger(getClass()).warn("Kolyn lesson context unavailable: classId={} errorType={}",
+                            classId, ex.getClass().getSimpleName());
+                    context.put("lessonDocuments", Map.of("state","unavailable",
+                            "limitations","Saved lesson materials could not be retrieved for this request."));
+                }
+            }
             LoggerFactory.getLogger(getClass()).info("Kolyn context: classId={} transcriptState={} transcriptSegments={} transcriptTruncated={} transcriptionActive={} boardPages={}",
                     classId,transcript.metadata().state(),transcript.metadata().segmentCount(),transcript.metadata().truncated(),
                     transcript.metadata().transcriptionActive(),board==null?0:board.pages().size());
