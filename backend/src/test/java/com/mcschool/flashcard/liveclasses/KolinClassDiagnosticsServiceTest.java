@@ -63,6 +63,19 @@ class KolinClassDiagnosticsServiceTest {
             .doesNotContain(other.getId().toString(),"Outsider","teacher@test.local");
     }
 
+    @SuppressWarnings("unchecked")
+    @Test void usesAnyAudiblePupilMicrophoneWhenSeveralDevicesConnected() {
+        setup();
+        when(media.isConfigured()).thenReturn(true);
+        when(media.listParticipantMedia(room.getRoomName())).thenReturn(List.of(
+            new LiveClassMediaProvider.MediaParticipant(ParticipantIdentity.of(mark.getId(),"tablet"),true,true),
+            new LiveClassMediaProvider.MediaParticipant(ParticipantIdentity.of(mark.getId(),"laptop"),true,false)));
+        var result = service.read(host,room,"Марк выключил микрофон?");
+        var rows = (List<Map<String,Object>>) result.get("participants");
+        assertThat(rows.get(0)).containsEntry("providerConnected",true)
+            .containsEntry("microphoneTrackStatus","published_unmuted");
+    }
+
     @Test void providerFailureIsNotInterpretedAsMutedOrDisconnected() {
         setup();
         when(media.isConfigured()).thenReturn(true);
