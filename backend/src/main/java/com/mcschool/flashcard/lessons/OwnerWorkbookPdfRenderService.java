@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Semaphore;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -33,6 +35,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Service
 public class OwnerWorkbookPdfRenderService {
+    private static final Logger LOG = LoggerFactory.getLogger(OwnerWorkbookPdfRenderService.class);
     static final int MAX_INPUT_CHARS = 115_000;
     static final int MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
     static final String VERSION = "2026-11-05-v4-fast-shared";
@@ -321,7 +324,12 @@ public class OwnerWorkbookPdfRenderService {
             result.put("qa",qa);
             result.put("published", false);
             result.put("renderMs", (renderedNanos - startedNanos) / 1_000_000L);
-            result.put("totalGenerationMs", (System.nanoTime() - startedNanos) / 1_000_000L);
+            long totalMs = (System.nanoTime() - startedNanos) / 1_000_000L;
+            result.put("totalGenerationMs", totalMs);
+            LOG.info("Mindcrafti workbook renderer successful: renderMs={} storageAndVerificationMs={} totalMs={} studentBytes={} teacherBytes={}",
+                    (renderedNanos - startedNanos) / 1_000_000L,
+                    (System.nanoTime() - renderedNanos) / 1_000_000L,
+                    totalMs, workbook.length, answers.length);
             result.put("runtimeCached", true);
             result.put("publication", "DRAFT only; review both PDFs before calling publish_lesson_draft");
             return result;
