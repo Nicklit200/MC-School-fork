@@ -68,6 +68,28 @@ describe('Kolyn captures saved pupil work', () => {
     expect(shot.additionalPages[3].revision).toBe(1); expect(mocks.lines).toHaveLength(1);
     expect(document.destroy).toHaveBeenCalledOnce();
   });
+  it('reads the shared group document on page one without a student identifier', async () => {
+    const document = pdf();
+    const shot = await captureBoardPage('class-1', null, 'board-1', 0, null, 'first_page');
+    expect(mocks.bytes).toHaveBeenCalledExactlyOnceWith('class-1', 'board-1');
+    expect(document.renderPage).toHaveBeenCalledExactlyOnceWith(0, 1600);
+    expect(shot).toMatchObject({ studentId: null, boardId: 'board-1', pageNumber: 1, scope: 'first_page' });
+  });
+  it('reads the inherited shared PDF but only the correct pupil ink', async () => {
+    const document = pdf();
+    mocks.version.mockImplementation(async (_classId: string, boardId: string) =>
+      ({ version: boardId === targetId ? 0 : boardId === 'board-1' ? 7 : 4 }));
+    const legacyBoard = 'personal-' + pupil;
+    const entry = { ...annotationDocument('WHITEBOARD', 210, 297), targetId: legacyBoard, pageIndex: 0, revision: 1 };
+    mocks.list.mockResolvedValue([entry, { ...entry, id: 'other-pupil', targetId: 'personal-other' }]);
+    mocks.replay.mockResolvedValue([lateLine(1)]);
+    const shot = await captureBoardPage('class-1', pupil, '', 0, null, 'first_page');
+    expect(document.renderPage).toHaveBeenCalledExactlyOnceWith(0, 1600);
+    expect(mocks.bytes).toHaveBeenCalledExactlyOnceWith('class-1', 'board-1');
+    expect(mocks.lines).toHaveLength(1);
+    expect(shot).toMatchObject({ studentId: pupil, boardId: legacyBoard, pageNumber: 1,
+      documentVersion: 4, sharedDocumentVersion: 7, scope: 'first_page' });
+  });
   it('rejects PDF replacement during capture instead of reviewing old questions with new ink', async () => {
     const document = pdf(); mocks.version.mockResolvedValueOnce({ version: 4 }).mockResolvedValueOnce({ version: 5 });
     await expect(captureBoardPage('class-1', pupil, targetId, 0, new Date().toISOString())).rejects.toThrow('source changed');
