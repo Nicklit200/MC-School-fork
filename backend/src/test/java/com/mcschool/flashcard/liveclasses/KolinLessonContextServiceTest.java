@@ -86,7 +86,12 @@ class KolinLessonContextServiceTest {
         List<Map<String,Object>> pages = (List<Map<String,Object>>) context.get("relevantPages");
         assertThat(pages).isNotEmpty();
         assertThat(pages.get(0)).containsEntry("source","Мелисса").containsEntry("pageNumber",1);
-        assertThat(pages.toString()).contains("25/5=5","4+6=10");
+        // An explicitly numbered question about Melissa must prioritize her
+        // task rather than mixing the identically numbered group problem.
+        assertThat(pages.toString()).contains("25/5=5").doesNotContain("4+6=10");
+        var overview=service.read(host,room,"Какие темы на сегодняшнем уроке?",
+            new KolinChatService.Context("group",null,1));
+        assertThat(overview.get("relevantPages").toString()).contains("25/5=5","4+6=10");
         assertThat(pages.toString()).doesNotContain(melissa.getId().toString(),teacher.getEmail(),"answers.pdf");
     }
 
