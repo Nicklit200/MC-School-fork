@@ -37,19 +37,26 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
     if (!enabled) return;
     const target = await kolinApi.reviewTarget(classId, text, context);
     if (target.state === 'not_requested' || target.state === 'clarify') return;
-    if (target.state !== 'ready' || !target.studentId) throw new KolinReviewUnavailable();
-    const current = () => pages.current.scope === scope ? pages.current.entries.get(target.studentId!) : undefined;
-    const page = current();
+    if (target.state !== 'ready') throw new KolinReviewUnavailable();
+    const shared = target.studentId == null;
+    const current = () => pages.current.scope === scope && target.studentId
+      ? pages.current.entries.get(target.studentId) : undefined;
+    const observed = current();
     const whole = target.scope === 'workbook';
-    if (!whole && (!page || Date.now() - page.receivedAt > REVIEW_PAGE_MAX_AGE)) throw new KolinReviewUnavailable();
+    const first = target.scope === 'first_page';
+    if (!shared && !whole && !first && (!observed || Date.now() - observed.receivedAt > REVIEW_PAGE_MAX_AGE))
+      throw new KolinReviewUnavailable();
     try {
       const { captureBoardPage } = await import('./boardExport');
-      const snapshot = await captureBoardPage(classId, target.studentId, page?.boardId ?? '', page?.page ?? 0,
-        new Date(page?.receivedAt ?? Date.now()).toISOString(), whole ? 'workbook' : 'current_page');
+      const boardId = shared ? 'board-1' : observed?.boardId ?? '';
+      const index = first ? 0 : shared ? Math.max(0, (context.currentWorkbookPage ?? 1) - 1) : observed?.page ?? 0;
+      const snapshot = await captureBoardPage(classId, target.studentId ?? null, boardId, index,
+        observed ? new Date(observed.receivedAt).toISOString() : null,
+        whole ? 'workbook' : first ? 'first_page' : 'current_page');
       const latest = current();
-      if (pages.current.scope !== scope || !whole && (!latest || latest.boardId !== page!.boardId || latest.page !== page!.page
+      if (pages.current.scope !== scope || !shared && !whole && !first
+        && (!latest || latest.boardId !== observed!.boardId || latest.page !== observed!.page
           || Date.now() - latest.receivedAt > REVIEW_PAGE_MAX_AGE)) throw new KolinReviewUnavailable();
-      // The snapshot describes the page reported before capture, not a guessed teacher page.
       return snapshot;
     } catch (error) {
       if (error instanceof Error && error.message === 'REVIEW_TOO_LARGE') throw new KolinReviewTooLarge();
