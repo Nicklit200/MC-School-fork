@@ -25,7 +25,6 @@ function option(name, fallback) {
   return value ? value.slice(name.length + 3) : fallback;
 }
 const lessonPath = resolve(option('lesson', join(root, 'lesson.sample.json')));
-const logoPath = resolve(option('logo', join(root, 'assets', 'logo-m.png')));
 const out = resolve(option('out', join(root, 'out')));
 const plain = args.includes('--plain');
 const lesson = JSON.parse(await readFile(lessonPath, 'utf8'));
@@ -35,7 +34,6 @@ normalizeLessonMath(lesson);
 validateLesson(lesson);
 const visualQa = prepareVisualTasks(lesson);
 const css = await readFile(join(root, 'styles.css'), 'utf8');
-const logo = plain ? '' : (await readFile(logoPath)).toString('base64');
 validateLesson(lesson);
 
 function callout(b, tall = false) {
@@ -198,7 +196,8 @@ function pageChrome({ index, count, title, subtitle, time, teacher }) {
   const meta = lesson.meta;
   const homeworkStudent = lesson.meta.homeworkMode === true && !teacher;
   const subjectLabel = teacher ? 'LEHRERLÖSUNGEN' : homeworkStudent ? 'HAUSAUFGABEN' : 'ARBEITSHEFT';
-  const top = `<div class="brandbar"><img src="data:image/png;base64,${logo}" alt="Original Mindcrafti M logo"><div class="brand-lines"><div class="school-name">${richText(meta.school)}</div><div class="school-kind">${richText(meta.subject)} &nbsp;/&nbsp; ${subjectLabel}</div></div></div>`;
+  // School branding stays as text and the orange header; image logo is temporarily disabled.
+  const top = `<div class="brandbar"><div class="brand-lines"><div class="school-name">${richText(meta.school)}</div><div class="school-kind">${richText(meta.subject)} &nbsp;/&nbsp; ${subjectLabel}</div></div></div>`;
   const heading = `<div class="page-heading"><h1>${richText(title)}</h1><p class="page-subtitle">${richText(subtitle)}</p></div>`;
   // Page index remains in the footer; omit the per-page progress bar and time badge.
   const progress = '';
