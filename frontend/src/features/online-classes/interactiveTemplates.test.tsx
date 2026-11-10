@@ -70,7 +70,7 @@ describe('interactive templates',()=>{
   });
   it('toggles one sector and has no edit controls in the private preview',async()=>{
     const commit=vi.fn().mockResolvedValue('r2');const view=render(<InteractiveTemplate spec={fractions} revision="r1" onCommit={commit}/>);
-    fireEvent.click(screen.getByRole('button',{name:'Доля 1'}));
+    fireEvent.click(screen.getByRole('button',{name:'Пицца 1, кусочек 1'}));
     await waitFor(()=>expect(commit).toHaveBeenCalledTimes(1));expect(commit.mock.calls[0][0].selected).toEqual([1,2,3,4,5]);
     view.unmount();render(<InteractiveTemplate spec={triangle} disabled/>);expect(screen.queryByRole('button')).toBeNull();
   });
