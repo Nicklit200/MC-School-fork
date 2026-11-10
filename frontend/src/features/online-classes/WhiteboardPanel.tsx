@@ -113,6 +113,7 @@ export function WhiteboardPanel({
   compactPreview = false,
   followStudent = false,
   observedPage,
+  onPageChange,
   onSaveLessonDocuments,
   savingLessonDocuments = false,
   lessonDocumentsStatus = null,
@@ -143,6 +144,8 @@ export function WhiteboardPanel({
   followStudent?: boolean;
   /** Page currently being viewed by the student who owns this board. */
   observedPage?: number;
+  /** Teacher's actual local page, independent of the pupil's reported page. */
+  onPageChange?: (index: number) => void;
   onSaveLessonDocuments?: () => void;
   savingLessonDocuments?: boolean;
   lessonDocumentsStatus?: string | null;
@@ -165,6 +168,7 @@ export function WhiteboardPanel({
   const [eraserMode, setEraserMode] = useState<EraserMode>('partial');
   const [inputMode, setInputModeState] = useState<InputMode>(loadInputMode);
   const [pages, setPages] = useState<BoardPages>(() => initialPages(1));
+  useEffect(() => { if (active && isHost && onPageChange) onPageChange(pages.current); }, [active, isHost, onPageChange, pages.current]);
   const [previewViews, setPreviewViews] = useState<Record<number, PageView>>({});
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<'unavailable' | 'failed' | null>(null);
