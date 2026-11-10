@@ -49,7 +49,7 @@ it('can review the whole saved workbook without pretending the pupil is online',
   mocks.target.mockResolvedValue({ state: 'ready', studentId: pupil, scope: 'workbook' });
   const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
   await result.current('Что неправильно решила Мелисса?', {});
-  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 0, expect.any(String), 'workbook');
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 0, null, 'workbook');
 });
 it('does not capture ordinary conversation or ambiguous recipients', async () => {
   const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
