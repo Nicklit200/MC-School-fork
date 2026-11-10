@@ -58,6 +58,18 @@ describe('Kolyn captures saved pupil work', () => {
     expect(shot).toMatchObject({ studentId: pupil, pageNumber: 3, revision: 1, documentVersion: 4, scope: 'current_page', additionalPages: [] });
     expect(document.destroy).toHaveBeenCalledOnce();
   });
+  it('reviews task 7 from physical page three without an active pupil microphone or page announcement', async () => {
+    const document = pdf();
+    const entry = { ...annotationDocument('WHITEBOARD', 210, 297), targetId, pageIndex: 2, revision: 1 };
+    mocks.list.mockResolvedValue([entry]);
+    mocks.replay.mockResolvedValue([lateLine(1)]);
+    const shot = await captureBoardPage('class-1', pupil, '', 2, null, 'task_page');
+    expect(document.renderPage).toHaveBeenCalledExactlyOnceWith(2, 1600);
+    expect(mocks.replay).toHaveBeenCalledExactlyOnceWith('class-1', entry.id, 0);
+    expect(mocks.lines).toHaveLength(1);
+    expect(shot).toMatchObject({ studentId: pupil, pageNumber: 3, scope: 'task_page',
+      observedAt: null, revision: 1, additionalPages: [] });
+  });
   it('includes all PDF pages and appended handwritten pages in a workbook review', async () => {
     const document = pdf();
     mocks.list.mockResolvedValue([{ ...annotationDocument('WHITEBOARD', 210, 297), targetId, pageIndex: 4, revision: 1 }]);
