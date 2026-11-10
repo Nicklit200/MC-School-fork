@@ -84,7 +84,7 @@ def inspect_layout(document):
                 check_children(child, container)
         check_children(page._page_box)
         summaries.append({'page': index + 1, 'width': page.width, 'height': page.height,
-                          'contentBottom': my1, 'footerTop': footer_top, 'plain': plain})
+                          'contentTop': my0, 'contentBottom': my1, 'footerTop': footer_top, 'plain': plain})
     if any(len(pages) != 1 for pages in task_pages.values()):
         issues.append('A task was split between pages')
     return {'passed': not issues, 'pageCount': len(document.pages),
