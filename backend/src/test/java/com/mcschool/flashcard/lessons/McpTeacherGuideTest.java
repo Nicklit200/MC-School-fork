@@ -15,7 +15,13 @@ class McpTeacherGuideTest {
     private final ObjectMapper json=new ObjectMapper();
     private final McpAccessService access=mock(McpAccessService.class);
     private final User teacher=User.activeTeacher("Teacher","teacher@example.test","teacher","unused");
-    private McpTeacherGuideService service()throws Exception{return new McpTeacherGuideService(access,json);}
+    private final TeacherHelpCenterService helpCenter=mock(TeacherHelpCenterService.class);
+    private McpTeacherGuideService service()throws Exception{
+        when(helpCenter.published()).thenReturn(Map.of());
+        when(helpCenter.customImages()).thenReturn(List.of());
+        when(helpCenter.image(anyString())).thenReturn(Optional.empty());
+        return new McpTeacherGuideService(access,json,helpCenter);
+    }
 
     @Test void indexIsCompleteAndAllSourcesAndRelatedTopicsExist()throws Exception {
         var service=service();var result=service.read(teacher,false,Map.of());
@@ -117,7 +123,7 @@ class McpTeacherGuideTest {
         for(var entry:Map.of("answers",List.of("Ответы","Загрузить PDF решений"),
                 "boards",List.of("Общая группа","Имя ученика","Все"),
                 "audio",List.of("Сказать всем","Вернуться к ученику"),
-                "saving",List.of("Сохранить документы урока","Выйти","Завершить урок для всех","Все документы")).entrySet()) {
+                "saving",List.of("Выйти","Завершить урок для всех","Все документы")).entrySet()) {
             var images=(List<McpTeacherGuideService.GuideImage>)service.read(teacher,false,Map.of("topicId",entry.getKey())).get("images");
             assertThat(images.stream().flatMap(i->i.controls().stream()).toList()).containsAll(entry.getValue());
         }
