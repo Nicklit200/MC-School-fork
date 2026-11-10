@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { fmt, fractionDiscs, fractionFromInputs, graphPoint, parseInteractiveSpec, plot, sectorPath, templateScene, templateTitle, type InteractiveSpec } from './interactiveTemplates';
+import { fmt, MAX_PIZZA_CIRCLES, fractionDiscs, fractionFromInputs, graphPoint, parseInteractiveSpec, plot, sectorPath, templateScene, templateTitle, type InteractiveSpec } from './interactiveTemplates';
 import './interactive-template.css';
 import {checkSceneAnswer,scenePoint,sceneProjection,setSceneParameter} from './mathScene';
 import {checkSolidAnswer} from './mathSolid';
@@ -162,9 +162,9 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
         onPointerUp={()=>void commit()} onPointerCancel={()=>void commit()} onKeyUp={()=>void commit()} onBlur={()=>void commit()}/>
     </label>)}</div>}
     {!disabled&&value.template==='fractionCircle'&&<div className="interactive-template__fractions">
-      <form className="interactive-template__fraction-form" onSubmit={applyFraction}>
+      <form noValidate className="interactive-template__fraction-form" onSubmit={applyFraction}>
         <label>{de?'Zähler':'Числитель'}
-          <input type="number" min={0} max={value.parts*4} step={1} inputMode="numeric" pattern="[0-9]*"
+          <input type="number" min={0} max={MAX_PIZZA_CIRCLES*24} step={1} inputMode="numeric" pattern="[0-9]*"
             value={numerator} disabled={locked} aria-label={de?'Zähler':'Числитель'}
             onChange={event=>{setNumerator(event.target.value);setFractionError(null);}}/></label>
         <span className="interactive-template__fraction-slash" aria-hidden="true">/</span>
