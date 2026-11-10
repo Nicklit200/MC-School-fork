@@ -90,30 +90,17 @@ class OwnerWorkbookPdfRenderServiceTest {
     }
 
     @Test
-    void logoExtractionIsCachedOnlyWhileCurrentBrandGuideRevisionIsUnchanged() throws Exception {
+    void logoFreeGeneratorDoesNotReadBrandGuideOrExtractArtwork() throws Exception {
         LessonPdfDraftService drafts=mock(LessonPdfDraftService.class);
         SchoolBrandGuideService brand=mock(SchoolBrandGuideService.class);
         ObjectMapper json=new ObjectMapper();
         var service=new OwnerWorkbookPdfRenderService(json,drafts,brand);
         var teacher=new AuthenticatedUser(UUID.randomUUID(),"teacher@test.local",Role.TEACHER);
-        BufferedImage image=new BufferedImage(160,120,BufferedImage.TYPE_INT_RGB);
-        byte[] guidePdf=LessonPdfDraftService.render("Guide","Staff",List.of(
-                new LessonPdfDraftService.Task("Question","Answer",2)),image,false,"");
-        Instant first=Instant.parse("2026-11-05T10:00:00Z");
-        when(brand.readForStaff(teacher)).thenReturn(new SchoolBrandGuideResponse("Brand","guide.pdf",true,guidePdf.length,first));
-        when(brand.pdfForStaff(teacher)).thenReturn(new SchoolBrandGuideService.BrandGuidePdf("guide.pdf",guidePdf));
         String lesson=json.writeValueAsString(document(60));
-        // The module directory has not been injected in this unit test. That runtime
-        // failure must occur lazily after a fresh guide read, without saving a draft.
+        // The modules path is intentionally unset. Check the generator fails
+        // without loading artwork or saving a draft.
         assertThrows(IllegalStateException.class,()->service.create(teacher,"one",lesson,"",""));
-        assertThrows(IllegalStateException.class,()->service.create(teacher,"two",lesson,"",""));
-        verify(brand,times(2)).readForStaff(teacher);
-        verify(brand,times(1)).pdfForStaff(teacher);
-        when(brand.readForStaff(teacher)).thenReturn(new SchoolBrandGuideResponse("Brand changed","guide.pdf",true,guidePdf.length,first.plusSeconds(1)));
-        assertThrows(IllegalStateException.class,()->service.create(teacher,"three",lesson,"",""));
-        verify(brand,times(3)).readForStaff(teacher);
-        verify(brand,times(2)).pdfForStaff(teacher);
-        verifyNoInteractions(drafts);
+        verifyNoInteractions(brand,drafts);
     }
 
     @Test
