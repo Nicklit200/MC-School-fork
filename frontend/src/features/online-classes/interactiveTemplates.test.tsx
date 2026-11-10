@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { cubeFaces, fractionLabel, graphValue, parseInteractiveSpec, templateScene, triangleMeasures, type InteractiveSpec } from './interactiveTemplates';
+import { cubeFaces, fractionDiscs, fractionFromInputs, fractionLabel, graphValue, parseInteractiveSpec, sectorPath, templateScene, triangleMeasures, type InteractiveSpec } from './interactiveTemplates';
 import { InteractiveTemplate } from './InteractiveTemplate';
 import { foldOperations, undoableOperations, type Operation } from './annotations';
 import { parseKolinWorksheet } from '../../api/kolin';
@@ -73,6 +73,56 @@ describe('interactive templates',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Доля 1'}));
     await waitFor(()=>expect(commit).toHaveBeenCalledTimes(1));expect(commit.mock.calls[0][0].selected).toEqual([1,2,3,4,5]);
     view.unmount();render(<InteractiveTemplate spec={triangle} disabled/>);expect(screen.queryByRole('button')).toBeNull();
+  });
+  it('accepts user-entered proper and improper fractions with up to four pizzas',()=>{
+    expect(fractionFromInputs('3','8')).toEqual({parts:8,selected:[0,1,2]});
+    const sevenFour={...fractions,...fractionFromInputs('7','4')!};
+    expect(parseInteractiveSpec(sevenFour)).toEqual(sevenFour);
+    expect(fractionLabel(sevenFour)).toBe('7/4 = 1 3/4');
+    expect(fractionDiscs(sevenFour)).toHaveLength(2);
+    expect(templateScene(sevenFour).filter(p=>p.kind==='path')).toHaveLength(8);
+    const fourPizzas={...fractions,...fractionFromInputs('96','24')!};
+    expect(fractionDiscs(fourPizzas)).toHaveLength(4);
+    expect(fractionLabel(fourPizzas)).toBe('96/24 = 4/1');
+    expect(parseInteractiveSpec(fourPizzas)).toEqual(fourPizzas);
+    expect(parseInteractiveSpec({...fractions,parts:4,selected:Array.from({length:17},(_,i)=>i)})).toBeUndefined();
+    expect(parseInteractiveSpec({...fractions,parts:0})).toBeUndefined();
+    expect(fractionFromInputs('97','24')).toBeUndefined();
+    expect(fractionFromInputs('7','0')).toBeUndefined();
+    expect(fractionFromInputs('-1','4')).toBeUndefined();
+    expect(fractionFromInputs('1.5','4')).toBeUndefined();
+    expect(fractionFromInputs('1','25')).toBeUndefined();
+    expect(fractionFromInputs('2','1')).toEqual({parts:1,selected:[0,1]});
+    expect(sectorPath(0,1)).toContain('A 110 110');
+  });
+  it('lets the teacher enter a custom fraction and keeps edits synchronized',async()=>{
+    const commit=vi.fn().mockResolvedValue('r2');
+    const view=render(<InteractiveTemplate spec={fractions} revision="r1" onCommit={commit}/>);
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Числитель'}),{target:{value:'7'}});
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Знаменатель'}),{target:{value:'4'}});
+    fireEvent.click(screen.getByRole('button',{name:'Применить дробь'}));
+    const expected={template:'fractionCircle',language:'ru',parts:4,selected:[0,1,2,3,4,5,6]};
+    await waitFor(()=>expect(commit).toHaveBeenCalledWith(expected,'r1'));
+    expect(screen.getByRole('button',{name:'Пицца 2, кусочек 1'})).toHaveAttribute('aria-pressed','true');
+    expect(screen.getByRole('button',{name:'Пицца 2, кусочек 4'})).toHaveAttribute('aria-pressed','false');
+    fireEvent.click(screen.getByRole('button',{name:'+ 1 кусочек'}));
+    await waitFor(()=>expect(commit).toHaveBeenCalledTimes(2));
+    expect(commit.mock.calls[1][0].selected).toEqual([0,1,2,3,4,5,6,7]);
+    view.unmount();
+    render(<InteractiveTemplate spec={expected} disabled/>);
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(screen.queryByRole('button',{name:'Применить дробь'})).toBeNull();
+  });
+  it('rejects invalid manual fractions without saving and supports clearing',async()=>{
+    const commit=vi.fn().mockResolvedValue('r2');
+    render(<InteractiveTemplate spec={fractions} revision="r1" onCommit={commit}/>);
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Знаменатель'}),{target:{value:'0'}});
+    fireEvent.click(screen.getByRole('button',{name:'Применить дробь'}));
+    expect(screen.getByRole('alert')).toHaveTextContent('Знаменатель');
+    expect(commit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Очистить'}));
+    await waitFor(()=>expect(commit).toHaveBeenCalledTimes(1));
+    expect(commit.mock.calls[0][0].selected).toEqual([]);
   });
   it('replays teacher creation and pupil interaction consistently, including deletion and restore',()=>{
     const shape={kind:'interactive',x:.08,y:.06,w:.84,h:.55,interactive:graph};
