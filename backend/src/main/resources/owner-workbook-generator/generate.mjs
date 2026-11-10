@@ -15,6 +15,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { renderDiagram, computeIntersections, graphWarnings } from './diagrams.mjs';
 import { primeMath, renderMath as math, richText } from './math.mjs';
 import { validateLesson, normalizeLessonMath, length, integer, columns } from './schema.mjs';
+import { autoPaginatePages, preflightPages, repackOverflowPages } from './pagination.mjs';
 import { prepareVisualTasks, mergeVisualQa } from './visual-tasks.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -247,101 +248,6 @@ function checkAnswerMath(data){
   return checked;
 }
 
-function blockWeight(block, teacher = false) {
-  const type = String(block?.type || '');
-  const sum = (items, gapMm = 3.6) => (items || []).reduce((total,child)=>total+blockWeight(child,teacher),0) + Math.max(0,(items || []).length-1)*gapMm/14;
-  const millimeters = (value, fallback) => {
-    const v = value ?? fallback;
-    return parseFloat(v)*(v.endsWith('mm') ? 1 : v.endsWith('px') ? 25.4/96 : 16*25.4/96);
-  };
-  switch (type) {
-    case 'callout': return 1.4;
-    case 'strips': return 2.3;
-    case 'graph': case 'coordinateGrid': return 5.0;
-    case 'geometry': return 4.8;
-    case 'facts': return 2.2;
-    case 'example': return 2.2;
-    case 'exercise': {
-      const rows = Array.isArray(block.rows) ? block.rows.length : 0;
-      const writeLines = Number(block.writeLines || 0);
-      return 1.0 + rows * 0.9 + writeLines * 0.42 + (block.extra ? 0.7 : 0) + (block.selfRating ? 0.55 : 0);
-    }
-    case 'teacherNote': return 1.2 + (Array.isArray(block.paragraphs) ? block.paragraphs.length * 0.55 : 0.55);
-    case 'schedule': return 1.2 + (Array.isArray(block.rows) ? block.rows.length * 0.55 : 0);
-    case 'solutions': return 1.3 + (Array.isArray(block.items) ? block.items.length * 0.62 : 0);
-    // This is a conservative early estimate. The rendered-box/PDF checks stay
-    // authoritative. Parallel columns consume the tallest column, not their sum.
-    case 'row': return Math.max(0,...(block.children || []).map(child=>blockWeight(child,teacher)));
-    case 'grid': {
-      const children=block.children || [], count=integer(block.columns,2,1,4), rows=[];
-      for(let i=0;i<children.length;i+=count)rows.push(Math.max(0,...children.slice(i,i+count).map(child=>blockWeight(child,teacher))));
-      return rows.reduce((total,weight)=>total+weight,0)+Math.max(0,rows.length-1)*millimeters(block.gap,'4mm')/14;
-    }
-    case 'split': return Math.max(sum(block.left,3),sum(block.right,3));
-    case 'column': case 'stack': return sum(block.children,millimeters(block.gap,'4mm'));
-    case 'taskCard': return 0.6+(block.title ? 0.5 : 0)+(block.subtitle ? 0.4 : 0)+(block.description ? 0.7 : 0)+sum(block.children);
-    case 'answerLines': return integer(block.lines ?? block.count,3,1,15)*millimeters(block.spacing,'8mm')/14+(block.label ? 0.3 : 0);
-    case 'answerBox': return millimeters(block.height,'24mm')/14;
-    case 'studentHeader': return 0.7;
-    case 'matching': return Math.max(block.left?.length || 0,block.right?.length || 0)+0.6+(block.title ? 0.4 : 0);
-    case 'conclusionBox': return 1.0+(block.text ? 0.6 : 0)+(block.children ? sum(block.children) : (block.lines ?? 2)*8/14);
-    case 'spacer': return millimeters(block.height,'4mm')/14;
-    case 'divider': return 0.1;
-    case 'richText': case 'text': case 'explanation': case 'intersectionResult': return 0.6;
-    case 'math': return 1.0;
-    default:
-      if (teacher) throw new TypeError('Unknown teacher block in preflight: ' + type);
-      throw new TypeError('Unknown workbook block in preflight: ' + type);
-  }
-}
-function preflightPages(pages, teacher = false) {
-  const maxUnits = teacher ? 18 : 16;
-  // Many short dividers/text blocks can fit. The schema bounds node counts;
-  // vertical weight catches crowded pages without rejecting short components.
-  const maxBlocks = 80;
-  pages.forEach((page, index) => {
-    if (!page || !Array.isArray(page.blocks)) throw new TypeError(`Page ${index + 1} must contain blocks[]`);
-    if (page.blocks.length > maxBlocks) throw new Error(`Page ${index + 1} has too many blocks for A4 preflight (${page.blocks.length} > ${maxBlocks})`);
-    const units = page.blocks.reduce((sum, block) => sum + blockWeight(block, teacher), 0);
-    if (units > maxUnits) throw new Error(`Page ${index + 1} is likely to overflow A4 before rendering (layout weight ${units.toFixed(1)} > ${maxUnits})`);
-  });
-}
-
-/**
- * AI chooses teaching content, not physical page packing. Repack top-level
- * blocks with deliberate headroom before the expensive PDF pass.
- * Nested diagrams/grids remain intact and are never split.
- */
-function autoPaginatePages(pages, teacher = false) {
-  // Reserve physical A4 headroom for handwritten work; a pair of 8-line
-  // exercises exceeded measured geometry QA despite passing the old estimate.
-  // With this limit, short tasks can still share a page, while long
-  // handwritten solutions get a separate sheet without shrinking text.
-  const targetUnits = teacher ? 14.5 : 8.5;
-  const hardMax = teacher ? 18 : 16;
-  const output = [];
-  for (const [pageIndex,page] of pages.entries()) {
-    if (!page || !Array.isArray(page.blocks)) throw new TypeError(`Page ${pageIndex + 1} must contain blocks[]`);
-    if (!page.blocks.length) { output.push(page); continue; }
-    let current = [], units = 0;
-    const flush = () => {
-      if (!current.length) return;
-      output.push({...page, blocks: current});
-      current = []; units = 0;
-    };
-    for (const block of page.blocks) {
-      const weight = blockWeight(block, teacher);
-      if (weight > hardMax) {
-        throw new Error(`Page ${pageIndex + 1} contains one block too large for A4 (layout weight ${weight.toFixed(1)} > ${hardMax})`);
-      }
-      if (current.length && units + weight > targetUnits) flush();
-      current.push(block);
-      units += weight;
-    }
-    flush();
-  }
-  return output;
-}
 function runProcess(command, args, timeoutMs, errorPrefix) {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe']});
@@ -411,26 +317,68 @@ await writeFile(join(out,`${base}_math-qa.json`),JSON.stringify(mathQa,null,2),'
 const durationMinutes = Number(lesson.meta.durationMinutes);
 if (!Number.isInteger(durationMinutes) || durationMinutes < 30 || durationMinutes > 240) throw Error('Invalid meta.durationMinutes');
 const targets=[
-  {key:`Arbeitsheft_${durationMinutes}min`,html:doc(lesson.workbookPages.map((p,i)=>workbookPage(p,i,lesson.workbookPages)).join(''),lesson.meta.homeworkMode === true ? 'Mindcrafti / Mathematik / Hausaufgaben' : 'Mindcrafti / Arbeitsheft')},
-  {key:`Lehrerloesungen_${durationMinutes}min`,html:doc(lesson.teacherPages.map((p,i)=>teacherPage(p,i,lesson.teacherPages)).join(''),'Mindcrafti / Gruppe 1 / Lehrerloesungen')},
+  {key:'Arbeitsheft_'+durationMinutes+'min',title:lesson.meta.homeworkMode===true ? 'Mindcrafti / Mathematik / Hausaufgaben' : 'Mindcrafti / Arbeitsheft',student:true},
+  {key:'Lehrerloesungen_'+durationMinutes+'min',title:'Mindcrafti / Lehrerloesungen',student:false},
 ];
-for(const target of targets){target.htmlPath=join(out,`${base}_${target.key}.html`);target.pdfPath=join(out,`${base}_${target.key}.pdf`);await writeFile(target.htmlPath,target.html,'utf8');}
+const writeHtml = async () => {
+  for(const target of targets){
+    const pages=target.student ? lesson.workbookPages : lesson.teacherPages;
+    target.html=doc(pages.map((p,i)=>target.student ? workbookPage(p,i,pages) : teacherPage(p,i,pages)).join(''),target.title);
+    target.htmlPath=join(out,base+'_'+target.key+'.html');
+    target.pdfPath=join(out,base+'_'+target.key+'.pdf');
+    await writeFile(target.htmlPath,target.html,'utf8');
+  }
+};
 const engineArg = process.argv.find(v => v.startsWith('--engine='));
 const engine = engineArg ? engineArg.slice('--engine='.length) : 'weasyprint';
 if(process.argv.includes('--html-only')) {
+  await writeHtml();
   console.log('HTML only mode: ready to preview in any modern browser.');
 } else if(engine === 'weasyprint') {
   const helper = join(root,'render_pdf.py');
-  const renderArgs = [helper, ...targets.flatMap(t => [t.htmlPath, t.pdfPath])];
-  await runProcess(process.env.PYTHON_BIN || 'python3',renderArgs,120000,'WeasyPrint PDF failed');
-  for (const t of targets) console.log('Created '+t.pdfPath);
-} else if(engine === 'chromium') {
+  // A retry is internal to this same generation job, preserving its idempotency key,
+  // its lesson content, the original logo, and every handwriting line.
+  let rendered=false;
+  for(let attempt=0;attempt<4;attempt++){
+    await writeHtml();
+    const renderArgs=[helper,...targets.flatMap(t=>[t.htmlPath,t.pdfPath])];
+    try{
+      await runProcess(process.env.PYTHON_BIN || 'python3',renderArgs,120000,'WeasyPrint PDF failed');
+      rendered=true;
+      break;
+    }catch(error){
+      // Only recover demonstrable vertical layout failures. Math/SVG, logo,
+      // missing resources, engine version and other errors must still fail.
+      const reports=await Promise.all(targets.map(async t=>{
+        try{return JSON.parse(await readFile(t.pdfPath+'.layout.json','utf8'));}
+        catch{return null;}
+      }));
+      if(attempt===3 || reports.some(x=>!x)){
+        throw error;
+      }
+      const studentReport=reports[0],teacherReport=reports[1];
+      const studentRecovery=lesson.meta.homeworkMode===true
+        ? {changed:false,pages:lesson.workbookPages}
+        : repackOverflowPages(lesson.workbookPages,studentReport,false);
+      const teacherRecovery=repackOverflowPages(lesson.teacherPages,teacherReport,true);
+      if(!studentRecovery.changed && !teacherRecovery.changed)throw error;
+      lesson.workbookPages=studentRecovery.pages;
+      lesson.teacherPages=teacherRecovery.pages;
+      preflightPages(lesson.workbookPages,false);
+      preflightPages(lesson.teacherPages,true);
+      await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
+      console.log('Auto-reflow after measured A4 layout error; attempt '+(attempt+1));
+    }
+  }
+  if(!rendered)throw new Error('A4 page packing exhausted');
+  for(const t of targets)console.log('Created '+t.pdfPath);
+} else if(engine==='chromium'){
+  await writeHtml();
   const chromium=findChromium();
   if(!chromium)throw Error('Chromium not found. Set CHROMIUM_PATH.');
-  await Promise.all(targets.map(async target => {
-    const args=['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--allow-file-access-from-files','--no-pdf-header-footer','--virtual-time-budget=2000',`--print-to-pdf=${resolve(target.pdfPath)}`,pathToFileURL(resolve(target.htmlPath)).href];
+  await Promise.all(targets.map(async t=>{
+    const args=['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--allow-file-access-from-files','--no-pdf-header-footer','--virtual-time-budget=2000','--print-to-pdf='+resolve(t.pdfPath),pathToFileURL(resolve(t.htmlPath)).href];
     await runProcess(chromium,args,90000,'Chromium printing failed');
-    console.log('Created '+target.pdfPath);
   }));
 } else throw Error('Unknown engine: '+engine);
 if (!process.argv.includes('--html-only')) {
