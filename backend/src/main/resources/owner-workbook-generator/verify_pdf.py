@@ -86,8 +86,13 @@ def verify_file(path, expected_count, plain=False):
             page_layout = layout['pages'][page.number]
             assert page_layout.get('plain', False) == plain, 'Wrong worksheet rendering mode'
             footer_top = page_layout['footerTop'] * .75
-            blocks = [b for b in page.get_text('blocks') if b[4].strip() and (plain or b[1] > 160)
-                      and b[1] < footer_top - 1]
+            # Derive the true body boundary from WeasyPrint rather than a
+            # hard-coded y>185 px. Minimal orange pages may contain only a
+            # short prompt at the top followed by intentionally empty writing
+            # space: that is a valid task, not an accidental blank page.
+            body_top = page_layout['contentTop'] * .75
+            blocks = [b for b in page.get_text('blocks') if b[4].strip()
+                      and b[1] >= body_top - 2 and b[1] < footer_top - 1]
             for block in blocks:
                 assert block[0] >= -1 and block[2] <= rect.width + 1, f'Horizontal overflow on page {page.number + 1}'
                 assert block[3] <= footer_top + 1, f'Content touches footer on page {page.number + 1}'
@@ -98,8 +103,10 @@ def verify_file(path, expected_count, plain=False):
             for item in page.get_image_info():
                 image = fitz.Rect(item['bbox'])
                 assert image.x0 >= -1 and image.y0 >= -1 and image.x1 <= rect.width + 1 and image.y1 <= rect.height + 1, 'Image outside A4'
-            body_text = [b for b in blocks if b[1] < 745 and (plain or b[3] > 185)]
-            body_vectors = [d for d in drawings if (plain or d['rect'].y0 > 185) and d['rect'].y1 < 745 and d['rect'].get_area() > 25]
+            body_text = [b for b in blocks if b[1] < min(745, footer_top - 1)]
+            body_vectors = [d for d in drawings if d['rect'].y0 >= body_top - 2
+                            and d['rect'].y1 < min(745, footer_top - 1)
+                            and d['rect'].get_area() > 25]
             assert body_text or body_vectors, f'Accidental empty page {page.number + 1}'
         print(f'PASS: {path.name}, {len(pdf)} A4 pages, {"plain worksheet" if plain else "original logo on every page"}')
     return {'filename': path.name, 'pageCount': expected_count, 'layoutPassed': True, 'rawLatexFound': False}
