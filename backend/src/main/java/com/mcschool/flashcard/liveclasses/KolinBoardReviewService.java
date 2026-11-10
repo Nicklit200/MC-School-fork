@@ -28,13 +28,16 @@ public class KolinBoardReviewService {
     private final OnlineClassAccessService access;
     private final KolinTaskRoster roster;
     private final OnlineClassDocumentService documents;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinLessonContextService lessonContext;
 
     public KolinBoardReviewService(OnlineClassAccessService access, KolinTaskRoster roster, OnlineClassDocumentService documents) {
         this.access=access; this.roster=roster; this.documents=documents;
     }
     public record TargetRequest(@NotBlank @Size(max=4000) String text, @jakarta.validation.Valid KolinChatService.Context context) {}
-    public record Target(String state, UUID studentId, String studentName, String message,String scope) {
-        public Target(String state,UUID id,String name,String message) { this(state,id,name,message,"current_page"); }
+    public record Target(String state, UUID studentId, String studentName, String message,String scope,Integer pageNumber) {
+        public Target(String state,UUID id,String name,String message) { this(state,id,name,message,"current_page",null); }
+        public Target(String state,UUID id,String name,String message,String scope) { this(state,id,name,message,scope,null); }
     }
     public record Page(int pageNumber,long revision,@Size(max=2000022) String imageDataUrl) {}
     public record Snapshot(UUID studentId, String boardId, int pageNumber, long documentVersion, long revision,
@@ -55,7 +58,26 @@ public class KolinBoardReviewService {
                            String scope,int totalPageCount,List<PageMetadata> pages) {}
 
     public Target resolve(AuthenticatedUser teacher, UUID classId, TargetRequest request) {
-        return resolve(access.requireHost(teacher,classId),request.text(),request.context());
+        OnlineClass room=access.requireHost(teacher,classId);
+        Target target=resolve(room,request.text(),request.context());
+        // When the teacher explicitly asks to review a numbered task, inspect
+        // its *actual saved PDF page*, not a guessed index or current pupil tab.
+        if (lessonContext!=null && REVIEW.matcher(request.text()).find()
+                && KolinExerciseIndex.requestedNumber(request.text())!=null
+                && !"clarify".equals(target.state())) {
+            try {
+                var location=lessonContext.locateTask(teacher,room,request.text(),request.context());
+                if(location.isPresent()) {
+                    var task=location.get();
+                    return new Target("ready",task.studentId(),task.studentName(),
+                        null,"task_page",task.pageNumber());
+                }
+            } catch(RuntimeException ignored) {
+                // Preserve the existing explicit-current-page flow, never fail
+                // all of Kolyn because one saved PDF cannot be indexed.
+            }
+        }
+        return target;
     }
     Target resolve(OnlineClass room, String text, KolinChatService.Context context) {
         boolean namedPage=FIRST_PAGE.matcher(text).find();
@@ -80,6 +102,7 @@ public class KolinBoardReviewService {
         if (matches.isEmpty() && !WORK.matcher(text).find() && !explicit)
             return new Target("not_requested",null,null,null);
         if (matches.isEmpty() && !explicit && !namedPage && !explicitlyShared && text.matches("(?s).*\\d.*")
+                && KolinExerciseIndex.requestedNumber(text)==null
                 && !Pattern.compile("(?iu)(доск|страниц|тетрад|учени|tafel|seite|heft|schüler|board|page|pupil)").matcher(text).find())
             return new Target("not_requested",null,null,null);
         if (matches.size()>1) return clarify();
@@ -131,7 +154,16 @@ public class KolinBoardReviewService {
 
     /** Re-check the authorized recipient independently of any browser-supplied metadata. */
     public Metadata validate(OnlineClass room, String text, KolinChatService.Context context, Snapshot snapshot) {
-        var target=resolve(room,text,context);
+        return validateResolved(resolve(room,text,context),snapshot);
+    }
+
+    /** Re-resolve the indexed task on the server; a forged client page is rejected. */
+    public Metadata validate(AuthenticatedUser teacher, OnlineClass room, String text,
+                             KolinChatService.Context context, Snapshot snapshot) {
+        return validateResolved(resolve(teacher,room.getId(),new TargetRequest(text,context)),snapshot);
+    }
+
+    private Metadata validateResolved(Target target, Snapshot snapshot) {
         if(!"ready".equals(target.state()) || snapshot==null || !Objects.equals(target.studentId(),snapshot.studentId())
                 || (target.studentId()==null ? !"board-1".equals(snapshot.boardId())
                     : !PersonalBoard.ownerOf(snapshot.boardId()).filter(target.studentId()::equals).isPresent())
@@ -139,9 +171,12 @@ public class KolinBoardReviewService {
                 || snapshot.capturedAt()==null || !Objects.equals(target.scope(),snapshot.scope())
                 || snapshot.totalPageCount()<snapshot.pageNumber() || snapshot.totalPageCount()>1000
                 || "first_page".equals(snapshot.scope()) && snapshot.pageNumber()!=1
+                || "task_page".equals(snapshot.scope())
+                    && (target.pageNumber()==null || target.pageNumber()!=snapshot.pageNumber())
                 || snapshot.sharedDocumentVersion()!=null && snapshot.sharedDocumentVersion()<0
                 || target.studentId()==null && snapshot.sharedDocumentVersion()!=null
-                || target.studentId()!=null && !"workbook".equals(snapshot.scope()) && !"first_page".equals(snapshot.scope()) && (snapshot.observedAt()==null
+                || target.studentId()!=null && !"workbook".equals(snapshot.scope()) && !"first_page".equals(snapshot.scope())
+                    && !"task_page".equals(snapshot.scope()) && (snapshot.observedAt()==null
                     || snapshot.observedAt().isAfter(snapshot.capturedAt().plusSeconds(5))
                     || snapshot.observedAt().isBefore(snapshot.capturedAt().minusSeconds(30)))) throw KolinRequestException.reviewUnavailable();
         var pages=new ArrayList<Page>();pages.add(new Page(snapshot.pageNumber(),snapshot.revision(),snapshot.imageDataUrl()));
