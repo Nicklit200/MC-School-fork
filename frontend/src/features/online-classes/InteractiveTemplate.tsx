@@ -44,8 +44,14 @@ export function InteractiveTemplate({spec,revision='',onCommit,disabled=false}: 
     const next=fractionFromInputs(String(amount),String(parts));
     const v=current.current;
     if(v.template!=='fractionCircle'||!next)return;
+    // Step buttons should preserve manually selected sectors wherever possible.
+    // Direct numerator/denominator entry deliberately creates the first n sectors.
+    const selected=v.parts===parts?[...v.selected]:[];
+    while(selected.length>amount) selected.pop();
+    for(let i=0;selected.length<amount&&i<parts*4;i++)
+      if(!selected.includes(i))selected.push(i);
     setFractionError(null);
-    change({...v,...next});
+    change({...v,parts,selected});
     void commit();
   };
   const applyFraction=(event:React.FormEvent<HTMLFormElement>)=>{
