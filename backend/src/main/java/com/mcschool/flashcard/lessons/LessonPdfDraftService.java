@@ -79,12 +79,12 @@ public class LessonPdfDraftService {
         String plan = limited(input.get("lessonPlan"), "", 10_000);
         String difficulties = limited(input.get("difficulties"), "", 5_000);
         List<Task> tasks = parseTasks(input.get("tasks"));
-        BufferedImage officialLogo = extractOfficialLogo(guideService.pdfForStaff(teacher).bytes());
-
-        byte[] workbook = render(title, calendarTitle, tasks, officialLogo, false, plan);
-        byte[] answers = render(title, calendarTitle, tasks, officialLogo, true, plan);
-        int workbookPages = verifyPdf(workbook, officialLogo, "Arbeitsblatt");
-        int answersPages = verifyPdf(answers, officialLogo, "Loesungen");
+        // Temporarily produce logo-free worksheets; preserve orange text branding.
+        // No Brand Guide PDF load/extraction on the hot generation path.
+        byte[] workbook = render(title, calendarTitle, tasks, null, false, plan);
+        byte[] answers = render(title, calendarTitle, tasks, null, true, plan);
+        int workbookPages = verifyPdf(workbook, null, "Arbeitsblatt");
+        int answersPages = verifyPdf(answers, null, "Loesungen");
         if (workbook.length > MAX_PDF || answers.length > MAX_PDF)
             throw new IllegalArgumentException("Generated PDF exceeds 15 MB");
 
@@ -110,7 +110,7 @@ public class LessonPdfDraftService {
         result.put("answersPages", answersPages);
         result.put("taskCount", tasks.size());
         result.put("homeworkCount", 0);
-        result.put("brandGuideLogo", "extracted from current official Brand Guide PDF");
+        result.put("brandGuideLogo", "disabled temporarily by school administrator");
         result.put("qaPassed", true);
         result.put("next", "Download both PDF previews, then request explicit user approval before publishing.");
         return result;
@@ -159,7 +159,7 @@ public class LessonPdfDraftService {
         result.put("taskCount", taskCount);
         result.put("homeworkCount", 0);
         result.put("qaPassed", true);
-        result.put("brandGuideLogo", "extracted from current Mindcrafti Brand Guide");
+        result.put("brandGuideLogo", "disabled temporarily by school administrator");
         result.put("next", "Download and review both PDFs; explicit publish_lesson_draft approval required");
         return result;
     }
@@ -256,9 +256,10 @@ public class LessonPdfDraftService {
             throw new IllegalArgumentException("Homework drafts cannot be published as lesson workbooks; use the explicit seven-day homework assignment tool");
 
         // The two PDFs were generated and verified on create; recheck integrity before uploading.
-        BufferedImage logo = extractOfficialLogo(guideService.pdfForStaff(teacher).bytes());
-        verifyPdf(draft.workbook(), logo, "Arbeitsblatt");
-        verifyPdf(draft.answers(), logo, "Loesungen");
+        // Published files were already checked on draft creation. Revalidate
+        // pages and text without forcing a logo into older or newer drafts.
+        verifyPdf(draft.workbook(), null, "Arbeitsblatt");
+        verifyPdf(draft.answers(), null, "Loesungen");
         preparationService.prepareMaterials(teacher, draft.eventId(), null,
                 draft.workbookName(), draft.workbook(), draft.answersName(), draft.answers());
         jdbc.update("UPDATE lesson_pdf_drafts SET status = 'PUBLISHED', published_at = ? WHERE id = ?",
@@ -387,18 +388,23 @@ public class LessonPdfDraftService {
             PDFTextStripper stripper = new PDFTextStripper();
             for (int i=0; i<count; i++) {
                 PDPage page = pdf.getPage(i);
-                if (page.getResources() == null) throw new IllegalArgumentException("PDF page lacks official logo");
-                boolean hasOfficialImage = false;
-                for (COSName name : page.getResources().getXObjectNames()) {
-                    PDXObject x = page.getResources().getXObject(name);
-                    if (x instanceof PDImageXObject image &&
-                            image.getWidth() == artwork.getWidth() &&
-                            image.getHeight() == artwork.getHeight()) {
-                        hasOfficialImage = true;
+                // Existing logo-bearing PDFs remain readable, but new PDFs do not
+                // require an embedded logo. Preserve all text/page integrity QA.
+                if (artwork != null) {
+                    if (page.getResources() == null)
+                        throw new IllegalArgumentException("PDF page lacks artwork resources");
+                    boolean hasOfficialImage = false;
+                    for (COSName name : page.getResources().getXObjectNames()) {
+                        PDXObject x = page.getResources().getXObject(name);
+                        if (x instanceof PDImageXObject image &&
+                                image.getWidth() == artwork.getWidth() &&
+                                image.getHeight() == artwork.getHeight()) {
+                            hasOfficialImage = true;
+                        }
                     }
+                    if (!hasOfficialImage)
+                        throw new IllegalArgumentException("Required PDF artwork is missing on page " + (i+1));
                 }
-                if (!hasOfficialImage)
-                    throw new IllegalArgumentException("Missing official Mindcrafti logo on page " + (i+1));
                 stripper.setStartPage(i+1);
                 stripper.setEndPage(i+1);
                 String text = stripper.getText(pdf);
@@ -441,10 +447,12 @@ public class LessonPdfDraftService {
             stream.moveTo(LEFT,PAGE.getHeight()-71f);
             stream.lineTo(RIGHT,PAGE.getHeight()-71f);
             stream.stroke();
-            PDImageXObject image=LosslessFactory.createFromImage(doc,logo);
-            float width=50f, height=width*logo.getHeight()/logo.getWidth();
-            if(height>54f){height=54f;width=height*logo.getWidth()/logo.getHeight();}
-            stream.drawImage(image,RIGHT-width,PAGE.getHeight()-57f-height,width,height);
+            if (logo != null) {
+                PDImageXObject image=LosslessFactory.createFromImage(doc,logo);
+                float width=50f, height=width*logo.getHeight()/logo.getWidth();
+                if(height>54f){height=54f;width=height*logo.getWidth()/logo.getHeight();}
+                stream.drawImage(image,RIGHT-width,PAGE.getHeight()-57f-height,width,height);
+            }
             stream.setNonStrokingColor(GRAY);
             text(LEFT,31,"Mindcrafti School  |  "+pageNumber,REGULAR,8f);
         }
