@@ -37,6 +37,51 @@ class AlgebraTests(unittest.TestCase):
             with self.subTest(expression=expression), self.assertRaises(ValueError):
                 validate({'kind': 'expressionValue', 'expression': expression})
 
+    def test_mixed_fraction_notation_is_a_sum_not_implicit_multiplication(self):
+        # A valid mixed number contains a whole number plus a positive fraction.
+        for expression in [r'1\frac{7}{12}', r'1 \frac{7}{12}',
+                           r'1\,\frac{7}{12}', r'1\ \frac{7}{12}',
+                           r'1\dfrac{7}{12}', r'1\tfrac{7}{12}', '1 7/12']:
+            with self.subTest(expression=expression):
+                self.assertEqual(parse(expression)[0], parse('19/12')[0])
+                self.assertTrue(validate({'kind': 'equivalence', 'expression': expression,
+                                          'answer': r'\frac{19}{12}'})['passed'])
+                with self.assertRaisesRegex(ValueError, 'not equivalent'):
+                    validate({'kind': 'equivalence', 'expression': expression,
+                              'answer': '7/12'})
+
+    def test_negative_mixed_fractions_and_explicit_multiplication(self):
+        for expression in [r'-1\frac{7}{12}', r'-1\,\frac{7}{12}', '-1 7/12']:
+            with self.subTest(expression=expression):
+                self.assertEqual(validate({'kind': 'expressionValue',
+                                           'expression': expression})['answer'], '-19/12')
+        for expression in [r'2*\frac{3}{4}', r'2\cdot\frac{3}{4}',
+                           r'x\frac{3}{4}', '2(3/4)']:
+            with self.subTest(expression=expression):
+                self.assertTrue(validate({'kind': 'equivalence', 'expression': expression,
+                                          'answer': 'x*3/4' if expression.startswith('x') else '3/2'})['passed'])
+        with self.assertRaisesRegex(ValueError, 'Zero denominator'):
+            parse(r'1\frac{2}{0}')
+        with self.assertRaises(ValueError):
+            parse(r'1\frac{x}{12}\evil')
+
+    def test_teacher_solutions_with_mixed_numbers_are_checked(self):
+        document = {
+            'qa': {'algebra': [{'kind': 'equivalence', 'expression': r'1\frac{7}{12}',
+                                'answer': r'\frac{19}{12}'}]},
+            'teacherPages': [{'blocks': [{'type': 'solutions', 'items': [
+                {'label': '7a', 'math': {'latex': r'1\frac{7}{12}=\frac{19}{12}'}},
+                {'label': '7b', 'math': {'latex': r'-1\frac{7}{12}=-\frac{19}{12}'}},
+            ]}]}],
+        }
+        valid = verify_document(document)
+        self.assertTrue(valid['passed'], valid)
+        self.assertEqual(valid['teacherNumericSolutions']['checked'], 2)
+        document['teacherPages'][0]['blocks'][0]['items'][0]['math']['latex'] = r'1\frac{7}{12}=\frac{7}{12}'
+        invalid = verify_document(document)
+        self.assertFalse(invalid['passed'])
+        self.assertEqual(invalid['teacherNumericSolutions']['failed'][0]['position'], 1)
+
     def test_binomial_equivalence(self):
         self.assertTrue(validate({'kind': 'equivalence', 'expression': '(x+3)^2', 'answer': 'x^2+6x+9'})['passed'])
 
