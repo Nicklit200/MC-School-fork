@@ -115,6 +115,12 @@ final class McpSiteFunctionRegistry {
         // Raw Drive IDs use the school's service account, so only school administrators may access this adapter.
         add(functions, "drive", GoogleDriveController.class, Scope.ADMIN,
                 "listSharedDrives listFolders listPdfFiles download upload");
+        // ADMIN can draft/publish the same articles that teachers and MCH3 read.
+        // The generic MCP adapter enforces OAuth admin role, confirmation, idempotency
+        // and current-account validation before invoking any write.
+        add(functions, "teacher_help", TeacherHelpCenterController.class, Scope.CALLER, "published");
+        add(functions, "teacher_help", TeacherHelpCenterController.class, Scope.ADMIN,
+                "editor history draft publish restore upload");
         add(functions, "school_prompts", SchoolPromptSettingsController.class, Scope.CALLER, "get");
         add(functions, "school_prompts", SchoolPromptSettingsController.class, Scope.ADMIN, "update");
         add(functions, "brand_guide", SchoolBrandGuideController.class, Scope.CALLER, "get pdf");
@@ -162,6 +168,7 @@ final class McpSiteFunctionRegistry {
             case "homework" -> "assign_homework_series / update_homework / delete_homework / find_student_homeworks / get_recent_homework_submissions";
             case "skill_boards" -> "list_skill_boards / get_skill_board / edit_skill_board / create_skill_board";
             case "skill_mastery" -> "get_skill_mastery / update_skill_mastery";
+            case "teacher_help" -> "get_teacher_guide / show_teacher_guide / teacher_help.draft / teacher_help.publish";
             case "brand_guide" -> "get_brand_guide / update_brand_guide";
             case "stories_template" -> "get_story_template_info / get_story_template_chunk / update_story_template_master";
             default -> "";
