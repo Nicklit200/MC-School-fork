@@ -195,6 +195,10 @@ public class KolinLessonContextService {
         result.put("catalog", catalog);
         result.put("relevantPages", selectedPages);
         result.put("taskReference", taskReference(task));
+        result.put("taskReferenceGuidance", "For a numbered exercise, taskReference.state=resolved identifies its exact saved-PDF " +
+            "statement, page, source and version. Do not confuse exercise number with physical page number. " +
+            "If ambiguous, ask which listed source/page; if not_found, do not claim the condition was seen. " +
+            "A saved PDF text index never proves any handwritten answer or scanned image was read.");
         result.put("exerciseIndexFormat","text_layer_only; stable per authorized document version and page");
         result.put("selectedPageCount", selectedPages.size());
         result.put("totalAvailablePageCount", sources.stream().mapToInt(s -> s.parsed().totalPages()).sum());
