@@ -226,7 +226,7 @@ test('A4 pagination gives eight-line handwritten solutions separate pages',async
   lesson.teacherPages[0].blocks=[{type:'solutions',items:[
     {label:'1a',math:['6/8','=','3/4']}
   ]}];
-  const {workbook}=await render(lesson);
+  const {workbook,teacher}=await render(lesson);
   assert.equal((workbook.match(/class="sheet student"/g)||[]).length,4);
   assert.equal((workbook.match(/class="response-lines"/g)||[]).length,4);
   assert.doesNotMatch(workbook, /<img[^>]+Original Mindcrafti M logo/, 'Student pages must have no logo image');
