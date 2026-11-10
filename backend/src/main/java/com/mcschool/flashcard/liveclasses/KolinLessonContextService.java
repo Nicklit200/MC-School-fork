@@ -210,6 +210,32 @@ public class KolinLessonContextService {
         return result;
     }
 
+    /**
+     * Internal-only locator for an explicit teacher-requested review. The caller
+     * must be the room host. The returned recipient/page is rechecked during
+     * snapshot validation and is never trusted merely because the browser sent it.
+     */
+    public record TaskLocation(UUID studentId, String studentName, int pageNumber) {}
+    public java.util.Optional<TaskLocation> locateTask(AuthenticatedUser teacher, OnlineClass room,
+                                                        String question, KolinChatService.Context requested) {
+        Integer number=KolinExerciseIndex.requestedNumber(question);
+        if(number==null) return java.util.Optional.empty();
+        // Documents separately enforce room access; only members of this server
+        // roster are ever used to construct private workbook targets.
+        List<KolinTaskRoster.Pupil> pupils=roster.read(room).stream().limit(MAX_PUPILS).toList();
+        var sources=new ArrayList<Source>();
+        sources.add(source(teacher,room,"Общая доска","board-1",true));
+        for(var pupil:pupils)
+            sources.add(source(teacher,room,pupil.name(),PersonalBoard.workbookTargetIdFor(pupil.id()),false));
+        var match=resolveTask(number,sources,selectedBoard(question,requested,pupils),
+            requested!=null&&requested.currentWorkbookPage()!=null?requested.currentWorkbookPage():1);
+        if(match.resolved()==null) return java.util.Optional.empty();
+        var found=match.resolved();
+        UUID owner=found.source().shared()?null:PersonalBoard.ownerOf(found.source().boardId()).orElse(null);
+        if(!found.source().shared() && owner==null) return java.util.Optional.empty();
+        return java.util.Optional.of(new TaskLocation(owner,found.source().name(),found.task().pageNumber()));
+    }
+
     private Source source(AuthenticatedUser teacher, OnlineClass room, String name, String boardId, boolean shared) {
         try {
             long version = documents.workbookVersion(teacher, room.getId(), boardId);
