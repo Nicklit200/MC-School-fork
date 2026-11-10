@@ -221,7 +221,7 @@ public class KolinLessonContextService {
     private static String selectedBoard(String question, KolinChatService.Context requested,
                                         List<KolinTaskRoster.Pupil> pupils) {
         String normalized = KolinBoardReviewService.normalize(question);
-        var words = Set.of(normalized.split("[^a-z0-9]+"));
+        Set<String> words = new HashSet<>(java.util.Arrays.asList(normalized.split("[^a-z0-9]+")));
         List<KolinTaskRoster.Pupil> matches = pupils.stream().filter(pupil ->
             java.util.Arrays.stream(KolinBoardReviewService.normalize(pupil.name()).split("[^a-z0-9]+"))
                 .filter(name -> name.length() >= 3)
