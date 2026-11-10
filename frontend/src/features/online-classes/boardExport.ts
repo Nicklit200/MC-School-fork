@@ -245,7 +245,7 @@ export async function exportBoardPdf({
 
 /** An on-demand saved-board snapshot; it never opens or navigates a visible board. */
 export async function captureBoardPage(classId: string, studentId: string | null, boardId: string, pageIndex: number,
-  observedAt: string | null, scope: 'current_page' | 'first_page' | 'workbook' = 'current_page'): Promise<KolinBoardSnapshot> {
+  observedAt: string | null, scope: 'current_page' | 'first_page' | 'workbook' | 'task_page' = 'current_page'): Promise<KolinBoardSnapshot> {
   if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= 1000) throw new Error('Invalid review page');
   const shared = studentId === null;
   const privateBoard = shared ? null : personalWorkbookBoardId(studentId);
