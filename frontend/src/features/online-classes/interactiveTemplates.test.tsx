@@ -101,7 +101,7 @@ describe('interactive templates',()=>{
     fireEvent.change(screen.getByRole('spinbutton',{name:'Числитель'}),{target:{value:'7'}});
     fireEvent.change(screen.getByRole('spinbutton',{name:'Знаменатель'}),{target:{value:'4'}});
     fireEvent.click(screen.getByRole('button',{name:'Применить дробь'}));
-    const expected={template:'fractionCircle',language:'ru',parts:4,selected:[0,1,2,3,4,5,6]};
+    const expected:InteractiveSpec={template:'fractionCircle',language:'ru',parts:4,selected:[0,1,2,3,4,5,6]};
     await waitFor(()=>expect(commit).toHaveBeenCalledWith(expected,'r1'));
     expect(screen.getByRole('button',{name:'Пицца 2, кусочек 1'})).toHaveAttribute('aria-pressed','true');
     expect(screen.getByRole('button',{name:'Пицца 2, кусочек 4'})).toHaveAttribute('aria-pressed','false');
