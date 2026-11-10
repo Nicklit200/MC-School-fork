@@ -57,6 +57,31 @@ export function parseKolinBlocks(value: string): KolinBlock[] {
       continue;
     }
 
+    // Consume a whole TeX display block, including formulas spanning several lines.
+    // Without this, model responses expose literal \[ ... \] in the teacher chat.
+    const opening = trimmed.startsWith('\\[') ? '\\[' : trimmed.startsWith('$$') ? '$$' : null;
+    if (opening) {
+      flush();
+      const closing = opening === '$$' ? '$$' : '\\]';
+      const captured: string[] = [trimmed.slice(opening.length)];
+      let joined = captured[0];
+      while (!joined.includes(closing) && i + 1 < lines.length) {
+        captured.push(lines[++i]);
+        joined = captured.join('\n');
+      }
+      const end = joined.indexOf(closing);
+      if (end >= 0) {
+        const expression = joined.slice(0, end).trim();
+        if (expression) blocks.push({ kind: 'formula', text: expression });
+        const remainder = joined.slice(end + closing.length).trim();
+        if (remainder) paragraph.push(remainder);
+      } else {
+        // Unclosed delimiters remain visible as text, never interpreted as HTML.
+        blocks.push({ kind: 'paragraph', text: opening + joined });
+      }
+      continue;
+    }
+
     const heading = trimmed.match(/^#{1,4}\s+(.+)$/);
     if (heading) { flush(); blocks.push({ kind: 'heading', text: heading[1] }); continue; }
 
@@ -77,13 +102,17 @@ export function parseKolinBlocks(value: string): KolinBlock[] {
 
 function normalMath(value: string): string {
   return value
+    .replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, '$1')
     .replace(/\\(?:cdot|times)/g, '×')
     .replace(/\\div/g, '÷')
     .replace(/\\pm/g, '±')
-    .replace(/\\leq/g, '≤')
-    .replace(/\\geq/g, '≥')
+    .replace(/\\(?:leq|le)/g, '≤')
+    .replace(/\\(?:geq|ge)/g, '≥')
     .replace(/\\neq/g, '≠')
+    .replace(/\\(?:ldots|dots)/g, '…')
+    .replace(/\\sqrt\s*\{([^{}]+)\}/g, '√($1)')
     .replace(/\\sqrt/g, '√')
+    .replace(/\\(?:quad|qquad|,|;|!)/g, ' ')
     .replace(/\\left|\\right/g, '')
     .replace(/\^\{2\}|\^2/g, '²')
     .replace(/\^\{3\}|\^3/g, '³');
