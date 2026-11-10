@@ -92,7 +92,7 @@ class McpPersonalLessonWorkbookToolsTest {
         var helpCenter = mock(TeacherHelpCenterService.class);
         when(helpCenter.published()).thenReturn(java.util.Map.of());
         when(helpCenter.customImages()).thenReturn(java.util.List.of());
-        when(helpCenter.image(anyString())).thenReturn(java.util.Optional.empty());
+        when(helpCenter.image(org.mockito.ArgumentMatchers.anyString())).thenReturn(java.util.Optional.empty());
         controller.setTeacherGuideService(new McpTeacherGuideService(access,json,helpCenter));
     }
 
