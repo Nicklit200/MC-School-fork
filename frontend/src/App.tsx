@@ -12,6 +12,7 @@ import { homePathForRole } from './auth/roleRoutes';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { ActivatePage } from './pages/ActivatePage';
+import { TrialGuestJoinPage } from './pages/TrialGuestJoinPage';
 import { TeachersPage } from './pages/admin/TeachersPage';
 import { AdminTeacherLessonsPage } from './pages/admin/AdminTeacherLessonsPage';
 import { AdminLessonDetailWithHomeworkSeries } from './pages/admin/AdminLessonDetailWithHomeworkSeries';
@@ -76,6 +77,7 @@ export function App() {
       <Route path="/skill-progress" element={<PublicSkillProgressPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivatePage />} />
+      <Route path="/trial/join/:token" element={<TrialGuestJoinPage />} />
       <Route path="/phone-camera/:cameraId?" element={<Suspense fallback={<p>Открываем камеру…</p>}><PhoneCameraPage /></Suspense>} />
       <Route path="/lesson-notebook/:eventId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={<p>Открываем тетрадь…</p>}><NotebookCameraPage /></Suspense></Layout></ProtectedRoute>} />
 
