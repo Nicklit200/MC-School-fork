@@ -159,7 +159,7 @@ export function GeneratorSettingsPanel({ currentDocument }: Props) {
             <strong>{field.label}</strong>
             <strong>{layout[field.key]} {field.suffix}</strong>
           </div>
-          <input type="range" min={field.min} max={field.max} step={field.step}
+          <input type="range" aria-label={field.label} min={field.min} max={field.max} step={field.step}
             value={layout[field.key] as number} disabled={busy}
             onChange={event => change(field.key, Number(event.target.value))} style={{ width:'100%' }}/>
           <div className="muted" style={{ fontSize:12 }}>{field.hint}</div>
