@@ -142,11 +142,11 @@ public class OwnerWorkbookPdfRenderService {
                 Path output = Files.createDirectory(workspace.resolve("out"));
                 Files.writeString(source, lessonJson, StandardCharsets.UTF_8);
                 String basename = "Kolin_Plain";
-                Path layout = workspace.resolve("layout.json");
-                Files.writeString(layout, activeLayout(), StandardCharsets.UTF_8);
+                Path layoutFile = workspace.resolve("layout.json");
+                Files.writeString(layoutFile, activeLayout(), StandardCharsets.UTF_8);
                 var process = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
                         "--lesson=" + source, "--out=" + output, "--basename=" + basename, "--plain",
-                        "--layout=" + layout);
+                        "--layout=" + layoutFile);
                 process.directory(runtime.toFile());
                 process.redirectErrorStream(true);
                 process.redirectOutput(workspace.resolve("renderer.log").toFile());
@@ -211,11 +211,11 @@ public class OwnerWorkbookPdfRenderService {
                 Path source = workspace.resolve("lesson.json");
                 Files.writeString(source, lessonJson, StandardCharsets.UTF_8);
                 Path output = Files.createDirectory(workspace.resolve("out"));
-                Path layout = workspace.resolve("layout.json");
-                Files.writeString(layout, layoutJson, StandardCharsets.UTF_8);
+                Path layoutFile = workspace.resolve("layout.json");
+                Files.writeString(layoutFile, layoutJson, StandardCharsets.UTF_8);
                 var process = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
                         "--lesson=" + source, "--out=" + output, "--basename=" + basename,
-                        "--layout=" + layout);
+                        "--layout=" + layoutFile);
                 process.directory(runtime.toFile());
                 process.redirectErrorStream(true);
                 process.redirectOutput(workspace.resolve("renderer.log").toFile());
@@ -315,11 +315,11 @@ public class OwnerWorkbookPdfRenderService {
             String duration = String.valueOf(((Number) requireMap(document.get("meta"), "meta")
                     .get("durationMinutes")).intValue());
             String basename = "Mindcrafti_Workbook_v3";
-            Path layout = workspace.resolve("layout.json");
-            Files.writeString(layout, activeLayout(), StandardCharsets.UTF_8);
+            Path layoutFile = workspace.resolve("layout.json");
+            Files.writeString(layoutFile, activeLayout(), StandardCharsets.UTF_8);
             ProcessBuilder pb = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
                     "--lesson=" + dataPath, "--out=" + output,
-                    "--basename=" + basename, "--layout=" + layout);
+                    "--basename=" + basename, "--layout=" + layoutFile);
             pb.directory(runtime.toFile());
             pb.redirectErrorStream(true);
             Path logs = workspace.resolve("renderer.log");
