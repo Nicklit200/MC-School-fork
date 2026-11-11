@@ -48,6 +48,8 @@ public class OwnerWorkbookPdfRenderService {
     private final ObjectMapper mapper;
     private final LessonPdfDraftService drafts;
     private final SchoolBrandGuideService brandGuide;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private WorkbookGeneratorLayoutService globalLayout;
     // Three background workbook jobs run in parallel. Keep one additional
     // permit available for live Kolin/teacher-triggered worksheet rendering.
     private final Semaphore renderSlots = new Semaphore(4, true);
@@ -140,8 +142,11 @@ public class OwnerWorkbookPdfRenderService {
                 Path output = Files.createDirectory(workspace.resolve("out"));
                 Files.writeString(source, lessonJson, StandardCharsets.UTF_8);
                 String basename = "Kolin_Plain";
+                Path layout = workspace.resolve("layout.json");
+                Files.writeString(layout, activeLayout(), StandardCharsets.UTF_8);
                 var process = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
-                        "--lesson=" + source, "--out=" + output, "--basename=" + basename, "--plain");
+                        "--lesson=" + source, "--out=" + output, "--basename=" + basename, "--plain",
+                        "--layout=" + layout);
                 process.directory(runtime.toFile());
                 process.redirectErrorStream(true);
                 process.redirectOutput(workspace.resolve("renderer.log").toFile());
@@ -184,6 +189,11 @@ public class OwnerWorkbookPdfRenderService {
                                int teacherPages, Map<String, Object> qa) {}
 
     public StudioRender renderStudio(String lessonJson) throws Exception {
+        return renderStudio(lessonJson, activeLayout());
+    }
+
+    public StudioRender renderStudio(String lessonJson, String layoutJson) throws Exception {
+        WorkbookGeneratorLayoutService.validate(layoutJson);
         if (!renderSlots.tryAcquire())
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Workbook renderer busy");
         try {
@@ -201,8 +211,11 @@ public class OwnerWorkbookPdfRenderService {
                 Path source = workspace.resolve("lesson.json");
                 Files.writeString(source, lessonJson, StandardCharsets.UTF_8);
                 Path output = Files.createDirectory(workspace.resolve("out"));
+                Path layout = workspace.resolve("layout.json");
+                Files.writeString(layout, layoutJson, StandardCharsets.UTF_8);
                 var process = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
-                        "--lesson=" + source, "--out=" + output, "--basename=" + basename);
+                        "--lesson=" + source, "--out=" + output, "--basename=" + basename,
+                        "--layout=" + layout);
                 process.directory(runtime.toFile());
                 process.redirectErrorStream(true);
                 process.redirectOutput(workspace.resolve("renderer.log").toFile());
@@ -237,6 +250,10 @@ public class OwnerWorkbookPdfRenderService {
         } finally {
             renderSlots.release();
         }
+    }
+
+    private String activeLayout() {
+        return globalLayout == null ? WorkbookGeneratorLayoutService.DEFAULT_JSON : globalLayout.activeJson();
     }
 
     private static void runPlainProcess(ProcessBuilder builder) throws IOException {
@@ -298,9 +315,11 @@ public class OwnerWorkbookPdfRenderService {
             String duration = String.valueOf(((Number) requireMap(document.get("meta"), "meta")
                     .get("durationMinutes")).intValue());
             String basename = "Mindcrafti_Workbook_v3";
+            Path layout = workspace.resolve("layout.json");
+            Files.writeString(layout, activeLayout(), StandardCharsets.UTF_8);
             ProcessBuilder pb = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
                     "--lesson=" + dataPath, "--out=" + output,
-                    "--basename=" + basename);
+                    "--basename=" + basename, "--layout=" + layout);
             pb.directory(runtime.toFile());
             pb.redirectErrorStream(true);
             Path logs = workspace.resolve("renderer.log");
