@@ -87,6 +87,32 @@ public class JwtService {
                 .compact();
     }
 
+    /** JWT for a single trial classroom; never a general student login. */
+    public String generateTrialToken(User guest, UUID classId, Instant expiry) {
+        if (guest == null || !guest.isTrialGuest() || guest.getRole() != Role.STUDENT
+                || classId == null || expiry == null || !expiry.isAfter(Instant.now())) {
+            throw new IllegalArgumentException("Invalid scoped trial access");
+        }
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .subject(guest.getId().toString())
+                .claim("role", Role.STUDENT.name())
+                .claim("trialClassId", classId.toString())
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiry))
+                .signWith(key).compact();
+    }
+
+    /** Validated trial claim; returning empty also covers ordinary account JWTs. */
+    public Optional<UUID> trialClassId(String token) {
+        try {
+            String raw = parseClaims(token).get("trialClassId", String.class);
+            return raw == null ? Optional.empty() : Optional.of(UUID.fromString(raw));
+        } catch (JwtException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
     public Instant expiresAt(String token) {
         return parseClaims(token).getExpiration().toInstant();
     }
