@@ -27,13 +27,35 @@ function option(name, fallback) {
 const lessonPath = resolve(option('lesson', join(root, 'lesson.sample.json')));
 const out = resolve(option('out', join(root, 'out')));
 const plain = args.includes('--plain');
+const layoutFile = option('layout', '');
+const safeLayout = (layoutFile ? JSON.parse(await readFile(resolve(layoutFile), 'utf8')) : {
+  schema:'mindcrafti.generator-layout/1',
+  graphHeightMm:68, graphWidthPercent:100, graphPlotScalePercent:100,
+  graphAlignment:'center', blockGapMm:3.6, answerSpacePercent:100, taskTitleFontPx:14
+});
+function validLayout(o) {
+  const int=(x,a,b)=>Number.isInteger(x)&&x>=a&&x<=b;
+  return o && typeof o==='object' && !Array.isArray(o)
+    && Object.keys(o).length===8 && o.schema==='mindcrafti.generator-layout/1'
+    && int(o.graphHeightMm,60,85) && int(o.graphWidthPercent,75,100)
+    && int(o.graphPlotScalePercent,90,110) && ['left','center'].includes(o.graphAlignment)
+    && typeof o.blockGapMm==='number' && o.blockGapMm>=2 && o.blockGapMm<=8
+    && int(o.answerSpacePercent,60,120) && int(o.taskTitleFontPx,12,18);
+}
+if (!validLayout(safeLayout)) throw Error('Invalid workbook generator layout profile');
+const layoutCss = [
+  '.sheet:not(.plain) .block { margin-top: '+safeLayout.blockGapMm+'mm; }',
+  '.sheet:not(.plain) .exercise-title { font-size: '+safeLayout.taskTitleFontPx+'px; }',
+  '.sheet:not(.plain) .diagram-block--graph .diagram-svg { width: '+safeLayout.graphWidthPercent+'%; height: '+safeLayout.graphHeightMm+'mm; max-height: '+safeLayout.graphHeightMm+'mm; margin-left: '+(safeLayout.graphAlignment==='left'?'0':'auto')+'; margin-right: '+(safeLayout.graphAlignment==='left'?'auto':'auto')+'; }',
+  '.sheet:not(.plain) .task-row .workline { height: '+(6*safeLayout.answerSpacePercent/100).toFixed(2)+'mm; }',
+].join('\n');
 const lesson = JSON.parse(await readFile(lessonPath, 'utf8'));
 // Match the teacher/admin ChatGPT contract before strict schema and math QA.
 // This changes only representation, never mathematical content or answers.
 normalizeLessonMath(lesson);
 validateLesson(lesson);
 const visualQa = prepareVisualTasks(lesson);
-const css = await readFile(join(root, 'styles.css'), 'utf8');
+const css = (await readFile(join(root, 'styles.css'), 'utf8')) + '\n' + layoutCss;
 validateLesson(lesson);
 
 function callout(b, tall = false) {
@@ -94,7 +116,7 @@ function exercise(b) {
   const n = Number(b.writeLines ?? 0);
   if(!Number.isInteger(n) || n<0 || n>30)throw new TypeError('Invalid writing line count');
   const gap = lesson.meta.homeworkMode===true && !plain ? 5.6 : 7.2;
-  const height = n ? (2.4*n + gap*(n-1) + (lesson.meta.homeworkMode===true && !plain ? 0 : 1)) : 0;
+  const height = n ? (2.4*n + gap*(n-1) + (lesson.meta.homeworkMode===true && !plain ? 0 : 1))*(plain?1:safeLayout.answerSpacePercent/100) : 0;
   const lines = n ? `<div class="response-lines" data-qa="blank-workspace" style="height:${height.toFixed(2)}mm"></div>` : '';
   const mini = b.extra ? `<div class="mini-check"><span class="small-pill">${richText(b.extra.label)}</span>${math(b.extra.math)}</div>` : '';
   const selfRating = b.selfRating ? (() => {
@@ -161,7 +183,7 @@ function renderWorkbookBlock(b, idx, pageIndex) {
   switch (b.type) {
     case 'callout': return callout(b, pageIndex === 0 && idx === 0);
     case 'strips': return stripes(b);
-    case 'graph': case 'geometry': case 'coordinateGrid': return renderDiagram(b);
+    case 'graph': case 'geometry': case 'coordinateGrid': return renderDiagram(b.type === 'graph' || b.type === 'coordinateGrid' ? {...b, layoutPlotScalePercent:safeLayout.graphPlotScalePercent, layoutAlignment:safeLayout.graphAlignment} : b);
     case 'facts': return factsBlock(b);
     case 'example': return example(b);
     case 'exercise': return exercise(b);
@@ -179,7 +201,7 @@ function teacherBlock(b) {
     }
     case 'schedule':
       return `<section class="teacher-block teacher-schedule"><div class="teacher-section-label">${richText(b.label)}</div><div class="teacher-section-title">${richText(b.title)}</div>${(b.rows || []).map(([time,text])=> `<div class="schedule-row"><span class="schedule-time">${richText(time)}</span><span>${richText(text)}</span></div>`).join('')}</section>`;
-    case 'graph': case 'geometry': case 'coordinateGrid': return renderDiagram(b);
+    case 'graph': case 'geometry': case 'coordinateGrid': return renderDiagram(b.type === 'graph' || b.type === 'coordinateGrid' ? {...b, layoutPlotScalePercent:safeLayout.graphPlotScalePercent, layoutAlignment:safeLayout.graphAlignment} : b);
     case 'callout': return callout(b);
     case 'example': return example(b);
     case 'exercise': return exercise(b);
