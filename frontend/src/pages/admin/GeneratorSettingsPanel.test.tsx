@@ -25,9 +25,10 @@ const doc = {
 };
 
 beforeEach(() => {
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:test-pdf'), revokeObjectURL: vi.fn() });
   vi.mocked(generatorLayoutApi.get).mockResolvedValue(saved);
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe('global generator profile controls', () => {
   it('does not activate a draft merely because a slider is changed', async () => {
