@@ -36,7 +36,9 @@ import org.springframework.web.server.ResponseStatusException;
 public class TrialLessonInvitationService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Duration EARLY_JOIN = Duration.ofHours(1);
-    private static final Duration END_GRACE = Duration.ofMinutes(60);
+    // The share URL stays valid until the room is ended or the teacher revokes it;
+    // the guest's actual classroom JWT is still short-lived and can be refreshed.
+    private static final Instant LINK_STORAGE_EXPIRY = Instant.parse("2099-01-01T00:00:00Z");
     private final JdbcTemplate jdbc;
     private final LessonHistoryRepository lessons;
     private final OnlineClassService classes;
@@ -94,8 +96,6 @@ public class TrialLessonInvitationService {
     @Transactional
     public Created issue(AuthenticatedUser teacher, String eventId) {
         LessonHistoryEntry lesson = eligible(teacher, eventId);
-        if (Instant.now().isAfter(lesson.getEndsAt().plus(END_GRACE)))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This trial lesson has finished");
         // Creates (or reuses) the same teacher-only room the teacher uses for PDF preparation.
         var classInfo = classes.materializeFromCalendar(teacher, eventId);
         OnlineClass room = classRepository.findById(classInfo.id())
@@ -107,7 +107,7 @@ public class TrialLessonInvitationService {
         // Stable for this teacher, lesson and classroom: copying the link must not revoke it.
         String token = jwt.trialInvitationToken(teacher.id(), eventId, room.getId());
         String tokenHash = hash(token);
-        Instant expiry = lesson.getEndsAt().plus(END_GRACE);
+        Instant expiry = LINK_STORAGE_EXPIRY;
         int updated = jdbc.update("""
                 INSERT INTO trial_lesson_invitations
                   (event_id, teacher_id, class_id, token_hash, expires_at)
