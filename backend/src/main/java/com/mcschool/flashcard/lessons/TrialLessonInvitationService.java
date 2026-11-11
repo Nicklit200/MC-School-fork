@@ -86,8 +86,8 @@ public class TrialLessonInvitationService {
         LessonHistoryEntry lesson = lessons.findByTeacherIdAndEventId(teacher.id(), eventId)
                 .filter(entry -> entry.getDeletedAt() == null && isTrial(entry.getTitle()))
                 .orElseThrow(() -> new ResourceNotFoundException("Trial lesson not found"));
-        if (lesson.getStudentId() != null || lesson.getGroupId() != null)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This lesson already has a student");
+        if (lesson.getGroupId() != null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A group cannot use this trial link");
         return lesson;
     }
 
@@ -100,9 +100,12 @@ public class TrialLessonInvitationService {
         var classInfo = classes.materializeFromCalendar(teacher, eventId);
         OnlineClass room = classRepository.findById(classInfo.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not found"));
-        if (room.isTerminal() || !room.isTeacherOnly())
+        if (room.isTerminal() || (room.getStudent() != null
+                && (!room.getStudent().isTrialGuest()
+                    || !room.getStudent().getId().equals(lesson.getStudentId()))))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This classroom can no longer accept a guest");
-        String token = freshToken();
+        // Stable for this teacher, lesson and classroom: copying the link must not revoke it.
+        String token = jwt.trialInvitationToken(teacher.id(), eventId, room.getId());
         String tokenHash = hash(token);
         Instant expiry = lesson.getEndsAt().plus(END_GRACE);
         int updated = jdbc.update("""
@@ -111,12 +114,17 @@ public class TrialLessonInvitationService {
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (teacher_id, event_id)
                 DO UPDATE SET token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at,
-                              class_id = EXCLUDED.class_id, revoked_at = NULL
-                WHERE trial_lesson_invitations.guest_user_id IS NULL
+                              class_id = EXCLUDED.class_id
+                WHERE trial_lesson_invitations.revoked_at IS NULL
+                  AND (trial_lesson_invitations.guest_user_id IS NULL
+                       OR trial_lesson_invitations.guest_user_id = (
+                            SELECT student_id FROM online_classes WHERE id = EXCLUDED.class_id))
+                  AND trial_lesson_invitations.class_id = EXCLUDED.class_id
                 """, eventId, teacher.id(), room.getId(), tokenHash,
                 java.sql.Timestamp.from(expiry));
         if (updated != 1)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A guest has already joined this trial");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Invitation was revoked, the classroom changed, or a different student joined");
         return new Created(token, room.getId(), expiry);
     }
 
@@ -125,7 +133,7 @@ public class TrialLessonInvitationService {
         eligible(teacher, eventId);
         jdbc.update("""
                 UPDATE trial_lesson_invitations SET revoked_at = CURRENT_TIMESTAMP
-                WHERE teacher_id = ? AND event_id = ? AND guest_user_id IS NULL
+                WHERE teacher_id = ? AND event_id = ?
                 """, teacher.id(), eventId);
     }
 
@@ -170,7 +178,7 @@ public class TrialLessonInvitationService {
         LessonHistoryEntry lesson = validate(invite);
         Instant now = Instant.now();
         return new InvitationInfo("Пробный урок Mindcrafti", lesson.getStartsAt(), lesson.getEndsAt(),
-                !now.isBefore(lesson.getStartsAt().minus(EARLY_JOIN)) && invite.guestId() == null,
+                !now.isBefore(lesson.getStartsAt().minus(EARLY_JOIN)),
                 invite.guestId() != null);
     }
 
@@ -182,11 +190,19 @@ public class TrialLessonInvitationService {
         Invite invite = find(token, true);
         LessonHistoryEntry lesson = validate(invite);
         Instant now = Instant.now();
-        if (invite.guestId() != null)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This invitation was already used");
         if (now.isBefore(lesson.getStartsAt().minus(EARLY_JOIN)))
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "You can enter up to 60 minutes before the trial lesson");
+        if (invite.guestId() != null) {
+            User returning = users.findById(invite.guestId())
+                    .filter(User::isTrialGuest)
+                    .filter(user -> !user.isArchived() && user.getStatus() == UserStatus.ACTIVE)
+                    .orElseThrow(() -> new ResourceNotFoundException("Guest no longer available"));
+            if (!returning.getFullName().equalsIgnoreCase(name.trim()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Please enter the same name you used for the first visit");
+            return new Joined(guestAuth(returning, invite), invite.classId());
+        }
         if (lesson.getStudentId() != null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This trial is already assigned");
         var teacher = users.findById(invite.teacherId())
@@ -207,9 +223,13 @@ public class TrialLessonInvitationService {
                 SET guest_user_id = ?, claimed_at = CURRENT_TIMESTAMP
                 WHERE token_hash = ? AND guest_user_id IS NULL AND revoked_at IS NULL
                 """, guest.getId(), hash(token));
-        Instant tokenExpiry = invite.expiresAt().isBefore(now.plus(Duration.ofHours(4)))
+        return new Joined(guestAuth(guest, invite), room.getId());
+    }
+    private AuthResponse guestAuth(User guest, Invite invite) {
+        Instant now = Instant.now();
+        Instant expiry = invite.expiresAt().isBefore(now.plus(Duration.ofHours(4)))
                 ? invite.expiresAt() : now.plus(Duration.ofHours(4));
-        String accessToken = jwt.generateTrialToken(guest, room.getId(), tokenExpiry);
-        return new Joined(AuthResponse.bearer(accessToken, tokenExpiry, UserResponse.from(guest)), room.getId());
+        return AuthResponse.bearer(
+                jwt.generateTrialToken(guest, invite.classId(), expiry), expiry, UserResponse.from(guest));
     }
 }
