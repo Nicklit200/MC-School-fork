@@ -16,6 +16,18 @@ class JwtServiceTest {
     private final User admin = User.bootstrapAdmin("Admin", "admin@test.local", "hash");
 
     @Test
+    void trialLinkRemainsStableForOneLessonAndDiffersBetweenLessons() {
+        java.util.UUID teacher = java.util.UUID.randomUUID();
+        java.util.UUID room = java.util.UUID.randomUUID();
+        String first = jwtService.trialInvitationToken(teacher, "local-lesson-a", room);
+        assertThat(first).hasSize(43);
+        assertThat(jwtService.trialInvitationToken(teacher, "local-lesson-a", room)).isEqualTo(first);
+        assertThat(jwtService.trialInvitationToken(teacher, "local-lesson-b", room)).isNotEqualTo(first);
+        assertThat(jwtService.trialInvitationToken(java.util.UUID.randomUUID(), "local-lesson-a", room))
+                .isNotEqualTo(first);
+    }
+
+    @Test
     void issuesTokenThatVerifiesToTheSameUser() {
         String token = jwtService.generateToken(admin);
 
