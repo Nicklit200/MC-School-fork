@@ -380,8 +380,8 @@ export function GroupLessonsPage() {
     const expanded = expandedLessonId === lesson.eventId;
     const finished = finishedLessonId === lesson.eventId;
     const isShareableTrial = lesson.eventId.startsWith('local-')
-      && (lesson.title.startsWith('Пробный урок') || lesson.title.startsWith('Probeunterricht'))
-      && !lesson.groupId && Date.parse(lesson.endsAt) + 60 * 60 * 1000 > Date.now();
+      && !lesson.groupId && !lesson.studentId
+      && Date.parse(lesson.endsAt) + 60 * 60 * 1000 > Date.now();
 
     const kind = lesson.groupId ? (language === 'DE' ? 'Gruppenunterricht' : 'Групповое занятие')
       : lesson.studentId ? (language === 'DE' ? 'Einzelunterricht' : 'Индивидуальное занятие')
