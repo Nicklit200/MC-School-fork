@@ -8,13 +8,24 @@ import { api, setAccessToken, setSessionAccessToken } from '../api/client';
 import { useOnlineClassesAvailable } from '../features/online-classes/useOnlineClassesAvailable';
 import type { TranslationKey } from '../i18n/translations';
 import { clearAdminImpersonation, readAdminImpersonation } from '../auth/adminImpersonation';
+import { workbookStudioApi } from '../api/workbookStudio';
+import { useEffect } from 'react';
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout, setUser } = useAuth();
   const { language, t } = useI18n();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const isStoriesWorkspace = user?.role === 'ADMIN' && pathname === '/admin/stories';
+  const isStoriesWorkspace = user?.role === 'ADMIN' && (pathname === '/admin/stories' || pathname === '/admin/workbook-studio');
+  const [ownerWorkbookAccess, setOwnerWorkbookAccess] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setOwnerWorkbookAccess(false);
+    if (user?.role === 'ADMIN') {
+      void workbookStudioApi.get().then(() => { if (active) setOwnerWorkbookAccess(true); }).catch(() => { if (active) setOwnerWorkbookAccess(false); });
+    }
+    return () => { active = false; };
+  }, [user?.id, user?.role]);
   const [returningToAdmin, setReturningToAdmin] = useState(false);
 
   const isStudent = user?.role === 'STUDENT';
@@ -96,6 +107,7 @@ export function Layout({ children }: { children: ReactNode }) {
             { to: '/admin/leads', label: language === 'DE' ? 'Anfragen' : 'Заявки' },
             { to: '/admin/site-visits', label: language === 'DE' ? 'Besuche' : 'Попытки посетителей' },
             { to: '/admin/stories', label: 'Шаблоны Stories' },
+            ...(ownerWorkbookAccess ? [{ to: '/admin/workbook-studio', label: language === 'DE' ? 'Arbeitsheft-Editor' : 'Редактор тетрадей' }] : []),
             { to: '/admin/prompts', label: language === 'DE' ? 'Prompts' : 'Промты школы' },
             { to: '/admin/help', label: language === 'DE' ? 'Hilfe verwalten' : 'База знаний' },
             { to: '/skills', label: language === 'DE' ? 'Kompetenzen' : 'Навыки' },
