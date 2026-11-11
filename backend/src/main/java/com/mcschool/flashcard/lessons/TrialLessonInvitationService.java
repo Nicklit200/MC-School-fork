@@ -167,7 +167,11 @@ public class TrialLessonInvitationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not available"));
         if (lesson.getStudentId() != null && !lesson.getStudentId().equals(invite.guestId()))
             throw new ResourceNotFoundException("Invitation not available");
-        if (room.getGroup() != null)
+        if (room.getGroup() != null
+                || (invite.guestId() == null && room.getStudent() != null)
+                || (invite.guestId() != null
+                    && (room.getStudent() == null
+                        || !invite.guestId().equals(room.getStudent().getId()))))
             throw new ResourceNotFoundException("Invitation not available");
         return lesson;
     }
