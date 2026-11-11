@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [integration/railway-and-ux]
     paths:
-      - 'frontend/src/pages/admin/AdminWorkbookStudioPage.tsx'
+      - 'frontend/src/pages/admin/AdminWorkbookStudioPage*'
       - 'frontend/src/api/workbookStudio*'
       - 'frontend/src/components/Layout.tsx'
       - 'frontend/src/App.tsx'
@@ -46,7 +46,7 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Frontend test
         working-directory: frontend
-        run: npm run test -- src/api/workbookStudio.test.ts
+        run: npm run test -- src/api/workbookStudio.test.ts src/pages/admin/AdminWorkbookStudioPage.test.tsx
       - name: Frontend compile and build
         working-directory: frontend
         run: npm run build
