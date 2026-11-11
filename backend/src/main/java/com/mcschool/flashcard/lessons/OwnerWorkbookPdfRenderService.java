@@ -179,6 +179,66 @@ public class OwnerWorkbookPdfRenderService {
         }
     }
 
+    /** Preview-only rendering, no paid AI, no lesson drafts and no publication. */
+    public record StudioRender(byte[] studentPdf, byte[] teacherPdf, int studentPages,
+                               int teacherPages, Map<String, Object> qa) {}
+
+    public StudioRender renderStudio(String lessonJson) throws Exception {
+        if (!renderSlots.tryAcquire())
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Workbook renderer busy");
+        try {
+            if (lessonJson == null || lessonJson.isBlank() || lessonJson.length() > MAX_INPUT_CHARS)
+                throw new IllegalArgumentException("Invalid workbook JSON size");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> document = mapper.readValue(lessonJson, Map.class);
+            validateDocument(document);
+            Path runtime = runtimeDirectory();
+            Path workspace = Files.createTempDirectory("mindcrafti-workbook-studio-");
+            try {
+                String basename = "Mindcrafti_Studio";
+                String minutes = String.valueOf(((Number) requireMap(document.get("meta"), "meta")
+                        .get("durationMinutes")).intValue());
+                Path source = workspace.resolve("lesson.json");
+                Files.writeString(source, lessonJson, StandardCharsets.UTF_8);
+                Path output = Files.createDirectory(workspace.resolve("out"));
+                var process = new ProcessBuilder("node", runtime.resolve("generate.mjs").toString(),
+                        "--lesson=" + source, "--out=" + output, "--basename=" + basename);
+                process.directory(runtime.toFile());
+                process.redirectErrorStream(true);
+                process.redirectOutput(workspace.resolve("renderer.log").toFile());
+                runPlainProcess(process);
+                Path studentPath = output.resolve(basename + "_Arbeitsheft_" + minutes + "min.pdf");
+                Path teacherPath = output.resolve(basename + "_Lehrerloesungen_" + minutes + "min.pdf");
+                if (Files.size(studentPath) > MAX_DOCUMENT_BYTES || Files.size(teacherPath) > MAX_DOCUMENT_BYTES)
+                    throw new IllegalArgumentException("Studio PDF exceeds 15 MB");
+                byte[] student = Files.readAllBytes(studentPath);
+                byte[] teacher = Files.readAllBytes(teacherPath);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> math = mapper.readValue(
+                        Files.readString(output.resolve(basename + "_math-qa.json")), Map.class);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> layout = mapper.readValue(
+                        Files.readString(output.resolve(basename + "_layout-qa.json")), Map.class);
+                if (!Boolean.TRUE.equals(math.get("passed")) || !Boolean.TRUE.equals(layout.get("passed")))
+                    throw new IllegalStateException("Workbook studio QA did not pass");
+                try (PDDocument studentDocument = Loader.loadPDF(student);
+                     PDDocument teacherDocument = Loader.loadPDF(teacher)) {
+                    if (studentDocument.isEncrypted() || teacherDocument.isEncrypted())
+                        throw new IllegalStateException("Generated PDFs must not be encrypted");
+                    return new StudioRender(student, teacher, studentDocument.getNumberOfPages(),
+                            teacherDocument.getNumberOfPages(), Map.of(
+                                    "mathPassed", true, "layoutPassed", true,
+                                    "algebraChecked", math.getOrDefault("checked", 0),
+                                    "graphWarnings", math.getOrDefault("graphWarnings", List.of())));
+                }
+            } finally {
+                cleanupWorkspace(workspace);
+            }
+        } finally {
+            renderSlots.release();
+        }
+    }
+
     private static void runPlainProcess(ProcessBuilder builder) throws IOException {
         Process process = builder.start();
         try {
