@@ -42,6 +42,57 @@ function createCopyPrompt(json: string): string {
   ].join('\n\n');
 }
 
+/** Instant, read-only content outline while the exact A4 PDF is being verified. */
+function describeBlock(raw: unknown, index: number) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const block = raw as Record<string, unknown>;
+  const type = typeof block.type === 'string' ? block.type : 'block';
+  const heading = [block.number, block.title, block.label].filter(v => typeof v === 'string' || typeof v === 'number').join('  ');
+  const text = [block.subtitle, block.text, block.caption].filter(v => typeof v === 'string' && v.trim()).join('  ');
+  const rows = Array.isArray(block.rows) ? block.rows.slice(0, 12) : [];
+  return (
+    <div key={index} style={{ padding: '10px 12px', borderRadius: 8, background: type === 'exercise' ? '#fffaf5' : '#f7f8fa', border: '1px solid #e9e1d9', marginTop: 8 }}>
+      <strong style={{ fontSize: 13 }}>{heading || (type === 'graph' ? 'График' : type === 'geometry' ? 'Геометрия' : type)}</strong>
+      {text && <div style={{ marginTop: 4, fontSize: 12, whiteSpace: 'pre-wrap' }}>{text}</div>}
+      {(type === 'graph' || type === 'coordinateGrid' || type === 'geometry') &&
+        <div style={{ border: '1px dashed #d6a275', background: '#fff4e7', marginTop: 8, padding: 12, borderRadius: 6, fontSize: 12 }}>
+          {type === 'geometry' ? 'Геометрическая фигура' : 'Координатная сетка и график'}: точный рисунок будет в PDF
+        </div>}
+      {rows.map((rawRow, rowIndex) => {
+        if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) return null;
+        const row = rawRow as Record<string, unknown>;
+        const expression = Array.isArray(row.math)
+          ? row.math.map(token => typeof token === 'string' || typeof token === 'number' ? String(token) : 'формула').join(' ')
+          : '';
+        return <div key={rowIndex} style={{ fontSize: 12, marginTop: 6, overflowWrap: 'anywhere' }}>
+          {typeof row.label === 'string' ? row.label + ' ' : ''}{expression}
+        </div>;
+      })}
+      {Array.isArray(block.given) && <div style={{ fontSize: 12, marginTop: 4 }}>Дано: {block.given.map(String).join('; ')}</div>}
+      {Array.isArray(block.find) && <div style={{ fontSize: 12, marginTop: 4 }}>Найти: {block.find.map(String).join('; ')}</div>}
+      {typeof block.writeLines === 'number' && block.writeLines > 0 && <div style={{ fontSize: 12, marginTop: 4 }}>Место для решения: {block.writeLines} строк</div>}
+    </div>
+  );
+}
+
+function WorkbookOutline({ document, mode }: { document: WorkbookDocument | null; mode: 'student' | 'teacher' }) {
+  const pages = mode === 'student' ? document?.workbookPages : document?.teacherPages;
+  if (!pages) return <p>Загружаем тетрадь...</p>;
+  return (
+    <div style={{ maxHeight: '70vh', overflowY: 'auto', padding: 12, background: '#eceef1', borderRadius: 10 }}>
+      <p style={{ fontSize: 12, margin: '0 0 10px' }}>Быстрый просмотр содержания. Точное оформление, формулы и графики проверяются в PDF.</p>
+      {pages.map((page, index) => (
+        <div key={index} style={{ background: 'white', border: '1px solid #ddd', boxShadow: '0 2px 4px #0001', padding: '16px 20px', margin: '0 auto 14px', maxWidth: 480, minHeight: 320 }}>
+          <div style={{ color: '#d96f29', fontSize: 12, fontWeight: 750 }}>MINDCRAFTI SCHOOL · {mode === 'student' ? 'АРБАЙТСХЕФТ' : 'РЕШЕНИЯ'} · {index + 1}</div>
+          <h3 style={{ margin: '10px 0 5px', fontSize: 18 }}>{page.title || 'Страница ' + (index + 1)}</h3>
+          {typeof page.subtitle === 'string' && <p style={{ fontSize: 12 }}>{page.subtitle}</p>}
+          {page.blocks.map(describeBlock)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AdminWorkbookStudioPage() {
   const [project, setProject] = useState<WorkbookProject | null>(null);
   const [draft, setDraft] = useState('');
@@ -53,6 +104,7 @@ export function AdminWorkbookStudioPage() {
   const [history, setHistory] = useState<string[]>([]);
   const [preview, setPreview] = useState<Blob | null>(null);
   const [answers, setAnswers] = useState<Blob | null>(null);
+  const [appliedDocument, setAppliedDocument] = useState<WorkbookDocument | null>(null);
   const [mode, setMode] = useState<'student' | 'teacher'>('student');
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -85,7 +137,9 @@ export function AdminWorkbookStudioPage() {
         setVersion(cloud.version);
         setProject(initial);
         setActiveId(initial.activeTemplateId);
-        setDraft(JSON.stringify(initial.templates.find(t => t.id === initial.activeTemplateId)?.document, null, 2));
+        const initialDocument = initial.templates.find(t => t.id === initial.activeTemplateId)?.document ?? null;
+        setDraft(JSON.stringify(initialDocument, null, 2));
+        setAppliedDocument(initialDocument);
         setStatus(cloud.configured ? 'Шаблоны загружены с сервера' : 'Открыт пример. Сохраните его, чтобы создать первый шаблон.');
         try {
           const local = sessionStorage.getItem(KEY);
@@ -103,6 +157,7 @@ export function AdminWorkbookStudioPage() {
     setDraft(next);
     setPreview(null);
     setAnswers(null);
+    setStatus('Код изменён. Нажмите «Применить код» для обновления тетради слева.');
     setError('');
     try { sessionStorage.setItem(KEY, next); } catch { /* export remains available */ }
   }
@@ -117,11 +172,13 @@ export function AdminWorkbookStudioPage() {
         templates: project.templates.map(template => template.id === activeId ? { ...template, document } : template),
       });
       setProject(updated);
-      setStatus('JSON принят. Запустите PDF-предпросмотр, чтобы проверить математические и печатные ошибки.');
+      setAppliedDocument(document);
+      setStatus('JSON принят. Обновляем страницы и проверяем PDF...');
       setError('');
       return document;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Неверный JSON');
+      setStatus('Не удалось применить код. Исправьте JSON и попробуйте снова.');
       return null;
     }
   }
@@ -138,6 +195,7 @@ export function AdminWorkbookStudioPage() {
       setStatus('Проверка пройдена: тетрадь ' + result.studentPages + ' стр., ответы ' + result.teacherPages + ' стр.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Ошибка PDF-рендеринга');
+      setStatus('Содержание применено, но точный PDF не сформирован. Посмотрите ошибку выше.');
     } finally {
       setBusy(false);
     }
@@ -172,7 +230,9 @@ export function AdminWorkbookStudioPage() {
         const imported = validateWorkbookProject(parsed);
         setProject(imported);
         setActiveId(imported.activeTemplateId);
-        setDraft(JSON.stringify(imported.templates.find(t => t.id === imported.activeTemplateId)?.document, null, 2));
+        const importedDocument = imported.templates.find(t => t.id === imported.activeTemplateId)?.document ?? null;
+        setDraft(JSON.stringify(importedDocument, null, 2));
+        setAppliedDocument(importedDocument);
         setPreview(null); setAnswers(null);
         setStatus('Проект загружен из файла. Сохранение на сервере отдельно.');
       } else {
@@ -194,6 +254,7 @@ export function AdminWorkbookStudioPage() {
     setProject({ ...project, templates, activeTemplateId: id });
     setActiveId(id);
     setDraft(JSON.stringify(template.document, null, 2));
+    setAppliedDocument(template.document);
     setHistory([]);
     setPreview(null); setAnswers(null);
   }
@@ -208,6 +269,7 @@ export function AdminWorkbookStudioPage() {
     const templates = project.templates.map(t => t.id === activeId ? { ...t, document } : t);
     setProject({ ...project, templates: [...templates, { id, name: name.slice(0, 80), document: structuredClone(document) }], activeTemplateId: id });
     setActiveId(id);
+    setAppliedDocument(document);
     setHistory([]);
     setPreview(null); setAnswers(null);
   }
@@ -218,6 +280,7 @@ export function AdminWorkbookStudioPage() {
     setProject({ ...project, templates, activeTemplateId: templates[0].id });
     setActiveId(templates[0].id);
     setDraft(JSON.stringify(templates[0].document, null, 2));
+    setAppliedDocument(templates[0].document);
     setPreview(null); setAnswers(null);
   }
 
@@ -267,16 +330,12 @@ export function AdminWorkbookStudioPage() {
             <button className="btn btn--secondary" type="button" onClick={() => setMode('teacher')}>Ответы</button>
           </div>
           <button className="btn" type="button" onClick={() => void render()} disabled={!project || busy}>
-            {busy ? 'Генерируем PDF...' : 'Обновить PDF-предпросмотр'}
+            {busy ? 'Проверяем PDF...' : 'Повторить проверку PDF'}
           </button>
           {previewUrl
             ? <iframe title={mode === 'student' ? 'Предпросмотр ученика' : 'Предпросмотр решений'}
                 src={previewUrl} style={{ display: 'block', width: '100%', height: 'min(70vh, 820px)', border: '1px solid #ddd' }} />
-            : <div style={{ minHeight: 420, background: '#fff8f3', padding: 24, borderRadius: 12 }}>
-                <h3>{selected?.name || 'Тетрадь'}</h3>
-                <p>Задачи и графики будут показаны здесь после первой проверки PDF.</p>
-                <p className="muted">Изменения JSON применяются без оплаты ИИ. Перерисовка PDF использует вычисления сервера.</p>
-              </div>}
+            : <WorkbookOutline document={appliedDocument} mode={mode} />}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button className="btn btn--secondary" type="button" disabled={!preview} onClick={() => preview && downloadBlob(preview, fileName(selected?.name || 'workbook') + '_Arbeitsheft.pdf')}>PDF ученика</button>
             <button className="btn btn--secondary" type="button" disabled={!answers} onClick={() => answers && downloadBlob(answers, fileName(selected?.name || 'answers') + '_Lehrerloesungen.pdf')}>PDF ответов</button>
@@ -289,7 +348,7 @@ export function AdminWorkbookStudioPage() {
             onChange={event => updateDraft(event.target.value)}
             style={{ width: '100%', minHeight: 550, resize: 'vertical', fontFamily: 'ui-monospace, monospace', fontSize: 12, lineHeight: 1.5, padding: 12 }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <button className="btn btn--secondary" type="button" disabled={!project} onClick={apply}>Применить код</button>
+            <button className="btn" type="button" disabled={!project || busy} onClick={() => void render()}>{busy ? 'Применяем и проверяем...' : 'Применить код и показать тетрадь'}</button>
             <button className="btn btn--secondary" type="button" disabled={!history.length}
               onClick={() => { const previous = history[history.length - 1]; setHistory(history.slice(0, -1)); setDraft(previous); setPreview(null); setAnswers(null); }}>Отменить</button>
             <button className="btn" type="button" disabled={!draft} onClick={() => void copyPrompt()}>Скопировать запрос для ChatGPT</button>
