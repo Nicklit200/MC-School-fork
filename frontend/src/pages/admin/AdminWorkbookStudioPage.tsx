@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { workbookStudioApi, validateWorkbookProject, type WorkbookDocument, type WorkbookProject } from '../../api/workbookStudio';
+import { GeneratorSettingsPanel } from './GeneratorSettingsPanel';
 
 const KEY = 'mindcrafti.workbook-studio.unsaved';
 const fileName = (name: string) => name.replace(/[^a-z0-9_-]/gi, '_').slice(0, 60) || 'workbook';
@@ -106,6 +107,7 @@ export function AdminWorkbookStudioPage() {
   const [answers, setAnswers] = useState<Blob | null>(null);
   const [appliedDocument, setAppliedDocument] = useState<WorkbookDocument | null>(null);
   const [mode, setMode] = useState<'student' | 'teacher'>('student');
+  const [section, setSection] = useState<'workbook' | 'generator'>('workbook');
   const fileInput = useRef<HTMLInputElement>(null);
 
   const selected = useMemo(() => project?.templates.find(template => template.id === activeId), [project, activeId]);
@@ -305,6 +307,13 @@ export function AdminWorkbookStudioPage() {
         <h1 style={{ margin: 0, fontSize: 23 }}>Редактор тетрадей</h1>
         <p className="muted">Слева тетрадь, справа JSON для ChatGPT. Ручные правки не используют платный AI API.</p>
       </div>
+      <nav aria-label="Работа с генератором" style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        <button className={section === 'workbook' ? 'btn' : 'btn btn--secondary'}
+          onClick={() => setSection('workbook')} type="button">Редактор тетради</button>
+        <button className={section === 'generator' ? 'btn' : 'btn btn--secondary'}
+          onClick={() => setSection('generator')} type="button">Настройки генератора</button>
+      </nav>
+      {section === 'generator' ? <GeneratorSettingsPanel currentDocument={appliedDocument} /> : <>
       {error && <div role="alert" className="banner banner--error">{error}</div>}
       <div role="status" className="muted">{status}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -356,6 +365,7 @@ export function AdminWorkbookStudioPage() {
           <p className="muted">Скопируйте запрос, опишите в ChatGPT нужную правку, затем вставьте полученный JSON обратно. Ни копирование, ни ручное редактирование не расходуют баланс Kolyn.</p>
         </section>
       </div>
+      </>}
     </div>
   );
 }
