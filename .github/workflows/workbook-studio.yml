@@ -6,11 +6,18 @@ on:
     paths:
       - 'frontend/src/pages/admin/AdminWorkbookStudioPage*'
       - 'frontend/src/api/workbookStudio*'
+      - 'frontend/src/api/generatorLayout.ts'
+      - 'frontend/src/pages/admin/GeneratorSettingsPanel*'
       - 'frontend/src/components/Layout.tsx'
       - 'frontend/src/App.tsx'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/WorkbookStudio*'
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/WorkbookGeneratorLayout*'
+      - 'backend/src/main/resources/owner-workbook-generator/generate.mjs'
+      - 'backend/src/main/resources/owner-workbook-generator/diagrams.mjs'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/OwnerWorkbookPdfRenderService.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/WorkbookStudio*'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/WorkbookGeneratorLayout*'
+      - 'backend/src/main/resources/db/migration/V106__workbook_generator_layout_profiles.sql'
       - 'backend/src/main/resources/db/migration/V105__owner_workbook_studio_projects.sql'
       - '.github/workflows/workbook-studio.yml'
   workflow_dispatch:
@@ -37,7 +44,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Backend unit tests
         working-directory: backend
-        run: mvn -B -ntp -Dtest=WorkbookStudioProjectServiceTest,OwnerWorkbookPdfRenderServiceTest test
+        run: mvn -B -ntp -Dtest=WorkbookStudioProjectServiceTest,WorkbookGeneratorLayoutServiceTest,OwnerWorkbookPdfRenderServiceTest test
       - name: Backend build
         working-directory: backend
         run: mvn -B -ntp -DskipTests package
@@ -46,7 +53,7 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Frontend test
         working-directory: frontend
-        run: npm run test -- src/api/workbookStudio.test.ts src/pages/admin/AdminWorkbookStudioPage.test.tsx
+        run: npm run test -- src/api/workbookStudio.test.ts src/pages/admin/AdminWorkbookStudioPage.test.tsx src/pages/admin/GeneratorSettingsPanel.test.tsx
       - name: Frontend compile and build
         working-directory: frontend
         run: npm run build
