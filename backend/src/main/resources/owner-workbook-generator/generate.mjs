@@ -45,6 +45,8 @@ function validLayout(o) {
 if (!validLayout(safeLayout)) throw Error('Invalid workbook generator layout profile');
 const layoutCss = [
   '.sheet:not(.plain) .block { margin-top: '+safeLayout.blockGapMm+'mm; }',
+  '.sheet:not(.plain) .exercise { margin-top: '+(safeLayout.blockGapMm+2.4).toFixed(2)+'mm; }',
+  '.sheet:not(.plain) .exercise:first-child { margin-top: 0; }',
   '.sheet:not(.plain) .exercise-title { font-size: '+safeLayout.taskTitleFontPx+'px; }',
   '.sheet:not(.plain) .diagram-block--graph .diagram-svg { width: '+safeLayout.graphWidthPercent+'%; height: '+safeLayout.graphHeightMm+'mm; max-height: '+safeLayout.graphHeightMm+'mm; margin-left: '+(safeLayout.graphAlignment==='left'?'0':'auto')+'; margin-right: '+(safeLayout.graphAlignment==='left'?'auto':'auto')+'; }',
   '.sheet:not(.plain) .task-row .workline { height: '+(6*safeLayout.answerSpacePercent/100).toFixed(2)+'mm; }',
