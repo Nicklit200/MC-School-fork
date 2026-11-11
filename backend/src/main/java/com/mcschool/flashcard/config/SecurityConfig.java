@@ -54,6 +54,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/activate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/public/trial-leads", "/api/v1/public/site-visits").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/public/trial-invitations/*").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/public/trial-invitations/*/join").permitAll()
                         // Only these two phone routes bypass account login. Each
                         // validates a bounded hashed QR/session secret itself.
                         .requestMatchers(HttpMethod.POST,
