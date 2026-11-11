@@ -39,17 +39,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith(BEARER_PREFIX)) {
             jwtService.verify(header.substring(BEARER_PREFIX.length()))
-                    .ifPresent(claims -> authenticate(claims, request));
+                    .ifPresent(claims -> authenticate(claims, request, header.substring(BEARER_PREFIX.length())));
         }
         filterChain.doFilter(request, response);
     }
 
-    private void authenticate(JwtService.TokenClaims claims, HttpServletRequest request) {
+    private void authenticate(JwtService.TokenClaims claims, HttpServletRequest request, String token) {
         // Re-check the account on every request so deleted or not-yet-activated
         // accounts cannot use previously issued tokens.
         userRepository.findById(claims.userId())
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .filter(user -> !user.isArchived())
+                .filter(user -> !user.isTrialGuest() || isAllowedGuestRequest(
+                        request, jwtService.trialClassId(token).orElse(null)))
                 .ifPresent(user -> {
                     AuthenticatedUser principal =
                             new AuthenticatedUser(user.getId(), user.getEmail(), user.getRole());
@@ -58,5 +60,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             principal, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 });
+    }
+
+    /** Guest JWTs never authorize profiles, groups, calendars, admin or other classes. */
+    static boolean isAllowedGuestRequest(HttpServletRequest request, java.util.UUID trialClassId) {
+        if (trialClassId == null) return false;
+        String path = request.getRequestURI();
+        if ("/api/v1/auth/me".equals(path) && "GET".equals(request.getMethod())) return true;
+        String root = "/api/v1/online-classes/" + trialClassId;
+        if (!(path.equals(root) || path.startsWith(root + "/"))) return false;
+        // All writes still pass existing per-class admission checks and
+        // TEACHER-only method security. Limit guest to the exact class scope.
+        return true;
     }
 }
