@@ -84,7 +84,7 @@ public class TrialLessonInvitationService {
             throw new ResourceNotFoundException("Trial lesson not found");
         }
         LessonHistoryEntry lesson = lessons.findByTeacherIdAndEventId(teacher.id(), eventId)
-                .filter(entry -> entry.getDeletedAt() == null && isTrial(entry.getTitle()))
+                .filter(entry -> entry.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException("Trial lesson not found"));
         if (lesson.getGroupId() != null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A group cannot use this trial link");
@@ -158,7 +158,7 @@ public class TrialLessonInvitationService {
         if (invite.revoked() || !Instant.now().isBefore(invite.expiresAt()))
             throw new ResourceNotFoundException("Invitation expired or revoked");
         LessonHistoryEntry lesson = lessons.findByTeacherIdAndEventId(invite.teacherId(), invite.eventId())
-                .filter(entry -> entry.getDeletedAt() == null && isTrial(entry.getTitle()))
+                .filter(entry -> entry.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException("Invitation not found"));
         OnlineClass room = classRepository.findById(invite.classId())
                 .filter(candidate -> !candidate.isTerminal()
