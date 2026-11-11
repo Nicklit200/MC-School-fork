@@ -36,8 +36,9 @@ function range(input, field) {
   if (!(lo < hi) || hi - lo > 50 || hi - lo < 0.5) throw new Error(`${field}: invalid bounds`);
   return [lo,hi];
 }
-function banner(label, svg, caption = '') {
-  return `<section class="block diagram-block"><div class="diagram-eyebrow">${esc(label ?? 'ABBILDUNG')}</div>${svg}${caption ? `<div class="diagram-caption">${esc(caption)}</div>` : ''}</section>`;
+function banner(label, svg, caption = '', kind = '') {
+  const cls=kind==='graph' ? ' diagram-block--graph' : '';
+  return `<section class="block diagram-block${cls}"><div class="diagram-eyebrow">${esc(label ?? 'ABBILDUNG')}</div>${svg}${caption ? `<div class="diagram-caption">${esc(caption)}</div>` : ''}</section>`;
 }
 const vec = (x,y) => `${fmt(x)},${fmt(y)}`;
 const len = v => Math.hypot(v[0],v[1]);
@@ -343,9 +344,13 @@ export function graphSvg(spec) {
   const step=finite(spec.gridStep ?? 1,'gridStep');
   if(step < 0.25 || step > 10 || (x1-x0)/step > 35 || (y1-y0)/step > 35)throw Error('Unsupported gridStep');
   const W=560,H=258;
-  const scale=Math.min(455/(x1-x0),207/(y1-y0));
+  const layoutScale=spec.layoutPlotScalePercent ?? 100;
+  if (!Number.isInteger(layoutScale) || layoutScale < 90 || layoutScale > 110) throw Error('Unsupported graph layout scale');
+  const scale=Math.min(455/(x1-x0),207/(y1-y0)) * (layoutScale / 100);
   const plotW=scale*(x1-x0), plotH=scale*(y1-y0);
-  const left=(W-plotW)/2, top=(H-plotH)/2-2;
+  const centeredLeft=(W-plotW)/2;
+  const left=spec.layoutAlignment==='left' ? Math.max(26, centeredLeft-Math.min(70,centeredLeft/2)) : centeredLeft;
+  const top=(H-plotH)/2-2;
   const right=left+plotW, bottom=top+plotH;
   const X=x => left + (x-x0)*scale;
   const Y=y => bottom - (y-y0)*scale;
@@ -627,8 +632,8 @@ function roundFigureSvg(spec) {
 
 export function renderDiagram(block){
   switch(block.type){
-    case 'graph':return banner(block.label??'FUNKTION & KOORDINATENSYSTEM',graphSvg(block),block.caption);
-    case 'coordinateGrid':return banner(block.label??'KOORDINATENSYSTEM',coordinateGridSvg(block),block.caption);
+    case 'graph':return banner(block.label??'FUNKTION & KOORDINATENSYSTEM',graphSvg(block),block.caption,'graph');
+    case 'coordinateGrid':return banner(block.label??'KOORDINATENSYSTEM',coordinateGridSvg(block),block.caption,'graph');
     case 'geometry':return banner(block.label??'GEOMETRISCHE ZEICHNUNG',geometrySvg(block),block.caption);
     default:throw Error('Unsupported diagram block');
   }
