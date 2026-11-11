@@ -28,6 +28,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserRepository userRepository;
 
+    // Revoking a shared trial URL must also invalidate previously issued
+    // short-lived student tokens, without touching ordinary student sessions.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate trialInviteJdbc;
+
     public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
@@ -50,8 +55,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         userRepository.findById(claims.userId())
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .filter(user -> !user.isArchived())
-                .filter(user -> !user.isTrialGuest() || isAllowedGuestRequest(
-                        request, jwtService.trialClassId(token).orElse(null)))
+                .filter(user -> {
+                    if (!user.isTrialGuest()) return true;
+                    java.util.UUID classId = jwtService.trialClassId(token).orElse(null);
+                    return isAllowedGuestRequest(request, classId) && isActiveGuestInvite(user.getId(), classId);
+                })
                 .ifPresent(user -> {
                     AuthenticatedUser principal =
                             new AuthenticatedUser(user.getId(), user.getEmail(), user.getRole());
@@ -60,6 +68,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             principal, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 });
+    }
+
+    private boolean isActiveGuestInvite(java.util.UUID guestId, java.util.UUID classId) {
+        if (trialInviteJdbc == null || classId == null) return false;
+        return Boolean.TRUE.equals(trialInviteJdbc.queryForObject("""
+                SELECT EXISTS(
+                    SELECT 1 FROM trial_lesson_invitations
+                    WHERE guest_user_id = ? AND class_id = ? AND revoked_at IS NULL
+                      AND expires_at > CURRENT_TIMESTAMP
+                )
+                """, Boolean.class, guestId, classId));
     }
 
     /** Guest JWTs never authorize profiles, groups, calendars, admin or other classes. */
