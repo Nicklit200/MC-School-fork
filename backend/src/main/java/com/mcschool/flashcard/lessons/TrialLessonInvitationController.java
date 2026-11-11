@@ -20,6 +20,14 @@ public class TrialLessonInvitationController {
     }
     public record NameRequest(@NotBlank @Size(min=2,max=80) String name) {}
 
+    @GetMapping("/api/v1/trial-invitations")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<java.util.List<String>> listMine(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(invitations.listMine(caller));
+    }
+
     @PostMapping("/api/v1/trial-invitations/{eventId}")
     @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<TrialLessonInvitationService.Created> issue(
