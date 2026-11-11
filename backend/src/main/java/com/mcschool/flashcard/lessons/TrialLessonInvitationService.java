@@ -128,6 +128,17 @@ public class TrialLessonInvitationService {
         return new Created(token, room.getId(), expiry);
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<String> listMine(AuthenticatedUser teacher) {
+        if (teacher == null || teacher.role() != Role.TEACHER)
+            throw new ResourceNotFoundException("Teacher not found");
+        return jdbc.query("""
+                SELECT event_id FROM trial_lesson_invitations
+                WHERE teacher_id = ? AND revoked_at IS NULL
+                  AND expires_at > CURRENT_TIMESTAMP
+                """, (rs, row) -> rs.getString("event_id"), teacher.id());
+    }
+
     @Transactional
     public void revoke(AuthenticatedUser teacher, String eventId) {
         eligible(teacher, eventId);
