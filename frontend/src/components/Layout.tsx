@@ -107,10 +107,11 @@ export function Layout({ children }: { children: ReactNode }) {
             { to: '/admin/leads', label: language === 'DE' ? 'Anfragen' : 'Заявки' },
             { to: '/admin/site-visits', label: language === 'DE' ? 'Besuche' : 'Попытки посетителей' },
             { to: '/admin/stories', label: 'Шаблоны Stories' },
-            ...(ownerWorkbookAccess ? [{ to: '/admin/workbook-studio', label: language === 'DE' ? 'Arbeitsheft-Editor' : 'Редактор тетрадей' }] : []),
             { to: '/admin/prompts', label: language === 'DE' ? 'Prompts' : 'Промты школы' },
             { to: '/admin/help', label: language === 'DE' ? 'Hilfe verwalten' : 'База знаний' },
             { to: '/skills', label: language === 'DE' ? 'Kompetenzen' : 'Навыки' },
+            ...(ownerWorkbookAccess ? [{ to: '/admin/workbook-studio', label: language === 'DE' ? 'Arbeitsheft-Editor' : 'Редактор тетрадей' }] : []),
+            { to: '/admin/settings', label: 'nav.settings' },
           ]
         : [{ to: '/teachers', label: 'nav.teachers' }];
 
