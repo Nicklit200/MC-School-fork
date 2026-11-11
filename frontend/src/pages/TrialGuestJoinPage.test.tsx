@@ -5,8 +5,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { TrialGuestJoinPage } from './TrialGuestJoinPage';
 import { trialInvitationsApi } from '../api/trialInvitations';
 
-const setUser = vi.fn();
-const setSessionAccessToken = vi.fn();
+const { setUser, setSessionAccessToken } = vi.hoisted(() => ({
+  setUser: vi.fn(),
+  setSessionAccessToken: vi.fn(),
+}));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ setUser }) }));
 vi.mock('../api/client', () => ({ setSessionAccessToken }));
 vi.mock('../api/trialInvitations', () => ({
