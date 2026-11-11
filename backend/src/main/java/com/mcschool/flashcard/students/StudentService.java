@@ -124,6 +124,7 @@ public class StudentService {
     @Transactional
     public List<StudentListResponse> listStudents(AuthenticatedUser teacher) {
         return userRepository.findAllByTeacherIdAndRoleAndArchivedFalseOrderByFullNameAsc(teacher.id(), Role.STUDENT).stream()
+                .filter(candidate -> !candidate.isTrialGuest())
                 .peek(this::prepareManagedStudent)
                 .map(StudentListResponse::from)
                 .toList();
