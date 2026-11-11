@@ -1,0 +1,56 @@
+name: Trial lesson guest links
+
+on:
+  pull_request:
+    branches: [integration/railway-and-ux]
+    paths:
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/TrialLessonInvitation*'
+      - 'backend/src/main/java/com/mcschool/flashcard/auth/Jwt*'
+      - 'backend/src/main/java/com/mcschool/flashcard/users/User.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/students/StudentService.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/config/SecurityConfig.java'
+      - 'backend/src/main/resources/db/migration/V107__trial_lesson_guest_invitations.sql'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/TrialLessonInvitationServiceTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/auth/TrialGuestJwtFilterScopeTest.java'
+      - 'frontend/src/pages/TrialGuestJoinPage*'
+      - 'frontend/src/pages/teacher/TrialInvitationPanel.tsx'
+      - 'frontend/src/pages/teacher/LessonWorkspacePage.tsx'
+      - 'frontend/src/api/trialInvitations.ts'
+      - 'frontend/src/App.tsx'
+      - '.github/workflows/trial-guest-links.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Guest access and invitations unit tests
+        working-directory: backend
+        run: mvn -B -ntp -Dtest=TrialLessonInvitationServiceTest,TrialGuestJwtFilterScopeTest,OnlineClassTeacherOnlyTest,ManualLessonServiceTest test
+      - name: Backend compile
+        working-directory: backend
+        run: mvn -B -ntp -DskipTests package
+      - name: Frontend install
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+      - name: Guest join UI tests
+        working-directory: frontend
+        run: npm run test -- src/pages/TrialGuestJoinPage.test.tsx
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
