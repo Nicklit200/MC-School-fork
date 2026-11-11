@@ -58,7 +58,7 @@ describe('trial guest entry', () => {
       canJoin: false, claimed: false,
     });
     page();
-    expect(await screen.findByText(/Страницу открытой/)).toBeTruthy();
+    expect(await screen.findByText(/можешь оставить эту страницу открытой/)).toBeTruthy();
     expect(screen.queryByText('Войти на урок')).toBeNull();
     expect(screen.getByText('Ждать преподавателя')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Как тебя зовут?'), { target: { value: 'Anna' } });
