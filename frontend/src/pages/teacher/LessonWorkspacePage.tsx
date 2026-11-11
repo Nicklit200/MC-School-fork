@@ -7,6 +7,7 @@ import { completedLessonApi, lessonPreparationApi, type CompletedLessonDocument 
 import type { GroupLesson, LessonPreparation } from '../../api/types';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
 import { TrialInvitationPanel } from './TrialInvitationPanel';
+import { trialInvitationsApi } from '../../api/trialInvitations';
 import { LessonHomeworkSeriesPanel } from '../../components/LessonHomeworkSeriesPanel';
 import { PersonalWorkbooksPanel } from './PersonalWorkbooksPanel';
 import { useI18n } from '../../i18n/I18nContext';
@@ -18,6 +19,7 @@ export function LessonWorkspacePage() {
   const { language, t } = useI18n();
   const de = language === 'DE';
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
+  const [previousTrialInvite, setPreviousTrialInvite] = useState(false);
   const [prep, setPrep] = useState<LessonPreparation | null>(null);
   const [documents, setDocuments] = useState<CompletedLessonDocument[]>([]);
   const [error, setError] = useState('');
@@ -27,6 +29,15 @@ export function LessonWorkspacePage() {
   const documentsDialog = useRef<HTMLDialogElement>(null);
   const homeworkDialog = useRef<HTMLDialogElement>(null);
   const generation = useRef(0);
+  useEffect(() => {
+    let active = true;
+    setPreviousTrialInvite(false);
+    void trialInvitationsApi.listMine().then(ids => {
+      if (active) setPreviousTrialInvite(ids.includes(eventId));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [eventId]);
+
   useEffect(() => {
     const epoch = ++generation.current;
     setLoading(true); setError(''); setNotice(''); setPrep(null); setLesson(null); setDocuments([]);
@@ -89,7 +100,7 @@ export function LessonWorkspacePage() {
     <section className="workspace-summary panel"><div><span>{de ? 'Teilnehmer' : 'Участники'}</span><strong>{lesson?.groupName || lesson?.studentName || (de ? 'Probestunde' : 'Пробный урок')}</strong></div><div><span>{de ? 'Format' : 'Формат'}</span><strong>{de ? 'Online' : 'Онлайн'} · {lesson ? Math.round((Date.parse(lesson.endsAt) - Date.parse(lesson.startsAt)) / 60000) : 60} {de ? 'Minuten' : 'минут'}</strong></div>
       {lesson && (import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' ? <StartOnlineClassButton eventId={lesson.eventId} /> : lesson.meetUrl ? <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">{de ? 'Online-Unterricht starten' : 'Начать онлайн-урок'}</a> : <Link className="btn" to={`/lesson-board/${encodeURIComponent(eventId)}`}>{de ? 'Tafel öffnen' : 'Открыть доску урока'}</Link>)}
     </section>
-    {lesson && lesson.eventId.startsWith('local-') && !lesson.studentId && !lesson.groupId && <TrialInvitationPanel eventId={eventId} de={de} />}
+    {lesson && lesson.eventId.startsWith('local-') && !lesson.groupId && (!lesson.studentId || previousTrialInvite) && <TrialInvitationPanel eventId={eventId} de={de} />}
     {prep && <div className="workspace-columns"><div className="workspace-materials"><WorkspaceCard title={de ? 'Gemeinsames Arbeitsheft' : 'Общая рабочая тетрадь'} symbol="workbook">{fileControls('workbook')}</WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} /></div>
       <div className="workspace-info-grid">
         <WorkspaceCard title={de ? 'Hausaufgaben' : 'Домашняя работа'} symbol="homework"><button type="button" className="btn btn--secondary" onClick={() => homeworkDialog.current?.showModal()}>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</button>{note('homeworkNotes')}</WorkspaceCard>
