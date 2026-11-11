@@ -119,6 +119,9 @@ public class User {
     @Column(nullable = false)
     private boolean archived;
 
+    @Column(name = "is_trial_guest", nullable = false)
+    private boolean trialGuest;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -326,6 +329,13 @@ public class User {
         user.status = UserStatus.ACTIVE;
         user.teacher = teacher;
         return user;
+    }
+
+    /** Short-lived named visitor: no email, login, password or permanent school profile. */
+    public static User trialGuest(String fullName, User teacher) {
+        User guest = managedStudent(fullName, teacher);
+        guest.trialGuest = true;
+        return guest;
     }
 
     /** Legacy factory kept for compatibility with old data/tests. New student creation uses managedStudent. */
