@@ -43,17 +43,20 @@ public class TrialLessonInvitationService {
     private final OnlineClassRepository classRepository;
     private final UserRepository users;
     private final ManualLessonService manualLessons;
+    private final GoogleCalendarLessonService calendarLessons;
     private final JwtService jwt;
 
     public TrialLessonInvitationService(JdbcTemplate jdbc, LessonHistoryRepository lessons,
                                        OnlineClassService classes, OnlineClassRepository classRepository,
-                                       UserRepository users, ManualLessonService manualLessons, JwtService jwt) {
+                                       UserRepository users, ManualLessonService manualLessons,
+                                       GoogleCalendarLessonService calendarLessons, JwtService jwt) {
         this.jdbc = jdbc;
         this.lessons = lessons;
         this.classes = classes;
         this.classRepository = classRepository;
         this.users = users;
         this.manualLessons = manualLessons;
+        this.calendarLessons = calendarLessons;
         this.jwt = jwt;
     }
 
@@ -75,12 +78,9 @@ public class TrialLessonInvitationService {
         RANDOM.nextBytes(secret);
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
     }
-    private static boolean isTrial(String title) {
-        return title != null && (title.startsWith("Пробный урок") || title.startsWith("Probeunterricht"));
-    }
 
     private LessonHistoryEntry eligible(AuthenticatedUser teacher, String eventId) {
-        if (teacher == null || teacher.role() != Role.TEACHER || !eventId.startsWith(ManualLessonService.EVENT_PREFIX)) {
+        if (teacher == null || teacher.role() != Role.TEACHER || eventId == null || eventId.isBlank()) {
             throw new ResourceNotFoundException("Trial lesson not found");
         }
         LessonHistoryEntry lesson = lessons.findByTeacherIdAndEventId(teacher.id(), eventId)
@@ -227,7 +227,17 @@ public class TrialLessonInvitationService {
         // A guest has no username, email or password and is not a normal student account.
         User guest = users.saveAndFlush(User.trialGuest(name.trim(), teacher));
         AuthenticatedUser teacherPrincipal = new AuthenticatedUser(teacher.getId(), teacher.getEmail(), Role.TEACHER);
-        manualLessons.bindStudent(teacherPrincipal, lesson.getEventId(), guest.getId());
+        if (lesson.getEventId().startsWith(ManualLessonService.EVENT_PREFIX)) {
+            manualLessons.bindStudent(teacherPrincipal, lesson.getEventId(), guest.getId());
+        } else {
+            calendarLessons.bindStudent(teacherPrincipal, lesson.getBindingKey(), guest.getId());
+            var previous = lesson.toResponse();
+            lesson.reassign(new GroupLessonResponse(previous.eventId(), previous.bindingKey(),
+                    null, null, guest.getId(), guest.getFullName(), java.util.List.of(guest.getId()),
+                    previous.title(), previous.startsAt(), previous.endsAt(),
+                    previous.meetUrl(), previous.calendarUrl()));
+            lessons.save(lesson);
+        }
         OnlineClass room = classRepository.findForUpdate(invite.classId())
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not available"));
         if (!room.isTeacherOnly() || room.isTerminal())
