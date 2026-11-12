@@ -87,6 +87,26 @@ public class JwtService {
                 .compact();
     }
 
+    /**
+     * Stable, unguessable 256-bit invitation capability. Re-issuing the
+     * same trial produces the identical URL without persisting a plaintext
+     * secret. Actual permission is still checked against the invitation row.
+     */
+    public String trialInvitationToken(UUID teacherId, String eventId, UUID classId) {
+        if (teacherId == null || eventId == null || eventId.isBlank() || classId == null) {
+            throw new IllegalArgumentException("Invalid trial invitation coordinates");
+        }
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(key.getEncoded(), "HmacSHA256"));
+            String payload = "mindcrafti-trial-invite:v2:" + teacherId + ":" + eventId + ":" + classId;
+            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.GeneralSecurityException unavailable) {
+            throw new IllegalStateException("Cannot create trial invitation", unavailable);
+        }
+    }
+
     /** JWT for a single trial classroom; never a general student login. */
     public String generateTrialToken(User guest, UUID classId, Instant expiry) {
         if (guest == null || !guest.isTrialGuest() || guest.getRole() != Role.STUDENT

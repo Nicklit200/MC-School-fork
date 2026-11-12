@@ -6,6 +6,7 @@ import { api, ApiRequestError } from '../../api/client';
 import type { GroupLesson, StudentGroup, StudentListItem, User } from '../../api/types';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { GroupLessonsPage } from './GroupLessonsPage';
+import { trialInvitationsApi } from '../../api/trialInvitations';
 import { lessonDayInstant, schoolDateKey } from '../../lib/lessonSchedule';
 
 vi.mock('../../api/client', async (importOriginal) => {
@@ -21,6 +22,7 @@ vi.mock('../../api/client', async (importOriginal) => {
 });
 
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn().mockResolvedValue({hasWorkbook:false,hasAnswers:false})}}));
+vi.mock('../../api/trialInvitations',()=>({trialInvitationsApi:{listMine:vi.fn(),issue:vi.fn()}}));
 
 const lessonApi = vi.mocked(api.lessons);
 const trialNameLabel = 'Имя ученика';
@@ -54,6 +56,7 @@ describe('native lesson schedule', () => {
     vi.clearAllMocks();
     localStorage.clear();
     localStorage.setItem('language', 'RU');
+    vi.mocked(trialInvitationsApi.listMine).mockResolvedValue([]);
     vi.mocked(api.auth.me).mockResolvedValue({ id: 'teacher', fullName: 'Teacher' } as User);
     vi.mocked(api.students.list).mockResolvedValue([]);
     vi.mocked(api.groups.list).mockResolvedValue([]);
@@ -66,6 +69,20 @@ describe('native lesson schedule', () => {
     lessonApi.create.mockResolvedValue(lesson());
     lessonApi.createSeries.mockResolvedValue([lesson()]);
     lessonApi.deleteLesson.mockResolvedValue(undefined);
+  });
+
+  it('shows the copy link control for an unassigned trial with an arbitrary calendar title', async () => {
+    const start = lessonDayInstant(schoolDateKey(new Date()), 23);
+    lessonApi.groupLessons.mockResolvedValue([{
+      ...lesson('Werte, die bleiben — VON POLL IMMOBILIEN'),
+      eventId: 'calendar-foreign-title',
+      bindingKey: 'calendar-foreign-title',
+      startsAt: start.toISOString(),
+      endsAt: new Date(start.getTime() + 3600_000).toISOString(),
+    }]);
+    renderPage();
+    await screen.findByText('Werte, die bleiben — VON POLL IMMOBILIEN');
+    expect(screen.getByRole('button', { name: 'Скопировать ссылку на пробный урок' })).toBeInTheDocument();
   });
 
   it('shows the saved schedule before Google refresh and optional page data finish', async () => {

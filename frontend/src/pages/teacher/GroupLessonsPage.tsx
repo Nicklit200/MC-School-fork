@@ -1,6 +1,8 @@
 import { TeacherIcon } from '../../components/TeacherIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateLessonPanel } from './CreateLessonPanel';
+import { TrialAgendaCopyButton } from './TrialAgendaCopyButton';
+import { trialInvitationsApi } from '../../api/trialInvitations';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { ApiRequestError } from '../../api/client';
@@ -39,6 +41,7 @@ export function GroupLessonsPage() {
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
   const [teacher, setTeacher] = useState<User | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
+  const [invitedTrialIds, setInvitedTrialIds] = useState<string[]>([]);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [briefs, setBriefs] = useState<BriefMap>({});
@@ -151,7 +154,10 @@ export function GroupLessonsPage() {
       setConnection(googleConnection); setTeacher(currentTeacher); setStudents(studentList); setGroups(groupList);
     }).catch(failure => { if (live()) setOptionsError(toErrorMessage(failure, t)); })
       .finally(() => { if (live()) setOptionsLoading(false); });
-    await Promise.all([saved, refresh, options]);
+    const invitations = trialInvitationsApi.listMine().then(ids => {
+      if (live()) setInvitedTrialIds(ids);
+    }).catch(() => { /* Native unassigned trials remain shareable even when history is unavailable. */ });
+    await Promise.all([saved, refresh, options, invitations]);
   }
 
   useEffect(() => {
@@ -378,12 +384,15 @@ export function GroupLessonsPage() {
     const selectedTarget = lesson.groupId ? `group:${lesson.groupId}` : lesson.studentId ? `student:${lesson.studentId}` : '';
     const expanded = expandedLessonId === lesson.eventId;
     const finished = finishedLessonId === lesson.eventId;
+    const isShareableTrial = !lesson.groupId
+      && (!lesson.studentId || invitedTrialIds.includes(lesson.eventId))
+      && Date.parse(lesson.endsAt) + 60 * 60 * 1000 > Date.now();
 
     const kind = lesson.groupId ? (language === 'DE' ? 'Gruppenunterricht' : 'Групповое занятие')
       : lesson.studentId ? (language === 'DE' ? 'Einzelunterricht' : 'Индивидуальное занятие')
         : (language === 'DE' ? 'Probeunterricht' : 'Пробный урок');
     return (
-      <article key={lesson.eventId} className="lesson-agenda-card">
+      <article key={lesson.eventId} className={"lesson-agenda-card" + (isShareableTrial ? " lesson-agenda-card--trial-share" : "")}>
         <div className="lesson-agenda-card__row">
           <Link className="lesson-agenda-card__link" to={'/teacher/lessons/' + encodeURIComponent(lesson.eventId)} aria-label={(language==='DE'?'Unterricht öffnen: ':'Открыть урок: ')+lesson.title}>
             <div className="lesson-agenda-card__when"><strong>{formatStartTime(lesson.startsAt,language)}</strong><span>{formatStartTime(lesson.endsAt,language)}</span></div>
@@ -391,6 +400,7 @@ export function GroupLessonsPage() {
             <span className="lesson-row-readiness">{readiness[lesson.eventId] !== undefined && <span className={readiness[lesson.eventId]?'material-ready':'material-reminder'}>{!readiness[lesson.eventId] && <TeacherIcon name="difficulties"/>}{readiness[lesson.eventId]?(language==='DE'?'Materialien bereit':'Материалы готовы'):(language==='DE'?'Materialien fehlen':'Материалы не готовы')}</span>}</span>
             <TeacherIcon name="chevronRight" />
           </Link>
+          {isShareableTrial && <TrialAgendaCopyButton eventId={lesson.eventId} de={language === 'DE'} />}
           <button className="teacher-icon-button lesson-row-menu" type="button" aria-label={(language === 'DE' ? 'Unterrichtseinstellungen: ' : 'Настройки урока: ') + lesson.title} aria-expanded={expanded} aria-controls={'lesson-options-' + lesson.eventId} onClick={() => expanded ? setExpandedLessonId(null) : openTimeEditor(lesson)}>⋯</button>
         </div>
         {expanded && <div className="lesson-agenda-card__options" id={'lesson-options-' + lesson.eventId}>

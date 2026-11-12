@@ -36,24 +36,29 @@ import org.springframework.web.server.ResponseStatusException;
 public class TrialLessonInvitationService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Duration EARLY_JOIN = Duration.ofHours(1);
-    private static final Duration END_GRACE = Duration.ofMinutes(60);
+    // The share URL stays valid until the room is ended or the teacher revokes it;
+    // the guest's actual classroom JWT is still short-lived and can be refreshed.
+    private static final Instant LINK_STORAGE_EXPIRY = Instant.parse("2099-01-01T00:00:00Z");
     private final JdbcTemplate jdbc;
     private final LessonHistoryRepository lessons;
     private final OnlineClassService classes;
     private final OnlineClassRepository classRepository;
     private final UserRepository users;
     private final ManualLessonService manualLessons;
+    private final GoogleCalendarLessonService calendarLessons;
     private final JwtService jwt;
 
     public TrialLessonInvitationService(JdbcTemplate jdbc, LessonHistoryRepository lessons,
                                        OnlineClassService classes, OnlineClassRepository classRepository,
-                                       UserRepository users, ManualLessonService manualLessons, JwtService jwt) {
+                                       UserRepository users, ManualLessonService manualLessons,
+                                       GoogleCalendarLessonService calendarLessons, JwtService jwt) {
         this.jdbc = jdbc;
         this.lessons = lessons;
         this.classes = classes;
         this.classRepository = classRepository;
         this.users = users;
         this.manualLessons = manualLessons;
+        this.calendarLessons = calendarLessons;
         this.jwt = jwt;
     }
 
@@ -75,49 +80,63 @@ public class TrialLessonInvitationService {
         RANDOM.nextBytes(secret);
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
     }
-    private static boolean isTrial(String title) {
-        return title != null && (title.startsWith("Пробный урок") || title.startsWith("Probeunterricht"));
-    }
 
     private LessonHistoryEntry eligible(AuthenticatedUser teacher, String eventId) {
-        if (teacher == null || teacher.role() != Role.TEACHER || !eventId.startsWith(ManualLessonService.EVENT_PREFIX)) {
+        if (teacher == null || teacher.role() != Role.TEACHER || eventId == null || eventId.isBlank()) {
             throw new ResourceNotFoundException("Trial lesson not found");
         }
         LessonHistoryEntry lesson = lessons.findByTeacherIdAndEventId(teacher.id(), eventId)
-                .filter(entry -> entry.getDeletedAt() == null && isTrial(entry.getTitle()))
+                .filter(entry -> entry.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException("Trial lesson not found"));
-        if (lesson.getStudentId() != null || lesson.getGroupId() != null)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This lesson already has a student");
+        if (lesson.getGroupId() != null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A group cannot use this trial link");
         return lesson;
     }
 
     @Transactional
     public Created issue(AuthenticatedUser teacher, String eventId) {
         LessonHistoryEntry lesson = eligible(teacher, eventId);
-        if (Instant.now().isAfter(lesson.getEndsAt().plus(END_GRACE)))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This trial lesson has finished");
         // Creates (or reuses) the same teacher-only room the teacher uses for PDF preparation.
         var classInfo = classes.materializeFromCalendar(teacher, eventId);
         OnlineClass room = classRepository.findById(classInfo.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not found"));
-        if (room.isTerminal() || !room.isTeacherOnly())
+        if (room.isTerminal() || (room.getStudent() != null
+                && (!room.getStudent().isTrialGuest()
+                    || !room.getStudent().getId().equals(lesson.getStudentId()))))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This classroom can no longer accept a guest");
-        String token = freshToken();
+        // Stable for this teacher, lesson and classroom: copying the link must not revoke it.
+        String token = jwt.trialInvitationToken(teacher.id(), eventId, room.getId());
         String tokenHash = hash(token);
-        Instant expiry = lesson.getEndsAt().plus(END_GRACE);
+        Instant expiry = LINK_STORAGE_EXPIRY;
         int updated = jdbc.update("""
                 INSERT INTO trial_lesson_invitations
                   (event_id, teacher_id, class_id, token_hash, expires_at)
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (teacher_id, event_id)
                 DO UPDATE SET token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at,
-                              class_id = EXCLUDED.class_id, revoked_at = NULL
-                WHERE trial_lesson_invitations.guest_user_id IS NULL
+                              class_id = EXCLUDED.class_id
+                WHERE trial_lesson_invitations.revoked_at IS NULL
+                  AND (trial_lesson_invitations.guest_user_id IS NULL
+                       OR trial_lesson_invitations.guest_user_id = (
+                            SELECT student_id FROM online_classes WHERE id = EXCLUDED.class_id))
+                  AND trial_lesson_invitations.class_id = EXCLUDED.class_id
                 """, eventId, teacher.id(), room.getId(), tokenHash,
                 java.sql.Timestamp.from(expiry));
         if (updated != 1)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A guest has already joined this trial");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Invitation was revoked, the classroom changed, or a different student joined");
         return new Created(token, room.getId(), expiry);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<String> listMine(AuthenticatedUser teacher) {
+        if (teacher == null || teacher.role() != Role.TEACHER)
+            throw new ResourceNotFoundException("Teacher not found");
+        return jdbc.query("""
+                SELECT event_id FROM trial_lesson_invitations
+                WHERE teacher_id = ? AND revoked_at IS NULL
+                  AND expires_at > CURRENT_TIMESTAMP
+                """, (rs, row) -> rs.getString("event_id"), teacher.id());
     }
 
     @Transactional
@@ -125,7 +144,7 @@ public class TrialLessonInvitationService {
         eligible(teacher, eventId);
         jdbc.update("""
                 UPDATE trial_lesson_invitations SET revoked_at = CURRENT_TIMESTAMP
-                WHERE teacher_id = ? AND event_id = ? AND guest_user_id IS NULL
+                WHERE teacher_id = ? AND event_id = ?
                 """, teacher.id(), eventId);
     }
 
@@ -150,7 +169,7 @@ public class TrialLessonInvitationService {
         if (invite.revoked() || !Instant.now().isBefore(invite.expiresAt()))
             throw new ResourceNotFoundException("Invitation expired or revoked");
         LessonHistoryEntry lesson = lessons.findByTeacherIdAndEventId(invite.teacherId(), invite.eventId())
-                .filter(entry -> entry.getDeletedAt() == null && isTrial(entry.getTitle()))
+                .filter(entry -> entry.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException("Invitation not found"));
         OnlineClass room = classRepository.findById(invite.classId())
                 .filter(candidate -> !candidate.isTerminal()
@@ -159,7 +178,11 @@ public class TrialLessonInvitationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not available"));
         if (lesson.getStudentId() != null && !lesson.getStudentId().equals(invite.guestId()))
             throw new ResourceNotFoundException("Invitation not available");
-        if (room.getGroup() != null)
+        if (room.getGroup() != null
+                || (invite.guestId() == null && room.getStudent() != null)
+                || (invite.guestId() != null
+                    && (room.getStudent() == null
+                        || !invite.guestId().equals(room.getStudent().getId()))))
             throw new ResourceNotFoundException("Invitation not available");
         return lesson;
     }
@@ -170,7 +193,7 @@ public class TrialLessonInvitationService {
         LessonHistoryEntry lesson = validate(invite);
         Instant now = Instant.now();
         return new InvitationInfo("Пробный урок Mindcrafti", lesson.getStartsAt(), lesson.getEndsAt(),
-                !now.isBefore(lesson.getStartsAt().minus(EARLY_JOIN)) && invite.guestId() == null,
+                !now.isBefore(lesson.getStartsAt().minus(EARLY_JOIN)),
                 invite.guestId() != null);
     }
 
@@ -182,11 +205,19 @@ public class TrialLessonInvitationService {
         Invite invite = find(token, true);
         LessonHistoryEntry lesson = validate(invite);
         Instant now = Instant.now();
-        if (invite.guestId() != null)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This invitation was already used");
         if (now.isBefore(lesson.getStartsAt().minus(EARLY_JOIN)))
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "You can enter up to 60 minutes before the trial lesson");
+        if (invite.guestId() != null) {
+            User returning = users.findById(invite.guestId())
+                    .filter(User::isTrialGuest)
+                    .filter(user -> !user.isArchived() && user.getStatus() == UserStatus.ACTIVE)
+                    .orElseThrow(() -> new ResourceNotFoundException("Guest no longer available"));
+            if (!returning.getFullName().equalsIgnoreCase(name.trim()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Please enter the same name you used for the first visit");
+            return new Joined(guestAuth(returning, invite), invite.classId());
+        }
         if (lesson.getStudentId() != null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This trial is already assigned");
         var teacher = users.findById(invite.teacherId())
@@ -196,7 +227,17 @@ public class TrialLessonInvitationService {
         // A guest has no username, email or password and is not a normal student account.
         User guest = users.saveAndFlush(User.trialGuest(name.trim(), teacher));
         AuthenticatedUser teacherPrincipal = new AuthenticatedUser(teacher.getId(), teacher.getEmail(), Role.TEACHER);
-        manualLessons.bindStudent(teacherPrincipal, lesson.getEventId(), guest.getId());
+        if (lesson.getEventId().startsWith(ManualLessonService.EVENT_PREFIX)) {
+            manualLessons.bindStudent(teacherPrincipal, lesson.getEventId(), guest.getId());
+        } else {
+            calendarLessons.bindStudent(teacherPrincipal, lesson.getBindingKey(), guest.getId());
+            var previous = lesson.toResponse();
+            lesson.reassign(new GroupLessonResponse(previous.eventId(), previous.bindingKey(),
+                    null, null, guest.getId(), guest.getFullName(), java.util.List.of(guest.getId()),
+                    previous.title(), previous.startsAt(), previous.endsAt(),
+                    previous.meetUrl(), previous.calendarUrl()));
+            lessons.save(lesson);
+        }
         OnlineClass room = classRepository.findForUpdate(invite.classId())
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not available"));
         if (!room.isTeacherOnly() || room.isTerminal())
@@ -207,9 +248,13 @@ public class TrialLessonInvitationService {
                 SET guest_user_id = ?, claimed_at = CURRENT_TIMESTAMP
                 WHERE token_hash = ? AND guest_user_id IS NULL AND revoked_at IS NULL
                 """, guest.getId(), hash(token));
-        Instant tokenExpiry = invite.expiresAt().isBefore(now.plus(Duration.ofHours(4)))
+        return new Joined(guestAuth(guest, invite), room.getId());
+    }
+    private AuthResponse guestAuth(User guest, Invite invite) {
+        Instant now = Instant.now();
+        Instant expiry = invite.expiresAt().isBefore(now.plus(Duration.ofHours(4)))
                 ? invite.expiresAt() : now.plus(Duration.ofHours(4));
-        String accessToken = jwt.generateTrialToken(guest, room.getId(), tokenExpiry);
-        return new Joined(AuthResponse.bearer(accessToken, tokenExpiry, UserResponse.from(guest)), room.getId());
+        return AuthResponse.bearer(
+                jwt.generateTrialToken(guest, invite.classId(), expiry), expiry, UserResponse.from(guest));
     }
 }

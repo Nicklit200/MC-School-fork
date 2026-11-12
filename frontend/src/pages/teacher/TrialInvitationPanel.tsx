@@ -45,7 +45,7 @@ export function TrialInvitationPanel({ eventId, de }: { eventId: string; de: boo
     </p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       <button className="btn" type="button" disabled={busy} onClick={() => void issue()}>
-        {busy ? '...' : url ? (de ? 'Neuen Link erstellen' : 'Создать новую ссылку') : (de ? 'Link erstellen und kopieren' : 'Создать и скопировать ссылку')}
+        {busy ? '...' : (de ? 'Link kopieren' : 'Скопировать ссылку')}
       </button>
       {url && <button className="btn btn--secondary" type="button" disabled={busy}
         onClick={() => void navigator.clipboard.writeText(url).then(() => setMessage('Ссылка скопирована')).catch(() => setMessage('Скопируйте ссылку из поля ниже'))}>
@@ -60,8 +60,8 @@ export function TrialInvitationPanel({ eventId, de }: { eventId: string; de: boo
     {message && <p role="status" className="muted">{message}</p>}
     {error && <p role="alert" className="banner banner--error">{error}</p>}
     <p className="muted" style={{ fontSize: 12 }}>
-      {de ? 'Nur ein Schüler darf diesen Link einmal einlösen. Ein neuer Link macht den vorherigen ungültig.'
-        : 'Ссылка рассчитана на одного ученика и одно использование. Новая ссылка отменяет предыдущую.'}
+      {de ? 'Der Einladungslink bleibt fuer diesen Unterricht gleich. Bei Verbindungsproblemen kann der Schueler ihn erneut benutzen.'
+        : 'Ссылка для этого урока постоянная. Ученик может открыть её повторно после обрыва соединения. Доступ можно отозвать.'}
     </p>
   </section>;
 }

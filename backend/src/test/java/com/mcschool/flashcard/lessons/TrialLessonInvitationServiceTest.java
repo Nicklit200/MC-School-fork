@@ -22,19 +22,21 @@ class TrialLessonInvitationServiceTest {
     private final OnlineClassRepository rooms = mock(OnlineClassRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final ManualLessonService manual = mock(ManualLessonService.class);
+    private final GoogleCalendarLessonService calendar = mock(GoogleCalendarLessonService.class);
     private final JwtService jwt = mock(JwtService.class);
     private final TrialLessonInvitationService service =
-            new TrialLessonInvitationService(jdbc, lessons, classes, rooms, users, manual, jwt);
+            new TrialLessonInvitationService(jdbc, lessons, classes, rooms, users, manual, calendar, jwt);
 
     @Test
-    void onlyNativeTeacherOwnedTrialsCanIssueLinks() {
+    void onlyTeacherOwnedLessonsCanIssueLinks() {
         assertThrows(ResourceNotFoundException.class,
                 () -> service.issue(new AuthenticatedUser(UUID.randomUUID(), "teacher@test", Role.STUDENT),
                         "local-" + UUID.randomUUID()));
         assertThrows(ResourceNotFoundException.class,
                 () -> service.issue(new AuthenticatedUser(UUID.randomUUID(), "teacher@test", Role.TEACHER),
                         "google-calendar-event"));
-        verifyNoInteractions(lessons, classes, rooms, users, manual, jwt, jdbc);
+        verify(lessons).findByTeacherIdAndEventId(any(), eq("google-calendar-event"));
+        verifyNoInteractions(classes, rooms, users, manual, calendar, jwt, jdbc);
     }
 
     @Test

@@ -20,6 +20,7 @@ export interface TrialGuestJoined {
 }
 
 export const trialInvitationsApi = {
+  listMine: () => request<string[]>('GET', '/trial-invitations'),
   issue: (eventId: string) =>
     request<{ token: string; classId: string; expiresAt: string }>(
       'POST', '/trial-invitations/' + encodeURIComponent(eventId)),
