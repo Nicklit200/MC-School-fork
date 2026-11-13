@@ -513,9 +513,13 @@ export function geometrySvg(spec) {
       out.push(`<line x1="${fmt(H[0])}" y1="${fmt(H[1])}" x2="${fmt(G[0])}" y2="${fmt(G[1])}" stroke="${NAVY}" stroke-width="1.8" stroke-dasharray="7 5"/>`);
       out.push(`<line x1="${fmt(H[0])}" y1="${fmt(H[1])}" x2="${fmt(D[0])}" y2="${fmt(D[1])}" stroke="${NAVY}" stroke-width="1.8" stroke-dasharray="7 5"/>`);
       if(opts.showMeasures === true){
+        // Dimension lines must follow one real edge direction each:
+        // width: A-B (horizontal), depth: B-F (receding), height: B-C (vertical).
+        // Offsets translate the entire edge; they must never mix points from
+        // different directions such as B-E or C-G.
         out.push(dimLine(A[0],A[1]+16,B[0],B[1]+16,`${fmt(opts.widthVal)}${unitSuffix?` ${unitSuffix}`:''}`,(A[0]+B[0])/2,A[1]+34));
-        out.push(dimLine(B[0]+18,B[1]+10,E[0]+18,E[1]+10,`${fmt(opts.depthVal)}${unitSuffix?` ${unitSuffix}`:''}`,(B[0]+E[0])/2+28,(B[1]+E[1])/2+8));
-        out.push(dimLine(C[0]+20,C[1],G[0]+20,G[1],`${fmt(opts.heightVal)}${unitSuffix?` ${unitSuffix}`:''}`,G[0]+42,(C[1]+G[1])/2+4,'start'));
+        out.push(dimLine(B[0]+12,B[1]-8,F[0]+12,F[1]-8,`${fmt(opts.depthVal)}${unitSuffix?` ${unitSuffix}`:''}`,(B[0]+F[0])/2+32,(B[1]+F[1])/2-16));
+        out.push(dimLine(B[0]+78,B[1],C[0]+78,C[1],`${fmt(opts.heightVal)}${unitSuffix?` ${unitSuffix}`:''}`,B[0]+89,(B[1]+C[1])/2+5,'start'));
       }
       out.push(lab((A[0]+B[0])/2,C[1]+40,name,NAVY));
       return out.join('');
