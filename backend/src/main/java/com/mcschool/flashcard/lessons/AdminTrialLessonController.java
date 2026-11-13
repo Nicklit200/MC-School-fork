@@ -22,15 +22,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminTrialLessonController {
 
     private final UserRepository userRepository;
-    private final GoogleCalendarLessonService lessonService;
+    private final LessonHistoryRepository lessonHistoryRepository;
     private final LessonPreparationRepository preparationRepository;
 
     public AdminTrialLessonController(
             UserRepository userRepository,
-            GoogleCalendarLessonService lessonService,
+            LessonHistoryRepository lessonHistoryRepository,
             LessonPreparationRepository preparationRepository) {
         this.userRepository = userRepository;
-        this.lessonService = lessonService;
+        this.lessonHistoryRepository = lessonHistoryRepository;
         this.preparationRepository = preparationRepository;
     }
 
@@ -40,25 +40,25 @@ public class AdminTrialLessonController {
 
         for (User teacher : userRepository.findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(
                 Role.TEACHER, UserStatus.ACTIVE)) {
-            AuthenticatedUser principal = new AuthenticatedUser(
-                    teacher.getId(), teacher.getEmail(), teacher.getRole());
-
-            List<GroupLessonResponse> lessons;
-            try {
-                lessons = lessonService.listGroupLessons(principal);
-            } catch (RuntimeException ignored) {
-                continue;
-            }
+            // Read persisted lessons directly. Admin listings must not depend on
+            // a teacher's external Google Calendar refresh or authorization state.
+            List<GroupLessonResponse> lessons = lessonHistoryRepository
+                    .findAllByTeacherIdAndDeletedAtIsNullOrderByStartsAtAsc(teacher.getId())
+                    .stream().map(LessonHistoryEntry::toResponse).toList();
 
             for (GroupLessonResponse lesson : lessons) {
-                if (lesson.groupId() != null || lesson.studentId() != null) continue;
+                // Guest joining a native trial binds studentId; it must remain
+                // visible to the school administrator after that first visit.
+                if (lesson.groupId() != null) continue;
+                boolean namedTrial = looksLikeTrialTitle(lesson.title());
+                if (lesson.studentId() != null && !namedTrial) continue;
 
                 LessonPreparation preparation = preparationRepository
                         .findByTeacherIdAndEventId(teacher.getId(), lesson.eventId())
                         .orElse(null);
                 boolean hasTranscript = preparation != null && preparation.hasTranscriptPdf();
 
-                if (!hasTranscript && !looksLikeTrialTitle(lesson.title())) continue;
+                if (!hasTranscript && !namedTrial) continue;
 
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("teacherId", teacher.getId().toString());
