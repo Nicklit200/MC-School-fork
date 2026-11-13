@@ -77,7 +77,7 @@ const selectedGrades=()=>[...new Set(
     .map(Number)
     .filter(grade=>Number.isInteger(grade)&&grade>=1&&grade<=13)
 )];
-const defaultTrackFilterState=()=>({core:true,schools:new Set(selectedStudents().map(student=>student.schoolType).filter(Boolean))});
+const defaultTrackFilterState=()=>({core:true,schools:new Set(allSchoolTypes)});
 const trackFilterKey=()=>`mindcrafti.skills.trackFilters.${selectedGroupId?"g:"+selectedGroupId:selectedStudentId?"s:"+selectedStudentId:"none"}`;
 function loadTrackFilterState(){
   const fallback=defaultTrackFilterState();
@@ -98,11 +98,15 @@ function saveTrackFilterState(){
   try{localStorage.setItem(trackFilterKey(),JSON.stringify({core:trackFilterState.core,schools:[...trackFilterState.schools]}));}catch{/* Optional display preference. */}
 }
 const activeSchoolTypes=()=>currentTrackFilters().schools;
+const programPreferenceKey=studentId=>`mindcrafti.skills.program.${studentId}`;
 const boardIdForSelection=()=>{
-  const chosen=selectedStudents(),grades=selectedGrades();
-  if(!chosen.length||grades.length!==1)return "";
-  if(!selectedGroupId&&chosen[0]?.grade==null)return "";
-  return boardIdByGrade.get(grades[0])||"";
+  const student=selectedStudent();
+  if(!student)return "";
+  try{
+    const remembered=localStorage.getItem(programPreferenceKey(student.id))||"";
+    if([...boardIdByGrade.values()].includes(remembered))return remembered;
+  }catch{/* Optional per-student display preference. */}
+  return boardIdForStudent(student)||[...boardIdByGrade.values()][0]||"";
 };
 const directTrackDefaults={
   "mc8-1-1":{core:true,schools:["GYMNASIUM","REALSCHULE","MITTELSCHULE","WIRTSCHAFTSSCHULE"]},
@@ -202,43 +206,49 @@ function renderSchoolFilters(){
     label.append(input,document.createTextNode(schoolShort[type]));label.title=schoolLabels[type];host.append(label);
   }
 }
+function renderProgramFilter(){
+  const select=$("board-filter"),wrap=$("board-filter-wrap");if(!select)return;
+  select.replaceChildren();
+  for(const [grade,id] of [...boardIdByGrade.entries()].sort((a,b)=>a[0]-b[0])){
+    const option=element("option","",`${grade} класс`);option.value=id;select.append(option);
+  }
+  select.value=boardIdForSelection();
+  select.disabled=!selectedStudentId||masteryLoading||Boolean(config?.publicMode)||!select.options.length;
+  if(wrap)wrap.hidden=Boolean(config?.publicMode)||!selectedStudentId;
+}
 function renderStudentFilter(){
   const select=$("student-filter");if(!select)return;
-  select.replaceChildren();const none=element("option","","Выберите группу или ученика");none.value="";select.append(none);
-  if(groups.length){
-    const groupOptions=element("optgroup");groupOptions.label="Группы";
-    for(const group of groups){
-      const grades=[...new Set((group.students||[]).map(student=>student.grade).filter(Boolean))];
-      const schools=[...new Set((group.students||[]).map(student=>schoolShort[student.schoolType]).filter(Boolean))];
-      const meta=[grades.length===1?`${grades[0]} кл.`:grades.length>1?"разные классы":"класс не указан",schools.join("+")].filter(Boolean).join(" · ");
-      const option=element("option","",meta?`${group.name} · ${meta}`:group.name);option.value=`g:${group.id}`;groupOptions.append(option);
-    }
-    select.append(groupOptions);
-  }
+  select.replaceChildren();
+  const none=element("option","","Выберите ученика");none.value="";select.append(none);
   if(students.length){
-    const studentOptions=element("optgroup");studentOptions.label="Ученики";
+    const options=element("optgroup");options.label="Ученики";
     for(const student of students){
-      const meta=[student.grade?`${student.grade} кл.`:"класс не указан",schoolLabels[student.schoolType]||""].filter(Boolean).join(" · ");
-      const option=element("option","",meta?`${student.fullName} · ${meta}`:student.fullName);option.value=`s:${student.id}`;studentOptions.append(option);
+      const option=element("option","",student.fullName);option.value=`s:${student.id}`;options.append(option);
     }
-    select.append(studentOptions);
+    select.append(options);
   }
-  select.value=selectedGroupId?`g:${selectedGroupId}`:selectedStudentId?`s:${selectedStudentId}`:"";
-  select.disabled=masteryLoading||(!students.length&&!groups.length);
-  renderSchoolFilters();
+  select.value=selectedStudentId?`s:${selectedStudentId}`:"";
+  select.disabled=masteryLoading||Boolean(config?.publicMode)||!students.length;
+  renderSchoolFilters();renderProgramFilter();
 }
 async function chooseStudent(value){
   if(!flushForm()){renderStudentFilter();return;}
   const [type,id]=String(value||"").split(":");
   const nextStudentId=type==="s"&&students.some(student=>student.id===id)?id:"";
-  const nextGroupId=type==="g"&&groups.some(group=>group.id===id)?id:"";
-  if(nextStudentId===selectedStudentId&&nextGroupId===selectedGroupId)return;
-  if(dirty&&!confirm("Есть несохранённые изменения карты. Переключить без сохранения?")){renderStudentFilter();return;}
-  selectedStudentId=nextStudentId;selectedGroupId=nextGroupId;trackFilterState=null;
+  if(nextStudentId===selectedStudentId)return;
+  if(dirty&&!confirm("Есть несохранённые изменения программы. Переключить без сохранения?")){renderStudentFilter();return;}
+  selectedStudentId=nextStudentId;selectedGroupId="";trackFilterState=null;
   try{
-    const target=selectedGroupId?`g:${selectedGroupId}`:selectedStudentId?`s:${selectedStudentId}`:"";
-    if(target)localStorage.setItem("mindcrafti.skills.target",target);else localStorage.removeItem("mindcrafti.skills.target");
-  }catch{/* Preference is optional. */}
+    if(selectedStudentId)localStorage.setItem("mindcrafti.skills.target",`s:${selectedStudentId}`);
+    else localStorage.removeItem("mindcrafti.skills.target");
+  }catch{/* Optional preference. */}
+  location.reload();
+}
+async function chooseProgram(value){
+  if(!selectedStudentId||![...boardIdByGrade.values()].includes(value)){renderProgramFilter();return;}
+  if(!flushForm()){renderProgramFilter();return;}
+  if(dirty&&!confirm("Есть несохранённые изменения программы. Переключить без сохранения?")){renderProgramFilter();return;}
+  try{localStorage.setItem(programPreferenceKey(selectedStudentId),value);}catch{/* Optional preference. */}
   location.reload();
 }
 function masteryPercent(n,studentId){
@@ -300,7 +310,7 @@ function renderHistoryPanel(){
   const body=$("history-body"),count=$("history-count");if(!body||!count)return;
   const groups=historyGroups();count.textContent=String(groups.length);const toolbarCount=$("history-toolbar-count");if(toolbarCount)toolbarCount.textContent=String(groups.length);body.replaceChildren();
   if(!selectedStudents().length){
-    body.append(element("p","history-empty","Выберите группу или ученика — здесь появится история изменения процентов."));return;
+    body.append(element("p","history-empty","Выберите ученика — здесь появится история изменения процентов."));return;
   }
   if(!groups.length){
     body.append(element("p","history-empty","История пока пустая. Новые изменения процентов будут сохраняться здесь автоматически."));return;
@@ -453,20 +463,18 @@ window.addEventListener("message",async event=>{
   if(typeof incoming.apiBase!=="string"||!incoming.token){notice("Для открытия карты нужно войти в Mindcrafti.",true);return;}
   config=incoming;
   try{
-    const [availableBoards, loadedStudents, loadedGroups]=await Promise.all([
+    const [availableBoards, loadedStudents]=await Promise.all([
       request("GET","/skill-boards/catalog").catch(()=>null),
-      request("GET","/skill-boards/students"),
-      request("GET","/skill-boards/groups")
+      request("GET","/skill-boards/students")
     ]);
-    students=loadedStudents;groups=loadedGroups;
+    students=loadedStudents;groups=[];selectedGroupId="";
     if(Array.isArray(availableBoards)&&availableBoards.length){
       boardIdByGrade.clear();
       for(const board of availableBoards){if(Number.isInteger(board.grade)&&!boardIdByGrade.has(board.grade))boardIdByGrade.set(board.grade,board.id);}
     }
     try{
       const remembered=localStorage.getItem("mindcrafti.skills.target")||"";
-      if(remembered.startsWith("g:")&&groups.some(group=>group.id===remembered.slice(2)))selectedGroupId=remembered.slice(2);
-      else if(remembered.startsWith("s:")&&students.some(student=>student.id===remembered.slice(2)))selectedStudentId=remembered.slice(2);
+      if(remembered.startsWith("s:")&&students.some(student=>student.id===remembered.slice(2)))selectedStudentId=remembered.slice(2);
       else{
         const oldStudent=localStorage.getItem("mindcrafti.skills.student")||"";
         if(students.some(student=>student.id===oldStudent))selectedStudentId=oldStudent;
@@ -475,48 +483,37 @@ window.addEventListener("message",async event=>{
     trackFilterState=null;
     renderStudentFilter();
 
-    const chosen=selectedStudents(),grades=selectedGrades();
+    const chosen=selectedStudents();
     boardId=boardIdForSelection();
     if(!chosen.length){
-      $("board-grade").textContent="выберите группу или ученика";
-      $("source-note").replaceChildren(element("strong","","Класс выбирается автоматически"),document.createElement("br"),document.createTextNode("Выберите группу или ученика сверху."));
+      $("board-grade").textContent="выберите ученика";
+      $("source-note").replaceChildren(element("strong","","Личная карта навыков"),document.createElement("br"),document.createTextNode("Выберите ученика. Его прогресс сохраняется независимо от группы и класса."));
       $("empty").hidden=false;
-      $("empty").replaceChildren(element("strong","","Выберите группу или ученика"),element("p","","Откроется карта нужного класса с процентами выбранных учеников."));
-      status();return;
-    }
-    if(grades.length!==1){
-      $("board-grade").textContent=grades.length>1?"разные классы":"класс не определён";
-      $("source-note").replaceChildren(
-        element("strong","",grades.length>1?"В группе разные классы":"Класс не указан"),
-        document.createElement("br"),
-        document.createTextNode(grades.length>1?"Для одной карты у группы должен быть один класс.":"Укажите класс хотя бы одному ученику группы.")
-      );
-      $("empty").hidden=false;
-      $("empty").replaceChildren(
-        element("strong","",grades.length>1?"Нельзя выбрать одну карту":"Карта класса не определена"),
-        element("p","",grades.length>1?"Проверьте классы учеников в их учебных профилях.":"Укажите класс ученика в учебном профиле.")
-      );
+      $("empty").replaceChildren(element("strong","","Выберите ученика"),element("p","","Затем можно открыть навыки из любой доступной программы."));
       status();return;
     }
     if(!boardId){
-      $("board-grade").textContent=`${grades[0]} класс`;
-      $("source-note").replaceChildren(element("strong","","Нет карты для выбранного класса"),document.createElement("br"),document.createTextNode(`Доступны карты: ${[...boardIdByGrade.keys()].sort((a,b)=>a-b).join(", ")} классов.`));
+      $("board-grade").textContent=selectedTargetLabel();
+      $("source-note").replaceChildren(element("strong","","Программы пока не загружены"),document.createElement("br"),document.createTextNode("Проверьте доступность каталога навыков."));
       $("empty").hidden=false;
-      $("empty").replaceChildren(element("strong","",`Для ${grades[0]} класса карта пока не создана`));
+      $("empty").replaceChildren(element("strong","","Нет доступных программ"));
       status();return;
     }
 
     snapshot=await request("GET",boardPath());
     validateBoard(snapshot.data);data=clone(snapshot.data);
-    $("board-grade").textContent=boardTitle();
-    const sourceNote=$("source-note"),schools=[...activeSchoolTypes()].map(type=>schoolLabels[type]||type),unknownGrade=chosen.filter(student=>student.grade==null);
+    $("board-grade").textContent=selectedTargetLabel();
+    const sourceNote=$("source-note"),schools=[...activeSchoolTypes()].map(type=>schoolLabels[type]||type);
     sourceNote.replaceChildren(
-      element("strong","","Источник программы"),
+      element("strong","","Личная карта · "+selectedTargetLabel()),
       document.createElement("br"),
+      document.createTextNode(`Открытая программа: ${snapshot.data.grade} класс. Можно переключиться на любую программу независимо от класса ребёнка.`),
+      document.createElement("br"),document.createElement("br"),
       document.createTextNode(snapshot.data.source||"Источник не указан."),
       document.createElement("br"),document.createElement("br"),
-      document.createTextNode(`Выбрано: ${selectedTargetLabel()} · ${grades[0]} класс${schools.length?" · "+schools.join(" + "):""}.`),
-      ...(unknownGrade.length?[document.createElement("br"),document.createTextNode(`Без указанного класса: ${unknownGrade.map(student=>student.fullName).join(", ")}. Карта взята по остальным ученикам группы.`)]:[])
+      document.createTextNode(`Фильтры школьных программ: ${schools.length?schools.join(" + "):"не выбраны"}.`),
+      document.createElement("br"),document.createElement("br"),
+      document.createTextNode("Проценты индивидуальны. Изменения структуры программы затрагивают её общий шаблон.")
     );
 
     masteryLoading=true;renderStudentFilter();
@@ -821,7 +818,7 @@ function showNode(id){
   const chosen=selectedStudents(),masteryBox=element("div","mastery-box"),masteryTitle=element("div","mastery-title",`ОСВОЕНИЕ · ${selectedTargetLabel()}`);
   masteryBox.append(masteryTitle);
   if(!chosen.length){
-    masteryBox.append(element("div","mastery-note","Выберите группу или ученика сверху."));
+    masteryBox.append(element("div","mastery-note","Выберите ученика сверху."));
   }else{
     for(const student of chosen){
       const row=element("div","mastery-editor-row"),name=element("span","mastery-editor-name",student.fullName);
@@ -1024,7 +1021,7 @@ function setCatalogCollapsed(collapsed){
 $("catalog-toggle").onclick=()=>setCatalogCollapsed(!catalogCollapsed);
 setCatalogCollapsed(catalogCollapsed);
 $("view-free").onclick=()=>setViewMode("free");$("view-hierarchy").onclick=()=>setViewMode("hierarchy");
-$("student-filter").onchange=e=>void chooseStudent(e.target.value);$("search").oninput=()=>{showArchived=false;renderSearch();};
+$("student-filter").onchange=e=>void chooseStudent(e.target.value);$("board-filter").onchange=e=>void chooseProgram(e.target.value);$("search").oninput=()=>{showArchived=false;renderSearch();};
 $("archives").onclick=()=>{showArchived=!showArchived;$("search").value="";renderSearch();};
 $("prerequisites").onchange=renderEdges;$("zoom-in").onclick=()=>zoomAt(1.2);$("zoom-out").onclick=()=>zoomAt(1/1.2);$("fit").onclick=fit;
 const historyPanel=$("history-panel");
