@@ -1,0 +1,479 @@
+{
+  "meta": {
+    "school": "MINDCRAFTI SCHOOL",
+    "subject": "MATHEMATIK",
+    "group": "Klasse 8 - workbook studio regression",
+    "date": "11.11.2026",
+    "weekday": "Mittwoch",
+    "durationMinutes": 60
+  },
+  "workbookPages": [
+    {
+      "title": "Binomische Formeln",
+      "subtitle": "Wiederholung und sicheres Umformen",
+      "time": "00-10 MIN",
+      "blocks": [
+        {
+          "type": "exercise",
+          "number": "01",
+          "title": "Multipliziere aus.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "(2x+3)^2 = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        },
+        {
+          "type": "exercise",
+          "number": "02",
+          "title": "Vereinfache den Term.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "(x+2)^2 - (x-2)^2 = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        },
+        {
+          "type": "exercise",
+          "number": "03",
+          "title": "Nutze eine binomische Formel.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "(3x-1)^2 = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        }
+      ]
+    },
+    {
+      "title": "Lineare Funktionen",
+      "subtitle": "Graphen und Schnittpunkt",
+      "time": "10-25 MIN",
+      "blocks": [
+        {
+          "type": "exercise",
+          "number": "04",
+          "title": "Berechne einen Funktionswert.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "f(-2) = 2\\cdot(-2)-1 = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        },
+        {
+          "type": "graph",
+          "label": "GERADEN",
+          "xRange": [
+            -3,
+            7
+          ],
+          "yRange": [
+            -6,
+            10
+          ],
+          "gridStep": 1,
+          "series": [
+            {
+              "kind": "linear",
+              "m": 2,
+              "b": -1,
+              "label": "f(x) = 2x - 1"
+            },
+            {
+              "kind": "linear",
+              "m": -1,
+              "b": 5,
+              "label": "g(x) = -x + 5"
+            }
+          ],
+          "caption": "Die Aufgaben 05 und 06 stehen direkt unter dem Graphen."
+        },
+        {
+          "type": "exercise",
+          "number": "05",
+          "title": "Lies Steigung und y-Achsenabschnitt beider Geraden ab.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "m_{f} = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "b.",
+              "math": {
+                "latex": "b_{f} = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "c.",
+              "math": {
+                "latex": "m_{g} = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "d.",
+              "math": {
+                "latex": "b_{g} = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 0
+        },
+        {
+          "type": "exercise",
+          "number": "06",
+          "title": "Bestimme den Schnittpunkt der beiden Geraden.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "S = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        }
+      ]
+    },
+    {
+      "title": "Geraden selbst zeichnen",
+      "subtitle": "Wertetabellen und Koordinatensystem",
+      "time": "25-35 MIN",
+      "blocks": [
+        {
+          "type": "coordinateGrid",
+          "label": "KOORDINATENSYSTEM",
+          "xRange": [
+            -5,
+            6
+          ],
+          "yRange": [
+            -6,
+            9
+          ],
+          "gridStep": 1,
+          "caption": "Trage die Punkte ein und verbinde sie jeweils zu einer Geraden."
+        },
+        {
+          "type": "exercise",
+          "number": "07",
+          "title": "Zeichne f(x) = 2x - 1 für die angegebenen x-Werte.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "f(-2) = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "b.",
+              "math": {
+                "latex": "f(0) = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "c.",
+              "math": {
+                "latex": "f(2) = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 0
+        },
+        {
+          "type": "exercise",
+          "number": "08",
+          "title": "Zeichne g(x) = -x + 5 für die angegebenen x-Werte.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "g(0) = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "b.",
+              "math": {
+                "latex": "g(2) = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "c.",
+              "math": {
+                "latex": "g(4) = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 0
+        }
+      ]
+    },
+    {
+      "title": "Einführung in die Raumgeometrie",
+      "subtitle": "Quader: Ecken, Kanten und Flächen",
+      "time": "35-45 MIN",
+      "blocks": [
+        {
+          "type": "geometry",
+          "label": "QUADER",
+          "figure": "cuboid",
+          "width": 6,
+          "depth": 4,
+          "height": 3,
+          "unit": "cm",
+          "name": "Quader",
+          "showMeasuresOnFigure": false,
+          "caption": "Länge 6 cm, Breite 4 cm, Höhe 3 cm."
+        },
+        {
+          "type": "exercise",
+          "number": "09",
+          "title": "Untersuche den Quader.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "8\\ \\text{Ecken}"
+              },
+              "work": false
+            },
+            {
+              "label": "b.",
+              "math": {
+                "latex": "12\\ \\text{Kanten}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 0
+        },
+        {
+          "type": "exercise",
+          "number": "10",
+          "title": "Berechne Grundfläche, Volumen und Oberfläche.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "G = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "b.",
+              "math": {
+                "latex": "V = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "c.",
+              "math": {
+                "latex": "O = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 0
+        }
+      ]
+    },
+    {
+      "title": "Würfel und Selbstkontrolle",
+      "subtitle": "Unterschied zwischen Würfel und Quader",
+      "time": "45-55 MIN",
+      "blocks": [
+        {
+          "type": "geometry",
+          "label": "WÜRFEL",
+          "figure": "cube",
+          "side": 4,
+          "unit": "cm",
+          "name": "Würfel",
+          "showMeasuresOnFigure": false,
+          "caption": "Alle Kanten sind 4 cm lang."
+        },
+        {
+          "type": "exercise",
+          "number": "11",
+          "title": "Vergleiche Würfel und Quader. Berechne die Werte.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "V = \\underline{\\qquad}"
+              },
+              "work": false
+            },
+            {
+              "label": "b.",
+              "math": {
+                "latex": "O = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        }
+      ]
+    },
+    {
+      "title": "Abschluss: Transfer",
+      "subtitle": "Kurze Kontrolle zum Schluss",
+      "time": "55-60 MIN",
+      "blocks": [
+        {
+          "type": "exercise",
+          "number": "12",
+          "title": "Berechne den Funktionswert ohne Taschenrechner.",
+          "subtitle": "",
+          "rows": [
+            {
+              "label": "a.",
+              "math": {
+                "latex": "f(3) = 2\\cdot 3-1 = \\underline{\\qquad}"
+              },
+              "work": false
+            }
+          ],
+          "writeLines": 1
+        }
+      ]
+    }
+  ],
+  "teacherPages": [
+    {
+      "title": "Lehrerlösungen",
+      "subtitle": "Binomische Formeln und Funktionen",
+      "time": "",
+      "blocks": [
+        {
+          "type": "solutions",
+          "section": "ALGEBRA",
+          "title": "Aufgaben 01-04",
+          "items": [
+            {
+              "label": "01",
+              "text": "(2x+3)² = 4x²+12x+9."
+            },
+            {
+              "label": "02",
+              "text": "(x+2)²-(x-2)² = 8x."
+            },
+            {
+              "label": "03",
+              "text": "(3x-1)² = 9x²-6x+1."
+            },
+            {
+              "label": "04",
+              "text": "f(-2)=-5."
+            }
+          ]
+        },
+        {
+          "type": "solutions",
+          "section": "FUNKTIONEN",
+          "title": "Aufgaben 05-08",
+          "items": [
+            {
+              "label": "05",
+              "text": "f: m=2,b=-1. g: m=-1,b=5."
+            },
+            {
+              "label": "06",
+              "text": "S(2|3)."
+            },
+            {
+              "label": "07",
+              "text": "f(-2)=-5,f(0)=-1,f(2)=3."
+            },
+            {
+              "label": "08",
+              "text": "g(0)=5,g(2)=3,g(4)=1."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Lehrerlösungen",
+      "subtitle": "Raumgeometrie und Abschluss",
+      "time": "",
+      "blocks": [
+        {
+          "type": "solutions",
+          "section": "RAUMGEOMETRIE",
+          "title": "Aufgaben 09-11",
+          "items": [
+            {
+              "label": "09",
+              "text": "Quader: 8 Ecken, 12 Kanten, 6 Flächen."
+            },
+            {
+              "label": "10",
+              "text": "G=24 cm²; V=72 cm³; O=108 cm²."
+            },
+            {
+              "label": "11",
+              "text": "Würfel: V=64 cm³; O=96 cm²."
+            }
+          ]
+        },
+        {
+          "type": "solutions",
+          "section": "TRANSFER",
+          "title": "Aufgabe 12",
+          "items": [
+            {
+              "label": "12",
+              "text": "f(3)=5."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
