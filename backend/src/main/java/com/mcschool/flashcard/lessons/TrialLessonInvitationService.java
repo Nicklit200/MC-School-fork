@@ -108,6 +108,11 @@ public class TrialLessonInvitationService {
         String token = jwt.trialInvitationToken(teacher.id(), eventId, room.getId());
         String tokenHash = hash(token);
         Instant expiry = LINK_STORAGE_EXPIRY;
+        // The classroom is persisted with JPA, but the invitation uses JDBC and
+        // has an immediate foreign key to online_classes. On the first click,
+        // the newly materialized classroom may still be pending in Hibernate.
+        // Flush it before the JDBC insert so PostgreSQL can resolve the FK.
+        classRepository.flush();
         int updated = jdbc.update("""
                 INSERT INTO trial_lesson_invitations
                   (event_id, teacher_id, class_id, token_hash, expires_at)
