@@ -42,6 +42,13 @@ assert.ok(!cleanSvg.includes('paint-order'), 'no unsupported white-stroke text p
 assert.ok(!cleanSvg.includes('cm</text>'), 'no numeric sides by default');
 const visible=geometrySvg({...cleanTriangle,showSideLabels:false,showAngleLabels:false});
 assert.ok(!visible.includes('>α</text>') && !visible.includes('>a</text>'));
+// Regression: cuboid dimensions must follow the correct three projected
+// edge directions (never cross a face or use the diagonal of the top).
+const measuredCuboid=geometrySvg({type:'geometry',figure:'cuboid',width:5,depth:3,height:4,unit:'cm',showMeasuresOnFigure:true});
+assert.ok(measuredCuboid.includes('x1="105" y1="134" x2="277" y2="134"'), '5 cm must be horizontal and parallel to AB');
+assert.ok(measuredCuboid.includes('x1="289" y1="110" x2="332.68" y2="79.2"'), '3 cm must be parallel to BF (depth)');
+assert.ok(measuredCuboid.includes('x1="355" y1="118" x2="355" y2="194"'), '4 cm must be vertical and parallel to BC');
+for(const measure of ['5 cm','3 cm','4 cm']) assert.ok(measuredCuboid.includes(measure), `Missing dimension ${measure}`); 
 const cube=geometrySvg({type:'geometry',figure:'cube',unit:'cm',side:4});
 assert.ok(cube.includes('Würfel') && !cube.includes('4 cm</text>'));
 const circleClean=geometrySvg({type:'geometry',figure:'circle',center:{x:0,y:0},radius:3,unit:'cm'});
