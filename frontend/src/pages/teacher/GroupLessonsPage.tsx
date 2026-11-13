@@ -237,8 +237,35 @@ export function GroupLessonsPage() {
     return Array.from({length:count},(_,offset)=>{const date=addDays(start,offset);const key=localDateKey(date);return {key,date,lessons:lessonsByDay.get(key)??[]};});
   }, [weekCursor, lessonsByDay, calendarView, selectedDayKey]);
   const selectedLessons = lessonsByDay.get(selectedDayKey) ?? [];
-  const visibleLessonIds = selectedLessons.map(item=>item.eventId).join('|');
-  useEffect(()=>{let cancelled=false;const ids=visibleLessonIds.split('|').filter(Boolean);void Promise.all(ids.map(async id=>{try{const prep=await lessonPreparationApi.get(id);return [id,prep.hasWorkbook && prep.hasAnswers] as const;}catch{return null;}})).then(rows=>{if(!cancelled)setReadiness(current=>({...current,...Object.fromEntries(rows.filter((row):row is readonly [string,boolean]=>row!==null))}));});return()=>{cancelled=true;};},[visibleLessonIds]);
+  const visibleLessonsKey = selectedLessons.map(item =>
+    [item.eventId, item.studentId ?? '', item.groupId ?? ''].join(':')).join('|');
+  useEffect(() => {
+    let cancelled = false;
+    // A shared workbook is optional for personal lessons: each pupil can have
+    // their own worksheet and private teacher answers instead.
+    void Promise.all(selectedLessons.map(async (lesson) => {
+      const id = lesson.eventId;
+      try {
+        const prep = await lessonPreparationApi.get(id);
+        if (prep.hasWorkbook && prep.hasAnswers) return [id, true] as const;
+        if (!lesson.studentId && !lesson.groupId) return [id, false] as const;
+        const personal = await lessonPreparationApi.personalWorkbooks(id);
+        if (!personal.enabled || personal.students.length === 0) return [id, false] as const;
+        const ready = lesson.studentId
+          ? personal.students.some(student =>
+              student.studentId === lesson.studentId && student.hasWorkbook && student.hasAnswers)
+          : personal.students.every(student => student.hasWorkbook && student.hasAnswers);
+        return [id, ready] as const;
+      } catch {
+        // Keep unknown instead of falsely telling the teacher files are absent.
+        return null;
+      }
+    })).then(rows => {
+      if (!cancelled) setReadiness(Object.fromEntries(
+        rows.filter((row): row is readonly [string, boolean] => row !== null)));
+    });
+    return () => { cancelled = true; };
+  }, [visibleLessonsKey]);
   const selectedDate = dateFromKey(selectedDayKey);
   const todayKey = berlinDateKey(new Date().toISOString());
   function selectDate(key: string) {
