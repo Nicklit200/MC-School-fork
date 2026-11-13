@@ -7,6 +7,7 @@ import type { GroupLesson, StudentGroup, StudentListItem, User } from '../../api
 import { I18nProvider } from '../../i18n/I18nContext';
 import { GroupLessonsPage } from './GroupLessonsPage';
 import { trialInvitationsApi } from '../../api/trialInvitations';
+import { lessonPreparationApi } from '../../api/lessonPreparation';
 import { lessonDayInstant, schoolDateKey } from '../../lib/lessonSchedule';
 
 vi.mock('../../api/client', async (importOriginal) => {
@@ -21,7 +22,7 @@ vi.mock('../../api/client', async (importOriginal) => {
   } };
 });
 
-vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn().mockResolvedValue({hasWorkbook:false,hasAnswers:false})}}));
+vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn().mockResolvedValue({hasWorkbook:false,hasAnswers:false}),personalWorkbooks:vi.fn().mockResolvedValue({enabled:true,students:[]})}}));
 vi.mock('../../api/trialInvitations',()=>({trialInvitationsApi:{listMine:vi.fn(),issue:vi.fn()}}));
 
 const lessonApi = vi.mocked(api.lessons);
@@ -57,6 +58,8 @@ describe('native lesson schedule', () => {
     localStorage.clear();
     localStorage.setItem('language', 'RU');
     vi.mocked(trialInvitationsApi.listMine).mockResolvedValue([]);
+    vi.mocked(lessonPreparationApi.get).mockResolvedValue({hasWorkbook:false,hasAnswers:false} as never);
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({enabled:true,students:[]});
     vi.mocked(api.auth.me).mockResolvedValue({ id: 'teacher', fullName: 'Teacher' } as User);
     vi.mocked(api.students.list).mockResolvedValue([]);
     vi.mocked(api.groups.list).mockResolvedValue([]);
@@ -69,6 +72,49 @@ describe('native lesson schedule', () => {
     lessonApi.create.mockResolvedValue(lesson());
     lessonApi.createSeries.mockResolvedValue([lesson()]);
     lessonApi.deleteLesson.mockResolvedValue(undefined);
+  });
+
+  it('marks a personal-only individual lesson ready when both PDFs belong to that student', async () => {
+    const mark = { ...lesson('Марк — математика'), studentId: 'mark-student', studentName: 'Марк' };
+    lessonApi.groupLessons.mockResolvedValue([mark]);
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({
+      enabled: true,
+      students: [{ studentId: 'mark-student', studentName: 'Марк', hasWorkbook: true,
+        filename: 'mark.pdf', version: 1, hasAnswers: true, answersFilename: 'answers.pdf', answersVersion: 1 }],
+    });
+    renderPage();
+    expect(await screen.findByText('Материалы готовы')).toBeInTheDocument();
+    expect(lessonPreparationApi.personalWorkbooks).toHaveBeenCalledWith(mark.eventId);
+  });
+
+  it('does not accept another pupil personal PDFs for an individual lesson', async () => {
+    lessonApi.groupLessons.mockResolvedValue([{
+      ...lesson('Марк — математика'), studentId: 'mark-student', studentName: 'Марк',
+    }]);
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({
+      enabled: true,
+      students: [{ studentId: 'another', studentName: 'Другой', hasWorkbook: true,
+        filename: 'other.pdf', version: 1, hasAnswers: true, answersFilename: 'other-answers.pdf', answersVersion: 1 }],
+    });
+    renderPage();
+    expect(await screen.findByText('Материалы не готовы')).toBeInTheDocument();
+  });
+
+  it('requires a personal worksheet and answers for every group pupil without shared PDFs', async () => {
+    lessonApi.groupLessons.mockResolvedValue([{
+      ...lesson('Группа'), groupId: 'group-1', groupName: 'Группа',
+    }]);
+    vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({
+      enabled: true,
+      students: [
+        { studentId: 'one', studentName: 'Первый', hasWorkbook: true, filename: 'one.pdf',
+          version: 1, hasAnswers: true, answersFilename: 'one-answers.pdf', answersVersion: 1 },
+        { studentId: 'two', studentName: 'Второй', hasWorkbook: true, filename: 'two.pdf',
+          version: 1, hasAnswers: false, answersFilename: null, answersVersion: 0 },
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText('Материалы не готовы')).toBeInTheDocument();
   });
 
   it('shows the copy link control for an unassigned trial with an arbitrary calendar title', async () => {
