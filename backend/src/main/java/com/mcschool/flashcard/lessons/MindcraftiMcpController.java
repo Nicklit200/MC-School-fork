@@ -2298,20 +2298,22 @@ public class MindcraftiMcpController {
             AuthenticatedUser principal = principal(teacher);
             List<GroupLessonResponse> lessons;
             try {
-                lessons = calendarLessonService.listGroupLessons(principal);
+                lessons = calendarLessonService.listSavedGroupLessons(principal);
             } catch (RuntimeException ignored) {
                 continue;
             }
 
             for (GroupLessonResponse lesson : lessons) {
-                if (lesson.groupId() != null || lesson.studentId() != null) continue;
+                if (lesson.groupId() != null) continue;
+                boolean namedTrial = AdminTrialLessonController.looksLikeTrialTitle(lesson.title());
+                if (lesson.studentId() != null && !namedTrial) continue;
 
                 LessonPreparation preparation = preparationRepository
                         .findByTeacherIdAndEventId(teacher.getId(), lesson.eventId())
                         .orElse(null);
                 boolean hasTranscript = preparation != null && preparation.hasTranscriptPdf();
 
-                if (!hasTranscript && !AdminTrialLessonController.looksLikeTrialTitle(lesson.title())) continue;
+                if (!hasTranscript && !namedTrial) continue;
 
                 String haystack = normalize(String.join(" ",
                         teacher.getFullName() == null ? "" : teacher.getFullName(),
