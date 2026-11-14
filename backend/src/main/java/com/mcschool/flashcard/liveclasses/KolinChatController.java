@@ -33,6 +33,12 @@ public class KolinChatController {
         return chat.status(caller, classId);
     }
 
+    @GetMapping("/questions")
+    public ResponseEntity<java.util.List<KolinQuestionJournal.View>> questions(
+            @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable UUID classId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(chat.questions(caller, classId));
+    }
+
     @PostMapping("/review-target")
     public ResponseEntity<KolinBoardReviewService.Target> reviewTarget(@AuthenticationPrincipal AuthenticatedUser caller,
             @PathVariable UUID classId,@Valid @RequestBody KolinBoardReviewService.TargetRequest request) {
