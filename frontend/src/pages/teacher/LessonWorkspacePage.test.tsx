@@ -3,16 +3,16 @@ import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { LessonWorkspacePage } from './LessonWorkspacePage';
-import { api } from '../../api/client';
+import { api, request } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPreparation';
-vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn()}},request:vi.fn().mockResolvedValue([])}));
+vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn()}},request:vi.fn()}));
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn(),update:vi.fn(),assignHomeworkSeries:vi.fn()},completedLessonApi:{list:vi.fn()}}));
 vi.mock('./PersonalWorkbooksPanel',()=>({PersonalWorkbooksPanel:()=> <div>Мелисса: тетрадь и решения</div>}));
 vi.mock('./GoogleDrivePdfPicker',()=>({GoogleDrivePdfPicker:()=> <button>Google Drive</button>}));
 vi.mock('../../components/LessonHomeworkSeriesPanel',()=>({LessonHomeworkSeriesPanel:()=> <div>Настройки срока и файла</div>}));
 vi.mock('../../features/online-classes/StartOnlineClassButton',()=>({StartOnlineClassButton:()=> <button>Начать онлайн-урок</button>}));
 beforeEach(()=>{
-  cleanup();localStorage.clear();
+  cleanup();localStorage.clear();vi.mocked(request).mockResolvedValue([] as never);
   vi.mocked(api.lessons.groupLessons).mockResolvedValue([{eventId:'lesson-1',title:'Дроби',groupName:'Математика',startsAt:'2026-11-05T14:00:00Z',endsAt:'2026-11-05T15:00:00Z'}] as never);
   vi.mocked(lessonPreparationApi.get).mockResolvedValue({eventId:'lesson-1',homeworkNotes:'Задания 1-3',difficulties:'Знаки',coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'Автоматическая запись'} as never);
   vi.mocked(completedLessonApi.list).mockResolvedValue([]);
