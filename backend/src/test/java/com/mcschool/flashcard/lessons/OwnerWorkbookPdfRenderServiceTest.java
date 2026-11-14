@@ -30,6 +30,42 @@ class OwnerWorkbookPdfRenderServiceTest {
     }
 
     @Test
+    void studioPreflightRejectsEmptyFunctionGraphButAcceptsCoordinateGrid() {
+        var invalidGraph = Map.<String,Object>of("type", "graph", "series", List.of());
+        var error = assertThrows(ResponseStatusException.class,
+                () -> OwnerWorkbookPdfRenderService.validateStudioDiagrams(invalidGraph));
+        assertEquals(422, error.getStatusCode().value());
+        assertTrue(error.getReason().contains("coordinateGrid"));
+        assertDoesNotThrow(() -> OwnerWorkbookPdfRenderService.validateStudioDiagrams(
+                Map.of("workbookPages", List.of(Map.of("blocks", List.of(
+                        Map.of("type", "coordinateGrid", "xRange", List.of(-5, 5)),
+                        Map.of("type", "graph", "series", List.of(
+                                Map.of("kind", "linear", "m", 2, "b", -1)))))))));
+    }
+
+    @Test
+    void studioFailureClassifiesHiddenRendererErrorsWithoutReturningSourceExpressions() throws Exception {
+        var log = java.nio.file.Files.createTempFile("mindcrafti-studio-diagnostics", ".log");
+        try {
+            java.nio.file.Files.writeString(log,
+                    "Error: graph requires 1-3 function series; private f(x)=2x+secret");
+            var classified = OwnerWorkbookPdfRenderService.studioRenderFailure(log,
+                    new IllegalArgumentException("Plain worksheet generation or verification failed"));
+            assertEquals(422, classified.getStatusCode().value());
+            assertTrue(classified.getReason().contains("coordinateGrid"));
+            assertTrue(classified.getReason().contains("Код диагностики"));
+            assertFalse(classified.getReason().contains("secret"));
+            java.nio.file.Files.writeString(log, "Error: Invalid LaTeX expression: private-secret");
+            var math = OwnerWorkbookPdfRenderService.studioRenderFailure(log,
+                    new IllegalArgumentException("failed"));
+            assertTrue(math.getReason().contains("math.latex"));
+            assertFalse(math.getReason().contains("private-secret"));
+        } finally {
+            java.nio.file.Files.deleteIfExists(log);
+        }
+    }
+
+    @Test
     void fifthConcurrentRenderIsRejectedWhileRuntimeInitializesAndSlotsAreReleased() throws Exception {
         ObjectMapper json = new ObjectMapper();
         LessonPdfDraftService drafts = mock(LessonPdfDraftService.class);
