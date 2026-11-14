@@ -270,9 +270,18 @@ export function attachTabletInkInput(
     if (!event.touches) return;
     const presentIds = new Set(Array.from(event.touches, touch => touch.identifier));
     const freshIds = new Set(Array.from(event.changedTouches, touch => touch.identifier));
+    const freshStylus = Array.from(event.changedTouches)
+      .some(touch => touchDevice(touch) === 'pen');
+    // WebKit can retain a ghost Pencil contact in `touches` after the Pencil
+    // disconnects, then report the reconnected tip as another stylus contact.
+    // A single Pencil cannot have two tips down at once, so any fresh stylus
+    // contact proves that the previous active stylus contact is stale.
+    const supersededPenId = freshStylus && active?.meta.source === 'touch' &&
+      active.meta.device === 'pen' ? active.meta.inputId : null;
     // Touch.target can be a canvas node replaced during rendering. Its current
     // DOM ancestry does not tell us whether the physical contact is still down.
-    const continues = (id: number) => presentIds.has(id) && !freshIds.has(id);
+    const continues = (id: number) => id !== supersededPenId &&
+      presentIds.has(id) && !freshIds.has(id);
     let contactsChanged = false;
     for (const id of ownedTouches) {
       if (!continues(id)) ownedTouches.delete(id);
