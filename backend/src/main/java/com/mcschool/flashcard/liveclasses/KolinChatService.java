@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.ObjectMapper;
 
-/** Stateless text assistance. The teacher's private, per-class thread stays in the lesson UI. */
+/** AI replies stay in the lesson UI; valid teacher questions are durably journalled per class. */
 @Service
 public class KolinChatService {
     public static final int MAX_TEXT_LENGTH = 4000;
@@ -34,6 +34,7 @@ public class KolinChatService {
     private final AiLessonPilotService ai;
     private final ObjectMapper mapper;
     private final KolinTranscriptContextService transcripts;
+    private final KolinQuestionJournal questionJournal;
     @org.springframework.beans.factory.annotation.Autowired
     private KolinTaskService tasks;
     @org.springframework.beans.factory.annotation.Autowired
@@ -45,9 +46,10 @@ public class KolinChatService {
     private final Set<UUID> pendingTeachers = ConcurrentHashMap.newKeySet();
 
     public KolinChatService(OnlineClassAccessService access, StudentGroupRepository groups,
-                            AiLessonPilotService ai, ObjectMapper mapper, KolinTranscriptContextService transcripts) {
+                            AiLessonPilotService ai, ObjectMapper mapper, KolinTranscriptContextService transcripts,
+                            KolinQuestionJournal questionJournal) {
         this.access = access; this.groups = groups; this.ai = ai; this.mapper = mapper;
-        this.transcripts = transcripts;
+        this.transcripts = transcripts; this.questionJournal = questionJournal;
     }
 
     public record HistoryMessage(@NotBlank @Pattern(regexp="user|assistant") String role,
@@ -81,6 +83,11 @@ public class KolinChatService {
         return Map.of("configured", ai.isConfigured());
     }
 
+    public List<KolinQuestionJournal.View> questions(AuthenticatedUser teacher, UUID classId) {
+        access.requireHost(teacher, classId);
+        return questionJournal.recent(teacher.id(), classId);
+    }
+
     public KolinBoardReviewService.Target reviewTarget(AuthenticatedUser teacher,UUID classId,KolinBoardReviewService.TargetRequest request) {
         return reviews.resolve(teacher,classId,request);
     }
@@ -90,6 +97,7 @@ public class KolinChatService {
         var context = compactContext(room, request.context());
         String question = text(request.text());
         KolinBoardReviewService.Metadata board=null;
+        Reply immediateReply=null;
         if (reviews!=null) {
             var target=reviews.resolve(room,question,request.context());
             if (request.boardReview()!=null) {
@@ -100,14 +108,37 @@ public class KolinChatService {
                 context.put("currentWorkbookPage",board.pageNumber());
                 context.put("boardReview",board);
             } else if (!"not_requested".equals(target.state())) {
-                return new Reply("text",target.message()!=null?target.message():
+                immediateReply = new Reply("text",target.message()!=null?target.message():
                     "Не удалось получить текущую страницу ученика. Обновите страницу урока, попросите ученика открыть личную доску и повторите запрос.");
             }
         }
         List<Map<String, String>> history = history(request.history());
-        if (!ai.isConfigured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Kolyn пока не настроен. Обратитесь к администратору.");
-        if (!pendingTeachers.add(teacher.id())) throw KolinRequestException.busy();
+
+        String targetType = (String) context.get("targetType");
+        UUID studentId = null;
+        if ("student".equals(targetType)) {
+            if (board != null) studentId = board.studentId();
+            else if (request.context()!=null && request.context().studentId()!=null) studentId = request.context().studentId();
+            else if (room.getStudent()!=null) studentId = room.getStudent().getId();
+        }
+        Integer currentPage = (Integer) context.get("currentWorkbookPage");
+        String format = request.context()==null ? null : request.context().format();
+        UUID questionId = questionJournal.record(teacher.id(), classId, request.clientMessageId(), question,
+                targetType, studentId, currentPage, format);
+
+        if (immediateReply!=null) {
+            questionJournal.answered(questionId);
+            return immediateReply;
+        }
+        if (!ai.isConfigured()) {
+            questionJournal.failed(questionId);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Kolyn пока не настроен. Обратитесь к администратору.");
+        }
+        if (!pendingTeachers.add(teacher.id())) {
+            questionJournal.failed(questionId);
+            throw KolinRequestException.busy();
+        }
         try {
             var transcript = transcript(room);
             context.put("transcript", transcript);
@@ -139,12 +170,16 @@ public class KolinChatService {
             LoggerFactory.getLogger(getClass()).info("Kolyn context: classId={} transcriptState={} transcriptSegments={} transcriptTruncated={} transcriptionActive={} boardPages={}",
                     classId,transcript.metadata().state(),transcript.metadata().segmentCount(),transcript.metadata().truncated(),
                     transcript.metadata().transcriptionActive(),board==null?0:board.pages().size());
-            if (request.clientMessageId()!=null)
-                return tasks.reply(teacher,room,request,context,history,question,transcript.metadata(),board);
-            return new Reply("text", ai.kolinReply(mapper.writeValueAsString(context), history, question), transcript.metadata());
+            Reply reply = request.clientMessageId()!=null
+                    ? tasks.reply(teacher,room,request,context,history,question,transcript.metadata(),board)
+                    : new Reply("text", ai.kolinReply(mapper.writeValueAsString(context), history, question), transcript.metadata());
+            questionJournal.answered(questionId);
+            return reply;
         } catch (KolinRequestException | com.mcschool.flashcard.common.ConflictException ex) {
+            questionJournal.failed(questionId);
             throw ex;
         } catch (Exception ex) {
+            questionJournal.failed(questionId);
             LoggerFactory.getLogger(getClass()).warn("Kolyn request failed: classId={} errorType={}", classId, ex.getClass().getSimpleName());
             throw KolinRequestException.failed();
         } finally {
