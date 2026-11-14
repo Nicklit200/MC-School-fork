@@ -186,6 +186,34 @@ describe('native touch recovery after a lost release', () => {
     expect(input.onEnd.mock.calls[1][1]).not.toHaveProperty('recovered');
   });
 
+  it('replaces a ghost Pencil contact even when WebKit still lists it as present', () => {
+    const input = attach('ios-touch');
+    touch(input.sheet, 'touchstart');
+    touch(input.sheet, 'touchmove', { clientX: 30 });
+    const stale = contact(input.sheet, { identifier: 7, clientX: 30 });
+    const fresh = contact(input.sheet, { identifier: 8, clientX: 100 });
+
+    // After a Pencil disconnect, WebKit can retain the old stylus in the full
+    // contact list while reporting a new stylus activation. One Pencil cannot
+    // produce two simultaneous tip contacts, so id 7 must be stale.
+    touch(input.sheet, 'touchstart', fresh, [stale, fresh]);
+
+    expect(input.onEnd).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ clientX: 30 }),
+      { source: 'touch', device: 'pen', inputId: 7, recovered: true }, false,
+    );
+    expect(input.onStart).toHaveBeenCalledTimes(2);
+    expect(input.onStart.mock.calls[1]).toEqual([
+      expect.objectContaining({ clientX: 100 }),
+      { source: 'touch', device: 'pen', inputId: 8 },
+    ]);
+
+    touch(input.sheet, 'touchmove', { identifier: 8, clientX: 120 });
+    touch(input.sheet, 'touchend', { identifier: 8, clientX: 130 });
+    expect(input.onMove).toHaveBeenCalledTimes(2);
+    expect(input.onEnd).toHaveBeenCalledTimes(2);
+  });
+
   it.each([7, 8])('releases the previous page before id %i starts on another page', newId => {
     const first = attach('ios-touch'), second = attach('ios-touch');
     const order: string[] = [];
