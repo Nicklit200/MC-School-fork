@@ -14,6 +14,7 @@ import {
   FocusLayoutContainer,
   LiveKitRoom,
   RoomAudioRenderer,
+  StartAudio,
   useConnectionState,
   useTracks,
 } from '@livekit/components-react';
@@ -927,6 +928,9 @@ function RoomBody({
       </div>
 
       <CaptionsPanel enabled={transcriptionState === 'ACTIVE'} />
+      <StartAudio label={language === 'DE'
+        ? 'Tippen, um den Ton einzuschalten'
+        : 'Нажмите, чтобы включить звук'} />
       <RoomAudioRenderer />
       <ConnectionStateToast />
 
