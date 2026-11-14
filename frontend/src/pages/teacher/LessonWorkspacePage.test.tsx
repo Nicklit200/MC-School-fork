@@ -5,7 +5,7 @@ import { I18nProvider } from '../../i18n/I18nContext';
 import { LessonWorkspacePage } from './LessonWorkspacePage';
 import { api } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPreparation';
-vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn()}}}));
+vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn()}},request:vi.fn().mockResolvedValue([])}));
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn(),update:vi.fn(),assignHomeworkSeries:vi.fn()},completedLessonApi:{list:vi.fn()}}));
 vi.mock('./PersonalWorkbooksPanel',()=>({PersonalWorkbooksPanel:()=> <div>Мелисса: тетрадь и решения</div>}));
 vi.mock('./GoogleDrivePdfPicker',()=>({GoogleDrivePdfPicker:()=> <button>Google Drive</button>}));
