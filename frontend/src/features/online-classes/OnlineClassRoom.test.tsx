@@ -45,6 +45,7 @@ vi.mock('@livekit/components-react', () => ({
   ),
   ControlBar: () => null,
   RoomAudioRenderer: () => null,
+  StartAudio: ({ label }: { label: string }) => <button type="button">{label}</button>,
   ConnectionStateToast: () => null,
   FocusLayoutContainer: ({ children }: { children: React.ReactNode }) => <div data-testid="screen">{children}</div>,
   FocusLayout: () => null,
@@ -897,6 +898,11 @@ describe('OnlineClassRoom', () => {
       { userId: 'u1', displayName: 'Alice', classRole: 'STUDENT', admissionState: 'ADMITTED' } as never,
     ]);
     vi.mocked(lessonPreparationApi.answersMetadata).mockResolvedValue({ hasAnswers: true, answersFilename: 'a.pdf' } as never);
+  });
+
+  it('offers a user gesture when Safari blocks incoming audio', async () => {
+    mount(false);
+    expect(await screen.findByRole('button', { name: 'Нажмите, чтобы включить звук' })).toBeVisible();
   });
 
   it('puts named board buttons before Video and switches listening with names, Open and All pupils', async () => {
