@@ -19,6 +19,11 @@ public class KolinBoardReviewService {
     public static final int MAX_IMAGE_BYTES = 1_500_000;
     private static final String JPEG = "data:image/jpeg;base64,";
     private static final Pattern REVIEW = Pattern.compile("(?iu)(провер[ьиья]|проверь|посмотр|разбер|разоб[ер]|оцени|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|check|review|mistake|wrong|prüf|pruf|kontrollier|schau|fehler)");
+    private static final Pattern AFTER_PREVIOUS_CHECK = Pattern.compile(
+        "(?iu)(после\\s+(?:последн\\p{L}*|прошл\\p{L}*|предыдущ\\p{L}*)\\s+(?:проверк\\p{L}*|раз\\p{L}*)|с\\s+(?:прошл\\p{L}*|последн\\p{L}*)\\s+(?:раз\\p{L}*|проверк\\p{L}*)|что\\s+изменил\\p{L}*|что\\s+нов\\p{L}*\\s+(?:решил\\p{L}*|написал\\p{L}*)|с\\s+момента\\s+проверк\\p{L}*|seit\\s+der\\s+letzten\\s+kontrolle|since\\s+(?:last|previous)\\s+(?:review|check))");
+    static boolean incrementalReview(String text) {
+        return text!=null && REVIEW.matcher(text).find() && AFTER_PREVIOUS_CHECK.matcher(text).find();
+    }
     private static final Pattern WHOLE = Pattern.compile("(?iu)(всю|весь|всех.{0,10}страниц|тетрад|документ|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|workbook|document|all.{0,10}page|mistake|wrong|fehler|heft|gesamte)");
     private static final Pattern EXPLAIN = Pattern.compile("(?iu)(об[ъь]?[яе]сн|поясн|разъясн|покаж|найди|где|erklär|erklar|explain|show|find|where)");
     private static final Pattern FIRST_PAGE = Pattern.compile("(?iu)(?:перв\\p{L}*|задани\\p{L}*\\s*(?:№\\s*)?1\\b|страниц\\p{L}*\\s*(?:№\\s*)?1\\b|лист\\p{L}*\\s*(?:№\\s*)?1\\b|first\\s+(?:page|sheet|task|exercise))");
@@ -90,7 +95,7 @@ public class KolinBoardReviewService {
             return new Target("not_requested",null,null,null);
         if(Pattern.compile("(?iu)^\\s*(дай|создай|сделай|подготовь|erstelle|create|generate).*(задан|pdf|интерактив|aufgab|worksheet)").matcher(text).find())
             return new Target("not_requested",null,null,null);
-        String scope=namedPage?"first_page":WHOLE.matcher(text).find()?"workbook":"current_page";
+        String scope=incrementalReview(text)||WHOLE.matcher(text).find()?"workbook":namedPage?"first_page":"current_page";
         boolean explicitlyShared=EXPLICIT_SHARED.matcher(text).find();
         var pupils=roster.read(room);
         var words=Arrays.stream(normalize(text).split("[^a-z0-9]+")).filter(s->!s.isBlank()).toList();
@@ -238,7 +243,8 @@ public class KolinBoardReviewService {
 
     /** A concurrent pupil edit invalidates the captured task-page image. */
     private void requireInkUnchanged(UUID classId, Snapshot snapshot) {
-        if(!"task_page".equals(snapshot.scope()) || annotations==null) return;
+        if(!("task_page".equals(snapshot.scope()) || "workbook".equals(snapshot.scope()))
+                || annotations==null) return;
         var pages=new ArrayList<Page>();
         pages.add(new Page(snapshot.pageNumber(),snapshot.revision(),snapshot.imageDataUrl()));
         if(snapshot.additionalPages()!=null) pages.addAll(snapshot.additionalPages());
