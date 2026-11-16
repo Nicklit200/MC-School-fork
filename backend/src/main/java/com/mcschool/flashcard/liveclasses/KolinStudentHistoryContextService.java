@@ -1,7 +1,6 @@
 package com.mcschool.flashcard.liveclasses;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
-import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.lessons.StudentLessonHistoryService;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDetail;
@@ -113,18 +112,18 @@ public class KolinStudentHistoryContextService {
                 out.add(row);
                 budget+=row.toString().length();
             }
-            var assigned=homework.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(id);
+            var assigned=homework.recentKolinHomework(id,7);
             var recent=new ArrayList<Map<String,Object>>();
-            for(Homework task:assigned) {
-                if(recent.size()>=7) break;
+            for(var task:assigned) {
                 var row=new LinkedHashMap<String,Object>();
                 row.put("date",task.getStartDate().toString());
-                row.put("hasWorksheet",task.hasWorksheet());
-                row.put("submitted",task.isSubmitted());
+                row.put("hasWorksheet",Boolean.TRUE.equals(task.getHasWorksheet()));
+                row.put("submitted",task.getSubmittedAt()!=null);
                 if(task.getSubmittedAt()!=null) row.put("submittedAt",task.getSubmittedAt().toString());
                 put(row,"worksheetFilename",task.getWorksheetFilename(),150);
-                if(wantsTasks && recent.size()<2 && task.hasWorksheet()) {
-                    put(row,"worksheetTextExcerpt",pdfText(task.getWorksheetPdf(),2,1100),1100);
+                if(wantsTasks && recent.size()<2 && Boolean.TRUE.equals(task.getHasWorksheet())) {
+                    homework.findByIdAndStudentId(task.getId(),id).ifPresent(detail->
+                        put(row,"worksheetTextExcerpt",pdfText(detail.getWorksheetPdf(),2,1100),1100));
                 }
                 recent.add(row);
             }
