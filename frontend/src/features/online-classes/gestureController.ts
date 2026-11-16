@@ -74,14 +74,29 @@ export class GestureController {
       this.penDown !== null ||
       (this.deps.mode() === 'stylus' && this.now() - this.lastPenRelease < GestureController.PALM_GRACE_MS)
     )) return [];
+    const intents: Intent[] = [];
+    // A new physical pen/mouse press proves the previous draw has ended.
+    // Some browsers lose pointerup after a long class or hardware sleep, and
+    // may reuse the exact same pointerId. Without this recovery the next pen
+    // press is silently ignored because the controller remains in 'draw'.
+    // Preserve the previous visible geometry as a completed stroke.
+    if (this.state === 'draw' && this.drawPointer !== null &&
+        (kind === 'pen' || kind === 'mouse')) {
+      intents.push({ type: 'stroke-end' });
+      this.state = 'idle';
+      this.drawPointer = null;
+      if (this.penDown !== null) {
+        this.penDown = null;
+        this.lastPenRelease = this.now();
+      }
+    }
     if (navigate && this.state === 'idle') {
       if (kind === 'pen') this.penDown = id;
       this.touches.set(id, position);
       this.beginNavigation();
-      return [];
+      return intents;
     }
 
-    const intents: Intent[] = [];
     if (kind === 'pen') {
       this.penDown = id;
       // Stale touches from under the resting hand must not turn into a pinch
