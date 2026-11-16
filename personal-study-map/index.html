@@ -11,7 +11,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/study-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=20261116-nutrition-budget-v1" />
+  <link rel="stylesheet" href="./styles.css?v=20261116-weight-tracker-v1" />
 </head>
 <body>
   <div class="board-app">
@@ -38,10 +38,20 @@
             <h2>Дневник питания</h2>
           </div>
           <div class="life-view-actions">
+            <button id="nutrition-calendar-toggle" class="nutrition-calendar-toggle" type="button" aria-controls="nutrition-calendar-panel" aria-expanded="false">📅 Календарь</button>
             <button id="nutrition-add-toggle" class="life-add-button" type="button">+ Добавить еду</button>
-            <input id="nutrition-date" type="date" />
+            <input id="nutrition-date" type="date" aria-label="Дата питания" />
           </div>
         </div>
+
+        <aside id="nutrition-calendar-panel" class="nutrition-calendar-popover" hidden aria-label="Календарь калорий">
+          <div class="nutrition-calendar-heading">
+            <strong>Календарь калорий</strong>
+            <button id="nutrition-calendar-close" class="close-inline" type="button" aria-label="Закрыть календарь">×</button>
+          </div>
+          <div id="nutrition-calendar" class="month-calendar compact"></div>
+          <p class="nutrition-calendar-hint">Зелёный: в пределах цели. Красный: выше цели. Нажми день, чтобы открыть дневник.</p>
+        </aside>
 
         <div id="nutrition-add-panel" class="nutrition-add-panel" hidden>
           <div class="nutrition-add-head">
@@ -73,7 +83,36 @@
           </form>
         </div>
 
-        <div id="nutrition-calendar" class="month-calendar"></div>
+        <section class="weight-tracker" aria-label="Изменение веса">
+          <div class="weight-tracker-header">
+            <div>
+              <div class="eyebrow">ДИНАМИКА ВЕСА</div>
+              <h3>Мой вес</h3>
+              <p id="weight-progress" class="weight-progress">Измерения по дням</p>
+            </div>
+            <div class="weight-tracker-totals">
+              <div class="weight-current"><span>Сейчас</span><strong id="weight-latest">—</strong></div>
+              <div class="weight-target"><span>Цель</span><strong>80,0 кг</strong></div>
+            </div>
+          </div>
+          <div class="weight-chart-toolbar">
+            <div class="weight-periods" role="group" aria-label="Период графика">
+              <button type="button" data-weight-period="7" aria-pressed="false">7 дней</button>
+              <button type="button" data-weight-period="30" aria-pressed="true">30 дней</button>
+              <button type="button" data-weight-period="90" aria-pressed="false">90 дней</button>
+              <button type="button" data-weight-period="all" aria-pressed="false">Всё</button>
+            </div>
+            <span id="weight-change" class="weight-change"></span>
+          </div>
+          <div id="weight-chart" class="weight-chart" role="img" aria-label="История изменения веса по дням"></div>
+          <form id="weight-form" class="weight-form">
+            <label><span>Дата измерения</span><input id="weight-date" type="date" required /></label>
+            <label><span>Вес, кг</span><input id="weight-kg" type="number" min="25" max="350" step="0.01" inputmode="decimal" placeholder="88,50" required /></label>
+            <button id="weight-save" type="submit">Сохранить вес</button>
+          </form>
+          <p id="weight-status" class="weight-status" role="status" aria-live="polite"></p>
+        </section>
+
         <div id="nutrition-day-balance" class="life-balance" aria-label="Разница между дневной целью по питанию и съеденными калориями"></div>
 
         <div class="nutrition-day-content">
@@ -370,7 +409,7 @@
   <script src="./flashcard-status-colors.js?v=20261018-intervals-v2" defer></script>
   <script src="./flashcard-engine.js?v=20261020-berlin-v3"></script>
   <script src="./study-settings.js?v=20261017-1" defer></script>
-  <script type="module" src="./app.js?v=20261116-nutrition-budget-v1"></script>
+  <script type="module" src="./app.js?v=20261116-weight-tracker-v1"></script>
   <script src="./quiz-portable-backup.js?v=20261018-transfer-v3" defer></script>
   <script type="module" src="./flashcards.js?v=20261026-auto-sync-v4"></script>
   <script>
