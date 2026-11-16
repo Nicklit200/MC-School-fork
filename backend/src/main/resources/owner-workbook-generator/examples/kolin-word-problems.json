@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "school": "MINDCRAFTI SCHOOL",
+    "subject": "MATHEMATIK",
+    "group": "Kolyn",
+    "date": "16.11.2026",
+    "durationMinutes": 30
+  },
+  "workbookPages": [
+    {
+      "title": "",
+      "subtitle": "",
+      "blocks": [
+        {
+          "type": "exercise",
+          "number": "1",
+          "title": "",
+          "description": "Lena kauft 3 Hefte. Ein Heft kostet 4 Euro. Wie viel bezahlt sie insgesamt?",
+          "rows": [],
+          "writeLines": 4
+        },
+        {
+          "type": "spacer",
+          "height": "14mm"
+        },
+        {
+          "type": "exercise",
+          "number": "2",
+          "title": "",
+          "description": "Ein Fahrrad kostet 120 Euro. Es gibt 25 % Rabatt. Wie viel kostet es nach dem Rabatt?",
+          "rows": [],
+          "writeLines": 4
+        }
+      ]
+    }
+  ],
+  "teacherPages": [
+    {
+      "title": "",
+      "subtitle": "",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "Private automated answer validation"
+        }
+      ]
+    }
+  ],
+  "qa": {
+    "algebra": [
+      {
+        "kind": "expressionValue",
+        "expression": "3*4",
+        "restrictions": []
+      },
+      {
+        "kind": "expressionValue",
+        "expression": "120*(100-25)/100",
+        "restrictions": []
+      }
+    ]
+  }
+}
