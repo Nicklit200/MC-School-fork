@@ -6,6 +6,9 @@ const state = {
   germanWords: [],
   nutritionEntries: [],
   nutritionAssistantEntries: [],
+  weightEntries: [],
+  weightPeriod: "30",
+  weightLoadError: "",
   workoutEntries: [],
   workoutAssistantEntries: [],
   nutritionCalendarEntries: [],
@@ -482,6 +485,9 @@ function renderSection() {
   if (state.section !== "nutrition") {
     const nutritionPanel = $("nutrition-add-panel");
     if (nutritionPanel) nutritionPanel.hidden = true;
+    const calendarPanel = $("nutrition-calendar-panel");
+    if (calendarPanel) calendarPanel.hidden = true;
+    $("nutrition-calendar-toggle")?.setAttribute("aria-expanded", "false");
   }
 
   for (const button of document.querySelectorAll(".section-tab")) {
@@ -500,6 +506,7 @@ function switchSection(section) {
     loadGermanWords();
   } else if (section === "nutrition") {
     loadNutrition();
+    void loadWeight();
   } else if (section === "workouts") {
     loadWorkouts();
   }
@@ -746,7 +753,7 @@ function renderCalendar(section) {
         <div class="calendar-subtitle">${
           section === "workouts" ? "Бег — бегущий значок · силовая тренировка — гиря" :
           section === "study" ? "Зелёный - карточки пройдены · красный - пропущен день после начала тренировок" :
-          `Минус — осталось от ${Math.round(nutritionInfo?.maxKcal || nutritionDailyGoal())} ккал · плюс — превышение`
+          `Зелёный: в пределах ${Math.round(nutritionInfo?.maxKcal || nutritionDailyGoal())} ккал · красный: выше лимита`
         }</div>
       </div>
       <button type="button" class="calendar-nav next" aria-label="Следующий месяц">›</button>
@@ -780,12 +787,16 @@ function renderCalendar(section) {
       const logged = nutritionInfo?.byDate?.has(dateIso) || false;
       const kcal = nutritionInfo?.byDate?.get(dateIso)?.kcal || 0;
       const remaining = nutritionDailyGoal() - kcal;
+      const selected = dateIso === ($("nutrition-date")?.value || today);
+      if (selected) button.classList.add("selected");
+      button.dataset.date = dateIso;
+      button.setAttribute("aria-pressed", String(selected));
       button.innerHTML = `
         <span class="calendar-day-number">${day}</span>
-        ${logged ? `<span class="calendar-day-kcal nutrition-budget-number">${nutritionBudgetText(kcal)} ккал</span>` : ""}
+        ${logged ? `<span class="calendar-day-kcal">${Math.round(kcal).toLocaleString("ru-RU")}</span>` : ""}
       `;
       button.title = logged
-        ? `${dateIso} · ${remaining >= 0 ? "осталось до цели" : "сверх цели"} ${Math.abs(Math.round(remaining))} ккал · съедено ${Math.round(kcal)} ккал`
+        ? `${dateIso} · съедено ${Math.round(kcal)} ккал · ${remaining >= 0 ? "осталось до цели" : "сверх цели"} ${Math.abs(Math.round(remaining))} ккал`
         : dateIso;
     } else if (section === "workouts") {
       const types = workoutIconsForDay.get(dateIso) || new Set();
@@ -817,6 +828,8 @@ function renderCalendar(section) {
     } else if (section === "nutrition") {
       button.onclick = () => {
         $("nutrition-date").value = dateIso;
+        $("nutrition-calendar-panel").hidden = true;
+        $("nutrition-calendar-toggle").setAttribute("aria-expanded","false");
         loadNutrition();
       };
     }
@@ -872,6 +885,136 @@ function mergeNutritionEntries(...groups) {
   return [...byId.values()].sort((a, b) =>
     String(a.createdAt || a.date || "").localeCompare(String(b.createdAt || b.date || ""))
   );
+}
+
+
+const WEIGHT_TARGET_KG = 80;
+function weightKgText(value) {
+  return new Intl.NumberFormat("ru-RU", {minimumFractionDigits:1, maximumFractionDigits:2}).format(Number(value)) + " кг";
+}
+function weightDateMs(date) {
+  return Date.parse(String(date) + "T12:00:00Z");
+}
+function weightDateLabel(date) {
+  return new Date(date + "T12:00:00").toLocaleDateString("ru-RU", {day:"numeric",month:"short"});
+}
+function weightEntriesForPeriod() {
+  const entries = state.weightEntries || [];
+  if (state.weightPeriod === "all") return entries;
+  const days = Number(state.weightPeriod) || 30;
+  const firstDate = new Date(weightDateMs(todayIso()));
+  firstDate.setUTCDate(firstDate.getUTCDate() - days + 1);
+  const start = firstDate.toISOString().slice(0, 10);
+  return entries.filter(row => row.date >= start);
+}
+function renderWeightChart() {
+  const host = $("weight-chart");
+  if (!host) return;
+  const entries = weightEntriesForPeriod();
+  if (!entries.length) {
+    host.innerHTML = '<div class="weight-chart-empty">Пока нет измерений за выбранный период. Введи вес ниже, чтобы начать график.</div>';
+    return;
+  }
+
+  const W=960, H=245, left=65, right=26, top=22, bottom=42;
+  const chartWidth=W-left-right, chartHeight=H-top-bottom;
+  const weights=entries.map(row => row.weightKg);
+  const min=Math.min(...weights), max=Math.max(...weights);
+  let yMin=Math.floor((min-0.9)*2)/2;
+  let yMax=Math.ceil((max+0.9)*2)/2;
+  if(yMax-yMin<2) {yMin=min-1;yMax=max+1;}
+  const lastDayMs=weightDateMs(todayIso());
+  const firstDayMs=state.weightPeriod==="all"
+    ? Math.min(weightDateMs(entries[0].date),lastDayMs-6*86400000)
+    : lastDayMs-(Number(state.weightPeriod)-1)*86400000;
+  const xMax=Math.max(lastDayMs,firstDayMs+86400000);
+  const xFor=iso => left+Math.max(0,Math.min(1,(weightDateMs(iso)-firstDayMs)/(xMax-firstDayMs)))*chartWidth;
+  const yFor=value => top+(yMax-value)/(yMax-yMin)*chartHeight;
+  const coords=entries.map(row=>({x:xFor(row.date),y:yFor(row.weightKg),row}));
+  const points=coords.map(point=>point.x.toFixed(1)+","+point.y.toFixed(1)).join(" ");
+  const areaPath="M"+left+","+(H-bottom)+" L"+coords.map(point=>point.x.toFixed(1)+","+point.y.toFixed(1)).join(" L")+" L"+coords[coords.length-1].x.toFixed(1)+","+(H-bottom)+" Z";
+  const grid=Array.from({length:5},(_,i)=>{
+    const value=yMax-(yMax-yMin)*i/4;
+    const y=yFor(value);
+    return '<line x1="'+left+'" x2="'+(W-right)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="#e7eef7" stroke-width="1"/>'+
+      '<text x="'+(left-10)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end" fill="#8a9aaf" font-size="12">'+value.toFixed(1).replace(".",",")+'</text>';
+  }).join("");
+  const dots=coords.map(point=>{
+    const title=escapeHtml(weightDateLabel(point.row.date)+" · "+weightKgText(point.row.weightKg));
+    return '<circle cx="'+point.x.toFixed(1)+'" cy="'+point.y.toFixed(1)+'" r="5.5" fill="#2f6fed" stroke="white" stroke-width="2.5"><title>'+title+'</title></circle>';
+  }).join("");
+  const last=coords[coords.length-1];
+  const firstLabel=new Date(firstDayMs).toISOString().slice(0,10);
+  host.setAttribute("aria-label", "График веса: "+entries.map(row => row.date+" "+weightKgText(row.weightKg)).join("; "));
+  host.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'+
+    '<defs><linearGradient id="weight-area-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#6ea1f2" stop-opacity=".24"/><stop offset="100%" stop-color="#dceaff" stop-opacity=".02"/></linearGradient></defs>'+
+    grid+
+    '<path d="'+areaPath+'" fill="url(#weight-area-fill)"/>'+
+    (coords.length>1?'<polyline fill="none" stroke="#2f6fed" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="'+points+'"/>':'')+
+    dots+
+    '<text x="'+left+'" y="'+(H-13)+'" fill="#8192a8" font-size="12">'+escapeHtml(weightDateLabel(firstLabel))+'</text>'+
+    '<text x="'+(W-right)+'" y="'+(H-13)+'" text-anchor="end" fill="#8192a8" font-size="12">'+escapeHtml(weightDateLabel(todayIso()))+'</text>'+
+    '<text x="'+Math.max(left+45,Math.min(W-right-45,last.x))+'" y="'+Math.max(14,last.y-11)+'" text-anchor="middle" fill="#2d66b1" font-size="13" font-weight="800">'+escapeHtml(weightKgText(last.row.weightKg))+'</text>'+
+    '</svg>';
+}
+function renderWeight() {
+  const latest=(state.weightEntries||[]).at(-1);
+  $("weight-latest").textContent=latest ? weightKgText(latest.weightKg) : "—";
+  if (latest) {
+    const remain=latest.weightKg-WEIGHT_TARGET_KG;
+    $("weight-progress").textContent=remain>0
+      ? "До цели 80 кг осталось "+weightKgText(remain)
+      : remain<0 ? "Ниже выбранной цели на "+weightKgText(-remain)
+      : "Цель 80 кг достигнута";
+  } else {
+    $("weight-progress").textContent="Добавь измерение, чтобы начать отслеживать динамику";
+  }
+  const filtered=weightEntriesForPeriod();
+  const change=$("weight-change");
+  if (filtered.length>=2) {
+    const delta=filtered.at(-1).weightKg-filtered[0].weightKg;
+    change.textContent=(delta>0?"+":delta<0?"−":"")+weightKgText(Math.abs(delta))+" за период";
+    change.className="weight-change "+(delta<0?"down":delta>0?"up":"");
+  } else {
+    change.textContent=filtered.length ? "Первое измерение" : "Нет данных за период";
+    change.className="weight-change";
+  }
+  document.querySelectorAll("[data-weight-period]").forEach(button=>
+    button.setAttribute("aria-pressed", String(button.dataset.weightPeriod===state.weightPeriod))
+  );
+  const chosen=$("weight-date")?.value;
+  const row=(state.weightEntries||[]).find(entry=>entry.date===chosen);
+  if($("weight-kg")) $("weight-kg").value=row ? String(row.weightKg) : "";
+  renderWeightChart();
+}
+async function loadWeight() {
+  const token=readStudySessionAccount();
+  if (!token) {
+    state.weightEntries=[];
+    state.weightLoadError="Для сохранения и синхронизации веса войди в свой аккаунт через раздел «Карточки».";
+    renderWeight();
+    $("weight-status").textContent=state.weightLoadError;
+    $("weight-status").classList.add("error");
+    return;
+  }
+  $("weight-status").textContent="Загружаю историю веса…";
+  $("weight-status").classList.remove("error");
+  try {
+    const rows=await api("/api/weight", {headers:{Authorization:"Bearer "+token}});
+    state.weightEntries=(Array.isArray(rows)?rows:[])
+      .map(row=>({date:String(row.date||"").slice(0,10),weightKg:Number(row.weightKg)}))
+      .filter(row=>/^\d{4}-\d{2}-\d{2}$/.test(row.date) && Number.isFinite(row.weightKg) && row.weightKg>=25 && row.weightKg<=350)
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    state.weightLoadError="";
+    $("weight-status").textContent="Вес сохраняется в аккаунте, по одному измерению на день.";
+    $("weight-status").classList.remove("error");
+  } catch(error) {
+    console.warn("Не удалось загрузить вес",error);
+    state.weightLoadError="Не удалось загрузить историю веса. Проверь вход в аккаунт и соединение.";
+    $("weight-status").textContent=state.weightLoadError;
+    $("weight-status").classList.add("error");
+  }
+  renderWeight();
 }
 
 async function loadNutrition() {
@@ -2070,10 +2213,22 @@ for (const button of document.querySelectorAll(".section-tab")) {
   button.onclick = () => switchSection(button.dataset.section);
 }
 
+const nutritionCalendarPanel = $("nutrition-calendar-panel");
+function setNutritionCalendarOpen(open) {
+  nutritionCalendarPanel.hidden=!open;
+  $("nutrition-calendar-toggle").setAttribute("aria-expanded",String(open));
+  if(open) {
+    $("nutrition-add-panel").hidden=true;
+    renderCalendar("nutrition");
+  }
+}
+$("nutrition-calendar-toggle").onclick=()=>setNutritionCalendarOpen(nutritionCalendarPanel.hidden);
+$("nutrition-calendar-close").onclick=()=>setNutritionCalendarOpen(false);
 const nutritionAddPanel = $("nutrition-add-panel");
 $("nutrition-add-toggle").onclick = () => {
   nutritionAddPanel.hidden = !nutritionAddPanel.hidden;
   if (!nutritionAddPanel.hidden) {
+    setNutritionCalendarOpen(false);
     $("nutrition-name")?.focus();
   }
 };
@@ -2082,7 +2237,40 @@ $("nutrition-add-close").onclick = () => {
 };
 
 $("nutrition-date").value = todayIso();
+$("weight-date").value=todayIso();
+$("weight-date").max=todayIso();
 $("workout-date").value = todayIso();
+$("weight-date").onchange=renderWeight;
+for (const button of document.querySelectorAll("[data-weight-period]"))
+  button.onclick=()=>{state.weightPeriod=button.dataset.weightPeriod;renderWeight();};
+$("weight-form").onsubmit=async event=>{
+  event.preventDefault();
+  const token=readStudySessionAccount();
+  const raw=$("weight-kg").value;
+  const weightKg=Number(raw.replace(",","."));
+  const date=$("weight-date").value;
+  if(!token){$("weight-status").textContent="Войди в аккаунт в разделе «Карточки», чтобы сохранить вес."; $("weight-status").classList.add("error");return;}
+  if(!date||date>todayIso()||!Number.isFinite(weightKg)||weightKg<25||weightKg>350){
+    $("weight-status").textContent="Проверь дату и вес (25–350 кг).";
+    $("weight-status").classList.add("error");
+    return;
+  }
+  const button=$("weight-save");
+  button.disabled=true;
+  $("weight-status").classList.remove("error");
+  $("weight-status").textContent="Сохраняю…";
+  try {
+    await api("/api/weight",{method:"POST",headers:{Authorization:"Bearer "+token},
+      body:JSON.stringify({date,weightKg})});
+    await loadWeight();
+    $("weight-status").textContent="Вес за "+fmtDate(date)+" сохранён.";
+    $("weight-status").classList.remove("error");
+  }catch(error){
+    console.warn("Не удалось сохранить вес",error);
+    $("weight-status").textContent="Не удалось сохранить вес. Проверь подключение и вход в аккаунт.";
+    $("weight-status").classList.add("error");
+  }finally{button.disabled=false;}
+};
 $("nutrition-date").onchange = loadNutrition;
 $("workout-date").onchange = loadWorkouts;
 
@@ -2178,6 +2366,7 @@ window.addEventListener("keydown", (event) => {
   $("review-panel").classList.add("closed");
   $("homework-panel").classList.add("closed");
   $("study-calendar-panel").classList.add("closed");
+  setNutritionCalendarOpen(false);
 });
 
 window.addEventListener("study-reviews-updated", () => {
