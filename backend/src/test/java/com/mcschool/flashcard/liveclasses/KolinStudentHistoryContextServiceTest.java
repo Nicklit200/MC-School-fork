@@ -47,7 +47,7 @@ class KolinStudentHistoryContextServiceTest {
             false,null,true,"Transkript.pdf","Wir haben Brüche erklärt und wiederholt");
         when(history.listForTeacherAssistant(host,vitalina.getId())).thenReturn(List.of(item));
         when(history.detail(host,vitalina.getId(),previousTeacher,"past-001")).thenReturn(detail);
-        when(homework.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(vitalina.getId())).thenReturn(List.of());
+        when(homework.recentKolinHomework(vitalina.getId(),7)).thenReturn(List.of());
         var result=service.read(host,room,"Что мы проходили с Виталиной на прошлом уроке?",
             new KolinChatService.Context("student",melissa.getId(),1));
         assertThat(result.get("state")).isEqualTo("available");
