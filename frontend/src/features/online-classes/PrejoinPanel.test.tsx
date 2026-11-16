@@ -225,7 +225,7 @@ describe('PrejoinPanel', () => {
     });
     const onJoin = renderPanel();
     await screen.findByRole('option', { name: 'Headset microphone' });
-    await userEvent.selectOptions(screen.getByLabelText(/Микрофон|Mikrofon/i), 'mic-2');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Микрофон|Mikrofon/i }), 'mic-2');
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({
       video: true, audio: { deviceId: { ideal: 'mic-2' } },
     }));
