@@ -11,7 +11,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/study-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=20261116-nutrition-calendar-budget-v2" />
+  <link rel="stylesheet" href="./styles.css?v=20261116-weight-polish-v1" />
 </head>
 <body>
   <div class="board-app">
@@ -83,33 +83,61 @@
           </form>
         </div>
 
-        <section class="weight-tracker" aria-label="Изменение веса">
-          <div class="weight-tracker-header">
-            <div>
-              <div class="eyebrow">ДИНАМИКА ВЕСА</div>
-              <h3>Мой вес</h3>
-              <p id="weight-progress" class="weight-progress">Измерения по дням</p>
+        <section class="weight-tracker" aria-label="Отслеживание веса">
+          <div class="weight-dashboard-top">
+            <div class="weight-dashboard-heading">
+              <div class="weight-eyebrow"><span class="weight-eyebrow-dot" aria-hidden="true"></span> ЛИЧНЫЙ ПРОГРЕСС</div>
+              <h3>Вес и динамика</h3>
+              <p id="weight-progress" class="weight-progress">История измерений и путь к цели 80 кг</p>
             </div>
-            <div class="weight-tracker-totals">
-              <div class="weight-current"><span>Сейчас</span><strong id="weight-latest">—</strong></div>
-              <div class="weight-target"><span>Цель</span><strong>80,0 кг</strong></div>
+            <div class="weight-metrics">
+              <div class="weight-metric weight-metric-current">
+                <span class="weight-metric-label">Текущий вес</span>
+                <strong id="weight-latest">—</strong>
+                <small id="weight-latest-date">Последняя запись</small>
+              </div>
+              <div class="weight-metric weight-metric-delta">
+                <span class="weight-metric-label">Изменение веса</span>
+                <strong id="weight-total-change">—</strong>
+                <small id="weight-total-change-label">С первого измерения</small>
+              </div>
+              <div class="weight-metric weight-metric-goal">
+                <span class="weight-metric-label">До цели</span>
+                <strong id="weight-to-target">—</strong>
+                <small>Цель: 80,0 кг</small>
+              </div>
             </div>
           </div>
-          <div class="weight-chart-toolbar">
-            <div class="weight-periods" role="group" aria-label="Период графика">
-              <button type="button" data-weight-period="7" aria-pressed="false">7 дней</button>
-              <button type="button" data-weight-period="30" aria-pressed="true">30 дней</button>
-              <button type="button" data-weight-period="90" aria-pressed="false">90 дней</button>
-              <button type="button" data-weight-period="all" aria-pressed="false">Всё</button>
+          <div class="weight-chart-card">
+            <div class="weight-chart-toolbar">
+              <div class="weight-chart-description">
+                <h4>История веса</h4>
+                <p id="weight-chart-subtitle">Каждое измерение появляется на графике</p>
+              </div>
+              <div class="weight-periods" role="group" aria-label="Период графика веса">
+                <button type="button" data-weight-period="7" aria-pressed="false">7 дней</button>
+                <button type="button" data-weight-period="30" aria-pressed="true">30 дней</button>
+                <button type="button" data-weight-period="90" aria-pressed="false">90 дней</button>
+                <button type="button" data-weight-period="all" aria-pressed="false">Всё время</button>
+              </div>
             </div>
-            <span id="weight-change" class="weight-change"></span>
+            <div id="weight-chart" class="weight-chart" role="img" aria-label="История изменения веса по дням"></div>
+            <div class="weight-chart-foot">
+              <span id="weight-chart-count">Нет измерений</span>
+              <span id="weight-change" class="weight-change">—</span>
+            </div>
           </div>
-          <div id="weight-chart" class="weight-chart" role="img" aria-label="История изменения веса по дням"></div>
-          <form id="weight-form" class="weight-form">
-            <label><span>Дата измерения</span><input id="weight-date" type="date" required /></label>
-            <label><span>Вес, кг</span><input id="weight-kg" type="number" min="25" max="350" step="0.01" inputmode="decimal" placeholder="88,50" required /></label>
-            <button id="weight-save" type="submit">Сохранить вес</button>
-          </form>
+          <div class="weight-entry-card">
+            <div class="weight-entry-heading">
+              <span class="weight-entry-symbol" aria-hidden="true">+</span>
+              <div><h4>Записать вес</h4><p>Одно измерение в день, можно исправить позже</p></div>
+            </div>
+            <form id="weight-form" class="weight-form">
+              <label><span>Дата измерения</span><input id="weight-date" type="date" required /></label>
+              <label><span>Вес, кг</span><input id="weight-kg" type="number" min="25" max="350" step="0.01" inputmode="decimal" placeholder="88,5" required /></label>
+              <button id="weight-save" type="submit">Сохранить вес</button>
+            </form>
+          </div>
           <p id="weight-status" class="weight-status" role="status" aria-live="polite"></p>
         </section>
 
@@ -409,7 +437,7 @@
   <script src="./flashcard-status-colors.js?v=20261018-intervals-v2" defer></script>
   <script src="./flashcard-engine.js?v=20261020-berlin-v3"></script>
   <script src="./study-settings.js?v=20261017-1" defer></script>
-  <script type="module" src="./app.js?v=20261116-nutrition-calendar-budget-v2"></script>
+  <script type="module" src="./app.js?v=20261116-weight-polish-v1"></script>
   <script src="./quiz-portable-backup.js?v=20261018-transfer-v3" defer></script>
   <script type="module" src="./flashcards.js?v=20261026-auto-sync-v4"></script>
   <script>
