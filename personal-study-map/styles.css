@@ -1497,6 +1497,21 @@ body[data-section="workouts"] .brand-mark{background:#fff4e8;color:#b86616}
   background: #f0fcf4;
   border-color: #bce8c9;
 }
+/* Nutrition view: show a RED negative remaining daily budget, not fictitious burned calories. */
+.life-balance-card.nutrition-budget {
+  --life-balance-color: #bb2e36;
+  background: #fff2f2;
+  border-color: #f4cdcd;
+}
+.life-balance-card.nutrition-target {
+  --life-balance-color: #405b7a;
+  background: #f5f8fc;
+  border-color: #dce5f0;
+}
+.life-balance-card.nutrition-budget .life-balance-value {
+  font-size: clamp(21px, 2.8vw, 30px);
+}
+.calendar-day-kcal.nutrition-budget-number {color:#bb2e36;}
 .life-balance-symbol {
   display: flex;
   width: 40px;

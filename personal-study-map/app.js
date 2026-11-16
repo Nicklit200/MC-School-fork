@@ -568,6 +568,20 @@ function workoutTypesByDate() {
   return byDate;
 }
 
+function nutritionDailyGoal() {
+  const value = state.data?.personalGoals?.nutrition?.kcalMax;
+  const parsed = value == null || value === "" ? NaN : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2200;
+}
+
+// A display convention, NOT energy burned or an actual weight-loss deficit.
+// For example: target 2200 - food 150 = "-2 050 kcal" remaining in the day's budget.
+function nutritionBudgetText(eaten) {
+  const remaining = Math.round(nutritionDailyGoal() - eaten);
+  const sign = remaining >= 0 ? "−" : "+";
+  return sign + Math.abs(remaining).toLocaleString("ru-RU");
+}
+
 function nutritionDayStatus() {
   const byDate = new Map();
   for (const item of state.nutritionCalendarEntries || []) {
@@ -579,8 +593,7 @@ function nutritionDayStatus() {
     byDate.set(date, current);
   }
 
-  const configuredMax = state.data?.personalGoals?.nutrition?.kcalMax;
-  const maxKcal = configuredMax == null || configuredMax === "" ? null : Number(configuredMax);
+  const maxKcal = nutritionDailyGoal();
   const statuses = new Map();
 
   for (const [date, info] of byDate) {
@@ -591,7 +604,7 @@ function nutritionDayStatus() {
     }
   }
 
-  return { statuses, byDate, maxKcal: Number.isFinite(maxKcal) && maxKcal > 0 ? maxKcal : null };
+  return { statuses, byDate, maxKcal };
 }
 
 
@@ -610,6 +623,32 @@ function renderLifeBalances() {
     const burned = (state.workoutCalendarEntries || [])
       .filter((item) => String(item.date || "").slice(0, 10) === selectedDate)
       .reduce((sum, item) => sum + (Number(item.activeKcal ?? item.activeCalories) || 0), 0);
+    if (containerId === "nutrition-day-balance") {
+      const goal = nutritionDailyGoal();
+      const remaining = goal - eaten;
+      const hasFood = (state.nutritionCalendarEntries || [])
+        .some((item) => String(item.date || "").slice(0, 10) === selectedDate);
+      const value = hasFood ? nutritionBudgetText(eaten) + ' ккал' : '—';
+      const note = !hasFood
+        ? 'Добавь еду, чтобы увидеть разницу'
+        : remaining >= 0
+          ? 'Осталось до дневного лимита · не сожжённые калории'
+          : 'Превышение дневного лимита · не расход энергии';
+      host.innerHTML =
+        '<div class="life-balance-card nutrition-budget">' +
+          '<span class="life-balance-symbol" aria-hidden="true">−</span>' +
+          '<div><div class="life-balance-label">Минус по питанию</div>' +
+          '<strong class="life-balance-value">' + value + '</strong>' +
+          '<div class="life-balance-note">' + note + '</div></div>' +
+        '</div>' +
+        '<div class="life-balance-card nutrition-target">' +
+          '<span class="life-balance-symbol" aria-hidden="true">🎯</span>' +
+          '<div><div class="life-balance-label">Дневная цель</div>' +
+          '<strong class="life-balance-value">' + Math.round(goal).toLocaleString("ru-RU") + ' ккал</strong>' +
+          '<div class="life-balance-note">Съедено сегодня: ' + Math.round(eaten).toLocaleString("ru-RU") + ' ккал</div></div>' +
+        '</div>';
+      continue;
+    }
     host.innerHTML =
       '<div class="life-balance-card burned">' +
         '<span class="life-balance-symbol" aria-hidden="true">🔥</span>' +
@@ -707,9 +746,7 @@ function renderCalendar(section) {
         <div class="calendar-subtitle">${
           section === "workouts" ? "Бег — бегущий значок · силовая тренировка — гиря" :
           section === "study" ? "Зелёный - карточки пройдены · красный - пропущен день после начала тренировок" :
-          nutritionInfo?.maxKcal
-            ? `До ${Math.round(nutritionInfo.maxKcal)} ккал - зелёный · выше лимита - красный`
-            : "Калории показываются по дням · лимит пока не задан"
+          `Минус — осталось от ${Math.round(nutritionInfo?.maxKcal || nutritionDailyGoal())} ккал · плюс — превышение`
         }</div>
       </div>
       <button type="button" class="calendar-nav next" aria-label="Следующий месяц">›</button>
@@ -740,12 +777,16 @@ function renderCalendar(section) {
     button.className = "calendar-day" + (status ? " " + status : "") + (dateIso === today ? " today" : "");
 
     if (section === "nutrition") {
+      const logged = nutritionInfo?.byDate?.has(dateIso) || false;
       const kcal = nutritionInfo?.byDate?.get(dateIso)?.kcal || 0;
+      const remaining = nutritionDailyGoal() - kcal;
       button.innerHTML = `
         <span class="calendar-day-number">${day}</span>
-        ${kcal > 0 ? `<span class="calendar-day-kcal">${Math.round(kcal)} ккал</span>` : ""}
+        ${logged ? `<span class="calendar-day-kcal nutrition-budget-number">${nutritionBudgetText(kcal)} ккал</span>` : ""}
       `;
-      button.title = kcal > 0 ? `${dateIso} · ${Math.round(kcal)} ккал` : dateIso;
+      button.title = logged
+        ? `${dateIso} · ${remaining >= 0 ? "осталось до цели" : "сверх цели"} ${Math.abs(Math.round(remaining))} ккал · съедено ${Math.round(kcal)} ккал`
+        : dateIso;
     } else if (section === "workouts") {
       const types = workoutIconsForDay.get(dateIso) || new Set();
       button.classList.add("workout-day");
@@ -876,7 +917,7 @@ function renderNutrition() {
   }, {kcal:0,protein:0,carbs:0,fat:0});
 
   $("nutrition-summary").innerHTML = `
-    <div><span>Ккал</span><strong>${Math.round(totals.kcal)}</strong></div>
+    <div><span>Съедено</span><strong>${Math.round(totals.kcal)}</strong></div>
     <div><span>Белки</span><strong>${totals.protein.toFixed(1)} г</strong></div>
     <div><span>Углеводы</span><strong>${totals.carbs.toFixed(1)} г</strong></div>
     <div><span>Жиры</span><strong>${totals.fat.toFixed(1)} г</strong></div>
