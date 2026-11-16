@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
@@ -169,7 +169,7 @@ const toneLabels: Record<'correct' | 'incorrect' | 'tip' | 'warning', string> = 
 };
 
 /** Rich teacher-only display for mathematical explanations; model text stays untrusted. */
-export function KolinRichText({ text }: { text: string }) {
+export const KolinRichText = memo(function KolinRichText({ text }: { text: string }) {
   return <div className="kolin-rich">
     {parseKolinBlocks(text).map((block, index) => {
       if (block.kind === 'heading') return <h4 key={index}>{inlineText(block.text)}</h4>;
@@ -187,4 +187,4 @@ export function KolinRichText({ text }: { text: string }) {
       return <div className="kolin-rich__paragraph" key={index}>{richContent(block.text)}</div>;
     })}
   </div>;
-}
+});
