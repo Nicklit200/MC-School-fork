@@ -35,14 +35,17 @@ public class KolinStudentHistoryContextService {
     private final StudentLessonHistoryService history;
     private final HomeworkRepository homework;
     private final PersonalLessonWorkbookRepository personalWorkbooks;
+    private final KolinLessonMemoryService memory;
 
     public KolinStudentHistoryContextService(KolinTaskRoster roster,StudentLessonHistoryService history,
                                              HomeworkRepository homework,
-                                             PersonalLessonWorkbookRepository personalWorkbooks) {
+                                             PersonalLessonWorkbookRepository personalWorkbooks,
+                                             KolinLessonMemoryService memory) {
         this.roster=roster;
         this.history=history;
         this.homework=homework;
         this.personalWorkbooks=personalWorkbooks;
+        this.memory=memory;
     }
 
     @Transactional(readOnly=true)
@@ -152,6 +155,11 @@ public class KolinStudentHistoryContextService {
             result.put("studentName",name);
             result.put("pastLessons",out);
             result.put("recentHomework",recent);
+            // The student's assigned teacher can also continue earlier Kolyn
+            // checks of this same pupil, without copying images or treating
+            // old answers as proof about today's handwriting.
+            try { result.put("priorKolynReviews",memory.priorPupilMemory(teacher,room.getId(),id)); }
+            catch(RuntimeException ex) { result.put("priorKolynReviewsState","unavailable"); }
             result.put("provenance","Past scheduled lesson entries, preparation notes and saved homework; not proof that all material was actually mastered.");
             result.put("groupCaution","A group transcript or lesson note may mention other pupils. Never attribute a group utterance or mistake to this particular student without direct evidence.");
             result.put("textOnly","A PDF excerpt comes from its text layer. It does not prove anything about handwriting or image-only worksheet pages.");
