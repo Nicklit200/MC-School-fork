@@ -170,7 +170,14 @@ public class KolinChatService {
                 ? tasks.reply(teacher,room,request,context,history,question,transcript.metadata(),board)
                 : new Reply("text",ai.kolinReply(mapper.writeValueAsString(context),history,question),transcript.metadata());
             if(memory!=null && request.clientMessageId()!=null) {
-                try { memory.remember(teacher,classId,request.clientMessageId(),question,answer.text()); }
+                try {
+                    UUID identified=board==null?null:board.studentId();
+                    if(identified==null && context.get("studentHistory") instanceof Map<?,?> prior
+                            && "available".equals(prior.get("state"))
+                            && prior.get("studentId") instanceof String resolvedId)
+                        identified=UUID.fromString(resolvedId);
+                    memory.remember(teacher,classId,request.clientMessageId(),question,answer.text(),identified);
+                }
                 catch(RuntimeException ex) {
                     LoggerFactory.getLogger(getClass()).warn("Kolyn memory write unavailable: classId={} kind={}",
                         classId,ex.getClass().getSimpleName());
