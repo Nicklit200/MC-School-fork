@@ -20,6 +20,7 @@ CREATE TABLE kolyn_review_page_checkpoints (
 CREATE TABLE kolyn_lesson_memory_turns (
   class_id UUID NOT NULL REFERENCES online_classes(id) ON DELETE CASCADE,
   teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  student_id UUID REFERENCES users(id) ON DELETE CASCADE,
   client_message_id UUID NOT NULL,
   question VARCHAR(4000) NOT NULL,
   reply_text VARCHAR(10000) NOT NULL,
@@ -30,3 +31,6 @@ CREATE INDEX idx_kolyn_memory_recent
   ON kolyn_lesson_memory_turns(class_id, teacher_id, created_at DESC);
 CREATE INDEX idx_kolyn_memory_expiry
   ON kolyn_lesson_memory_turns(created_at);
+CREATE INDEX idx_kolyn_memory_pupil_recent
+  ON kolyn_lesson_memory_turns(teacher_id, student_id, created_at DESC)
+  WHERE student_id IS NOT NULL;
