@@ -456,4 +456,64 @@ class KolinTaskServiceTest {
     private static KolinTaskService.Task task(String expression,String answer) {
         return new KolinTaskService.Task("expression","Вычислите",expression,answer,"",List.of());
     }
+
+    @Test void textProblemsProvideAnUnambiguousStudentStoryButKeepTheAnswerPrivate() throws Exception {
+        var task=new KolinTaskService.Task("word_problem",
+            "Lena kauft 3 Hefte. Ein Heft kostet 4 Euro. Wie viel bezahlt sie insgesamt?",
+            "3*4","12","",List.of());
+        var data=KolinTaskService.document(List.of(task));
+        var json=mapper.readTree(mapper.writeValueAsString(data));
+        var exercise=json.path("workbookPages").get(0).path("blocks").get(0);
+        assertThat(exercise.path("type").asString()).isEqualTo("exercise");
+        assertThat(exercise.path("description").asString()).contains("3 Hefte","4 Euro");
+        assertThat(exercise.path("writeLines").asInt()).isGreaterThanOrEqualTo(3);
+        assertThat(exercise.path("rows").size()).isZero();
+        assertThat(json.path("qa").path("algebra").get(0).path("expression").asString()).isEqualTo("3*4");
+        // Even with a model-proposed answer, nothing in the student document leaks it.
+        assertThat(json.path("workbookPages").toString()).doesNotContain("3*4","12","answer");
+    }
+
+    @Test void textProblemsRejectInventedOperandsOrLeakedAnswers() {
+        String story="Lena kauft 3 Hefte. Ein Heft kostet 4 Euro. Wie viel bezahlt sie?";
+        assertThatThrownBy(() -> KolinTaskService.document(List.of(
+            new KolinTaskService.Task("word_problem",story,"3*9",null,"",List.of()))))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("unseen operand");
+        assertThatThrownBy(() -> KolinTaskService.document(List.of(
+            new KolinTaskService.Task("word_problem",story+" Antwort: 12","3*4",null,"",List.of()))))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> KolinTaskService.document(List.of(
+            new KolinTaskService.Task("word_problem","Calculate 3*4", "3*4",null,"",List.of()))))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test void textProblemsCanUseCheckedPercentagesButNotUnprovidedNumbers() {
+        var story="Ein Fahrrad kostet 120 Euro. Es gibt 25 % Rabatt. Wie viel kostet es nach dem Rabatt?";
+        var task=new KolinTaskService.Task("word_problem",story,"120*(100-25)/100",null,"",List.of());
+        var json=mapper.readTree(mapper.writeValueAsString(KolinTaskService.document(List.of(task))));
+        assertThat(json.path("qa").path("algebra").get(0).path("expression").asString())
+            .isEqualTo("120*(100-25)/100");
+    }
+
+    @Test void explicitlyRequestedTextProblemsUseVerifiedRendererAndRemainPrivateDrafts() throws Exception {
+        reserve();
+        var story="Lena kauft 3 Hefte. Ein Heft kostet 4 Euro. Wie viel bezahlt sie?";
+        var task=new KolinTaskService.Task("word_problem",story,"3*4",null,"",List.of());
+        var generated=new KolinTaskService.Content("worksheet","Textaufgaben",pupil.getId().toString(),
+            List.of(task,task));
+        when(ai.kolinStructuredReply(anyString(),anyList(),anyString()))
+            .thenReturn(mapper.writeValueAsString(generated));
+        when(renderer.renderPlain(anyString())).thenReturn(
+            new OwnerWorkbookPdfRenderService.PlainWorksheet(new byte[]{1},new byte[]{2},1,
+                Map.of("results",List.of(Map.of("passed",true,"answer","12"),Map.of("passed",true,"answer","12")))));
+        send("Составь 2 текстовые задачи для Виталины");
+        verify(ai).kolinStructuredReply(anyString(),anyList(),eq("Составь 2 текстовые задачи для Виталины"));
+        verify(renderer).renderPlain(argThat(json->json.contains(story)&&json.contains("3*4")));
+        verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("worksheet"),
+            eq("Textaufgaben"),eq(metadata),eq(pupil.getId()),eq("Виталина"),eq(2),eq(1),
+            any(),any(),argThat(json->json.contains("word_problem")&&json.contains("\\\"answer\\\":\\\"12\\\"")));
+        verify(store,never()).append(any(),any(),any());
+    }
+
+
 }
