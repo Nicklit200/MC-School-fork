@@ -105,7 +105,7 @@ export class GestureController {
       // Stale touches from under the resting hand must not turn into a pinch
       // after pen-up. Deliberate navigation can start with fresh fingers.
       this.touches.clear();
-      if (this.state === 'draw' && this.drawPointer !== id) {
+      if (this.state === 'draw' && (this.drawPointer !== id || this.drawKind !== 'pen')) {
         intents.push({ type: 'stroke-cancel' });
         this.drawPointer = null;
         this.drawKind = null;
