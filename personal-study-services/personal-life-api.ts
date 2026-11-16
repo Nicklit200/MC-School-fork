@@ -1092,5 +1092,57 @@ import {createStudySessionStore, loadStudySessionCatalog} from './study-sessions
     return studySessionStore.save(owner,args);
   }));
 
+
+  // Body-weight history. Entries are visible and editable only to the signed-in primary owner.
+  let weightSchemaReady = false;
+  async function ensureWeightSchema() {
+    if (weightSchemaReady) return;
+    await sql`CREATE TABLE IF NOT EXISTS personal_weight_entries (
+      owner_hash TEXT NOT NULL,
+      entry_date DATE NOT NULL,
+      weight_kg NUMERIC(5,2) NOT NULL CHECK (weight_kg >= 25 AND weight_kg <= 350),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (owner_hash, entry_date)
+    )`;
+    weightSchemaReady = true;
+  }
+  async function seedWeightReading(owner) {
+    // First measurement supplied 16 Nov 2026. Preserve user edits.
+    await sql`INSERT INTO personal_weight_entries (owner_hash,entry_date,weight_kg)
+      VALUES (${owner},'2026-11-16'::date,88.50)
+      ON CONFLICT (owner_hash,entry_date) DO NOTHING`;
+  }
+  app.get("/api/weight", async c => {
+    const owner = await v2Owner(c);
+    if (!owner) return c.json({error:"Требуется вход в аккаунт «Мои навыки»"},401,{"Cache-Control":"no-store"});
+    await ensureWeightSchema();
+    await seedWeightReading(owner);
+    const rows = await sql`SELECT entry_date::text AS date, weight_kg::float AS "weightKg",
+      updated_at AS "updatedAt" FROM personal_weight_entries
+      WHERE owner_hash=${owner} ORDER BY entry_date ASC LIMIT 3650`;
+    return c.json(rows,200,{"Cache-Control":"no-store"});
+  });
+  app.post("/api/weight", async c => {
+    const owner = await v2Owner(c);
+    if (!owner) return c.json({error:"Требуется вход в аккаунт «Мои навыки»"},401,{"Cache-Control":"no-store"});
+    const body = await c.req.json().catch(() => null);
+    const date = dateOnly(body?.date);
+    const value = body?.weightKg;
+    const kg = value === "" || value === null || value === undefined ? NaN : Number(value);
+    const validDate = Boolean(date) && Number.isFinite(Date.parse(date+"T12:00:00Z")) &&
+      new Date(date+"T12:00:00Z").toISOString().slice(0,10) === date;
+    if (!validDate || date < "2020-01-01" || date > berlinDate() ||
+        !Number.isFinite(kg) || kg < 25 || kg > 350)
+      return c.json({error:"Укажи корректную дату и вес от 25 до 350 кг"},400,{"Cache-Control":"no-store"});
+    await ensureWeightSchema();
+    const rows = await sql`INSERT INTO personal_weight_entries(owner_hash,entry_date,weight_kg)
+      VALUES(${owner},${date}::date,${Math.round(kg*100)/100})
+      ON CONFLICT(owner_hash,entry_date) DO UPDATE
+        SET weight_kg=EXCLUDED.weight_kg,updated_at=NOW()
+      RETURNING entry_date::text AS date,weight_kg::float AS "weightKg",updated_at AS "updatedAt"`;
+    return c.json(rows[0],200,{"Cache-Control":"no-store"});
+  });
+
 export default app;
 
