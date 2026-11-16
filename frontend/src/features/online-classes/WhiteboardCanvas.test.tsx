@@ -113,6 +113,31 @@ function animationFrames() {
   };
 }
 
+describe('WhiteboardCanvas lost pointer capture', () => {
+  it('commits the visible pen stroke and accepts another after capture silently disappears', async () => {
+    const onCommit = vi.fn().mockResolvedValue(true);
+    const { container } = render(<WhiteboardCanvas {...props} onCommit={onCommit} />);
+    const surface = container.querySelector('.whiteboard__surface')!;
+    await act(async () => {
+      fireEvent.pointerDown(surface, { pointerId: 9, pointerType: 'pen', clientX: 150, clientY: 130 });
+      fireEvent.pointerMove(surface, { pointerId: 9, pointerType: 'pen', clientX: 180, clientY: 160 });
+      fireEvent(surface, new TestPointerEvent('lostpointercapture', {
+        pointerId: 9, pointerType: 'pen', bubbles: true,
+      }));
+    });
+    expect(onCommit).toHaveBeenCalledOnce();
+    // The browser may send its normal release after capture loss; no double save.
+    fireEvent.pointerUp(surface, { pointerId: 9, pointerType: 'pen' });
+    expect(onCommit).toHaveBeenCalledOnce();
+    await act(async () => {
+      fireEvent.pointerDown(surface, { pointerId: 9, pointerType: 'pen', clientX: 230, clientY: 180 });
+      fireEvent.pointerUp(surface, { pointerId: 9, pointerType: 'pen', clientX: 260, clientY: 210 });
+    });
+    expect(onCommit).toHaveBeenCalledTimes(2);
+    expect(onCommit.mock.calls[0][1]).not.toBe(onCommit.mock.calls[1][1]);
+  });
+});
+
 describe('WhiteboardCanvas wheel navigation', () => {
   it.each([1, 2])('scrolls plain trackpad movement once without changing zoom at scale %s', zoom => {
     const frames = animationFrames(), onDocumentGesture = vi.fn(), onScrollGesture = vi.fn();
