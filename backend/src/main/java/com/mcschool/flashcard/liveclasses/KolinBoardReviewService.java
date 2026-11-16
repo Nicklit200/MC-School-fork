@@ -145,7 +145,7 @@ public class KolinBoardReviewService {
         if(name.equals(word)) return true;
         String stem=name.replaceFirst("(?:iya|ia|ya|a)$","");
         return stem.length()>=3 && word.startsWith(stem)
-                && Set.of("a","y","e","u","i","ia","ya","yi","ii","iyu","yu","s","as","yas","ias").contains(word.substring(stem.length()));
+                && Set.of("a","y","e","u","i","ia","ya","yi","ii","iyu","yu","oi","oy","ei","ey","s","as","yas","ias").contains(word.substring(stem.length()));
     }
     static String normalize(String text) {
         String value=Normalizer.normalize(text.toLowerCase(Locale.ROOT).replace('ё','е'),Normalizer.Form.NFD).replaceAll("\\p{M}","");
