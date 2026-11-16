@@ -33,6 +33,33 @@ describe('stylus mode', () => {
     expect(types(ctx.controller.up(1))).toEqual(['stroke-end']);
   });
 
+  it('recovers Pencil drawing when Safari reuses an old pointerId after losing pointerup', () => {
+    expect(types(ctx.controller.down(1, 'pen', { x: 10, y: 10 }))).toEqual(['stroke-start']);
+    expect(types(ctx.controller.move(1, { x: 20, y: 20 }))).toEqual(['stroke-move']);
+    // Lost pointerup, then a fresh contact that reuses id 1.
+    const fresh = ctx.controller.down(1, 'pen', { x: 90, y: 90 });
+    expect(types(fresh)).toEqual(['stroke-end', 'stroke-start']);
+    expect(ctx.controller.isDrawing).toBe(true);
+    expect(types(ctx.controller.move(1, { x: 95, y: 100 }))).toEqual(['stroke-move']);
+    expect(types(ctx.controller.up(1))).toEqual(['stroke-end']);
+    expect(ctx.controller.isDrawing).toBe(false);
+  });
+
+  it('finishes a stale stroke if the stylus reconnects with a different pointerId', () => {
+    ctx.controller.down(3, 'pen', { x: 10, y: 10 });
+    expect(types(ctx.controller.down(4, 'pen', { x: 60, y: 60 }))).toEqual(['stroke-end', 'stroke-start']);
+    expect(types(ctx.controller.move(3, { x: 20, y: 20 }))).toEqual([]);
+    expect(types(ctx.controller.up(4))).toEqual(['stroke-end']);
+  });
+
+  it('ignores palm contacts without interpreting them as a new pen press', () => {
+    ctx.controller.down(1, 'pen', { x: 10, y: 10 });
+    expect(ctx.controller.down(2, 'touch', { x: 300, y: 300 }, true)).toEqual([]);
+    expect(ctx.controller.isDrawing).toBe(true);
+    expect(types(ctx.controller.move(1, { x: 20, y: 20 }))).toEqual(['stroke-move']);
+  });
+
+
   it('ignores accidental hand contacts just after the pencil lifts', () => {
     ctx.controller.down(1, 'pen', { x: 10, y: 10 });
     ctx.controller.up(1);
