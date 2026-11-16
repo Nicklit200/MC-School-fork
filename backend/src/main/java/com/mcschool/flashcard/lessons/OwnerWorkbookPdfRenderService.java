@@ -202,7 +202,15 @@ public class OwnerWorkbookPdfRenderService {
             @SuppressWarnings("unchecked")
             Map<String, Object> document = mapper.readValue(lessonJson, Map.class);
             validateDocument(document);
-            Path runtime = runtimeDirectory();
+            validateStudioDiagrams(document);
+            Path runtime;
+            try {
+                runtime = runtimeDirectory();
+            } catch (IllegalStateException ex) {
+                LOG.error("Workbook Studio PDF runtime unavailable", ex);
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "PDF-генератор недоступен. Проверьте MathJax и зависимости сервера.");
+            }
             Path workspace = Files.createTempDirectory("mindcrafti-workbook-studio-");
             try {
                 String basename = "Mindcrafti_Studio";
@@ -218,8 +226,13 @@ public class OwnerWorkbookPdfRenderService {
                         "--layout=" + layoutFile);
                 process.directory(runtime.toFile());
                 process.redirectErrorStream(true);
-                process.redirectOutput(workspace.resolve("renderer.log").toFile());
-                runPlainProcess(process);
+                Path rendererLog = workspace.resolve("renderer.log");
+                process.redirectOutput(rendererLog.toFile());
+                try {
+                    runPlainProcess(process);
+                } catch (IOException | RuntimeException ex) {
+                    throw studioRenderFailure(rendererLog, ex);
+                }
                 Path studentPath = output.resolve(basename + "_Arbeitsheft_" + minutes + "min.pdf");
                 Path teacherPath = output.resolve(basename + "_Lehrerloesungen_" + minutes + "min.pdf");
                 if (Files.size(studentPath) > MAX_DOCUMENT_BYTES || Files.size(teacherPath) > MAX_DOCUMENT_BYTES)
@@ -249,6 +262,64 @@ public class OwnerWorkbookPdfRenderService {
             }
         } finally {
             renderSlots.release();
+        }
+    }
+
+    /** Classify failures without exposing private workbook contents in HTTP responses. */
+    static ResponseStatusException studioRenderFailure(Path logPath, Exception cause) {
+        String log = "";
+        try {
+            if (Files.isRegularFile(logPath)) {
+                String raw = Files.readString(logPath, StandardCharsets.UTF_8);
+                log = raw.substring(Math.max(0, raw.length() - 6000));
+            }
+        } catch (IOException ex) {
+            LOG.warn("Workbook Studio diagnostic file unavailable", ex);
+        }
+        String incident = java.util.UUID.randomUUID().toString().substring(0, 8);
+        LOG.error("Workbook Studio PDF incident={} rendererLog={}", incident,
+                log.isBlank() ? "(empty)" : log, cause);
+        String signal = (log + " " + cause.getMessage()).toLowerCase(Locale.ROOT);
+        String hint;
+        if (signal.contains("graph requires 1-3 function series")) {
+            hint = "График graph требует от 1 до 3 функций. Для пустой сетки используйте coordinateGrid.";
+        } else if (signal.contains("invalid latex") || signal.contains("mathjax")
+                || signal.contains("tex command") || signal.contains("math must be prepared")) {
+            hint = "Ошибка математической формулы. Проверьте math.latex.";
+        } else if (signal.contains("overflow a4") || signal.contains("overlaps footer")
+                || signal.contains("fragmented page") || signal.contains("page packing")) {
+            hint = "Содержимое не помещается на A4. Разделите задания на две страницы.";
+        } else if (signal.contains("algebra qa did not pass") || signal.contains("incorrect math")) {
+            hint = "Математическая проверка не пройдена. Проверьте ответы.";
+        } else if (signal.contains("weasyprint") || signal.contains("render_pdf.py")
+                || signal.contains("pdf failed")) {
+            hint = "Ошибка движка PDF. Проверьте WeasyPrint и системные библиотеки.";
+        } else {
+            hint = "PDF не сформирован. Подробная причина записана в журнале сервера.";
+        }
+        return new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                hint + " Код диагностики: " + incident);
+    }
+
+    /** Fast and non-mutating validation before launching the PDF subprocess. */
+    static void validateStudioDiagrams(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            if ("graph".equals(map.get("type"))) {
+                Object series = map.get("series");
+                if (!(series instanceof List<?> list) || list.isEmpty() || list.size() > 3)
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "graph должен содержать 1–3 функции. Для пустой сетки используйте coordinateGrid.");
+            }
+            if ("coordinateGrid".equals(map.get("type")) && map.get("series") instanceof List<?> list && !list.isEmpty())
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "coordinateGrid не должен содержать функций.");
+            for (Object child : map.values()) {
+                if (child instanceof List<?> || child instanceof Map<?, ?>) validateStudioDiagrams(child);
+            }
+        } else if (value instanceof List<?> list) {
+            for (Object child : list) {
+                if (child instanceof List<?> || child instanceof Map<?, ?>) validateStudioDiagrams(child);
+            }
         }
     }
 
