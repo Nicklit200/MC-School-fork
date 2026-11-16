@@ -49,6 +49,7 @@ export class GestureController {
   private state: State = 'idle';
   private readonly touches = new Map<number, Point>();
   private drawPointer: number | null = null;
+  private drawKind: PointerKind | null = null;
   private penDown: number | null = null;
   /** A resting hand may still fire touch events immediately after pen-up. */
   private lastPenRelease = Number.NEGATIVE_INFINITY;
@@ -81,10 +82,12 @@ export class GestureController {
     // press is silently ignored because the controller remains in 'draw'.
     // Preserve the previous visible geometry as a completed stroke.
     if (this.state === 'draw' && this.drawPointer !== null &&
-        (kind === 'pen' || kind === 'mouse')) {
+        (kind === 'pen' || kind === 'mouse') &&
+        (this.drawKind === 'pen' || this.drawKind === 'mouse')) {
       intents.push({ type: 'stroke-end' });
       this.state = 'idle';
       this.drawPointer = null;
+      this.drawKind = null;
       if (this.penDown !== null) {
         this.penDown = null;
         this.lastPenRelease = this.now();
@@ -105,6 +108,7 @@ export class GestureController {
       if (this.state === 'draw' && this.drawPointer !== id) {
         intents.push({ type: 'stroke-cancel' });
         this.drawPointer = null;
+        this.drawKind = null;
         this.state = 'idle';
       }
       // A pen always pre-empts any pan/pinch made by fingers.
@@ -122,6 +126,7 @@ export class GestureController {
       intents.push({ type: 'stroke-cancel' });
       this.state = 'idle';
       this.drawPointer = null;
+      this.drawKind = null;
     }
 
     const action = actionFor(kind, this.deps.mode(), count);
@@ -130,6 +135,7 @@ export class GestureController {
       if (this.state === 'idle') {
         this.state = 'draw';
         this.drawPointer = id;
+        this.drawKind = kind;
         intents.push({ type: 'stroke-start', point: position, pointerKind: kind, pressure });
       }
       return intents;
@@ -203,6 +209,7 @@ export class GestureController {
       intents.push({ type: cancelled ? 'stroke-cancel' : 'stroke-end' });
       this.state = 'idle';
       this.drawPointer = null;
+      this.drawKind = null;
     } else if (this.state === 'pinch') {
       if (this.touches.size >= 2) {
         this.beginNavigation();
@@ -224,6 +231,7 @@ export class GestureController {
     this.state = 'idle';
     this.touches.clear();
     this.drawPointer = null;
+    this.drawKind = null;
     this.penDown = null;
     this.lastPenRelease = Number.NEGATIVE_INFINITY;
     this.anchors = null;
