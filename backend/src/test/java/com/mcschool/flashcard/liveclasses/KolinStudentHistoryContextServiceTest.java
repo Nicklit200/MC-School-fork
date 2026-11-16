@@ -23,8 +23,9 @@ class KolinStudentHistoryContextServiceTest {
     private final StudentLessonHistoryService history=mock(StudentLessonHistoryService.class);
     private final HomeworkRepository homework=mock(HomeworkRepository.class);
     private final PersonalLessonWorkbookRepository personalWorkbooks=mock(PersonalLessonWorkbookRepository.class);
+    private final KolinLessonMemoryService memory=mock(KolinLessonMemoryService.class);
     private final KolinStudentHistoryContextService service=
-        new KolinStudentHistoryContextService(roster,history,homework,personalWorkbooks);
+        new KolinStudentHistoryContextService(roster,history,homework,personalWorkbooks,memory);
     private final User teacher=User.activeTeacher("Teacher","teacher@test.local","teacher","hash");
     private final User vitalina=User.managedStudent("Виталина",teacher);
     private final User melissa=User.managedStudent("Мелисса",teacher);
