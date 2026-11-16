@@ -7,6 +7,7 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.lessons.StudentLessonHistoryService;
+import com.mcschool.flashcard.lessons.PersonalLessonWorkbookRepository;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDetail;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryItem;
 import com.mcschool.flashcard.users.Role;
@@ -21,8 +22,9 @@ class KolinStudentHistoryContextServiceTest {
     private final KolinTaskRoster roster=mock(KolinTaskRoster.class);
     private final StudentLessonHistoryService history=mock(StudentLessonHistoryService.class);
     private final HomeworkRepository homework=mock(HomeworkRepository.class);
+    private final PersonalLessonWorkbookRepository personalWorkbooks=mock(PersonalLessonWorkbookRepository.class);
     private final KolinStudentHistoryContextService service=
-        new KolinStudentHistoryContextService(roster,history,homework);
+        new KolinStudentHistoryContextService(roster,history,homework,personalWorkbooks);
     private final User teacher=User.activeTeacher("Teacher","teacher@test.local","teacher","hash");
     private final User vitalina=User.managedStudent("Виталина",teacher);
     private final User melissa=User.managedStudent("Мелисса",teacher);
