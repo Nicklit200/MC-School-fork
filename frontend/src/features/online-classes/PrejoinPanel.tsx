@@ -22,7 +22,7 @@ export function PrejoinPanel({
   onJoin: (choice: PrejoinChoice) => void;
   joinDisabled?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [state, setState] = useState<PrejoinState>('checking');
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
@@ -43,7 +43,7 @@ export function PrejoinPanel({
     streamRef.current = null;
   }, []);
 
-  const startPreview = useCallback(async (mode: 'all' | 'audio' = 'all') => {
+  const startPreview = useCallback(async (mode: 'all' | 'audio' = 'all', preferredMicrophoneId?: string | null) => {
     const attempt = ++attemptRef.current;
     const media = navigator.mediaDevices;
     if (!media?.getUserMedia) {
@@ -58,9 +58,19 @@ export function PrejoinPanel({
     stopStream();
 
     try {
-      const stream = await media.getUserMedia(
-        mode === 'audio' ? { video: false, audio: true } : { video: true, audio: true },
-      );
+      const audio: boolean | MediaTrackConstraints = preferredMicrophoneId
+        ? { deviceId: { ideal: preferredMicrophoneId } } : true;
+      let stream: MediaStream;
+      try {
+        stream = await media.getUserMedia(
+          mode === 'audio' ? { video: false, audio } : { video: true, audio },
+        );
+      } catch (error) {
+        if (mode === 'audio') throw error;
+        // A blocked/busy camera must not prevent a pupil from publishing audio.
+        // Recheck microphone permission independently before offering device-free entry.
+        stream = await media.getUserMedia({ video: false, audio });
+      }
       if (attempt !== attemptRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -81,14 +91,21 @@ export function PrejoinPanel({
 
       const cameras = devices.filter((device) => device.kind === 'videoinput');
       const microphones = devices.filter((device) => device.kind === 'audioinput');
-      const hasCamera = stream.getVideoTracks().length > 0;
-      const hasMicrophone = stream.getAudioTracks().length > 0;
+      const hasCamera = stream.getVideoTracks().some((track) => track.readyState !== 'ended');
+      const liveMicrophone = stream.getAudioTracks().find((track) => track.readyState !== 'ended');
+      const hasMicrophone = Boolean(liveMicrophone);
+      // Use the device actually verified by the browser. Previously we used
+      // microphones[0], potentially switching to a different mic in LiveKit.
+      const capturedMicrophoneId = liveMicrophone?.getSettings?.().deviceId;
       setVideoDevices(cameras);
       setAudioDevices(microphones);
       setVideoDeviceId((current) => cameras.some((device) => device.deviceId === current)
         ? current : cameras[0]?.deviceId ?? null);
-      setAudioDeviceId((current) => microphones.some((device) => device.deviceId === current)
-        ? current : microphones[0]?.deviceId ?? null);
+      setAudioDeviceId((current) => capturedMicrophoneId
+        && microphones.some((device) => device.deviceId === capturedMicrophoneId)
+        ? capturedMicrophoneId
+        : microphones.some((device) => device.deviceId === current)
+          ? current : microphones[0]?.deviceId ?? null);
       setCameraEnabled(hasCamera);
       setMicrophoneEnabled(hasMicrophone);
       setState(hasCamera || hasMicrophone ? 'ready' : 'noDevices');
@@ -206,6 +223,16 @@ export function PrejoinPanel({
                 </label>
               )}
 
+              {state === 'ready' && !streamRef.current?.getAudioTracks().some((track) => track.readyState !== 'ended') && (
+                <p role="alert" className="prejoin__error">
+                  {language === 'DE' ? 'Das Mikrofon ist nicht verfügbar. Prüfen Sie es erneut, bevor Sie beitreten.'
+                    : 'Микрофон недоступен. Проверьте его перед входом в урок.'}
+                </p>
+              )}
+              <button type="button" className="prejoin__retry"
+                onClick={() => void startPreview('all', audioDeviceId)}>
+                {language === 'DE' ? 'Mikrofon erneut prüfen' : 'Проверить микрофон снова'}
+              </button>
               {streamRef.current?.getVideoTracks().length ? (
                 <label className="prejoin__toggle">
                   <input type="checkbox" checked={cameraEnabled}
