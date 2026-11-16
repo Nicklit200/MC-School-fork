@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class KolinStudentHistoryContextService {
     private static final Pattern HISTORY = Pattern.compile(
-        "(?iu)(прошл|раньше|раннее|до этого|ранее|предыдущ|другие занят|другие урок|домаш|задани|тетрад|проходил|проходили|ошиб|помни|вчера|last lesson|previous|history|homework|was haben|früher|letzte stunde|aufgaben)");
+        "(?iu)(прошл|последн|раньше|раннее|до этого|ранее|предыдущ|другие занят|другие урок|домаш|задани|тетрад|проходил|проходили|ошиб|помни|вчера|last lesson|previous|history|homework|was haben|früher|letzte stunde|aufgaben)");
     private final KolinTaskRoster roster;
     private final StudentLessonHistoryService history;
     private final HomeworkRepository homework;
