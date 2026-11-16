@@ -908,86 +908,159 @@ function weightEntriesForPeriod() {
   const start = firstDate.toISOString().slice(0, 10);
   return entries.filter(row => row.date >= start);
 }
+function weightSignedChange(delta) {
+  if (!Number.isFinite(delta)) return "—";
+  return (delta < 0 ? "−" : delta > 0 ? "+" : "") + weightKgText(Math.abs(delta));
+}
+function weightLongDate(dateIso) {
+  return new Date(dateIso + "T12:00:00").toLocaleDateString("ru-RU", {day:"numeric",month:"long",year:"numeric"});
+}
 function renderWeightChart() {
   const host = $("weight-chart");
   if (!host) return;
   const entries = weightEntriesForPeriod();
   if (!entries.length) {
-    host.innerHTML = '<div class="weight-chart-empty">Пока нет измерений за выбранный период. Введи вес ниже, чтобы начать график.</div>';
+    host.setAttribute("aria-label", "За выбранный период нет измерений веса");
+    host.innerHTML = '<div class="weight-chart-empty">За этот период пока нет измерений. Выбери другой период или запиши новый вес ниже.</div>';
     return;
   }
 
-  const W=960, H=245, left=65, right=26, top=22, bottom=42;
-  const chartWidth=W-left-right, chartHeight=H-top-bottom;
-  const weights=entries.map(row => row.weightKg);
-  const min=Math.min(...weights), max=Math.max(...weights);
-  let yMin=Math.floor((min-0.9)*2)/2;
-  let yMax=Math.ceil((max+0.9)*2)/2;
-  if(yMax-yMin<2) {yMin=min-1;yMax=max+1;}
-  const lastDayMs=weightDateMs(todayIso());
-  const firstDayMs=state.weightPeriod==="all"
-    ? Math.min(weightDateMs(entries[0].date),lastDayMs-6*86400000)
-    : lastDayMs-(Number(state.weightPeriod)-1)*86400000;
-  const xMax=Math.max(lastDayMs,firstDayMs+86400000);
-  const xFor=iso => left+Math.max(0,Math.min(1,(weightDateMs(iso)-firstDayMs)/(xMax-firstDayMs)))*chartWidth;
-  const yFor=value => top+(yMax-value)/(yMax-yMin)*chartHeight;
-  const coords=entries.map(row=>({x:xFor(row.date),y:yFor(row.weightKg),row}));
-  const points=coords.map(point=>point.x.toFixed(1)+","+point.y.toFixed(1)).join(" ");
-  const areaPath="M"+left+","+(H-bottom)+" L"+coords.map(point=>point.x.toFixed(1)+","+point.y.toFixed(1)).join(" L")+" L"+coords[coords.length-1].x.toFixed(1)+","+(H-bottom)+" Z";
-  const grid=Array.from({length:5},(_,i)=>{
-    const value=yMax-(yMax-yMin)*i/4;
-    const y=yFor(value);
-    return '<line x1="'+left+'" x2="'+(W-right)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="#e7eef7" stroke-width="1"/>'+
-      '<text x="'+(left-10)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end" fill="#8a9aaf" font-size="12">'+value.toFixed(1).replace(".",",")+'</text>';
+  if (entries.length === 1) {
+    // A single point is not a trend. Avoid the misleading filled triangle produced by the old graph.
+    const entry = entries[0];
+    host.setAttribute("aria-label", "Одно измерение: " + weightLongDate(entry.date) + ", " + weightKgText(entry.weightKg));
+    host.innerHTML = '<div class="weight-first-reading">' +
+      '<div class="weight-first-header">' +
+        '<span class="weight-first-tag"><span aria-hidden="true">●</span> Первое измерение</span>' +
+        '<span class="weight-first-date">' + escapeHtml(weightLongDate(entry.date)) + '</span>' +
+      '</div>' +
+      '<div class="weight-first-center"><span class="weight-first-mark" aria-hidden="true"></span>' +
+        '<strong class="weight-first-value">' + escapeHtml(weightKgText(entry.weightKg)) + '</strong></div>' +
+      '<p class="weight-first-hint">Добавь ещё один вес, чтобы увидеть реальную динамику</p>' +
+      '<p class="weight-first-note">Пока есть одна точка, снижение или рост вычислить нельзя</p>' +
+      '</div>';
+    return;
+  }
+
+  // Size the SVG to its rendered container. Fixed-width viewBoxes stretched
+  // the old graph and made numbers distorted on desktop/mobile.
+  const width = Math.max(300, Math.round(host.clientWidth || 860));
+  const height = width < 540 ? 224 : 286;
+  const left = width < 540 ? 44 : 56;
+  const right = width < 540 ? 17 : 26;
+  const top = 25, bottom = 38;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const values = entries.map(item => item.weightKg);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = Math.max(1.6, max-min+1.4);
+  const center = (min+max)/2;
+  const yMin = center-range/2;
+  const yMax = center+range/2;
+
+  const dayMs = 86400000;
+  const todayMs = weightDateMs(todayIso());
+  const firstMs = weightDateMs(entries[0].date);
+  const lastMs = weightDateMs(entries[entries.length-1].date);
+  const startMs = state.weightPeriod === "all"
+    ? firstMs-dayMs
+    : todayMs-(Number(state.weightPeriod)-1)*dayMs;
+  const endMs = state.weightPeriod === "all"
+    ? Math.max(todayMs, lastMs+dayMs, startMs+2*dayMs)
+    : Math.max(todayMs, startMs+dayMs);
+  const x = date => left+plotWidth*(weightDateMs(date)-startMs)/(endMs-startMs);
+  const y = value => top+plotHeight*(yMax-value)/(yMax-yMin);
+  const pts = entries.map(item => ({row:item,x:x(item.date),y:y(item.weightKg)}));
+  const linePath = "M " + pts.map(point => point.x.toFixed(2) + " " + point.y.toFixed(2)).join(" L ");
+  const base = (height-bottom).toFixed(2);
+  const areaPath = linePath + " L " + pts[pts.length-1].x.toFixed(2) + " " + base +
+    " L " + pts[0].x.toFixed(2) + " " + base + " Z";
+  const grid = Array.from({length:5}, (_,i) => {
+    const val=yMax-(yMax-yMin)*i/4;
+    const py=(top+i*plotHeight/4).toFixed(1);
+    return '<line x1="'+left+'" y1="'+py+'" x2="'+(width-right)+'" y2="'+py+'" stroke="#e8eef7" stroke-width="1"/>' +
+      '<text x="'+(left-11)+'" y="'+(Number(py)+4)+'" text-anchor="end" font-size="11" font-weight="600" fill="#91a0b5">' +
+      val.toFixed(1).replace(".",",") + '</text>';
   }).join("");
-  const dots=coords.map(point=>{
-    const title=escapeHtml(weightDateLabel(point.row.date)+" · "+weightKgText(point.row.weightKg));
-    return '<circle cx="'+point.x.toFixed(1)+'" cy="'+point.y.toFixed(1)+'" r="5.5" fill="#2f6fed" stroke="white" stroke-width="2.5"><title>'+title+'</title></circle>';
+  const dots = pts.map((point,index) => {
+    const title=escapeHtml(weightLongDate(point.row.date)+" · "+weightKgText(point.row.weightKg));
+    return '<circle cx="'+point.x.toFixed(2)+'" cy="'+point.y.toFixed(2)+'" r="'+(index===pts.length-1?5.6:4.6)+'" fill="#327be0" stroke="#fff" stroke-width="2.5">'+
+      '<title>'+title+'</title></circle>';
   }).join("");
-  const last=coords[coords.length-1];
-  const firstLabel=new Date(firstDayMs).toISOString().slice(0,10);
-  host.setAttribute("aria-label", "График веса: "+entries.map(row => row.date+" "+weightKgText(row.weightKg)).join("; "));
-  host.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'+
-    '<defs><linearGradient id="weight-area-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#6ea1f2" stop-opacity=".24"/><stop offset="100%" stop-color="#dceaff" stop-opacity=".02"/></linearGradient></defs>'+
+  const leftDate = state.weightPeriod === "all"
+    ? entries[0].date : new Date(startMs).toISOString().slice(0,10);
+  const rightDate = new Date(endMs).toISOString().slice(0,10);
+  const last=pts[pts.length-1];
+  const lastTitle=escapeHtml(weightKgText(last.row.weightKg));
+  const labelX=Math.min(width-right-35,Math.max(left+35,last.x));
+  const labelY=Math.max(15, Math.min(height-bottom-10,last.y-14));
+
+  host.setAttribute("aria-label", "История веса: "+entries.map(item=>item.date+" "+weightKgText(item.weightKg)).join("; "));
+  host.innerHTML = '<svg viewBox="0 0 '+width+' '+height+'" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
+    '<defs><linearGradient id="weight-chart-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5d9bf2" stop-opacity=".21"/><stop offset="100%" stop-color="#9bbef5" stop-opacity=".015"/></linearGradient></defs>'+
     grid+
-    '<path d="'+areaPath+'" fill="url(#weight-area-fill)"/>'+
-    (coords.length>1?'<polyline fill="none" stroke="#2f6fed" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="'+points+'"/>':'')+
+    '<path d="'+areaPath+'" fill="url(#weight-chart-fill)" />'+
+    '<path d="'+linePath+'" stroke="#347ee0" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'+
     dots+
-    '<text x="'+left+'" y="'+(H-13)+'" fill="#8192a8" font-size="12">'+escapeHtml(weightDateLabel(firstLabel))+'</text>'+
-    '<text x="'+(W-right)+'" y="'+(H-13)+'" text-anchor="end" fill="#8192a8" font-size="12">'+escapeHtml(weightDateLabel(todayIso()))+'</text>'+
-    '<text x="'+Math.max(left+45,Math.min(W-right-45,last.x))+'" y="'+Math.max(14,last.y-11)+'" text-anchor="middle" fill="#2d66b1" font-size="13" font-weight="800">'+escapeHtml(weightKgText(last.row.weightKg))+'</text>'+
+    '<text x="'+left+'" y="'+(height-14)+'" font-size="11" fill="#91a0b5">'+escapeHtml(weightDateLabel(leftDate))+'</text>'+
+    '<text x="'+(width-right)+'" y="'+(height-14)+'" text-anchor="end" font-size="11" fill="#91a0b5">'+escapeHtml(weightDateLabel(rightDate))+'</text>'+
+    '<text x="'+labelX+'" y="'+labelY+'" text-anchor="middle" fill="#286abf" font-size="12" font-weight="850">'+lastTitle+'</text>'+
     '</svg>';
 }
 function renderWeight() {
-  const latest=(state.weightEntries||[]).at(-1);
+  const all=state.weightEntries || [];
+  const first=all[0];
+  const latest=all.at(-1);
   $("weight-latest").textContent=latest ? weightKgText(latest.weightKg) : "—";
+  $("weight-latest-date").textContent=latest ? "На "+fmtDate(latest.date) : "Нет измерений";
+
+  const goal=$("weight-to-target");
+  const deltaMetric=document.querySelector(".weight-metric-delta");
+  deltaMetric?.classList.remove("negative","positive");
   if (latest) {
-    const remain=latest.weightKg-WEIGHT_TARGET_KG;
-    $("weight-progress").textContent=remain>0
-      ? "До цели 80 кг осталось "+weightKgText(remain)
-      : remain<0 ? "Ниже выбранной цели на "+weightKgText(-remain)
+    const toGoal=latest.weightKg-WEIGHT_TARGET_KG;
+    goal.textContent=toGoal>0 ? weightKgText(toGoal) : toGoal===0 ? "0 кг" : "0 кг";
+    $("weight-progress").textContent=toGoal>0
+      ? "До цели 80 кг осталось " + weightKgText(toGoal)
       : "Цель 80 кг достигнута";
   } else {
-    $("weight-progress").textContent="Добавь измерение, чтобы начать отслеживать динамику";
+    goal.textContent="—";
+    $("weight-progress").textContent="Добавь первое измерение, чтобы начать отслеживать вес";
   }
+  if (first && latest && all.length>=2) {
+    const totalDelta=latest.weightKg-first.weightKg;
+    $("weight-total-change").textContent=weightSignedChange(totalDelta);
+    $("weight-total-change-label").textContent="С "+fmtDate(first.date);
+    deltaMetric?.classList.add(totalDelta<0?"negative":totalDelta>0?"positive":"neutral");
+  } else {
+    $("weight-total-change").textContent="—";
+    $("weight-total-change-label").textContent="Нужно 2 измерения";
+  }
+
   const filtered=weightEntriesForPeriod();
+  const plural=(n)=>n===1?"измерение":n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?"измерения":"измерений";
+  $("weight-chart-count").textContent=filtered.length+" "+plural(filtered.length)+" за период";
+  $("weight-chart-subtitle").textContent=filtered.length>=2
+    ? "Изменения веса на основе сохранённых записей"
+    : "График динамики появится после второго измерения";
   const change=$("weight-change");
   if (filtered.length>=2) {
     const delta=filtered.at(-1).weightKg-filtered[0].weightKg;
-    change.textContent=(delta>0?"+":delta<0?"−":"")+weightKgText(Math.abs(delta))+" за период";
+    change.textContent=weightSignedChange(delta)+" за выбранный период";
     change.className="weight-change "+(delta<0?"down":delta>0?"up":"");
   } else {
-    change.textContent=filtered.length ? "Первое измерение" : "Нет данных за период";
+    change.textContent=filtered.length ? "Ожидаем следующую запись" : "Нет данных за период";
     change.className="weight-change";
   }
-  document.querySelectorAll("[data-weight-period]").forEach(button=>
+  document.querySelectorAll("[data-weight-period]").forEach(button =>
     button.setAttribute("aria-pressed", String(button.dataset.weightPeriod===state.weightPeriod))
   );
   const chosen=$("weight-date")?.value;
-  const row=(state.weightEntries||[]).find(entry=>entry.date===chosen);
+  const row=all.find(entry=>entry.date===chosen);
   if($("weight-kg")) $("weight-kg").value=row ? String(row.weightKg) : "";
   renderWeightChart();
 }
+
 async function loadWeight() {
   const token=readStudySessionAccount();
   if (!token) {
@@ -2407,6 +2480,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.addEventListener("resize", applyTransform);
+window.addEventListener("resize", () => { if(state.section === "nutrition") renderWeightChart(); });
 
 
 async function handleOAuthApproval(){
