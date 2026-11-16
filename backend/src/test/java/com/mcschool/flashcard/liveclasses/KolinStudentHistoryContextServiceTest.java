@@ -51,11 +51,16 @@ class KolinStudentHistoryContextServiceTest {
         when(history.listForTeacherAssistant(host,vitalina.getId())).thenReturn(List.of(item));
         when(history.detail(host,vitalina.getId(),previousTeacher,"past-001")).thenReturn(detail);
         when(homework.recentKolinHomework(vitalina.getId(),7)).thenReturn(List.of());
+        when(memory.priorPupilMemory(host,room.getId(),vitalina.getId())).thenReturn(
+            List.of(Map.of("at","2026-11-09T17:00:00Z",
+                "question","Проверь дроби",
+                "priorAnswerExcerpt","В прошлой работе было неправильное сокращение.")));
         var result=service.read(host,room,"Что мы проходили с Виталиной на прошлом уроке?",
             new KolinChatService.Context("student",melissa.getId(),1));
         assertThat(result.get("state")).isEqualTo("available");
         assertThat(result.get("studentId")).isEqualTo(vitalina.getId().toString());
-        assertThat(result.toString()).contains("Bruchrechnen","Beim Kürzen","2026-11-09");
+        assertThat(result.toString()).contains("Bruchrechnen","Beim Kürzen","2026-11-09",
+            "неправильное сокращение");
         verify(history).list(host,vitalina.getId());
         verify(history,never()).list(host,melissa.getId());
     }
