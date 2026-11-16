@@ -38,6 +38,12 @@ public class KolinLessonContextService {
     static final int MAX_SELECTED_PAGES = 7;
     private static final int MAX_CACHE_ENTRIES = 48;
     private static final Pattern TOKEN = Pattern.compile("[\\p{L}\\p{N}]{3,}", Pattern.UNICODE_CHARACTER_CLASS);
+    // Asking about newly appended material means the most recent PDF pages,
+    // not the page the teacher happened to open earlier in the lesson.
+    private static final Pattern RECENT = Pattern.compile(
+        "(?iu)(?:нов\p{L}*|добав\p{L}*|последн\p{L}*|только\s+что|new|latest|added|append\p{L}*|neu\p{L}*|hinzugef\p{L}*)");
+    private static final Pattern WORK = Pattern.compile(
+        "(?iu)(?:задан\p{L}*|упражнен\p{L}*|пример\p{L}*|страниц\p{L}*|лист\p{L}*|тетрад\p{L}*|задач\p{L}*|task\p{L}*|exercise\p{L}*|page\p{L}*|worksheet\p{L}*|workbook\p{L}*|aufgab\p{L}*|seite\p{L}*|heft\p{L}*)");
     private final OnlineClassDocumentService documents;
     private final KolinTaskRoster roster;
     private final OnlineClassAnnotationDocumentRepository annotations;
@@ -112,6 +118,7 @@ public class KolinLessonContextService {
         // Resolve against the server-authorized, version-keyed text index before
         // selecting model-visible pages so a task on a later page is not lost.
         TaskResolution task = resolveTask(KolinExerciseIndex.requestedNumber(question),sources,selected,currentPage);
+        boolean recentMaterial = task.number() == null && RECENT.matcher(question).find() && WORK.matcher(question).find();
         List<Map<String, Object>> catalog = new ArrayList<>();
         List<Candidate> candidates = new ArrayList<>();
         for (var source : sources) {
@@ -133,7 +140,7 @@ public class KolinLessonContextService {
                 if (page.text().isBlank()) continue;
                 // A numbered question about a selected pupil must not accidentally
                 // show the same exercise number from somebody else's workbook.
-                if (task.number()!=null && !"board-1".equals(selected)
+                if ((task.number()!=null || recentMaterial) && !"board-1".equals(selected)
                     && !source.boardId().equals(selected) && !source.shared()) continue;
                 if (task.resolved()!=null &&
                     !source.boardId().equals(task.resolved().source().boardId())) continue;
@@ -144,6 +151,13 @@ public class KolinLessonContextService {
                 // available because personal boards can inherit the group PDF.
                 rank += Objects.equals(selected, source.boardId()) ? 100 :
                     source.shared() ? 45 : 0;
+                if (recentMaterial) {
+                    // Prioritize the tail of an append-only workbook (latest
+                    // saved PDF version is already loaded above). Do not infer
+                    // when a page was created; page order is the only evidence.
+                    int pagesFromEnd = parsed.totalPages() - page.number();
+                    if (pagesFromEnd >= 0 && pagesFromEnd < 7) rank += 220 - pagesFromEnd * 22;
+                }
                 if (task.resolved()!=null
                     && Objects.equals(task.resolved().source().boardId(),source.boardId())
                     && task.resolved().task().pageNumber()==page.number()) rank += 2000;
@@ -203,7 +217,9 @@ public class KolinLessonContextService {
         result.put("selectedPageCount", selectedPages.size());
         result.put("totalAvailablePageCount", sources.stream().mapToInt(s -> s.parsed().totalPages()).sum());
         result.put("handwritingContentReadable", false);
-        result.put("pageSelection", "Relevant saved PDF text pages only, not a complete copy of every document");
+        result.put("pageSelection", recentMaterial
+            ? "Recent saved PDF pages prioritized by page order; this does not establish the upload time or expose blank/scanned image text"
+            : "Relevant saved PDF text pages only, not a complete copy of every document");
         result.put("limitations", "Only embedded PDF text was extracted. Image-only PDF text and handwritten ink were NOT read. " +
             "Saved ink revisions show activity, not whether a solution is right. Use a fresh authorized board image " +
             "when the teacher asks to inspect handwriting. Never claim to see unprovided pages or live speech.");
