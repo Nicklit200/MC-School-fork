@@ -47,14 +47,37 @@ public class KolinLessonMemoryService {
     }
 
     @Transactional
-    public void remember(AuthenticatedUser teacher,UUID classId,UUID messageId,String question,String answer) {
+    public void remember(AuthenticatedUser teacher,UUID classId,UUID messageId,String question,
+                         String answer,UUID studentId) {
         if(messageId==null || question==null || question.isBlank() || answer==null || answer.isBlank()) return;
         access.requireHost(teacher, classId);
         jdbc.update("""
             INSERT INTO kolyn_lesson_memory_turns
-            (class_id,teacher_id,client_message_id,question,reply_text)
-            VALUES (?,?,?,?,?) ON CONFLICT (class_id,teacher_id,client_message_id) DO NOTHING
-            """,classId,teacher.id(),messageId,clip(question,4000),clip(answer,10000));
+            (class_id,teacher_id,student_id,client_message_id,question,reply_text)
+            VALUES (?,?,?,?,?,?) ON CONFLICT (class_id,teacher_id,client_message_id) DO NOTHING
+            """,classId,teacher.id(),studentId,messageId,clip(question,4000),clip(answer,10000));
+    }
+
+    /** Past Kolyn reviews for an already-authorized pupil, including prior classes.
+     * The caller must first validate the pupil's room membership and current
+     * teacher assignment via KolinStudentHistoryContextService.
+     */
+    @Transactional(readOnly=true)
+    List<Map<String,Object>> priorPupilMemory(AuthenticatedUser teacher,UUID currentClassId,UUID studentId) {
+        access.requireHost(teacher,currentClassId);
+        if(studentId==null) return List.of();
+        return jdbc.query("""
+            SELECT question, reply_text, created_at
+            FROM kolyn_lesson_memory_turns
+            WHERE teacher_id=? AND student_id=? AND class_id<>?
+            ORDER BY created_at DESC, client_message_id DESC LIMIT 5
+            """,(rs,n)->{
+                Map<String,Object> row=new LinkedHashMap<>();
+                row.put("question",clip(rs.getString("question"),450));
+                row.put("priorAnswerExcerpt",clip(rs.getString("reply_text"),1050));
+                row.put("at",rs.getTimestamp("created_at").toInstant().toString());
+                return row;
+            },teacher.id(),studentId,currentClassId);
     }
 
     /**
