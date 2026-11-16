@@ -157,7 +157,7 @@ test('Kolyn text problems render as real German stories without exposing their p
   assert.match(html,/Lena kauft 3 Hefte/);
   assert.match(html,/Ein Fahrrad kostet 120 Euro/);
   assert.match(html,/Wie viel kostet es nach dem Rabatt/);
-  assert.equal((html.match(/class="block exercise"/g)||[]).length,2);
+  assert.equal((html.match(/class="block exercise\b/g)||[]).length,2);
   assert.doesNotMatch(html,/3\*4|120\*\(100-25\)\/100|Private automated answer validation|data-mjx-error/);
   assert.ok((await readFile(join(directory,'Kolin_Plain_preview.png'))).length>0);
 }));
