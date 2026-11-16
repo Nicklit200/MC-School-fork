@@ -295,6 +295,22 @@ describe('mouse navigation (middle button / space)', () => {
   });
 });
 
+describe('finger drawing switches to the pen', () => {
+  it('cancels the finger draft rather than saving it when the pen takes over', () => {
+    const { controller } = setup('finger');
+    expect(types(controller.down(9, 'touch', { x: 100, y: 100 }))).toEqual(['stroke-start']);
+    expect(types(controller.down(10, 'pen', { x: 140, y: 140 }))).toEqual(['stroke-cancel', 'stroke-start']);
+    expect(types(controller.up(10))).toEqual(['stroke-end']);
+  });
+
+  it('still switches input safely if a browser reuses an old finger pointer ID', () => {
+    const { controller } = setup('finger');
+    controller.down(9, 'touch', { x: 100, y: 100 });
+    expect(types(controller.down(9, 'pen', { x: 140, y: 140 }))).toEqual(['stroke-cancel', 'stroke-start']);
+    expect(types(controller.up(9))).toEqual(['stroke-end']);
+  });
+});
+
 describe('pen versus a moving finger', () => {
   it('starts inking even while a finger is panning the canvas', () => {
     const { controller } = setup('stylus');
