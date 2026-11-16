@@ -211,7 +211,7 @@ export function PrejoinPanel({
                   <select value={audioDeviceId ?? ''}
                     onChange={(event) => {
                       setAudioDeviceId(event.target.value);
-                      void startPreview('all', event.target.value);
+                      void startPreview(streamRef.current?.getVideoTracks().length ? 'all' : 'audio', event.target.value);
                     }}>
                     {audioDevices.map((device) => (
                       <option key={device.deviceId} value={device.deviceId}>
@@ -229,7 +229,7 @@ export function PrejoinPanel({
                 </p>
               )}
               <button type="button" className="prejoin__retry"
-                onClick={() => void startPreview('all', audioDeviceId)}>
+                onClick={() => void startPreview(streamRef.current?.getVideoTracks().length ? 'all' : 'audio', audioDeviceId)}>
                 {language === 'DE' ? 'Mikrofon erneut prüfen' : 'Проверить микрофон снова'}
               </button>
               {streamRef.current?.getVideoTracks().length ? (
