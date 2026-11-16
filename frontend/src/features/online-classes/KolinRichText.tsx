@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 export type KolinBlockKind = 'paragraph' | 'heading' | 'correct' | 'incorrect' | 'tip' | 'warning' | 'bullet' | 'numbered' | 'formula';
 
@@ -100,53 +102,63 @@ export function parseKolinBlocks(value: string): KolinBlock[] {
   return blocks;
 }
 
-function normalMath(value: string): string {
-  return value
-    .replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, '$1')
-    .replace(/\\(?:cdot|times)/g, '×')
-    .replace(/\\div/g, '÷')
-    .replace(/\\pm/g, '±')
-    .replace(/\\(?:leq|le)/g, '≤')
-    .replace(/\\(?:geq|ge)/g, '≥')
-    .replace(/\\neq/g, '≠')
-    .replace(/\\(?:ldots|dots)/g, '…')
-    .replace(/\\sqrt\s*\{([^{}]+)\}/g, '√($1)')
-    .replace(/\\sqrt/g, '√')
-    .replace(/\\(?:quad|qquad|,|;|!)/g, ' ')
-    .replace(/\\left|\\right/g, '')
-    .replace(/\^\{2\}|\^2/g, '²')
-    .replace(/\^\{3\}|\^3/g, '³');
-}
 
-function mathParts(value: string): ReactNode[] {
-  const frac = /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g;
-  const parts: ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  while ((match = frac.exec(value)) !== null) {
-    if (match.index > last) parts.push(normalMath(value.slice(last, match.index)));
-    parts.push(<span className="kolin-rich__fraction" key={match.index}>
-      <span>{normalMath(match[1])}</span><span>{normalMath(match[2])}</span>
-    </span>);
-    last = match.index + match[0].length;
+/** KaTeX safely escapes model-provided math and refuses dangerous HTML extensions. */
+function KolinMath({ source, displayMode = false }: { source: string; displayMode?: boolean }) {
+  if (source.length > 4000) return <code className="kolin-rich__math-fallback">{source}</code>;
+  try {
+    const html = katex.renderToString(source, {
+      displayMode,
+      throwOnError: true,
+      trust: false,
+      strict: 'ignore',
+      maxExpand: 300,
+      maxSize: 12,
+      output: 'htmlAndMathml',
+    });
+    return <span className="kolin-rich__typeset" dangerouslySetInnerHTML={{ __html: html }} />;
+  } catch {
+    // Invalid TeX is kept as escaped React text, never rendered as model HTML.
+    return <code className="kolin-rich__math-fallback">{source}</code>;
   }
-  if (last < value.length) parts.push(normalMath(value.slice(last)));
-  return parts.length ? parts : [normalMath(value)];
 }
 
 function inlineText(value: string): ReactNode[] {
   const tokens = /(\*\*[^*]+\*\*|\x60[^\x60\n]+\x60|\\\([^\n]+?\\\)|\$[^$\n]+\$)/g;
   return value.split(tokens).map((piece, index) => {
     if (piece.startsWith('**') && piece.endsWith('**'))
-      return <strong key={index}>{piece.slice(2, -2)}</strong>;
+      return <strong key={index}>{inlineText(piece.slice(2, -2))}</strong>;
     if (piece.charCodeAt(0) === 96 && piece.charCodeAt(piece.length - 1) === 96)
       return <code key={index}>{piece.slice(1, -1)}</code>;
     if (piece.startsWith('\\(') && piece.endsWith('\\)'))
-      return <span className="kolin-rich__math" key={index}>{mathParts(piece.slice(2, -2))}</span>;
+      return <span className="kolin-rich__math" key={index}><KolinMath source={piece.slice(2, -2)} /></span>;
     if (piece.startsWith('$') && piece.endsWith('$') && piece.length > 2)
-      return <span className="kolin-rich__math" key={index}>{mathParts(piece.slice(1, -1))}</span>;
+      return <span className="kolin-rich__math" key={index}><KolinMath source={piece.slice(1, -1)} /></span>;
     return piece;
   });
+}
+
+/** Recognize complete multi-line display equations even inside feedback callouts. */
+function richContent(value: string): ReactNode[] {
+  const displays = /\\\[([\s\S]*?)\\\]|\$\$([\s\S]*?)\$\$/g;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+  const addText = (segment: string) => {
+    const text = segment.trim();
+    if (text) nodes.push(<p className="kolin-rich__text" key={key++}>{inlineText(text)}</p>);
+  };
+  while ((match = displays.exec(value)) !== null) {
+    addText(value.slice(last, match.index));
+    const source = (match[1] || match[2] || '').trim();
+    if (source) nodes.push(
+      <div className="kolin-rich__formula" key={key++}><KolinMath source={source} displayMode /></div>,
+    );
+    last = match.index + match[0].length;
+  }
+  addText(value.slice(last));
+  return nodes;
 }
 
 const toneLabels: Record<'correct' | 'incorrect' | 'tip' | 'warning', string> = {
@@ -161,18 +173,18 @@ export function KolinRichText({ text }: { text: string }) {
   return <div className="kolin-rich">
     {parseKolinBlocks(text).map((block, index) => {
       if (block.kind === 'heading') return <h4 key={index}>{inlineText(block.text)}</h4>;
-      if (block.kind === 'formula') return <div className="kolin-rich__formula" key={index}>{mathParts(block.text)}</div>;
-      if (block.kind === 'bullet') return <div className="kolin-rich__list-item" key={index}><span aria-hidden="true">•</span><p>{inlineText(block.text)}</p></div>;
+      if (block.kind === 'formula') return <div className="kolin-rich__formula" key={index}><KolinMath source={block.text} displayMode /></div>;
+      if (block.kind === 'bullet') return <div className="kolin-rich__list-item" key={index}><span aria-hidden="true">•</span><div className="kolin-rich__list-body">{richContent(block.text)}</div></div>;
       if (block.kind === 'numbered') return <div className="kolin-rich__list-item" key={index}>
-        <span aria-hidden="true">{block.number}.</span><p>{inlineText(block.text)}</p>
+        <span aria-hidden="true">{block.number}.</span><div className="kolin-rich__list-body">{richContent(block.text)}</div>
       </div>;
       if (block.kind === 'correct' || block.kind === 'incorrect' || block.kind === 'tip' || block.kind === 'warning') {
         return <div className={'kolin-rich__callout kolin-rich__callout--' + block.kind} key={index}>
           <span className="kolin-rich__callout-icon" aria-hidden="true">{toneLabels[block.kind]}</span>
-          <p>{inlineText(block.text)}</p>
+          <div className="kolin-rich__callout-body">{richContent(block.text)}</div>
         </div>;
       }
-      return <p className="kolin-rich__paragraph" key={index}>{inlineText(block.text)}</p>;
+      return <div className="kolin-rich__paragraph" key={index}>{richContent(block.text)}</div>;
     })}
   </div>;
 }

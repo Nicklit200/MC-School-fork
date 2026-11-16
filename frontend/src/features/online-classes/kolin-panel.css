@@ -86,3 +86,41 @@
 .kolin-rich__fraction > span:first-child { border-bottom:1px solid currentColor; padding:0 .15em .08em; }
 .kolin-rich__fraction > span:last-child { padding:.08em .15em 0; }
 .kolin-rich code { font-family:ui-monospace,monospace; font-size:.94em; background:rgba(255,255,255,.08); border-radius:4px; padding:1px 4px; }
+
+
+/* Typeset math must fit the teacher's narrow chat, including iPad split view. */
+.kolin-rich, .kolin-rich__callout, .kolin-rich__callout-body,
+.kolin-rich__list-body, .kolin-rich__paragraph { min-width:0; }
+.kolin-rich__callout-body, .kolin-rich__list-body, .kolin-rich__paragraph {
+  display:grid;
+  gap:7px;
+  width:100%;
+}
+.kolin-rich__text { white-space:pre-wrap; overflow-wrap:anywhere; }
+.kolin-rich__formula {
+  max-width:100%;
+  min-width:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  overflow-wrap:normal;
+  scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;
+  font-size:1.12em;
+}
+.kolin-rich__formula .kolin-rich__typeset {
+  display:block;
+  width:max-content;
+  min-width:100%;
+  text-align:center;
+}
+.kolin-rich__formula .katex-display { margin:.12em 0; }
+.kolin-rich__typeset { vertical-align:middle; }
+.kolin-rich__math-fallback {
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  font:inherit;
+  background:rgba(255,255,255,.06);
+}
+@media(max-width:600px) {
+  .kolin-rich__formula { padding:8px 6px; }
+}
