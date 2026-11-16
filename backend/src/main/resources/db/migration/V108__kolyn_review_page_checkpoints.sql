@@ -34,3 +34,6 @@ CREATE INDEX idx_kolyn_memory_expiry
 CREATE INDEX idx_kolyn_memory_pupil_recent
   ON kolyn_lesson_memory_turns(teacher_id, student_id, created_at DESC)
   WHERE student_id IS NOT NULL;
+CREATE INDEX idx_kolin_teacher_pupil_review_history
+  ON kolin_worksheets(teacher_id,student_id,updated_at DESC)
+  WHERE result_type='text' AND student_id IS NOT NULL;
