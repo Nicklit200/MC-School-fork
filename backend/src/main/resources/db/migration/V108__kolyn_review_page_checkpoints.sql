@@ -14,3 +14,19 @@ CREATE TABLE kolyn_review_page_checkpoints (
   reviewed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (class_id, teacher_id, board_id, page_number)
 );
+
+-- The private per-lesson conversation survives reloads. No JPEG, PDF, audio,
+-- transcript, raw handwriting or access tokens are copied into this table.
+CREATE TABLE kolyn_lesson_memory_turns (
+  class_id UUID NOT NULL REFERENCES online_classes(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_message_id UUID NOT NULL,
+  question VARCHAR(4000) NOT NULL,
+  reply_text VARCHAR(10000) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (class_id, teacher_id, client_message_id)
+);
+CREATE INDEX idx_kolyn_memory_recent
+  ON kolyn_lesson_memory_turns(class_id, teacher_id, created_at DESC);
+CREATE INDEX idx_kolyn_memory_expiry
+  ON kolyn_lesson_memory_turns(created_at);
