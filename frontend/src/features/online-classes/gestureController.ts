@@ -49,6 +49,7 @@ export class GestureController {
   private state: State = 'idle';
   private readonly touches = new Map<number, Point>();
   private drawPointer: number | null = null;
+  private drawKind: PointerKind | null = null;
   private penDown: number | null = null;
   /** A resting hand may still fire touch events immediately after pen-up. */
   private lastPenRelease = Number.NEGATIVE_INFINITY;
@@ -74,22 +75,40 @@ export class GestureController {
       this.penDown !== null ||
       (this.deps.mode() === 'stylus' && this.now() - this.lastPenRelease < GestureController.PALM_GRACE_MS)
     )) return [];
+    const intents: Intent[] = [];
+    // A new physical pen/mouse press proves the previous draw has ended.
+    // Some browsers lose pointerup after a long class or hardware sleep, and
+    // may reuse the exact same pointerId. Without this recovery the next pen
+    // press is silently ignored because the controller remains in 'draw'.
+    // Preserve the previous visible geometry as a completed stroke.
+    if (this.state === 'draw' && this.drawPointer !== null &&
+        (kind === 'pen' || kind === 'mouse') &&
+        (this.drawKind === 'pen' || this.drawKind === 'mouse')) {
+      intents.push({ type: 'stroke-end' });
+      this.state = 'idle';
+      this.drawPointer = null;
+      this.drawKind = null;
+      if (this.penDown !== null) {
+        this.penDown = null;
+        this.lastPenRelease = this.now();
+      }
+    }
     if (navigate && this.state === 'idle') {
       if (kind === 'pen') this.penDown = id;
       this.touches.set(id, position);
       this.beginNavigation();
-      return [];
+      return intents;
     }
 
-    const intents: Intent[] = [];
     if (kind === 'pen') {
       this.penDown = id;
       // Stale touches from under the resting hand must not turn into a pinch
       // after pen-up. Deliberate navigation can start with fresh fingers.
       this.touches.clear();
-      if (this.state === 'draw' && this.drawPointer !== id) {
+      if (this.state === 'draw' && (this.drawPointer !== id || this.drawKind !== 'pen')) {
         intents.push({ type: 'stroke-cancel' });
         this.drawPointer = null;
+        this.drawKind = null;
         this.state = 'idle';
       }
       // A pen always pre-empts any pan/pinch made by fingers.
@@ -107,6 +126,7 @@ export class GestureController {
       intents.push({ type: 'stroke-cancel' });
       this.state = 'idle';
       this.drawPointer = null;
+      this.drawKind = null;
     }
 
     const action = actionFor(kind, this.deps.mode(), count);
@@ -115,6 +135,7 @@ export class GestureController {
       if (this.state === 'idle') {
         this.state = 'draw';
         this.drawPointer = id;
+        this.drawKind = kind;
         intents.push({ type: 'stroke-start', point: position, pointerKind: kind, pressure });
       }
       return intents;
@@ -188,6 +209,7 @@ export class GestureController {
       intents.push({ type: cancelled ? 'stroke-cancel' : 'stroke-end' });
       this.state = 'idle';
       this.drawPointer = null;
+      this.drawKind = null;
     } else if (this.state === 'pinch') {
       if (this.touches.size >= 2) {
         this.beginNavigation();
@@ -209,6 +231,7 @@ export class GestureController {
     this.state = 'idle';
     this.touches.clear();
     this.drawPointer = null;
+    this.drawKind = null;
     this.penDown = null;
     this.lastPenRelease = Number.NEGATIVE_INFINITY;
     this.anchors = null;

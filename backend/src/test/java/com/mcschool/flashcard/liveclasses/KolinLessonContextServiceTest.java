@@ -227,4 +227,36 @@ class KolinLessonContextServiceTest {
         assertThat(pages.get(0)).containsEntry("savedHandwritingPresent",true).containsEntry("handwritingRevision",1L);
         assertThat(output).containsEntry("handwritingContentReadable",false);
     }
+
+    @SuppressWarnings("unchecked")
+    @Test void newlyAppendedPersonalAssignmentsArePrioritizedAndOtherPupilsStayPrivate() throws Exception {
+        rosterAndInk();
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(0L);
+        String personal = PersonalBoard.workbookTargetIdFor(melissa.getId());
+        String other = PersonalBoard.workbookTargetIdFor(sofia.getId());
+        when(documents.workbookVersion(host,room.getId(),personal)).thenReturn(4L);
+        when(documents.workbook(host,room.getId(),personal)).thenReturn(Optional.of(pdfPages(
+            "TASK 1: Original equation", "TASK 2: Old equation", "TASK 3: Old equation",
+            "TASK 4: Old equation", "TASK 5: Old equation", "TASK 6: Old equation",
+            "TASK 7: Old equation", "TASK 8: Old equation", "TASK 9: Old equation",
+            "TASK 10: Newly appended expression, 5x plus 7"
+        )));
+        when(documents.workbookVersion(host,room.getId(),other)).thenReturn(2L);
+        when(documents.workbook(host,room.getId(),other)).thenReturn(Optional.of(
+            pdfPages("TASK 1: Sofia private", "TASK 2: Sofia newly appended private")));
+        var recent = service.read(host, room, "Покажи новые задачи, которые я добавил Мелиссе",
+            new KolinChatService.Context("student",melissa.getId(),1));
+        var pages = (List<Map<String,Object>>)recent.get("relevantPages");
+        assertThat(pages).isNotEmpty();
+        assertThat(pages.get(0)).containsEntry("source","Мелисса").containsEntry("pageNumber",10);
+        assertThat(pages.get(0).get("text")).asString().contains("Newly appended expression");
+        assertThat(pages.toString()).doesNotContain("Sofia newly appended private");
+        assertThat(recent.get("pageSelection")).asString().contains("Recent saved PDF pages");
+
+        var ordinary = service.read(host, room, "Объясни тему",
+            new KolinChatService.Context("student",melissa.getId(),1));
+        var ordinaryPages = (List<Map<String,Object>>)ordinary.get("relevantPages");
+        assertThat(ordinaryPages.get(0)).containsEntry("pageNumber",1);
+    }
+
 }
