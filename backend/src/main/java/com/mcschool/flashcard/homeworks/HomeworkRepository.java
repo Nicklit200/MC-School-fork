@@ -10,6 +10,25 @@ import org.springframework.data.repository.query.Param;
 
 public interface HomeworkRepository extends JpaRepository<Homework, UUID> {
 
+    /** Lightweight bounded Kolyn history, no bulk PDF/BLOB fetch. */
+    interface KolinHomeworkMetadata {
+        UUID getId();
+        LocalDate getStartDate();
+        String getWorksheetFilename();
+        Boolean getHasWorksheet();
+        java.time.Instant getSubmittedAt();
+    }
+    @Query(value="""
+        SELECT id AS "id", start_date AS "startDate",
+               worksheet_filename AS "worksheetFilename",
+               (worksheet_pdf IS NOT NULL) AS "hasWorksheet",
+               submitted_at AS "submittedAt"
+        FROM homeworks WHERE student_id = :studentId
+        ORDER BY start_date DESC, created_at DESC LIMIT :limit
+        """,nativeQuery=true)
+    List<KolinHomeworkMetadata> recentKolinHomework(UUID studentId,int limit);
+
+
     List<Homework> findAllByStudentIdOrderByStartDateDescCreatedAtDesc(UUID studentId);
 
     Optional<Homework> findByIdAndStudentId(UUID id, UUID studentId);
