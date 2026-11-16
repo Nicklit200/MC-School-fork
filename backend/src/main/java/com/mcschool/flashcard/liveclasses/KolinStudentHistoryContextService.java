@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Read-only, student-authorized longitudinal context for Kolyn. Previous
  * lessons are fetched through the already established student-history access
  * check, which requires the caller to be this student's assigned teacher.
- * Only authorized pupils in the *current room* are considered.
+ * Only authorized pupils in the *current room* are considered; this includes their current teacher's own earlier lessons.
  */
 @Service
 public class KolinStudentHistoryContextService {
@@ -70,7 +70,7 @@ public class KolinStudentHistoryContextService {
             // Both list() and detail() validate the assigned teacher, student
             // status and actual historical group membership, including older
             // lessons delivered by another teacher. No blind school-wide query.
-            var items=history.list(teacher,id);
+            var items=history.listForTeacherAssistant(teacher,id);
             var out=new ArrayList<Map<String,Object>>();
             boolean wantsTranscript=Pattern.compile("(?iu)(говорил|сказал|обсуждал|произнос|на прошлом урок|прошлом занят|transkript|transcript|gesagt|spoken|last lesson)")
                 .matcher(question).find();
