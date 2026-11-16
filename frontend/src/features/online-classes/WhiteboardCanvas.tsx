@@ -861,6 +861,14 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
     applyIntents(controller.up(event.pointerId, true));
   };
 
+  const onLostPointerCapture = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (nativeAppleInkRef.current && event.pointerType !== 'mouse') return;
+    // Releasing browser pointer capture without pointerup used to leave the
+    // canvas thinking the pen was held down forever. End exactly once; a
+    // normal pointerup already moved the controller back to idle.
+    applyIntents(controller.up(event.pointerId));
+  };
+
   // Keep callbacks current across React renders without ever detaching the
   // Pencil input listeners during a stroke.
   const applyInkIntentsRef = useRef(applyIntents);
@@ -1182,6 +1190,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, Props>(functi
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onLostPointerCapture}
       onWheel={onWheel}
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
