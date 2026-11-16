@@ -7,6 +7,7 @@ CREATE TABLE kolyn_review_page_checkpoints (
   board_id VARCHAR(255) NOT NULL,
   page_number INTEGER NOT NULL CHECK (page_number BETWEEN 1 AND 1000),
   document_version BIGINT NOT NULL,
+  shared_document_version BIGINT NOT NULL DEFAULT -1,
   ink_revision BIGINT NOT NULL,
   image_sha256 VARCHAR(64) NOT NULL,
   page_count INTEGER NOT NULL CHECK (page_count BETWEEN 1 AND 1000),
