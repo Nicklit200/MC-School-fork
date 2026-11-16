@@ -66,18 +66,37 @@ public class KolinLessonMemoryService {
     List<Map<String,Object>> priorPupilMemory(AuthenticatedUser teacher,UUID currentClassId,UUID studentId) {
         access.requireHost(teacher,currentClassId);
         if(studentId==null) return List.of();
-        return jdbc.query("""
-            SELECT question, reply_text, created_at
-            FROM kolyn_lesson_memory_turns
-            WHERE teacher_id=? AND student_id=? AND class_id<>?
-            ORDER BY created_at DESC, client_message_id DESC LIMIT 5
+        // The pre-memory implementation already stored successful board
+        // reviews in kolin_worksheets, tagged with the exact student UUID.
+        // Include those historic reviews as well, not only newly saved chats.
+        List<Map<String,Object>> rows=jdbc.query("""
+            SELECT question, reply_text, logged_at FROM (
+              SELECT question, reply_text, created_at AS logged_at
+              FROM kolyn_lesson_memory_turns
+              WHERE teacher_id=? AND student_id=? AND class_id<>?
+              UNION ALL
+              SELECT '[Проверка Kolyn из прежнего урока]' AS question,
+                     reply_text, updated_at AS logged_at
+              FROM kolin_worksheets
+              WHERE teacher_id=? AND student_id=? AND class_id<>?
+                AND result_type='text' AND state IN ('READY','ADDED')
+                AND reply_text IS NOT NULL
+            ) recent ORDER BY logged_at DESC LIMIT 12
             """,(rs,n)->{
                 Map<String,Object> row=new LinkedHashMap<>();
                 row.put("question",clip(rs.getString("question"),450));
                 row.put("priorAnswerExcerpt",clip(rs.getString("reply_text"),1050));
-                row.put("at",rs.getTimestamp("created_at").toInstant().toString());
+                row.put("at",rs.getTimestamp("logged_at").toInstant().toString());
                 return row;
-            },teacher.id(),studentId,currentClassId);
+            },teacher.id(),studentId,currentClassId,teacher.id(),studentId,currentClassId);
+        var result=new ArrayList<Map<String,Object>>();
+        var seen=new java.util.HashSet<String>();
+        for(var row:rows) {
+            String answer=(String)row.get("priorAnswerExcerpt");
+            if(seen.add(answer)) result.add(row);
+            if(result.size()==5) break;
+        }
+        return List.copyOf(result);
     }
 
     /**
