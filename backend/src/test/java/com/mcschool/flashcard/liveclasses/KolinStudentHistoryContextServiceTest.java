@@ -45,7 +45,7 @@ class KolinStudentHistoryContextServiceTest {
             "Die Brüche kürzen und erweitern üben","Beim Kürzen durch ungleiche Zahlen",
             "Brüche und Terme wiederholen","Bruchrechnen",null,true,"Arbeitsheft.pdf",
             false,null,true,"Transkript.pdf","Wir haben Brüche erklärt und wiederholt");
-        when(history.list(host,vitalina.getId())).thenReturn(List.of(item));
+        when(history.listForTeacherAssistant(host,vitalina.getId())).thenReturn(List.of(item));
         when(history.detail(host,vitalina.getId(),previousTeacher,"past-001")).thenReturn(detail);
         when(homework.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(vitalina.getId())).thenReturn(List.of());
         var result=service.read(host,room,"Что мы проходили с Виталиной на прошлом уроке?",
@@ -64,7 +64,7 @@ class KolinStudentHistoryContextServiceTest {
     }
 
     @Test void assignmentPermissionsAreCheckedBeforeReturningAnyHistoricRecord() {
-        when(history.list(host,vitalina.getId())).thenThrow(new ResourceNotFoundException("Not assigned"));
+        when(history.listForTeacherAssistant(host,vitalina.getId())).thenThrow(new ResourceNotFoundException("Not assigned"));
         var result=service.read(host,room,"Что было на прошлом занятии Виталины?",null);
         assertThat(result.get("state")).isEqualTo("not_authorized");
         verifyNoInteractions(homework);
