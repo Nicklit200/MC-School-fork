@@ -184,6 +184,13 @@ class KolinBoardReviewServiceTest {
     }
 
 
+    @Test void RussianInstrumentalCaseDoesNotSelectTheWrongPupil() {
+        assertThat(KolinBoardReviewService.nameMatches("vitalina",
+            KolinBoardReviewService.normalize("Виталиной"))).isTrue();
+        assertThat(KolinBoardReviewService.nameMatches("melissa",
+            KolinBoardReviewService.normalize("Мелиссой"))).isTrue();
+    }
+
     @Test void resumesReviewAcrossTheWholePupilWorkbookRatherThanOnlyOpenedPage() {
         for(String question:List.of(
             "Проверь у Мелиссы всё после прошлой проверки",
