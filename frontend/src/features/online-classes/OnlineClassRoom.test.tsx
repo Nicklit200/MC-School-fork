@@ -53,6 +53,7 @@ vi.mock('@livekit/components-react', () => ({
   useTracks: () => screenShares,
 }));
 vi.mock('./CameraColumn', () => ({ CameraColumn: () => <ul aria-label="cameras" /> }));
+vi.mock('./MicrophoneRecoveryControl', () => ({ MicrophoneRecoveryControl: () => <button type="button">Восстановить микрофон</button> }));
 vi.mock('../notebook-camera/useLessonNotebookCameras', () => ({
   useLessonNotebookCameras: () => ({ cameras: [...notebookFixture.camerasByOwner.values()], camerasByOwner: notebookFixture.camerasByOwner, error: null }),
 }));
@@ -903,6 +904,14 @@ describe('OnlineClassRoom', () => {
   it('offers a user gesture when Safari blocks incoming audio', async () => {
     mount(false);
     expect(await screen.findByRole('button', { name: 'Нажмите, чтобы включить звук' })).toBeVisible();
+  });
+
+  it('offers microphone recovery to pupils but not teachers', async () => {
+    const view = mount(false);
+    expect(await screen.findByRole('button', { name: 'Восстановить микрофон' })).toBeVisible();
+    view.unmount();
+    mount(true);
+    expect(screen.queryByRole('button', { name: 'Восстановить микрофон' })).toBeNull();
   });
 
   it('puts named board buttons before Video and switches listening with names, Open and All pupils', async () => {
