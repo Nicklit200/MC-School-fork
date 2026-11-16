@@ -753,7 +753,7 @@ function renderCalendar(section) {
         <div class="calendar-subtitle">${
           section === "workouts" ? "Бег — бегущий значок · силовая тренировка — гиря" :
           section === "study" ? "Зелёный - карточки пройдены · красный - пропущен день после начала тренировок" :
-          `Зелёный: в пределах ${Math.round(nutritionInfo?.maxKcal || nutritionDailyGoal())} ккал · красный: выше лимита`
+          `Минус: осталось от ${Math.round(nutritionInfo?.maxKcal || nutritionDailyGoal())} ккал · плюс: превышение`
         }</div>
       </div>
       <button type="button" class="calendar-nav next" aria-label="Следующий месяц">›</button>
@@ -793,11 +793,12 @@ function renderCalendar(section) {
       button.setAttribute("aria-pressed", String(selected));
       button.innerHTML = `
         <span class="calendar-day-number">${day}</span>
-        ${logged ? `<span class="calendar-day-kcal">${Math.round(kcal).toLocaleString("ru-RU")}</span>` : ""}
+        ${logged ? `<span class="calendar-day-kcal nutrition-budget-number">${nutritionBudgetText(kcal)}</span>` : ""}
       `;
       button.title = logged
-        ? `${dateIso} · съедено ${Math.round(kcal)} ккал · ${remaining >= 0 ? "осталось до цели" : "сверх цели"} ${Math.abs(Math.round(remaining))} ккал`
+        ? `${dateIso} · ${nutritionBudgetText(kcal)} ккал · съедено ${Math.round(kcal)} ккал · ${remaining >= 0 ? "осталось до цели" : "превышение цели"}`
         : dateIso;
+      button.setAttribute("aria-label", button.title);
     } else if (section === "workouts") {
       const types = workoutIconsForDay.get(dateIso) || new Set();
       button.classList.add("workout-day");
