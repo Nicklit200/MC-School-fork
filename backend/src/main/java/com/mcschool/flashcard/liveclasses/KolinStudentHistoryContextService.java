@@ -2,6 +2,7 @@ package com.mcschool.flashcard.liveclasses;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
+import com.mcschool.flashcard.lessons.PersonalLessonWorkbookRepository;
 import com.mcschool.flashcard.lessons.StudentLessonHistoryService;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDetail;
 import com.mcschool.flashcard.lessons.dto.StudentLessonHistoryItem;
@@ -33,12 +34,15 @@ public class KolinStudentHistoryContextService {
     private final KolinTaskRoster roster;
     private final StudentLessonHistoryService history;
     private final HomeworkRepository homework;
+    private final PersonalLessonWorkbookRepository personalWorkbooks;
 
     public KolinStudentHistoryContextService(KolinTaskRoster roster,StudentLessonHistoryService history,
-                                             HomeworkRepository homework) {
+                                             HomeworkRepository homework,
+                                             PersonalLessonWorkbookRepository personalWorkbooks) {
         this.roster=roster;
         this.history=history;
         this.homework=homework;
+        this.personalWorkbooks=personalWorkbooks;
     }
 
     @Transactional(readOnly=true)
@@ -104,12 +108,21 @@ public class KolinStudentHistoryContextService {
                         if(raw!=null && raw.length()>1900) row.put("transcriptTruncated",true);
                     }
                 }
-                if(wantsTasks && entry.hasWorkbook()) {
-                    // Read only the teacher-authorized historical workbook.
-                    // Older sheets with textless PDF scans remain unavailable.
+                if(wantsTasks && out.size()<2) {
+                    // One pupil's old private workbook is stored separately
+                    // from the old shared lesson PDF. Both are looked up only
+                    // AFTER student-history access validates the pupil and
+                    // the exact historical lesson membership.
                     try {
-                        var file=history.document(teacher,id,entry.sourceTeacherId(),entry.eventId(),"workbook");
-                        if(file!=null) put(row,"workbookTextExcerpt",pdfText(file.bytes(),2,1400),1400);
+                        personalWorkbooks.findByTeacherIdAndEventIdAndStudentId(
+                            entry.sourceTeacherId(),entry.eventId(),id).ifPresent(own->{
+                            row.put("hasPersonalWorkbook",true);
+                            put(row,"personalWorkbookTextExcerpt",pdfText(own.getWorkbookPdf(),2,1400),1400);
+                        });
+                        if(entry.hasWorkbook()) {
+                            var file=history.document(teacher,id,entry.sourceTeacherId(),entry.eventId(),"workbook");
+                            if(file!=null) put(row,"sharedWorkbookTextExcerpt",pdfText(file.bytes(),2,900),900);
+                        }
                     } catch(RuntimeException ignored) {
                         row.put("workbookTextState","unavailable");
                     }
