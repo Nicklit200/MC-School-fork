@@ -41,9 +41,9 @@ public class KolinLessonContextService {
     // Asking about newly appended material means the most recent PDF pages,
     // not the page the teacher happened to open earlier in the lesson.
     private static final Pattern RECENT = Pattern.compile(
-        "(?iu)(?:нов\p{L}*|добав\p{L}*|последн\p{L}*|только\s+что|new|latest|added|append\p{L}*|neu\p{L}*|hinzugef\p{L}*)");
+        "(?iu)(?:нов\\p{L}*|добав\\p{L}*|последн\\p{L}*|только\\s+что|new|latest|added|append\\p{L}*|neu\\p{L}*|hinzugef\\p{L}*)");
     private static final Pattern WORK = Pattern.compile(
-        "(?iu)(?:задан\p{L}*|упражнен\p{L}*|пример\p{L}*|страниц\p{L}*|лист\p{L}*|тетрад\p{L}*|задач\p{L}*|task\p{L}*|exercise\p{L}*|page\p{L}*|worksheet\p{L}*|workbook\p{L}*|aufgab\p{L}*|seite\p{L}*|heft\p{L}*)");
+        "(?iu)(?:задан\\p{L}*|упражнен\\p{L}*|пример\\p{L}*|страниц\\p{L}*|лист\\p{L}*|тетрад\\p{L}*|задач\\p{L}*|task\\p{L}*|exercise\\p{L}*|page\\p{L}*|worksheet\\p{L}*|workbook\\p{L}*|aufgab\\p{L}*|seite\\p{L}*|heft\\p{L}*)");
     private final OnlineClassDocumentService documents;
     private final KolinTaskRoster roster;
     private final OnlineClassAnnotationDocumentRepository annotations;
