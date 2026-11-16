@@ -2399,49 +2399,139 @@ body.quiz-learning-active{overflow:hidden}
 #nutrition-calendar-panel .calendar-day.selected {outline:2px solid #4f81d8;outline-offset:-2px}
 .nutrition-calendar-hint {font-size:11px;color:#6b7b92;line-height:1.5;margin:9px 2px 0}
 
-.weight-tracker {
-  background:linear-gradient(155deg,#f8fbff 0%,#fff 75%);
-  border:1px solid #dae6f5;
-  border-radius:19px; padding:22px;
-  box-shadow:0 6px 22px #31527a0b;
-  margin:0 0 20px;
+
+/* Weight dashboard v2: intentionally capped width on large displays. */
+#nutrition-view .weight-tracker {
+  max-width:1140px;
+  width:100%;
+  margin:0 auto 24px;
+  padding:0;
+  background:transparent;
+  box-shadow:none;
+  border:0;
+  color:#223a55;
 }
-.weight-tracker-header {display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
-.weight-tracker-header h3 {font-size:23px;line-height:1.25;margin:5px 0 6px;color:#20344f}
-.weight-progress {margin:0;color:#637996;font-size:12px;line-height:1.45}
-.weight-tracker-totals {display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-.weight-tracker-totals>div {padding:11px 15px;border:1px solid #e0e9f3;border-radius:13px;min-width:125px;background:#fff}
-.weight-tracker-totals span {display:block;color:#7e8fa7;font-weight:750;font-size:10px;text-transform:uppercase}
-.weight-tracker-totals strong {display:block;color:#214269;font-size:24px;line-height:1.35;font-weight:900;font-variant-numeric:tabular-nums}
-.weight-target strong {color:#2d9163}
-.weight-chart-toolbar {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0 9px}
-.weight-periods {display:flex;flex-wrap:wrap;gap:5px}
+.weight-dashboard-top {
+  display:grid;
+  grid-template-columns:minmax(240px,.94fr) minmax(520px,1.4fr);
+  align-items:center;
+  gap:28px;
+  padding:4px 0 22px;
+}
+.weight-eyebrow {
+  display:flex;align-items:center;gap:7px;color:#5084bc;
+  font-size:10px;font-weight:850;letter-spacing:.11em;
+}
+.weight-eyebrow-dot {width:8px;height:8px;border-radius:50%;background:#3983de;box-shadow:0 0 0 4px #e7f1ff}
+.weight-dashboard-heading h3 {
+  font-size:clamp(24px,2.5vw,32px);line-height:1.15;
+  letter-spacing:-.035em;margin:10px 0 10px;color:#1e3651;font-weight:850;
+}
+#nutrition-view .weight-progress {font-size:13px;line-height:1.55;color:#7a8da4;margin:0;max-width:420px}
+.weight-metrics {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.weight-metric {
+  display:flex;flex-direction:column;min-width:0;min-height:114px;
+  padding:17px 17px 15px;border:1px solid #e0e9f3;border-radius:17px;
+  background:#fff;box-shadow:0 6px 18px rgba(30,61,102,.035);
+}
+.weight-metric-current {background:linear-gradient(130deg,#edf5ff 0%,#fff 95%);border-color:#d2e4ff}
+.weight-metric-goal {background:linear-gradient(130deg,#f2fbf6 0%,#fff 95%);border-color:#d4ecdd}
+.weight-metric-label {font-size:11px;font-weight:800;color:#70859e;white-space:nowrap}
+.weight-metric strong {font-size:clamp(20px,2.25vw,28px);letter-spacing:-.035em;line-height:1.25;font-weight:900;color:#1c4168;font-variant-numeric:tabular-nums;margin:10px 0 3px}
+.weight-metric-current strong {color:#225aa0}
+.weight-metric-goal strong {color:#26875d}
+.weight-metric-delta.negative strong {color:#1b915e}
+.weight-metric-delta.positive strong {color:#bf5c50}
+.weight-metric small {color:#8696a9;font-size:10px;line-height:1.4;margin-top:auto}
+.weight-chart-card {
+  border:1px solid #dde7f2;border-radius:22px;background:#fff;
+  box-shadow:0 12px 38px rgba(36,68,111,.065);
+  padding:24px 26px 18px;
+}
+#nutrition-view .weight-chart-toolbar {
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:18px;margin:0 0 20px;
+}
+.weight-chart-description h4 {margin:0 0 5px;font-size:17px;letter-spacing:-.02em;color:#213d5b}
+.weight-chart-description p {margin:0;color:#8494a8;font-size:11px;line-height:1.45}
+.weight-periods {display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #e3eaf4;border-radius:12px;background:#f6f9fd}
 .weight-periods button {
-  border:1px solid #dfe8f3;border-radius:8px;padding:7px 11px;
-  font-size:11px;font-weight:800;color:#627894;background:white;cursor:pointer
+  min-height:34px;white-space:nowrap;border:0;border-radius:8px;padding:7px 13px;
+  font-size:11px;font-weight:800;color:#72869f;background:transparent;cursor:pointer;
+  transition:background .14s,color .14s,box-shadow .14s;
 }
-.weight-periods button[aria-pressed="true"] {border-color:#98b7e9;background:#eaf2ff;color:#245fae}
-.weight-change {color:#627994;font-size:12px;font-weight:800}
-.weight-change.down {color:#20855f}
-.weight-change.up {color:#b85b43}
-.weight-chart {width:100%;min-height:245px;border-radius:14px;background:white;border:1px solid #e8eef6;overflow:hidden}
-.weight-chart svg {display:block;width:100%;height:245px}
-.weight-chart-empty {display:flex;align-items:center;justify-content:center;text-align:center;min-height:245px;color:#75869e;padding:15px;font-size:13px;box-sizing:border-box}
-.weight-form {margin-top:16px;display:flex;align-items:end;gap:10px;flex-wrap:wrap}
-.weight-form label {display:flex;flex-direction:column;gap:5px;flex:1 1 140px;max-width:230px}
-.weight-form label span {color:#697c93;font-size:11px;font-weight:800}
-.weight-form input {
-  box-sizing:border-box;height:42px;width:100%;
-  background:#fff;border:1px solid #d7e3f1;border-radius:10px;
-  font:inherit;font-size:14px;color:#243c59;padding:0 10px;
+.weight-periods button:hover {color:#3168b0;background:#edf4ff}
+.weight-periods button[aria-pressed="true"] {background:#fff;color:#2464ae;box-shadow:0 1px 5px #263f6520}
+.weight-periods button:focus-visible,.weight-form input:focus-visible,.weight-form button:focus-visible {outline:3px solid #91b9f1;outline-offset:2px}
+#nutrition-view .weight-chart {
+  position:relative;box-sizing:border-box;min-height:264px;
+  border:1px solid #edf2f8;background:#fdfefe;
+  border-radius:16px;overflow:hidden;
 }
-.weight-form button {
-  height:42px;border:0;border-radius:10px;padding:0 18px;
-  background:#2f6fed;color:#fff;font-weight:850;cursor:pointer;
+#nutrition-view .weight-chart svg {display:block;width:100%;height:auto;min-height:230px;max-height:300px;overflow:visible}
+.weight-chart-empty {min-height:264px;padding:32px;display:grid;place-items:center;color:#8293a8;font-size:13px;text-align:center}
+.weight-first-reading {
+  min-height:264px;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;padding:23px 25px 20px;
+  background:
+    linear-gradient(to bottom,transparent 0,transparent 62%,#edf2fa 62%,#edf2fa calc(62% + 1px),transparent calc(62% + 1px)),
+    radial-gradient(ellipse at 80% 50%,#e8f2ff80 0%,transparent 57%),
+    linear-gradient(120deg,#fcfdff,#f8fbff);
 }
-.weight-form button:disabled {opacity:.6;cursor:wait}
-.weight-status {font-size:11px;line-height:1.5;margin:9px 0 0;color:#67809b;min-height:16px}
-.weight-status.error {color:#b94343}
+.weight-first-header {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.weight-first-tag {
+  border:1px solid #c9defc;background:#e9f3ff;color:#336bac;
+  border-radius:999px;padding:6px 10px;font-size:10px;font-weight:850;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.weight-first-date {font-size:11px;color:#8090a5;font-weight:750}
+.weight-first-center {flex:1;display:flex;align-items:center;justify-content:center;gap:15px}
+.weight-first-mark {width:16px;height:16px;border-radius:50%;background:#3786ed;border:4px solid #fff;box-shadow:0 0 0 5px #deebff,0 0 18px #4e95e744;flex:none}
+.weight-first-value {font-size:clamp(32px,4vw,44px);font-weight:900;letter-spacing:-.05em;color:#245eaa;line-height:1.1;font-variant-numeric:tabular-nums}
+.weight-first-hint {margin:0;text-align:center;font-size:12px;line-height:1.5;color:#7890aa}
+.weight-first-note {margin:4px 0 0;color:#8d9bae;font-size:10px;text-align:center}
+.weight-chart-foot {display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:14px}
+.weight-chart-foot>span {color:#8497ad;font-size:11px;font-weight:750;line-height:1.4}
+.weight-chart-foot .weight-change.down {color:#22845e}
+.weight-chart-foot .weight-change.up {color:#b45d52}
+.weight-entry-card {
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  margin-top:16px;padding:18px 22px;
+  border:1px solid #e3ebf6;border-radius:18px;background:#f7faff;
+}
+.weight-entry-heading {display:flex;align-items:center;gap:12px;min-width:190px}
+.weight-entry-symbol {
+  width:40px;height:40px;display:grid;place-items:center;border-radius:12px;
+  background:#e7f1ff;color:#286abb;font-size:27px;font-weight:600;flex:none;
+}
+.weight-entry-heading h4 {font-size:14px;line-height:1.25;margin:0 0 4px;color:#294765}
+.weight-entry-heading p {margin:0;color:#8295ac;font-size:10px;line-height:1.45}
+#nutrition-view .weight-form {margin:0;display:flex;align-items:end;gap:9px;flex-wrap:wrap;justify-content:flex-end;flex:1}
+#nutrition-view .weight-form label {display:flex;flex-direction:column;gap:6px;flex:1 1 130px;max-width:195px}
+#nutrition-view .weight-form label span {font-weight:800;color:#7a8da5;font-size:10px}
+#nutrition-view .weight-form input {
+  min-width:0;width:100%;height:41px;border:1px solid #d6e2f1;
+  border-radius:10px;padding:0 11px;background:#fff;color:#29445f;
+  font:inherit;font-size:13px;box-sizing:border-box;
+}
+#nutrition-view .weight-form button {
+  height:41px;padding:0 17px;border:0;border-radius:10px;white-space:nowrap;
+  background:#2d72ce;color:#fff;font-weight:850;font-size:12px;
+  box-shadow:0 4px 10px #327cce24;cursor:pointer;
+}
+#nutrition-view .weight-form button:hover {background:#1f62b9}
+#nutrition-view .weight-form button:disabled {opacity:.55;cursor:wait}
+#nutrition-view .weight-status {font-size:11px;line-height:1.45;margin:10px 0 0;color:#8295a9;min-height:15px}
+#nutrition-view .weight-status.error {color:#ba4444}
+@media(max-width:1180px) {
+  .weight-dashboard-top {grid-template-columns:1fr;gap:18px}
+  .weight-metrics {max-width:none}
+}
+@media(max-width:880px) {
+  .weight-entry-card {align-items:stretch;flex-direction:column}
+  #nutrition-view .weight-form {justify-content:flex-start}
+  #nutrition-view .weight-form label {max-width:230px}
+}
 @media(max-width:720px) {
   #nutrition-view {padding:15px;top:78px;left:8px;right:8px;bottom:8px}
   #nutrition-view .life-view-head {gap:10px;margin-bottom:14px}
@@ -2450,15 +2540,6 @@ body.quiz-learning-active{overflow:hidden}
   #nutrition-view .life-add-button {flex:0 0 auto;padding:0 10px;font-size:11px}
   #nutrition-view .life-view-actions input[type="date"] {font-size:11px;min-width:0;width:120px;padding:0 6px}
   .nutrition-calendar-popover {top:111px;right:8px;width:min(425px,calc(100% - 16px))}
-  .weight-tracker {padding:15px;border-radius:15px}
-  .weight-tracker-header {flex-direction:column;gap:12px}
-  .weight-tracker-totals {justify-content:flex-start;width:100%}
-  .weight-tracker-totals>div {flex:1;min-width:0;padding:10px}
-  .weight-tracker-totals strong {font-size:20px}
-  .weight-chart svg {height:210px}
-  .weight-chart,.weight-chart-empty {min-height:210px}
-  .weight-form label {max-width:none;flex:1 1 110px}
-  .weight-form button {width:100%}
 }
 @media(max-width:390px) {
   #nutrition-view .life-view-actions input[type="date"] {width:110px}
@@ -2469,4 +2550,35 @@ body.quiz-learning-active{overflow:hidden}
 @media(max-width:430px) {
   #nutrition-calendar-panel .calendar-day-kcal {font-size:9.5px;margin-top:4px}
   #nutrition-calendar-panel .calendar-day {min-height:42px;padding:5px 0 4px}
+}
+
+@media(max-width:720px) {
+  #nutrition-view .weight-tracker {margin:0 auto 16px}
+  .weight-dashboard-top {gap:15px;padding-bottom:16px}
+  .weight-dashboard-heading h3 {font-size:25px}
+  .weight-metrics {gap:7px}
+  .weight-metric {min-height:105px;padding:12px 10px;border-radius:13px}
+  .weight-metric-label {font-size:9px;white-space:normal}
+  .weight-metric strong {font-size:19px;margin:10px 0 2px}
+  .weight-metric small {font-size:9px}
+  .weight-chart-card {padding:17px 13px 14px;border-radius:17px}
+  #nutrition-view .weight-chart-toolbar {gap:12px;margin-bottom:15px}
+  .weight-periods {width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
+  .weight-periods button {padding:8px 4px;min-width:0;font-size:10px}
+  #nutrition-view .weight-chart {min-height:220px}
+  .weight-chart-foot {margin-top:12px}
+  .weight-first-reading {min-height:220px;padding:19px 16px}
+  .weight-first-center {gap:10px}
+  .weight-first-value {font-size:31px}
+  .weight-first-hint {font-size:11px}
+  .weight-entry-card {padding:16px;border-radius:15px}
+  #nutrition-view .weight-form {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:9px}
+  #nutrition-view .weight-form label {max-width:none;min-width:0}
+  #nutrition-view .weight-form button {grid-column:1/-1;width:100%;height:44px}
+}
+@media(max-width:370px) {
+  .weight-metric {padding:11px 7px}
+  .weight-metric strong {font-size:17px}
+  .weight-metric-label {font-size:8px}
+  .weight-first-header {gap:6px}
 }
