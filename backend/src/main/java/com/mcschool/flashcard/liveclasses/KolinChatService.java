@@ -42,6 +42,10 @@ public class KolinChatService {
     private KolinLessonContextService lessonContext;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
     private KolinClassDiagnosticsService classDiagnostics;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinLessonMemoryService memory;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinStudentHistoryContextService studentHistory;
     private final Set<UUID> pendingTeachers = ConcurrentHashMap.newKeySet();
 
     public KolinChatService(OnlineClassAccessService access, StudentGroupRepository groups,
@@ -81,6 +85,11 @@ public class KolinChatService {
         return Map.of("configured", ai.isConfigured());
     }
 
+    public List<Map<String,Object>> recentMemory(AuthenticatedUser teacher,UUID classId) {
+        access.requireHost(teacher,classId);
+        return memory==null ? List.of() : memory.recent(teacher,classId);
+    }
+
     public KolinBoardReviewService.Target reviewTarget(AuthenticatedUser teacher,UUID classId,KolinBoardReviewService.TargetRequest request) {
         return reviews.resolve(teacher,classId,request);
     }
@@ -111,6 +120,24 @@ public class KolinChatService {
         try {
             var transcript = transcript(room);
             context.put("transcript", transcript);
+            if(memory!=null) {
+                try {
+                    context.put("recentTeacherMemory",memory.recent(teacher,classId));
+                    if(board!=null) context.put("previousReviewPageStates",memory.comparison(teacher,classId,board));
+                } catch(RuntimeException ex) {
+                    context.put("recentTeacherMemory",List.of());
+                    LoggerFactory.getLogger(getClass()).warn("Kolyn memory read unavailable: classId={} kind={}",
+                        classId,ex.getClass().getSimpleName());
+                }
+            }
+            if(studentHistory!=null) {
+                try { context.put("studentHistory",studentHistory.read(teacher,room,question,request.context())); }
+                catch(RuntimeException ex) {
+                    context.put("studentHistory",Map.of("state","unavailable"));
+                    LoggerFactory.getLogger(getClass()).warn("Kolyn student history unavailable: classId={} kind={}",
+                        classId,ex.getClass().getSimpleName());
+                }
+            }
             // Read-only lesson retrieval for EVERY question. PDF text pages are indexed and
             // ranked server-side; old documents and unverified handwriting are never invented.
             if (lessonContext != null) {
@@ -139,9 +166,17 @@ public class KolinChatService {
             LoggerFactory.getLogger(getClass()).info("Kolyn context: classId={} transcriptState={} transcriptSegments={} transcriptTruncated={} transcriptionActive={} boardPages={}",
                     classId,transcript.metadata().state(),transcript.metadata().segmentCount(),transcript.metadata().truncated(),
                     transcript.metadata().transcriptionActive(),board==null?0:board.pages().size());
-            if (request.clientMessageId()!=null)
-                return tasks.reply(teacher,room,request,context,history,question,transcript.metadata(),board);
-            return new Reply("text", ai.kolinReply(mapper.writeValueAsString(context), history, question), transcript.metadata());
+            Reply answer = request.clientMessageId()!=null
+                ? tasks.reply(teacher,room,request,context,history,question,transcript.metadata(),board)
+                : new Reply("text",ai.kolinReply(mapper.writeValueAsString(context),history,question),transcript.metadata());
+            if(memory!=null && request.clientMessageId()!=null) {
+                try { memory.remember(teacher,classId,request.clientMessageId(),question,answer.text()); }
+                catch(RuntimeException ex) {
+                    LoggerFactory.getLogger(getClass()).warn("Kolyn memory write unavailable: classId={} kind={}",
+                        classId,ex.getClass().getSimpleName());
+                }
+            }
+            return answer;
         } catch (KolinRequestException | com.mcschool.flashcard.common.ConflictException ex) {
             throw ex;
         } catch (Exception ex) {
