@@ -73,6 +73,10 @@ public class KolinLessonMemoryService {
             """, (rs,n)->new Previous(rs.getInt(1),rs.getLong(2),rs.getLong(3),
                     rs.getLong(4),rs.getString(5),rs.getTimestamp(6).toInstant()),
                     classId,teacher.id(),board.boardId());
+        return classify(board,before);
+    }
+
+    static List<Map<String,Object>> classify(KolinBoardReviewService.Metadata board,List<Previous> before) {
         var byPage=new java.util.HashMap<Integer,Previous>();
         for(var row:before) byPage.put(row.pageNumber(),row);
         var result=new ArrayList<Map<String,Object>>();
@@ -118,7 +122,7 @@ public class KolinLessonMemoryService {
         }
     }
 
-    private record Previous(int pageNumber,long documentVersion,long sharedDocumentVersion,
+    record Previous(int pageNumber,long documentVersion,long sharedDocumentVersion,
                             long inkRevision,String imageSha256,Instant reviewedAt) {}
 
     private static String clip(String value,int max) {
