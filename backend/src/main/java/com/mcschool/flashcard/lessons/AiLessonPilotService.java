@@ -443,6 +443,9 @@ public class AiLessonPilotService {
             «Это слишком легко для Abitur?» означает обсуждение сложности, не команду переделать задания.
             «Что ты умеешь?» требует объяснить возможности и ограничения, без создания материала.
             Для вопроса «как объяснить» дай шаги, наглядный пример и вопрос для проверки понимания.
+            По просьбе учителя создавай и текстовые сюжетные задачи с условиями, вопросами и
+            проверяемыми вычислениями. Если просят распечатать или добавить их на доску,
+            подготовь отдельный приватный PDF-черновик, требующий подтверждения преподавателя.
             Проверяй определения и вычисления. Используй простую пунктуацию без длинного тире.
             Для объяснения используй понятные фразы, которые преподаватель может сказать вслух.
             Дай законченный, развернутый ответ с достаточными шагами, примером, проверкой вычислений
@@ -550,7 +553,11 @@ public class AiLessonPilotService {
         input.add(Map.of("role","system","content",KOLIN_PROMPT+"""
                 Верни JSON {mode,text}. mode=answer для обычного разговора: text содержит полный ответ.
                 mode=generate только если пользователь именно просит СОЗДАТЬ/ИЗМЕНИТЬ/ПОДГОТОВИТЬ задания,
-                PDF, рисунок, интерактив или перенаправить существующий черновик. В этом случае text кратко описывает запрос.
+                в том числе текстовые сюжетные задачи (Textaufgaben), PDF, рисунок, интерактив
+                или перенаправить существующий черновик. В этом случае text кратко описывает запрос.
+                Прямые просьбы «Дай текстовую задачу», «Составь три Textaufgaben», «Задай 2 сюжетные
+                задачи ученику», «Подготовь задачи по тексту» означают generate: должен быть черновик
+                с полноценными условиями, а не ответ о том, что такие задачи не поддерживаются.
                 Само упоминание слов задача, PDF, интерактив или имени ученика не является просьбой создать материал.
                 Вопрос об уже созданном материале, о его сложности или о том, почему он не работает, означает answer.
                 «Объясни на примере» требует текстового объяснения; «сделай интерактивный пример» означает generate.
@@ -654,18 +661,21 @@ public class AiLessonPilotService {
         if (apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         var staticTasks=new java.util.ArrayList<Map<String,Object>>();
         boolean repairVisualWorksheet=objectMapper.readTree(lessonContext).path("worksheetRequiresVisual").asBoolean(false);
-        for(String kind:repairVisualWorksheet?List.of("visual"):List.of("expression","equation","visual")) {
+        for(String kind:repairVisualWorksheet?List.of("visual"):List.of("expression","equation","word_problem","visual")) {
             var props=new LinkedHashMap<String,Object>();
             props.put("kind",Map.of("type","string","enum",List.of(kind)));
             boolean visual=kind.equals("visual");
-            props.put("instruction",Map.of("type","string","enum",visual?List.of("")
-                :kind.equals("equation")?List.of("Решите уравнение","Löse die Gleichung","Solve the equation")
-                :List.of("Вычислите","Упростите","Berechne","Vereinfache","Calculate","Simplify")));
+            boolean wordProblem=kind.equals("word_problem");
+            props.put("instruction",wordProblem
+                ? Map.of("type","string","minLength",35,"maxLength",1000)
+                : Map.of("type","string","enum",visual?List.of("")
+                    :kind.equals("equation")?List.of("Решите уравнение","Löse die Gleichung","Solve the equation")
+                    :List.of("Вычислите","Упростите","Berechne","Vereinfache","Calculate","Simplify")));
             props.put("expression",visual?Map.of("type","string","enum",List.of(""))
-                :kind.equals("expression")?Map.of("type","string","minLength",1,"maxLength",500,"pattern","^[^=]+$")
+                :wordProblem||kind.equals("expression")?Map.of("type","string","minLength",1,"maxLength",500,"pattern","^[^=]+$")
                 :Map.of("type","string","minLength",1,"maxLength",500));
             props.put("variable",Map.of("type","string","enum",kind.equals("equation")?List.of("x","y","z","a","b","c","m","n"):List.of("")));
-            props.put("restrictions",Map.of("type","array","items",Map.of("type","string","minLength",1,"maxLength",60),"maxItems",visual?0:4));
+            props.put("restrictions",Map.of("type","array","items",Map.of("type","string","minLength",1,"maxLength",60),"maxItems",visual||wordProblem?0:4));
             props.put("visual",visual?KolinVisualSchema.schema():Map.of("type","null"));
             staticTasks.add(Map.of("type","object","properties",props,"required",List.copyOf(props.keySet()),"additionalProperties",false));
         }
@@ -734,6 +744,12 @@ public class AiLessonPilotService {
                 Измени только запрошенную часть; при просьбе изменить обе верни обе. Без нового количества сохрани прежнее.
                 При 'это добавь Софии/на общую доску' сохрани содержание и поменяй адресата. Не добавляй сам.
                 Режим подтверждаемого PDF, kind=worksheet:
+                Если педагог просит "составь текстовые задачи", это запрос на PDF-черновик
+                с kind=word_problem. НЕЛЬЗЯ отвечать, что текстовые задачи недоступны.
+                Поддерживай и обычные арифметические истории на немецком языке.
+                Текстовая задача имеет печатное условие и пустое место для решения.
+                Приватное выражение используется ТОЛЬКО для автоматической проверки.
+                Оно НЕ должно появляться на ученическом листе.
                 Для геометрии ВСЕ условия берутся из visual. Обязательно используй kind=visual,
                 instruction=expression=variable='', restrictions=[]. Не выдавай формулу площади вместо задачи с размерами.
                 Площадь куба: visual={type:'geometry',language:'ru',figure:'cube',objective:'surface',
@@ -742,7 +758,21 @@ public class AiLessonPilotService {
                 expression - проверяемое условие LaTeX, variable='', visual=null, restrictions - ограничения области.
                 Для уравнения kind=equation: только линейное уравнение одной переменной с единственным решением,
                 ровно один знак '=', variable из x,y,z,a,b,c,m,n. Ответы вычисляет сервер. Не включай их в условие.
-                Неподдерживаемые доказательства, неравенства и текстовые задачи объясняй в text, не подменяй условие.
+                Для настоящих сюжетных текстовых задач (Textaufgaben, word problems, Sachaufgaben)
+                используй kind=word_problem. instruction - полное реалистичное условие и вопрос
+                на языке преподавателя (например, по-немецки для школьного листа), 35-1000 знаков.
+                Обязательно укажи в условии ВСЕ исходные числа, единицы измерения и вопрос со знаком ?.
+                expression - СКРЫТОЕ от ученика числовое выражение для вычисления единственного ответа
+                (например, "120*(100-25)/100" для скидки 25 % от 120 евро).
+                variable='', restrictions=[], visual=null, answer не сообщай в instruction.
+                Ответ и вычисления проверяет сервер, а не модель. Не вставляй в expression
+                числа, которых нет в условии; допустимо 100 только для записи процентов.
+                Текстовые задачи могут быть на сложение, вычитание, умножение, деление,
+                дроби, проценты, деньги, скорость, время и последовательные действия.
+                Оставляй условия понятными ученику его класса, не превращай сюжет
+                в голое математическое выражение. Не выдавай готового ответа ученику.
+                Доказательства и неравенства, для которых нет проверяемого формата,
+                по-прежнему объясняй в text, а не выдавай неправильно проверенный PDF.
                 Следующие технические инструкции относятся К ЭЛЕМЕНТАМ materials, а не ко всему result:
                 """+KolinVisualSchema.INSTRUCTIONS+com.mcschool.flashcard.liveclasses.InteractiveTemplateSpec.INSTRUCTIONS+"""
                 Напоминание: result всегда имеет только text и materials. Для объяснения materials=[], а не kind=text.

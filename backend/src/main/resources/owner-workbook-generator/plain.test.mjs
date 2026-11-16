@@ -140,3 +140,24 @@ test('a real fraction worksheet with generated TeX division passes math and PDF 
       await copyFile(join(directory,name),join(division,name));
   }
 }));
+
+
+test('Kolyn text problems render as real German stories without exposing their private arithmetic',async()=>workspace(async directory=>{
+  const source=join(root,'examples','kolin-word-problems.json');
+  const run=generate(source,directory);
+  assert.equal(run.status,0,run.stderr || run.stdout || run.error?.message);
+  const math=JSON.parse(await readFile(join(directory,'Kolin_Plain_math-qa.json'),'utf8'));
+  assert.equal(math.passed,true);
+  assert.equal(math.checked,2);
+  assert.deepEqual(math.results.map(item=>item.answer),['12','90']);
+  const layout=JSON.parse(await readFile(join(directory,'Kolin_Plain_layout-qa.json'),'utf8'));
+  assert.equal(layout.passed,true);
+  assert.equal(layout.documents[0].pageCount,1);
+  const html=await readFile(join(directory,'Kolin_Plain_Arbeitsheft_30min.html'),'utf8');
+  assert.match(html,/Lena kauft 3 Hefte/);
+  assert.match(html,/Ein Fahrrad kostet 120 Euro/);
+  assert.match(html,/Wie viel kostet es nach dem Rabatt/);
+  assert.equal((html.match(/class="block exercise\b/g)||[]).length,2);
+  assert.doesNotMatch(html,/3\*4|120\*\(100-25\)\/100|Private automated answer validation|data-mjx-error/);
+  assert.ok((await readFile(join(directory,'Kolin_Plain_preview.png'))).length>0);
+}));

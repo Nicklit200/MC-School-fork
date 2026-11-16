@@ -255,7 +255,10 @@ public class KolinTaskService {
 
     /** Validation assertions are built from the exact expressions displayed to pupils. */
     static Map<String,Object> document(List<Task> tasks) {
-        if(tasks.stream().anyMatch(task -> "visual".equals(task.kind()))) return visualDocument(tasks);
+        // Prose problems need room for the pupil's working and must never
+        // display the private QA expression alongside the story.
+        if(tasks.stream().anyMatch(task -> "visual".equals(task.kind()) || "word_problem".equals(task.kind())))
+            return visualDocument(tasks);
         var pages=new ArrayList<Map<String,Object>>();
         var checks=new ArrayList<Map<String,Object>>();
         for(int offset=0;offset<tasks.size();offset+=5) {
@@ -295,7 +298,17 @@ public class KolinTaskService {
         var checks=new ArrayList<Map<String,Object>>();
         for(int i=0;i<tasks.size();i++) {
             Task task=tasks.get(i);
-            if("visual".equals(task.kind())) {
+            if("word_problem".equals(task.kind())) {
+                // In the student's PDF print the full story, NEVER the
+                // private expression or calculated answer.
+                requireWordProblem(task);
+                pages.add(Map.of("title","","blocks",List.of(Map.of(
+                    "type","exercise","number",String.valueOf(i+1),"title","",
+                    "description",(i+1)+". "+task.instruction(),
+                    "rows",List.of(),"writeLines",4))));
+                checks.add(Map.of("kind","expressionValue","expression",task.expression(),
+                    "restrictions",List.of()));
+            } else if("visual".equals(task.kind())) {
                 // The closed visual spec is authoritative. Model-supplied prose/formulas are
                 // deliberately discarded, including in follow-up context, never rendered.
                 if(task.visual()==null || task.visual().isEmpty())
@@ -330,6 +343,39 @@ public class KolinTaskService {
                 "workbookPages",packed,"teacherPages",List.of(Map.of("title","","blocks",List.of(
                         Map.of("type","text","text","Private automated answer validation")))),"qa",Map.of("algebra",checks));
     }
+    /**
+     * Word-problem drafts can be educationally varied. The QA engine checks the
+     * private numerical expression, and we additionally require every numeric
+     * operand to appear in the visible story (except the 100 used in a percent
+     * conversion). Semantic equivalence between prose and maths remains a
+     * teacher-preview responsibility; never pretend it was machine-proved.
+     */
+    private static void requireWordProblem(Task task) {
+        if(task.visual()!=null || task.restrictions()==null || !task.restrictions().isEmpty()
+                || task.variable()==null || !task.variable().isEmpty())
+            throw new IllegalArgumentException("Invalid word problem fields");
+        requireText(task.instruction(),1000);
+        requireText(task.expression(),500);
+        String story=task.instruction().strip();
+        if(story.length()<35 || !story.contains("?")
+                || story.matches("(?isu).*(?:ответ\\s*[:=]|antwort\\s*[:=]|lösung\\s*[:=]|solution\\s*[:=]).*")
+                || task.expression().contains("="))
+            throw new IllegalArgumentException("Invalid word problem statement");
+        var operands=java.util.regex.Pattern.compile("\\d+(?:[.,]\\d+)?");
+        Set<String> visible=new HashSet<>();
+        var visibleMatches=operands.matcher(story);
+        while(visibleMatches.find()) visible.add(visibleMatches.group().replace(',','.'));
+        var used=operands.matcher(task.expression());
+        boolean found=false;
+        while(used.find()) {
+            found=true;
+            String number=used.group().replace(',','.');
+            if(!visible.contains(number) && !("100".equals(number) && story.contains("%")))
+                throw new IllegalArgumentException("Word problem expression uses unseen operand");
+        }
+        if(!found) throw new IllegalArgumentException("Word problem has no numeric operands");
+    }
+
     private static void requireText(String value,int maximum) {
         if(value==null || value.isBlank() || value.length()>maximum) throw new IllegalArgumentException("Invalid task text");
     }
@@ -357,6 +403,10 @@ public class KolinTaskService {
             case "Math belongs in the checked expression field" -> "MATH_IN_INSTRUCTION";
             case "Expression contains a hidden answer" -> "EQUALITY_IN_EXPRESSION";
             case "Invalid task text" -> "TASK_TEXT";
+            case "Invalid word problem fields" -> "WORD_PROBLEM_FIELDS";
+            case "Invalid word problem statement" -> "WORD_PROBLEM_STATEMENT";
+            case "Word problem expression uses unseen operand" -> "WORD_PROBLEM_OPERAND";
+            case "Word problem has no numeric operands" -> "WORD_PROBLEM_OPERAND";
             case "Unexpected visual on algebra task" -> "UNEXPECTED_VISUAL";
             case "Invalid restrictions" -> "RESTRICTIONS";
             case "Unsupported checked math task" -> "UNSUPPORTED_TASK";
@@ -427,7 +477,7 @@ public class KolinTaskService {
         String interactiveCountPhrase=explicitInteractive.find()?explicitInteractive.group():null;
         if(defaultCount==1 && interactiveCountPhrase!=null) question=interactiveCountPhrase;
         else if(defaultCount==5) question=question.replaceAll("(?iu)(?:\\d{1,3}|[\\p{L}]+)\\s+"+interactiveItem," ");
-        String item="(?:задан|пример|упражнен|интер(?:а)?ктив|interactive|interaktiv|график|диаграмм|пирамид|призм|фигур|куб|круг|aufgaben|aufgabe|tasks?|exercises?|graph|diagram|pyramid|prism)";
+        String item="(?:задан|задач|текстов(?:ых|ые|ую|ой)?\\s+задач|пример|упражнен|интер(?:а)?ктив|interactive|interaktiv|график|диаграмм|пирамид|призм|фигур|куб|круг|aufgaben|aufgabe|textaufgaben|word\\s+problems?|tasks?|exercises?|graph|diagram|pyramid|prism)";
         var numeric=java.util.regex.Pattern.compile("(?iu)(\\d{1,3})\\s*"+item).matcher(question);
         if(numeric.find()) return Integer.parseInt(numeric.group(1));
         var words=Map.ofEntries(Map.entry("одно",1),Map.entry("один",1),Map.entry("одну",1),Map.entry("два",2),Map.entry("две",2),
