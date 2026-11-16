@@ -31,7 +31,7 @@ public class KolinLessonMemoryService {
     @Transactional(readOnly=true)
     public List<Map<String,Object>> recent(AuthenticatedUser teacher, UUID classId) {
         access.requireHost(teacher, classId);
-        var turns = jdbc.query("""
+        List<Map<String,Object>> turns = jdbc.query("""
             SELECT question, reply_text, created_at FROM kolyn_lesson_memory_turns
             WHERE class_id = ? AND teacher_id = ?
             ORDER BY created_at DESC, client_message_id DESC LIMIT ?
