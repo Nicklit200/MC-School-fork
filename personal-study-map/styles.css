@@ -2376,7 +2376,7 @@ body.quiz-learning-active{overflow:hidden}
 .nutrition-calendar-toggle[aria-expanded="true"] { background:#e6f0ff; border-color:#90b5ed; }
 .nutrition-calendar-popover {
   position:absolute; z-index:79; right:22px; top:78px;
-  width:min(365px,calc(100% - 28px)); box-sizing:border-box;
+  width:min(425px,calc(100% - 28px)); box-sizing:border-box;
   padding:14px; border:1px solid #dce6f1;
   border-radius:16px; background:#fff;
   box-shadow:0 16px 50px #223c591f;
@@ -2390,9 +2390,9 @@ body.quiz-learning-active{overflow:hidden}
 #nutrition-calendar-panel .calendar-subtitle {font-size:9px;line-height:1.3}
 #nutrition-calendar-panel .calendar-nav {width:30px;height:30px;border-radius:8px;font-size:20px}
 #nutrition-calendar-panel .calendar-grid,#nutrition-calendar-panel .calendar-weekdays {gap:4px}
-#nutrition-calendar-panel .calendar-day {border-radius:8px;min-height:38px;aspect-ratio:auto;padding:4px 0 3px;overflow:hidden}
-#nutrition-calendar-panel .calendar-day-number {font-size:12px}
-#nutrition-calendar-panel .calendar-day-kcal {font-size:9px;margin-top:3px;font-variant-numeric:tabular-nums;line-height:1.1}
+#nutrition-calendar-panel .calendar-day {border-radius:9px;min-height:45px;aspect-ratio:auto;padding:6px 0 4px;overflow:hidden}
+#nutrition-calendar-panel .calendar-day-number {font-size:13px}
+#nutrition-calendar-panel .calendar-day-kcal {font-size:11px;margin-top:5px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.03em;white-space:nowrap}
 #nutrition-calendar-panel .calendar-day.good:after,
 #nutrition-calendar-panel .calendar-day.logged:after,
 #nutrition-calendar-panel .calendar-day.over:after {display:none}
@@ -2449,7 +2449,7 @@ body.quiz-learning-active{overflow:hidden}
   #nutrition-view .nutrition-calendar-toggle {padding:0 9px;font-size:11px}
   #nutrition-view .life-add-button {flex:0 0 auto;padding:0 10px;font-size:11px}
   #nutrition-view .life-view-actions input[type="date"] {font-size:11px;min-width:0;width:120px;padding:0 6px}
-  .nutrition-calendar-popover {top:111px;right:8px;width:min(365px,calc(100% - 16px))}
+  .nutrition-calendar-popover {top:111px;right:8px;width:min(425px,calc(100% - 16px))}
   .weight-tracker {padding:15px;border-radius:15px}
   .weight-tracker-header {flex-direction:column;gap:12px}
   .weight-tracker-totals {justify-content:flex-start;width:100%}
@@ -2464,4 +2464,9 @@ body.quiz-learning-active{overflow:hidden}
   #nutrition-view .life-view-actions input[type="date"] {width:110px}
   #nutrition-view .nutrition-calendar-toggle {padding:0 7px}
   .nutrition-calendar-popover {top:115px}
+}
+
+@media(max-width:430px) {
+  #nutrition-calendar-panel .calendar-day-kcal {font-size:9.5px;margin-top:4px}
+  #nutrition-calendar-panel .calendar-day {min-height:42px;padding:5px 0 4px}
 }
