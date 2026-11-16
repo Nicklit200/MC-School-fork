@@ -511,7 +511,7 @@ class KolinTaskServiceTest {
         verify(renderer).renderPlain(argThat(json->json.contains(story)&&json.contains("3*4")));
         verify(store).complete(eq(host),eq(room.getId()),eq(artifact),eq(attempt),eq("worksheet"),
             eq("Textaufgaben"),eq(metadata),eq(pupil.getId()),eq("Виталина"),eq(2),eq(1),
-            any(),any(),argThat(json->json.contains("word_problem")&&json.contains("\\\"answer\\\":\\\"12\\\"")));
+            any(),any(),argThat(json->json.contains("word_problem")&&json.contains("\"answer\":\"12\"")));
         verify(store,never()).append(any(),any(),any());
     }
 
