@@ -22,7 +22,7 @@ export function PrejoinPanel({
   onJoin: (choice: PrejoinChoice) => void;
   joinDisabled?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [state, setState] = useState<PrejoinState>('checking');
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
@@ -43,7 +43,7 @@ export function PrejoinPanel({
     streamRef.current = null;
   }, []);
 
-  const startPreview = useCallback(async (mode: 'all' | 'audio' = 'all') => {
+  const startPreview = useCallback(async (mode: 'all' | 'audio' = 'all', preferredMicrophoneId?: string | null) => {
     const attempt = ++attemptRef.current;
     const media = navigator.mediaDevices;
     if (!media?.getUserMedia) {
@@ -58,8 +58,10 @@ export function PrejoinPanel({
     stopStream();
 
     try {
+      const audio: boolean | MediaTrackConstraints = preferredMicrophoneId
+        ? { deviceId: { ideal: preferredMicrophoneId } } : true;
       const stream = await media.getUserMedia(
-        mode === 'audio' ? { video: false, audio: true } : { video: true, audio: true },
+        mode === 'audio' ? { video: false, audio } : { video: true, audio },
       );
       if (attempt !== attemptRef.current) {
         stream.getTracks().forEach((track) => track.stop());
@@ -81,14 +83,19 @@ export function PrejoinPanel({
 
       const cameras = devices.filter((device) => device.kind === 'videoinput');
       const microphones = devices.filter((device) => device.kind === 'audioinput');
-      const hasCamera = stream.getVideoTracks().length > 0;
-      const hasMicrophone = stream.getAudioTracks().length > 0;
+      const hasCamera = stream.getVideoTracks().some((track) => track.readyState !== 'ended');
+      const liveMicrophone = stream.getAudioTracks().find((track) => track.readyState !== 'ended');
+      const hasMicrophone = Boolean(liveMicrophone);
+      // Use the device actually verified by the browser. Previously we used
+      // microphones[0], potentially switching to a different mic in LiveKit.
+      const capturedMicrophoneId = liveMicrophone?.getSettings?.().deviceId;
       setVideoDevices(cameras);
       setAudioDevices(microphones);
       setVideoDeviceId((current) => cameras.some((device) => device.deviceId === current)
         ? current : cameras[0]?.deviceId ?? null);
-      setAudioDeviceId((current) => microphones.some((device) => device.deviceId === current)
-        ? current : microphones[0]?.deviceId ?? null);
+      setAudioDeviceId((current) => capturedMicrophoneId
+        || (microphones.some((device) => device.deviceId === current) ? current : null)
+        || microphones[0]?.deviceId || null);
       setCameraEnabled(hasCamera);
       setMicrophoneEnabled(hasMicrophone);
       setState(hasCamera || hasMicrophone ? 'ready' : 'noDevices');
@@ -128,12 +135,18 @@ export function PrejoinPanel({
   }, [state, cameraEnabled, microphoneEnabled]);
 
   const hasMedia = state === 'ready';
-  const join = () => onJoin({
-    videoDeviceId: hasMedia && cameraEnabled ? videoDeviceId : null,
-    audioDeviceId: hasMedia && microphoneEnabled ? audioDeviceId : null,
-    cameraEnabled: hasMedia && cameraEnabled,
-    microphoneEnabled: hasMedia && microphoneEnabled,
-  });
+  const join = () => {
+    const choice: PrejoinChoice = {
+      videoDeviceId: hasMedia && cameraEnabled ? videoDeviceId : null,
+      audioDeviceId: hasMedia && microphoneEnabled ? audioDeviceId : null,
+      cameraEnabled: hasMedia && cameraEnabled,
+      microphoneEnabled: hasMedia && microphoneEnabled,
+    };
+    // Release preview capture before LiveKit acquires the real lesson tracks.
+    // Previously those two getUserMedia calls could overlap on iPad/Android.
+    stopStream();
+    onJoin(choice);
+  };
 
   return (
     <section className="prejoin" aria-labelledby="prejoin-title">
@@ -196,7 +209,10 @@ export function PrejoinPanel({
                 <label className="prejoin__select">
                   {t('onlineClass.prejoin.microphone')}
                   <select value={audioDeviceId ?? ''}
-                    onChange={(event) => setAudioDeviceId(event.target.value)}>
+                    onChange={(event) => {
+                      setAudioDeviceId(event.target.value);
+                      void startPreview(streamRef.current?.getVideoTracks().length ? 'all' : 'audio', event.target.value);
+                    }}>
                     {audioDevices.map((device) => (
                       <option key={device.deviceId} value={device.deviceId}>
                         {device.label || t('onlineClass.prejoin.microphone')}
@@ -206,6 +222,16 @@ export function PrejoinPanel({
                 </label>
               )}
 
+              {state === 'ready' && !streamRef.current?.getAudioTracks().some((track) => track.readyState !== 'ended') && (
+                <p role="alert" className="prejoin__error">
+                  {language === 'DE' ? 'Das Mikrofon ist nicht verfügbar. Prüfen Sie es erneut, bevor Sie beitreten.'
+                    : 'Микрофон недоступен. Проверьте его перед входом в урок.'}
+                </p>
+              )}
+              <button type="button" className="prejoin__retry"
+                onClick={() => void startPreview(streamRef.current?.getVideoTracks().length ? 'all' : 'audio', audioDeviceId)}>
+                {language === 'DE' ? 'Mikrofon erneut prüfen' : 'Проверить микрофон снова'}
+              </button>
               {streamRef.current?.getVideoTracks().length ? (
                 <label className="prejoin__toggle">
                   <input type="checkbox" checked={cameraEnabled}

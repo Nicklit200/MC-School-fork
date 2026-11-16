@@ -190,4 +190,51 @@ describe('PrejoinPanel', () => {
       microphoneEnabled: true,
     });
   });
+  it('uses the microphone device actually granted by the browser, not the first listed one', async () => {
+    const { stream, stop } = fakeStream();
+    Object.assign(stream.getAudioTracks()[0], { getSettings: () => ({ deviceId: 'mic-2' }) });
+    setMediaDevices({
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      enumerateDevices: vi.fn().mockResolvedValue([
+        ...devices,
+        { deviceId: 'mic-2', kind: 'audioinput', label: 'Headset microphone', groupId: 'g2' },
+      ]),
+    });
+    const onJoin = renderPanel();
+    expect(await screen.findByRole('option', { name: 'Headset microphone' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Beitreten|Присоединиться/i }));
+    expect(stop).toHaveBeenCalled();
+    expect(onJoin).toHaveBeenCalledWith(expect.objectContaining({
+      audioDeviceId: 'mic-2', microphoneEnabled: true,
+    }));
+  });
+
+  it('checks the newly selected microphone before joining', async () => {
+    const first = fakeStream();
+    const second = fakeStream();
+    Object.assign(second.stream.getAudioTracks()[0], { getSettings: () => ({ deviceId: 'mic-2' }) });
+    const getUserMedia = vi.fn()
+      .mockResolvedValueOnce(first.stream)
+      .mockResolvedValueOnce(second.stream);
+    setMediaDevices({
+      getUserMedia,
+      enumerateDevices: vi.fn().mockResolvedValue([
+        ...devices,
+        { deviceId: 'mic-2', kind: 'audioinput', label: 'Headset microphone', groupId: 'g2' },
+      ]),
+    });
+    const onJoin = renderPanel();
+    await screen.findByRole('option', { name: 'Headset microphone' });
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Микрофон|Mikrofon/i }), 'mic-2');
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({
+      video: true, audio: { deviceId: { ideal: 'mic-2' } },
+    }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Beitreten|Присоединиться/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /Beitreten|Присоединиться/i }));
+    expect(onJoin).toHaveBeenCalledWith(expect.objectContaining({
+      audioDeviceId: 'mic-2', microphoneEnabled: true,
+    }));
+  });
+
+
 });

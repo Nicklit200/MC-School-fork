@@ -35,6 +35,7 @@ import { AnswersButton } from './AnswersButton';
 import { AnswersPanel } from './AnswersPanel';
 import { AnswersPanelResizer } from './AnswersPanelResizer';
 import { CameraColumn } from './CameraColumn';
+import { MicrophoneRecoveryControl } from './MicrophoneRecoveryControl';
 import { CaptionsPanel } from './CaptionsPanel';
 import { RecordingControls } from './RecordingControls';
 import { TranscriptionControls } from './TranscriptionControls';
@@ -939,6 +940,7 @@ function RoomBody({
         {/* Leave is handled by our own button. LiveKit's built-in Leave
             would look like an unexpected network disconnect here. */}
         <ControlBar controls={{ leave: false }} />
+        {!connection.host && <MicrophoneRecoveryControl />}
         <button
           type="button"
           aria-pressed={panelsOpen}
