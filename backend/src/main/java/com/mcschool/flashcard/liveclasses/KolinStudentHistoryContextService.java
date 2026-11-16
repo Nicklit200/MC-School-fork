@@ -93,10 +93,16 @@ public class KolinStudentHistoryContextService {
                 put(row,"homeworkNotes",detail.homeworkNotes(),850);
                 put(row,"lessonPlan",detail.lessonPlan(),600);
                 if(wantsTranscript) {
-                    String raw=detail.sonioxTranscriptText()==null||detail.sonioxTranscriptText().isBlank()
-                        ? detail.transcriptText():detail.sonioxTranscriptText();
-                    put(row,"transcriptExcerpt",raw,1900);
-                    if(raw!=null && raw.length()>1900) row.put("transcriptTruncated",true);
+                    if(entry.groupName()!=null && !entry.groupName().isBlank()
+                        && !entry.sourceTeacherId().equals(teacher.id())) {
+                        row.put("transcriptScope","A prior group conversation under another teacher "
+                            + "is not included; it may contain unrelated pupils' speech.");
+                    } else {
+                        String raw=detail.sonioxTranscriptText()==null||detail.sonioxTranscriptText().isBlank()
+                            ? detail.transcriptText():detail.sonioxTranscriptText();
+                        put(row,"transcriptExcerpt",raw,1900);
+                        if(raw!=null && raw.length()>1900) row.put("transcriptTruncated",true);
+                    }
                 }
                 if(wantsTasks && entry.hasWorkbook()) {
                     // Read only the teacher-authorized historical workbook.
