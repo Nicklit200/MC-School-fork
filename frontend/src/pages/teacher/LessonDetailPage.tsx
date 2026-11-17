@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { isNativeLesson, lessonDurationLabel, schoolDateKey } from '../../lib/lessonSchedule';
 import { lessonPreparationApi, completedLessonApi, type CompletedLessonDocument } from '../../api/lessonPreparation';
@@ -71,6 +71,19 @@ function transcriptDownloadFilename(eventId: string, lesson: GroupLesson | null)
 
 export function LessonDetailPage() {
   const { eventId = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const previewKind = searchParams.get('preview') === 'workbook' || searchParams.get('preview') === 'answers'
+    ? searchParams.get('preview') as 'workbook' | 'answers' : null;
+  const closePreview = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('preview');
+    setSearchParams(next, { replace: true });
+  };
+  const selectPreview = (kind: 'workbook' | 'answers') => {
+    const next = new URLSearchParams(searchParams);
+    next.set('preview', kind);
+    setSearchParams(next, { replace: true });
+  };
   const { language, t } = useI18n();
   const { user } = useAuth();
   const isNickAiPilot = user?.id === NICK_AI_PILOT_TEACHER_ID;
@@ -444,8 +457,42 @@ export function LessonDetailPage() {
 
   if (loading) return <p className="muted">{t('common.loading')}</p>;
 
+  const previewUrl = previewKind === 'workbook' ? workbookUrl : previewKind === 'answers' ? answersUrl : null;
+  const previewAttached = previewKind === 'workbook' ? preparation?.hasWorkbook : preparation?.hasAnswers;
+  const previewFilename = previewKind === 'workbook' ? preparation?.workbookFilename : preparation?.answersFilename;
+
   return (
     <div style={{ maxWidth: 1320, margin: '0 auto' }}>
+      {previewKind && (
+        <section role="dialog" aria-modal="true" aria-label="Просмотр рабочей тетради"
+          style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'var(--teacher-surface, #fff)', display: 'flex', flexDirection: 'column', padding: 'max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))', gap: 12 }}>
+          <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--muted-text, #65758b)' }}>{lesson?.studentName ?? lesson?.groupName ?? 'Урок'}</div>
+              <strong>{previewKind === 'workbook' ? 'Рабочая тетрадь' : 'Ответы для учителя'}</strong>
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {previewKind === 'workbook' && preparation?.hasAnswers &&
+                <button type="button" className="btn btn--secondary" onClick={() => selectPreview('answers')}>Ответы для учителя</button>}
+              {previewKind === 'answers' && preparation?.hasWorkbook &&
+                <button type="button" className="btn btn--secondary" onClick={() => selectPreview('workbook')}>Рабочая тетрадь</button>}
+              {previewUrl &&
+                <a className="btn btn--secondary" href={previewUrl} download={previewFilename || (previewKind === 'workbook' ? 'Arbeitsblatt.pdf' : 'Lehrerloesungen.pdf')}>Скачать PDF</a>}
+              <button type="button" className="btn" onClick={closePreview}>Вернуться к уроку</button>
+            </div>
+          </header>
+          {previewUrl ? (
+            <iframe title={previewKind === 'workbook' ? 'PDF рабочей тетради' : 'PDF ответов учителя'}
+              src={previewUrl} style={{ flex: 1, width: '100%', minHeight: 0, border: '1px solid var(--border, #ddd)', borderRadius: 10 }} />
+          ) : (
+            <div role="status" style={{ display: 'grid', placeItems: 'center', flex: 1, textAlign: 'center', padding: 24 }}>
+              {previewAttached
+                ? 'Не удалось автоматически открыть PDF. Вернитесь к уроку и попробуйте открыть документ ещё раз.'
+                : 'Тетрадь ещё не прикреплена к этому уроку. Когда генерация завершится, документ появится здесь.'}
+            </div>
+          )}
+        </section>
+      )}
       <div className="lesson-detail-header">
         <div>
           <Link to="/teacher/lessons" className="muted">← Назад к расписанию</Link>
