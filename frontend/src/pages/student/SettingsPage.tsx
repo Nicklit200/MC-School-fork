@@ -334,9 +334,13 @@ export function SettingsPage() {
         <div>
           <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Handy-Benachrichtigungen' : 'Уведомления на телефон'}</h2>
           <p className="muted" style={{ marginBottom: 0 }}>
-            {language === 'DE'
-              ? 'Kostenlose Erinnerung an Karten und offene Hausaufgaben.'
-              : 'Бесплатное напоминание о карточках и невыполненной домашке.'}
+            {user?.role === 'TEACHER' || user?.role === 'ADMIN'
+              ? (language === 'DE'
+                ? 'Push-Benachrichtigung, sobald automatisch erzeugte Hausaufgaben verteilt wurden oder ein Fehler aufgetreten ist. Funktioniert auch bei geschlossenem Browser.'
+                : 'Уведомления о готовой автоматической домашке и ошибках назначения. Приходят на телефон, даже когда сайт закрыт.')
+              : (language === 'DE'
+                ? 'Kostenlose Erinnerung an Karten und offene Hausaufgaben.'
+                : 'Бесплатное напоминание о карточках и невыполненной домашке.')}
           </p>
         </div>
 
