@@ -196,7 +196,7 @@ final class PostLessonHomeworkMch3Template {
         // Supports one short, flat algebraic numerator/denominator or an operand.
         // No model-supplied TeX commands, HTML, CSS, or opaque slash expressions.
         if(token.isBlank() || token.length()>60
-                || !token.matches("[A-Za-z0-9 .+*()\\\\-]+"))
+                || !token.matches("[A-Za-z0-9 .+*()-]+"))
             throw new IllegalArgumentException("HOMEWORK_CONTENT_UNSUPPORTED_MATH_TOKEN");
         return token.replace("*","\\cdot ");
     }
