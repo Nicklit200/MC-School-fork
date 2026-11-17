@@ -113,6 +113,9 @@ public class WorkbookContentService {
                 lastContentError = badContent;
             }
         }
+        // Preserve the existing validation contract for callers/tests.
+        // Unexpected malformed model JSON still surfaces as a server failure.
+        if (lastContentError instanceof IllegalArgumentException badInput) throw badInput;
         throw new IllegalStateException("Workbook content invalid after three attempts", lastContentError);
     }
 
