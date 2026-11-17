@@ -235,7 +235,7 @@ public class OwnerSameDayWorkbookService {
                 WHERE teacher_id=? AND event_id=?
                 """, draftId, OWNER, eventId);
             push(owner, "Рабочая тетрадь готова",
-                    "Тетрадь и ответы для " + target(lesson) + " созданы и прикреплены. Проверьте перед уроком.", eventId);
+                    "Тетрадь и ответы для " + target(lesson) + " созданы и прикреплены. Нажмите, чтобы сразу открыть PDF.", eventId, true);
         } catch (Exception ex) {
             // Rolling deployments stop in-flight HTTP requests. They are not
             // AI/QA failures and must not consume the bounded content budget.
@@ -257,7 +257,7 @@ public class OwnerSameDayWorkbookService {
                 """, code.substring(0, Math.min(code.length(), 120)), OWNER, eventId);
             User owner = owner();
             if (owner != null) push(owner, "Не удалось создать тетрадь",
-                    "Автоматическая подготовка не завершилась. Откройте урок для повторного запуска.", eventId);
+                    "Автоматическая подготовка не завершилась. Откройте урок для повторного запуска.", eventId, false);
         }
     }
 
@@ -270,10 +270,16 @@ public class OwnerSameDayWorkbookService {
         return false;
     }
 
-    private void push(User owner, String title, String body, String eventId) {
+    /** Preview links stay within the authenticated teacher lesson screen; PDF bytes require the teacher's token. */
+    static String notificationPath(String eventId, boolean openWorkbook) {
+        return "/teacher/lessons/" + eventId + (openWorkbook ? "?preview=workbook" : "");
+    }
+
+    private void push(User owner, String title, String body, String eventId, boolean openWorkbook) {
         if (!webPush.isConfigured()) return;
+        String target = notificationPath(eventId, openWorkbook);
         for (PushSubscription subscription : subscriptions.findAllByUserId(owner.getId())) {
-            try { webPush.send(subscription, title, body, "/teacher/lessons/" + eventId); }
+            try { webPush.send(subscription, title, body, target, "owner-workbook-" + eventId); }
             catch (RuntimeException ignored) { /* One broken phone never blocks publication. */ }
         }
     }
