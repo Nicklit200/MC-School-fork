@@ -14,8 +14,16 @@ final class McpHomeworkDraftValidator {
     static final String MARKER = "MCH3_HOMEWORK_DAY_V1:";
     private McpHomeworkDraftValidator() {}
 
-    @SuppressWarnings("unchecked")
     static String normalize(ObjectMapper mapper, String source, int day, String targetName) throws Exception {
+        return normalize(mapper, source, day, 7, targetName);
+    }
+
+    @SuppressWarnings("unchecked")
+    static String normalize(ObjectMapper mapper, String source, int day, int totalDays, String targetName) throws Exception {
+        if (totalDays < 1 || totalDays > 7 || day > totalDays)
+            throw new IllegalArgumentException("Homework series must have 1..7 days");
+        // For shorter series, the last day is the independent German-only check.
+        boolean independent = day == totalDays || day >= 5;
         if (day < 1 || day > 7) throw new IllegalArgumentException("homework day must be 1..7");
         if (source == null || source.isBlank() || source.length() > OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS)
             throw new IllegalArgumentException("Homework lessonJson is missing or too long");
@@ -37,14 +45,14 @@ final class McpHomeworkDraftValidator {
         meta.put("homeworkDay", day);
         doc.put("meta", meta);
 
-        if (day <= 4 && (blocks.isEmpty() || !(blocks.get(0) instanceof Map<?,?> first)
+        if (!independent && day <= 4 && (blocks.isEmpty() || !(blocks.get(0) instanceof Map<?,?> first)
                 || !Set.of("callout","explanation","example","text").contains(String.valueOf(first.get("type")))))
             throw new IllegalArgumentException("Days 1..4 require a short explanation at the TOP of the page");
-        if (day >= 5 && containsCyrillic(page))
+        if (independent && containsCyrillic(page))
             throw new IllegalArgumentException("Days 5..7 must be fully in German, without Russian text");
         if (containsStudentIdentifier(page, targetName))
             throw new IllegalArgumentException("Student PDF must not contain names, group, calendar dates or day-number headings");
-        int count = countTasks(blocks, day, 0);
+        int count = countTasks(blocks, independent ? 7 : day, 0);
         if (count < 1 || count > 2)
             throw new IllegalArgumentException("Homework contains " + count + " tasks; at most 2 independent responses per day");
         int lined = countResponseAreas(blocks, 0);
