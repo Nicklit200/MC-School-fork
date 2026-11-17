@@ -237,6 +237,18 @@ public class OwnerSameDayWorkbookService {
             push(owner, "Рабочая тетрадь готова",
                     "Тетрадь и ответы для " + target(lesson) + " созданы и прикреплены. Проверьте перед уроком.", eventId);
         } catch (Exception ex) {
+            // Rolling deployments stop in-flight HTTP requests. They are not
+            // AI/QA failures and must not consume the bounded content budget.
+            if (Thread.currentThread().isInterrupted() || interrupted(ex)) {
+                db.update("""
+                    UPDATE owner_same_day_workbook_jobs
+                       SET state='QUEUED', attempts=GREATEST(attempts-1, 0),
+                           error_code=NULL, updated_at=now()
+                     WHERE teacher_id=? AND event_id=?
+                    """, OWNER, eventId);
+                Thread.currentThread().interrupt();
+                return;
+            }
             String code = ex.getClass().getSimpleName();
             LOG.error("Owner workbook generation failed for event {} [{}]", eventId, code, ex);
             db.update("""
@@ -247,6 +259,15 @@ public class OwnerSameDayWorkbookService {
             if (owner != null) push(owner, "Не удалось создать тетрадь",
                     "Автоматическая подготовка не завершилась. Откройте урок для повторного запуска.", eventId);
         }
+    }
+
+    private static boolean interrupted(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof InterruptedException) return true;
+            if (current.getMessage() != null
+                    && current.getMessage().contains("generation interrupted")) return true;
+        }
+        return false;
     }
 
     private void push(User owner, String title, String body, String eventId) {
