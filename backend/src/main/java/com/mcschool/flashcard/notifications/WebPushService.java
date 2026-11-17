@@ -43,11 +43,16 @@ public class WebPushService {
     }
 
     public void send(PushSubscription subscription, String title, String body, String url) {
+        send(subscription, title, body, url, "mindcrafti-reminder");
+    }
+
+    /** The tag separates independently completed lessons on one phone. */
+    public void send(PushSubscription subscription, String title, String body, String url, String tag) {
         if (!isConfigured()) {
             throw new IllegalStateException("Web Push is not configured");
         }
         String payload = "{\"title\":\"" + json(title) + "\",\"body\":\"" + json(body)
-                + "\",\"url\":\"" + json(url) + "\"}";
+                + "\",\"url\":\"" + json(url) + "\",\"tag\":\"" + json(tag) + "\"}";
         try {
             PushService pushService = new PushService(publicKey, privateKey, subject);
             Notification notification = new Notification(

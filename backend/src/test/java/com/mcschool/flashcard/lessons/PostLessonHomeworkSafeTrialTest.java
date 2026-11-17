@@ -6,6 +6,7 @@ import com.mcschool.flashcard.homeworks.HomeworkPdfService;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.liveclasses.*;
 import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
+import com.mcschool.flashcard.notifications.PostLessonHomeworkPushService;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
@@ -49,6 +50,7 @@ class PostLessonHomeworkSafeTrialTest {
     private final MonthlyPlanService plans = mock(MonthlyPlanService.class);
     private final SchoolPromptSettingsService prompts = mock(SchoolPromptSettingsService.class);
     private final PostLessonHomeworkContentService generator = mock(PostLessonHomeworkContentService.class);
+    private final PostLessonHomeworkPushService push = mock(PostLessonHomeworkPushService.class);
     private final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
 
     private final AuthenticatedUser actor = new AuthenticatedUser(teacherId, null, Role.TEACHER);
@@ -70,7 +72,7 @@ class PostLessonHomeworkSafeTrialTest {
         when(student.getTeacher()).thenReturn(mock(User.class));
         when(student.getTeacher().getId()).thenReturn(teacherId);
         jobs = new PostLessonHomeworkJobService(jdbc,transactions,new ObjectMapper(),access,
-                members,users,homeworks,publisher,preparations,lessonPreparation,transcripts,plans,prompts,generator);
+                members,users,homeworks,publisher,preparations,lessonPreparation,transcripts,plans,prompts,generator,push);
     }
 
     @Test void afterFinishOnlyFictionalPupilIsQueuedNotAssigned() {
