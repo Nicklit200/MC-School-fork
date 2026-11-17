@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { onlineClassesApi } from '../../api/onlineClasses';
 import { OnlineClassRoom } from '../../features/online-classes/OnlineClassRoom';
+import { PostLessonHomeworkDialog } from '../../features/online-classes/PostLessonHomeworkDialog';
 import { PrejoinPanel, type PrejoinChoice } from '../../features/online-classes/PrejoinPanel';
 import { useClassSession } from '../../features/online-classes/useClassSession';
 import { LessonEntryAction } from '../../features/online-classes/LessonEntryAction';
@@ -26,6 +27,7 @@ export function OnlineClassPage() {
   const navigate = useNavigate();
   const session = useClassSession(classId);
   const now = useLessonEntryClock(session.onlineClass?.serverNow);
+  const [postLessonHomework, setPostLessonHomework] = useState<{ id: string; title: string } | null>(null);
   const [hasDisconnected, setHasDisconnected] = useState(false);
   const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
   const [mediaApiStatus, setMediaApiStatus] = useState<MediaApiStatus>('idle');
@@ -37,6 +39,14 @@ export function OnlineClassPage() {
     cameraEnabled: false,
     microphoneEnabled: false,
   });
+
+  if (postLessonHomework) {
+    return <PostLessonHomeworkDialog classId={postLessonHomework.id} title={postLessonHomework.title}
+      language={language} onDone={() => {
+        setPostLessonHomework(null);
+        navigate(-1);
+      }} />;
+  }
 
   if (session.phase === 'loading') {
     return <p>{t('common.loading')}</p>;
@@ -107,8 +117,9 @@ export function OnlineClassPage() {
           session.onlineClass?.viewerIsHost && classId
             ? () => {
                 return onlineClassesApi.end(classId).then(() => {
+                  const title = session.onlineClass?.title || (language === 'DE' ? 'Unterricht' : 'Урок');
                   session.release();
-                  navigate(-1);
+                  setPostLessonHomework({ id: classId, title });
                 });
               }
             : undefined
