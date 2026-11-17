@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { onlineClassesApi } from '../../api/onlineClasses';
+import { ApiRequestError } from '../../api/client';
 import '../../styles/post-lesson-homework.css';
 
 type Props = { classId: string; title: string; language: string; onDone: () => void };
@@ -37,7 +38,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
     }
     try {
       stream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t));
+      const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t));
       const current = new MediaRecorder(stream.current, mimeType ? { mimeType } : undefined);
       recorder.current = current; chunks.current = [];
       current.ondataavailable = event => { if (event.data.size) chunks.current.push(event.data); };
@@ -45,15 +46,31 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
         setRecording(false);
         stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
         const recorded = new Blob(chunks.current, { type: current.mimeType });
-        if (!recorded.size) return;
+        if (!recorded.size) {
+          setError(de ? 'Die Aufnahme ist leer. Bitte erneut versuchen.' : 'Запись пустая. Попробуйте ещё раз.');
+          return;
+        }
+        if (recorded.size > 5_000_000) {
+          setError(de ? 'Die Aufnahme ist zu lang. Bitte kürzer sprechen.' : 'Запись слишком длинная. Скажите короче.');
+          return;
+        }
         const extension = current.mimeType.includes('mp4') ? 'mp4' : current.mimeType.includes('ogg') ? 'ogg' : 'webm';
         setTranscribing(true);
         try {
           const text = await onlineClassesApi.transcribePostLessonHomework(
             classId, new File([recorded], 'instruction.' + extension, { type: current.mimeType }));
           setInstructions(previous => [previous.trim(), text.trim()].filter(Boolean).join('\n'));
-        } catch {
-          setError(de ? 'Sprachnachricht konnte nicht erkannt werden.' : 'Не удалось распознать голосовое. Напишите указание текстом.');
+        } catch (err) {
+          if (err instanceof ApiRequestError && err.status === 413) {
+            setError(de ? 'Die Aufnahme ist zu groß.' : 'Запись слишком большая. Попробуйте короче.');
+          } else if (err instanceof ApiRequestError && err.status === 503) {
+            setError(de ? 'Die Spracherkennung ist gerade nicht konfiguriert.' : 'Сервис распознавания голоса пока не настроен.');
+          } else if (err instanceof ApiRequestError && err.status === 422) {
+            setError(de ? 'Keine Sprache erkannt. Bitte deutlicher sprechen.' : 'Не удалось услышать речь. Попробуйте ещё раз.');
+          } else {
+            setError(de ? 'Spracherkennung fehlgeschlagen. Bitte erneut versuchen oder schreiben.' :
+              'Не удалось распознать голос. Попробуйте ещё раз или напишите указание.');
+          }
         } finally { setTranscribing(false); }
       };
       current.start(); setRecording(true);
@@ -69,9 +86,17 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
     try {
       await onlineClassesApi.postLessonHomework(classId, days, instructions);
       onDone();
-    } catch {
-      setError(de ? 'Hausaufgabe konnte nicht gestartet werden. Bitte erneut versuchen.' :
-        'Не удалось запустить домашку. Проверьте подключение и повторите.');
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 503) {
+        setError(de ? 'Die automatische Erstellung ist derzeit nicht konfiguriert. Bitte die Schulverwaltung informieren.' :
+          'Автоматическая генерация пока не настроена на сервере. Обратитесь к администратору школы.');
+      } else if (err instanceof ApiRequestError && err.status === 409) {
+        setError(de ? 'Für diesen Unterricht gibt es bereits einen Auftrag oder noch keine gespeicherten Unterrichtsdaten.' :
+          'Для этого урока уже есть задание или пока нет сохранённых данных урока.');
+      } else {
+        setError(de ? 'Hausaufgabe konnte nicht gestartet werden. Bitte erneut versuchen.' :
+          'Не удалось запустить домашку. Проверьте подключение и повторите.');
+      }
       setPending(false);
     }
   };
@@ -80,7 +105,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
     <div className="post-homework-backdrop">
       <section role="dialog" aria-modal="true" aria-labelledby="post-homework-title" className="post-homework-island">
         <header className="post-homework-header">
-          <span className="post-homework-book" aria-hidden="true">▣</span>
+          <span className="post-homework-book" aria-hidden="true">M</span>
           <div>
             <h2 ref={heading} tabIndex={-1} id="post-homework-title">
               {de ? 'Hausaufgaben' : 'Домашнее задание'}
@@ -118,6 +143,9 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
               transcribing ? (de ? 'Wird erkannt...' : 'Распознаём голос...') :
               (de ? 'Sprachanweisung aufnehmen' : 'Записать голосовое указание')}
           </button>
+          {recording && <p className="post-homework-voice-note" role="status">
+            {de ? 'Aufnahme läuft. Erneut drücken, um zu beenden.' : 'Идёт запись. Нажмите ещё раз, чтобы закончить.'}
+          </p>}
         </div>
         {error && <p className="post-homework-error" role="alert">{error}</p>}
         <footer className="post-homework-footer">
