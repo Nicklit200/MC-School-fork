@@ -181,6 +181,9 @@ public class PostLessonHomeworkJobService {
                             reason.startsWith("HOMEWORK_AI_")?"AI_UNAVAILABLE":
                             reason.startsWith("HOMEWORK_LESSON_EVIDENCE_MISSING")?"LESSON_MATERIAL_MISSING":
                             reason.startsWith("HOMEWORK_PDF_INVALID")?"PDF_INVALID":
+                            reason.startsWith("HOMEWORK_DRAFT_VALIDATION_FAILED")?"HOMEWORK_JSON_INVALID":
+                            reason.startsWith("HOMEWORK_DRAFT_RENDER_FAILED")?"HOMEWORK_JSON_RENDER_INVALID":
+                            reason.startsWith("HOMEWORK_DRAFT_MATH_QA_FAILED")?"HOMEWORK_MATH_QA_FAILED":
                             "GENERATION_FAILED";
                     int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING'",code,job.id());
                     if(changed>0) safeNotify(job.id());
