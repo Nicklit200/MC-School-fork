@@ -146,7 +146,11 @@ final class PostLessonHomeworkMch3Template {
         if(tokens.stream().noneMatch(t -> t.contains("/")))
             return Map.of("tokens",tokens);
         List<String> latex=new ArrayList<>();
-        for(String token:tokens) latex.add(tokenLatex(token));
+        for(String token:tokens) {
+            // MathJax may emit nested SVGs for underlined blank placeholders.
+            // Homework already has six full-width lines below each task.
+            if(!"_____".equals(token))latex.add(tokenLatex(token));
+        }
         return Map.of("latex",String.join(" ",latex));
     }
 
