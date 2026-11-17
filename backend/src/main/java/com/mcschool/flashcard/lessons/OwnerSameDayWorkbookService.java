@@ -118,6 +118,15 @@ public class OwnerSameDayWorkbookService {
             WHERE teacher_id=? AND state='RUNNING'
               AND lesson_date=? AND updated_at < now() - INTERVAL '10 minutes'
             """, OWNER, LocalDate.now(BERLIN));
+        // A failed job can retry a bounded number of times; the same
+        // today's-lesson and not-yet-started checks still apply in enqueue.
+        // Never spin on an invalid AI response every minute.
+        db.update("""
+            UPDATE owner_same_day_workbook_jobs
+               SET state='QUEUED', error_code=NULL, updated_at=now()
+             WHERE teacher_id=? AND lesson_date=? AND state='FAILED'
+               AND attempts < 3 AND updated_at < now() - INTERVAL '2 minutes'
+            """, OWNER, LocalDate.now(BERLIN));
         List<GroupLessonResponse> today = lessons.listSavedGroupLessons(actor);
         for (GroupLessonResponse lesson : today) {
             try {
@@ -180,8 +189,9 @@ public class OwnerSameDayWorkbookService {
 
     private void run(String eventId) {
         if (db.update("""
-                UPDATE owner_same_day_workbook_jobs SET state='RUNNING', updated_at=now()
-                WHERE teacher_id=? AND event_id=? AND state='QUEUED'
+                UPDATE owner_same_day_workbook_jobs
+                   SET state='RUNNING', attempts=attempts+1, updated_at=now()
+                 WHERE teacher_id=? AND event_id=? AND state='QUEUED'
                 """, OWNER, eventId) != 1) return;
         try {
             User owner = owner();
