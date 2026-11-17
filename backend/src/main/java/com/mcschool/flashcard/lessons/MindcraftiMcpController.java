@@ -1423,6 +1423,10 @@ public class MindcraftiMcpController {
         // when a transcript gains new words.
         evidence.remove("currentPreparation");
         evidence.remove("previousLesson");
+        // Do not revalidate against live homework activity, skill analytics or
+        // submissions changing while the PDF worker is queued. Student identity,
+        // selected lesson, official prompts and month plan remain bound above.
+        evidence.remove("students");
         Object previous = evidence.remove("previousLessons");
         if (previous instanceof List<?> lessons) {
             evidence.put("completedPreviousEventIds", lessons.stream()
