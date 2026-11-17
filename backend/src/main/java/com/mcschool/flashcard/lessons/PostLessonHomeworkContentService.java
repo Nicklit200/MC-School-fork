@@ -124,7 +124,10 @@ public class PostLessonHomeworkContentService {
 
     /** Server-side voice-to-text; the audio is never stored in the database. */
     public String transcribe(MultipartFile audio)throws Exception{
-        if(!configured())throw new IllegalStateException("HOMEWORK_AI_NOT_CONFIGURED");
+        // Speech transcription is independent of the model used for PDF generation.
+        // A valid OPENAI_API_KEY is sufficient for audio transcription.
+        if(apiKey.isEmpty())throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Voice transcription is not configured");
         if(audio==null||audio.isEmpty()||audio.getSize()>5_000_000)
             throw new IllegalArgumentException("Voice note must be smaller than 5 MB");
         String original=Objects.toString(audio.getOriginalFilename(),"note.webm");
@@ -145,9 +148,16 @@ public class PostLessonHomeworkContentService {
                 .header("Content-Type","multipart/form-data; boundary="+boundary)
                 .timeout(Duration.ofSeconds(90)).POST(HttpRequest.BodyPublishers.ofByteArray(payload)).build();
         HttpResponse<String> response=client.send(req,HttpResponse.BodyHandlers.ofString());
-        if(response.statusCode()<200||response.statusCode()>=300)throw new IllegalStateException("HOMEWORK_TRANSCRIBE_FAILED");
+        if(response.statusCode()<200||response.statusCode()>=300) {
+            // Avoid exposing provider response bodies or secrets to the browser.
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_GATEWAY,
+                    "Voice transcription provider returned HTTP "+response.statusCode());
+        }
         Map<String,Object> out=json.readValue(response.body(),Map.class);
         String note=String.valueOf(out.getOrDefault("text","")).strip();
+        if(note.isBlank())throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "Speech could not be recognized");
         if(note.length()>3000)throw new IllegalArgumentException("Voice text too long");
         return note;
     }
