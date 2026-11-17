@@ -389,6 +389,9 @@ class WorkbookTeacherWorkflowTest {
     @Test
     @SuppressWarnings("unchecked")
     void homeworkMayReadCompletedReferenceLessonButCannotReadLiveReference() throws Exception {
+        when(prompts.readForMcp()).thenReturn(new SchoolPromptSettingsResponse(
+                "group-current", "individual-current", "", "", "workbook-current",
+                "seven-day-homework-prompt", Instant.now()));
         LessonPreparation finished = LessonPreparation.create(a, "lesson-a");
         when(preparations.findByTeacherIdAndEventId(a.getId(), "lesson-a"))
                 .thenReturn(Optional.of(finished));
