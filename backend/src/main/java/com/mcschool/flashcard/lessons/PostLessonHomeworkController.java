@@ -19,33 +19,39 @@ public class PostLessonHomeworkController {
     private final PostLessonHomeworkJobService jobs;
     private final PostLessonHomeworkContentService content;
     private final OnlineClassAccessService access;
+    private final PostLessonHomeworkPilotAccess pilot;
 
     public PostLessonHomeworkController(PostLessonHomeworkJobService jobs,
-            PostLessonHomeworkContentService content,OnlineClassAccessService access){
-        this.jobs=jobs;this.content=content;this.access=access;
+            PostLessonHomeworkContentService content,OnlineClassAccessService access,
+            PostLessonHomeworkPilotAccess pilot){
+        this.jobs=jobs;this.content=content;this.access=access;this.pilot=pilot;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public Map<String,Object> queue(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId,@Valid @RequestBody PostLessonHomeworkJobService.Request request){
+        pilot.require(teacher);
         return jobs.enqueue(teacher,classId,request);
     }
 
     @GetMapping
     public Map<String,Object> status(@AuthenticationPrincipal AuthenticatedUser teacher,@PathVariable UUID classId){
+        pilot.require(teacher);
         return jobs.status(teacher,classId);
     }
 
     @PostMapping("/retry")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public Map<String,Object> retry(@AuthenticationPrincipal AuthenticatedUser teacher,@PathVariable UUID classId){
+        pilot.require(teacher);
         return jobs.retry(teacher,classId);
     }
 
     @PostMapping(value="/transcribe",consumes="multipart/form-data")
     public Map<String,String> transcribe(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId,@RequestParam("audio") MultipartFile audio)throws Exception{
+        pilot.require(teacher);
         access.requireHost(teacher,classId);
         return Map.of("text",content.transcribe(audio));
     }
