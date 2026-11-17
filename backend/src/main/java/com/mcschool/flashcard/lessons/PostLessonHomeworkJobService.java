@@ -39,6 +39,8 @@ import tools.jackson.databind.ObjectMapper;
 public class PostLessonHomeworkJobService {
     private static final Logger LOG=LoggerFactory.getLogger(PostLessonHomeworkJobService.class);
     private static final ZoneId ZONE=ZoneId.of("Europe/Berlin");
+    private static final int MAX_SOURCE_WORKBOOK_PDF_BYTES=8_000_000;
+    private static final int MAX_SOURCE_WORKBOOK_TEXT_CHARS=16_000;
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
     private final ObjectMapper json;
@@ -174,8 +176,11 @@ public class PostLessonHomeworkJobService {
             worker.execute(()->{
                 try{process(job);}
                 catch(Exception failure){
+                    String reason=Objects.toString(failure.getMessage(),"");
                     String code=failure instanceof ResponseStatusException status? "CONFLICT_"+status.getStatusCode().value():
-                            Objects.toString(failure.getMessage(),"").startsWith("HOMEWORK_AI_")?"AI_UNAVAILABLE":
+                            reason.startsWith("HOMEWORK_AI_")?"AI_UNAVAILABLE":
+                            reason.startsWith("HOMEWORK_LESSON_EVIDENCE_MISSING")?"LESSON_MATERIAL_MISSING":
+                            reason.startsWith("HOMEWORK_PDF_INVALID")?"PDF_INVALID":
                             "GENERATION_FAILED";
                     int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING'",code,job.id());
                     if(changed>0) safeNotify(job.id());
@@ -304,13 +309,60 @@ public class PostLessonHomeworkJobService {
                         "submitted",h.isSubmitted()));
         }
         data.put("previousHomework",previous);
-        // A lesson PLAN does not prove it was actually taught; fail closed without lesson evidence.
+        // The student's ORIGINAL attached lesson workbook is a source of example tasks,
+        // not proof they were solved. Prefer their own PDF; use the shared PDF as fallback.
+        WorksheetSource worksheet=lessonWorksheet(teacher.id(),job.eventId(),studentId);
+        if(worksheet!=null){
+            data.put("lessonWorksheetSource",worksheet.source());
+            data.put("lessonWorksheetPages",worksheet.pages());
+            data.put("lessonWorksheetText",worksheet.text());
+            data.put("worksheetIsEvidenceOfCompletion",false);
+            // The generative API receives this as a real PDF attachment, NOT base64 text.
+            data.put("_lessonWorksheetPdfBase64",Base64.getEncoder().encodeToString(worksheet.pdf()));
+        }
+        // Without transcription, the workbook and teacher's written/voice instructions
+        // are sufficient to ground new practice. Never invent student mistakes.
         boolean hasLesson=(!Objects.toString(data.get("transcript"),"").isBlank()
                 ||!Objects.toString(data.get("liveTranscript"),"").isBlank()
                 ||!Objects.toString(data.get("coveredMaterial"),"").isBlank()
-                ||!Objects.toString(data.get("savedBoardText"),"").isBlank());
+                ||!Objects.toString(data.get("savedBoardText"),"").isBlank()
+                ||worksheet!=null);
         if(!hasLesson)throw new IllegalStateException("HOMEWORK_LESSON_EVIDENCE_MISSING");
         return data;
+    }
+
+    /** Student-visible PDF only. Teacher answers must never enter the AI evidence. */
+    record WorksheetSource(byte[] pdf,String source,String text,int pages){}
+
+    private WorksheetSource lessonWorksheet(UUID teacherId,String eventId,UUID studentId){
+        List<byte[]> personal=db.query(
+                "SELECT workbook_pdf FROM personal_lesson_workbooks WHERE teacher_id=? AND event_id=? AND student_id=?",
+                (rs,i)->rs.getBytes(1),teacherId,eventId,studentId);
+        if(!personal.isEmpty()){
+            WorksheetSource source=inspectWorksheet(personal.get(0),"personal");
+            if(source!=null)return source;
+        }
+        List<byte[]> shared=db.query(
+                "SELECT workbook_pdf FROM lesson_preparations WHERE teacher_id=? AND event_id=? AND workbook_pdf IS NOT NULL",
+                (rs,i)->rs.getBytes(1),teacherId,eventId);
+        return shared.isEmpty()?null:inspectWorksheet(shared.get(0),"shared");
+    }
+
+    static WorksheetSource inspectWorksheet(byte[] bytes,String source){
+        if(bytes==null||bytes.length<100||bytes.length>MAX_SOURCE_WORKBOOK_PDF_BYTES)return null;
+        try(var document=org.apache.pdfbox.Loader.loadPDF(bytes)){
+            int pages=document.getNumberOfPages();
+            if(pages<1||pages>40)return null;
+            var stripper=new org.apache.pdfbox.text.PDFTextStripper();
+            stripper.setSortByPosition(true);
+            String text=Objects.toString(stripper.getText(document),"").strip();
+            if(text.length()>MAX_SOURCE_WORKBOOK_TEXT_CHARS)
+                text=text.substring(0,MAX_SOURCE_WORKBOOK_TEXT_CHARS);
+            return new WorksheetSource(bytes,source,text,pages);
+        }catch(Exception failure){
+            // Malformed legacy workbooks do not hide valid transcripts and board data.
+            return null;
+        }
     }
 
     /** All-or-nothing publication, no replacing any existing PDF (including unsubmitted work). */
