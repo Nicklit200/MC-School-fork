@@ -102,6 +102,61 @@ class PostLessonHomeworkSafeTrialTest {
         verifyNoInteractions(homeworks);
     }
 
+    @Test void twoFinishedLessonsCanAssignTwoIndependentWorksheetsOnTheSameDay() {
+        // Simulate two different completed classrooms with the same pupil and date.
+        // This must not query/replace the pupil's already-assigned homeworks.
+        LocalDate day = LocalDate.of(2026,11,18);
+        User owner = mock(User.class);
+        when(users.findById(teacherId)).thenReturn(java.util.Optional.of(owner));
+        when(owner.getRole()).thenReturn(Role.TEACHER);
+        when(owner.getStatus()).thenReturn(UserStatus.ACTIVE);
+        when(room.getStatus()).thenReturn(OnlineClassStatus.ENDED);
+        UUID secondRoomId=UUID.fromString("00000000-0000-4000-a000-000000001021");
+        UUID secondJobId=UUID.fromString("00000000-0000-4000-a000-000000001031");
+        when(access.requireHost(actor,secondRoomId)).thenReturn(room);
+        when(users.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(
+                studentId,teacherId,Role.STUDENT,UserStatus.ACTIVE)).thenReturn(true);
+        Map<String,Object> generated=Map.of(
+                "student_id",studentId,
+                "day_number",1,
+                "assignment_date",java.sql.Date.valueOf(day),
+                "student_pdf",new byte[]{37,80,68,70,45,49,46,55});
+        when(jdbc.queryForList(
+                startsWith("SELECT student_id,day_number,assignment_date,student_pdf"),
+                any(UUID.class))).thenReturn(List.of(generated));
+        var roster=List.<Map<String,Object>>of(Map.of("id",studentId.toString(),"name",TEST_NAME));
+        var first=new PostLessonHomeworkJobService.Job(
+                jobId,roomId,teacherId,TEST_EVENT,1,day,"","[]",null,"RUNNING",1,1);
+        var second=new PostLessonHomeworkJobService.Job(
+                secondJobId,secondRoomId,teacherId,TEST_EVENT,1,day,"","[]",null,"RUNNING",1,1);
+
+        assertDoesNotThrow(()->jobs.publish(first,actor,roster));
+        assertDoesNotThrow(()->jobs.publish(second,actor,roster));
+
+        var pdfs=org.mockito.ArgumentCaptor.forClass(org.springframework.web.multipart.MultipartFile.class);
+        verify(publisher,times(2)).createWorksheetHomework(
+                eq(actor),eq(studentId),eq(day),pdfs.capture());
+        var files=pdfs.getAllValues();
+        assertEquals(2,files.size());
+        assertNotEquals(files.get(0).getOriginalFilename(),files.get(1).getOriginalFilename());
+        assertTrue(files.get(0).getOriginalFilename().contains("2026-11-18"));
+        assertTrue(files.get(1).getOriginalFilename().contains("2026-11-18"));
+        verifyNoInteractions(homeworks);
+        verify(publisher,never()).uploadWorksheet(any(),any(),any());
+    }
+
+    @Test void publishedJobCannotBeRetriedAndDuplicated() {
+        var published=new PostLessonHomeworkJobService.Job(
+                jobId,roomId,teacherId,TEST_EVENT,1,LocalDate.of(2026,11,18),
+                "","[]",null,"PUBLISHED",1,1);
+        when(jdbc.query(
+                startsWith("SELECT * FROM post_lesson_homework_jobs WHERE class_id=? AND teacher_id=? FOR UPDATE"),
+                any(org.springframework.jdbc.core.RowMapper.class),eq(roomId),eq(teacherId)))
+                .thenReturn(List.of(published));
+        assertThrows(ResponseStatusException.class,()->jobs.retry(actor,roomId));
+        verifyNoInteractions(publisher);
+    }
+
     @Test void noHomeworkIsQueuedBeforeAnActualEnd() {
         when(room.getStatus()).thenReturn(OnlineClassStatus.LIVE);
         assertThrows(ResponseStatusException.class,()->
