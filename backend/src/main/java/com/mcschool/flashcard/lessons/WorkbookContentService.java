@@ -90,6 +90,8 @@ public class WorkbookContentService {
                     "failureType", lastContentError == null ? "INVALID_CONTENT" : lastContentError.getClass().getSimpleName(),
                     "instruction", "Generate a NEW, shorter, valid complete lessonJson string. "
                         + "Correct JSON brackets, escaped backslashes, nested quotes, meta/workbookPages/teacherPages and math QA. "
+                        + "Each exercise row.math and extra.math MUST be {latex:nonempty TeX} or {tokens:[one or more short strings]}. "
+                        + "Never use empty tokens. qa.algebra must verify a real exercise answer. "
                         + "Never output partial JSON. Retain the student's German exercises and separate teacher solutions."));
             Map<String,Object> payload = Map.of("model", model, "store", false, "max_output_tokens", 24000,
                     "instructions", instructions,
@@ -126,9 +128,56 @@ public class WorkbookContentService {
             throw new IllegalArgumentException("Generated workbook content is missing or too large");
         @SuppressWarnings("unchecked") Map<String,Object> document = json.readValue(content.lessonJson(), Map.class);
         OwnerWorkbookPdfRenderService.validateDocument(document);
+        validateMathExpressions(document);
         if (!(document.get("qa") instanceof Map<?,?> qa) || !(qa.get("algebra") instanceof List<?> checks) || checks.isEmpty())
             throw new IllegalArgumentException("Generated workbook must contain explicit algebra QA assertions");
         return content;
+    }
+
+    /**
+     * The layout validator checks page structure, while the renderer also
+     * requires every math field to contain a real expression. Reject invalid
+     * model-created rows before rendering so the bounded AI-repair loop can
+     * regenerate the whole structured lesson, not produce a broken PDF.
+     */
+    static void validateMathExpressions(Object value) {
+        if (value instanceof List<?> list) {
+            for (Object item : list) validateMathExpressions(item);
+            return;
+        }
+        if (!(value instanceof Map<?,?> map)) return;
+        if (map.containsKey("math")) validateMathValue(map.get("math"));
+        if (map.containsKey("expressions")) {
+            Object expressions = map.get("expressions");
+            if (expressions instanceof List<?> values)
+                for (Object expression : values) validateMathValue(expression);
+        }
+        for (var entry : map.entrySet()) {
+            if ("math".equals(entry.getKey()) || "expressions".equals(entry.getKey())) continue;
+            validateMathExpressions(entry.getValue());
+        }
+    }
+
+    private static void validateMathValue(Object value) {
+        if (value instanceof String text) {
+            if (text.isBlank()) throw new IllegalArgumentException("Workbook math expression is empty");
+            return; // Rich-text inline maths may be LaTeX strings.
+        }
+        if (value instanceof List<?> tokens) {
+            if (tokens.isEmpty() || tokens.size() > 100 || tokens.stream().anyMatch(x -> !(x instanceof String t) || t.isBlank() || t.length() > 200))
+                throw new IllegalArgumentException("Workbook math tokens must be 1..100 nonempty strings");
+            return;
+        }
+        if (value instanceof Map<?, ?> math) {
+            boolean latex = math.containsKey("latex"), tokens = math.containsKey("tokens");
+            if (latex == tokens) throw new IllegalArgumentException("Workbook math requires exactly one latex or tokens");
+            if (latex) {
+                if (!(math.get("latex") instanceof String expression) || expression.isBlank() || expression.length() > 2000)
+                    throw new IllegalArgumentException("Workbook LaTeX must be a nonempty string");
+            } else validateMathValue(math.get("tokens"));
+            return;
+        }
+        throw new IllegalArgumentException("Workbook math value has an unsupported structure");
     }
 
     static String outputText(Map<String,Object> body) {
