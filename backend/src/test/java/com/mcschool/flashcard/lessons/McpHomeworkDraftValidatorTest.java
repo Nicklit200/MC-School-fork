@@ -81,4 +81,24 @@ class McpHomeworkDraftValidatorTest {
         assertThrows(IllegalArgumentException.class,()->McpHomeworkDraftValidator.seriesMarker("bad",1));
         assertThrows(IllegalArgumentException.class,()->McpHomeworkDraftValidator.seriesMarker("approved-homework-7",8));
     }
+    @Test void shorterSeriesHasAnIndependentLastDay() throws Exception {
+        assertDoesNotThrow(() -> McpHomeworkDraftValidator.normalize(
+                mapper, document(3, 1, 5, false), 3, 3, "Sofia"));
+        assertThrows(IllegalArgumentException.class, () -> McpHomeworkDraftValidator.normalize(
+                mapper, document(3, 1, 5, true), 3, 3, "Sofia"));
+        assertDoesNotThrow(() -> McpHomeworkDraftValidator.normalize(
+                mapper, document(1, 1, 5, false), 1, 1, "Sofia"));
+        assertThrows(IllegalArgumentException.class, () -> McpHomeworkDraftValidator.normalize(
+                mapper, document(1, 1, 5, true), 1, 1, "Sofia"));
+    }
+
+    @Test void shorterSeriesStillRequiresGuidanceBeforeLastDay() throws Exception {
+        assertDoesNotThrow(() -> McpHomeworkDraftValidator.normalize(
+                mapper, document(2, 1, 5, true), 2, 4, "Sofia"));
+        assertThrows(IllegalArgumentException.class, () -> McpHomeworkDraftValidator.normalize(
+                mapper, document(2, 1, 5, false), 2, 4, "Sofia"));
+        assertThrows(IllegalArgumentException.class, () -> McpHomeworkDraftValidator.normalize(
+                mapper, document(3, 1, 5, false), 3, 2, "Sofia"));
+    }
+
 }
