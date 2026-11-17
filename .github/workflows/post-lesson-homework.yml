@@ -5,6 +5,7 @@ on:
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/PostLessonHomework*'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/McpHomeworkDraftValidator.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/McpHomeworkDraftValidatorTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkSafeTrialTest.java'
       - 'backend/src/main/resources/db/migration/V108__post_lesson_automatic_homework.sql'
       - 'frontend/src/features/online-classes/PostLessonHomeworkDialog*'
       - 'frontend/src/api/onlineClasses.ts'
@@ -27,7 +28,7 @@ jobs:
           cache-dependency-path: backend/pom.xml
       - name: Homework validator and backend compile
         working-directory: backend
-        run: mvn -B -ntp -Dtest=McpHomeworkDraftValidatorTest test
+        run: mvn -B -ntp -Dtest=McpHomeworkDraftValidatorTest,PostLessonHomeworkSafeTrialTest test
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
