@@ -141,6 +141,20 @@ public class PostLessonHomeworkContentService {
                 provide variable "x"; otherwise variable must be the empty string.
                 solutionText is a correct, German explanation only for the PRIVATE
                 teacher answers, not pupil-facing text.
+                IMPORTANT pedagogical accuracy: distinguish Brüche (numeric fractions) from
+                Terme (algebraic expressions). Do NOT mix them into one problem just because
+                the source workbook contains both skills. Do not introduce x or an algebraic
+                numerator in a simple Bruch kürzen/Bruch vereinfachen task. Such a task must
+                display ONE ordinary numerical fraction (e.g. ["18/24","=","_____"])
+                and the answer must be its reduced form (e.g. 3/4).
+                Do NOT label division of fractions or Bruchterme as "Bruch vereinfachen".
+                If the teacher explicitly wants advanced algebraic fractions, use an
+                accurate advanced title such as "Bruchterme dividieren" and represent
+                each complete fraction as ONE token ("(3x-2)/4", "3/8"), rather than
+                splitting numerator, slash and denominator into separate tokens.
+                The server formats these tokens as proper vertically stacked fractions.
+                Follow the source exercises and teacher's stated difficulty; never
+                escalate from a basic fraction into algebraic fractions without evidence.
                 One or two independent problems, a total of at most ten minutes.
                 Each task has a SHORT title and optional short description.
                 For earlier days provide a concise helpful hint. For the final day,

@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "school": "MINDCRAFTI SCHOOL",
+    "subject": "MATHEMATIK",
+    "durationMinutes": 30,
+    "homeworkMode": true,
+    "homeworkDay": 1,
+    "homeworkEstimatedMinutes": 6
+  },
+  "workbookPages": [
+    {
+      "title": "Bruchterme dividieren",
+      "subtitle": "Berechne und vereinfache.",
+      "blocks": [
+        {
+          "type": "callout",
+          "label": "Merke",
+          "text": "Beim Dividieren mit dem Kehrwert multiplizieren."
+        },
+        {
+          "type": "exercise",
+          "number": "01",
+          "title": "Bruchterme dividieren.",
+          "rows": [
+            {
+              "label": "",
+              "math": {
+                "latex": "\\frac{3x-2}{4} \\div \\frac{3}{8} ="
+              },
+              "work": true
+            }
+          ],
+          "writeLines": 6
+        }
+      ]
+    }
+  ],
+  "teacherPages": [
+    {
+      "title": "Lösungen",
+      "subtitle": "Nur für Lehrkräfte",
+      "blocks": [
+        {
+          "type": "solutions",
+          "section": "Bruchterme",
+          "title": "Antworten",
+          "items": [
+            {
+              "label": "01",
+              "text": "((3x-2)/4) : (3/8) = (6x-4)/3"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "qa": {
+    "algebra": [
+      {
+        "number": 1,
+        "kind": "equivalence",
+        "expression": "((3*x-2)/4)/(3/8)",
+        "answer": "(6*x-4)/3",
+        "restrictions": []
+      }
+    ]
+  }
+}
