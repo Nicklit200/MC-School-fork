@@ -77,7 +77,13 @@ final class PostLessonHomeworkMch3Template {
             exercise.put("writeLines",6);
             studentBlocks.add(exercise);
 
-            answers.add(Map.of("label",label,"text",solution));
+            // Never trust a free-form explanation as an unchecked teacher answer.
+            // Render the same expression and proposed answer that SymPy checks
+            // in qa.algebra; the teacher may explain steps live.
+            String checkedAnswer = kind.equals("solution")
+                    ? expression + "  →  " + variable + " = " + answer
+                    : expression + " = " + answer;
+            answers.add(Map.of("label",label,"text",checkedAnswer));
             Map<String,Object> assertion = new LinkedHashMap<>();
             assertion.put("number",i+1);
             assertion.put("restrictions",List.of());
