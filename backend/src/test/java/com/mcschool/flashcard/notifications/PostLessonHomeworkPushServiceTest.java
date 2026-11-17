@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.lessons.PostLessonHomeworkPilotAccess;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserStatus;
@@ -22,6 +23,7 @@ class PostLessonHomeworkPushServiceTest {
     private final UserRepository users=mock(UserRepository.class);
     private final PushSubscriptionRepository subscriptions=mock(PushSubscriptionRepository.class);
     private final WebPushService webPush=mock(WebPushService.class);
+    private final PostLessonHomeworkPilotAccess pilot=mock(PostLessonHomeworkPilotAccess.class);
     private final UUID teacher=UUID.fromString("00000000-0000-4000-a000-000000000031");
     private final UUID admin=UUID.fromString("00000000-0000-4000-a000-000000000032");
     private final UUID pupil=UUID.fromString("00000000-0000-4000-a000-000000000033");
@@ -30,25 +32,27 @@ class PostLessonHomeworkPushServiceTest {
     private final UUID outboxId=UUID.fromString("00000000-0000-4000-a000-000000000035");
     private final Instant finished=Instant.parse("2026-11-17T10:40:00Z");
     private final PostLessonHomeworkPushService service=
-            new PostLessonHomeworkPushService(db,users,subscriptions,webPush);
+            new PostLessonHomeworkPushService(db,users,subscriptions,webPush,pilot);
 
     @BeforeEach void setup() {
         when(webPush.isConfigured()).thenReturn(true);
+        when(pilot.teacherId()).thenReturn(teacher);
+        when(pilot.allowed(teacher)).thenReturn(true);
     }
 
     @Test void capturesOnlyActiveStaffDeviceSubscriptionsIdempotently() {
         service.captureTerminal(job);
         verify(db).update(argThat(sql -> sql.contains("ON CONFLICT")
                         && sql.contains("push_subscriptions")
-                        && sql.contains("u.role = 'ADMIN'")
                         && sql.contains("u.id = j.teacher_id")
-                        && sql.contains("u.archived = false")),eq(job));
+                        && sql.contains("u.role = 'TEACHER'")
+                        && sql.contains("u.archived = false")),eq(job),eq(teacher));
         verifyNoInteractions(webPush);
     }
 
     @Test void onlyTeacherAndAdminCanBeNotified() {
         assertTrue(PostLessonHomeworkPushService.isStaffRecipient(teacher,Role.TEACHER,teacher));
-        assertTrue(PostLessonHomeworkPushService.isStaffRecipient(admin,Role.ADMIN,teacher));
+        assertFalse(PostLessonHomeworkPushService.isStaffRecipient(admin,Role.ADMIN,teacher));
         assertFalse(PostLessonHomeworkPushService.isStaffRecipient(pupil,Role.STUDENT,teacher));
         assertFalse(PostLessonHomeworkPushService.isStaffRecipient(pupil,Role.PARENT,teacher));
         assertFalse(PostLessonHomeworkPushService.isStaffRecipient(admin,Role.TEACHER,teacher));
@@ -91,7 +95,7 @@ class PostLessonHomeworkPushServiceTest {
     @Test void neverSendsStudentOrParentCompletionPush() {
         prepare("PUBLISHED",Role.PARENT,pupil);
         service.sendPending();
-        verify(webPush,never()).send(any(),anyString(),anyString(),anyString());
+        verify(webPush,never()).send(any(),anyString(),anyString(),anyString(),anyString());
     }
 
     @SuppressWarnings({"unchecked","rawtypes"})
