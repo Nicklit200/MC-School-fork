@@ -1445,8 +1445,8 @@ public class MindcraftiMcpController {
     private MonthlyPlanResponse selectedWorkbookPlan(AuthenticatedUser teacher, GroupLessonResponse lesson) {
         String type = lesson.groupId() != null ? "group" : "student";
         UUID targetId = lesson.groupId() != null ? lesson.groupId() : lesson.studentId();
-        if (targetId == null) throw new IllegalArgumentException(
-                "Workbook pilot requires a lesson linked to an actual group or student");
+        // A trial workbook belongs to the lesson event, not to a registered pupil/group.
+        if (targetId == null) return null;
         String month = workbookLocalDate(lesson).withDayOfMonth(1).toString().substring(0, 7);
         MonthlyPlanResponse result = monthlyPlanService.get(teacher, type, targetId, month);
         return result;
@@ -1593,6 +1593,8 @@ public class MindcraftiMcpController {
     private Map<String,Object> prepareHomeworkContext(Map<String,Object> args, AuthContext auth) throws Exception {
         requireWorkbookStaff(auth);
         Map<String,Object> ctx=new LinkedHashMap<>(prepareWorkbookContext(args,auth));
+        if ("trial".equals(ctx.get("targetType")))
+            throw new IllegalArgumentException("Daily homework requires a registered student or group; use a diagnostic workbook for trial lessons");
         String prompt=schoolPromptSettingsService.readForMcp().homeworkPrompt();
         if(prompt==null || prompt.isBlank())throw new IllegalStateException("School homework prompt is not configured");
         // The shared workbook context includes workbook-specific warnings like
@@ -1766,13 +1768,14 @@ public class MindcraftiMcpController {
                 lesson.startsAt(), lesson.endsAt()).toMinutes());
         if (durationMinutes <= 0 || durationMinutes > 240)
             throw new IllegalArgumentException("Invalid calendar lesson duration");
+        boolean trial = lesson.groupId() == null && lesson.studentId() == null;
         MonthlyPlanResponse monthPlan = selectedWorkbookPlan(teacher, lesson);
         Map<String,Object> result = new LinkedHashMap<>();
         result.put("contextVersion", "v2-teacher-scoped");
         result.put("teacherId", teacher.id().toString());
         result.put("eventId", lesson.eventId());
-        result.put("targetType", lesson.groupId() == null ? "student" : "group");
-        result.put("targetId", String.valueOf(lesson.groupId() != null ? lesson.groupId() : lesson.studentId()));
+        result.put("targetType", trial ? "trial" : (lesson.groupId() == null ? "student" : "group"));
+        result.put("targetId", trial ? null : String.valueOf(lesson.groupId() != null ? lesson.groupId() : lesson.studentId()));
         result.put("targetName", lesson.groupName() != null ? lesson.groupName()
                 : lesson.studentName() != null ? lesson.studentName() : lesson.title());
         result.put("lessonTitle", lesson.title());
@@ -1789,7 +1792,8 @@ public class MindcraftiMcpController {
         }
         result.put("monthPlan", parsedPlan);
         result.put("monthPlanAvailable", !parsedPlan.isEmpty());
-        List<GroupLessonResponse> actualLessons = calendarLessonService.listGroupLessons(teacher).stream()
+        List<GroupLessonResponse> actualLessons = trial ? List.of()
+                : calendarLessonService.listGroupLessons(teacher).stream()
                 .filter(l -> l.startsAt() != null)
                 .filter(l -> lesson.groupId() != null ? lesson.groupId().equals(l.groupId())
                         : lesson.studentId().equals(l.studentId()))
@@ -1804,13 +1808,16 @@ public class MindcraftiMcpController {
         if (position >= 0 && plannedLessons instanceof List<?> list && position < list.size())
             result.put("candidateMonthLesson", list.get(position));
         else result.put("candidateMonthLesson", null);
-        result.put("monthLessonSelectionConfidence", "CANDIDATE_BY_CALENDAR_ORDER_ONLY");
-        result.put("monthLessonVerification", "Read preceding lesson/transcript and completed work; planned lesson statuses alone do not prove a topic was taught. Ask the teacher if plan and history disagree.");
+        result.put("monthLessonSelectionConfidence", trial ? "NOT_APPLICABLE_TRIAL" : "CANDIDATE_BY_CALENDAR_ORDER_ONLY");
+        result.put("monthLessonVerification", trial
+                ? "Trial lessons have no registered student or month plan. Use teacher-provided diagnostic goals, grade and topics; do not invent learning history."
+                : "Read preceding lesson/transcript and completed work; planned lesson statuses alone do not prove a topic was taught. Ask the teacher if plan and history disagree.");
 
         LessonPreparation current = preparationRepository
                 .findByTeacherIdAndEventId(teacher.id(), lesson.eventId()).orElse(null);
         result.put("currentPreparation", workbookPrepSummary(current));
-        GroupLessonResponse previous = calendarLessonService.listGroupLessons(teacher).stream()
+        GroupLessonResponse previous = trial ? null
+                : calendarLessonService.listGroupLessons(teacher).stream()
                 .filter(l -> l.startsAt() != null && l.startsAt().isBefore(lesson.startsAt()))
                 .filter(l -> lesson.groupId() != null ? lesson.groupId().equals(l.groupId())
                         : lesson.studentId().equals(l.studentId()))
@@ -1828,7 +1835,7 @@ public class MindcraftiMcpController {
         if (lesson.studentId() != null) {
             students.add(Map.of("id", lesson.studentId().toString(),
                     "name", lesson.studentName() == null ? "Student" : lesson.studentName()));
-        } else {
+        } else if (lesson.groupId() != null) {
             Map<String,Object> targets = homeworkSeriesService.findTargets(teacher, "");
             Object raw = targets.get("targets");
             if (raw instanceof List<?> targetList) for (Object entry : targetList) {
@@ -1931,8 +1938,11 @@ public class MindcraftiMcpController {
         result.put("students", studentContexts);
         result.put("studentMembershipNeedsTeacherReview", true);
         var prompts = schoolPromptSettingsService.readForMcp();
-        result.put("teachingPrompt", lesson.groupId() != null ?
-                prompts.groupLessonPrompt() : prompts.individualLessonPrompt());
+        String teachingPrompt = lesson.groupId() != null
+                ? prompts.groupLessonPrompt() : prompts.individualLessonPrompt();
+        if (trial && prompts.diagnosticLessonPrompt() != null && !prompts.diagnosticLessonPrompt().isBlank())
+            teachingPrompt = prompts.diagnosticLessonPrompt();
+        result.put("teachingPrompt", teachingPrompt);
         result.put("workbookPrompt", prompts.workbookPrompt());
         result.put("promptUpdatedAt", prompts.updatedAt() == null ? null : prompts.updatedAt().toString());
         Map<String,Object> brand = new LinkedHashMap<>(schoolBrandGuideService.readForMcp());
@@ -1946,13 +1956,20 @@ public class MindcraftiMcpController {
             }
         }
         result.put("brandGuide", brand);
-        result.put("rules", List.of(
-                "Use the documented month plan but verify the lesson candidate against actual past work.",
-                "Review submitted handwritten homework via get_homework_submission_pages before claiming errors in PDF solutions.",
-                "Unsumbitted homework is missing evidence, NOT proof of a learning difficulty.",
+        List<String> workbookRules = new ArrayList<>();
+        if (trial) {
+            workbookRules.add("Trial lessons have no registered student/group, month plan or stored mastery. Use teacher-provided diagnostic goals, grade and topics, without inventing history.");
+            workbookRules.add("Do not create a fictitious student to generate a trial workbook. Keep guest details generic until confirmed.");
+        } else {
+            workbookRules.add("Use the documented month plan but verify the lesson candidate against actual past work.");
+            workbookRules.add("Review submitted handwritten homework via get_homework_submission_pages before claiming errors in PDF solutions.");
+            workbookRules.add("Unsumbitted homework is missing evidence, NOT proof of a learning difficulty.");
+        }
+        workbookRules.addAll(List.of(
                 "Generate exactly two PDFs, workbook + teacher answers; do not generate or assign homework or cards.",
                 "Use canonical generator v3 SVG/CSS; download both unpublished draft PDFs and review before publication.",
                 "If pupil level, topic, date or duration is ambiguous, stop and ask the teacher to decide."));
+        result.put("rules", workbookRules);
         result.put("nextStep", "MANDATORY: ChatGPT must author lessonJson from this exact rendererContract and current lesson evidence (student workbookPages, teacherPages, qa.algebra), then call generate_lesson_workbook_draft with lessonJson, this fresh contextToken, eventId and a stable idempotencyKey. Server AI authoring is disabled. The school server renders only two unpublished PDF previews; do not publish until approved.");
         result.put("rendererContract",workbookRendererContract());
         result.put("contextToken",workbookContextToken(result));
