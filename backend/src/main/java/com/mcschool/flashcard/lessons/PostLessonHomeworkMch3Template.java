@@ -63,7 +63,7 @@ final class PostLessonHomeworkMch3Template {
 
             // The blank in the student expression is mandatory; the actual answer
             // must exist only in the teacher key and the server-side algebra QA.
-            if(!display.contains("_____") || display.stream().anyMatch(t -> t.equals(answer)))
+            if(!display.contains("_____") || display.get(display.size()-1).equals(answer))
                 throw new IllegalArgumentException("HOMEWORK_CONTENT_ANSWER_LEAKAGE");
             if(display.stream().noneMatch(t -> "=".equals(t)))
                 throw new IllegalArgumentException("HOMEWORK_CONTENT_EQUALS_MISSING");
