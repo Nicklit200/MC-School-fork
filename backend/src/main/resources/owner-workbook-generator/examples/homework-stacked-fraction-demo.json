@@ -25,7 +25,7 @@
             {
               "label": "",
               "math": {
-                "latex": "\\frac{3x-2}{4} \\div \\frac{3}{8} = \\underline{\\qquad\\qquad}"
+                "latex": "\\frac{3x-2}{4} \\div \\frac{3}{8} ="
               },
               "work": true
             }
