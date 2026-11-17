@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.lessons.PostLessonHomeworkPilotAccess;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserStatus;
@@ -28,13 +29,16 @@ public class PostLessonHomeworkPushService {
     private final UserRepository users;
     private final PushSubscriptionRepository subscriptions;
     private final WebPushService webPush;
+    private final PostLessonHomeworkPilotAccess pilot;
 
     public PostLessonHomeworkPushService(JdbcTemplate jdbc, UserRepository users,
-            PushSubscriptionRepository subscriptions, WebPushService webPush) {
+            PushSubscriptionRepository subscriptions, WebPushService webPush,
+            PostLessonHomeworkPilotAccess pilot) {
         this.jdbc = jdbc;
         this.users = users;
         this.subscriptions = subscriptions;
         this.webPush = webPush;
+        this.pilot = pilot;
     }
 
     record Delivery(UUID id, UUID jobId, UUID recipientId, UUID subscriptionId, String eventState,
@@ -48,37 +52,37 @@ public class PostLessonHomeworkPushService {
      * The periodic scan also repairs failures between commit and capturing the event.
      */
     public void captureTerminal(UUID jobId) {
+        if (pilot.teacherId() == null) return;
         jdbc.update("""
             INSERT INTO post_lesson_homework_push_outbox
                 (id, job_id, recipient_id, subscription_id, event_state, event_finished_at)
             SELECT gen_random_uuid(), j.id, u.id, s.id, j.state, j.finished_at
               FROM post_lesson_homework_jobs j
-              JOIN users u ON
-                   ((u.id = j.teacher_id AND u.role = 'TEACHER')
-                   OR u.role = 'ADMIN')
+              JOIN users u ON u.id = j.teacher_id AND u.role = 'TEACHER'
               JOIN push_subscriptions s ON s.user_id = u.id
-             WHERE j.id = ?
+             WHERE j.id = ? AND j.teacher_id = ?
                AND j.state IN ('PUBLISHED', 'FAILED')
                AND j.finished_at IS NOT NULL
                AND u.status = 'ACTIVE'
                AND u.archived = false
             ON CONFLICT (job_id, subscription_id, event_state, event_finished_at) DO NOTHING
-            """, jobId);
+            """, jobId, pilot.teacherId());
     }
 
     @Scheduled(fixedDelayString = "${app.post-lesson-homework.push.poll-ms:5000}",
             initialDelayString = "${app.post-lesson-homework.push.initial-ms:12000}")
     public void sendPending() {
-        if (!webPush.isConfigured()) return;
+        if (!webPush.isConfigured() || pilot.teacherId() == null) return;
         try {
             // Only recent jobs are scanned to avoid replaying old school assignments
             // when the feature is first deployed; existing outbox retries persist.
             List<UUID> recent = jdbc.query("""
                     SELECT id FROM post_lesson_homework_jobs
                      WHERE state IN ('PUBLISHED', 'FAILED')
+                       AND teacher_id = ?
                        AND finished_at >= now() - INTERVAL '24 hours'
                      ORDER BY finished_at DESC LIMIT 80
-                    """, (rs, i) -> rs.getObject("id", UUID.class));
+                    """, (rs, i) -> rs.getObject("id", UUID.class), pilot.teacherId());
             for (UUID jobId : recent) captureTerminal(jobId);
             jdbc.update("""
                     UPDATE post_lesson_homework_push_outbox
@@ -131,6 +135,8 @@ public class PostLessonHomeworkPushService {
 
             User recipient = users.findById(delivery.recipientId()).orElse(null);
             if (recipient == null || recipient.isArchived() || recipient.getStatus() != UserStatus.ACTIVE
+                    || !pilot.allowed(result.teacherId())
+                    || !pilot.allowed(recipient.getId())
                     || !isStaffRecipient(recipient.getId(), recipient.getRole(), result.teacherId())) {
                 mark(delivery.id(), "SKIPPED");
                 return;
@@ -179,7 +185,7 @@ public class PostLessonHomeworkPushService {
     }
 
     static boolean isStaffRecipient(UUID recipient, Role role, UUID teacher) {
-        return role == Role.ADMIN || (role == Role.TEACHER && Objects.equals(recipient, teacher));
+        return role == Role.TEACHER && Objects.equals(recipient, teacher);
     }
 
     static String title(Result result) {
