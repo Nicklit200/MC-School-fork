@@ -74,7 +74,8 @@ class PostLessonHomeworkPushServiceTest {
         service.sendPending();
         verify(webPush,times(1)).send(any(PushSubscription.class),
                 contains("назначена"),contains("3 дн., 1 уч."),
-                eq("/teacher/lessons/local-test-lesson"));
+                eq("/teacher/lessons/local-test-lesson"),
+                eq("post-homework-" + job + "-PUBLISHED"));
         verify(db).update(argThat(sql->sql.contains("SET status = ?")),
                 eq("SENT"),eq("SENT"),eq(outboxId));
     }
@@ -82,7 +83,7 @@ class PostLessonHomeworkPushServiceTest {
     @Test void doesNotSendOldFailureAfterTeacherHasRetried() {
         prepare("QUEUED",Role.TEACHER,teacher);
         service.sendPending();
-        verify(webPush,never()).send(any(),anyString(),anyString(),anyString());
+        verify(webPush,never()).send(any(),anyString(),anyString(),anyString(),anyString());
         verify(db).update(argThat(sql->sql.contains("SET status = ?")),
                 eq("SKIPPED"),eq("SKIPPED"),eq(outboxId));
     }
