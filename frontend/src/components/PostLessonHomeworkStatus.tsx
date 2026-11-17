@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import { onlineClassesApi, type PostLessonHomeworkJob } from '../api/onlineClasses';
 
 export function PostLessonHomeworkStatus({ eventId, de }: { eventId: string; de: boolean }) {
+  const { user } = useAuth();
+  const isPilot = user?.id === '14e3c7c1-1fc8-41bd-858a-6c20efdd957a' && user.role === 'TEACHER';
   const [id, setId] = useState<string | null>(null);
   const [job, setJob] = useState<PostLessonHomeworkJob | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -9,15 +12,16 @@ export function PostLessonHomeworkStatus({ eventId, de }: { eventId: string; de:
   useEffect(() => {
     let active = true;
     setId(null); setJob(null); setError('');
+    if (!isPilot) return () => { active = false; };
     void onlineClassesApi.findByEvent(eventId).then(rooms => {
       if (!active) return;
       const ended = rooms.find(room => room.status === 'ENDED');
       if (ended) setId(ended.id);
     }).catch(() => {});
     return () => { active = false; };
-  }, [eventId]);
+  }, [eventId, isPilot]);
   useEffect(() => {
-    if (!id) return;
+    if (!id || !isPilot) return;
     let active = true;
     const load = () => void onlineClassesApi.postLessonHomeworkStatus(id).then(response => {
       if (active) setJob(response);
@@ -27,8 +31,8 @@ export function PostLessonHomeworkStatus({ eventId, de }: { eventId: string; de:
     load();
     const timer = window.setInterval(load, 5000);
     return () => { active = false; clearInterval(timer); };
-  }, [id, de]);
-  if (!job || job.state === 'NONE') return null;
+  }, [id, de, isPilot]);
+  if (!isPilot || !job || job.state === 'NONE') return null;
   const label = job.state === 'PUBLISHED'
     ? (de ? 'Hausaufgaben verteilt' : 'Домашка назначена')
     : job.state === 'FAILED'
