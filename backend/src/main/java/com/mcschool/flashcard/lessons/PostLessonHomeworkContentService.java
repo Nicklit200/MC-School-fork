@@ -6,25 +6,41 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.ObjectMapper;
 
 /** Only creates validated, unpublished PDF pairs. Runs on the server without a browser session. */
 @Service
 public class PostLessonHomeworkContentService {
+    private static final Logger LOG = LoggerFactory.getLogger(PostLessonHomeworkContentService.class);
+    private static final int MAX_DRAFT_ATTEMPTS = 3;
+    private static final int MAX_REJECTED_JSON_CHARS = 24_000;
     private final String apiKey,model;
     private final ObjectMapper json;
     private final OwnerWorkbookPdfRenderService renderer;
-    private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+    private final HttpClient client;
 
+    @Autowired
     public PostLessonHomeworkContentService(
             @Value("${OPENAI_API_KEY:}") String apiKey,
             @Value("${HOMEWORK_OPENAI_MODEL:${WORKBOOK_OPENAI_MODEL:${OPENAI_MODEL:}}}") String model,
             ObjectMapper json,OwnerWorkbookPdfRenderService renderer) {
+        this(apiKey,model,json,renderer,HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15)).build());
+    }
+
+    /** Package-private for deterministic tests with a fake HTTP provider. */
+    PostLessonHomeworkContentService(String apiKey,String model,ObjectMapper json,
+            OwnerWorkbookPdfRenderService renderer,HttpClient client) {
         this.apiKey=apiKey==null?"":apiKey.trim();
         this.model=model==null?"":model.trim();
-        this.json=json;this.renderer=renderer;
+        this.json=Objects.requireNonNull(json);
+        this.renderer=Objects.requireNonNull(renderer);
+        this.client=Objects.requireNonNull(client);
     }
     public boolean configured(){return !apiKey.isEmpty()&&!model.isEmpty();}
 
@@ -144,12 +160,76 @@ public class PostLessonHomeworkContentService {
         Map<String,Object> schema=Map.of("type","object","properties",
                 Map.of("lessonJson",Map.of("type","string")),
                 "required",List.of("lessonJson"),"additionalProperties",false);
-        Map<String,Object> out=json.readValue(ask(instructions,evidence,"mindcrafti_daily_homework",schema),Map.class);
-        String checked=McpHomeworkDraftValidator.normalize(json,String.valueOf(out.get("lessonJson")),day,totalDays,studentName);
-        OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(checked);
-        if(pdf.studentPages()!=1||pdf.teacherPages()<1||pdf.studentPdf().length<100||pdf.teacherPdf().length<100)
-            throw new IllegalStateException("HOMEWORK_PDF_INVALID");
-        return pdf;
+        String rejectedJson = null;
+        String feedback = null;
+        String stage = "VALIDATION";
+        for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
+            // The existing school prompt, pupil-specific source PDF and teacher directions
+            // remain present for every repair. Never switch models or weaken PDF QA.
+            Map<String,Object> attemptEvidence = new LinkedHashMap<>(evidence);
+            if(feedback!=null) attemptEvidence.put("serverRepairRequest", Map.of(
+                    "day",day,"totalDays",totalDays,
+                    "validationError",feedback,
+                    "previousRejectedLessonJson",rejectedJson==null?"":rejectedJson.substring(
+                            0,Math.min(MAX_REJECTED_JSON_CHARS,rejectedJson.length())),
+                    "instruction","Correct this document while keeping the same source topics and school rules. "
+                            +"Return exactly a new complete JSON string in lessonJson."));
+            @SuppressWarnings("unchecked")
+            Map<String,Object> result=json.readValue(ask(instructions,attemptEvidence,
+                    "mindcrafti_daily_homework",schema),Map.class);
+            String candidate=result==null?"":Objects.toString(result.get("lessonJson"),"");
+            String checked;
+            try {
+                checked=McpHomeworkDraftValidator.normalize(json,candidate,day,totalDays,studentName);
+            }catch(Exception rejected){
+                stage="VALIDATION";
+                feedback=repairFeedback(rejected);
+                rejectedJson=candidate;
+                LOG.warn("Post-lesson homework JSON rejected: day={} attempt={} type={}",
+                        day,attempt,rejected.getClass().getSimpleName());
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
+                continue;
+            }
+            try {
+                OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(checked);
+                if(pdf.studentPages()!=1||pdf.teacherPages()<1
+                        ||pdf.studentPdf().length<100||pdf.teacherPdf().length<100)
+                    throw new IllegalStateException("HOMEWORK_PDF_INVALID");
+                return pdf;
+            }catch(IllegalArgumentException rejected){
+                stage="RENDER";
+                feedback=repairFeedback(rejected);
+                rejectedJson=candidate;
+                LOG.warn("Post-lesson homework PDF input rejected: day={} attempt={} type={}",
+                        day,attempt,rejected.getClass().getSimpleName());
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_RENDER_FAILED",rejected);
+            }catch(IllegalStateException rejected){
+                // Only model-related QA failures can be corrected by asking Luna again.
+                // Renderer crashes, filesystem errors and service configuration must
+                // remain visible as infrastructure failures.
+                if(!"Workbook studio QA did not pass".equals(rejected.getMessage()))throw rejected;
+                stage="MATH_QA";
+                feedback="The math or page-layout QA rejected this PDF. "
+                        +"Check all operations, answers, qa.algebra, page count and spacing.";
+                rejectedJson=candidate;
+                LOG.warn("Post-lesson homework PDF math/layout QA failed: day={} attempt={}",day,attempt);
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_MATH_QA_FAILED",rejected);
+            }
+        }
+        throw new IllegalStateException("HOMEWORK_DRAFT_"+stage+"_FAILED");
+    }
+
+    /** Repair guidance includes only the server-side validator reason, not private logs. */
+    private static String repairFeedback(Exception error) {
+        String reason=Objects.toString(error.getMessage(),"Unknown schema error");
+        // Safety bound: provider-generated content is never copied into application logs.
+        reason=reason.replaceAll("[\\r\\n\\t]+"," ").strip();
+        if(reason.length()>350)reason=reason.substring(0,350);
+        return "Server rejected the homework JSON: "+reason+". "
+                +"Fix all violations of the Mindcrafti homework prompt without adding student answers.";
     }
 
     /** Server-side voice-to-text; the audio is never stored in the database. */
