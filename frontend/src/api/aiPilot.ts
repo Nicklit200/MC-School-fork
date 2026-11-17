@@ -29,7 +29,24 @@ export type AiPilotSettings = {
   zone: string;
 };
 
+export type OwnerWorkbookStatus = {
+  enabled: boolean;
+  eventId: string;
+  state: 'NOT_STARTED' | 'NOT_ELIGIBLE' | 'ALREADY_ATTACHED' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED';
+  updatedAt?: string;
+};
+
 export const aiPilotApi = {
+  workbookStatus(eventId: string) {
+    return fetch(`${BASE_URL}/ai-pilot/lessons/${encodeURIComponent(eventId)}/workbook-status`, {
+      headers: headers(),
+    }).then(parse<OwnerWorkbookStatus>);
+  },
+  generateWorkbook(eventId: string) {
+    return fetch(`${BASE_URL}/ai-pilot/lessons/${encodeURIComponent(eventId)}/generate-workbook`, {
+      method: 'POST', headers: headers(),
+    }).then(parse<OwnerWorkbookStatus>);
+  },
   status() {
     return fetch(`${BASE_URL}/ai-pilot/status`, { headers: headers() }).then(parse<AiPilotStatus>);
   },
