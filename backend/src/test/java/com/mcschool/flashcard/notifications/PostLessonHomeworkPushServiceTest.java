@@ -108,6 +108,10 @@ class PostLessonHomeworkPushServiceTest {
             if(sql.contains("SELECT state, finished_at")) return List.of(result);
             return List.of();
         });
+        // Result lookup includes a jobId SQL bind, unlike the two-argument claim query.
+        when(db.query(org.mockito.ArgumentMatchers.<String>argThat(
+                sql -> sql.contains("SELECT state, finished_at")),
+                any(RowMapper.class), eq(job))).thenReturn(List.of(result));
         // First claim returns a pending device; subsequent claims are empty.
         final int[] claims={0};
         when(db.query(org.mockito.ArgumentMatchers.<String>argThat(sql -> sql.contains("RETURNING id, job_id")),
