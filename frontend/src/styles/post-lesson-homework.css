@@ -1,27 +1,80 @@
-.post-homework-backdrop{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.7);backdrop-filter:blur(12px)}
-.post-homework-island{width:min(660px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;border-radius:25px;background:#181818;color:#f6f6f6;border:1px solid #373737;box-shadow:0 20px 90px #0009;padding:26px;font-family:inherit}
-.post-homework-header{display:flex;align-items:center;gap:14px;padding-bottom:22px;border-bottom:1px solid #333}
-.post-homework-book{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:#101010;font-size:24px}
-.post-homework-header h2{font-size:21px;margin:0;font-weight:700;outline:none}
-.post-homework-header p{margin:4px 0 0;color:#aaa;font-size:14px}
-.post-homework-main{padding:23px 0;border-bottom:1px solid #303030}
-.post-homework-main h3{margin:0 0 16px;font-size:17px;font-weight:650}
-.post-homework-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
-.post-homework-day{min-height:48px;border:1px solid #444;border-radius:12px;background:transparent;color:#999;font-size:17px;cursor:pointer}
-.post-homework-day.is-selected{background:#fff;color:#161616;border-color:#fff;font-weight:650}
-.post-homework-day:hover:not(:disabled){border-color:#e7e7e7}
-.post-homework-day:focus-visible,.post-homework-voice:focus-visible,.post-homework-submit:focus-visible,.post-homework-skip:focus-visible{outline:2px solid #fff;outline-offset:3px}
-.post-homework-hint{font-size:13px;color:#aaa;margin:14px 0 0}
-.post-homework-textarea{display:block;width:100%;box-sizing:border-box;min-height:102px;resize:vertical;color:white;background:#171717;border:1px solid #424242;border-radius:16px;padding:15px;font-size:14px;font-family:inherit;line-height:1.55}
-.post-homework-textarea:focus{outline:1px solid #eee;border-color:#fff}
-.post-homework-voice{display:inline-flex;align-items:center;gap:10px;border:1px solid #383838;border-radius:20px;background:#262626;color:#eee;padding:9px 15px;margin-top:12px;font:inherit;cursor:pointer}
-.post-homework-voice.is-recording{background:#4a1b20;border-color:#c65454}
-.post-homework-voice span{font-size:15px}
-.post-homework-footer{display:flex;gap:12px;margin-top:22px}
-.post-homework-footer button{padding:13px 18px;border-radius:13px;font:inherit;font-weight:650;cursor:pointer}
-.post-homework-skip{background:#292929;border:1px solid #454545;color:#e7e7e7}
-.post-homework-submit{flex:1;background:#fff;border:1px solid #fff;color:#161616}
-.post-homework-footer button:disabled,.post-homework-voice:disabled{cursor:wait;opacity:.55}
-.post-homework-fineprint{color:#929292;text-align:center;font-size:12px;line-height:1.5;margin:13px 0 0}
-.post-homework-error{padding:10px;color:#ffb1b1;font-size:13px;margin:0}
-@media(max-width:550px){.post-homework-island{padding:17px;border-radius:19px}.post-homework-days{gap:3px}.post-homework-day{border-radius:9px;min-height:43px}.post-homework-header h2{font-size:19px}.post-homework-footer{flex-direction:column}.post-homework-footer .post-homework-skip{order:2}}
+/* Mindcrafti School post-lesson handoff: the same light navy/orange brand as staff pages. */
+.post-homework-backdrop {
+  position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center;
+  justify-content: center; padding: 20px; background: rgba(7, 10, 32, .56);
+  backdrop-filter: blur(8px);
+}
+.post-homework-island {
+  box-sizing: border-box; width: min(660px, 100%); max-height: calc(100dvh - 40px);
+  overflow-y: auto; overscroll-behavior: contain; padding: 27px;
+  border-radius: 22px; border: 1px solid #e5e7eb; background: #fff;
+  color: #070a20; font-family: inherit;
+  box-shadow: 0 24px 88px rgba(7, 10, 32, .25);
+}
+.post-homework-header { display: flex; align-items: center; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid #e5e7eb; }
+.post-homework-book {
+  display: grid; place-items: center; flex: none; width: 48px; height: 48px;
+  border-radius: 14px; color: #ff6a00; background: #fff3e8; font-size: 25px; font-weight: 700;
+}
+.post-homework-header h2 { color: #070a20; font-size: 23px; line-height: 1.2; margin: 0; font-weight: 750; outline: none; }
+.post-homework-header p { margin: 5px 0 0; color: #6b7280; font-size: 13px; line-height: 1.5; }
+.post-homework-main { padding: 21px 0; border-bottom: 1px solid #e5e7eb; }
+.post-homework-main h3 { color: #070a20; margin: 0 0 15px; font-size: 17px; font-weight: 700; }
+.post-homework-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }
+.post-homework-day {
+  min-width: 0; min-height: 48px; border: 1px solid #d9dde6; border-radius: 12px;
+  background: #fff; color: #4b5563; font-size: 17px; font-weight: 600; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.post-homework-day.is-selected { background: #ff6a00; color: #fff; border-color: #ff6a00; }
+.post-homework-day:hover:not(:disabled) { border-color: #ff6a00; }
+.post-homework-day:focus-visible, .post-homework-voice:focus-visible,
+.post-homework-submit:focus-visible, .post-homework-skip:focus-visible {
+  outline: 3px solid #ffb37c; outline-offset: 2px;
+}
+.post-homework-hint { font-size: 13px; color: #6b7280; margin: 13px 0 0; }
+.post-homework-textarea {
+  box-sizing: border-box; display: block; width: 100%; min-height: 110px; resize: vertical;
+  padding: 14px; border: 1px solid #d9dde6; border-radius: 13px; background: #fff;
+  color: #070a20; font-size: 14px; line-height: 1.55; font-family: inherit;
+}
+.post-homework-textarea::placeholder { color: #858c99; opacity: 1; }
+.post-homework-textarea:focus { outline: 3px solid #fff3e8; border-color: #ff6a00; }
+.post-homework-voice {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: 43px; margin-top: 12px; padding: 9px 15px;
+  border-radius: 11px; border: 1px solid #ffd5b9; background: #fff3e8;
+  color: #a74800; font: inherit; font-weight: 650; cursor: pointer;
+}
+.post-homework-voice:hover:not(:disabled) { background: #ffe6d2; }
+.post-homework-voice.is-recording { background: #fef2f2; border-color: #ef4444; color: #b91c1c; }
+.post-homework-voice span { font-size: 16px; }
+.post-homework-voice-note { margin: 10px 0 0; color: #6b7280; font-size: 12px; }
+.post-homework-footer { display: flex; gap: 10px; margin-top: 20px; }
+.post-homework-footer button {
+  min-height: 48px; padding: 12px 18px; border-radius: 12px;
+  font: inherit; font-weight: 700; cursor: pointer;
+}
+.post-homework-skip { border: 1px solid #d9dde6; color: #374151; background: #fff; }
+.post-homework-skip:hover:not(:disabled) { background: #f7f8fa; }
+.post-homework-submit { flex: 1; border: 1px solid #ff6a00; background: #ff6a00; color: #fff; }
+.post-homework-submit:hover:not(:disabled) { background: #e95c00; }
+.post-homework-footer button:disabled, .post-homework-voice:disabled { cursor: not-allowed; opacity: .55; }
+.post-homework-error {
+  margin: 14px 0 0; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid #fecaca; background: #fef2f2; color: #b91c1c;
+  font-size: 13px; line-height: 1.5;
+}
+.post-homework-fineprint { color: #6b7280; font-size: 12px; line-height: 1.5; margin: 14px 0 0; text-align: center; }
+@media (max-width: 550px) {
+  .post-homework-backdrop { padding: 10px; align-items: flex-end; }
+  .post-homework-island { padding: 20px 16px; border-radius: 20px; max-height: calc(100dvh - 20px); }
+  .post-homework-header h2 { font-size: 21px; }
+  .post-homework-days { gap: 5px; }
+  .post-homework-day { min-height: 45px; border-radius: 9px; }
+  .post-homework-footer { flex-direction: column; }
+  .post-homework-footer .post-homework-skip { order: 2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .post-homework-day { transition: none; }
+}
