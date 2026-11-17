@@ -7,6 +7,7 @@ import com.mcschool.flashcard.homeworks.HomeworkPdfService;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
 import com.mcschool.flashcard.liveclasses.*;
 import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
+import com.mcschool.flashcard.notifications.PostLessonHomeworkPushService;
 import com.mcschool.flashcard.settings.SchoolPromptSettingsService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
@@ -52,6 +53,7 @@ public class PostLessonHomeworkJobService {
     private final MonthlyPlanService monthlyPlans;
     private final SchoolPromptSettingsService prompts;
     private final PostLessonHomeworkContentService generator;
+    private final PostLessonHomeworkPushService jobPush;
     private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
         Thread t=new Thread(r,"mindcrafti-post-lesson-homework");t.setDaemon(true);return t;
     });
@@ -65,12 +67,14 @@ public class PostLessonHomeworkJobService {
             LessonPreparationRepository preparations,LessonPreparationService lessonPreparation,
             OnlineClassTranscriptSegmentRepository transcriptSegments,
             MonthlyPlanService monthlyPlans,SchoolPromptSettingsService prompts,
-            PostLessonHomeworkContentService generator) {
+            PostLessonHomeworkContentService generator,
+            PostLessonHomeworkPushService jobPush) {
         this.db=db;this.tx=new TransactionTemplate(manager);this.json=json;this.access=access;
         this.members=members;this.users=users;this.homeworks=homeworks;this.homeworkPdf=homeworkPdf;
         this.preparations=preparations;this.lessonPreparation=lessonPreparation;
         this.transcriptSegments=transcriptSegments;
         this.monthlyPlans=monthlyPlans;this.prompts=prompts;this.generator=generator;
+        this.jobPush=jobPush;
     }
 
     public record Request(int days,String teacherInstructions) {}
@@ -173,7 +177,8 @@ public class PostLessonHomeworkJobService {
                     String code=failure instanceof ResponseStatusException status? "CONFLICT_"+status.getStatusCode().value():
                             Objects.toString(failure.getMessage(),"").startsWith("HOMEWORK_AI_")?"AI_UNAVAILABLE":
                             "GENERATION_FAILED";
-                    db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING'",code,job.id());
+                    int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING'",code,job.id());
+                    if(changed>0) safeNotify(job.id());
                     LOG.warn("Post-lesson homework job={} failed code={} type={}",job.id(),code,failure.getClass().getSimpleName());
                 } finally{activeJob=null;busy.set(false);}
             });
@@ -223,6 +228,17 @@ public class PostLessonHomeworkJobService {
             }
         }
         publish(job,teacher,eligible);
+        safeNotify(job.id());
+    }
+
+    /** Push failures are isolated from the committed homework and never change its state. */
+    private void safeNotify(UUID jobId) {
+        try { jobPush.captureTerminal(jobId); }
+        catch (RuntimeException notificationError) {
+            LOG.warn("Homework push capture failed job={} error={}",
+                    jobId, notificationError.getClass().getSimpleName());
+            // The independent push scheduler recovers terminal job events after a restart.
+        }
     }
 
     private boolean draftExists(UUID job,UUID student,int day){
