@@ -77,6 +77,67 @@ class PostLessonHomeworkRepairTest {
         verify(http,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
     }
 
+    @Test void algebraicFractionIsAlwaysStackedInStudentPdfInput() throws Exception {
+        var math=PostLessonHomeworkMch3Template.displayMath(
+                List.of("(3x-2)/4","÷","3/8","=","_____"));
+        assertEquals("\\frac{3x-2}{4} \\div \\frac{3}{8} = \\underline{\\qquad\\qquad}",
+                math.get("latex"));
+        var draft=new java.util.LinkedHashMap<>(goodContent());
+        draft.put("topic","Bruchterme dividieren");
+        draft.put("tasks",List.of(Map.of(
+                "title","Bruchterme dividieren", "description","Berechne.",
+                "mathTokens",List.of("(3x-2)/4","÷","3/8","=","_____"),
+                "expression","((3*x-2)/4)/(3/8)", "answer","(6*x-4)/3",
+                "solutionText","(6x-4)/3", "kind","equivalence","variable","")));
+        String jsonResult=PostLessonHomeworkMch3Template.fromContent(
+                json,draft,1,3,"Mindcrafti Testschüler");
+        Map<?,?> doc=json.readValue(jsonResult,Map.class);
+        Map<?,?> page=(Map<?,?>)((List<?>)doc.get("workbookPages")).get(0);
+        var blocks=(List<?>)page.get("blocks");
+        var task=(Map<?,?>)blocks.get(1);
+        var row=(Map<?,?>)((List<?>)task.get("rows")).get(0);
+        var rendered=(Map<?,?>)row.get("math");
+        assertTrue(((String)rendered.get("latex")).startsWith("\\frac{3x-2}{4}"));
+        assertFalse(((String)rendered.get("latex")).contains("(3x-2)/4"));
+    }
+
+    @Test void simpleFractionTitlesCannotHideAlgebraOrDivision() throws Exception {
+        var wrong=new java.util.LinkedHashMap<>(goodContent());
+        wrong.put("tasks",List.of(Map.of(
+                "title","Bruch vereinfachen", "description","Vereinfache den Bruch.",
+                "mathTokens",List.of("(3x-2)/4","÷","3/8","=","_____"),
+                "expression","((3*x-2)/4)/(3/8)", "answer","(6*x-4)/3",
+                "solutionText","(6x-4)/3", "kind","equivalence","variable","")));
+        var error=assertThrows(IllegalArgumentException.class,
+                ()->PostLessonHomeworkMch3Template.fromContent(
+                        json,wrong,1,3,"Mindcrafti Testschüler"));
+        assertEquals("HOMEWORK_CONTENT_TITLE_MISMATCH_SIMPLE_FRACTION_REQUIRED",
+                error.getMessage());
+    }
+
+    @Test void ordinaryKuerzenUsesNumericalFraction() throws Exception {
+        var draft=new java.util.LinkedHashMap<>(goodContent());
+        draft.put("tasks",List.of(Map.of(
+                "title","Bruch vereinfachen", "description","Kürze vollständig.",
+                "mathTokens",List.of("18/24","=","_____"),
+                "expression","18/24", "answer","3/4",
+                "solutionText","18/24 = 3/4", "kind","equivalence","variable","")));
+        String generated=PostLessonHomeworkMch3Template.fromContent(
+                json,draft,1,3,"Mindcrafti Testschüler");
+        Map<?,?> doc=json.readValue(generated,Map.class);
+        Map<?,?> page=(Map<?,?>)((List<?>)doc.get("workbookPages")).get(0);
+        Map<?,?> task=(Map<?,?>)((List<?>)page.get("blocks")).get(1);
+        Map<?,?> row=(Map<?,?>)((List<?>)task.get("rows")).get(0);
+        assertEquals("\\frac{18}{24} = \\underline{\\qquad\\qquad}",
+                ((Map<?,?>)row.get("math")).get("latex"));
+    }
+
+    @Test void unknownFractionNotationIsRejectedRatherThanShownInline() {
+        assertThrows(IllegalArgumentException.class,
+                ()->PostLessonHomeworkMch3Template.displayMath(
+                        List.of("(3x-2)/4/5","=","_____")));
+    }
+
     @Test void finalDayHasNoTeacherHintInStudentPage()throws Exception {
         Map<String,Object> draft=new java.util.LinkedHashMap<>(goodContent());
         draft.put("hint","");
