@@ -375,8 +375,14 @@ public class PostLessonHomeworkJobService {
         }
     }
 
-    /** All-or-nothing publication, no replacing any existing PDF (including unsubmitted work). */
-    private void publish(Job job,AuthenticatedUser teacher,List<Map<String,Object>> students){
+    /**
+     * Publish one new homework record per generated PDF, atomically.
+     * Multiple independent homeworks on the same calendar date are allowed
+     * (V16 removed the old student/date uniqueness constraint).
+     * The job's unique class_id and its persisted drafts protect retries;
+     * existing homework rows and student submissions are never modified.
+     */
+    void publish(Job job,AuthenticatedUser teacher,List<Map<String,Object>> students){
         tx.executeWithoutResult(st->{
             User owner=users.findById(job.teacherId()).orElseThrow(()->new IllegalStateException("HOMEWORK_TEACHER_REVOKED"));
             if(owner.getRole()!=Role.TEACHER||owner.getStatus()!=UserStatus.ACTIVE||owner.isArchived())
@@ -391,23 +397,28 @@ public class PostLessonHomeworkJobService {
             for(Map<String,Object> row:saved){
                 UUID id=(UUID)row.get("student_id");
                 LocalDate date=((java.sql.Date)row.get("assignment_date")).toLocalDate();
-                // This lock is shared across all post-lesson workers and protects duplicate clicks.
+                // Serialize publication for this pupil/day. Distinct lessons on
+                // the same day still create separate homeworks; never overwrite.
                 db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))","post-homework:"+id+":"+date);
                 if(!users.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(id,teacher.id(),Role.STUDENT,UserStatus.ACTIVE))
                     throw new IllegalStateException("HOMEWORK_STUDENT_CHANGED");
                 if(source.getGroup()!=null && !members.existsByGroupIdAndStudentId(source.getGroup().getId(),id))
                     throw new IllegalStateException("HOMEWORK_MEMBERSHIP_CHANGED");
-                boolean collision=homeworks.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(id).stream()
-                        .anyMatch(h->h.getStartDate().equals(date)&&h.hasWorksheet());
-                if(collision)throw new ResponseStatusException(HttpStatus.CONFLICT,"Existing homework cannot be replaced");
+                // An existing worksheet on this date is not a collision.
+                // HomeworkPdfService.createWorksheetHomework creates a fresh UUID,
+                // so it cannot replace or reset an earlier student's submission.
             }
             for(Map<String,Object> row:saved){
                 UUID id=(UUID)row.get("student_id");
                 LocalDate date=((java.sql.Date)row.get("assignment_date")).toLocalDate();
                 int day=((Number)row.get("day_number")).intValue();
                 byte[] bytes=(byte[])row.get("student_pdf");
+                // A unique, recognizable filename also distinguishes two homework
+                // PDFs on the same date in the teacher and student listings.
+                String filename="Mindcrafti_Hausaufgabe_"+date+"_Tag_"+day+"_"+
+                        job.id().toString().substring(0,8)+".pdf";
                 homeworkPdf.createWorksheetHomework(teacher,id,date,
-                        new PdfFile("Mindcrafti_Hausaufgabe_"+day+".pdf",bytes));
+                        new PdfFile(filename,bytes));
             }
             db.update("UPDATE post_lesson_homework_jobs SET state='PUBLISHED',finished_at=now(),worker_id=NULL,lease_until=NULL,updated_at=now() WHERE id=? AND state='RUNNING'",job.id());
         });
