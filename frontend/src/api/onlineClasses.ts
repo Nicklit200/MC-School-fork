@@ -1,4 +1,4 @@
-import { ApiRequestError, request, requestBlob } from './client';
+import { ApiRequestError, getAccessToken, request, requestBlob } from './client';
 
 /**
  * Online-class API. Kept in its own module rather than added to the `api`
@@ -190,6 +190,17 @@ export function deviceId(): string {
   }
 }
 
+export interface PostLessonHomeworkJob {
+  jobId?: string;
+  classId?: string;
+  state: 'NONE' | 'QUEUED' | 'RUNNING' | 'PUBLISHED' | 'FAILED';
+  days?: number;
+  startDate?: string;
+  generatedFiles?: number;
+  expectedFiles?: number;
+  failureCode?: string | null;
+}
+
 export interface OnlineClassHomework {
   notes: string | null;
   hasDocument: boolean;
@@ -211,6 +222,28 @@ export const onlineClassesApi = {
   start: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/start`),
 
   end: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/end`),
+
+  postLessonHomework: (classId: string, days: number, teacherInstructions: string) =>
+    request<PostLessonHomeworkJob>('POST', `/online-classes/${classId}/post-lesson-homework`, { days, teacherInstructions }),
+
+  postLessonHomeworkStatus: (classId: string) =>
+    request<PostLessonHomeworkJob>('GET', `/online-classes/${classId}/post-lesson-homework`),
+
+  retryPostLessonHomework: (classId: string) =>
+    request<PostLessonHomeworkJob>('POST', `/online-classes/${classId}/post-lesson-homework/retry`),
+
+  transcribePostLessonHomework: async (classId: string, file: File): Promise<string> => {
+    const form = new FormData();
+    form.append('audio', file);
+    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+    const token = getAccessToken();
+    const response = await fetch(`${base}/online-classes/${classId}/post-lesson-homework/transcribe`, {
+      method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form,
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
+    return payload.text ?? '';
+  },
 
   cancel: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/cancel`),
 
