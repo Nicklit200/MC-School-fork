@@ -7,12 +7,20 @@ import type { Homework, StudentListItem } from '../../api/types';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { StudentHomeworksPage } from './StudentHomeworksPage';
 
-vi.mock('../../api/client', () => ({
-  api: {
-    students: { get: vi.fn() },
-    homeworks: { listForStudent: vi.fn(), remove: vi.fn(), createPdf: vi.fn() },
-  },
-}));
+vi.mock('../../api/client', async () => {
+  const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client');
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      students: { ...actual.api.students, get: vi.fn() },
+      homeworks: {
+        ...actual.api.homeworks,
+        listForStudent: vi.fn(), remove: vi.fn(), createPdf: vi.fn(),
+      },
+    },
+  };
+});
 vi.mock('./GoogleDrivePdfPicker', () => ({
   GoogleDrivePdfPicker: () => null,
 }));
