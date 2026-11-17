@@ -110,7 +110,7 @@ class PostLessonHomeworkPushServiceTest {
         });
         // First claim returns a pending device; subsequent claims are empty.
         final int[] claims={0};
-        when(db.query(argThat(sql -> sql.contains("RETURNING id, job_id")),
+        when(db.query(org.mockito.ArgumentMatchers.<String>argThat(sql -> sql.contains("RETURNING id, job_id")),
                 any(RowMapper.class))).thenAnswer(invocation -> {
             return claims[0]++ == 0 ? List.of(delivery) : List.of();
         });
