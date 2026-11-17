@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import type { Homework, StudentListItem } from '../../api/types';
@@ -21,6 +21,35 @@ export function StudentHomeworksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Homework | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const onOutsidePointer = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpenMenuId(null);
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenuId(null);
+    };
+    document.addEventListener('pointerdown', onOutsidePointer);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('pointerdown', onOutsidePointer);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [openMenuId]);
+
+  useEffect(() => {
+    if (!pendingDelete || deleting) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPendingDelete(null);
+    };
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [pendingDelete, deleting]);
 
   async function reload() {
     const [studentPayload, homeworkPayload] = await Promise.all([
@@ -88,6 +117,24 @@ export function StudentHomeworksPage() {
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  }
+
+  async function deleteHomework() {
+    if (!pendingDelete || deleting) return;
+    const homeworkId = pendingDelete.id;
+    setDeleting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.homeworks.remove(homeworkId);
+      await reload();
+      setPendingDelete(null);
+      setMessage(language === 'DE' ? 'Hausaufgabe wurde gelöscht.' : 'Домашнее задание удалено.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function createHomework(event: FormEvent) {
@@ -199,15 +246,77 @@ export function StudentHomeworksPage() {
         <div className="panel"><div className="history-list">
           {worksheetHomeworks.map((homework) => {
             const status = resolveHomeworkHistoryStatus(homework);
+            const detailUrl = `/teacher/students/${studentId}/homeworks/${homework.id}`;
+            const menuOpen = openMenuId === homework.id;
             return (
-              <Link key={homework.id} className="history-row" to={`/teacher/students/${studentId}/homeworks/${homework.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <span>{formatDate(homework.startDate, language)}</span>
-                <span>{homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}{homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}</span>
-                <span className={`pill ${homeworkHistoryClass(status)}`}>{homeworkHistoryText(status, language)}</span>
-              </Link>
+              <div key={homework.id} className="history-row homework-history-row">
+                <span className="homework-history-date">{formatDate(homework.startDate, language)}</span>
+                <Link className="homework-history-file" to={`${detailUrl}?section=preview`}>
+                  <strong className="homework-history-name">
+                    {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
+                  </strong>
+                  {homework.worksheetPageCount && (
+                    <span className="muted homework-history-pages"> · {homework.worksheetPageCount} {language === 'DE' ? 'Seiten' : 'стр.'}</span>
+                  )}
+                </Link>
+                <span className={`pill homework-history-status ${homeworkHistoryClass(status)}`}>
+                  {homeworkHistoryText(status, language)}
+                </span>
+                <div className="homework-history-actions" ref={menuOpen ? menuRef : undefined}>
+                  <button type="button" className="homework-history-menu-button"
+                    aria-label={language === 'DE' ? `Aktionen für Hausaufgabe vom ${formatDate(homework.startDate, language)}` : `Действия с домашкой за ${formatDate(homework.startDate, language)}`}
+                    title={language === 'DE' ? 'Hausaufgaben-Aktionen' : 'Действия с домашкой'}
+                    aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? `homework-actions-${homework.id}` : undefined}
+                    onClick={() => setOpenMenuId(current => current === homework.id ? null : homework.id)}>
+                    <span aria-hidden="true">•••</span>
+                  </button>
+                  {menuOpen && (
+                    <div className="homework-history-menu" id={`homework-actions-${homework.id}`} role="menu">
+                      <Link role="menuitem" to={`${detailUrl}?section=preview`} onClick={() => setOpenMenuId(null)}>
+                        {language === 'DE' ? 'Ansehen' : 'Посмотреть'}
+                      </Link>
+                      <Link role="menuitem" to={`${detailUrl}?section=edit`} onClick={() => setOpenMenuId(null)}>
+                        {language === 'DE' ? 'Bearbeiten' : 'Редактировать'}
+                      </Link>
+                      <button role="menuitem" type="button" className="homework-history-delete-action"
+                        onClick={() => { setOpenMenuId(null); setPendingDelete(homework); }}>
+                        {language === 'DE' ? 'Löschen' : 'Удалить'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div></div>
+      )}
+
+      {pendingDelete && (
+        <div className="homework-history-dialog-backdrop"
+          onMouseDown={event => {
+            if (!deleting && event.target === event.currentTarget) setPendingDelete(null);
+          }}>
+          <section className="panel homework-history-dialog" role="alertdialog" aria-modal="true"
+            aria-labelledby="homework-delete-title" aria-describedby="homework-delete-description">
+            <h2 id="homework-delete-title">{language === 'DE' ? 'Hausaufgabe löschen?' : 'Удалить домашнее задание?'}</h2>
+            <p id="homework-delete-description">
+              {language === 'DE'
+                ? `Die Hausaufgabe vom ${formatDate(pendingDelete.startDate, language)} wird dauerhaft gelöscht. Auch eine bereits abgegebene Lösung kann verloren gehen.`
+                : `Домашка за ${formatDate(pendingDelete.startDate, language)} будет удалена без возможности восстановления. Если ученик уже сдал работу, его ответ тоже будет удалён.`}
+            </p>
+            <p className="muted homework-history-delete-name">{pendingDelete.worksheetFilename}</p>
+            <div className="homework-history-dialog-actions">
+              <button type="button" className="btn btn--secondary" autoFocus disabled={deleting}
+                onClick={() => setPendingDelete(null)}>
+                {language === 'DE' ? 'Abbrechen' : 'Отмена'}
+              </button>
+              <button type="button" className="btn homework-history-delete-confirm" disabled={deleting}
+                onClick={() => { void deleteHomework(); }}>
+                {deleting ? (language === 'DE' ? 'Wird gelöscht…' : 'Удаляем…') : (language === 'DE' ? 'Endgültig löschen' : 'Удалить')}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
