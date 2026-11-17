@@ -326,8 +326,7 @@ public class PostLessonHomeworkJobService {
                 ||!Objects.toString(data.get("liveTranscript"),"").isBlank()
                 ||!Objects.toString(data.get("coveredMaterial"),"").isBlank()
                 ||!Objects.toString(data.get("savedBoardText"),"").isBlank()
-                ||worksheet!=null
-                ||!job.instructions().isBlank());
+                ||worksheet!=null);
         if(!hasLesson)throw new IllegalStateException("HOMEWORK_LESSON_EVIDENCE_MISSING");
         return data;
     }
