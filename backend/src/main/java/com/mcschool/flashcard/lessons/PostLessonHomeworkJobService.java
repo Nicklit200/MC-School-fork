@@ -47,6 +47,7 @@ public class PostLessonHomeworkJobService {
     private final HomeworkRepository homeworks;
     private final HomeworkPdfService homeworkPdf;
     private final LessonPreparationRepository preparations;
+    private final LessonPreparationService lessonPreparation;
     private final OnlineClassTranscriptSegmentRepository transcriptSegments;
     private final MonthlyPlanService monthlyPlans;
     private final SchoolPromptSettingsService prompts;
@@ -61,12 +62,14 @@ public class PostLessonHomeworkJobService {
     public PostLessonHomeworkJobService(JdbcTemplate db,PlatformTransactionManager manager,ObjectMapper json,
             OnlineClassAccessService access,StudentGroupMemberRepository members,UserRepository users,
             HomeworkRepository homeworks,HomeworkPdfService homeworkPdf,
-            LessonPreparationRepository preparations,OnlineClassTranscriptSegmentRepository transcriptSegments,
+            LessonPreparationRepository preparations,LessonPreparationService lessonPreparation,
+            OnlineClassTranscriptSegmentRepository transcriptSegments,
             MonthlyPlanService monthlyPlans,SchoolPromptSettingsService prompts,
             PostLessonHomeworkContentService generator) {
         this.db=db;this.tx=new TransactionTemplate(manager);this.json=json;this.access=access;
         this.members=members;this.users=users;this.homeworks=homeworks;this.homeworkPdf=homeworkPdf;
-        this.preparations=preparations;this.transcriptSegments=transcriptSegments;
+        this.preparations=preparations;this.lessonPreparation=lessonPreparation;
+        this.transcriptSegments=transcriptSegments;
         this.monthlyPlans=monthlyPlans;this.prompts=prompts;this.generator=generator;
     }
 
@@ -247,10 +250,28 @@ public class PostLessonHomeworkJobService {
             data.put("lessonPlan",Objects.toString(p.getLessonPlan(),""));
             data.put("lessonDifficulties",Objects.toString(p.getDifficulties(),""));
             data.put("lessonHomeworkNotes",Objects.toString(p.getHomeworkNotes(),""));
-            String transcript=Objects.toString(p.getTranscriptTextForDisplay(),"");
+            String transcript=Objects.toString(lessonPreparation.transcriptTextForAnalysis(p),"");
             if(transcript.length()>24000)transcript=transcript.substring(transcript.length()-24000);
             data.put("transcript",transcript);
         });
+        // Only THIS pupil's saved board plus the shared board; other pupils' writing stays private.
+        List<String> boardText=new ArrayList<>();
+        db.query("SELECT board_id,pdf FROM completed_lesson_documents WHERE class_id=? AND teacher_id=? ORDER BY updated_at DESC",rs->{
+            String board=rs.getString("board_id");
+            boolean permitted="board-1".equals(board)
+                    ||PersonalBoard.ownerOf(board).map(studentId::equals).orElse(false);
+            if(!permitted)return;
+            byte[] bytes=rs.getBytes("pdf");
+            if(bytes==null||bytes.length>5_000_000)return;
+            try(var document=org.apache.pdfbox.Loader.loadPDF(bytes)){
+                String extracted=new org.apache.pdfbox.text.PDFTextStripper().getText(document);
+                if(extracted!=null&&!extracted.isBlank()){
+                    String safe=extracted.length()>10000?extracted.substring(0,10000):extracted;
+                    boardText.add(board+": "+safe);
+                }
+            }catch(Exception ignored){ /* Handwriting-heavy boards may have no extractable text. */ }
+        },job.classId(),teacher.id());
+        data.put("savedBoardText",String.join("\\n",boardText));
         List<String> live=transcriptSegments.findAllByOnlineClassIdOrderByStartMsAscIdAsc(job.classId()).stream()
                 .map(s->s.getText()).filter(s->s!=null&&!s.isBlank()).toList();
         if(!live.isEmpty()){
