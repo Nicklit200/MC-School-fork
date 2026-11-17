@@ -115,6 +115,135 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 }
 .history-row:last-child { border-bottom: none; }
 
+
+/* Homework history: independent status, filename, and context menu.
+   Scoped so other three-column history lists are unaffected. */
+.homework-history-row {
+  position: relative;
+  grid-template-columns: 102px minmax(0, 1fr) max-content 44px;
+  gap: 16px;
+  min-height: 64px;
+}
+.homework-history-row:focus-within { z-index: 5; }
+.homework-history-date { font-size: 13px; white-space: nowrap; }
+.homework-history-file {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.homework-history-file:hover,
+.homework-history-file:focus-visible { color: var(--accent-dark); }
+.homework-history-name {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 600;
+}
+.homework-history-pages { display: block; font-size: 12px; margin-top: 2px; }
+.homework-history-status {
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.homework-history-actions {
+  position: relative;
+  justify-self: end;
+  align-self: center;
+}
+.homework-history-menu-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.homework-history-menu-button:hover,
+.homework-history-menu-button[aria-expanded="true"],
+.homework-history-menu-button:focus-visible {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.homework-history-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 15;
+  width: 192px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 30px #0002;
+}
+.homework-history-menu a,
+.homework-history-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.homework-history-menu a:hover,
+.homework-history-menu button:hover,
+.homework-history-menu a:focus-visible,
+.homework-history-menu button:focus-visible { background: var(--bg); }
+.homework-history-menu .homework-history-delete-action { color: var(--danger); }
+.homework-history-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: #06091c99;
+}
+.homework-history-dialog {
+  width: min(100%, 460px);
+  margin: 0;
+  padding: 24px;
+  background: var(--surface);
+  box-shadow: 0 20px 55px #0004;
+}
+.homework-history-dialog h2 { margin: 0 0 12px; }
+.homework-history-dialog p { line-height: 1.5; }
+.homework-history-delete-name { overflow-wrap: anywhere; font-size: 13px; }
+.homework-history-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+.homework-history-delete-confirm { background: #b91c1c; color: #fff; }
+.homework-history-delete-confirm:hover:not(:disabled) { background: #991b1b; }
+@media (max-width: 700px) {
+  .homework-history-row { grid-template-columns: minmax(0, 1fr) 44px; gap: 5px 10px; }
+  .homework-history-date { grid-column: 1; grid-row: 1; }
+  .homework-history-file { grid-column: 1; grid-row: 2; }
+  .homework-history-status { grid-column: 1; grid-row: 3; white-space: normal; }
+  .homework-history-actions { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+}
+
 /* --- Buttons --- */
 .btn {
   appearance: none;

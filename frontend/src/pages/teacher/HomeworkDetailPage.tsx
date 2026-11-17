@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api, getAccessToken } from '../../api/client';
 import type { Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -12,6 +12,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080
 /** Teacher view of one PDF homework. Flashcards are managed on separate card pages. */
 export function HomeworkDetailPage() {
   const { studentId = '', homeworkId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const requestedSection = searchParams.get('section');
   const { language, t } = useI18n();
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
@@ -27,6 +29,13 @@ export function HomeworkDetailPage() {
   const [submissionPreviewUrls, setSubmissionPreviewUrls] = useState<string[]>([]);
   const [submissionPreviewLoading, setSubmissionPreviewLoading] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(null);
+  // The history menu opens either the real PDF preview or the existing
+  // PDF replacement/ChatGPT editor. Nothing is editable in the list itself.
+  useEffect(() => {
+    if (requestedSection === 'preview' || requestedSection === 'edit') {
+      setOpenSection(requestedSection);
+    }
+  }, [homeworkId, requestedSection]);
   const previewUrlsRef = useRef<string[]>([]);
   const submissionPreviewUrlsRef = useRef<string[]>([]);
 
