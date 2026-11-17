@@ -156,7 +156,7 @@ describe('Homework history three-dot actions', () => {
     await user.click(within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Удалить' }));
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Удалить' }));
-    expect(await screen.findByText('Сервер отказал')).toBeInTheDocument();
+    expect(await screen.findByText('Что-то пошло не так')).toBeInTheDocument();
     expect(screen.getByText(a.worksheetFilename!)).toBeInTheDocument();
   });
 
