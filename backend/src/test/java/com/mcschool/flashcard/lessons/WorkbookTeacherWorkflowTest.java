@@ -324,6 +324,102 @@ class WorkbookTeacherWorkflowTest {
         verifyNoInteractions(renderer,receipts);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void workbookNeverReadsItsOwnTranscriptAndTokenSurvivesLiveUpdates() throws Exception {
+        LessonPreparation live = LessonPreparation.create(a, "lesson-a");
+        when(preparations.findByTeacherIdAndEventId(a.getId(), "lesson-a"))
+                .thenReturn(Optional.of(live));
+        when(preparation.transcriptTextForAnalysis(live))
+                .thenReturn("First live phrase", "Many more live phrases");
+
+        Map<String,Object> first = (Map<String,Object>)((Map<?,?>)call(a,
+                "prepare_workbook_context", Map.of("eventId", "lesson-a"))
+                .get("result")).get("structuredContent");
+        Map<String,Object> second = (Map<String,Object>)((Map<?,?>)call(a,
+                "prepare_workbook_context", Map.of("eventId", "lesson-a"))
+                .get("result")).get("structuredContent");
+
+        assertThat(first).containsEntry("referenceScope", "WORKBOOK_PRIOR_COMPLETED_LESSONS");
+        assertThat(first.get("currentPreparation")).isEqualTo(Map.of(
+                "excluded", true,
+                "reason", "Current lesson transcript and notes are not workbook source evidence"));
+        assertThat(first.get("contextToken")).isEqualTo(second.get("contextToken"));
+        verify(preparations, never()).findByTeacherIdAndEventId(a.getId(), "lesson-a");
+        verify(preparation, never()).transcriptTextForAnalysis(live);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void workbookUsesFinishedEarlierLessonsOnlyAndDoesNotRehashTheirTranscripts() throws Exception {
+        Instant start = Instant.parse("2026-11-06T12:00:00Z");
+        GroupLessonResponse current = new GroupLessonResponse("lesson-a", "lesson-a", null, null,
+                student.getId(), "Sofia", List.of(), "Sofia Mathematics",
+                start, start.plusSeconds(3600), null, null);
+        GroupLessonResponse completed = new GroupLessonResponse("lesson-previous", "lesson-previous", null, null,
+                student.getId(), "Sofia", List.of(), "Sofia prior", start.minusSeconds(172800),
+                start.minusSeconds(169200), null, null);
+        GroupLessonResponse unfinished = new GroupLessonResponse("lesson-overlap", "lesson-overlap", null, null,
+                student.getId(), "Sofia", List.of(), "Sofia overlapping", start.minusSeconds(1800),
+                start.plusSeconds(1800), null, null);
+        when(calendar.listGroupLessons(principal(a))).thenReturn(List.of(
+                current, completed, unfinished));
+        LessonPreparation old = LessonPreparation.create(a, "lesson-previous");
+        when(preparations.findByTeacherIdAndEventId(a.getId(), "lesson-previous"))
+                .thenReturn(Optional.of(old));
+        when(preparation.transcriptTextForAnalysis(old))
+                .thenReturn("Finished lesson about fractions", "Completed lesson transcription corrected");
+
+        Map<String,Object> first = (Map<String,Object>)((Map<?,?>)call(a,
+                "prepare_workbook_context", Map.of("eventId", "lesson-a"))
+                .get("result")).get("structuredContent");
+        Map<String,Object> second = (Map<String,Object>)((Map<?,?>)call(a,
+                "prepare_workbook_context", Map.of("eventId", "lesson-a"))
+                .get("result")).get("structuredContent");
+        List<Map<String,Object>> history = (List<Map<String,Object>>)first.get("previousLessons");
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0)).containsEntry("eventId", "lesson-previous");
+        assertThat(((Map<?,?>)history.get(0).get("preparation")).get("transcriptText"))
+                .isEqualTo("Finished lesson about fractions");
+        assertThat(first.get("contextToken")).isEqualTo(second.get("contextToken"));
+        verify(preparations, never()).findByTeacherIdAndEventId(a.getId(), "lesson-overlap");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void homeworkMayReadCompletedReferenceLessonButCannotReadLiveReference() throws Exception {
+        when(prompts.readForMcp()).thenReturn(new SchoolPromptSettingsResponse(
+                "group-current", "individual-current", "", "", "workbook-current",
+                "seven-day-homework-prompt", Instant.now()));
+        LessonPreparation finished = LessonPreparation.create(a, "lesson-a");
+        when(preparations.findByTeacherIdAndEventId(a.getId(), "lesson-a"))
+                .thenReturn(Optional.of(finished));
+        when(preparation.transcriptTextForAnalysis(finished)).thenReturn(
+                "Completed reference lesson about functions");
+
+        Map<String,Object> afterClass = (Map<String,Object>)((Map<?,?>)call(a,
+                "prepare_homework_context", Map.of("eventId", "lesson-a"))
+                .get("result")).get("structuredContent");
+        assertThat(afterClass).containsEntry("referenceScope", "HOMEWORK_COMPLETED_REFERENCE_LESSON");
+        assertThat(((Map<?,?>)afterClass.get("currentPreparation")).get("transcriptText"))
+                .isEqualTo("Completed reference lesson about functions");
+
+        Instant start = Instant.now().plusSeconds(7200);
+        GroupLessonResponse future = new GroupLessonResponse("lesson-future", "lesson-future", null, null,
+                student.getId(), "Sofia", List.of(), "Future lesson", start,
+                start.plusSeconds(3600), null, null);
+        when(calendar.listGroupLessons(principal(a))).thenReturn(List.of(future));
+        when(preparations.findByTeacherIdAndEventId(a.getId(), "lesson-future"))
+                .thenReturn(Optional.of(LessonPreparation.create(a, "lesson-future")));
+        // Monthly plan lookup is outside the current month and is allowed to return null.
+        Map<String,Object> beforeClass = (Map<String,Object>)((Map<?,?>)call(a,
+                "prepare_homework_context", Map.of("eventId", "lesson-future"))
+                .get("result")).get("structuredContent");
+        assertThat(((Map<?,?>)beforeClass.get("currentPreparation")).get("excluded")).isEqualTo(true);
+        verify(preparations, never()).findByTeacherIdAndEventId(a.getId(), "lesson-future");
+    }
+
     private String contextToken() {
         Map<String,Object> envelope=call(a,"prepare_workbook_context",Map.of("eventId","lesson-a"));
         assertThat(envelope).doesNotContainKey("error");
