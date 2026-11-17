@@ -272,7 +272,9 @@ public class OwnerSameDayWorkbookService {
 
     /** Preview links stay within the authenticated teacher lesson screen; PDF bytes require the teacher's token. */
     static String notificationPath(String eventId, boolean openWorkbook) {
-        return "/teacher/lessons/" + eventId + (openWorkbook ? "?preview=workbook" : "");
+        return openWorkbook
+                ? "/lesson-workbook-preview/" + OWNER + "/" + eventId
+                : "/teacher/lessons/" + eventId;
     }
 
     private void push(User owner, String title, String body, String eventId, boolean openWorkbook) {
