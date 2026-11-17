@@ -9,6 +9,7 @@ import { StartOnlineClassButton } from '../../features/online-classes/StartOnlin
 import { TrialInvitationPanel } from './TrialInvitationPanel';
 import { trialInvitationsApi } from '../../api/trialInvitations';
 import { LessonHomeworkSeriesPanel } from '../../components/LessonHomeworkSeriesPanel';
+import { PostLessonHomeworkStatus } from '../../components/PostLessonHomeworkStatus';
 import { PersonalWorkbooksPanel } from './PersonalWorkbooksPanel';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
@@ -103,7 +104,7 @@ export function LessonWorkspacePage() {
     {lesson && !lesson.groupId && (!lesson.studentId || previousTrialInvite) && <TrialInvitationPanel eventId={eventId} de={de} />}
     {prep && <div className="workspace-columns"><div className="workspace-materials"><WorkspaceCard title={de ? 'Gemeinsames Arbeitsheft' : 'Общая рабочая тетрадь'} symbol="workbook">{fileControls('workbook')}</WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} /></div>
       <div className="workspace-info-grid">
-        <WorkspaceCard title={de ? 'Hausaufgaben' : 'Домашняя работа'} symbol="homework"><button type="button" className="btn btn--secondary" onClick={() => homeworkDialog.current?.showModal()}>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</button>{note('homeworkNotes')}</WorkspaceCard>
+        <WorkspaceCard title={de ? 'Hausaufgaben' : 'Домашняя работа'} symbol="homework"><PostLessonHomeworkStatus eventId={eventId} de={de} /><button type="button" className="btn btn--secondary" onClick={() => homeworkDialog.current?.showModal()}>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</button>{note('homeworkNotes')}</WorkspaceCard>
         <LessonCardsPanel lesson={lesson} />
         <WorkspaceCard title={de ? 'Schwierigkeiten' : 'Проблемы и сложности'} symbol="difficulties"><button type="button" className="btn btn--secondary" disabled={busy} onClick={() => void save()}>{busy ? (de ? 'Speichern…' : 'Сохраняем…') : (de ? 'Informationen speichern' : 'Сохранить информацию')}</button>{note('difficulties')}</WorkspaceCard>
         <WorkspaceCard title={de ? 'Transkription' : 'Транскрипция'} symbol="transcript"><button type="button" className="btn btn--secondary" disabled={busy || !(prep.transcriptFilename || (prep.sonioxTranscriptText || prep.transcriptText || '').trim())} onClick={()=>{if(prep.transcriptFilename){open('transcript');return;}const url=URL.createObjectURL(new Blob([prep.sonioxTranscriptText || prep.transcriptText || ''],{type:'text/plain;charset=utf-8'}));window.open(url,'_blank','noopener,noreferrer');window.setTimeout(()=>URL.revokeObjectURL(url),60000);}}>{de?'Transkription öffnen':'Открыть транскрипцию'}</button></WorkspaceCard>
