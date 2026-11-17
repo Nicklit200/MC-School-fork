@@ -77,7 +77,8 @@ describe('PrejoinPanel', () => {
 
     const retry = screen.getByRole('button', { name: /erneut|Повторить/i });
     await userEvent.click(retry);
-    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
+    // The initial request and manual retry each try combined media, then mic-only.
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(4));
   });
 
   it('distinguishes missing hardware from a denied permission', async () => {
@@ -124,7 +125,7 @@ describe('PrejoinPanel', () => {
     });
   });
 
-  it('can request microphone only after camera access fails', async () => {
+  it('automatically preserves a usable microphone when camera access fails', async () => {
     const { stream } = fakeStream();
     const audioTrack = stream.getAudioTracks()[0];
     const audioStream = {
@@ -140,10 +141,10 @@ describe('PrejoinPanel', () => {
       enumerateDevices: vi.fn().mockResolvedValue(devices),
     });
     const onJoin = renderPanel();
-    await screen.findByRole('button', { name: /Только микрофон|Nur Mikrofon/ });
-    await userEvent.click(screen.getByRole('button', { name: /Только микрофон|Nur Mikrofon/ }));
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ video: false, audio: true }));
     await screen.findByRole('option', { name: 'Built-in mic' });
+    // No second click or manual audio-only mode is needed.
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
     await userEvent.click(screen.getByRole('button', { name: /Beitreten|Присоединиться/i }));
     expect(onJoin).toHaveBeenCalledWith({
       videoDeviceId: null,
