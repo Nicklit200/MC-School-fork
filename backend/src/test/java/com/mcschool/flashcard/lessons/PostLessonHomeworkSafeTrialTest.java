@@ -51,6 +51,7 @@ class PostLessonHomeworkSafeTrialTest {
     private final SchoolPromptSettingsService prompts = mock(SchoolPromptSettingsService.class);
     private final PostLessonHomeworkContentService generator = mock(PostLessonHomeworkContentService.class);
     private final PostLessonHomeworkPushService push = mock(PostLessonHomeworkPushService.class);
+    private final PostLessonHomeworkPilotAccess pilot = mock(PostLessonHomeworkPilotAccess.class);
     private final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
 
     private final AuthenticatedUser actor = new AuthenticatedUser(teacherId, null, Role.TEACHER);
@@ -72,7 +73,7 @@ class PostLessonHomeworkSafeTrialTest {
         when(student.getTeacher()).thenReturn(mock(User.class));
         when(student.getTeacher().getId()).thenReturn(teacherId);
         jobs = new PostLessonHomeworkJobService(jdbc,transactions,new ObjectMapper(),access,
-                members,users,homeworks,publisher,preparations,lessonPreparation,transcripts,plans,prompts,generator,push);
+                members,users,homeworks,publisher,preparations,lessonPreparation,transcripts,plans,prompts,generator,push,pilot);
     }
 
     @Test void afterFinishOnlyFictionalPupilIsQueuedNotAssigned() {
