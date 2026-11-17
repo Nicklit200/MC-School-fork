@@ -43,9 +43,11 @@ class PostLessonHomeworkRepairTest {
             replies[i]=mock(HttpResponse.class);
             when(replies[i].statusCode()).thenReturn(200);
             String inner=json.writeValueAsString(Map.of("lessonJson",worksheetJson[i]));
-            when(replies[i].body()).thenReturn(json.writeValueAsString(Map.of(
-                    "status","completed","output",List.of(Map.of(
-                            "content",List.of(Map.of("type","output_text","text",inner))))));
+            Map<String,Object> part=Map.of("type","output_text","text",inner);
+            Map<String,Object> item=Map.of("content",List.of(part));
+            String responseBody=json.writeValueAsString(Map.of(
+                    "status","completed","output",List.of(item)));
+            when(replies[i].body()).thenReturn(responseBody);
         }
         when(http.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class)))
                 .thenReturn(replies[0],java.util.Arrays.copyOfRange(replies,1,replies.length));
