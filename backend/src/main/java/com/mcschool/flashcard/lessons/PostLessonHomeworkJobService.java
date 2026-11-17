@@ -211,7 +211,8 @@ public class PostLessonHomeworkJobService {
             String name=String.valueOf(pupil.get("name"));
             for(int day=1;day<=job.days();day++){
                 if(draftExists(job.id(),id,day))continue;
-                Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,day,individual.getOrDefault(id,"")));
+                final int currentDay=day;
+                Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,currentDay,individual.getOrDefault(id,"")));
                 OwnerWorkbookPdfRenderService.StudioRender pair=generator.make(evidence,day,job.days(),name);
                 UUID draft=UUID.randomUUID();
                 LocalDate date=job.startDate().plusDays(day-1);
