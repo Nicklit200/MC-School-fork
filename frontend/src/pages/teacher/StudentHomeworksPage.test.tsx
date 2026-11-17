@@ -157,7 +157,10 @@ describe('Homework history three-dot actions', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Удалить' }));
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Удалить' }));
     expect(await screen.findByText('Что-то пошло не так')).toBeInTheDocument();
-    expect(screen.getByText(a.worksheetFilename!)).toBeInTheDocument();
+    // The pending confirmation also displays the filename; verify the real list
+    // entry survived the failed API call rather than querying both copies.
+    expect(screen.getAllByText(a.worksheetFilename!)
+      .some(node => Boolean(node.closest('.homework-history-row')))).toBe(true);
   });
 
   it('closes the menu after clicking away or pressing Escape', async () => {
