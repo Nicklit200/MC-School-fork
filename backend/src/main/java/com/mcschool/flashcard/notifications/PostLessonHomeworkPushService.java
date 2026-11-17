@@ -144,7 +144,8 @@ public class PostLessonHomeworkPushService {
             String url = recipient.getRole() == Role.ADMIN
                     ? "/admin/teachers/" + result.teacherId() + "/lessons/" + encode(result.eventId())
                     : "/teacher/lessons/" + encode(result.eventId());
-            webPush.send(subscription, title(result), body(result), url);
+            webPush.send(subscription, title(result), body(result), url,
+                    "post-homework-" + delivery.jobId() + "-" + result.state());
             mark(delivery.id(), "SENT");
         } catch (RuntimeException failure) {
             int minutes = Math.min(60, 1 << Math.min(delivery.attempts() - 1, 6));
