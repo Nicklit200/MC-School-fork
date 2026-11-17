@@ -1,6 +1,8 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
@@ -213,6 +215,51 @@ public class AiLessonPilotService {
                         difficulties,
                         current.lessonPlan(),
                         current.manualTranscriptText()));
+    }
+
+    /**
+     * Server-side workbook generation context. Reuses the pilot's established
+     * monthly-plan, previous lesson, and submitted-homework scoping, without
+     * calling MCH3 or ChatGPT tools. Student-facing worksheets use German.
+     */
+    public Map<String, Object> workbookGenerationContext(AuthenticatedUser teacher, String eventId) {
+        requirePilotTeacher(teacher);
+        LessonContext c = context(teacher, eventId);
+        GroupLessonResponse lesson = lessonService.listSavedGroupLessons(teacher).stream()
+                .filter(item -> eventId.equals(item.eventId()))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("Lesson not found"));
+        long duration = java.time.Duration.between(lesson.startsAt(), lesson.endsAt()).toMinutes();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("eventId", eventId);
+        result.put("lesson", c.lessonDescription());
+        result.put("calendarDurationMinutes", Math.max(1, Math.min(1440, duration)));
+        result.put("teachingPrompt", c.schoolPrompt());
+        result.put("workbookPrompt", promptSettingsService.readForStaff(teacher).workbookPrompt());
+        result.put("monthlyPlan", emptyFallback(c.monthPlanJson(), "No monthly plan saved."));
+        result.put("previousLessonTranscript", emptyFallback(c.previousTranscript(), "No previous lesson transcript available."));
+        result.put("completedHomeworkSummary", c.homeworkSummary());
+        List<Map<String, Object>> submitted = new java.util.ArrayList<>();
+        for (HomeworkFile file : c.homeworkFiles()) {
+            String text = extractWorkbookSourceText(file.pdf());
+            submitted.add(Map.of("student", file.studentName(), "date", file.assignedDate(),
+                    "submittedAt", file.submittedAt(), "extractedText", text));
+        }
+        result.put("submittedHomeworkEvidence", submitted);
+        result.put("evidenceRules", "Do not invent errors, achievements, or covered material. Missing or image-only PDF text means not verified.");
+        return result;
+    }
+
+    private String extractWorkbookSourceText(byte[] pdf) {
+        if (pdf == null || pdf.length == 0 || pdf.length > 10_000_000)
+            return "PDF not available for text extraction.";
+        try (var document = Loader.loadPDF(pdf)) {
+            String extracted = new PDFTextStripper().getText(document);
+            return extracted == null || extracted.isBlank()
+                    ? "Image-based homework without extractable text, cannot infer mistakes."
+                    : truncate(extracted, 12000);
+        } catch (Exception ignored) {
+            return "Submitted PDF could not be read as text; cannot infer mistakes.";
+        }
     }
 
     private LessonContext context(AuthenticatedUser teacher, String eventId) {

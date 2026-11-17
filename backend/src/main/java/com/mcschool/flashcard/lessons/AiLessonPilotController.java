@@ -19,9 +19,23 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiLessonPilotController {
 
     private final AiLessonPilotService service;
+    private final OwnerSameDayWorkbookService workbooks;
 
-    public AiLessonPilotController(AiLessonPilotService service) {
+    public AiLessonPilotController(AiLessonPilotService service, OwnerSameDayWorkbookService workbooks) {
         this.service = service;
+        this.workbooks = workbooks;
+    }
+
+    @GetMapping("/lessons/{eventId}/workbook-status")
+    public Map<String, Object> workbookStatus(
+            @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable String eventId) {
+        return workbooks.status(caller, eventId);
+    }
+
+    @PostMapping("/lessons/{eventId}/generate-workbook")
+    public Map<String, Object> generateWorkbook(
+            @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable String eventId) {
+        return workbooks.createNow(caller, eventId);
     }
 
     @GetMapping("/status")

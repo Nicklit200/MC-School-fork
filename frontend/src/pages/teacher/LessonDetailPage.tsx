@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { isNativeLesson, lessonDurationLabel, schoolDateKey } from '../../lib/lessonSchedule';
 import { lessonPreparationApi, completedLessonApi, type CompletedLessonDocument } from '../../api/lessonPreparation';
-import { aiPilotApi } from '../../api/aiPilot';
+import { aiPilotApi, type OwnerWorkbookStatus } from '../../api/aiPilot';
 import { useAuth } from '../../auth/AuthContext';
 import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
@@ -105,6 +105,8 @@ export function LessonDetailPage() {
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [aiModel, setAiModel] = useState('');
   const [aiRunning, setAiRunning] = useState<'prepare' | 'analyze' | null>(null);
+  const [ownerWorkbook, setOwnerWorkbook] = useState<OwnerWorkbookStatus | null>(null);
+  const [ownerWorkbookStarting, setOwnerWorkbookStarting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -192,6 +194,63 @@ export function LessonDetailPage() {
       cancelled = true;
     };
   }, [isNickAiPilot]);
+
+  // The PDF pair is rendered entirely by Mindcrafti's server. Poll only
+  // the current lesson; a successful job reloads the real attached files.
+  useEffect(() => {
+    if (!isNickAiPilot || !eventId) return;
+    let cancelled = false;
+    let previous = '';
+    async function refresh() {
+      try {
+        const state = await aiPilotApi.workbookStatus(eventId);
+        if (cancelled) return;
+        setOwnerWorkbook(state);
+        if (state.state === 'SUCCEEDED' && previous !== 'SUCCEEDED') {
+          const updated = await lessonPreparationApi.get(eventId);
+          if (cancelled) return;
+          setPreparation(updated);
+          if (updated.hasWorkbook) {
+            try {
+              const url = await lessonPreparationApi.workbookUrl(eventId);
+              if (cancelled) URL.revokeObjectURL(url);
+              else setWorkbookUrl(url);
+            } catch { /* Material still saved; viewing may be retried. */ }
+          }
+          if (updated.hasAnswers) {
+            try {
+              const url = await lessonPreparationApi.answersUrl(eventId);
+              if (cancelled) URL.revokeObjectURL(url);
+              else setAnswersUrl(url);
+            } catch { /* Material still saved; viewing may be retried. */ }
+          }
+        }
+        previous = state.state;
+      } catch { /* Other lesson features should work even without pilot. */ }
+    }
+    void refresh();
+    const interval = window.setInterval(() => { void refresh(); }, 8000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [eventId, isNickAiPilot]);
+
+  async function generateOwnerWorkbook() {
+    if (!isNickAiPilot || ownerWorkbookStarting) return;
+    setOwnerWorkbookStarting(true);
+    setError(null);
+    try {
+      const result = await aiPilotApi.generateWorkbook(eventId);
+      setOwnerWorkbook(result);
+      setMessage(result.state === 'QUEUED' || result.state === 'RUNNING'
+        ? 'Сервер Mindcrafti готовит тетрадь и ответы для этого урока. Файлы появятся здесь автоматически.'
+        : result.state === 'ALREADY_ATTACHED'
+          ? 'Материалы уже прикреплены, повторная генерация не нужна.'
+          : 'Генерация доступна только для предстоящих уроков на сегодня после 09:00.');
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+    } finally {
+      setOwnerWorkbookStarting(false);
+    }
+  }
 
   useEffect(() => () => {
     if (workbookUrl) URL.revokeObjectURL(workbookUrl);
@@ -468,6 +527,44 @@ export function LessonDetailPage() {
             <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
               Код пилота уже подключён. Для запуска осталось добавить OPENAI_API_KEY в backend Railway.
             </div>
+          )}
+        </section>
+      )}
+
+      {isNickAiPilot && (
+        <section className="panel" style={{ marginBottom: 16, padding: 18 }}>
+          <h2 style={{ margin: '0 0 8px' }}>Рабочая тетрадь на сегодня</h2>
+          <p className="muted" style={{ fontSize: 13 }}>
+            После 09:00 по Берлину сервер готовит PDF и ответы автоматически,
+            если этот урок назначен на сегодня. Поздняя запись на сегодня
+            запускается сразу после создания. Другие даты не затрагиваются.
+          </p>
+          <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" className="btn" onClick={() => void generateOwnerWorkbook()}
+              disabled={ownerWorkbookStarting || !ownerWorkbook?.enabled
+                || Boolean(preparation?.hasWorkbook || preparation?.hasAnswers)
+                || ownerWorkbook?.state === 'QUEUED' || ownerWorkbook?.state === 'RUNNING'
+                || ownerWorkbook?.state === 'SUCCEEDED'
+                || !lesson || schoolDateKey(new Date(lesson.startsAt)) !== schoolDateKey(new Date())
+                || new Date(lesson.startsAt).getTime() <= Date.now()}>
+              {ownerWorkbookStarting ? 'Запускаем…'
+                : ownerWorkbook?.state === 'QUEUED' || ownerWorkbook?.state === 'RUNNING'
+                  ? 'Создаётся на сервере…' : 'Создать сейчас'}
+            </button>
+            <span role="status" className="muted" style={{ fontSize: 13 }}>
+              {ownerWorkbook?.state === 'SUCCEEDED' ? 'Тетрадь и ответы прикреплены'
+                : ownerWorkbook?.state === 'FAILED' ? 'Ошибка генерации. Можно повторить.'
+                : ownerWorkbook?.state === 'QUEUED' ? 'В очереди'
+                : ownerWorkbook?.state === 'RUNNING' ? 'Генерируется PDF'
+                : preparation?.hasWorkbook || preparation?.hasAnswers ? 'Материалы уже прикреплены'
+                : ownerWorkbook?.enabled ? 'Ожидает генерации'
+                : 'Пилот пока выключен'}
+            </span>
+          </div>
+          {ownerWorkbook?.state === 'FAILED' && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              Нажмите «Создать сейчас», чтобы повторить попытку без дубликатов.
+            </p>
           )}
         </section>
       )}

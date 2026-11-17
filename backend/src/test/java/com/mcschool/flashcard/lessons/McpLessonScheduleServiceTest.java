@@ -42,7 +42,7 @@ class McpLessonScheduleServiceTest {
     private final McpOperationReceiptService receipts = mock(McpOperationReceiptService.class);
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final McpAccessService access = new McpAccessService(jdbc);
-    private final ManualLessonService nativeLessons = new ManualLessonService(users, groups, members, history, rooms, classroom);
+    private final ManualLessonService nativeLessons = new ManualLessonService(users, groups, members, history, rooms, classroom, mock(org.springframework.context.ApplicationEventPublisher.class));
     private final McpLessonScheduleService service = new McpLessonScheduleService(nativeLessons, calendar, users, groups, history, access, receipts, jdbc);
     private final User teacher = User.activeTeacher("Teacher", "teacher@test.local", "teacher", "unused");
     private final User other = User.activeTeacher("Other", "other@test.local", "other", "unused");

@@ -24,7 +24,7 @@ public class WorkbookContentService {
 
     @Autowired
     public WorkbookContentService(@Value("${OPENAI_API_KEY:}") String apiKey,
-            @Value("${WORKBOOK_OPENAI_MODEL:${OPENAI_MODEL:}}") String model,
+            @Value("${WORKBOOK_OPENAI_MODEL:${HOMEWORK_OPENAI_MODEL:${OPENAI_MODEL:}}}") String model,
             ObjectMapper json) {
         this(apiKey, model, json, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build());
     }

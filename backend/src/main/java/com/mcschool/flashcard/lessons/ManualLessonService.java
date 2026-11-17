@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -35,17 +36,20 @@ public class ManualLessonService {
     private final LessonHistoryRepository history;
     private final OnlineClassRepository onlineClasses;
     private final OnlineClassService onlineClassService;
+    private final ApplicationEventPublisher events;
 
     public ManualLessonService(UserRepository users, StudentGroupRepository groups,
                                StudentGroupMemberRepository members, LessonHistoryRepository history,
                                OnlineClassRepository onlineClasses,
-                               OnlineClassService onlineClassService) {
+                               OnlineClassService onlineClassService,
+                               ApplicationEventPublisher events) {
         this.users = users;
         this.groups = groups;
         this.members = members;
         this.history = history;
         this.onlineClasses = onlineClasses;
         this.onlineClassService = onlineClassService;
+        this.events = events;
     }
 
     @Transactional
@@ -61,6 +65,11 @@ public class ManualLessonService {
                 List.of(), request.title().strip(), request.startsAt(), request.endsAt(), null, null);
         lesson = withTarget(caller, lesson, request.groupId(), request.studentId());
         history.save(LessonHistoryEntry.create(teacher, lesson));
+        // The listener runs only after successful commit. It filters to the
+        // owner's upcoming lessons on today's Berlin date after 09:00.
+        if (AiLessonPilotService.PILOT_TEACHER_ID.equals(caller.id())) {
+            events.publishEvent(new OwnerWorkbookLessonCreated(caller.id(), eventId));
+        }
         return lesson;
     }
 

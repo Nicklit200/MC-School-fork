@@ -23,7 +23,7 @@ class LessonSeriesServiceTest {
     private final LessonHistoryRepository history = mock(LessonHistoryRepository.class);
     private final ManualLessonService service = new ManualLessonService(users, groups, mock(StudentGroupMemberRepository.class), history,
             mock(com.mcschool.flashcard.liveclasses.OnlineClassRepository.class),
-            mock(com.mcschool.flashcard.liveclasses.OnlineClassService.class));
+            mock(com.mcschool.flashcard.liveclasses.OnlineClassService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
     private final User teacher = User.activeTeacher("Teacher", "teacher@test.local", "teacher", "unused");
     private final AuthenticatedUser caller = new AuthenticatedUser(teacher.getId(), teacher.getEmail(), Role.TEACHER);
     private final LocalDate thursday = LocalDate.of(2026, 10, 22);
