@@ -117,9 +117,13 @@ export function OnlineClassPage() {
           session.onlineClass?.viewerIsHost && classId
             ? () => {
                 return onlineClassesApi.end(classId).then(() => {
+                  // Trial/teacher-only classrooms have no registered pupil or group.
+                  // Closing them must never open the automatic homework workflow.
+                  const isRegularLesson = Boolean(session.onlineClass?.studentId || session.onlineClass?.groupId);
                   const title = session.onlineClass?.title || (language === 'DE' ? 'Unterricht' : 'Урок');
                   session.release();
-                  setPostLessonHomework({ id: classId, title });
+                  if (isRegularLesson) setPostLessonHomework({ id: classId, title });
+                  else navigate(-1);
                 });
               }
             : undefined
