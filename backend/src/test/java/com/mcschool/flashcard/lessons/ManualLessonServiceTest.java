@@ -30,7 +30,7 @@ class ManualLessonServiceTest {
     private final LessonHistoryRepository history = mock(LessonHistoryRepository.class);
     private final OnlineClassRepository onlineClasses = mock(OnlineClassRepository.class);
     private final OnlineClassService classroom = mock(OnlineClassService.class);
-    private final ManualLessonService service = new ManualLessonService(users, groups, members, history, onlineClasses, classroom);
+    private final ManualLessonService service = new ManualLessonService(users, groups, members, history, onlineClasses, classroom, mock(org.springframework.context.ApplicationEventPublisher.class));
     private final User teacher = User.activeTeacher("Teacher", "teacher@test.local", "teacher", "unused");
     private final AuthenticatedUser caller = new AuthenticatedUser(teacher.getId(), teacher.getEmail(), Role.TEACHER);
     private final Instant start = Instant.parse("2026-11-10T14:00:00Z");
