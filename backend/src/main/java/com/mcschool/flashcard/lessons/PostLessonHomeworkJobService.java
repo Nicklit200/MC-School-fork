@@ -56,6 +56,7 @@ public class PostLessonHomeworkJobService {
     private final SchoolPromptSettingsService prompts;
     private final PostLessonHomeworkContentService generator;
     private final PostLessonHomeworkPushService jobPush;
+    private final PostLessonHomeworkPilotAccess pilot;
     private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
         Thread t=new Thread(r,"mindcrafti-post-lesson-homework");t.setDaemon(true);return t;
     });
@@ -70,13 +71,14 @@ public class PostLessonHomeworkJobService {
             OnlineClassTranscriptSegmentRepository transcriptSegments,
             MonthlyPlanService monthlyPlans,SchoolPromptSettingsService prompts,
             PostLessonHomeworkContentService generator,
-            PostLessonHomeworkPushService jobPush) {
+            PostLessonHomeworkPushService jobPush,
+            PostLessonHomeworkPilotAccess pilot) {
         this.db=db;this.tx=new TransactionTemplate(manager);this.json=json;this.access=access;
         this.members=members;this.users=users;this.homeworks=homeworks;this.homeworkPdf=homeworkPdf;
         this.preparations=preparations;this.lessonPreparation=lessonPreparation;
         this.transcriptSegments=transcriptSegments;
         this.monthlyPlans=monthlyPlans;this.prompts=prompts;this.generator=generator;
-        this.jobPush=jobPush;
+        this.jobPush=jobPush;this.pilot=pilot;
     }
 
     public record Request(int days,String teacherInstructions) {}
@@ -84,6 +86,7 @@ public class PostLessonHomeworkJobService {
             String instructions,String roster,String selection,String state,int generated,int expected) {}
 
     public Map<String,Object> enqueue(AuthenticatedUser teacher,UUID classId,Request request){
+        pilot.require(teacher);
         if(request==null||request.days()<1||request.days()>7)
             throw new IllegalArgumentException("Choose 1..7 days");
         String notes=Objects.toString(request.teacherInstructions(),"").trim();
@@ -115,6 +118,7 @@ public class PostLessonHomeworkJobService {
 
     /** The status endpoint is intentionally teacher-scoped; it exposes no raw pupil records or notes. */
     public Map<String,Object> status(AuthenticatedUser teacher,UUID classId){
+        pilot.require(teacher);
         access.requireHost(teacher,classId);
         List<Job> found=db.query("SELECT * FROM post_lesson_homework_jobs WHERE class_id=? AND teacher_id=?",
                 this::row,classId,teacher.id());
@@ -122,6 +126,7 @@ public class PostLessonHomeworkJobService {
     }
 
     public Map<String,Object> retry(AuthenticatedUser teacher,UUID classId){
+        pilot.require(teacher);
         return tx.execute(st->{
             access.requireHost(teacher,classId);
             List<Job> found=db.query("SELECT * FROM post_lesson_homework_jobs WHERE class_id=? AND teacher_id=? FOR UPDATE",
@@ -165,7 +170,8 @@ public class PostLessonHomeworkJobService {
         try{
             Job job=tx.execute(st->{
                 db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code='INTERRUPTED',finished_at=now(),updated_at=now() WHERE state='RUNNING' AND lease_until<now()");
-                List<Job> list=db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row);
+                // Never process any pending teacher job outside the private pilot.
+                List<Job> list=db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' AND teacher_id=? ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row,pilot.teacherId());
                 if(list.isEmpty())return null;
                 Job item=list.get(0);
                 db.update("UPDATE post_lesson_homework_jobs SET state='RUNNING',worker_id=?,lease_until=now()+INTERVAL '90 seconds',updated_at=now() WHERE id=?",workerId,item.id());
@@ -196,6 +202,7 @@ public class PostLessonHomeworkJobService {
     @SuppressWarnings("unchecked")
     private void process(Job original)throws Exception{
         Job job=find(original.id());
+        pilot.require(job.teacherId());
         AuthenticatedUser teacher=new AuthenticatedUser(job.teacherId(),null,Role.TEACHER);
         List<Map<String,Object>> roster=json.readValue(job.roster(),List.class);
         Map<String,Object> selection;
