@@ -10,6 +10,13 @@ class OwnerSameDayWorkbookServiceTest {
     private static final UUID OWNER = AiLessonPilotService.PILOT_TEACHER_ID;
     private static final UUID OTHER = UUID.fromString("9a86b2f5-8c51-4ab3-8cab-4240bad0f31a");
 
+    @Test void notificationSuccessOpensPdfViewerAndFailuresOpenLesson() {
+        assertThat(OwnerSameDayWorkbookService.notificationPath("local-mark", true))
+                .isEqualTo("/lesson-workbook-preview/" + OWNER + "/local-mark");
+        assertThat(OwnerSameDayWorkbookService.notificationPath("local-mark", false))
+                .isEqualTo("/teacher/lessons/local-mark");
+    }
+
     @Test void beforeNineDoesNotGenerate() {
         assertThat(OwnerSameDayWorkbookService.eligibleAt(OWNER,
                 Instant.parse("2026-11-17T16:00:00Z"),
