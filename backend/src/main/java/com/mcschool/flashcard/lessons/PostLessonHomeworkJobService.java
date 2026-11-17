@@ -299,6 +299,12 @@ public class PostLessonHomeworkJobService {
     /** All-or-nothing publication, no replacing any existing PDF (including unsubmitted work). */
     private void publish(Job job,AuthenticatedUser teacher,List<Map<String,Object>> students){
         tx.executeWithoutResult(st->{
+            User owner=users.findById(job.teacherId()).orElseThrow(()->new IllegalStateException("HOMEWORK_TEACHER_REVOKED"));
+            if(owner.getRole()!=Role.TEACHER||owner.getStatus()!=UserStatus.ACTIVE||owner.isArchived())
+                throw new IllegalStateException("HOMEWORK_TEACHER_REVOKED");
+            OnlineClass source=access.requireHost(teacher,job.classId());
+            if(source.getStatus()!=OnlineClassStatus.ENDED)
+                throw new IllegalStateException("HOMEWORK_CLASS_CHANGED");
             List<Map<String,Object>> saved=db.queryForList(
                     "SELECT student_id,day_number,assignment_date,student_pdf FROM post_lesson_homework_drafts WHERE job_id=? ORDER BY student_id,day_number",job.id());
             if(saved.size()!=students.size()*job.days())
@@ -310,6 +316,8 @@ public class PostLessonHomeworkJobService {
                 db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))","post-homework:"+id+":"+date);
                 if(!users.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(id,teacher.id(),Role.STUDENT,UserStatus.ACTIVE))
                     throw new IllegalStateException("HOMEWORK_STUDENT_CHANGED");
+                if(source.getGroup()!=null && !members.existsByGroupIdAndStudentId(source.getGroup().getId(),id))
+                    throw new IllegalStateException("HOMEWORK_MEMBERSHIP_CHANGED");
                 boolean collision=homeworks.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(id).stream()
                         .anyMatch(h->h.getStartDate().equals(date)&&h.hasWorksheet());
                 if(collision)throw new ResponseStatusException(HttpStatus.CONFLICT,"Existing homework cannot be replaced");
