@@ -240,9 +240,14 @@ export const onlineClassesApi = {
     const response = await fetch(`${base}/online-classes/${classId}/post-lesson-homework/transcribe`, {
       method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form,
     });
-    const payload = await response.json();
-    if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
-    return payload.text ?? '';
+    const responseText = await response.text();
+    let payload: { text?: string; errorCode?: string; message?: string } = {};
+    try { payload = responseText ? JSON.parse(responseText) : {}; } catch { /* proxy may return non-JSON errors */ }
+    if (!response.ok) throw new ApiRequestError(response.status, payload.errorCode ?? 'UNKNOWN',
+      payload.message ?? (response.status === 502 ? 'Voice recognition provider unavailable' : response.statusText));
+    const text = payload.text?.trim() ?? '';
+    if (!text) throw new ApiRequestError(422, 'EMPTY_TRANSCRIPTION', 'No recognizable speech in recording');
+    return text;
   },
 
   cancel: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/cancel`),
