@@ -288,10 +288,11 @@ public class PostLessonHomeworkJobService {
                         "submitted",h.isSubmitted()));
         }
         data.put("previousHomework",previous);
+        // A lesson PLAN does not prove it was actually taught; fail closed without lesson evidence.
         boolean hasLesson=(!Objects.toString(data.get("transcript"),"").isBlank()
                 ||!Objects.toString(data.get("liveTranscript"),"").isBlank()
                 ||!Objects.toString(data.get("coveredMaterial"),"").isBlank()
-                ||!Objects.toString(data.get("lessonPlan"),"").isBlank());
+                ||!Objects.toString(data.get("savedBoardText"),"").isBlank());
         if(!hasLesson)throw new IllegalStateException("HOMEWORK_LESSON_EVIDENCE_MISSING");
         return data;
     }
