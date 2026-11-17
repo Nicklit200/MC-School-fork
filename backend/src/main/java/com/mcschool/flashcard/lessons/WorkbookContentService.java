@@ -76,23 +76,49 @@ public class WorkbookContentService {
                 "lessonJson", Map.of("type", "string"), "lessonPlan", Map.of("type", "string"),
                 "difficulties", Map.of("type", "string")),
                 "required", List.of("lessonJson", "lessonPlan", "difficulties"), "additionalProperties", false);
-        Map<String,Object> payload = Map.of("model", model, "store", false, "max_output_tokens", 24000,
-                "instructions", instructions,
-                "input", json.writeValueAsString(Map.of("context", context, "teacherInstruction", instruction == null ? "" : instruction)),
-                "text", Map.of("format", Map.of("type", "json_schema", "name", "mindcrafti_workbook_content", "strict", true, "schema", schema)));
-        HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.openai.com/v1/responses"))
-                .timeout(Duration.ofSeconds(180)).header("Authorization", "Bearer " + apiKey)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload))).build();
-        HttpResponse<String> response;
-        try { response = http.send(request, HttpResponse.BodyHandlers.ofString()); }
-        catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new IllegalStateException("Workbook content generation interrupted"); }
-        if (response.statusCode() < 200 || response.statusCode() >= 300)
-            throw new IllegalStateException("Workbook content provider returned HTTP " + response.statusCode());
-        if (response.body().length() > 700_000) throw new IllegalStateException("Workbook content provider response is too large");
-        @SuppressWarnings("unchecked") Map<String,Object> body = json.readValue(response.body(), Map.class);
-        if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Workbook content generation did not complete");
-        Content content = json.readValue(outputText(body), Content.class);
+        // Strict JSON format enforces the outer response, but the nested
+        // lessonJson is a string that can still contain malformed JSON. Retry
+        // only invalid content/validation, never transport/auth failures.
+        // This mirrors the safe automatic repair used by post-lesson homework.
+        Exception lastContentError = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            Map<String, Object> input = new java.util.LinkedHashMap<>();
+            input.put("context", context);
+            input.put("teacherInstruction", instruction == null ? "" : instruction);
+            if (attempt > 1) input.put("serverRepairRequest", Map.of(
+                    "previousAttempt", attempt - 1,
+                    "failureType", lastContentError == null ? "INVALID_CONTENT" : lastContentError.getClass().getSimpleName(),
+                    "instruction", "Generate a NEW, shorter, valid complete lessonJson string. "
+                        + "Correct JSON brackets, escaped backslashes, nested quotes, meta/workbookPages/teacherPages and math QA. "
+                        + "Never output partial JSON. Retain the student's German exercises and separate teacher solutions."));
+            Map<String,Object> payload = Map.of("model", model, "store", false, "max_output_tokens", 24000,
+                    "instructions", instructions,
+                    "input", json.writeValueAsString(input),
+                    "text", Map.of("format", Map.of("type", "json_schema", "name", "mindcrafti_workbook_content", "strict", true, "schema", schema)));
+            HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.openai.com/v1/responses"))
+                    .timeout(Duration.ofSeconds(180)).header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload))).build();
+            HttpResponse<String> response;
+            try { response = http.send(request, HttpResponse.BodyHandlers.ofString()); }
+            catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new IllegalStateException("Workbook content generation interrupted"); }
+            if (response.statusCode() < 200 || response.statusCode() >= 300)
+                throw new IllegalStateException("Workbook content provider returned HTTP " + response.statusCode());
+            if (response.body().length() > 700_000) throw new IllegalStateException("Workbook content provider response is too large");
+            @SuppressWarnings("unchecked") Map<String,Object> body = json.readValue(response.body(), Map.class);
+            if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Workbook content generation did not complete");
+            try {
+                return validateContentText(outputText(body));
+            } catch (Exception badContent) {
+                lastContentError = badContent;
+            }
+        }
+        throw new IllegalStateException("Workbook content invalid after three attempts", lastContentError);
+    }
+
+    /** Parses and validates the inner JSON before any PDF is rendered or attached. */
+    Content validateContentText(String output) throws Exception {
+        Content content = json.readValue(output, Content.class);
         if (content == null || content.lessonJson() == null || content.lessonJson().length() > OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS)
             throw new IllegalArgumentException("Generated workbook content is missing or too large");
         @SuppressWarnings("unchecked") Map<String,Object> document = json.readValue(content.lessonJson(), Map.class);
