@@ -84,10 +84,19 @@ public class OwnerSameDayWorkbookService {
     public void onLessonCreated(OwnerWorkbookLessonCreated created) {
         if (!enabled || !OWNER.equals(created.teacherId())) return;
         try {
-            User owner = owner();
-            if (owner == null) return;
-            AuthenticatedUser actor = actor(owner);
-            findLesson(actor, created.eventId()).ifPresent(lesson -> enqueue(actor, lesson, false));
+            // The post-commit event may still hold the completed transaction's
+            // connection in the publishing thread. Do all writes on the worker.
+            worker.submit(() -> {
+                try {
+                    User owner = owner();
+                    if (owner == null) return;
+                    AuthenticatedUser actor = actor(owner);
+                    findLesson(actor, created.eventId()).ifPresent(lesson -> enqueue(actor, lesson, false));
+                } catch (RuntimeException ex) {
+                    LOG.warn("Owner workbook event dispatch failed for {}: {}",
+                            created.eventId(), ex.getClass().getSimpleName());
+                }
+            });
         } catch (RuntimeException ex) {
             LOG.warn("Owner workbook creation trigger failed for event {}: {}",
                     created.eventId(), ex.getClass().getSimpleName());
@@ -196,9 +205,10 @@ public class OwnerSameDayWorkbookService {
             Map<String, Object> result = renderer.create(actor, eventId,
                     generated.lessonJson(), generated.lessonPlan(), generated.difficulties());
             UUID draftId = UUID.fromString(String.valueOf(result.get("draftId")));
-            // Teacher enabled auto-publication for this private pilot.
-            // Do not overwrite a teacher's intervening upload while rendering.
-            if (hasAnyMaterial(actor, eventId)) {
+            // Validate the day and start time again: AI or rendering may
+            // finish after the lesson begins, or the teacher may reschedule.
+            GroupLessonResponse latest = findLesson(actor, eventId).orElse(null);
+            if (latest == null || !eligible(actor, latest) || hasAnyMaterial(actor, eventId)) {
                 db.update("""
                     UPDATE owner_same_day_workbook_jobs SET state='SKIPPED', draft_id=?,updated_at=now()
                     WHERE teacher_id=? AND event_id=?
