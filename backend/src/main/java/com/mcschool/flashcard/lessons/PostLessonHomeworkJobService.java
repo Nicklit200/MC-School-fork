@@ -416,7 +416,7 @@ public class PostLessonHomeworkJobService {
                 // A unique, recognizable filename also distinguishes two homework
                 // PDFs on the same date in the teacher and student listings.
                 String filename="Mindcrafti_Hausaufgabe_"+date+"_Tag_"+day+"_"+
-                        job.id().toString().substring(0,8)+".pdf";
+                        job.id()+".pdf";
                 homeworkPdf.createWorksheetHomework(teacher,id,date,
                         new PdfFile(filename,bytes));
             }
