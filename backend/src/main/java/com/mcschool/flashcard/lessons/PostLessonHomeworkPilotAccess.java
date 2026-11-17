@@ -27,6 +27,8 @@ public class PostLessonHomeworkPilotAccess {
         this.pilotTeacherId = parsed;
     }
 
+    public UUID teacherId() { return pilotTeacherId; }
+
     public boolean allowed(UUID userId) {
         return pilotTeacherId != null && Objects.equals(pilotTeacherId,userId);
     }
