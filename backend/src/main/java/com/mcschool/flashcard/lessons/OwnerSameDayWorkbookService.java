@@ -252,12 +252,17 @@ public class OwnerSameDayWorkbookService {
                 .filter(lesson -> eventId.equals(lesson.eventId())).findFirst();
     }
 
+    static boolean eligibleAt(UUID teacherId, Instant lessonStart, Instant now, boolean hasTarget) {
+        if (!OWNER.equals(teacherId) || lessonStart == null || !hasTarget) return false;
+        var localNow = now.atZone(BERLIN);
+        return !localNow.toLocalTime().isBefore(START_AT)
+                && localNow.toLocalDate().equals(lessonStart.atZone(BERLIN).toLocalDate())
+                && lessonStart.isAfter(now);
+    }
+
     private boolean eligible(AuthenticatedUser actor, GroupLessonResponse lesson) {
-        if (!enabled || !OWNER.equals(actor.id()) || lesson.startsAt() == null) return false;
-        if (LocalTime.now(BERLIN).isBefore(START_AT)) return false;
-        if (!LocalDate.now(BERLIN).equals(lesson.startsAt().atZone(BERLIN).toLocalDate())) return false;
-        return lesson.startsAt().isAfter(Instant.now())
-                && (lesson.studentId() != null || lesson.groupId() != null);
+        return enabled && eligibleAt(actor.id(), lesson.startsAt(), Instant.now(),
+                lesson.studentId() != null || lesson.groupId() != null);
     }
 
     private boolean hasAnyMaterial(AuthenticatedUser actor, String eventId) {
