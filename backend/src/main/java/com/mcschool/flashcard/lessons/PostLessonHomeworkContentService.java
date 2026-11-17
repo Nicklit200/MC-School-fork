@@ -115,7 +115,7 @@ public class PostLessonHomeworkContentService {
                 Map.of("lessonJson",Map.of("type","string")),
                 "required",List.of("lessonJson"),"additionalProperties",false);
         Map<String,Object> out=json.readValue(ask(instructions,evidence,"mindcrafti_daily_homework",schema),Map.class);
-        String checked=McpHomeworkDraftValidator.normalize(json,String.valueOf(out.get("lessonJson")),day,studentName);
+        String checked=McpHomeworkDraftValidator.normalize(json,String.valueOf(out.get("lessonJson")),day,totalDays,studentName);
         OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(checked);
         if(pdf.studentPages()!=1||pdf.teacherPages()<1||pdf.studentPdf().length<100||pdf.teacherPdf().length<100)
             throw new IllegalStateException("HOMEWORK_PDF_INVALID");
