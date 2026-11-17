@@ -80,7 +80,7 @@ class PostLessonHomeworkRepairTest {
     @Test void algebraicFractionIsAlwaysStackedInStudentPdfInput() throws Exception {
         var math=PostLessonHomeworkMch3Template.displayMath(
                 List.of("(3x-2)/4","÷","3/8","=","_____"));
-        assertEquals("\\frac{3x-2}{4} \\div \\frac{3}{8} = \\underline{\\qquad\\qquad}",
+        assertEquals("\\frac{3x-2}{4} \\div \\frac{3}{8} =",
                 math.get("latex"));
         var draft=new java.util.LinkedHashMap<>(goodContent());
         draft.put("topic","Bruchterme dividieren");
@@ -128,7 +128,7 @@ class PostLessonHomeworkRepairTest {
         Map<?,?> page=(Map<?,?>)((List<?>)doc.get("workbookPages")).get(0);
         Map<?,?> task=(Map<?,?>)((List<?>)page.get("blocks")).get(1);
         Map<?,?> row=(Map<?,?>)((List<?>)task.get("rows")).get(0);
-        assertEquals("\\frac{18}{24} = \\underline{\\qquad\\qquad}",
+        assertEquals("\\frac{18}{24} =",
                 ((Map<?,?>)row.get("math")).get("latex"));
     }
 
