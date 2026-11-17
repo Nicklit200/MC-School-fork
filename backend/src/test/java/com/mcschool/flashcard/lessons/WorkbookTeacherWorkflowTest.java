@@ -93,6 +93,53 @@ class WorkbookTeacherWorkflowTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void trialLessonCanPrepareDiagnosticWorkbookWithoutStudentOrGroup() throws Exception {
+        Instant start=Instant.parse("2026-11-19T14:00:00Z");
+        var trial=new GroupLessonResponse("local-trial","local-trial",null,null,null,null,List.of(),
+                "Probeunterricht Anna",start,start.plusSeconds(3600),null,null);
+        when(calendar.listGroupLessons(principal(a))).thenReturn(List.of(trial));
+        when(prompts.readForMcp()).thenReturn(new SchoolPromptSettingsResponse(
+                "group-current","individual-current","diagnostic-current","","workbook-current","",Instant.now()));
+
+        Map<String,Object> envelope=call(a,"prepare_workbook_context",Map.of("eventId","local-trial"));
+        assertThat(envelope).doesNotContainKey("error");
+        Map<String,Object> result=(Map<String,Object>)envelope.get("result");
+        Map<String,Object> ctx=(Map<String,Object>)result.get("structuredContent");
+        assertThat(ctx).containsEntry("targetType","trial").containsEntry("targetId",null)
+                .containsEntry("teachingPrompt","diagnostic-current")
+                .containsEntry("monthPlanAvailable",false)
+                .containsEntry("monthLessonSelectionConfidence","NOT_APPLICABLE_TRIAL")
+                .containsEntry("previousLesson",null).containsKey("contextToken");
+        assertThat((List<?>)ctx.get("students")).isEmpty();
+        verifyNoInteractions(plans);
+        assertThat(call(a,"prepare_homework_context",Map.of("eventId","local-trial"))).containsKey("error");
+        verifyNoInteractions(renderer);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void trialLessonCanGenerateUnpublishedPdfDraftAndKeepsTeacherIsolation() throws Exception {
+        Instant start=Instant.parse("2026-11-19T14:00:00Z");
+        var trial=new GroupLessonResponse("local-trial","local-trial",null,null,null,null,List.of(),
+                "Probeunterricht Anna",start,start.plusSeconds(3600),null,null);
+        when(calendar.listGroupLessons(principal(a))).thenReturn(List.of(trial));
+        when(renderer.create(eq(principal(a)),eq("local-trial"),anyString(),eq(""),eq("")))
+                .thenReturn(new LinkedHashMap<>(Map.of("draftId","draft-trial","eventId","local-trial","published",false)));
+
+        Map<String,Object> envelope=call(a,"prepare_workbook_context",Map.of("eventId","local-trial"));
+        Map<String,Object> ctx=(Map<String,Object>)((Map<?,?>)envelope.get("result")).get("structuredContent");
+        String token=String.valueOf(ctx.get("contextToken"));
+        Map<String,Object> args=Map.of("eventId","local-trial","idempotencyKey","trial-generate-one",
+                "lessonJson",preparedJson(),"contextToken",token);
+        assertThat(call(a,"generate_lesson_workbook_draft",args)).doesNotContainKey("error");
+        assertThat(call(a,"generate_lesson_workbook_draft",args)).doesNotContainKey("error");
+        verify(renderer,times(1)).create(eq(principal(a)),eq("local-trial"),anyString(),eq(""),eq(""));
+        assertThat(call(b,"prepare_workbook_context",Map.of("eventId","local-trial"))).containsKey("error");
+        verifyNoInteractions(plans,preparation);
+    }
+
+    @Test
     void ordinaryTeacherCanGenerateOnlyOwnLessonWithoutPublishingAndRetryReusesDraft() throws Exception {
         String token=contextToken();
         Map<String,Object> args=Map.of("eventId","lesson-a","instruction","Mehr Graphen","idempotencyKey","generation-one",
