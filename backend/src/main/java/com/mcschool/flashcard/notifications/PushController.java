@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/push")
@@ -66,13 +68,26 @@ public class PushController {
     @PostMapping("/test")
     @Transactional(readOnly = true)
     public ResponseEntity<Void> test(@AuthenticationPrincipal AuthenticatedUser principal) {
+        if (!webPushService.isConfigured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Web Push is not configured");
+        }
+        var subscriptions = subscriptionRepository.findAllByUserId(principal.id());
+        if (subscriptions.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No push subscriptions found for this account");
+        }
         String url = principal.role() == Role.PARENT ? "/parent" : "/today";
-        for (PushSubscription subscription : subscriptionRepository.findAllByUserId(principal.id())) {
+        int failed = 0;
+        for (PushSubscription subscription : subscriptions) {
             try {
                 webPushService.send(subscription, "Mindcrafti School", "Тестовое уведомление работает 🎉", url);
             } catch (Exception e) {
+                failed++;
                 log.warn("Failed to send test push to subscription {}", subscription.getId(), e);
             }
+        }
+        if (failed > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Push delivery failed for " + failed + " of " + subscriptions.size() + " devices");
         }
         return ResponseEntity.noContent().build();
     }
