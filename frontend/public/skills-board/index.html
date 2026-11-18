@@ -60,17 +60,21 @@
     </div>
     <div id="catalog-content" class="catalog-content">
       <label class="student-filter">
-        <span>ГРУППА / УЧЕНИК</span>
-        <select id="student-filter" aria-label="Выбрать группу или ученика" disabled>
-          <option value="">Выберите группу или ученика</option>
+        <span>УЧЕНИК</span>
+        <select id="student-filter" aria-label="Выбрать ученика" disabled>
+          <option value="">Выберите ученика</option>
         </select>
+      </label>
+      <label class="student-filter" id="board-filter-wrap" hidden>
+        <span>НАВЫКИ ИЗ ПРОГРАММЫ</span>
+        <select id="board-filter" aria-label="Выбрать учебную программу" disabled></select>
       </label>
 
       <button id="parent-share" type="button" hidden title="Родитель сможет только просматривать карту и историю выбранного ученика">🔗 Скопировать ссылку для родителя</button>
       <button id="parent-share-revoke" type="button" hidden title="Ранее выданная ссылка перестанет работать">Отозвать родительскую ссылку</button>
 
-      <div class="catalog-subtitle">ПРОГРАММЫ ГРУППЫ</div>
-      <div id="school-filters" class="school-filters" aria-label="Программы группы"></div>
+      <div class="catalog-subtitle">ФИЛЬТРЫ ШКОЛЬНЫХ ПРОГРАММ</div>
+      <div id="school-filters" class="school-filters" aria-label="Фильтры школьных программ"></div>
 
       <div class="catalog-divider"></div>
       <div class="catalog-subtitle">РАЗДЕЛЫ <span id="count"></span></div>
@@ -136,6 +140,6 @@
     <div id="inspector-body"></div>
   </aside>
 </div>
-<script type="module" src="./board.js?v=20261102-3"></script>
+<script type="module" src="./board.js?v=20261110-student-only-1"></script>
 </body>
 </html>
