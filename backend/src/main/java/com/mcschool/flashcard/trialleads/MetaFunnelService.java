@@ -36,7 +36,7 @@ public class MetaFunnelService {
     private static final Logger log = LoggerFactory.getLogger(MetaFunnelService.class);
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(8)).build();
-    private static final List<String> EVENTS = List.of("Schedule", "QualifiedLead", "ConvertedLead");
+    private static final List<String> EVENTS = List.of("Lead", "Schedule", "QualifiedLead", "ConvertedLead");
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final String accessToken;
@@ -72,6 +72,21 @@ public class MetaFunnelService {
         }
         this.endpoint = URI.create("https://graph.facebook.com/" + graphVersion + "/" + pixelId + "/events");
         this.transport = transport;
+        log.info("Meta CAPI configuration enabled={} token_present={} test_mode={}",
+                sendingEnabled, !this.accessToken.isBlank(), this.testEventCode != null);
+    }
+
+    /** Initial trial form submissions share this event ID with the consented browser Pixel. */
+    public void recordLeadByToken(UUID trackingToken) {
+        try {
+            List<UUID> leadIds = jdbc.query(
+                    "SELECT id FROM trial_leads WHERE tracking_token = ?",
+                    (rs, row) -> rs.getObject("id", UUID.class), trackingToken);
+            if (!leadIds.isEmpty()) record(leadIds.get(0), "Lead", eventId(trackingToken, "Lead"));
+        } catch (RuntimeException error) {
+            // Saving the parent's request must never depend on Meta availability.
+            log.error("Meta CAPI event=Lead lead_id=none error={}", error.getClass().getSimpleName());
+        }
     }
 
     public void recordSchedule(UUID leadId) { record(leadId, "Schedule"); }
@@ -132,6 +147,10 @@ public class MetaFunnelService {
     }
 
     private void record(UUID leadId, String eventName) {
+        record(leadId, eventName, eventId(leadId, eventName));
+    }
+
+    private void record(UUID leadId, String eventName, String metaEventId) {
         try {
             int inserted = jdbc.update("""
                     INSERT INTO trial_lead_meta_conversions
@@ -144,7 +163,7 @@ public class MetaFunnelService {
                         WHERE lead_id=? AND event_name='ContractSigned' AND status IN ('SENT','TEST_SENT')
                     ))
                     ON CONFLICT (lead_id,event_name) DO NOTHING
-                    """, eventName, eventId(leadId, eventName), testEventCode, leadId, eventName, leadId);
+                    """, eventName, metaEventId, testEventCode, leadId, eventName, leadId);
             log.info("Meta CAPI event={} lead_id={} result={}", eventName, leadId,
                     inserted > 0 ? "recorded" : "already_recorded_or_missing");
         } catch (RuntimeException error) {
@@ -160,7 +179,7 @@ public class MetaFunnelService {
         try {
             jdbc.update("""
                     UPDATE trial_lead_meta_conversions SET status='EXPIRED',last_error='event_older_than_7_days'
-                    WHERE event_name IN ('Schedule','QualifiedLead','ConvertedLead')
+                    WHERE event_name IN ('Lead','Schedule','QualifiedLead','ConvertedLead')
                       AND occurred_at < CURRENT_TIMESTAMP - INTERVAL '7 days'
                       AND (status IN ('PENDING','FAILED') OR
                            (status='SENDING' AND claimed_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'))
@@ -168,7 +187,7 @@ public class MetaFunnelService {
             List<PendingEvent> pending = jdbc.query("""
                     SELECT lead_id,event_name,event_id,occurred_at,test_event_code
                     FROM trial_lead_meta_conversions
-                    WHERE event_name IN ('Schedule','QualifiedLead','ConvertedLead')
+                    WHERE event_name IN ('Lead','Schedule','QualifiedLead','ConvertedLead')
                       AND next_attempt_at <= CURRENT_TIMESTAMP
                       AND (status IN ('PENDING','FAILED') OR
                            (status='SENDING' AND claimed_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'))
@@ -317,6 +336,7 @@ public class MetaFunnelService {
 
     static String sentAtColumn(String eventName) {
         return switch (eventName) {
+            case "Lead" -> "meta_lead_sent_at";
             case "Schedule" -> "meta_schedule_sent_at";
             case "QualifiedLead" -> "meta_qualified_lead_sent_at";
             case "ConvertedLead" -> "meta_purchase_sent_at";
