@@ -2,6 +2,7 @@ package com.mcschool.flashcard.notifications;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Security;
+import nl.martijndwars.webpush.Encoding;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -60,7 +61,9 @@ public class WebPushService {
                     subscription.getP256dh(),
                     subscription.getAuth(),
                     payload.getBytes(StandardCharsets.UTF_8));
-            var response = pushService.send(notification);
+            // The library defaults to obsolete aesgcm, which FCM can reject with 403.
+            // Use RFC 8291 aes128gcm for Chrome, Firefox, and Safari push endpoints.
+            var response = pushService.send(notification, Encoding.AES128GCM);
             int status = response.getStatusLine().getStatusCode();
             String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity());
             if (status == 404 || status == 410
