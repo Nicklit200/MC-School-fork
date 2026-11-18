@@ -77,16 +77,8 @@ public class MetaFunnelService {
     }
 
     /** Initial trial form submissions share this event ID with the consented browser Pixel. */
-    public void recordLeadByToken(UUID trackingToken) {
-        try {
-            List<UUID> leadIds = jdbc.query(
-                    "SELECT id FROM trial_leads WHERE tracking_token = ?",
-                    (rs, row) -> rs.getObject("id", UUID.class), trackingToken);
-            if (!leadIds.isEmpty()) record(leadIds.get(0), "Lead", eventId(trackingToken, "Lead"));
-        } catch (RuntimeException error) {
-            // Saving the parent's request must never depend on Meta availability.
-            log.error("Meta CAPI event=Lead lead_id=none error={}", error.getClass().getSimpleName());
-        }
+    public void recordLead(UUID leadId, UUID trackingToken) {
+        record(leadId, "Lead", eventId(trackingToken, "Lead"));
     }
 
     public void recordSchedule(UUID leadId) { record(leadId, "Schedule"); }
