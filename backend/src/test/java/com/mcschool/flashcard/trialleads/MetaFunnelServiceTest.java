@@ -59,6 +59,29 @@ class MetaFunnelServiceTest {
         assertEquals("meta_purchase_sent_at", MetaFunnelService.sentAtColumn("ConvertedLead"));
     }
 
+    @Test void queuesInitialLeadWithPixelMatchingEventIdAndNoNetworkSend() {
+        UUID trackingToken = UUID.randomUUID();
+        MetaFunnelService.Transport transport = mock(MetaFunnelService.Transport.class);
+        service(transport).recordLead(id, trackingToken);
+        verify(jdbc).update(contains("INSERT INTO trial_lead_meta_conversions"),
+                eq("Lead"), eq("mindcrafti-Lead-" + trackingToken), eq("TEST123"),
+                eq(id), eq("Lead"), eq(id));
+        verifyNoInteractions(transport);
+        assertEquals("meta_lead_sent_at", MetaFunnelService.sentAtColumn("Lead"));
+    }
+
+    @Test void initialLeadPayloadUsesStableIdAndStandardLeadEvent() {
+        UUID trackingToken = UUID.randomUUID();
+        var initialEvent = new MetaFunnelService.PendingEvent(
+                id, "Lead", MetaFunnelService.eventId(trackingToken, "Lead"),
+                Instant.parse("2026-11-18T06:06:04Z"), null);
+        var sent = mapper.valueToTree(service(request -> new MetaFunnelService.MetaResponse(200, "{}"))
+                .payload(initialEvent, lead)).path("data").get(0);
+        assertEquals("Lead", sent.path("event_name").asString());
+        assertEquals("mindcrafti-Lead-" + trackingToken, sent.path("event_id").asString());
+        assertEquals("website", sent.path("action_source").asString());
+    }
+
     @Test void sanitizesMetaResponseRatherThanLoggingApiMessages() {
         var response = mapper.readTree("""
                 {"error":{"code":190,"error_subcode":463,"message":"SECRET_TOKEN parent@example.com",

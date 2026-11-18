@@ -128,6 +128,9 @@ public class TrialLeadController {
 
         saveAttribution(null, token, request.email(), request.fbp(), request.fbc(),
                 request.eventSourceUrl(), request.marketingConsent(), httpRequest);
+        // Enqueue the browser-deduplicated Meta Lead without delaying or blocking CRM capture.
+        // Only consented leads enter the CAPI sending queue; otherwise they are suppressed.
+        metaFunnelService.recordLead(id, token);
         notifyAdminsAboutNewLead(phone);
         return new PublicLeadResponse(token, "NEW");
     }
