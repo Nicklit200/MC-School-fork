@@ -251,6 +251,9 @@ public class PostLessonHomeworkJobService {
                 final int currentDay=day;
                 progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,currentDay);
                 Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,currentDay,individual.getOrDefault(id,"")));
+                // Previous days are loaded from durable drafts: retry/restart cannot forget
+                // math exercises already generated for this particular pupil.
+                evidence.put("previousGeneratedHomework",priorGeneratedHomework(job.id(),id));
                 PostLessonHomeworkContentService.GeneratedHomework generated=generator.makeWithReview(
                         evidence,day,job.days(),name,stage->progress(job,stage,currentDay));
                 OwnerWorkbookPdfRenderService.StudioRender pair=generated.pdf();
@@ -291,6 +294,30 @@ public class PostLessonHomeworkJobService {
                     jobId, notificationError.getClass().getSimpleName());
             // The independent push scheduler recovers terminal job events after a restart.
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String,Object>> priorGeneratedHomework(UUID jobId,UUID studentId) throws Exception {
+        List<Map<String,Object>> previous=new ArrayList<>();
+        for(Map<String,Object> row:db.queryForList("""
+                SELECT day_number,review_json FROM post_lesson_homework_drafts
+                 WHERE job_id=? AND student_id=? AND review_json IS NOT NULL
+                 ORDER BY day_number
+                """,jobId,studentId)) {
+            Map<String,Object> review=json.readValue((String)row.get("review_json"),Map.class);
+            if(review==null || !(review.get("tasks") instanceof List<?> tasks))
+                throw new IllegalStateException("HOMEWORK_DIVERSITY_HISTORY_INVALID");
+            List<Map<String,Object>> expressions=new ArrayList<>();
+            for(Object raw:tasks) {
+                if(!(raw instanceof Map<?,?> task)
+                        || !(task.get("expression") instanceof String expression))
+                    throw new IllegalStateException("HOMEWORK_DIVERSITY_HISTORY_INVALID");
+                expressions.add(Map.of("expression",expression));
+            }
+            previous.add(Map.of("day",((Number)row.get("day_number")).intValue(),
+                    "tasks",expressions));
+        }
+        return previous;
     }
 
     private boolean draftExists(UUID job,UUID student,int day){

@@ -19,6 +19,7 @@ on:
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkSafeTrialTest.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkWorksheetSourceTest.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkRepairTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkSeriesDiversityTest.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkPilotAccessTest.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkFailureTest.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/PostLessonHomeworkProviderFailureTest.java'
@@ -58,7 +59,7 @@ jobs:
           cache-dependency-path: backend/pom.xml
       - name: Homework validator and backend compile
         working-directory: backend
-        run: mvn -B -ntp -Dtest=McpHomeworkDraftValidatorTest,PostLessonHomeworkSafeTrialTest,PostLessonHomeworkPushServiceTest,PostLessonHomeworkWorksheetSourceTest,PostLessonHomeworkRepairTest,PostLessonHomeworkPilotAccessTest,PostLessonHomeworkFailureTest,PostLessonHomeworkProviderFailureTest,PostLessonHomeworkRecipientGuardTest,PostLessonHomeworkMathTest,PostLessonHomeworkReviewMetadataTest,OwnerWorkbookStudioFailureTest test
+        run: mvn -B -ntp -Dtest=McpHomeworkDraftValidatorTest,PostLessonHomeworkSafeTrialTest,PostLessonHomeworkPushServiceTest,PostLessonHomeworkWorksheetSourceTest,PostLessonHomeworkRepairTest,PostLessonHomeworkSeriesDiversityTest,PostLessonHomeworkPilotAccessTest,PostLessonHomeworkFailureTest,PostLessonHomeworkProviderFailureTest,PostLessonHomeworkRecipientGuardTest,PostLessonHomeworkMathTest,PostLessonHomeworkReviewMetadataTest,OwnerWorkbookStudioFailureTest test
   pdf-integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
