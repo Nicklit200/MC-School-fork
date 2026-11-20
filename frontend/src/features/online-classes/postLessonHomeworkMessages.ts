@@ -51,6 +51,10 @@ export function postLessonHomeworkFailureMessage(code: string | null | undefined
       return de
         ? 'Nicht alle erforderlichen PDFs wurden gespeichert. Die Hausaufgaben wurden nicht verteilt. Bitte erneut versuchen.'
         : 'Сохранены не все нужные PDF. Домашка не назначена. Повторите запуск.';
+    case 'REPEATED_EXERCISES':
+      return de
+        ? 'Die Aufgaben wiederholen sich innerhalb der Woche. Der Server hat die Veröffentlichung verhindert. Bitte erneut versuchen oder der Schulverwaltung melden.'
+        : 'Задания слишком похожи на уже созданные дни. Сервер остановил выдачу, чтобы не назначить повторы. Повторите создание или сообщите администратору.';
     case 'HOMEWORK_JSON_INVALID':
     case 'HOMEWORK_JSON_RENDER_INVALID':
     case 'HOMEWORK_MATH_QA_FAILED':
