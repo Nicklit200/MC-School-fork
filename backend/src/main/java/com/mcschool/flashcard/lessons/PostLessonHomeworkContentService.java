@@ -205,6 +205,20 @@ public class PostLessonHomeworkContentService {
                 proper vertically stacked fractions.
                 Follow the source exercises and teacher's stated difficulty; never
                 escalate from a basic fraction into algebraic fractions without evidence.
+                IMPORTANT: The server includes previousGeneratedHomework for THIS
+                student and job. Those exercises are ALREADY assigned to other days.
+                NEVER repeat any exact expression (even with new wording or title),
+                nor repeat an exercise twice inside today's PDF. All mathematical
+                expressions must be new across the whole week.
+                Make a real progression over the week instead of generating the
+                same elementary equation shape seven times: supported introduction,
+                varied application, substitution/checking, and independent transfer,
+                always limited to what this pupil actually learned in the lesson.
+                Do not use only trivial a*x+b=0 exercises for three days running.
+                For a function zero (Nullstelle), a numerical substitution that checks
+                whether a candidate gives y=0 is an acceptable equivalence task.
+                Do not introduce topics, graph notation or advanced algebra not
+                supported by the lesson evidence. Distinguish practice from a new skill.
                 One or two independent problems, a total of at most ten minutes.
                 Each task has a SHORT title and optional short description.
                 For days 5..7 and the final day, return hint as empty string;
@@ -264,12 +278,22 @@ public class PostLessonHomeworkContentService {
             String checked;
             try{
                 checked=PostLessonHomeworkMch3Template.fromContent(json,content,day,totalDays,studentName);
+                // Algebra QA proves correctness, not educational novelty.
+                // Reject identical math or a third day of the same trivial form
+                // BEFORE rendering or publishing any new PDF.
+                PostLessonHomeworkSeriesDiversity.validate(content,
+                        evidence.get("previousGeneratedHomework"),day);
             }catch(IllegalArgumentException rejected){
-                feedback=repairFeedback(rejected);
+                boolean repeated=PostLessonHomeworkSeriesDiversity.REPEATED_EXPRESSION.equals(rejected.getMessage())
+                        || PostLessonHomeworkSeriesDiversity.REPEATED_PATTERN.equals(rejected.getMessage());
+                feedback=repeated
+                        ?PostLessonHomeworkSeriesDiversity.repairAdvice(rejected.getMessage())
+                        :repairFeedback(rejected);
                 LOG.warn("Homework MCH3 content rejected: day={} attempt={} code={}",
                         day,attempt,rejectionCode(rejected));
                 if(attempt==MAX_DRAFT_ATTEMPTS)
-                    throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
+                    throw new IllegalStateException(repeated?"HOMEWORK_DRAFT_REPETITION_FAILED"
+                            :"HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
                 continue;
             }
             progress.accept(PostLessonHomeworkStage.PDF_RENDER);
