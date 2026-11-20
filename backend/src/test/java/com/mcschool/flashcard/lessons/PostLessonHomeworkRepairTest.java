@@ -3,6 +3,12 @@ package com.mcschool.flashcard.lessons;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,9 +29,7 @@ class PostLessonHomeworkRepairTest {
             "hint","Erweitere zuerst auf einen gemeinsamen Nenner.",
             "tasks",List.of(Map.of(
                 "title","Berechne und kürze.","description","Zeige alle Schritte.",
-                "mathTokens",List.of("1/2","+","1/4","=","_____"),
                 "expression","1/2+1/4","answer","3/4",
-                "solutionText","1/2 + 1/4 = 2/4 + 1/4 = 3/4.",
                 "kind","equivalence","variable","")));
     }
 
@@ -78,17 +82,15 @@ class PostLessonHomeworkRepairTest {
     }
 
     @Test void algebraicFractionIsAlwaysStackedInStudentPdfInput() throws Exception {
-        var math=PostLessonHomeworkMch3Template.displayMath(
-                List.of("(3x-2)/4","÷","3/8","=","_____"));
-        assertEquals("\\frac{3x-2}{4} \\div \\frac{3}{8} =",
+        var math=PostLessonHomeworkMath.student("((3*x-2)/4)/(3/8)","equivalence","");
+        assertEquals("\\frac{\\frac{3 \\cdot x - 2}{4}}{\\frac{3}{8}} =",
                 math.get("latex"));
         var draft=new java.util.LinkedHashMap<>(goodContent());
         draft.put("topic","Bruchterme dividieren");
         draft.put("tasks",List.of(Map.of(
                 "title","Bruchterme dividieren", "description","Berechne.",
-                "mathTokens",List.of("(3x-2)/4","÷","3/8","=","_____"),
                 "expression","((3*x-2)/4)/(3/8)", "answer","(6*x-4)/3",
-                "solutionText","(6x-4)/3", "kind","equivalence","variable","")));
+                "kind","equivalence","variable","")));
         String jsonResult=PostLessonHomeworkMch3Template.fromContent(
                 json,draft,1,3,"Mindcrafti Testschüler");
         Map<?,?> doc=json.readValue(jsonResult,Map.class);
@@ -97,7 +99,7 @@ class PostLessonHomeworkRepairTest {
         var task=(Map<?,?>)blocks.get(1);
         var row=(Map<?,?>)((List<?>)task.get("rows")).get(0);
         var rendered=(Map<?,?>)row.get("math");
-        assertTrue(((String)rendered.get("latex")).startsWith("\\frac{3x-2}{4}"));
+        assertEquals(math.get("latex"),rendered.get("latex"));
         assertFalse(((String)rendered.get("latex")).contains("(3x-2)/4"));
     }
 
@@ -105,9 +107,8 @@ class PostLessonHomeworkRepairTest {
         var wrong=new java.util.LinkedHashMap<>(goodContent());
         wrong.put("tasks",List.of(Map.of(
                 "title","Bruch vereinfachen", "description","Vereinfache den Bruch.",
-                "mathTokens",List.of("(3x-2)/4","÷","3/8","=","_____"),
                 "expression","((3*x-2)/4)/(3/8)", "answer","(6*x-4)/3",
-                "solutionText","(6x-4)/3", "kind","equivalence","variable","")));
+                "kind","equivalence","variable","")));
         var error=assertThrows(IllegalArgumentException.class,
                 ()->PostLessonHomeworkMch3Template.fromContent(
                         json,wrong,1,3,"Mindcrafti Testschüler"));
@@ -119,9 +120,8 @@ class PostLessonHomeworkRepairTest {
         var draft=new java.util.LinkedHashMap<>(goodContent());
         draft.put("tasks",List.of(Map.of(
                 "title","Bruch vereinfachen", "description","Kürze vollständig.",
-                "mathTokens",List.of("18/24","=","_____"),
                 "expression","18/24", "answer","3/4",
-                "solutionText","18/24 = 3/4", "kind","equivalence","variable","")));
+                "kind","equivalence","variable","")));
         String generated=PostLessonHomeworkMch3Template.fromContent(
                 json,draft,1,3,"Mindcrafti Testschüler");
         Map<?,?> doc=json.readValue(generated,Map.class);
@@ -132,10 +132,9 @@ class PostLessonHomeworkRepairTest {
                 ((Map<?,?>)row.get("math")).get("latex"));
     }
 
-    @Test void unknownFractionNotationIsRejectedRatherThanShownInline() {
-        assertThrows(IllegalArgumentException.class,
-                ()->PostLessonHomeworkMch3Template.displayMath(
-                        List.of("(3x-2)/4/5","=","_____")));
+    @Test void repeatedDivisionUsesTheSameGroupingAsTheCheckedExpression() {
+        assertEquals("\\frac{\\frac{3 \\cdot x - 2}{4}}{5} =",
+                PostLessonHomeworkMath.student("(3*x-2)/4/5","equivalence","").get("latex"));
     }
 
     @Test void finalDayHasNoTeacherHintInStudentPage()throws Exception {
@@ -145,5 +144,66 @@ class PostLessonHomeworkRepairTest {
         Map<?,?> doc=json.readValue(checked,Map.class);
         var page=(Map<?,?>)((List<?>)doc.get("workbookPages")).get(0);
         assertEquals(1,((List<?>)page.get("blocks")).size());
+    }
+
+    @Test void providerReceivesContentOnlySchemaAndTheRejectedTaskForRepair() throws Exception {
+        var wrong=new java.util.LinkedHashMap<>(goodContent());
+        var task=new java.util.LinkedHashMap<>((Map<String,Object>)((List<?>)wrong.get("tasks")).get(0));
+        task.put("answer","2/3");
+        wrong.put("tasks",List.of(task));
+        responses(wrong,goodContent());
+        var rendered=new OwnerWorkbookPdfRenderService.StudioRender(
+                new byte[120],new byte[130],1,1,Map.of());
+        when(renderer.renderStudio(anyString()))
+                .thenThrow(new IllegalArgumentException("WORKBOOK_RENDER_MATH_ANSWER"))
+                .thenReturn(rendered);
+        var service=new PostLessonHomeworkContentService("test-key","test-model",json,renderer,http);
+        assertSame(rendered,service.make(Map.of("homeworkPrompt","SCHOOL","dayNumber",99),2,7,"Testschüler"));
+        var requests=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http,times(2)).send(requests.capture(),any(HttpResponse.BodyHandler.class));
+        var first=json.readTree(body(requests.getAllValues().get(0)));
+        var properties=first.path("text").path("format").path("schema")
+                .path("properties").path("tasks").path("items").path("properties");
+        assertFalse(properties.has("mathTokens"));
+        assertFalse(properties.has("solutionText"));
+        assertTrue(properties.has("expression"));
+        var initialEvidence=json.readTree(first.path("input").asString());
+        assertEquals(2,initialEvidence.path("dayNumber").asInt());
+        assertEquals(7,initialEvidence.path("totalDays").asInt());
+        var second=json.readTree(body(requests.getAllValues().get(1)));
+        var repair=json.readTree(second.path("input").asString()).path("serverRepairRequest");
+        assertEquals("1/2+1/4",repair.path("rejectedContent").path("tasks").get(0).path("expression").asString());
+        assertEquals("2/3",repair.path("rejectedContent").path("tasks").get(0).path("answer").asString());
+        assertTrue(repair.path("reason").asString().contains("Recalculate it exactly"));
+    }
+
+    @Test void repeatedWrongAnswersAreReportedAsMathFailure() throws Exception {
+        responses(goodContent(),goodContent(),goodContent());
+        when(renderer.renderStudio(anyString()))
+                .thenThrow(new IllegalArgumentException("WORKBOOK_RENDER_MATH_ANSWER"));
+        var service=new PostLessonHomeworkContentService("test-key","test-model",json,renderer,http);
+        var failure=assertThrows(IllegalStateException.class,
+                ()->service.make(Map.of("homeworkPrompt","SCHOOL"),2,7,"Testschüler"));
+        assertEquals("HOMEWORK_MATH_QA_FAILED",PostLessonHomeworkFailure.code(failure));
+        verify(http,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+    }
+
+    @Test void logCategoriesNeverCopyUnknownPrivateReasons() {
+        assertEquals("HOMEWORK_CONTENT_EXPRESSION_SYNTAX",
+                PostLessonHomeworkContentService.rejectionCode(new IllegalArgumentException("HOMEWORK_CONTENT_EXPRESSION_SYNTAX")));
+        assertEquals("CONTENT_RULE",PostLessonHomeworkContentService.rejectionCode(
+                new IllegalArgumentException("WORKBOOK_RENDER_private pupil details")));
+    }
+
+    private static String body(HttpRequest request) throws Exception {
+        var result=new CompletableFuture<String>();
+        var bytes=new ByteArrayOutputStream();
+        request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            public void onSubscribe(Flow.Subscription subscription){subscription.request(Long.MAX_VALUE);}
+            public void onNext(ByteBuffer buffer){byte[] part=new byte[buffer.remaining()];buffer.get(part);bytes.writeBytes(part);}
+            public void onError(Throwable error){result.completeExceptionally(error);}
+            public void onComplete(){result.complete(bytes.toString(StandardCharsets.UTF_8));}
+        });
+        return result.get(2,TimeUnit.SECONDS);
     }
 }

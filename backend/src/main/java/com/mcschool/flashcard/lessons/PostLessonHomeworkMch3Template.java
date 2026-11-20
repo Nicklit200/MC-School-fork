@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -48,28 +47,13 @@ final class PostLessonHomeworkMch3Template {
             String description = text(task, "description", 200, false);
             String expression = text(task, "expression", 200, true);
             String answer = text(task, "answer", 130, true);
-            String solution = text(task, "solutionText", 280, true);
             String kind = text(task, "kind", 20, true);
             String variable = text(task, "variable", 8, false);
-            Object rawTokens = task.get("mathTokens");
-            if(!(rawTokens instanceof List<?> tokens) || tokens.isEmpty() || tokens.size()>20)
-                throw new IllegalArgumentException("HOMEWORK_CONTENT_MATH_TOKENS");
-            List<String> display = new ArrayList<>();
-            for(Object token:tokens) {
-                if(!(token instanceof String t) || t.isBlank() || t.length()>60
-                        || t.codePoints().anyMatch(Character::isISOControl))
-                    throw new IllegalArgumentException("HOMEWORK_CONTENT_MATH_TOKEN_INVALID");
-                display.add(t);
-            }
-
-            // The blank in the student expression is mandatory; the actual answer
-            // must exist only in the teacher key and the server-side algebra QA.
-            if(!display.contains("_____") || display.get(display.size()-1).equals(answer))
-                throw new IllegalArgumentException("HOMEWORK_CONTENT_ANSWER_LEAKAGE");
-            if(display.stream().noneMatch(t -> "=".equals(t)))
-                throw new IllegalArgumentException("HOMEWORK_CONTENT_EQUALS_MISSING");
-            verifyPedagogicalTitle(title,expression,display);
-            Object math = displayMath(display);
+            // One authoritative expression feeds both the visible formula and
+            // algebra QA. Old mathTokens are deliberately ignored, including
+            // blanks, answers or a different problem the model supplied there.
+            verifyPedagogicalTitle(title,expression);
+            Object math = PostLessonHomeworkMath.student(expression,kind,variable);
             String label = String.format("%02d", i+1);
             Map<String,Object> exercise = new LinkedHashMap<>();
             exercise.put("type","exercise");
@@ -100,7 +84,9 @@ final class PostLessonHomeworkMch3Template {
                 case "solution" -> {
                     if(!expression.contains("=") || !variable.matches("[a-z]"))
                         throw new IllegalArgumentException("HOMEWORK_CONTENT_EQUATION_INVALID");
-                    assertion.put("kind","solution");
+                    // Prove a unique linear solution, rather than accepting a
+                    // proposed value merely because substitution happens to work.
+                    assertion.put("kind","linearSolution");
                     assertion.put("equation",expression);
                     assertion.put("solution",Map.of(variable,answer));
                 }
@@ -137,93 +123,11 @@ final class PostLessonHomeworkMch3Template {
     }
 
     /**
-     * Never show a single-level slash for a fraction. The legacy token renderer
-     * only stacks numeric n/d, and would print (3x-2)/4 as plain text.
-     * Convert all supported fractional tokens into one safe MathJax TeX object.
-     * Unknown slash notation is rejected, rather than silently degrading typography.
-     */
-    static Map<String,Object> displayMath(List<String> tokens) {
-        if(tokens.stream().noneMatch(t -> t.contains("/")))
-            return Map.of("tokens",tokens);
-        List<String> latex=new ArrayList<>();
-        for(String token:tokens) {
-            // MathJax may emit nested SVGs for underlined blank placeholders.
-            // Homework already has six full-width lines below each task.
-            if(!"_____".equals(token))latex.add(tokenLatex(token));
-        }
-        return Map.of("latex",String.join(" ",latex));
-    }
-
-    private static String tokenLatex(String token) {
-        return switch(token) {
-            case "+" -> "+";
-            case "-" , "−" -> "-";
-            case "×", "·", "*" -> "\\cdot";
-            case "÷", ":" -> "\\div";
-            case "=" -> "=";
-            case "_____" -> "\\underline{\\qquad\\qquad}";
-            case "(" -> "(";
-            case ")" -> ")";
-            case "□" -> "\\square";
-            default -> fractionOrAlgebra(token);
-        };
-    }
-
-    private static String fractionOrAlgebra(String token) {
-        String src=token.replace('−','-').trim();
-        if(!src.contains("/"))return termLatex(src);
-        // Parenthesized fractions, like ((3x-2)/4), retain their stacked shape.
-        while(isFullyWrapped(src)) src=src.substring(1,src.length()-1).strip();
-        int depth=0,divide=-1;
-        for(int i=0;i<src.length();i++) {
-            char c=src.charAt(i);
-            if(c=='(')depth++;
-            if(c==')')depth--;
-            if(depth<0)throw new IllegalArgumentException("HOMEWORK_CONTENT_INVALID_FRACTION");
-            if(c=='/'&&depth==0) {
-                if(divide>=0)throw new IllegalArgumentException("HOMEWORK_CONTENT_SPLIT_FRACTIONS_INTO_TOKENS");
-                divide=i;
-            }
-        }
-        if(depth!=0||divide<0)
-            throw new IllegalArgumentException("HOMEWORK_CONTENT_UNSUPPORTED_FRACTION");
-        String numerator=src.substring(0,divide).strip();
-        String denominator=src.substring(divide+1).strip();
-        while(isFullyWrapped(numerator))numerator=numerator.substring(1,numerator.length()-1).strip();
-        while(isFullyWrapped(denominator))denominator=denominator.substring(1,denominator.length()-1).strip();
-        if(denominator.equals("0")||denominator.isBlank())
-            throw new IllegalArgumentException("HOMEWORK_CONTENT_ZERO_DENOMINATOR");
-        return "\\frac{"+termLatex(numerator)+"}{"+termLatex(denominator)+"}";
-    }
-
-    private static String termLatex(String token) {
-        // Supports one short, flat algebraic numerator/denominator or an operand.
-        // No model-supplied TeX commands, HTML, CSS, or opaque slash expressions.
-        if(token.isBlank() || token.length()>60
-                || !token.matches("[A-Za-z0-9 .+*()-]+"))
-            throw new IllegalArgumentException("HOMEWORK_CONTENT_UNSUPPORTED_MATH_TOKEN");
-        return token.replace("*","\\cdot ");
-    }
-
-    private static boolean isFullyWrapped(String value) {
-        if(!value.startsWith("(")||!value.endsWith(")"))return false;
-        int depth=0;
-        for(int i=0;i<value.length();i++){
-            char c=value.charAt(i);
-            if(c=='(')depth++;
-            else if(c==')')depth--;
-            if(depth==0&&i<value.length()-1)return false;
-            if(depth<0)return false;
-        }
-        return depth==0;
-    }
-
-    /**
      * A simple "Bruch vereinfachen" assignment must actually be ONE numeric
      * fraction to shorten, not a division of algebraic expressions in disguise.
      * Algebraic fractions remain possible under an appropriate advanced title.
      */
-    static void verifyPedagogicalTitle(String title,String expression,List<String> display) {
+    static void verifyPedagogicalTitle(String title,String expression) {
         String lower=title.toLowerCase(Locale.GERMAN);
         boolean simpleFraction=lower.contains("bruch vereinfach")
                 || lower.contains("brüche vereinfach")
@@ -233,9 +137,7 @@ final class PostLessonHomeworkMch3Template {
                 || lower.contains("kürze vollständig");
         if(!simpleFraction)return;
         String normalized=expression.replaceAll("\\s+","").replace('−','-');
-        if(!normalized.matches("-?[0-9]+/[1-9][0-9]*")
-                || display.size()!=3 || !normalized.equals(display.get(0).replace(" ",""))
-                || !"=".equals(display.get(1)) || !"_____".equals(display.get(2)))
+        if(!normalized.matches("-?[0-9]+/[1-9][0-9]*"))
             throw new IllegalArgumentException("HOMEWORK_CONTENT_TITLE_MISMATCH_SIMPLE_FRACTION_REQUIRED");
     }
 

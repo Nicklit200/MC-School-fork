@@ -73,6 +73,30 @@ class McpHomeworkDraftValidatorTest {
         assertThrows(IllegalArgumentException.class,()->McpHomeworkDraftValidator.normalize(mapper,mapper.writeValueAsString(doc),1,"Sofia"));
     }
 
+    @Test void supportsUniqueLinearSolutionChecksAndPreservesLegacySolutionDrafts()throws Exception {
+        Map<String,Object> doc=mapper.readValue(document(5,1,6,false),Map.class);
+        var page=(Map<String,Object>)((List<?>)doc.get("workbookPages")).get(0);
+        var task=(Map<String,Object>)((List<?>)page.get("blocks")).get(0);
+        task.put("rows",List.of(Map.of("label","", "math",Map.of("latex","2x+3=7"),"work",true)));
+        for(String kind:List.of("linearSolution","solution")) {
+            doc.put("qa",Map.of("algebra",List.of(Map.of(
+                    "kind",kind,"number",1,"equation","2*x+3=7",
+                    "solution",Map.of("x","2"),"restrictions",List.of()))));
+            String normalized=McpHomeworkDraftValidator.normalize(mapper,mapper.writeValueAsString(doc),5,"Sofia");
+            Map<?,?> parsed=mapper.readValue(normalized,Map.class);
+            var assertions=(List<?>)((Map<?,?>)parsed.get("qa")).get("algebra");
+            assertEquals(kind,((Map<?,?>)assertions.get(0)).get("kind"));
+        }
+    }
+
+    @Test void addingLinearChecksDoesNotAllowUnknownQaKinds()throws Exception {
+        Map<String,Object> doc=mapper.readValue(document(5,1,6,false),Map.class);
+        doc.put("qa",Map.of("algebra",List.of(Map.of("kind","uncheckedSolution","number",1))));
+        var error=assertThrows(IllegalArgumentException.class,
+                ()->McpHomeworkDraftValidator.normalize(mapper,mapper.writeValueAsString(doc),5,"Sofia"));
+        assertEquals("Unsupported homework algebra QA assertion kind",error.getMessage());
+    }
+
     @Test void seriesKeyBindsSevenDaysAndRejectsAmbiguousReferences(){
         assertNotEquals(McpHomeworkDraftValidator.seriesMarker("approved-homework-7",1),
                 McpHomeworkDraftValidator.seriesMarker("approved-homework-7",2));
