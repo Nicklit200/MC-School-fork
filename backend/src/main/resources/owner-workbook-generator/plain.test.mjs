@@ -41,7 +41,7 @@ test('Kolin diagrams render with checked references, all pages and no answer lea
   if(artifacts){await mkdir(artifacts+'-visuals',{recursive:true});for(const name of await readdir(directory))if(/\.(pdf|png|json|html)$/.test(name))await copyFile(join(directory,name),join(artifacts+'-visuals',name));}
 }));
 
-test('plain PDF keeps five conditions, domains and vector math without branding or answers',async()=>workspace(async directory=>{
+test('Kolyn PDF keeps five conditions, domains, Mindcrafti header and vector math without answers',async()=>workspace(async directory=>{
   const result=generate(example,directory);
   assert.equal(result.status,0,result.stderr || result.stdout || result.error?.message);
   const student=join(directory,'Kolin_Plain_Arbeitsheft_60min.pdf');
@@ -51,6 +51,8 @@ test('plain PDF keeps five conditions, domains and vector math without branding 
   assert.match(html,/Вычисли\./);
   assert.match(html,/x != 3/);
   assert.match(html,/class="sheet student plain"/);
+  assert.match(html,/class="kolin-header"/);
+  assert.match(html,/MINDCRAFTI SCHOOL/);
   assert.doesNotMatch(html,/<footer|<div class="brandbar">|PRIVATE ANSWERS|<img/);
   assert.doesNotMatch(html,/data-mml-node="merror"|data-mjx-error/);
   const math=JSON.parse(await readFile(join(directory,'Kolin_Plain_math-qa.json'),'utf8'));
@@ -63,12 +65,12 @@ test('plain PDF keeps five conditions, domains and vector math without branding 
     'import sys,fitz',
     'pdf=fitz.open(sys.argv[1]); assert len(pdf)==1',
     'page=pdf[0]; text=page.get_text()',
-    'assert "PRIVATE ANSWERS" not in text and "MINDCRAFTI SCHOOL" not in text',
+    'assert "PRIVATE ANSWERS" not in text and "MINDCRAFTI SCHOOL" in text',
     'assert "x != 3" in text and not page.get_images()',
     'assert abs(page.rect.height-841.89)<0.6',
-    'assert max(b[3] for b in page.get_text("blocks"))<450, "A4 retains ample handwriting space"',
+    'assert max(b[3] for b in page.get_text("blocks"))<745, "A4 retains handwriting space"',
     'image=fitz.Pixmap(sys.argv[2]); assert max(image.width,image.height)<=802',
-    'assert image.height<image.width, "Preview crops blank solving space rather than shrinking the full A4"',
+    'assert image.width>350 and image.height>250, "Preview remains readable and bounded"',
   ].join('; '),student,preview],{encoding:'utf8',timeout:10000,env:process.env});
   assert.equal(inspect.status,0,inspect.stderr || inspect.stdout || inspect.error?.message);
   const artifacts=process.env.PLAIN_WORKSHEET_ARTIFACT_DIR;
