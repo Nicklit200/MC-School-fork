@@ -36,6 +36,9 @@ on:
       - 'frontend/src/pages/online-classes/OnlineClassPage.tsx'
       - 'frontend/src/components/PostLessonHomeworkStatus*'
       - 'frontend/src/pages/teacher/StudentHomeworksPage.tsx'
+      - 'frontend/src/pages/teacher/PostLessonHomeworkReviewPage.tsx'
+      - 'frontend/src/pages/teacher/PostLessonHomeworkPdfCanvas*'
+      - 'frontend/src/pages/teacher/post-lesson-homework-review.css'
       - 'frontend/src/pages/teacher/StudentHomeworksPage.test.tsx'
       - 'frontend/src/pages/teacher/HomeworkDetailPage.tsx'
       - '.github/workflows/post-lesson-homework.yml'
@@ -116,7 +119,7 @@ jobs:
         run: npm ci
       - name: Post-lesson dialog behavior
         working-directory: frontend
-        run: npm test -- src/features/online-classes/PostLessonHomeworkDialog.test.tsx src/components/PostLessonHomeworkStatus.test.tsx src/pages/teacher/StudentHomeworksPage.test.tsx
+        run: npm test -- src/features/online-classes/PostLessonHomeworkDialog.test.tsx src/components/PostLessonHomeworkStatus.test.tsx src/pages/teacher/StudentHomeworksPage.test.tsx src/pages/teacher/PostLessonHomeworkPdfCanvas.test.tsx
       - name: Typecheck and build
         working-directory: frontend
         run: npm run build
