@@ -149,7 +149,7 @@ public class PostLessonHomeworkPushService {
             }
             String url = recipient.getRole() == Role.ADMIN
                     ? "/admin/teachers/" + result.teacherId() + "/lessons/" + encode(result.eventId())
-                    : "/teacher/lessons/" + encode(result.eventId());
+                    : "/teacher/lessons/" + encode(result.eventId()) + "?reviewHomework=1";
             webPush.send(subscription, title(result), body(result), url,
                     "post-homework-" + delivery.jobId() + "-" + result.state());
             mark(delivery.id(), "SENT");
