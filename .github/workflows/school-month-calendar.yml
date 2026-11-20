@@ -1,0 +1,43 @@
+name: School month curriculum calendar
+on:
+  pull_request:
+    paths:
+      - 'backend/src/main/java/com/mcschool/flashcard/skills/SchoolCalendar*.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/MindcraftiMcpController.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/skills/SchoolCalendar*.java'
+      - 'frontend/public/skills-board/**'
+      - 'frontend/tests/school-calendar.test.mjs'
+      - '.github/workflows/school-month-calendar.yml'
+  push:
+    branches: [feat/skills-school-monthly-plans-20261120]
+jobs:
+  school-calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Check school calendar model
+        run: node --test frontend/tests/school-calendar.test.mjs
+      - name: Check skills board JS syntax
+        run: |
+          node --check frontend/public/skills-board/school-calendar.js
+          node --check frontend/public/skills-board/board.js
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Backend calendar authorization and revision tests
+        working-directory: backend
+        run: mvn -B -Dtest='SchoolCalendarMcpServiceTest,SkillBoardMcpServiceTest' test
+      - name: Compile backend service and MCP controller
+        working-directory: backend
+        run: mvn -B -DskipTests package
