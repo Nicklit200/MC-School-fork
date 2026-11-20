@@ -485,10 +485,17 @@ public class OwnerWorkbookPdfRenderService {
             String type = String.valueOf(map.get("type"));
             if (List.of("solutions", "schedule", "teacherNote").contains(type))
                 throw new IllegalArgumentException("Teacher-only block in student PDF: " + type);
-            if ("exercise".equals(type) || "taskCard".equals(type) || "visualTask".equals(type))
-                count = map.get("rows") instanceof List<?> rows && !rows.isEmpty() ? rows.size() : 1;
+            // A taskCard is a visual/layout container. Count its child tasks, not
+            // the card AND those tasks: otherwise 5 Kolyn graphs count as 10
+            // exercises while the math engine correctly returns only 5 checks.
+            int nested = 0;
             for (Object value : map.values()) if (value instanceof Map<?,?> || value instanceof List<?>)
-                count += inspectStudentTree(value, depth + 1);
+                nested += inspectStudentTree(value, depth + 1);
+            if ("exercise".equals(type) || "visualTask".equals(type))
+                count = nested + (map.get("rows") instanceof List<?> rows && !rows.isEmpty() ? rows.size() : 1);
+            else if ("taskCard".equals(type))
+                count = Math.max(1, nested);
+            else count = nested;
         } else if (raw instanceof List<?> list) {
             if (list.size() > 200) throw new IllegalArgumentException("Workbook collection is too large");
             for (Object value : list) count += inspectStudentTree(value, depth + 1);
