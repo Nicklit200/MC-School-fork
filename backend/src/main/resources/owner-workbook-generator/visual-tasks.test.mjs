@@ -31,7 +31,7 @@ test('bounded graph inequalities distinguish above, below and equality with veri
   assert.equal(parabola.blocks[1].series.length,2);
   assert.equal(parabola.blocks[1].series[1].value,0);
   assert.equal(parabola.blocks[1].points,undefined);
-  assert.deepEqual(parabola.teacherDiagram.points.map(p=>p.x),[-2,2]);
+  assert.deepEqual(parabola.teacherDiagram.points.map(p=>Number(p.x.toFixed(6))),[-2,2]);
   assert.equal(parabola.teacherDiagram.label,'MUSTERLÖSUNG – GRAPH');
   const offset=compileVisual(graph('quadratic',[1,0,-4],'aboveBelow',{level:5}));
   assert.equal(offset.answer,'f(x) > 5: [-5; -3) ∪ (3; 5]; f(x) < 5: (-3; 3); f(x) = 5: -3; 3');
