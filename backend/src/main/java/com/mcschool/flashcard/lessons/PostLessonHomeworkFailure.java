@@ -41,6 +41,8 @@ final class PostLessonHomeworkFailure {
             Map.entry("HOMEWORK_PDF_INVALID", "PDF_INVALID"),
             Map.entry("Generated PDFs must not be encrypted", "PDF_INVALID"),
             Map.entry("HOMEWORK_DRAFT_VALIDATION_FAILED", "HOMEWORK_JSON_INVALID"),
+            Map.entry("HOMEWORK_DRAFT_REPETITION_FAILED", "REPEATED_EXERCISES"),
+            Map.entry("HOMEWORK_DIVERSITY_HISTORY_INVALID", "REPEATED_EXERCISES"),
             Map.entry("HOMEWORK_DRAFT_RENDER_FAILED", "HOMEWORK_JSON_RENDER_INVALID"),
             Map.entry("HOMEWORK_DRAFT_MATH_QA_FAILED", "HOMEWORK_MATH_QA_FAILED"));
 
