@@ -188,6 +188,46 @@ class PostLessonHomeworkRepairTest {
         verify(http,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
     }
 
+    @Test void repeatedPastExerciseIsRepairedBeforePdfRendering() throws Exception {
+        var replacement=new java.util.LinkedHashMap<>(goodContent());
+        replacement.put("tasks",List.of(Map.of("title","Neue Zahlen",
+                "description","Berechne.","expression","1/3+1/6",
+                "answer","1/2","kind","equivalence","variable","")));
+        responses(goodContent(),replacement);
+        var rendered=new OwnerWorkbookPdfRenderService.StudioRender(
+                new byte[120],new byte[130],1,1,Map.of());
+        when(renderer.renderStudio(anyString())).thenReturn(rendered);
+        var previous=List.of(Map.of("day",1,
+                "tasks",List.of(Map.of("expression","1/2+1/4"))));
+        var evidence=Map.<String,Object>of("homeworkPrompt","SCHOOL",
+                "previousGeneratedHomework",previous);
+        var service=new PostLessonHomeworkContentService("test-key","test-model",json,renderer,http);
+        assertSame(rendered,service.make(evidence,2,7,"Testschüler"));
+        verify(renderer,times(1)).renderStudio(anyString());
+        var requests=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http,times(2)).send(requests.capture(),any(HttpResponse.BodyHandler.class));
+        var second=json.readTree(body(requests.getAllValues().get(1)));
+        var payload=json.readTree(second.path("input").asString());
+        assertEquals("1/2+1/4",
+                payload.path("previousGeneratedHomework").get(0)
+                        .path("tasks").get(0).path("expression").asString());
+        assertTrue(payload.path("serverRepairRequest").path("reason").asString()
+                .contains("every expression must be unique"));
+    }
+
+    @Test void repeatedExercisesFailClosedAfterThreeAttempts() throws Exception {
+        responses(goodContent(),goodContent(),goodContent());
+        var evidence=Map.<String,Object>of("homeworkPrompt","SCHOOL",
+                "previousGeneratedHomework",List.of(Map.of("day",1,
+                    "tasks",List.of(Map.of("expression","1/2+1/4")))));
+        var service=new PostLessonHomeworkContentService("test-key","test-model",json,renderer,http);
+        var failure=assertThrows(IllegalStateException.class,
+                ()->service.make(evidence,2,7,"Testschüler"));
+        assertEquals("REPEATED_EXERCISES",PostLessonHomeworkFailure.code(failure));
+        verify(renderer,never()).renderStudio(anyString());
+        verify(http,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+    }
+
     @Test void logCategoriesNeverCopyUnknownPrivateReasons() {
         assertEquals("HOMEWORK_CONTENT_EXPRESSION_SYNTAX",
                 PostLessonHomeworkContentService.rejectionCode(new IllegalArgumentException("HOMEWORK_CONTENT_EXPRESSION_SYNTAX")));
