@@ -28,14 +28,54 @@ export function seriesDefinition(s) {
   return spec;
 }
 
+// Classify signs only for continuous polynomial families. Rational functions
+// need pole/hole exclusions and are deliberately out of scope for this task.
+function graphAboveBelow(s,series,graph,de) {
+  if(series.length!==1 || !['constant','linear','quadratic','polynomial'].includes(series[0].kind))
+    throw Error('Above/below tasks require one polynomial function');
+  const level=num(s.level), [xMin,xMax]=graph.xRange;
+  if(level<graph.yRange[0]||level>graph.yRange[1])throw Error('Comparison level must be visible');
+  const fn=series[0], reference={kind:'constant',value:level};
+  const display={...graph,series:[fn,reference]};
+  graphSvg(display);
+  // Exact coefficient comparison safely handles f(x) = level everywhere.
+  const coefficients=fn.kind==='constant'?[fn.value]:fn.kind==='linear'?[fn.b,fn.m]:
+    fn.kind==='quadratic'?[fn.c,fn.b,fn.a]:fn.coefficients;
+  const difference=[coefficients[0]-level,...coefficients.slice(1)];
+  const identical=difference.every(c=>c===0);
+  const crossings=identical?[]:computeIntersections(display).map(p=>p.x).sort((a,b)=>a-b)
+    .filter((x,i,all)=>i===0||Math.abs(x-all[i-1])>1e-6);
+  const cuts=[xMin,...crossings.filter(x=>x>xMin+1e-7&&x<xMax-1e-7),xMax];
+  const rootAt=x=>crossings.some(r=>Math.abs(r-x)<=1e-6);
+  const above=[],below=[];
+  if(!identical)for(let i=1;i<cuts.length;i++){
+    const lo=cuts[i-1],hi=cuts[i];
+    if(hi-lo<=1e-8)continue;
+    const value=functionAt(fn,(lo+hi)/2);
+    if(value===null)throw Error('Comparison has an undefined interval');
+    const interval=`${rootAt(lo)?'(':'['}${fmt(lo)}; ${fmt(hi)}${rootAt(hi)?')':']'}`;
+    if(value>level)above.push(interval);
+    else if(value<level)below.push(interval);
+    else throw Error('Comparison interval cannot be classified');
+  }
+  const regions=items=>items.length?items.join(' ∪ '):'∅';
+  const equals=identical?`[${fmt(xMin)}; ${fmt(xMax)}]`:crossings.length?crossings.map(fmt).join('; '):'∅';
+  const answer=`f(x) > ${fmt(level)}: ${regions(above)}; f(x) < ${fmt(level)}: ${regions(below)}; f(x) = ${fmt(level)}: ${equals}`;
+  const prompt=de?`Bestimme im dargestellten x-Bereich, wo der Graph von f oberhalb, unterhalb oder auf der Geraden y = ${fmt(level)} liegt.`:
+    `Найди в показанном диапазоне x, где график f выше, ниже или на прямой y = ${fmt(level)}.`;
+  const teacherPoints=crossings.map((x,i)=>({x,y:level,seriesIndex:0,label:`S${i+1}`}));
+  return result([text(prompt),display],answer,{...display,label:'MUSTERLÖSUNG – GRAPH',points:teacherPoints});
+}
 function graphTask(s,de) {
-  keys(s,['type','language','objective','series','at','xRange','yRange']);
+  keys(s,['type','language','objective','series','at','level','xRange','yRange']);
   const series=array(s.series,1,2).map(seriesDefinition), xRange=range(s.xRange), yRange=range(s.yRange);
   const graph={type:'graph',label:'',series,xRange,yRange,gridStep:Math.max(1,Math.ceil(Math.max(xRange[1]-xRange[0],yRange[1]-yRange[0])/10))};
   graphSvg(graph); // The same domain, clipping and function checks used to draw the PDF.
   // Only value-at-x tasks need an evaluation point. A drawing or
   // intersection exercise should not fail because ChatGPT omitted at.
   if(s.objective==='value'||s.at!==undefined)num(s.at);
+  if(s.objective==='aboveBelow')return graphAboveBelow(s,series,graph,de);
+  if(s.level!==undefined)throw Error('Comparison level is only valid for above/below tasks');
   if(s.objective==='draw') {
     if(series.length!==1)throw Error('Draw requires one function');
     return result([text(de?'Zeichne den Graphen der Funktion.':'Построй график функции.'),text(functionLabel(series[0])),
