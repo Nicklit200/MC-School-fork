@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { onlineClassesApi, type PostLessonHomeworkReview } from '../../api/onlineClasses';
 import './post-lesson-homework-review.css';
+import { PostLessonHomeworkPdfCanvas } from './PostLessonHomeworkPdfCanvas';
 
 type Kind = 'student' | 'teacher';
 
@@ -14,9 +15,11 @@ export function PostLessonHomeworkReviewPage() {
   const [day, setDay] = useState(1);
   const [kind, setKind] = useState<Kind>('student');
   const [pdfUrl, setPdfUrl] = useState('');
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [pdfKey, setPdfKey] = useState('');
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
-  const cached = useRef(new Map<string, string>());
+  const cached = useRef(new Map<string, { url: string; blob: Blob }>());
 
   useEffect(() => {
     let active = true;
@@ -37,7 +40,7 @@ export function PostLessonHomeworkReviewPage() {
 
   useEffect(() => {
     const localCache = cached.current;
-    return () => { localCache.forEach(url => URL.revokeObjectURL(url)); localCache.clear(); };
+    return () => { localCache.forEach(entry => URL.revokeObjectURL(entry.url)); localCache.clear(); };
   }, [classId]);
 
   const students = useMemo(() => Array.from(new Map((report?.documents ?? [])
@@ -48,10 +51,12 @@ export function PostLessonHomeworkReviewPage() {
   const cacheKey = [classId, studentId, day, kind].join(':');
 
   useEffect(() => {
-    if (!current) { setPdfUrl(''); return; }
+    if (!current) { setPdfUrl(''); setPdfBlob(null); setPdfKey(''); return; }
     let active = true;
     const saved = cached.current.get(cacheKey);
-    setPdfUrl(saved ?? '');
+    setPdfUrl(saved?.url ?? '');
+    setPdfBlob(saved?.blob ?? null);
+    setPdfKey(saved ? cacheKey : '');
     setPdfError('');
     if (saved) { setPdfLoading(false); return; }
     setPdfLoading(true);
@@ -59,8 +64,10 @@ export function PostLessonHomeworkReviewPage() {
       .then(blob => {
         if (!active) return;
         const url = URL.createObjectURL(blob);
-        cached.current.set(cacheKey, url);
+        cached.current.set(cacheKey, { url, blob });
         setPdfUrl(url);
+        setPdfBlob(blob);
+        setPdfKey(cacheKey);
       })
       .catch(() => { if (active) setPdfError('Не удалось открыть PDF. Повторите попытку.'); })
       .finally(() => { if (active) setPdfLoading(false); });
@@ -74,6 +81,8 @@ export function PostLessonHomeworkReviewPage() {
     setKind('student');
   }
 
+  const visiblePdfUrl = pdfKey === cacheKey ? pdfUrl : '';
+  const visiblePdfBlob = pdfKey === cacheKey ? pdfBlob : null;
   const selectedIndex = documents.findIndex(doc => doc.day === day);
   const back = () => { if (selectedIndex > 0) setDay(documents[selectedIndex - 1].day); };
   const forward = () => { if (selectedIndex >= 0 && selectedIndex < documents.length - 1) setDay(documents[selectedIndex + 1].day); };
@@ -133,11 +142,14 @@ export function PostLessonHomeworkReviewPage() {
                 <button type="button" aria-pressed={kind === 'student'} onClick={() => setKind('student')}>Задания</button>
                 <button type="button" aria-pressed={kind === 'teacher'} onClick={() => setKind('teacher')}>Ответы для учителя</button>
               </div>
-              {pdfUrl && <a className="btn btn--secondary" download={'Mindcrafti_' + kind + '_' + current.date + '.pdf'} href={pdfUrl}>Скачать PDF</a>}
+              {visiblePdfUrl && <div className="post-review-pdf-file-actions">
+                <a className="btn btn--secondary" href={visiblePdfUrl} target="_blank" rel="noopener noreferrer">Открыть отдельно</a>
+                <a className="btn btn--secondary" download={'Mindcrafti_' + kind + '_' + current.date + '.pdf'} href={visiblePdfUrl}>Скачать PDF</a>
+              </div>}
             </div>
-            {pdfLoading && !pdfUrl ? <div className="post-review-message" role="status">Загружаем PDF…</div>
+            {pdfLoading && !visiblePdfBlob ? <div className="post-review-message" role="status">Загружаем PDF…</div>
               : pdfError ? <div role="alert" className="post-review-message">{pdfError}</div>
-              : pdfUrl ? <iframe className="post-review-pdf" title={kind === 'student' ? 'Задания PDF' : 'Ответы преподавателя PDF'} src={pdfUrl} />
+              : visiblePdfBlob ? <PostLessonHomeworkPdfCanvas key={cacheKey} blob={visiblePdfBlob} />
               : <div className="post-review-message">PDF пока недоступен.</div>}
             <div className="post-review-pagination">
               <button type="button" className="btn btn--secondary" onClick={back} disabled={selectedIndex <= 0}>← Предыдущий день</button>
