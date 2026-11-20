@@ -197,6 +197,38 @@ class OwnerWorkbookPdfRenderServiceTest {
     }
 
     @Test
+    void kolynWrappedGraphTasksCountOnceAndMatchMathQaCoverage() {
+        // Kolyn encodes each plotted graph as taskCard > visualTask. The
+        // card is a layout wrapper, not an additional math exercise.
+        var lesson = new java.util.LinkedHashMap<String,Object>(document(60));
+        var blocks = new java.util.ArrayList<Map<String,Object>>();
+        for (int n = 1; n <= 5; n++) {
+            blocks.add(Map.of("type", "taskCard", "children", List.of(
+                    Map.of("type", "visualTask", "number", n,
+                           "spec", Map.of("type", "graph", "objective", "zeros")))));
+        }
+        lesson.put("workbookPages", List.of(Map.of("blocks", blocks)));
+        int actualTasks = OwnerWorkbookPdfRenderService.validatePlainDocument(lesson);
+        assertEquals(5, actualTasks, "Five Kolyn graph tasks need exactly five QA checks");
+        assertDoesNotThrow(() -> OwnerWorkbookPdfRenderService.requirePlainQa(
+                Map.of("passed", true, "checked", 5),
+                Map.of("passed", true), actualTasks));
+    }
+
+    @Test
+    void taskCardCountsNestedExercisesButStandaloneCardIsStillAnExercise() {
+        var lesson = new java.util.LinkedHashMap<String,Object>(document(60));
+        lesson.put("workbookPages", List.of(Map.of("blocks", List.of(
+                Map.of("type", "taskCard", "children", List.of(Map.of(
+                        "type", "exercise", "rows", List.of(
+                                Map.of("math", "1+1"), Map.of("math", "2+2")))))))));
+        assertEquals(2, OwnerWorkbookPdfRenderService.validateDocument(lesson));
+        lesson.put("workbookPages", List.of(Map.of("blocks", List.of(
+                Map.of("type", "taskCard", "title", "Standalone item")))));
+        assertEquals(1, OwnerWorkbookPdfRenderService.validateDocument(lesson));
+    }
+
+    @Test
     void plainSupplementCannotPassWithMissingMathCoverageOrFailedActualLayout() {
         var layout = Map.<String, Object>of("passed", true);
         assertThrows(IllegalStateException.class, () -> OwnerWorkbookPdfRenderService.requirePlainQa(

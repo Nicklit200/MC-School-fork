@@ -1,6 +1,7 @@
 package com.mcschool.flashcard.liveclasses;
 
 import static org.assertj.core.api.Assertions.*;
+import com.mcschool.flashcard.lessons.KolinVisualSchema;
 import java.nio.file.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,18 @@ class KolinVisualTaskTest {
     private static Map<String,Object> graph(String objective) {
         return Map.of("type","graph","language","ru","objective",objective,"at",2,"xRange",List.of(-5,5),"yRange",List.of(-5,10),
                 "series",List.of(Map.of("kind","quadratic","parameters",List.of(1,0,-4),"denominator",List.of())));
+    }
+    @Test void graphInequalityProviderContractRequiresAnExplicitComparisonLevel() {
+        var variants=(List<?>)KolinVisualSchema.schema().get("anyOf");
+        var comparisons=variants.stream().filter(variant->variant instanceof Map<?,?> shape
+                && shape.get("properties") instanceof Map<?,?> props && props.containsKey("level")).toList();
+        assertThat(comparisons).hasSize(1);
+        Map<?,?> contract=(Map<?,?>)comparisons.get(0);
+        Map<?,?> properties=(Map<?,?>)contract.get("properties");
+        assertThat(((Map<?,?>)properties.get("objective")).get("enum")).isEqualTo(List.of("aboveBelow"));
+        assertThat(((List<?>)contract.get("required")).stream().map(String::valueOf).toList())
+                .contains("level","xRange","yRange","series");
+        assertThat(KolinVisualSchema.INSTRUCTIONS).contains("aboveBelow","f(x)>level","level=0");
     }
     @Test void figuresStayPrivateAndEachTaskIsBoundToOneComputedReference() throws Exception {
         var tasks=List.of(visual(graph("zeros")),

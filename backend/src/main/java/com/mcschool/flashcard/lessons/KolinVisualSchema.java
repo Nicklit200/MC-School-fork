@@ -19,6 +19,9 @@ public final class KolinVisualSchema {
         return Map.of("anyOf",List.of(
                 object("type",choice("graph"),"language",language,"objective",choice("value","zeros","intersections","draw"),
                         "series",Map.of("type","array","items",series),"at",Map.of("type","number"),"xRange",numbers(),"yRange",numbers()),
+                object("type",choice("graph"),"language",language,"objective",choice("aboveBelow"),
+                        "series",Map.of("type","array","items",series),"at",Map.of("type","number"),
+                        "level",Map.of("type","number"),"xRange",numbers(),"yRange",numbers()),
                 object("type",choice("geometry"),"language",language,
                         "figure",choice("triangle","rectangle","quadrilateral","polygon"),
                         "objective",choice("area","perimeter","side","angle"),
@@ -35,12 +38,16 @@ public final class KolinVisualSchema {
             Для задания с чертежом kind=visual, visual содержит данные рисунка; instruction, expression, variable="", restrictions=[].
             Для expression/equation visual=null. Не передавай SVG, HTML, URL, код или готовый ответ.
             visual.language=ru или de по языку запроса. Сервер сам составляет точное условие из параметров и вычисляет ответ.
-            Graph: objective=value (найти f(at)), zeros (нули в показанном диапазоне), intersections (две функции), draw (построить по формуле на пустой сетке).
+            Graph: objective=value (найти f(at)), zeros (нули в показанном диапазоне), intersections (две функции), draw (построить по формуле на пустой сетке), aboveBelow (показать график и интервалы выше/ниже линии y=level).
+            Для aboveBelow ВСЕГДА передай поле level, например level=0 для оси x, level=2 для y=2. В ответе будут оба строгих неравенства f(x)>level, f(x)<level и точки равенства f(x)=level.
+            aboveBelow поддерживает только ОДНУ continuous-функцию constant, linear, quadratic или polynomial, без полюсов и разрывов. level обязан лежать внутри yRange. Подбирай границы xRange так, чтобы разбор интервалов был понятным.
+            Для одной пары графиков и линии y=c это одно PDF-задание kind=visual, не kind=equation или kind=expression.
             series: constant parameters=[c]; linear=[m,b]; quadratic=[a,b,c]; polynomial=[c0,c1,...] до степени четыре;
             sine/cosine=[amplitude,frequency,phase,offset]; absolute/reciprocal/sqrt=[a,h,k]; exponential/logarithmic=[a,h,k,base];
             rational parameters=[числитель c0,c1,...], denominator=[знаменатель c0,c1,...]. Для остальных denominator=[].
             xRange/yRange имеют два значения min<max, ширина от одного до двадцати; at лежит в xRange.
-            value и draw используют одну функцию. zeros/intersections поддерживают только polynomial, constant, linear, quadratic, rational.
+            value, draw и aboveBelow используют одну функцию. zeros/intersections поддерживают только polynomial, constant, linear, quadratic, rational.
+            Не подменяй интервалы выше/ниже линии y=c произвольным алгебраическим неравенством: для aboveBelow применяется только проверяемый графический формат.
             Подбирай диапазон так, чтобы нужные значения/точки были видны. Не ставь at в полюс или вне области определения.
             Geometry: triangle/rectangle/quadrilateral/polygon заданы vertices=[[x,y],...] по порядку обхода выпуклой фигуры; parameters=[].
             Для них objective=area/perimeter/side/angle; index задаёт сторону от вершины index к следующей или угол в вершине index, начиная с нуля.
