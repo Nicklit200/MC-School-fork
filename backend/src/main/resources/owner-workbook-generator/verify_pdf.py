@@ -63,6 +63,8 @@ def verify_file(path, expected_count, plain=False):
     html = html_path.read_text(encoding='utf-8')
     if plain:
         assert '<div class="brandbar">' not in html and '<footer' not in html, 'Unexpected plain worksheet chrome'
+        if '_Arbeitsheft_' in path.name:
+            assert 'class="kolin-header"' in html, 'Kolyn worksheet header missing'
     assert not re.search(r'data-mml-node=[\"\x27]merror|data-mjx-error', html), 'MathJax error found'
     visible = VisibleText()
     visible.feed(html)
@@ -76,7 +78,7 @@ def verify_file(path, expected_count, plain=False):
             assert abs(rect.width - 595.28) < .6 and abs(rect.height - 841.89) < .6, 'Not A4'
             text = page.get_text()
             assert not RAW_TEX.search(text), 'Raw LaTeX in PDF'
-            if not plain:
+            if not plain or '_Arbeitsheft_' in path.name:
                 assert 'MINDCRAFTI SCHOOL' in text, 'Brand text missing'
                 # Vector geometry and optional diagrams are permitted, but no logo is required.
             # PDF whitespace/line grouping depends on the installed font. Use
