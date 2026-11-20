@@ -6,6 +6,7 @@
   <title>Mindcrafti · Навыки</title>
   <link rel="stylesheet" href="./board.css?v=13">
   <link rel="stylesheet" href="./teacher-theme.css?v=20261023-1">
+  <link rel="stylesheet" href="./school-calendar.css?v=20261120-1">
   <script src="./teacher-theme.js?v=20261023-1"></script>
 </head>
 <body>
@@ -71,6 +72,7 @@
 
       <div class="catalog-subtitle">ПРОГРАММЫ ГРУППЫ</div>
       <div id="school-filters" class="school-filters" aria-label="Программы группы"></div>
+      <button type="button" id="school-calendar-toggle" title="Помесячные темы по типам школ. Это ориентир, не расписание школьных контрольных.">▦ Календарь тем по месяцам <span aria-hidden="true">›</span></button>
 
       <div class="catalog-divider"></div>
       <div class="catalog-subtitle">РАЗДЕЛЫ <span id="count"></span></div>
@@ -80,6 +82,31 @@
       <button id="archives" class="archive-tab">Архив <span id="archive-count">0</span></button>
       <div id="source-note" class="source-note"></div>
     </div>
+  </aside>
+
+  <aside id="school-calendar-panel" class="school-calendar-overlay" aria-label="Помесячная программа школы" role="dialog" aria-modal="true" hidden>
+    <section class="school-calendar-sheet">
+      <header class="calendar-head">
+        <div><h2>Календарь школьной программы</h2><small id="calendar-grade">6 класс</small></div>
+        <button type="button" id="school-calendar-close" title="Закрыть календарь" aria-label="Закрыть календарь">×</button>
+      </header>
+      <div class="calendar-controls">
+        <label>Тип школы<select id="calendar-school" aria-label="Тип школы"></select></label>
+        <label>Профиль<input id="calendar-profile" aria-label="Школьный профиль" value="vierstufig" autocomplete="off"></label>
+        <span id="calendar-status">Не проверено</span>
+      </div>
+      <div class="calendar-guidance">
+        <p id="calendar-caution">План ориентировочный. Школьные контрольные требуется подтверждать.</p>
+        <span id="calendar-disclaimer"></span>
+        <span id="calendar-source-link"></span>
+      </div>
+      <nav id="calendar-months" class="calendar-months" aria-label="Учебные месяцы"></nav>
+      <div id="school-calendar-body" class="calendar-body"></div>
+      <footer class="calendar-footer">
+        <span id="calendar-save-status" role="status">Выберите программу</span>
+        <button id="calendar-save" type="button" disabled>Сохранить календарь</button>
+      </footer>
+    </section>
   </aside>
 
   <div id="notice" role="alert" hidden></div>
@@ -136,6 +163,6 @@
     <div id="inspector-body"></div>
   </aside>
 </div>
-<script type="module" src="./board.js?v=20261102-3"></script>
+<script type="module" src="./board.js?v=20261120-1"></script>
 </body>
 </html>

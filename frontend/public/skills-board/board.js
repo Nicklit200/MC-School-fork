@@ -1,4 +1,5 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
+import {createSchoolCalendarPanel} from "./school-calendar.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
@@ -411,6 +412,7 @@ async function loadPublicProgress(incoming){
   config={apiBase:incoming.apiBase,token:null,canEdit:false,userId:"public",publicMode:true};
   document.body.classList.add("public-progress");
   $("parent-share").hidden=true;$("parent-share-revoke").hidden=true;$("save").hidden=true;
+  $("school-calendar-toggle").hidden=true;
   try{
     const response=await fetch(config.apiBase.replace(/\/$/,"")+`/public/skill-progress?token=${encodeURIComponent(incoming.shareToken)}`,{cache:"no-store",headers:{Accept:"application/json"}});
     const text=await response.text();let result;
@@ -620,7 +622,7 @@ function buildHierarchyLayout(items){
 }
 function visibleNodes(){
   if(!data)return [];
-  const active=data.nodes.filter(n=>!n.archived);
+  const active=data.nodes.filter(n=>!n.archived&&!(n.kind==="note"&&n.id.startsWith("school_calendar_")));
   if(selectedHistoryGroup())return active;
   if(viewMode==="hierarchy"){
     if(scope==="overview")return active;
@@ -659,7 +661,7 @@ function renderCatalog(){
 function renderSearch(){
   if(!data)return;
   const q=$("search").value.trim().toLocaleLowerCase();
-  const matches=data.nodes.filter(n=>showArchived?n.archived:!n.archived&&q&&[n.title,n.de,n.description].join(" ").toLocaleLowerCase().includes(q));
+  const matches=data.nodes.filter(n=>!(n.kind==="note"&&n.id.startsWith("school_calendar_"))&&(showArchived?n.archived:!n.archived&&q&&[n.title,n.de,n.description].join(" ").toLocaleLowerCase().includes(q)));
   $("results").hidden=!q&&!showArchived;$("sections").hidden=Boolean(q)||showArchived;$("overview").hidden=Boolean(q)||showArchived;
   $("results").replaceChildren();
   for(const n of matches)$("results").append(button(n.title,()=>{if(focusNode(n.id))showNode(n.id);},"search-result"));
@@ -1044,4 +1046,18 @@ $("export").onclick=()=>{
 };
 let resizeFrame=0;
 new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(data){render();fit();}else transform();});}).observe(canvas);
+const schoolCalendarUI=createSchoolCalendarPanel({
+  getBoard:()=>data,
+  getStudentSchool:()=>selectedStudent()?.schoolType||selectedStudents()[0]?.schoolType||"WIRTSCHAFTSSCHULE",
+  canEdit,
+  onCommit:async(next)=>{
+    const previousRevision=snapshot?.revision;
+    if(!mutate(next))throw Error("Не удалось проверить календарь.");
+    await save();
+    if(dirty||!snapshot||snapshot.revision===previousRevision)
+      throw Error("Календарь не подтверждён сервером. Проверьте версию карты.");
+  },
+  notify:notice
+});
+$("school-calendar-toggle").onclick=()=>schoolCalendarUI.open();
 showHelp();status();
