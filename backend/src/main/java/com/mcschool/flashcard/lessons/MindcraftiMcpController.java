@@ -1,6 +1,8 @@
 package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.skills.SkillBoardMcpService;
+import com.mcschool.flashcard.skills.SchoolCalendarMcpService;
+import com.mcschool.flashcard.skills.SchoolCalendarService;
 import com.mcschool.flashcard.skills.SkillMasteryMcpService;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
@@ -139,6 +141,8 @@ public class MindcraftiMcpController {
     }
 
     private SkillBoardMcpService skillBoardMcpService;
+    private SchoolCalendarMcpService schoolCalendarMcpService;
+    private SchoolCalendarService schoolCalendarService;
     private PersonalNutritionMcpService personalNutritionMcpService;
     private SkillMasteryMcpService skillMasteryMcpService;
     private McpLessonScheduleService lessonScheduleService;
@@ -230,6 +234,16 @@ public class MindcraftiMcpController {
     @Autowired
     public void setSkillBoardMcpService(SkillBoardMcpService service) {
         this.skillBoardMcpService = service;
+    }
+
+    @Autowired
+    public void setSchoolCalendarMcpService(SchoolCalendarMcpService service) {
+        this.schoolCalendarMcpService = service;
+    }
+
+    @Autowired
+    public void setSchoolCalendarService(SchoolCalendarService service) {
+        this.schoolCalendarService = service;
     }
 
     @Autowired
@@ -873,6 +887,8 @@ public class MindcraftiMcpController {
         }
         if (fileTransferActorAllowed(auth)) { tools.addAll(fileTransferTools()); tools.addAll(homeworkFileTransferTools()); }
         if (uiDiagnosticActorAllowed(auth)) tools.addAll(uiDiagnosticTools());
+        if (schoolCalendarMcpService != null && auth.user() != null && !auth.apiKey())
+            tools.addAll(SchoolCalendarMcpService.definitions());
         tools.addAll(SkillBoardMcpService.definitions());
         tools.addAll(SkillMasteryMcpService.definitions());
         tools.addAll(PersonalNutritionMcpService.definitions());
@@ -1242,6 +1258,11 @@ public class MindcraftiMcpController {
             } catch (Exception failure) {
                 return siteToolFailure(failure);
             }
+        }
+        if (SchoolCalendarMcpService.TOOL_NAMES.contains(name)) {
+            if (schoolCalendarMcpService == null)
+                return toolResult(Map.of("available", false, "reason", "School calendar connector is unavailable"));
+            return schoolCalendarMcpService.call(name, arguments, auth.user());
         }
         if (SkillBoardMcpService.TOOL_NAMES.contains(name))
             return skillBoardMcpService.call(name, arguments, auth.user());
@@ -1633,6 +1654,7 @@ public class MindcraftiMcpController {
         ctx.put("homeworkDays",7);
         ctx.put("homeworkRules",List.of(
             "Read actual last taught lesson/transcript and only verified mistakes. No invented errors, methods, terms or pupil skills.",
+            "Optional schoolCalendarReference is illustrative unless SCHOOL_CONFIRMED. Do not assume the class taught a topic or has a test from the plan. Use documented school work and teacher announcements first.",
             "Seven DIFFERENT one-page branded A4 student PDF drafts (plus seven separate private teacher-answer PDFs). Maximum TWO tasks and 10 minutes daily, including reading.",
             "meta.homeworkEstimatedMinutes must be 1..10. Provide 6+ full-width handwriting lines under EACH task with >=8mm spacing.",
             "Days 1..4: a short scaffold at TOP, in Russian using only already taught German math words. Days 5..7: German ONLY, no hints or examples.",
@@ -1949,6 +1971,18 @@ public class MindcraftiMcpController {
                 if (errorEvidence.size() >= 10) break;
             }
             item.put("documentedCardErrors", errorEvidence);
+            if (schoolCalendarService != null
+                    && item.get("grade") instanceof Number level
+                    && item.get("schoolType") instanceof String schoolType) {
+                try {
+                    item.put("schoolCalendarReference",
+                            schoolCalendarService.referenceForStudent(level.intValue(), schoolType,
+                                    lessonDate.getMonthValue()));
+                } catch (RuntimeException unavailable) {
+                    item.put("schoolCalendarReference",
+                            Map.of("available", false, "reason", "CALENDAR_TEMPORARILY_UNAVAILABLE"));
+                }
+            }
             Map<String,Object> assigned = homeworkReadService.findStudentHomeworks(
                     auth.user(),auth.apiKey(),studentId,activityStart,activityEnd);
             item.put("assignedHomeworkCount", assigned.get("homeworkCount"));
@@ -1983,6 +2017,7 @@ public class MindcraftiMcpController {
             studentContexts.add(item);
         }
         result.put("students", studentContexts);
+        result.put("schoolCalendarGuidance", "If present, schoolCalendarReference is a month-by-month planning example, NOT the verified teaching order or test schedule of this pupil's school. Verify what the pupil actually studied, last lesson and confirmed teacher announcements before recommending homework.");
         result.put("studentMembershipNeedsTeacherReview", true);
         var prompts = schoolPromptSettingsService.readForMcp();
         String teachingPrompt = lesson.groupId() != null
