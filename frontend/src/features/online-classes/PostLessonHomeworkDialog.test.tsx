@@ -4,7 +4,7 @@ import { PostLessonHomeworkDialog } from './PostLessonHomeworkDialog';
 import { onlineClassesApi } from '../../api/onlineClasses';
 
 vi.mock('../../api/onlineClasses', () => ({
-  onlineClassesApi: { postLessonHomework: vi.fn(), transcribePostLessonHomework: vi.fn() },
+  onlineClassesApi: { postLessonHomework: vi.fn(), retryPostLessonHomework: vi.fn(), transcribePostLessonHomework: vi.fn() },
 }));
 
 describe('PostLessonHomeworkDialog', () => {
@@ -48,6 +48,53 @@ describe('PostLessonHomeworkDialog', () => {
     render(<PostLessonHomeworkDialog classId="class" title="Группа 1" language="RU" onDone={onDone} />);
     fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Не удалось запустить домашку.'));
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('shows a returned failed job instead of reporting success, and retries the saved request only when asked', async () => {
+    vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({
+      state: 'FAILED', jobId: 'job', classId: 'class', failureCode: 'AI_EMPTY_RESPONSE',
+      days: 5, stage: 'AI_CONTENT', dayNumber: 1,
+    });
+    vi.mocked(onlineClassesApi.retryPostLessonHomework).mockResolvedValue({
+      state: 'QUEUED', jobId: 'job', classId: 'class',
+    });
+    render(<PostLessonHomeworkDialog classId="class" title="Соня" language="RU" onDone={onDone} />);
+    fireEvent.click(screen.getByRole('button', { name: '5' }));
+    const notes = screen.getByRole('textbox');
+    fireEvent.change(notes, { target: { value: 'Повторить нули функций.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('не вернул пригодный ответ');
+    expect(screen.getByText('Этап: создание заданий, день 1 из 5.')).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(onlineClassesApi.retryPostLessonHomework).not.toHaveBeenCalled();
+    expect(notes).toBeDisabled();
+    expect(notes).toHaveValue('Повторить нули функций.');
+    expect(screen.getByRole('button', { name: '3' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить создание' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(onlineClassesApi.retryPostLessonHomework).toHaveBeenCalledWith('class');
+    expect(onlineClassesApi.postLessonHomework).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps retry failures visible in German and does not close or submit a second job', async () => {
+    vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({ state: 'FAILED', failureCode: 'GENERATION_FAILED' });
+    vi.mocked(onlineClassesApi.retryPostLessonHomework).mockResolvedValue({ state: 'FAILED', failureCode: 'RENDERER_UNAVAILABLE' });
+    render(<PostLessonHomeworkDialog classId="class" title="Sonja" language="DE" onDone={onDone} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hausaufgaben im Hintergrund zuweisen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Erstellung erneut versuchen' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('PDF-Erstellung ist nicht betriebsbereit'));
+    expect(onDone).not.toHaveBeenCalled();
+    expect(onlineClassesApi.postLessonHomework).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close when the server returns no job', async () => {
+    vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({ state: 'NONE' });
+    render(<PostLessonHomeworkDialog classId="class" title="Соня" language="RU" onDone={onDone} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Сервер не подтвердил запуск');
     expect(onDone).not.toHaveBeenCalled();
   });
 });

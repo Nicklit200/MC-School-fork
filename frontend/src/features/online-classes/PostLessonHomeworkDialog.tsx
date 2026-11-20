@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { onlineClassesApi } from '../../api/onlineClasses';
+import { onlineClassesApi, type PostLessonHomeworkJob } from '../../api/onlineClasses';
 import { ApiRequestError } from '../../api/client';
+import { postLessonHomeworkFailureMessage, postLessonHomeworkStageMessage } from './postLessonHomeworkMessages';
 import '../../styles/post-lesson-homework.css';
 
 type Props = { classId: string; title: string; language: string; onDone: () => void };
@@ -14,6 +15,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
   const [transcribing, setTranscribing] = useState(false);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedJob, setFailedJob] = useState<PostLessonHomeworkJob | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const stream = useRef<MediaStream | null>(null);
@@ -84,8 +86,18 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
     if (pending || recording || transcribing) return;
     setPending(true); setError(null);
     try {
-      await onlineClassesApi.postLessonHomework(classId, days, instructions);
-      onDone();
+      const result = failedJob
+        ? await onlineClassesApi.retryPostLessonHomework(classId)
+        : await onlineClassesApi.postLessonHomework(classId, days, instructions);
+      if (result.state === 'FAILED') {
+        setFailedJob(result);
+        setError(postLessonHomeworkFailureMessage(result.failureCode, de));
+      } else if (result.state === 'QUEUED' || result.state === 'RUNNING' || result.state === 'PUBLISHED') {
+        onDone();
+      } else {
+        setError(de ? 'Der Server hat keinen Erstellungsauftrag bestätigt. Bitte erneut versuchen.' :
+          'Сервер не подтвердил запуск создания домашки. Повторите попытку.');
+      }
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 503) {
         setError(de ? 'Die automatische Erstellung ist derzeit nicht konfiguriert. Bitte die Schulverwaltung informieren.' :
@@ -97,8 +109,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
         setError(de ? 'Hausaufgabe konnte nicht gestartet werden. Bitte erneut versuchen.' :
           'Не удалось запустить домашку. Проверьте подключение и повторите.');
       }
-      setPending(false);
-    }
+    } finally { setPending(false); }
   };
 
   return (
@@ -119,7 +130,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
             {[1, 2, 3, 4, 5, 6, 7].map(number => (
               <button key={number} type="button"
                 className={'post-homework-day' + (number <= days ? ' is-selected' : '')}
-                aria-pressed={number === days} disabled={pending} onClick={() => setDays(number)}>
+                aria-pressed={number === days} disabled={pending || Boolean(failedJob)} onClick={() => setDays(number)}>
                 {number}
               </button>
             ))}
@@ -135,9 +146,9 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
             maxLength={3000} onChange={event => setInstructions(event.target.value)}
             placeholder={de ? 'Zum Beispiel: Melissa war heute nicht dabei, ihr nichts aufgeben. Vitalina soll Brüche und Terme üben.' :
               'Например: Мелиссы сегодня не было, ей не задавай. Виталине повторить Brüche и Terme перед контрольной.'}
-            disabled={pending || recording || transcribing} />
+            disabled={pending || recording || transcribing || Boolean(failedJob)} />
           <button type="button" className={'post-homework-voice' + (recording ? ' is-recording' : '')}
-            onClick={() => void toggleVoice()} disabled={pending || transcribing}>
+            onClick={() => void toggleVoice()} disabled={pending || transcribing || Boolean(failedJob)}>
             <span aria-hidden="true">{recording ? '■' : '●'}</span>
             {recording ? (de ? 'Aufnahme stoppen' : 'Остановить запись') :
               transcribing ? (de ? 'Wird erkannt...' : 'Распознаём голос...') :
@@ -148,14 +159,22 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
           </p>}
         </div>
         {error && <p className="post-homework-error" role="alert">{error}</p>}
+        {failedJob && postLessonHomeworkStageMessage(failedJob, de) && <p className="post-homework-hint">
+          {postLessonHomeworkStageMessage(failedJob, de)}
+        </p>}
+        {failedJob && <p className="post-homework-hint">
+          {de ? 'Der erneute Versuch verwendet die gespeicherten Tage und Anweisungen.' :
+            'Повторный запуск использует сохранённые дни и указания.'}
+        </p>}
         <footer className="post-homework-footer">
           <button type="button" className="post-homework-skip" onClick={onDone} disabled={pending || transcribing}>
-            {de ? 'Überspringen' : 'Пропустить'}
+            {failedJob ? (de ? 'Schließen' : 'Закрыть') : (de ? 'Überspringen' : 'Пропустить')}
           </button>
           <button type="button" className="post-homework-submit" disabled={pending || transcribing || recording}
             onClick={() => void submit()}>
             {pending ? (de ? 'Wird gestartet…' : 'Запускаем…') :
-              (de ? 'Hausaufgaben im Hintergrund zuweisen' : 'Задать домашнее задание')}
+              failedJob ? (de ? 'Erstellung erneut versuchen' : 'Повторить создание') :
+                (de ? 'Hausaufgaben im Hintergrund zuweisen' : 'Задать домашнее задание')}
           </button>
         </footer>
         <p className="post-homework-fineprint">{de ?

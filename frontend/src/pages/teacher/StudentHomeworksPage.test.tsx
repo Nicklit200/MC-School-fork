@@ -67,12 +67,15 @@ function findRow(filename: string): HTMLElement {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The fixture is a future assignment; keep calendar-dependent labels stable.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
   localStorage.setItem('language', 'RU');
   vi.mocked(api.students.get).mockResolvedValue(pupil);
   vi.mocked(api.homeworks.listForStudent).mockResolvedValue([a, b]);
   vi.mocked(api.homeworks.remove).mockResolvedValue(undefined);
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Homework history three-dot actions', () => {
   it('displays separate records and a compact menu when both PDFs have the same date', async () => {

@@ -85,13 +85,10 @@ class PostLessonHomeworkSafeTrialTest {
         // Mimic only a successful DB job read-back: never write any actual pupil work.
         PostLessonHomeworkJobService.Job stored = new PostLessonHomeworkJobService.Job(
                 jobId,roomId,teacherId,TEST_EVENT,3,LocalDate.of(2026,11,18),
-                note,"[{\"id\":\""+studentId+"\",\"name\":\""+TEST_NAME+"\"}]",null,"QUEUED",0,0);
+                note,"[{\"id\":\""+studentId+"\",\"name\":\""+TEST_NAME+"\"}]",null,"QUEUED",0,0,null,null,null);
         when(jdbc.query(eq("SELECT * FROM post_lesson_homework_jobs WHERE id=?"),
                 any(org.springframework.jdbc.core.RowMapper.class),any(UUID.class)))
                 .thenReturn(List.of(stored));
-        when(jdbc.query(eq("SELECT failure_code FROM post_lesson_homework_jobs WHERE id=?"),
-                any(org.springframework.jdbc.core.RowMapper.class),any(UUID.class)))
-                .thenReturn(Collections.singletonList(null));
         Map<String,Object> queued=jobs.enqueue(actor,roomId,
                 new PostLessonHomeworkJobService.Request(3,note));
         assertEquals("QUEUED",queued.get("state"));
@@ -124,11 +121,17 @@ class PostLessonHomeworkSafeTrialTest {
         when(jdbc.queryForList(
                 startsWith("SELECT student_id,day_number,assignment_date,student_pdf"),
                 any(UUID.class))).thenReturn(List.of(generated));
+        UUID worker=(UUID)org.springframework.test.util.ReflectionTestUtils.getField(jobs,"workerId");
+        when(jdbc.queryForList(
+                eq("SELECT state,worker_id FROM post_lesson_homework_jobs WHERE id=? FOR UPDATE"),
+                any(UUID.class))).thenReturn(List.of(Map.of("state","RUNNING","worker_id",worker)));
+        when(jdbc.update(startsWith("UPDATE post_lesson_homework_jobs SET state='PUBLISHED'"),
+                any(UUID.class),eq(worker))).thenReturn(1);
         var roster=List.<Map<String,Object>>of(Map.of("id",studentId.toString(),"name",TEST_NAME));
         var first=new PostLessonHomeworkJobService.Job(
-                jobId,roomId,teacherId,TEST_EVENT,1,day,"","[]",null,"RUNNING",1,1);
+                jobId,roomId,teacherId,TEST_EVENT,1,day,"","[]",null,"RUNNING",1,1,null,null,null);
         var second=new PostLessonHomeworkJobService.Job(
-                secondJobId,secondRoomId,teacherId,TEST_EVENT,1,day,"","[]",null,"RUNNING",1,1);
+                secondJobId,secondRoomId,teacherId,TEST_EVENT,1,day,"","[]",null,"RUNNING",1,1,null,null,null);
 
         assertDoesNotThrow(()->jobs.publish(first,actor,roster));
         assertDoesNotThrow(()->jobs.publish(second,actor,roster));
@@ -148,12 +151,55 @@ class PostLessonHomeworkSafeTrialTest {
     @Test void publishedJobCannotBeRetriedAndDuplicated() {
         var published=new PostLessonHomeworkJobService.Job(
                 jobId,roomId,teacherId,TEST_EVENT,1,LocalDate.of(2026,11,18),
-                "","[]",null,"PUBLISHED",1,1);
+                "","[]",null,"PUBLISHED",1,1,null,null,null);
         when(jdbc.query(
                 startsWith("SELECT * FROM post_lesson_homework_jobs WHERE class_id=? AND teacher_id=? FOR UPDATE"),
                 any(org.springframework.jdbc.core.RowMapper.class),eq(roomId),eq(teacherId)))
                 .thenReturn(List.of(published));
         assertThrows(ResponseStatusException.class,()->jobs.retry(actor,roomId));
+        verifyNoInteractions(publisher);
+    }
+
+    @Test void staleWorkerCannotPublishAnAlreadyPublishedJobAgain() {
+        var stale=new PostLessonHomeworkJobService.Job(
+                jobId,roomId,teacherId,TEST_EVENT,1,LocalDate.of(2026,11,18),
+                "","[]",null,"RUNNING",1,1,null,"PUBLICATION",null);
+        when(jdbc.queryForList(
+                eq("SELECT state,worker_id FROM post_lesson_homework_jobs WHERE id=? FOR UPDATE"),
+                eq(jobId))).thenReturn(List.of(Map.of("state","PUBLISHED")));
+        assertDoesNotThrow(()->jobs.publish(stale,actor,List.of(Map.of("id",studentId.toString()))));
+        verifyNoInteractions(publisher,users,homeworks);
+    }
+
+    @Test void expiredWorkerCannotPublishOverANewerRetry() {
+        var stale=new PostLessonHomeworkJobService.Job(
+                jobId,roomId,teacherId,TEST_EVENT,1,LocalDate.of(2026,11,18),
+                "","[]",null,"RUNNING",1,1,null,"PUBLICATION",null);
+        when(jdbc.queryForList(
+                eq("SELECT state,worker_id FROM post_lesson_homework_jobs WHERE id=? FOR UPDATE"),
+                eq(jobId))).thenReturn(List.of(Map.of("state","RUNNING","worker_id",UUID.randomUUID())));
+        var failure=assertThrows(IllegalStateException.class,
+                ()->jobs.publish(stale,actor,List.of(Map.of("id",studentId.toString()))));
+        assertEquals("INTERRUPTED",PostLessonHomeworkFailure.code(failure));
+        verifyNoInteractions(publisher,users,homeworks);
+    }
+
+    @Test void statusIncludesFailedDayAndStageWithoutPrivateLessonContent() {
+        var failed=new PostLessonHomeworkJobService.Job(
+                jobId,roomId,teacherId,TEST_EVENT,7,LocalDate.of(2026,11,18),
+                "private pupil instructions","private roster",null,"FAILED",2,7,
+                "RENDERER_UNAVAILABLE","PDF_RENDER",3);
+        when(jdbc.query(
+                eq("SELECT * FROM post_lesson_homework_jobs WHERE class_id=? AND teacher_id=?"),
+                any(org.springframework.jdbc.core.RowMapper.class),eq(roomId),eq(teacherId)))
+                .thenReturn(List.of(failed));
+        Map<String,Object> response=jobs.status(actor,roomId);
+        assertEquals("FAILED",response.get("state"));
+        assertEquals("RENDERER_UNAVAILABLE",response.get("failureCode"));
+        assertEquals("PDF_RENDER",response.get("stage"));
+        assertEquals(3,response.get("dayNumber"));
+        assertEquals(2,response.get("generatedFiles"));
+        assertFalse(response.toString().contains("private"));
         verifyNoInteractions(publisher);
     }
 

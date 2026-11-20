@@ -83,7 +83,8 @@ public class PostLessonHomeworkJobService {
 
     public record Request(int days,String teacherInstructions) {}
     record Job(UUID id,UUID classId,UUID teacherId,String eventId,int days,LocalDate startDate,
-            String instructions,String roster,String selection,String state,int generated,int expected) {}
+            String instructions,String roster,String selection,String state,int generated,int expected,
+            String failureCode,String stage,Integer dayNumber) {}
 
     public Map<String,Object> enqueue(AuthenticatedUser teacher,UUID classId,Request request){
         pilot.require(teacher);
@@ -136,7 +137,7 @@ public class PostLessonHomeworkJobService {
             if(!"FAILED".equals(job.state()))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Only failed homework generation can be retried");
             if(!generator.configured())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"AI is not configured");
-            db.update("UPDATE post_lesson_homework_jobs SET state='QUEUED',failure_code=NULL,worker_id=NULL,lease_until=NULL,updated_at=now() WHERE id=?",job.id());
+            db.update("UPDATE post_lesson_homework_jobs SET state='QUEUED',failure_code=NULL,generation_stage=NULL,day_number=NULL,worker_id=NULL,lease_until=NULL,finished_at=NULL,updated_at=now() WHERE id=?",job.id());
             return response(find(job.id()));
         });
     }
@@ -182,21 +183,32 @@ public class PostLessonHomeworkJobService {
             worker.execute(()->{
                 try{process(job);}
                 catch(Exception failure){
-                    String reason=Objects.toString(failure.getMessage(),"");
-                    String code=failure instanceof ResponseStatusException status? "CONFLICT_"+status.getStatusCode().value():
-                            reason.startsWith("HOMEWORK_AI_")?"AI_UNAVAILABLE":
-                            reason.startsWith("HOMEWORK_LESSON_EVIDENCE_MISSING")?"LESSON_MATERIAL_MISSING":
-                            reason.startsWith("HOMEWORK_PDF_INVALID")?"PDF_INVALID":
-                            reason.startsWith("HOMEWORK_DRAFT_VALIDATION_FAILED")?"HOMEWORK_JSON_INVALID":
-                            reason.startsWith("HOMEWORK_DRAFT_RENDER_FAILED")?"HOMEWORK_JSON_RENDER_INVALID":
-                            reason.startsWith("HOMEWORK_DRAFT_MATH_QA_FAILED")?"HOMEWORK_MATH_QA_FAILED":
-                            "GENERATION_FAILED";
-                    int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING'",code,job.id());
-                    if(changed>0) safeNotify(job.id());
-                    LOG.warn("Post-lesson homework job={} failed code={} type={}",job.id(),code,failure.getClass().getSimpleName());
+                    recordFailure(job.id(),failure);
                 } finally{activeJob=null;busy.set(false);}
             });
-        }catch(Exception failure){activeJob=null;busy.set(false);LOG.warn("Post-lesson homework queue error: {}",failure.getClass().getSimpleName());}
+        }catch(Exception failure){activeJob=null;busy.set(false);LOG.warn("Post-lesson homework queue error type={} origin={}",failure.getClass().getSimpleName(),PostLessonHomeworkFailure.origin(failure));}
+    }
+
+    private void recordFailure(UUID jobId,Exception failure){
+        String code=PostLessonHomeworkFailure.code(failure);
+        // A worker from an expired lease must not fail a newer retry or a published job.
+        try {
+            int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",code,jobId,workerId);
+            if(changed>0) safeNotify(jobId);
+        } catch (RuntimeException persistenceFailure) {
+            // Preserve the original safe diagnosis even when the database is unavailable.
+            LOG.warn("Post-lesson homework failure persistence job={} type={} origin={}",jobId,
+                    persistenceFailure.getClass().getSimpleName(),PostLessonHomeworkFailure.origin(persistenceFailure));
+        }
+        LOG.warn("Post-lesson homework job={} failed code={} type={} origin={}",jobId,code,
+                failure.getClass().getSimpleName(),PostLessonHomeworkFailure.origin(failure));
+    }
+
+    private void progress(Job job,PostLessonHomeworkStage stage,Integer day){
+        int changed=db.update("UPDATE post_lesson_homework_jobs SET generation_stage=?,day_number=?,updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",
+                stage.name(),day,job.id(),workerId);
+        if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+        LOG.info("Post-lesson homework progress job={} stage={} day={}",job.id(),stage,day);
     }
 
     @SuppressWarnings("unchecked")
@@ -204,12 +216,14 @@ public class PostLessonHomeworkJobService {
         Job job=find(original.id());
         pilot.require(job.teacherId());
         AuthenticatedUser teacher=new AuthenticatedUser(job.teacherId(),null,Role.TEACHER);
+        progress(job,PostLessonHomeworkStage.RECIPIENT_SELECTION,null);
         List<Map<String,Object>> roster=json.readValue(job.roster(),List.class);
         Map<String,Object> selection;
         if(job.selection()==null){
             selection=generator.select(roster,job.instructions());
             String saved=json.writeValueAsString(selection);
-            db.update("UPDATE post_lesson_homework_jobs SET selection_json=?,updated_at=now() WHERE id=? AND selection_json IS NULL",saved,job.id());
+            int changed=db.update("UPDATE post_lesson_homework_jobs SET selection_json=?,updated_at=now() WHERE id=? AND selection_json IS NULL AND state='RUNNING' AND worker_id=?",saved,job.id(),workerId);
+            if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
         } else selection=json.readValue(job.selection(),Map.class);
         Set<UUID> excluded=new HashSet<>();
         for(Object raw:(List<?>)selection.get("excluded")){
@@ -224,26 +238,46 @@ public class PostLessonHomeworkJobService {
         List<Map<String,Object>> eligible=roster.stream()
                 .filter(s->!excluded.contains(UUID.fromString(String.valueOf(s.get("id"))))).toList();
         if(eligible.isEmpty())throw new IllegalStateException("HOMEWORK_NO_RECIPIENTS");
-        db.update("UPDATE post_lesson_homework_jobs SET expected_files=?,updated_at=now() WHERE id=?",
-                eligible.size()*job.days(),job.id());
+        int changed=db.update("UPDATE post_lesson_homework_jobs SET expected_files=?,updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",
+                eligible.size()*job.days(),job.id(),workerId);
+        if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
         for(Map<String,Object> pupil:eligible){
             UUID id=UUID.fromString(String.valueOf(pupil.get("id")));
             String name=String.valueOf(pupil.get("name"));
             for(int day=1;day<=job.days();day++){
                 if(draftExists(job.id(),id,day))continue;
                 final int currentDay=day;
+                progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,currentDay);
                 Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,currentDay,individual.getOrDefault(id,"")));
-                OwnerWorkbookPdfRenderService.StudioRender pair=generator.make(evidence,day,job.days(),name);
+                OwnerWorkbookPdfRenderService.StudioRender pair=generator.make(evidence,day,job.days(),name,
+                        stage->progress(job,stage,currentDay));
+                progress(job,PostLessonHomeworkStage.PDF_STORAGE,currentDay);
                 UUID draft=UUID.randomUUID();
                 LocalDate date=job.startDate().plusDays(day-1);
-                db.update("INSERT INTO post_lesson_homework_drafts (id,job_id,student_id,day_number,assignment_date,student_pdf,teacher_pdf) VALUES (?,?,?,?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
-                        draft,job.id(),id,day,date,pair.studentPdf(),pair.teacherPdf());
-                int count=db.queryForObject("SELECT count(*) FROM post_lesson_homework_drafts WHERE job_id=?",Integer.class,job.id());
-                db.update("UPDATE post_lesson_homework_jobs SET generated_files=?,updated_at=now() WHERE id=?",count,job.id());
+                tx.executeWithoutResult(st->{
+                    if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                    db.update("INSERT INTO post_lesson_homework_drafts (id,job_id,student_id,day_number,assignment_date,student_pdf,teacher_pdf) VALUES (?,?,?,?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
+                            draft,job.id(),id,currentDay,date,pair.studentPdf(),pair.teacherPdf());
+                    int count=db.queryForObject("SELECT count(*) FROM post_lesson_homework_drafts WHERE job_id=?",Integer.class,job.id());
+                    db.update("UPDATE post_lesson_homework_jobs SET generated_files=?,updated_at=now() WHERE id=?",count,job.id());
+                });
             }
         }
+        progress(job,PostLessonHomeworkStage.PUBLICATION,null);
         publish(job,teacher,eligible);
         safeNotify(job.id());
+    }
+
+    /** Hold the job lock through the draft/publication transaction to fence an expired worker. */
+    private boolean publishedOrRequireOwnership(UUID jobId){
+        List<Map<String,Object>> locked=db.queryForList(
+                "SELECT state,worker_id FROM post_lesson_homework_jobs WHERE id=? FOR UPDATE",jobId);
+        if(locked.size()!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+        Map<String,Object> row=locked.get(0);
+        if("PUBLISHED".equals(row.get("state")))return true;
+        if(!"RUNNING".equals(row.get("state"))||!workerId.equals(row.get("worker_id")))
+            throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+        return false;
     }
 
     /** Push failures are isolated from the committed homework and never change its state. */
@@ -384,6 +418,7 @@ public class PostLessonHomeworkJobService {
      */
     void publish(Job job,AuthenticatedUser teacher,List<Map<String,Object>> students){
         tx.executeWithoutResult(st->{
+            if(publishedOrRequireOwnership(job.id()))return;
             User owner=users.findById(job.teacherId()).orElseThrow(()->new IllegalStateException("HOMEWORK_TEACHER_REVOKED"));
             if(owner.getRole()!=Role.TEACHER||owner.getStatus()!=UserStatus.ACTIVE||owner.isArchived())
                 throw new IllegalStateException("HOMEWORK_TEACHER_REVOKED");
@@ -420,7 +455,8 @@ public class PostLessonHomeworkJobService {
                 homeworkPdf.createWorksheetHomework(teacher,id,date,
                         new PdfFile(filename,bytes));
             }
-            db.update("UPDATE post_lesson_homework_jobs SET state='PUBLISHED',finished_at=now(),worker_id=NULL,lease_until=NULL,updated_at=now() WHERE id=? AND state='RUNNING'",job.id());
+            int changed=db.update("UPDATE post_lesson_homework_jobs SET state='PUBLISHED',finished_at=now(),worker_id=NULL,lease_until=NULL,updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",job.id(),workerId);
+            if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
         });
     }
 
@@ -432,7 +468,8 @@ public class PostLessonHomeworkJobService {
         return new Job((UUID)rs.getObject("id"),(UUID)rs.getObject("class_id"),(UUID)rs.getObject("teacher_id"),
                 rs.getString("event_id"),rs.getInt("days"),rs.getDate("start_date").toLocalDate(),
                 rs.getString("teacher_instructions"),rs.getString("roster_json"),rs.getString("selection_json"),
-                rs.getString("state"),rs.getInt("generated_files"),rs.getInt("expected_files"));
+                rs.getString("state"),rs.getInt("generated_files"),rs.getInt("expected_files"),
+                rs.getString("failure_code"),rs.getString("generation_stage"),rs.getObject("day_number",Integer.class));
     }
     private Map<String,Object> response(Job job){
         Map<String,Object> result=new LinkedHashMap<>();
@@ -440,9 +477,9 @@ public class PostLessonHomeworkJobService {
         result.put("state",job.state());result.put("days",job.days());
         result.put("startDate",job.startDate().toString());
         result.put("generatedFiles",job.generated());result.put("expectedFiles",job.expected());
-        var failure=db.query("SELECT failure_code FROM post_lesson_homework_jobs WHERE id=?",
-                (rs,i)->rs.getString("failure_code"),job.id());
-        result.put("failureCode",failure.isEmpty()?null:failure.get(0));
+        result.put("failureCode",job.failureCode());
+        result.put("stage",job.stage());
+        result.put("dayNumber",job.dayNumber());
         return result;
     }
 

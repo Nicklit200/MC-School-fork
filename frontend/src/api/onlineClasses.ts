@@ -199,6 +199,9 @@ export interface PostLessonHomeworkJob {
   generatedFiles?: number;
   expectedFiles?: number;
   failureCode?: string | null;
+  stage?: 'RECIPIENT_SELECTION' | 'LESSON_EVIDENCE' | 'AI_CONTENT' | 'CONTENT_VALIDATION' |
+    'PDF_RENDER' | 'PDF_STORAGE' | 'PUBLICATION' | null;
+  dayNumber?: number | null;
 }
 
 export interface OnlineClassHomework {
