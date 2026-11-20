@@ -237,6 +237,18 @@ class KolinTaskServiceTest {
         assertThat(json.path("qa").path("algebra").get(0).path("kind").asString()).isEqualTo("expressionValue");
         assertThat(json.path("qa").path("algebra").get(0).has("answer")).isFalse();
     }
+    @Test void printedMathUsesSchoolSymbolsWithoutChangingTheServerCheckedExpression() throws Exception {
+        var worksheet=KolinTaskService.document(List.of(new KolinTaskService.Task(
+            "expression","Вычислите","(-48)/6-(-7)*3",null,"",List.of())));
+        var doc=mapper.readTree(mapper.writeValueAsString(worksheet));
+        var row=doc.path("workbookPages").get(0).path("blocks").get(0).path("rows").get(0);
+        assertThat(row.path("text").asString()).isEqualTo("Berechne.");
+        assertThat(row.path("math").path("latex").asString())
+            .isEqualTo("(-48)\\div 6-(-7)\\cdot 3");
+        assertThat(doc.path("qa").path("algebra").get(0).path("expression").asString())
+            .isEqualTo("(-48)/6-(-7)*3");
+        assertThat(row.toString()).doesNotContain("answer");
+    }
     @Test @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="kolin.mixedFixtureDir",matches=".+")
     void validatesAndExportsCapturedMixedRepliesThroughTheProductionDocumentBuilder()throws Exception {
         var directory=java.nio.file.Path.of(System.getProperty("kolin.mixedFixtureDir"));

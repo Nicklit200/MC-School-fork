@@ -282,8 +282,8 @@ public class KolinTaskService {
                             "restrictions",task.restrictions());
                 } else throw new IllegalArgumentException("Unsupported checked math task");
                 checks.add(check);
-                rows.add(Map.of("label",String.valueOf(i+1)+".","math",Map.of("latex",task.expression()),
-                        "text",task.instruction()+(task.restrictions().isEmpty()?"":" ("+String.join(", ",task.restrictions())+")"),"work",false));
+                rows.add(Map.of("label",String.valueOf(i+1)+".","math",Map.of("latex",displayMath(task.expression())),
+                        "text",displayInstruction(task.instruction())+(task.restrictions().isEmpty()?"":" ("+String.join(", ",task.restrictions())+")"),"work",false));
             }
             pages.add(Map.of("title","","subtitle","","blocks",List.of(Map.of("type","exercise","number","",
                     "title","","subtitle","","rows",rows,"writeLines",0))));
@@ -291,6 +291,24 @@ public class KolinTaskService {
         return Map.of("meta",Map.of("school","MINDCRAFTI SCHOOL","durationMinutes",30,"group","","date",""),
                 "workbookPages",pages,"teacherPages",List.of(Map.of("title","","subtitle","","blocks",List.of(
                     Map.of("type","text","text","Private automated answer validation")))),"qa",Map.of("algebra",checks));
+    }
+    /**
+     * Only the pupil-facing TeX is typographically normalised. The original
+     * machine expression remains unchanged in qa.algebra and the saved draft.
+     * Using MathJax commands avoids printed programming operators such as * and /.
+     */
+    static String displayMath(String expression) {
+        return expression.replace("*", "\\cdot ").replace("/", "\\div ");
+    }
+
+    /** Brief exercise instructions should read like a German school worksheet. */
+    static String displayInstruction(String instruction) {
+        return switch (instruction) {
+            case "Вычислите", "Calculate", "Berechne" -> "Berechne.";
+            case "Упростите", "Simplify", "Vereinfache" -> "Vereinfache.";
+            case "Решите уравнение", "Solve the equation", "Löse die Gleichung" -> "Löse die Gleichung.";
+            default -> instruction;
+        };
     }
     /** Two diagrams per page leave writing space. Pure arithmetic stays five per page. */
     private static Map<String,Object> visualDocument(List<Task> tasks) {

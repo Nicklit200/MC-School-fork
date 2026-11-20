@@ -232,7 +232,14 @@ function pageChrome({ index, count, title, subtitle, time, teacher }) {
   return { top, heading, progress, pill, footer };
 }
 function workbookPage(p, idx, pages) {
-  if (plain) return `<article class="sheet student plain" data-page="${idx+1}"><main class="paper-content">${p.blocks.map((b,i)=>renderWorkbookBlock(b,i,idx)).join('')}</main></article>`;
+  if (plain) return `<article class="sheet student plain" data-page="${idx+1}">
+    <header class="kolin-header">
+      <span class="kolin-brand">MINDCRAFTI SCHOOL</span>
+      <span class="kolin-subject">MATHEMATIK / ARBEITSBLATT</span>
+    </header>
+    <h1 class="kolin-title">${richText(p.title || 'Übungsaufgaben')}</h1>
+    <main class="paper-content">${p.blocks.map((b,i)=>renderWorkbookBlock(b,i,idx)).join('')}</main>
+  </article>`;
   const c = pageChrome({index: idx, count: pages.length, title:p.title,subtitle:p.subtitle,time:p.time,teacher:false});
   return `<article class="sheet student${lesson.meta.homeworkMode===true ? ' homework' : ''}" data-page="${idx+1}">${c.top}${c.heading}${c.pill}${c.progress}<main class="paper-content">${p.blocks.map((b,i)=>renderWorkbookBlock(b,i,idx)).join('')}</main>${c.footer}</article>`;
 }

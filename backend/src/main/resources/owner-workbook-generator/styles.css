@@ -399,3 +399,91 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .sheet:not(.plain) .diagram-block .diagram-caption {
   margin-top: 1mm;
 }
+
+
+/* Kolyn live-generated PDF pages: compact Mindcrafti identity while remaining
+   a single appendable A4 sheet with vector math and generous handwriting room.
+   The plain switch still skips lesson metadata, footers and teacher answers. */
+.sheet.student.plain {
+  --navy: #070a20;
+  --orange: #ff6a00;
+  --orange-soft: #fff3e8;
+  --gray-text: #6b7280;
+  --border: #e5e7eb;
+  --line: #cbd5e1;
+  color: var(--navy);
+  font-family: Inter, Arial, 'Liberation Sans', sans-serif;
+}
+.sheet.student.plain .kolin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6mm;
+  min-height: 11mm;
+  border-bottom: .4mm solid var(--orange);
+  padding: 0 0 3mm;
+}
+.sheet.student.plain .kolin-brand {
+  color: var(--orange);
+  font-weight: 750;
+  font-size: 13px;
+  letter-spacing: .5px;
+}
+.sheet.student.plain .kolin-subject {
+  color: var(--gray-text);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+.sheet.student.plain .kolin-title {
+  color: var(--navy);
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 1.2;
+  margin: 5mm 0 3mm;
+}
+.sheet.student.plain .paper-content { padding-top: 1mm; }
+.sheet.student.plain .exercise .task-row {
+  min-height: 34mm;
+  margin-bottom: 4mm;
+  padding: 2.5mm 0 3mm;
+  border-bottom: .22mm solid var(--border);
+  align-items: start;
+}
+.sheet.student.plain .exercise .task-row:last-child {
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+.sheet.student.plain .task-row .item-label {
+  color: var(--orange);
+  font-size: 15px;
+  font-weight: 700;
+}
+.sheet.student.plain .task-row .expression-wrap {
+  padding-top: .5mm;
+  min-width: 0;
+}
+.sheet.student.plain .task-row .task-description {
+  color: var(--gray-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0 0 2mm;
+}
+.sheet.student.plain .task-row .formula {
+  color: var(--navy);
+  font-size: 24px;
+  line-height: 1.3;
+}
+.sheet.student.plain .task-row .math-latex svg {
+  max-width: 100%;
+}
+.sheet.student.plain .task-card-title {
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 700;
+}
+.sheet.student.plain .diagram-eyebrow {
+  color: var(--orange);
+}
