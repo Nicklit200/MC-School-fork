@@ -81,4 +81,23 @@ class PostLessonHomeworkRecipientGuardTest {
         assertTrue(excluded(PostLessonHomeworkRecipientGuard.verify(SOLO,notes,
                 selection(SONJA,"Соне не задавай домашку"))).isEmpty());
     }
+
+    @Test void easierHomeworkRequestIsNotAnExclusion() {
+        String notes="Соне не задавай слишком сложные задачи, подбери примеры попроще.";
+        assertTrue(excluded(PostLessonHomeworkRecipientGuard.verify(SOLO,notes,
+                selection(SONJA,"Соне не задавай слишком сложные задачи"))).isEmpty());
+    }
+
+    @Test void modelCannotTruncateAQualifiedNegativeInstruction() {
+        String notes="Соне не задавай слишком сложные задачи, подбери примеры попроще.";
+        assertTrue(excluded(PostLessonHomeworkRecipientGuard.verify(SOLO,notes,
+                selection(SONJA,"Соне не задавай"))).isEmpty());
+    }
+
+    @Test void bareSkipEndingAtAClauseBoundaryIsStillRespected() {
+        String notes="Соне не задавай, она получила задания заранее.";
+        assertEquals(1,excluded(PostLessonHomeworkRecipientGuard.verify(SOLO,notes,
+                selection(SONJA,"Соне не задавай"))).size());
+    }
+
 }
