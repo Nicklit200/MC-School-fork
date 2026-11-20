@@ -1,7 +1,8 @@
+import { onlineClassesApi } from '../../api/onlineClasses';
 import { LessonCardsPanel } from './LessonCardsPanel';
 import { TeacherIcon, type TeacherIconName } from '../../components/TeacherIcon';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi, type CompletedLessonDocument } from '../../api/lessonPreparation';
 import type { GroupLesson, LessonPreparation } from '../../api/types';
@@ -17,6 +18,8 @@ import { toErrorMessage } from '../../lib/errors';
 type Kind = 'workbook' | 'answers' | 'transcript';
 export function LessonWorkspacePage() {
   const { eventId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { language, t } = useI18n();
   const de = language === 'DE';
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
@@ -30,6 +33,18 @@ export function LessonWorkspacePage() {
   const documentsDialog = useRef<HTMLDialogElement>(null);
   const homeworkDialog = useRef<HTMLDialogElement>(null);
   const generation = useRef(0);
+  useEffect(() => {
+    if (searchParams.get('reviewHomework') !== '1') return;
+    let active = true;
+    void onlineClassesApi.findByEvent(eventId).then(rooms => {
+      if (!active) return;
+      const ended = rooms.filter(room => room.status === 'ENDED')
+        .sort((a,b) => Date.parse(b.actualEndAt || b.scheduledEndAt) - Date.parse(a.actualEndAt || a.scheduledEndAt))[0];
+      if (ended) navigate('/teacher/post-homework-review/' + encodeURIComponent(ended.id), { replace: true });
+    }).catch(() => { /* lesson stays visible if lookup fails */ });
+    return () => { active = false; };
+  }, [eventId, navigate, searchParams]);
+
   useEffect(() => {
     let active = true;
     setPreviousTrialInvite(false);

@@ -142,12 +142,20 @@ public class PostLessonHomeworkContentService {
     }
 
     @SuppressWarnings("unchecked")
+    record GeneratedHomework(OwnerWorkbookPdfRenderService.StudioRender pdf, Map<String,Object> review) {}
+
     public OwnerWorkbookPdfRenderService.StudioRender make(
             Map<String,Object> evidence,int day,int totalDays,String studentName)throws Exception {
-        return make(evidence,day,totalDays,studentName,stage->{});
+        return makeWithReview(evidence,day,totalDays,studentName,stage->{}).pdf();
     }
 
     OwnerWorkbookPdfRenderService.StudioRender make(
+            Map<String,Object> evidence,int day,int totalDays,String studentName,
+            Consumer<PostLessonHomeworkStage> progress)throws Exception {
+        return makeWithReview(evidence,day,totalDays,studentName,progress).pdf();
+    }
+
+    GeneratedHomework makeWithReview(
             Map<String,Object> evidence,int day,int totalDays,String studentName,
             Consumer<PostLessonHomeworkStage> progress)throws Exception {
         // The model authors CONTENT ONLY; the server controls all MCH3 structures.
@@ -270,7 +278,7 @@ public class PostLessonHomeworkContentService {
                 if(pdf.studentPages()!=1||pdf.teacherPages()<1
                         ||pdf.studentPdf().length<100||pdf.teacherPdf().length<100)
                     throw new IllegalStateException("HOMEWORK_PDF_INVALID");
-                return pdf;
+                return new GeneratedHomework(pdf,PostLessonHomeworkReviewMetadata.build(content,evidence));
             }catch(IllegalArgumentException rejected){
                 String reason=Objects.toString(rejected.getMessage(),"");
                 // Don't repeatedly prompt Luna when the PDF executable itself fails.

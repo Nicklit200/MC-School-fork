@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { Link } from 'react-router-dom';
 import { onlineClassesApi, type OnlineClass, type PostLessonHomeworkJob } from '../api/onlineClasses';
 import { postLessonHomeworkFailureMessage, postLessonHomeworkStageMessage } from '../features/online-classes/postLessonHomeworkMessages';
 
@@ -104,6 +105,10 @@ export function PostLessonHomeworkStatus({ eventId, de }: { eventId: string; de:
       {error && <p role="alert">{error}</p>}
       {error && <button type="button" className="btn btn--secondary" disabled={retrying}
         onClick={() => setRefresh(value => value + 1)}>{de ? 'Status aktualisieren' : 'Обновить статус'}</button>}
+      {visibleJob && id && (visibleJob.state === 'PUBLISHED' || (visibleJob.generatedFiles ?? 0) > 0) &&
+        <Link className="btn btn--secondary" to={'/teacher/post-homework-review/' + encodeURIComponent(id)}>
+          {de ? 'Hausaufgaben prüfen' : 'Проверить домашку и PDF'}
+        </Link>}
       {visibleJob?.state === 'FAILED' && id && <button type="button" className="btn btn--secondary" disabled={retrying}
         onClick={() => void retry()}>{retrying ? (de ? 'Wird gestartet...' : 'Запускаем...') :
           (de ? 'Erneut versuchen' : 'Повторить')}</button>}

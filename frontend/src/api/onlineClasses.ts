@@ -204,6 +204,35 @@ export interface PostLessonHomeworkJob {
   dayNumber?: number | null;
 }
 
+export interface PostLessonHomeworkReviewTask {
+  title: string;
+  description: string;
+  expression: string;
+}
+
+export interface PostLessonHomeworkReview {
+  jobId: string;
+  state: PostLessonHomeworkJob['state'];
+  lessonTitle: string;
+  days: number;
+  startDate: string;
+  generatedFiles: number;
+  expectedFiles: number;
+  documents: Array<{
+    studentId: string;
+    studentName: string;
+    day: number;
+    date: string;
+    summary: {
+      topic: string;
+      subtitle: string;
+      why: string;
+      reasonSource: string;
+      tasks: PostLessonHomeworkReviewTask[];
+    } | null;
+  }>;
+}
+
 export interface OnlineClassHomework {
   notes: string | null;
   hasDocument: boolean;
@@ -231,6 +260,12 @@ export const onlineClassesApi = {
 
   postLessonHomeworkStatus: (classId: string) =>
     request<PostLessonHomeworkJob>('GET', `/online-classes/${classId}/post-lesson-homework`),
+
+  postLessonHomeworkReview: (classId: string) =>
+    request<PostLessonHomeworkReview>('GET', `/online-classes/${classId}/post-lesson-homework/review`),
+
+  postLessonHomeworkReviewPdf: (classId: string, studentId: string, day: number, kind: 'student' | 'teacher') =>
+    requestBlob(`/online-classes/${classId}/post-lesson-homework/review/pdf?studentId=${encodeURIComponent(studentId)}&day=${day}&kind=${kind}`),
 
   retryPostLessonHomework: (classId: string) =>
     request<PostLessonHomeworkJob>('POST', `/online-classes/${classId}/post-lesson-homework/retry`),

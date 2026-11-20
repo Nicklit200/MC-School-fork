@@ -251,15 +251,16 @@ public class PostLessonHomeworkJobService {
                 final int currentDay=day;
                 progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,currentDay);
                 Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,currentDay,individual.getOrDefault(id,"")));
-                OwnerWorkbookPdfRenderService.StudioRender pair=generator.make(evidence,day,job.days(),name,
-                        stage->progress(job,stage,currentDay));
+                PostLessonHomeworkContentService.GeneratedHomework generated=generator.makeWithReview(
+                        evidence,day,job.days(),name,stage->progress(job,stage,currentDay));
+                OwnerWorkbookPdfRenderService.StudioRender pair=generated.pdf();
                 progress(job,PostLessonHomeworkStage.PDF_STORAGE,currentDay);
                 UUID draft=UUID.randomUUID();
                 LocalDate date=job.startDate().plusDays(day-1);
                 tx.executeWithoutResult(st->{
                     if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
-                    db.update("INSERT INTO post_lesson_homework_drafts (id,job_id,student_id,day_number,assignment_date,student_pdf,teacher_pdf) VALUES (?,?,?,?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
-                            draft,job.id(),id,currentDay,date,pair.studentPdf(),pair.teacherPdf());
+                    db.update("INSERT INTO post_lesson_homework_drafts (id,job_id,student_id,day_number,assignment_date,student_pdf,teacher_pdf,review_json) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
+                            draft,job.id(),id,currentDay,date,pair.studentPdf(),pair.teacherPdf(),json.writeValueAsString(generated.review()));
                     int count=db.queryForObject("SELECT count(*) FROM post_lesson_homework_drafts WHERE job_id=?",Integer.class,job.id());
                     db.update("UPDATE post_lesson_homework_jobs SET generated_files=?,updated_at=now() WHERE id=?",count,job.id());
                 });

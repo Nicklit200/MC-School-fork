@@ -78,7 +78,7 @@ class PostLessonHomeworkPushServiceTest {
         service.sendPending();
         verify(webPush,times(1)).send(any(PushSubscription.class),
                 contains("назначена"),contains("3 дн., 1 уч."),
-                eq("/teacher/lessons/local-test-lesson"),
+                eq("/teacher/lessons/local-test-lesson?reviewHomework=1"),
                 eq("post-homework-" + job + "-PUBLISHED"));
         verify(db).update(argThat(sql->sql.contains("SET status = ?")),
                 eq("SENT"),eq("SENT"),eq(outboxId));
