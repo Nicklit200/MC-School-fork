@@ -32,13 +32,23 @@ reference answer from those parameters; it accepts no model-written SVG or answe
 Graphs support values and construction for constant, linear, quadratic, polynomial,
 trigonometric, absolute, reciprocal, square-root, exponential, logarithmic and rational
 functions. Zeros/intersections use the existing polynomial/rational root isolation,
-are bounded to the visible range and are explicitly approximate.
+are bounded to the visible range and are explicitly approximate. For school-level
+graph inequalities, a closed `aboveBelow` objective compares one constant, linear,
+quadratic or degree <=4 polynomial function with a visible horizontal line y=level.
+The PDF presents both graphs and asks for intervals where f(x)>level and f(x)<level
+and the equality points. Strict inequalities omit boundary intersections;
+the reference solution includes endpoints of the visible x-range only when allowed,
+handles tangencies, no intersections and functions identical to the comparison line.
+The answer intervals and intersection markers are teacher-only. Rational functions
+with poles and arbitrary inequalities are not accepted as automatically verified
+graph inequality tasks.
 Geometry supports convex coordinate polygons (including triangles and rectangles),
 areas, perimeters, sides and angles; circles; cube/cuboid/cylinder/cone/sphere volumes
 and full surface areas; and equal circular fraction sectors. Solids are schematic.
 Numeric reference values are rounded to six decimals, not symbolic geometry proofs.
-Unsupported constructions, theorem proofs, general word problems, inequalities or nonlinear
-equations stay text assistance rather than being labelled automatically verified.
+Unsupported constructions, theorem proofs, general word problems, arbitrary inequalities
+outside the bounded graph `aboveBelow` contract, or nonlinear equations stay text
+assistance rather than being labelled automatically verified.
 Mixed/visual sheets place at most two tasks on each page with blank working space.
 Five visual tasks therefore use three pages; pure short algebra remains one page.
 These checks verify the encoded mathematics, not the entire pedagogical suitability
