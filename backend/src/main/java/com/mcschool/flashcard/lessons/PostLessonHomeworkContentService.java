@@ -5,6 +5,7 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
+import java.util.function.Consumer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -53,12 +54,35 @@ public class PostLessonHomeworkContentService {
                 .header("Authorization","Bearer "+apiKey).header("Content-Type","application/json")
                 .timeout(Duration.ofSeconds(180))
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload))).build();
-        HttpResponse<String> res=client.send(req,HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res=client.send(req,HttpResponse.BodyHandlers.ofString());
+        } catch (HttpTimeoutException failure) {
+            throw new IllegalStateException("HOMEWORK_AI_TIMEOUT",failure);
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("HOMEWORK_AI_NETWORK",failure);
+        }
         if(res.statusCode()<200||res.statusCode()>=300)throw new IllegalStateException("HOMEWORK_AI_HTTP_"+res.statusCode());
+        if(res.body()==null||res.body().isBlank())throw new IllegalStateException("HOMEWORK_AI_EMPTY_RESPONSE");
         if(res.body().length()>700000)throw new IllegalStateException("HOMEWORK_AI_RESPONSE_TOO_LONG");
-        @SuppressWarnings("unchecked") Map<String,Object> body=json.readValue(res.body(),Map.class);
+        Map<String,Object> body;
+        try {
+            body=json.readValue(res.body(),Map.class);
+        } catch (RuntimeException failure) {
+            throw new IllegalStateException("HOMEWORK_AI_RESPONSE_INVALID",failure);
+        }
+        if(body==null)throw new IllegalStateException("HOMEWORK_AI_RESPONSE_INVALID");
         if(!"completed".equals(body.get("status")))throw new IllegalStateException("HOMEWORK_AI_INCOMPLETE");
-        return WorkbookContentService.outputText(body);
+        try {
+            String text=WorkbookContentService.outputText(body);
+            if(text.isBlank())throw new IllegalStateException("HOMEWORK_AI_EMPTY_RESPONSE");
+            return text;
+        } catch (IllegalStateException failure) {
+            String code=PostLessonHomeworkFailure.code(failure);
+            if("AI_REFUSED".equals(code))throw new IllegalStateException("HOMEWORK_AI_REFUSED",failure);
+            if("AI_EMPTY_RESPONSE".equals(code))throw new IllegalStateException("HOMEWORK_AI_EMPTY_RESPONSE",failure);
+            throw failure;
+        }
     }
 
     /**
@@ -120,6 +144,12 @@ public class PostLessonHomeworkContentService {
     @SuppressWarnings("unchecked")
     public OwnerWorkbookPdfRenderService.StudioRender make(
             Map<String,Object> evidence,int day,int totalDays,String studentName)throws Exception {
+        return make(evidence,day,totalDays,studentName,stage->{});
+    }
+
+    OwnerWorkbookPdfRenderService.StudioRender make(
+            Map<String,Object> evidence,int day,int totalDays,String studentName,
+            Consumer<PostLessonHomeworkStage> progress)throws Exception {
         // The model authors CONTENT ONLY; the server controls all MCH3 structures.
         // This is the same deterministic authoring contract used when a teacher
         // prepares a workbook through the school connector.
@@ -191,9 +221,16 @@ public class PostLessonHomeworkContentService {
                     "day",day,"totalDays",totalDays,
                     "reason",feedback,
                     "instruction","Correct mathematical CONTENT only. The server owns all layout."));
-            @SuppressWarnings("unchecked")
-            Map<String,Object> content=json.readValue(ask(instructions,attemptEvidence,
-                    "mindcrafti_homework_content",schema),Map.class);
+            progress.accept(PostLessonHomeworkStage.AI_CONTENT);
+            String contentJson=ask(instructions,attemptEvidence,"mindcrafti_homework_content",schema);
+            progress.accept(PostLessonHomeworkStage.CONTENT_VALIDATION);
+            Map<String,Object> content;
+            try {
+                content=json.readValue(contentJson,Map.class);
+            } catch (RuntimeException failure) {
+                throw new IllegalStateException("HOMEWORK_AI_RESPONSE_INVALID",failure);
+            }
+            if(content==null)throw new IllegalStateException("HOMEWORK_AI_RESPONSE_INVALID");
             String checked;
             try{
                 checked=PostLessonHomeworkMch3Template.fromContent(json,content,day,totalDays,studentName);
@@ -205,6 +242,7 @@ public class PostLessonHomeworkContentService {
                     throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
                 continue;
             }
+            progress.accept(PostLessonHomeworkStage.PDF_RENDER);
             try{
                 OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(checked);
                 if(pdf.studentPages()!=1||pdf.teacherPages()<1
