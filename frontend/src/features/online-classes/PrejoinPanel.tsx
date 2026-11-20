@@ -60,9 +60,19 @@ export function PrejoinPanel({
     try {
       const audio: boolean | MediaTrackConstraints = preferredMicrophoneId
         ? { deviceId: { ideal: preferredMicrophoneId } } : true;
-      const stream = await media.getUserMedia(
-        mode === 'audio' ? { video: false, audio } : { video: true, audio },
-      );
+      let stream: MediaStream;
+      try {
+        stream = await media.getUserMedia(
+          mode === 'audio' ? { video: false, audio } : { video: true, audio },
+        );
+      } catch (firstFailure) {
+        if (mode !== 'all') throw firstFailure;
+        // Some browsers reject the combined request when the CAMERA is
+        // unavailable or denied, even though the MICROPHONE is usable.
+        // Preserve classroom audio automatically instead of joining silently
+        // with both devices disabled.
+        stream = await media.getUserMedia({ video: false, audio });
+      }
       if (attempt !== attemptRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;

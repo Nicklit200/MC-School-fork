@@ -35,7 +35,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm test -- src/features/online-classes/audioFocus.test.ts src/features/online-classes/useClassAudioFocus.test.tsx src/features/online-classes/OnlineClassRoom.test.tsx
+      - run: npm test -- src/features/online-classes/audioFocus.test.ts src/features/online-classes/useClassAudioFocus.test.tsx src/features/online-classes/OnlineClassRoom.test.tsx src/features/online-classes/PrejoinPanel.test.tsx
       - run: npm run build
       - run: npm install --no-save @playwright/test
       - run: npx playwright install --with-deps chromium
