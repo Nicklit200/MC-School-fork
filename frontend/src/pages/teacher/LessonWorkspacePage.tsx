@@ -31,7 +31,9 @@ export function LessonWorkspacePage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const documentsDialog = useRef<HTMLDialogElement>(null);
-  const homeworkDialog = useRe  useEffect(() => {
+  const homeworkDialog = useRef<HTMLDialogElement>(null);
+  const generation = useRef(0);
+  useEffect(() => {
     if (searchParams.get('reviewHomework') !== '1') return;
     let active = true;
     void onlineClassesApi.findByEvent(eventId).then(rooms => {
@@ -39,12 +41,10 @@ export function LessonWorkspacePage() {
       const ended = rooms.filter(room => room.status === 'ENDED')
         .sort((a,b) => Date.parse(b.actualEndAt || b.scheduledEndAt) - Date.parse(a.actualEndAt || a.scheduledEndAt))[0];
       if (ended) navigate('/teacher/post-homework-review/' + encodeURIComponent(ended.id), { replace: true });
-    }).catch(() => { /* existing lesson status stays available if lookup fails */ });
+    }).catch(() => { /* lesson stays visible if lookup fails */ });
     return () => { active = false; };
   }, [eventId, navigate, searchParams]);
 
-f<HTMLDialogElement>(null);
-  const generation = useRef(0);
   useEffect(() => {
     let active = true;
     setPreviousTrialInvite(false);
