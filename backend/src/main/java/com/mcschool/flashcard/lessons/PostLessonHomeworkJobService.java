@@ -225,6 +225,8 @@ public class PostLessonHomeworkJobService {
             int changed=db.update("UPDATE post_lesson_homework_jobs SET selection_json=?,updated_at=now() WHERE id=? AND selection_json IS NULL AND state='RUNNING' AND worker_id=?",saved,job.id(),workerId);
             if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
         } else selection=json.readValue(job.selection(),Map.class);
+        // Older jobs may contain invalid AI exclusions. Verify them again on every retry.
+        selection=PostLessonHomeworkRecipientGuard.verify(roster,job.instructions(),selection);
         Set<UUID> excluded=new HashSet<>();
         for(Object raw:(List<?>)selection.get("excluded")){
             Map<?,?> data=(Map<?,?>)raw;excluded.add(UUID.fromString(String.valueOf(data.get("studentId"))));

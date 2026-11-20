@@ -138,7 +138,7 @@ public class PostLessonHomeworkContentService {
         for(Object item:(List<?>)out.get("personalNotes"))
             if(!allowed.contains(String.valueOf(((Map<?,?>)item).get("studentId"))))
                 throw new IllegalArgumentException("HOMEWORK_RECIPIENT_UNKNOWN");
-        return out;
+        return PostLessonHomeworkRecipientGuard.verify(roster,notes,out);
     }
 
     @SuppressWarnings("unchecked")
