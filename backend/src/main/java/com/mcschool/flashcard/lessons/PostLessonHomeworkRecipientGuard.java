@@ -17,16 +17,21 @@ final class PostLessonHomeworkRecipientGuard {
     private static final Pattern DIRECT_SKIP = Pattern.compile(
             "(?iu)(?:"
             + "не\\s+(?:задавай(?:те)?|задавать|выдавай(?:те)?|выдавать|"
-            + "назначай(?:те)?|назначать|давай(?:те)?|давать)"
-            + "|не\\s+(?:нужно|надо|следует)\\s+(?:задавать|выдавать|назначать|давать)"
+            + "назначай(?:те)?|назначать|давай(?:те)?|давать)\\s+"
+            + "(?:(?:ей|ему|им)\\s+)?(?:домашк[\\p{L}]*|домашн[\\p{L}]*\\s+задан[\\p{L}]*|дз|ничего)"
+            + "|не\\s+(?:нужно|надо|следует)\\s+(?:задавать|выдавать|назначать|давать)\\s+"
+            + "(?:домашк[\\p{L}]*|домашн[\\p{L}]*\\s+задан[\\p{L}]*|дз|ничего)"
+            + "|(?:домашк[\\p{L}]*|домашн[\\p{L}]*\\s+задан[\\p{L}]*|дз)\\s+"
+            + "не\\s+(?:задавать|задавай(?:те)?|давать|давай(?:те)?|нужн[\\p{L}]*)"
             + "|(?:без|никакой|никаких|нет)\\s+(?:домашк[\\p{L}]*|домашн[\\p{L}]*\\s+задан[\\p{L}]*|дз)"
-            + "|(?:домашк[\\p{L}]*|домашн[\\p{L}]*\\s+задан[\\p{L}]*|дз)\\s+не\\s+нужн[\\p{L}]*"
             + "|(?:keine?|ohne)\\s+hausaufgaben"
             + "|hausaufgaben\\s+nicht\\s+(?:geben|aufgeben|erteilen|zuweisen)"
-            + "|nicht\\s+(?:aufgeben|zuweisen)\\s+(?:von\\s+)?hausaufgaben"
             + "|(?:do\\s+not|don't)\\s+(?:assign|give|set)\\s+(?:any\\s+)?(?:homework|assignments)"
             + "|no\\s+homework"
             + ")");
+    private static final Pattern BARE_SKIP = Pattern.compile(
+            "(?iu)\\bне\\s+(?:задавай(?:те)?|задавать|выдавай(?:те)?|выдавать|"
+            + "назначай(?:те)?|назначать|давай(?:те)?|давать)\\s*[.!?,;]?\\s*$");
 
     private PostLessonHomeworkRecipientGuard() {}
 
@@ -42,7 +47,7 @@ final class PostLessonHomeworkRecipientGuard {
             String studentId = Objects.toString(item.get("studentId"), "");
             String quote = Objects.toString(item.get("quote"), "");
             if (quote.isBlank() || !instructions.contains(quote)
-                    || !DIRECT_SKIP.matcher(quote).find()) continue;
+                    || !explicitExclusion(quote, instructions)) continue;
 
             Map<String,Object> intended = roster.stream()
                     .filter(pupil -> studentId.equals(Objects.toString(pupil.get("id"), "")))
@@ -65,6 +70,23 @@ final class PostLessonHomeworkRecipientGuard {
         Map<String,Object> safe = new LinkedHashMap<>(proposed);
         safe.put("excluded", accepted);
         return safe;
+    }
+
+    private static boolean explicitExclusion(String quote, String instructions) {
+        if (DIRECT_SKIP.matcher(quote).find()) return true;
+        if (!BARE_SKIP.matcher(quote).find()) return false;
+        // Bare "don't assign" is valid only when the source clause ends there.
+        // The partial quote "не задавай" from "не задавай сложные задачи" is NOT an exclusion.
+        int index = instructions.indexOf(quote);
+        while (index >= 0) {
+            int after = index + quote.length();
+            while (after < instructions.length() && Character.isWhitespace(instructions.charAt(after)))
+                after++;
+            if (after == instructions.length() || ",.!?;".indexOf(instructions.charAt(after)) >= 0)
+                return true;
+            index = instructions.indexOf(quote, index + 1);
+        }
+        return false;
     }
 
     private static String nameStem(String name) {
