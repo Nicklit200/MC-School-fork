@@ -39,7 +39,7 @@ public final class KolinVisualSchema {
             Для expression/equation visual=null. Не передавай SVG, HTML, URL, код или готовый ответ.
             visual.language=ru или de по языку запроса. Сервер сам составляет точное условие из параметров и вычисляет ответ.
             Graph: objective=value (найти f(at)), zeros (нули в показанном диапазоне), intersections (две функции), draw (построить по формуле на пустой сетке), aboveBelow (показать график и интервалы выше/ниже линии y=level).
-            Для aboveBelow ВСЕГДА передай поле level, например 0 для оси x, 2 для y=2. В ответе будут оба строгих неравенства f(x)>level, f(x)<level и точки равенства f(x)=level.
+            Для aboveBelow ВСЕГДА передай поле level, например level=0 для оси x, level=2 для y=2. В ответе будут оба строгих неравенства f(x)>level, f(x)<level и точки равенства f(x)=level.
             aboveBelow поддерживает только ОДНУ continuous-функцию constant, linear, quadratic или polynomial, без полюсов и разрывов. level обязан лежать внутри yRange. Подбирай границы xRange так, чтобы разбор интервалов был понятным.
             Для одной пары графиков и линии y=c это одно PDF-задание kind=visual, не kind=equation или kind=expression.
             series: constant parameters=[c]; linear=[m,b]; quadratic=[a,b,c]; polynomial=[c0,c1,...] до степени четыре;
