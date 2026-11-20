@@ -24,7 +24,8 @@ class KolinVisualTaskTest {
         Map<?,?> contract=(Map<?,?>)comparisons.get(0);
         Map<?,?> properties=(Map<?,?>)contract.get("properties");
         assertThat(((Map<?,?>)properties.get("objective")).get("enum")).isEqualTo(List.of("aboveBelow"));
-        assertThat((List<?>)contract.get("required")).contains("level","xRange","yRange","series");
+        assertThat(((List<?>)contract.get("required")).stream().map(String::valueOf).toList())
+                .contains("level","xRange","yRange","series");
         assertThat(KolinVisualSchema.INSTRUCTIONS).contains("aboveBelow","f(x)>level","level=0");
     }
     @Test void figuresStayPrivateAndEachTaskIsBoundToOneComputedReference() throws Exception {
