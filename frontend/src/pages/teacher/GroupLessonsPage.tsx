@@ -8,6 +8,7 @@ import { api } from '../../api/client';
 import { ApiRequestError } from '../../api/client';
 import { driveApi, type DriveItem } from '../../api/drive';
 import { lessonPreparationApi } from '../../api/lessonPreparation';
+import { aiPilotApi, type OwnerWorkbookStatus } from '../../api/aiPilot';
 import type { DailyReviewHistoryItem, GoogleCalendarConnection, GroupLesson, Homework, StudentGroup, StudentListItem, User } from '../../api/types';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
@@ -33,11 +34,15 @@ type ScheduleDay = { key: string; date: Date; lessons: GroupLesson[] };
 const STARTED_LESSON_KEY = 'mindcrafti.startedGroupLesson';
 const STARTED_LESSON_AT_KEY = 'mindcrafti.startedGroupLessonOpenedAt';
 const SONIOX_NOTIFICATION_PREFIX = 'mindcrafti.sonioxStopNotification.';
+const OWNER_WORKBOOK_TEACHER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
 
 export function GroupLessonsPage() {
   const { language, t } = useI18n();
   const [calendarView, setCalendarView] = useState<'week' | 'month'>(() => localStorage.getItem('mindcrafti.calendarView') === 'month' ? 'month' : 'week');
   const [readiness, setReadiness] = useState<Record<string, boolean>>({});
+  const [ownerWorkbookStatus, setOwnerWorkbookStatus] = useState<OwnerWorkbookStatus | null>(null);
+  const [ownerWorkbookError, setOwnerWorkbookError] = useState<string | null>(null);
+  const [ownerWorkbookBusyId, setOwnerWorkbookBusyId] = useState<string | null>(null);
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
   const [teacher, setTeacher] = useState<User | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
@@ -266,6 +271,63 @@ export function GroupLessonsPage() {
     });
     return () => { cancelled = true; };
   }, [visibleLessonsKey]);
+  // Show the real server job state inside the expanded calendar lesson card.
+  // Only the pilot owner may use this endpoint; other teachers never call it.
+  useEffect(() => {
+    setOwnerWorkbookStatus(null);
+    setOwnerWorkbookError(null);
+    if (teacher?.id !== OWNER_WORKBOOK_TEACHER_ID || !expandedLessonId) return;
+    const eventId = expandedLessonId;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const status = await aiPilotApi.workbookStatus(eventId);
+        if (cancelled) return;
+        setOwnerWorkbookStatus(status);
+        if (status.state === 'SUCCEEDED' || status.state === 'ALREADY_ATTACHED') {
+          try {
+            const prep = await lessonPreparationApi.get(eventId);
+            if (!cancelled && prep.hasWorkbook && prep.hasAnswers) {
+              setReadiness(current => ({ ...current, [eventId]: true }));
+            }
+          } catch { /* The server job state stays visible if document refresh fails. */ }
+        }
+      } catch (failure) {
+        if (!cancelled) setOwnerWorkbookError(toErrorMessage(failure, t));
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 8000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [expandedLessonId, teacher?.id, t]);
+
+  async function createOwnerWorkbook(lesson: GroupLesson) {
+    if (teacher?.id !== OWNER_WORKBOOK_TEACHER_ID || ownerWorkbookBusyId) return;
+    setOwnerWorkbookBusyId(lesson.eventId);
+    setOwnerWorkbookError(null);
+    try {
+      const status = await aiPilotApi.generateWorkbook(lesson.eventId);
+      setOwnerWorkbookStatus(status);
+      if (status.state === 'NOT_ELIGIBLE') {
+        setOwnerWorkbookError(language === 'DE'
+          ? 'Bitte prüfen Sie die Zuordnung und den heutigen Stundenbeginn.'
+          : 'Проверьте привязку ученика и время сегодняшнего урока.');
+      }
+      if (status.state === 'ALREADY_ATTACHED' || status.state === 'SUCCEEDED') {
+        try {
+          const prep = await lessonPreparationApi.get(lesson.eventId);
+          if (prep.hasWorkbook && prep.hasAnswers) {
+            setReadiness(current => ({ ...current, [lesson.eventId]: true }));
+          }
+        } catch { /* The attached documents remain accessible from the lesson. */ }
+      }
+    } catch (failure) {
+      setOwnerWorkbookError(toErrorMessage(failure, t));
+    } finally {
+      setOwnerWorkbookBusyId(null);
+    }
+  }
+
   const selectedDate = dateFromKey(selectedDayKey);
   const todayKey = berlinDateKey(new Date().toISOString());
   function selectDate(key: string) {
@@ -410,6 +472,14 @@ export function GroupLessonsPage() {
     const linkedGroup = Boolean(lesson.groupId && lesson.groupName);
     const selectedTarget = lesson.groupId ? `group:${lesson.groupId}` : lesson.studentId ? `student:${lesson.studentId}` : '';
     const expanded = expandedLessonId === lesson.eventId;
+    const workbookJob = ownerWorkbookStatus?.eventId === lesson.eventId ? ownerWorkbookStatus : null;
+    const workbookInProgress = workbookJob?.state === 'QUEUED' || workbookJob?.state === 'RUNNING';
+    const workbookReady = readiness[lesson.eventId] === true
+      || workbookJob?.state === 'SUCCEEDED' || workbookJob?.state === 'ALREADY_ATTACHED';
+    const workbookEligibleToday = berlinDateKey(lesson.startsAt) === todayKey
+      && Date.parse(lesson.startsAt) > Date.now();
+    const workbookCanStart = Boolean(workbookJob?.enabled && selectedTarget && workbookEligibleToday
+      && !workbookInProgress && !workbookReady && ownerWorkbookBusyId === null);
     const finished = finishedLessonId === lesson.eventId;
     const isShareableTrial = !lesson.groupId
       && (!lesson.studentId || invitedTrialIds.includes(lesson.eventId))
@@ -452,6 +522,54 @@ export function GroupLessonsPage() {
             {students.length > 0 && <optgroup label={language === 'DE' ? 'Schüler' : 'Ученики'}>{students.map((student) => <option key={student.id} value={`student:${student.id}`}>{student.fullName}</option>)}</optgroup>}
           </select>
         </label>
+          {teacher?.id === OWNER_WORKBOOK_TEACHER_ID && (
+            <div style={{ marginTop: 14, marginBottom: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+              <button className="btn" type="button"
+                style={{ backgroundColor: '#ff6a00', borderColor: '#ff6a00', color: '#fff', fontWeight: 800, minHeight: 44, paddingInline: 22 }}
+                disabled={!workbookCanStart}
+                onClick={() => void createOwnerWorkbook(lesson)}>
+                {ownerWorkbookBusyId === lesson.eventId
+                  ? (language === 'DE' ? 'Wird gestartet…' : 'Запускаем…')
+                  : workbookInProgress
+                    ? (language === 'DE' ? 'Arbeitsheft wird erstellt…' : 'Создаём тетрадь…')
+                    : workbookReady
+                      ? (language === 'DE' ? 'Arbeitsheft fertig' : 'Тетрадь готова')
+                      : workbookJob?.state === 'FAILED'
+                        ? (language === 'DE' ? 'Erneut erstellen' : 'Повторить создание')
+                        : (language === 'DE' ? 'Arbeitsheft erstellen' : 'Создать тетрадь')}
+              </button>
+              {workbookReady ? (
+                <Link to={`/lesson-workbook-preview/${OWNER_WORKBOOK_TEACHER_ID}/${encodeURIComponent(lesson.eventId)}`}>
+                  {language === 'DE' ? 'Arbeitsheft und Lösungen öffnen' : 'Открыть тетрадь и ответы'}
+                </Link>
+              ) : workbookInProgress ? (
+                <span className="muted" role="status">
+                  {language === 'DE' ? 'Der Server erstellt die PDFs. Die Anzeige aktualisiert sich automatisch.' : 'Сервер готовит PDF и ответы. Статус обновляется автоматически.'}
+                </span>
+              ) : !selectedTarget ? (
+                <span className="muted" role="status">
+                  {language === 'DE' ? 'Bitte zuerst einen Schüler oder eine Gruppe zuordnen.' : 'Сначала привяжите ученика или группу выше.'}
+                </span>
+              ) : !workbookEligibleToday ? (
+                <span className="muted">
+                  {language === 'DE' ? 'Manuelle Erstellung ist nur vor dem heutigen Unterricht verfügbar.' : 'Создание доступно только до начала сегодняшнего урока.'}
+                </span>
+              ) : workbookJob?.state === 'FAILED' ? (
+                <span className="muted" role="status">
+                  {language === 'DE' ? 'Die Erstellung ist fehlgeschlagen. Sie können sie erneut starten.' : 'Генерация завершилась ошибкой. Нажмите «Повторить создание».'}
+                </span>
+              ) : workbookJob && !workbookJob.enabled ? (
+                <span className="muted" role="status">
+                  {language === 'DE' ? 'Der Generator ist auf dem Server deaktiviert.' : 'Серверный генератор отключён.'}
+                </span>
+              ) : !workbookJob && !ownerWorkbookError ? (
+                <span className="muted" role="status">
+                  {language === 'DE' ? 'Generatorstatus wird geprüft…' : 'Проверяем готовность генератора…'}
+                </span>
+              ) : null}
+              {ownerWorkbookError && <div className="banner banner--error" role="alert" style={{ width: '100%' }}>{ownerWorkbookError}</div>}
+            </div>
+          )}
           <div className="lesson-agenda-card__links">
             {lesson.meetUrl && <button className="btn" type="button" data-mindcrafti-lesson-id={lesson.eventId} data-mindcrafti-group-id={lesson.groupId ?? ''} data-mindcrafti-student-id={lesson.studentId ?? ''} onClick={() => void requestStartLesson(lesson)}>{language === 'DE' ? 'Unterricht starten' : 'Начать урок'}</button>}
             {lesson.calendarUrl && <a className="btn btn--ghost" href={lesson.calendarUrl} target="_blank" rel="noreferrer">Google Calendar</a>}

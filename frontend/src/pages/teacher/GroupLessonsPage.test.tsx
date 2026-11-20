@@ -8,6 +8,7 @@ import { I18nProvider } from '../../i18n/I18nContext';
 import { GroupLessonsPage } from './GroupLessonsPage';
 import { trialInvitationsApi } from '../../api/trialInvitations';
 import { lessonPreparationApi } from '../../api/lessonPreparation';
+import { aiPilotApi } from '../../api/aiPilot';
 import { lessonDayInstant, schoolDateKey } from '../../lib/lessonSchedule';
 
 vi.mock('../../api/client', async (importOriginal) => {
@@ -24,6 +25,7 @@ vi.mock('../../api/client', async (importOriginal) => {
 
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn().mockResolvedValue({hasWorkbook:false,hasAnswers:false}),personalWorkbooks:vi.fn().mockResolvedValue({enabled:true,students:[]})}}));
 vi.mock('../../api/trialInvitations',()=>({trialInvitationsApi:{listMine:vi.fn(),issue:vi.fn()}}));
+vi.mock('../../api/aiPilot', () => ({ aiPilotApi: { workbookStatus: vi.fn(), generateWorkbook: vi.fn() } }));
 
 const lessonApi = vi.mocked(api.lessons);
 const trialNameLabel = 'Имя ученика';
@@ -58,6 +60,8 @@ describe('native lesson schedule', () => {
     localStorage.clear();
     localStorage.setItem('language', 'RU');
     vi.mocked(trialInvitationsApi.listMine).mockResolvedValue([]);
+    vi.mocked(aiPilotApi.workbookStatus).mockResolvedValue({enabled:true,eventId:'local-lesson',state:'NOT_STARTED'});
+    vi.mocked(aiPilotApi.generateWorkbook).mockResolvedValue({enabled:true,eventId:'local-lesson',state:'QUEUED'});
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({hasWorkbook:false,hasAnswers:false} as never);
     vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({enabled:true,students:[]});
     vi.mocked(api.auth.me).mockResolvedValue({ id: 'teacher', fullName: 'Teacher' } as User);
@@ -72,6 +76,46 @@ describe('native lesson schedule', () => {
     lessonApi.create.mockResolvedValue(lesson());
     lessonApi.createSeries.mockResolvedValue([lesson()]);
     lessonApi.deleteLesson.mockResolvedValue(undefined);
+  });
+
+  it('starts the real owner workbook job from the orange button on a linked Sonja lesson', async () => {
+    const start = lessonDayInstant(schoolDateKey(new Date()), 23);
+    lessonApi.groupLessons.mockResolvedValue([{
+      ...lesson('Stunden (Sonja Chukhman)'), studentId: 'sonja-id', studentName: 'Соня',
+      startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 3600_000).toISOString(),
+    }]);
+    vi.mocked(api.auth.me).mockResolvedValue({
+      id: '14e3c7c1-1fc8-41bd-858a-6c20efdd957a', fullName: 'Nick', role: 'TEACHER',
+    } as User);
+    vi.mocked(api.students.list).mockResolvedValue([{ id: 'sonja-id', fullName: 'Соня' } as StudentListItem]);
+    renderPage();
+    await screen.findByText('Stunden (Sonja Chukhman)');
+    await userEvent.click(screen.getByRole('button', { name: /Настройки урока/ }));
+    const create = await screen.findByRole('button', { name: 'Создать тетрадь' });
+    await waitFor(() => expect(create).toBeEnabled());
+    expect(create).toHaveStyle({ backgroundColor: '#ff6a00' });
+    await userEvent.click(create);
+    await waitFor(() => expect(aiPilotApi.generateWorkbook).toHaveBeenCalledOnce());
+    expect(aiPilotApi.generateWorkbook).toHaveBeenCalledWith('local-lesson');
+    expect(await screen.findByText('Сервер готовит PDF и ответы. Статус обновляется автоматически.')).toBeInTheDocument();
+  });
+
+  it('does not start owner workbook generation without a bound student or group', async () => {
+    const start = lessonDayInstant(schoolDateKey(new Date()), 23);
+    lessonApi.groupLessons.mockResolvedValue([{
+      ...lesson('Stunden (Sonja Chukhman)'),
+      startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 3600_000).toISOString(),
+    }]);
+    vi.mocked(api.auth.me).mockResolvedValue({
+      id: '14e3c7c1-1fc8-41bd-858a-6c20efdd957a', fullName: 'Nick', role: 'TEACHER',
+    } as User);
+    renderPage();
+    await screen.findByText('Stunden (Sonja Chukhman)');
+    await userEvent.click(screen.getByRole('button', { name: /Настройки урока/ }));
+    const create = await screen.findByRole('button', { name: 'Создать тетрадь' });
+    expect(create).toBeDisabled();
+    expect(screen.getByText('Сначала привяжите ученика или группу выше.')).toBeInTheDocument();
+    expect(aiPilotApi.generateWorkbook).not.toHaveBeenCalled();
   });
 
   it('marks a personal-only individual lesson ready when both PDFs belong to that student', async () => {
