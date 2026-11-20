@@ -46,6 +46,21 @@ public class StudentLessonHistoryService {
 
     @Transactional(readOnly = true)
     public List<StudentLessonHistoryItem> list(AuthenticatedUser caller, UUID studentId) {
+        return listInternal(caller,studentId,false);
+    }
+
+    /**
+     * The private teacher assistant needs the student's full historical
+     * sequence, including lessons with the CURRENT assigned teacher.
+     * The existing transfer-history endpoint intentionally hides these.
+     */
+    @Transactional(readOnly = true)
+    public List<StudentLessonHistoryItem> listForTeacherAssistant(AuthenticatedUser caller,UUID studentId) {
+        return listInternal(caller,studentId,true);
+    }
+
+    private List<StudentLessonHistoryItem> listInternal(AuthenticatedUser caller,UUID studentId,
+                                                        boolean includeOwnLessons) {
         requireAssignedStudent(caller, studentId);
         Map<UUID, Instant> groupMembershipCreatedAt = groupMemberships(studentId);
         List<LessonHistoryEntry> candidates = new ArrayList<>();
@@ -59,7 +74,8 @@ public class StudentLessonHistoryService {
         Map<String, LessonHistoryEntry> unique = new LinkedHashMap<>();
         for (LessonHistoryEntry entry : candidates) {
             UUID ownerId = entry.getTeacher().getId();
-            if (ownerId.equals(caller.id()) || !belongsToStudent(entry, studentId, groupMembershipCreatedAt)) {
+            if ((!includeOwnLessons && ownerId.equals(caller.id()))
+                    || !belongsToStudent(entry, studentId, groupMembershipCreatedAt)) {
                 continue;
             }
             unique.putIfAbsent(ownerId + ":" + entry.getEventId(), entry);

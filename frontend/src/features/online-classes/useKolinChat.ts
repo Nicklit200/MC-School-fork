@@ -65,6 +65,7 @@ export function useKolinChat(classId: string, teacherId: string, enabled: boolea
   const statusFlight = useRef<object | null>(null);
   const responseFlight = useRef<object | null>(null);
   const appendFlights = useRef(new Map<string, object>());
+  const rememberedFlight = useRef<object | null>(null);
   const change = useCallback((update: (current: Session) => Session) => {
     if (latest.current !== token) return;
     setStored(current => update(current.token === token ? current : initial(token)));
@@ -84,12 +85,34 @@ export function useKolinChat(classId: string, teacherId: string, enabled: boolea
     }
   }, [classId, enabled, token, change]);
 
+  const loadMemory = useCallback(async () => {
+    if (!enabled || rememberedFlight.current === token) return;
+    rememberedFlight.current = token;
+    try {
+      const rows = await kolinApi.recentMemory(classId);
+      if (!Array.isArray(rows)) return;
+      const restored: KolinMessage[] = [];
+      rows.slice(-8).forEach((row, i) => {
+        if (!row || typeof row.question !== 'string' || typeof row.answer !== 'string'
+          || row.question.length > 4000 || row.answer.length > 10000) return;
+        restored.push({ id: `memory-user-${i}`, role: 'user', type: 'text', status: 'complete', text: row.question });
+        restored.push({ id: `memory-answer-${i}`, role: 'assistant', type: 'text', status: 'complete', text: row.answer });
+      });
+      change(current => current.messages.length ? current : { ...current, messages: restored });
+    } catch {
+      // Existing chat remains usable even if memory is temporarily offline.
+    }
+  }, [classId, enabled, token, change]);
+
   const toggle = useCallback(() => {
     if (!enabled) return;
     const current = state.current;
     change(value => ({ ...value, open: !current.open }));
-    if (!current.open && (current.availability === 'idle' || current.availability === 'error')) void checkAvailability();
-  }, [enabled, change, checkAvailability]);
+    if (!current.open) {
+      if (current.availability === 'idle' || current.availability === 'error') void checkAvailability();
+      void loadMemory();
+    }
+  }, [enabled, change, checkAvailability, loadMemory]);
   const close = useCallback(() => change(current => ({ ...current, open: false })), [change]);
   const setDraft = useCallback((draft: string) => change(current => ({ ...current, draft })), [change]);
 

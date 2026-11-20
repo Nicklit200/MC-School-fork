@@ -183,4 +183,32 @@ class KolinBoardReviewServiceTest {
                 .isInstanceOf(KolinRequestException.class);
     }
 
+
+    @Test void RussianInstrumentalCaseDoesNotSelectTheWrongPupil() {
+        assertThat(KolinBoardReviewService.nameMatches("vitalina",
+            KolinBoardReviewService.normalize("Виталиной"))).isTrue();
+        assertThat(KolinBoardReviewService.nameMatches("melissa",
+            KolinBoardReviewService.normalize("Мелиссой"))).isTrue();
+    }
+
+    @Test void resumesReviewAcrossTheWholePupilWorkbookRatherThanOnlyOpenedPage() {
+        for(String question:List.of(
+            "Проверь у Мелиссы всё после прошлой проверки",
+            "Проверь что Мелисса сделала с прошлого раза",
+            "Проверь у Мелиссы с момента проверки",
+            "Check Melissa's work since last review")) {
+            var result=service.resolve(room,question,new KolinChatService.Context("student",sofia.getId(),3));
+            assertThat(result.state()).as(question).isEqualTo("ready");
+            assertThat(result.studentId()).as(question).isEqualTo(melissa.getId());
+            assertThat(result.scope()).as(question).isEqualTo("workbook");
+            assertThat(KolinBoardReviewService.incrementalReview(question)).isTrue();
+        }
+    }
+
+    @Test void ordinaryReviewDoesNotClaimToKnowThePreviousCheckpoint() {
+        assertThat(KolinBoardReviewService.incrementalReview("Проверь задание Мелиссы")).isFalse();
+        assertThat(KolinBoardReviewService.incrementalReview("После прошлой проверки что было?")).isFalse();
+    }
+
+
 }

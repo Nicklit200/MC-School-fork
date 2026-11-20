@@ -8,7 +8,7 @@ import { KolinPanel } from './KolinPanel';
 import { useKolinChat } from './useKolinChat';
 
 vi.mock('../../api/kolin', async importOriginal => ({ ...await importOriginal<typeof import('../../api/kolin')>(),
-  kolinApi: { status: vi.fn(), send: vi.fn(), worksheetPreview: vi.fn(), worksheetPdf: vi.fn(), appendWorksheet: vi.fn() } }));
+  kolinApi: { status: vi.fn(), recentMemory: vi.fn(), send: vi.fn(), worksheetPreview: vi.fn(), worksheetPdf: vi.fn(), appendWorksheet: vi.fn() } }));
 const transcriptContext: KolinTranscriptContext = { state: 'included', segmentCount: 12, truncated: true,
   latestSegmentAt: '2026-11-07T15:45:00Z', fromMs: 120000, toMs: 525000, transcriptionActive: false };
 function Harness({ currentWorkbookPage }: { currentWorkbookPage?: number } = {}) {
@@ -21,6 +21,7 @@ function Harness({ currentWorkbookPage }: { currentWorkbookPage?: number } = {})
 beforeEach(() => {
   localStorage.setItem('language', 'RU');
   vi.mocked(kolinApi.status).mockReset().mockResolvedValue({ configured: true });
+  vi.mocked(kolinApi.recentMemory).mockReset().mockResolvedValue([]);
   vi.mocked(kolinApi.send).mockReset().mockResolvedValue({ type: 'text', text: '1) 1/2 + 1/4\n2) 2/3 + 1/6' });
 });
 
