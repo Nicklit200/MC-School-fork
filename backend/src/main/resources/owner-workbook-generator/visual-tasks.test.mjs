@@ -25,6 +25,51 @@ test('zeros, intersections and construction keep solutions out of pupil diagrams
   assert.equal(draw.blocks[2].type,'coordinateGrid');assert.equal(draw.blocks[2].series,undefined);
   assert.match(draw.blocks[1].text,/x\^2 - 4/);
 });
+test('bounded graph inequalities distinguish above, below and equality with verified intervals',()=>{
+  const parabola=compileVisual(graph('quadratic',[1,0,-4],'aboveBelow',{level:0}));
+  assert.equal(parabola.answer,'f(x) > 0: [-5; -2) ∪ (2; 5]; f(x) < 0: (-2; 2); f(x) = 0: -2; 2');
+  assert.equal(parabola.blocks[1].series.length,2);
+  assert.equal(parabola.blocks[1].series[1].value,0);
+  assert.equal(parabola.blocks[1].points,undefined);
+  assert.deepEqual(parabola.teacherDiagram.points.map(p=>p.x),[-2,2]);
+  assert.equal(parabola.teacherDiagram.label,'MUSTERLÖSUNG – GRAPH');
+  const offset=compileVisual(graph('quadratic',[1,0,-4],'aboveBelow',{level:5}));
+  assert.equal(offset.answer,'f(x) > 5: [-5; -3) ∪ (3; 5]; f(x) < 5: (-3; 3); f(x) = 5: -3; 3');
+  assert.match(offset.blocks[0].text,/y = 5/);
+  const linear=compileVisual(graph('linear',[2,1],'aboveBelow',{level:3,language:'de'}));
+  assert.equal(linear.answer,'f(x) > 3: (1; 5]; f(x) < 3: [-5; 1); f(x) = 3: 1');
+  assert.match(linear.blocks[0].text,/oberhalb, unterhalb/);
+});
+test('tangencies, no crossings, boundary roots and identical horizontal lines are classified safely',()=>{
+  const tangent=compileVisual(graph('quadratic',[1,0,0],'aboveBelow',{level:0}));
+  assert.equal(tangent.answer,'f(x) > 0: [-5; 0) ∪ (0; 5]; f(x) < 0: ∅; f(x) = 0: 0');
+  const always=compileVisual(graph('quadratic',[1,0,1],'aboveBelow',{level:0}));
+  assert.equal(always.answer,'f(x) > 0: [-5; 5]; f(x) < 0: ∅; f(x) = 0: ∅');
+  const below=compileVisual(graph('quadratic',[-1,0,4],'aboveBelow',{level:0}));
+  assert.equal(below.answer,'f(x) > 0: (-2; 2); f(x) < 0: [-5; -2) ∪ (2; 5]; f(x) = 0: -2; 2');
+  const identical=compileVisual(graph('constant',[3],'aboveBelow',{level:3}));
+  assert.equal(identical.answer,'f(x) > 3: ∅; f(x) < 3: ∅; f(x) = 3: [-5; 5]');
+  const boundary=compileVisual(graph('linear',[1,5],'aboveBelow',{level:0}));
+  assert.equal(boundary.answer,'f(x) > 0: (-5; 5]; f(x) < 0: ∅; f(x) = 0: -5');
+});
+test('bounded inequalities refuse unsupported/discontinuous functions and hidden answers',()=>{
+  assert.throws(()=>compileVisual(graph('quadratic',[1,0,-4],'aboveBelow')),/Invalid visual number/);
+  assert.throws(()=>compileVisual(graph('quadratic',[1,0,-4],'aboveBelow',{level:20})),/Comparison level must be visible/);
+  assert.throws(()=>compileVisual(graph('rational',[1],'aboveBelow',{level:0,series:[{kind:'rational',parameters:[1],denominator:[0,1]}]})),/polynomial function/);
+  assert.throws(()=>compileVisual(graph('quadratic',[1,0,-4],'zeros',{level:0})),/Comparison level is only valid/);
+  const spec=graph('quadratic',[1,0,-4],'aboveBelow',{level:0});
+  const lesson={workbookPages:[{blocks:[{type:'taskCard',children:[{type:'visualTask',number:1,spec}]}]}],
+    teacherPages:[{blocks:[{type:'text',text:'Private answers'}]}],qa:{algebra:[{kind:'visualValue',number:1}]}};
+  const result=prepareVisualTasks(lesson);
+  assert.equal(result.results.get(1),'f(x) > 0: [-5; -2) ∪ (2; 5]; f(x) < 0: (-2; 2); f(x) = 0: -2; 2');
+  assert.ok(!JSON.stringify(lesson.workbookPages).includes('MUSTERLÖSUNG'));
+  assert.ok(!JSON.stringify(lesson.workbookPages).includes('"points"'));
+  assert.equal(lesson.teacherPages.length,2);
+  assert.equal(lesson.teacherPages[1].blocks[1].points.length,2);
+  const qa=mergeVisualQa({passed:true,checked:0,results:[]},result);
+  assert.equal(qa.checked,1);
+  assert.equal(qa.results[0].answer,result.results.get(1));
+});
 test('coordinate geometry and solids have independently known reference results',()=>{
   for(const [spec,answer] of [
     [geo('triangle','area',[],tri),'≈ 24 cm²'],[geo('triangle','perimeter',[],tri),'≈ 24 cm'],
