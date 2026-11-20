@@ -155,72 +155,93 @@ public class PostLessonHomeworkContentService {
         // prepares a workbook through the school connector.
         String instructions="""
                 Compose a daily mathematics practice exercise set for MINDCRAFTI.
-                Follow the provided mandatory school homeworkPrompt. The attached pupil
+                Follow the pedagogical rules in the mandatory school homeworkPrompt.
+                Its document, formatting and file requirements are implemented by the
+                server, so return only the content fields in the response schema.
+                The attached pupil
                 lesson_worksheet.pdf is the source of topics and examples, not evidence
                 the pupil finished anything. Use explicit teacher instructions to select
                 difficulty and subtopics. Do not invent pupil errors or achievements.
                 Produce ONLY the requested task content JSON, NOT workbookPages,
                 teacherPages, meta, QA structures, spacing, page design, HTML or PDF.
-                For every task return one mathTokens array of short display tokens,
-                e.g. ["3/4","+","1/8","=","_____"] or ["4x","+","3x","=","_____"].
-                Keep the full result BLANK in the student-facing mathTokens.
-                Return expression as arithmetic/algebra equation WITHOUT the blank,
+                Return expression as the COMPLETE unsolved mathematical problem,
                 e.g. "3/4+1/8", and answer as the exact mathematical answer, e.g. "7/8".
+                Never return mathTokens, TeX, an answer blank or any display structure.
+                The server compiles expression into its student-facing mathematical
+                display and adds all answer space. It also builds private teacher answers.
                 kind is "equivalence" for simplify/evaluate tasks, "solution" only
-                for a one-variable equation like "2*x+3=7". In the latter case
-                provide variable "x"; otherwise variable must be the empty string.
-                solutionText is a correct, German explanation only for the PRIVATE
-                teacher answers, not pupil-facing text.
+                for a LINEAR one-variable equation with exactly one solution,
+                like "2*x+3=7". Do not use quadratic equations or identities.
+                In the latter case provide the equation's variable, e.g. "x";
+                otherwise variable must be the empty string.
+                Use decimal points, parentheses, + - * / and integer powers ^ or **
+                from -12 to 12. Allowed variables are x, y, z, a, b, c, m, n.
+                Allowed functions are sqrt, sin, cos, exp, log, abs with one argument
+                in parentheses, only when justified by the lesson topic.
+                Write multiplication explicitly, e.g. "3*x". Do not use units, TeX,
+                mixed-number notation, inequalities or blank placeholders in expression.
+                Equivalence expressions must have no equals sign; solution equations
+                must have exactly one equals sign. Do not include the answer in expression.
+                Use nonzero numerical denominators. This task contract does not encode
+                domain restrictions, so do not introduce a variable denominator.
                 IMPORTANT pedagogical accuracy: distinguish Brüche (numeric fractions) from
                 Terme (algebraic expressions). Do NOT mix them into one problem just because
                 the source workbook contains both skills. Do not introduce x or an algebraic
                 numerator in a simple Bruch kürzen/Bruch vereinfachen task. Such a task must
-                display ONE ordinary numerical fraction (e.g. ["18/24","=","_____"])
+                use ONE ordinary numerical fraction (e.g. expression "18/24")
                 and the answer must be its reduced form (e.g. 3/4).
                 Do NOT label division of fractions or Bruchterme as "Bruch vereinfachen".
                 If the teacher explicitly wants advanced algebraic fractions, use an
-                accurate advanced title such as "Bruchterme dividieren" and represent
-                each complete fraction as ONE token ("(3x-2)/4", "3/8"), rather than
-                splitting numerator, slash and denominator into separate tokens.
-                The server formats these tokens as proper vertically stacked fractions.
+                accurate advanced title such as "Bruchterme dividieren" and an unambiguous
+                expression, e.g. "((3*x-2)/4)/(3/8)". The server formats division as
+                proper vertically stacked fractions.
                 Follow the source exercises and teacher's stated difficulty; never
                 escalate from a basic fraction into algebraic fractions without evidence.
                 One or two independent problems, a total of at most ten minutes.
                 Each task has a SHORT title and optional short description.
-                For earlier days provide a concise helpful hint. For the final day,
-                return hint as empty string; the entire student page, including titles,
-                instructions and descriptions, must be in German, without Russian.
+                For days 5..7 and the final day, return hint as empty string;
+                the entire student page, including titles, instructions and
+                descriptions, must be in German, without Russian.
                 For day 1..4 before the final day, a nonempty hint is mandatory.
                 Do NOT include the pupil name, dates, day numbers, or solutions in
-                the student title, subtitle, description, hint or mathTokens.
+                the student title, subtitle, description or hint.
+                Character limits: topic 88, subtitle 120, hint 240, task title 145,
+                description 200, expression 200, answer 130. Keep these fields concise.
                 The server will construct the fixed Mindcrafti layout and validate
                 every mathematical expression, answer, page and PDF.
                 """;
         Map<String,Object> taskFields=new LinkedHashMap<>();
         taskFields.put("title",Map.of("type","string"));
         taskFields.put("description",Map.of("type","string"));
-        taskFields.put("mathTokens",Map.of("type","array","items",Map.of("type","string")));
         taskFields.put("expression",Map.of("type","string"));
         taskFields.put("answer",Map.of("type","string"));
-        taskFields.put("solutionText",Map.of("type","string"));
         taskFields.put("kind",Map.of("type","string","enum",List.of("equivalence","solution")));
-        taskFields.put("variable",Map.of("type","string"));
+        taskFields.put("variable",Map.of("type","string","enum",List.of("","x","y","z","a","b","c","m","n")));
         Map<String,Object> taskSchema=Map.of("type","object","properties",taskFields,
                 "required",new ArrayList<>(taskFields.keySet()),"additionalProperties",false);
         Map<String,Object> contentFields=new LinkedHashMap<>();
         contentFields.put("topic",Map.of("type","string"));
         contentFields.put("subtitle",Map.of("type","string"));
         contentFields.put("hint",Map.of("type","string"));
-        contentFields.put("tasks",Map.of("type","array","items",taskSchema));
+        contentFields.put("tasks",Map.of("type","array","items",taskSchema,"minItems",1,"maxItems",2));
         Map<String,Object> schema=Map.of("type","object","properties",contentFields,
                 "required",new ArrayList<>(contentFields.keySet()),"additionalProperties",false);
         String feedback=null;
+        Map<String,Object> rejectedContent=null;
         for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
             Map<String,Object> attemptEvidence=new LinkedHashMap<>(evidence);
-            if(feedback!=null)attemptEvidence.put("serverRepairRequest",Map.of(
-                    "day",day,"totalDays",totalDays,
-                    "reason",feedback,
-                    "instruction","Correct mathematical CONTENT only. The server owns all layout."));
+            attemptEvidence.put("dayNumber",day);
+            attemptEvidence.put("totalDays",totalDays);
+            if(feedback!=null){
+                Map<String,Object> repair=new LinkedHashMap<>();
+                repair.put("day",day);
+                repair.put("totalDays",totalDays);
+                repair.put("reason",feedback);
+                repair.put("instruction","Correct the rejected mathematical CONTENT while preserving "
+                        +"the lesson topics. The server owns all layout. Return the complete corrected content.");
+                if(rejectedContent!=null)repair.put("rejectedContent",rejectedContent);
+                attemptEvidence.put("serverRepairRequest",repair);
+            }
             progress.accept(PostLessonHomeworkStage.AI_CONTENT);
             String contentJson=ask(instructions,attemptEvidence,"mindcrafti_homework_content",schema);
             progress.accept(PostLessonHomeworkStage.CONTENT_VALIDATION);
@@ -231,13 +252,14 @@ public class PostLessonHomeworkContentService {
                 throw new IllegalStateException("HOMEWORK_AI_RESPONSE_INVALID",failure);
             }
             if(content==null)throw new IllegalStateException("HOMEWORK_AI_RESPONSE_INVALID");
+            rejectedContent=contentJson.length()<=MAX_REJECTED_JSON_CHARS?content:null;
             String checked;
             try{
                 checked=PostLessonHomeworkMch3Template.fromContent(json,content,day,totalDays,studentName);
             }catch(IllegalArgumentException rejected){
                 feedback=repairFeedback(rejected);
-                LOG.warn("Homework MCH3 content rejected: day={} attempt={} type={}",
-                        day,attempt,rejected.getClass().getSimpleName());
+                LOG.warn("Homework MCH3 content rejected: day={} attempt={} code={}",
+                        day,attempt,rejectionCode(rejected));
                 if(attempt==MAX_DRAFT_ATTEMPTS)
                     throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
                 continue;
@@ -255,10 +277,14 @@ public class PostLessonHomeworkContentService {
                 if(reason.contains("RUNTIME_UNAVAILABLE"))
                     throw new IllegalStateException("HOMEWORK_RENDERER_UNAVAILABLE",rejected);
                 feedback=repairFeedback(rejected);
-                LOG.warn("Homework MCH3 render rejected: day={} attempt={} category={}",
-                        day,attempt,reason.startsWith("WORKBOOK_RENDER_")?reason:"RENDER_INPUT");
-                if(attempt==MAX_DRAFT_ATTEMPTS)
-                    throw new IllegalStateException("HOMEWORK_DRAFT_RENDER_FAILED",rejected);
+                LOG.warn("Homework MCH3 render rejected: day={} attempt={} code={}",
+                        day,attempt,rejectionCode(rejected));
+                if(attempt==MAX_DRAFT_ATTEMPTS) {
+                    boolean mathFailure=Set.of("WORKBOOK_RENDER_MATH_ANSWER","WORKBOOK_RENDER_MATH_DOMAIN","WORKBOOK_RENDER_MATH_LINEAR",
+                            "WORKBOOK_RENDER_MATH_SYNTAX","WORKBOOK_RENDER_MATH_QA").contains(reason);
+                    throw new IllegalStateException(mathFailure?"HOMEWORK_DRAFT_MATH_QA_FAILED"
+                            :"HOMEWORK_DRAFT_RENDER_FAILED",rejected);
+                }
             }catch(IllegalStateException rejected){
                 if(!"Workbook studio QA did not pass".equals(rejected.getMessage()))throw rejected;
                 feedback="Mathematical QA or physical one-page A4 layout failed. "
@@ -270,13 +296,37 @@ public class PostLessonHomeworkContentService {
         throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
     }
 
+    /** Only fixed server diagnostic identifiers may enter logs, never a model response. */
+    static String rejectionCode(Exception error) {
+        String reason=Objects.toString(error.getMessage(),"");
+        return reason.length()<=100 && reason.matches("(?:HOMEWORK_CONTENT|WORKBOOK_RENDER)_[A-Z_]+")
+                ?reason:"CONTENT_RULE";
+    }
+
     /** Repair guidance includes only the server-side validator reason, not private logs. */
     private static String repairFeedback(Exception error) {
         String reason=Objects.toString(error.getMessage(),"Unknown schema error");
+        reason=switch(reason) {
+            case "WORKBOOK_RENDER_MATH_ANSWER" -> "The proposed answer is mathematically incorrect. "
+                    +"Recalculate it exactly from expression; do not change the source topic.";
+            case "WORKBOOK_RENDER_MATH_DOMAIN" -> "The expression or answer has an undefined value "
+                    +"or needs domain restrictions. Use nonzero numerical denominators and a finite answer.";
+            case "WORKBOOK_RENDER_MATH_SYNTAX" -> "The expression or answer uses unsupported syntax "
+                    +"or excessive complexity. Use the documented plain arithmetic grammar.";
+            case "WORKBOOK_RENDER_MATH_LINEAR" -> "Use a one-variable linear equation with exactly one "
+                    +"solution. Do not use identities, contradictions, powers or functions of the variable.";
+            case "WORKBOOK_RENDER_MATH_QA" -> "The mathematical proof did not pass. Check the complete "
+                    +"expression and exact answer. Equations must be linear with exactly one solution.";
+            case "WORKBOOK_RENDER_MATH_DISPLAY" -> "The mathematical expression could not be displayed. "
+                    +"Use shorter expressions in the documented plain arithmetic grammar, without TeX.";
+            case "WORKBOOK_RENDER_LAYOUT_QA" -> "The content does not fit the fixed one-page homework layout. "
+                    +"Shorten titles, descriptions and hints; keep at most two short independent tasks.";
+            default -> reason;
+        };
         // Safety bound: provider-generated content is never copied into application logs.
         reason=reason.replaceAll("[\\r\\n\\t]+"," ").strip();
         if(reason.length()>350)reason=reason.substring(0,350);
-        return "Server rejected the homework JSON: "+reason+". "
+        return "Server rejected the task content: "+reason+". "
                 +"Fix all violations of the Mindcrafti homework prompt without adding student answers.";
     }
 

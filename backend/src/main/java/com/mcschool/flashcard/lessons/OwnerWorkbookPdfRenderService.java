@@ -219,7 +219,7 @@ public class OwnerWorkbookPdfRenderService {
                 process.directory(runtime.toFile());
                 process.redirectErrorStream(true);
                 process.redirectOutput(workspace.resolve("renderer.log").toFile());
-                runPlainProcess(process);
+                runStudioProcess(process, workspace.resolve("renderer.log"));
                 Path studentPath = output.resolve(basename + "_Arbeitsheft_" + minutes + "min.pdf");
                 Path teacherPath = output.resolve(basename + "_Lehrerloesungen_" + minutes + "min.pdf");
                 if (Files.size(studentPath) > MAX_DOCUMENT_BYTES || Files.size(teacherPath) > MAX_DOCUMENT_BYTES)
@@ -254,6 +254,75 @@ public class OwnerWorkbookPdfRenderService {
 
     private String activeLayout() {
         return globalLayout == null ? WorkbookGeneratorLayoutService.DEFAULT_JSON : globalLayout.activeJson();
+    }
+
+    /**
+     * Studio/homework repairs need a useful category, never the child process's
+     * source expressions or private lesson text. Keep the existing plain-PDF
+     * process contract intact and translate only its nonzero-exit failure.
+     */
+    static void runStudioProcess(ProcessBuilder builder, Path rendererLog) throws IOException {
+        try {
+            runPlainProcess(builder);
+        } catch (IllegalArgumentException failure) {
+            if (!"Plain worksheet generation or verification failed".equals(failure.getMessage()))
+                throw failure;
+            throw new IllegalArgumentException(studioFailureCode(readStudioDiagnostic(rendererLog)));
+        }
+    }
+
+    private static String readStudioDiagnostic(Path rendererLog) {
+        // generate.mjs includes at most the last 4000 child-output characters in
+        // its thrown error. A bounded tail also covers its own stack trace.
+        final int limit = 16_000;
+        try (var stream = Files.newInputStream(rendererLog)) {
+            stream.skipNBytes(Math.max(0, Files.size(rendererLog) - limit));
+            return new String(stream.readNBytes(limit), StandardCharsets.UTF_8);
+        } catch (IOException unavailable) {
+            return "";
+        }
+    }
+
+    /** Fixed allowlist only. This method must never return any part of the log. */
+    static String studioFailureCode(String diagnostic) {
+        String log = diagnostic == null ? "" : diagnostic;
+        if (log.contains("Error: Algebra QA failed:")) {
+            if (log.contains("A linear task requires a nonconstant affine difference")
+                    || log.contains("A linear task must contain exactly one variable")
+                    || log.contains("A linear task must supply exactly its own variable"))
+                return "WORKBOOK_RENDER_MATH_LINEAR";
+            if (log.contains("Expressions are not equivalent")
+                    || log.contains("Solution does not satisfy the original equation")
+                    || log.contains("Answer is not the unique real solution"))
+                return "WORKBOOK_RENDER_MATH_ANSWER";
+            if (log.contains("Missing domain restriction") || log.contains("Zero denominator")
+                    || log.contains("original domain") || log.contains("non-finite expression"))
+                return "WORKBOOK_RENDER_MATH_DOMAIN";
+            if (log.contains("Unsupported algebra syntax") || log.contains("Unknown symbol")
+                    || log.contains("Unsupported TeX command") || log.contains("Unbalanced")
+                    || log.contains("Function needs") || log.contains("Only integer powers")
+                    || log.contains("complexity limit") || log.contains("nesting limit"))
+                return "WORKBOOK_RENDER_MATH_SYNTAX";
+            return "WORKBOOK_RENDER_MATH_QA";
+        }
+        if (log.contains("MathJax must return exactly one complete SVG")
+                || log.contains("Invalid LaTeX expression:")
+                || log.contains("Unsafe or unsupported TeX command")
+                || log.contains("TeX commands require one backslash"))
+            return "WORKBOOK_RENDER_MATH_DISPLAY";
+        if (log.contains("Layout QA failed")
+                || log.contains("Generated PDF failed the mandatory layout check")
+                || log.contains("A4 page packing exhausted"))
+            return "WORKBOOK_RENDER_LAYOUT_QA";
+        if (log.contains("Unknown workbook block:") || log.contains("Unknown teacher block:")
+                || log.contains("Invalid lesson pages") || log.contains("Math requires exactly one")
+                || log.contains("Invalid bounded layout length") || log.contains("Invalid writing line count"))
+            return "WORKBOOK_RENDER_SCHEMA";
+        if (log.contains("ERR_MODULE_NOT_FOUND") || log.contains("Cannot find package")
+                || log.contains("Cannot find module") || log.contains("spawn python3 ENOENT")
+                || log.contains("Layout QA requires WeasyPrint"))
+            return "WORKBOOK_RENDER_RUNTIME_UNAVAILABLE";
+        return "WORKBOOK_RENDER_INPUT";
     }
 
     private static void runPlainProcess(ProcessBuilder builder) throws IOException {
