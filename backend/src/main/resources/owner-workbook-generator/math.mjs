@@ -1,3 +1,4 @@
+import {formatPlainMathText} from './math-typography.mjs';
 import MathJax from 'mathjax';
 import {isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -58,7 +59,7 @@ function token(t) {
     return `<svg class="math-fraction" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} 57" width="${w}" height="57" role="img" aria-label="${escapeHtml(n)} durch ${escapeHtml(d)}"><text x="${mid}" y="20" text-anchor="middle" font-size="29" font-family="Arial, sans-serif" fill="#070a20">${escapeHtml(n)}</text><line x1="2" y1="28" x2="${w-2}" y2="28" stroke="#070a20" stroke-width="2"/><text x="${mid}" y="53" text-anchor="middle" font-size="29" font-family="Arial, sans-serif" fill="#070a20">${escapeHtml(d)}</text></svg>`;
   }
   if (t === '_____') return '<span class="blank-formula" aria-label="Antwortlinie">________</span>';
-  return `<span class="op${t === '□' ? ' empty-op' : ''}">${escapeHtml(t)}</span>`;
+  return `<span class="op${t === '□' ? ' empty-op' : ''}">${formatPlainMathText(t)}</span>`;
 }
 
 export function renderMath(value, inline = false) {
@@ -73,14 +74,14 @@ export function renderMath(value, inline = false) {
 
 export function richText(value) {
   if (value == null) return '';
-  if (typeof value === 'string' || typeof value === 'number') return escapeHtml(value);
+  if (typeof value === 'string' || typeof value === 'number') return formatPlainMathText(value);
   const content = Array.isArray(value) ? value : value.type === 'richText' ? value.content : null;
   if (!Array.isArray(content) || content.length > 100) throw new TypeError('Text must be a string or richText content');
   return content.map(segment => {
     if (!segment || typeof segment !== 'object' || Object.hasOwn(segment,'text') === Object.hasOwn(segment,'math')) throw new TypeError('Rich text segment requires exactly one of text or math');
     if (Object.hasOwn(segment,'text')) {
       if (typeof segment.text !== 'string') throw new TypeError('Rich text text must be a string');
-      return escapeHtml(segment.text);
+      return formatPlainMathText(segment.text);
     }
     return renderMath(typeof segment.math === 'string' ? {latex:segment.math} : segment.math, true);
   }).join('');

@@ -1,3 +1,4 @@
+import {formatPlainMathText} from './math-typography.mjs';
 /**
  * Mindcrafti mathematical diagram components, rendered as resolution-independent SVG.
  * This is a deliberately constrained data-to-graphics engine, not arbitrary user SVG/JS.
@@ -38,7 +39,7 @@ function range(input, field) {
 }
 function banner(label, svg, caption = '', kind = '') {
   const cls=kind==='graph' ? ' diagram-block--graph' : '';
-  return `<section class="block diagram-block${cls}"><div class="diagram-eyebrow">${esc(label ?? 'ABBILDUNG')}</div>${svg}${caption ? `<div class="diagram-caption">${esc(caption)}</div>` : ''}</section>`;
+  return `<section class="block diagram-block${cls}"><div class="diagram-eyebrow">${esc(label ?? 'ABBILDUNG')}</div>${svg}${caption ? `<div class="diagram-caption">${formatPlainMathText(caption)}</div>` : ''}</section>`;
 }
 const vec = (x,y) => `${fmt(x)},${fmt(y)}`;
 const len = v => Math.hypot(v[0],v[1]);
@@ -424,7 +425,7 @@ export function graphSvg(spec) {
   }
   const legend=series.map((s,i)=>{
     const color=i===0?ORANGE:i===1?GREEN:NAVY;
-    return `<span class="graph-legend-item"><i class="graph-legend-swatch" style="background:${color}"></i>${esc(s.label??functionLabel(s,i))}</span>`;
+    return `<span class="graph-legend-item"><i class="graph-legend-swatch" style="background:${color}"></i>${formatPlainMathText(s.label??functionLabel(s,i))}</span>`;
   }).join('');
   const warnings=graphWarnings({series});
   // Crop unused SVG margins while leaving room for tick/axis labels.
