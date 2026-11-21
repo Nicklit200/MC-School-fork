@@ -37,6 +37,7 @@ class PostLessonHomeworkPushServiceTest {
     @BeforeEach void setup() {
         when(webPush.isConfigured()).thenReturn(true);
         when(pilot.teacherId()).thenReturn(teacher);
+        when(pilot.enabled()).thenReturn(true);
         when(pilot.allowed(teacher)).thenReturn(true);
     }
 
@@ -47,6 +48,17 @@ class PostLessonHomeworkPushServiceTest {
                         && sql.contains("u.id = j.teacher_id")
                         && sql.contains("u.role = 'TEACHER'")
                         && sql.contains("u.archived = false")),eq(job),eq(teacher));
+        verifyNoInteractions(webPush);
+    }
+
+    @Test void allTeacherRolloutCapturesCompletionForTheActualJobOwner() {
+        when(pilot.allTeachersEnabled()).thenReturn(true);
+        when(pilot.teacherId()).thenReturn(null);
+        service.captureTerminal(job);
+        verify(db).update(argThat(sql -> sql.contains("j.id = ?")
+                        && !sql.contains("j.teacher_id = ?")
+                        && sql.contains("u.id = j.teacher_id")
+                        && sql.contains("u.role = 'TEACHER'")), eq(job));
         verifyNoInteractions(webPush);
     }
 
