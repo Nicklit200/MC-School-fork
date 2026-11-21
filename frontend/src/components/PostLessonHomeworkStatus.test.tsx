@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PostLessonHomeworkStatus } from './PostLessonHomeworkStatus';
+import { MemoryRouter } from 'react-router-dom';
 import { onlineClassesApi, type OnlineClass, type PostLessonHomeworkJob } from '../api/onlineClasses';
 
 const auth = vi.hoisted(() => ({
@@ -112,7 +113,7 @@ describe('PostLessonHomeworkStatus', () => {
     vi.mocked(onlineClassesApi.postLessonHomeworkStatus).mockResolvedValue({
       state: 'PUBLISHED', generatedFiles: 7, expectedFiles: 7,
     });
-    render(<PostLessonHomeworkStatus eventId="event" de={false} />);
+    render(<MemoryRouter><PostLessonHomeworkStatus eventId="event" de={false} /></MemoryRouter>);
     expect(await screen.findByText('Домашка назначена')).toBeInTheDocument();
     expect(onlineClassesApi.findByEvent).toHaveBeenCalledWith('event');
     expect(onlineClassesApi.postLessonHomeworkStatus).toHaveBeenCalledWith('class');
