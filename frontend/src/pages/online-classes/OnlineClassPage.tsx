@@ -24,7 +24,7 @@ export function OnlineClassPage() {
   const { classId } = useParams<{ classId: string }>();
   const { t, language } = useI18n();
   const { user } = useAuth();
-  const isHomeworkPilot = user?.id === '14e3c7c1-1fc8-41bd-858a-6c20efdd957a' && user.role === 'TEACHER';
+  const canCreateHomework = user?.role === 'TEACHER';
   const navigate = useNavigate();
   const session = useClassSession(classId);
   const now = useLessonEntryClock(session.onlineClass?.serverNow);
@@ -120,7 +120,7 @@ export function OnlineClassPage() {
                 return onlineClassesApi.end(classId).then(() => {
                   // Trial/teacher-only classrooms have no registered pupil or group.
                   // Closing them must never open the automatic homework workflow.
-                  const isRegularLesson = Boolean(session.onlineClass?.studentId || session.onlineClass?.groupId) && isHomeworkPilot;
+                  const isRegularLesson = Boolean(session.onlineClass?.studentId || session.onlineClass?.groupId) && canCreateHomework;
                   const title = session.onlineClass?.title || (language === 'DE' ? 'Unterricht' : 'Урок');
                   session.release();
                   if (isRegularLesson) setPostLessonHomework({ id: classId, title });
