@@ -19,6 +19,9 @@ import com.mcschool.flashcard.liveclasses.dto.OnlineClassResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -44,6 +47,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/online-classes")
 @PreAuthorize("hasAnyRole('TEACHER', 'STUDENT')")
 public class OnlineClassController {
+    private static final Logger log = LoggerFactory.getLogger(OnlineClassController.class);
+
+    /** Setter injection preserves the existing controller constructor used by tests. */
+    private TranscriptExitAlertService transcriptExitAlerts;
+
+    @Autowired
+    public void installTranscriptExitAlerts(TranscriptExitAlertService service) {
+        this.transcriptExitAlerts = service;
+    }
+
+    private void scheduleTranscriptAudit(AuthenticatedUser caller, UUID classId) {
+        if (transcriptExitAlerts == null) return;
+        try {
+            transcriptExitAlerts.scheduleForHost(caller.id(), classId);
+        } catch (RuntimeException e) {
+            // The participant must still be able to exit even during alert DB issues.
+            log.error("Transcript alert could not be queued after teacher exit: classId={}", classId, e);
+        }
+    }
 
     private final OnlineClassService onlineClassService;
     private final OnlineClassAdmissionService admissionService;
@@ -133,7 +155,9 @@ public class OnlineClassController {
     @PreAuthorize("hasRole('TEACHER')")
     public OnlineClassResponse end(@AuthenticationPrincipal AuthenticatedUser caller,
                                    @PathVariable UUID classId) {
-        return onlineClassService.end(caller, classId);
+        OnlineClassResponse response = onlineClassService.end(caller, classId);
+        scheduleTranscriptAudit(caller, classId);
+        return response;
     }
 
     @PostMapping("/{classId}/cancel")
@@ -172,6 +196,7 @@ public class OnlineClassController {
     public void leave(@AuthenticationPrincipal AuthenticatedUser caller,
                       @PathVariable UUID classId) {
         onlineClassService.leave(caller, classId);
+        scheduleTranscriptAudit(caller, classId);
     }
 
     // --- Waiting room --------------------------------------------------------
