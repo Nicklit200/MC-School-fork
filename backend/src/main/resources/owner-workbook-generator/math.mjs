@@ -1,3 +1,4 @@
+import {formatPlainMathText} from './math-typography.mjs';
 import MathJax from 'mathjax';
 import {isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -73,14 +74,14 @@ export function renderMath(value, inline = false) {
 
 export function richText(value) {
   if (value == null) return '';
-  if (typeof value === 'string' || typeof value === 'number') return escapeHtml(value);
+  if (typeof value === 'string' || typeof value === 'number') return formatPlainMathText(value);
   const content = Array.isArray(value) ? value : value.type === 'richText' ? value.content : null;
   if (!Array.isArray(content) || content.length > 100) throw new TypeError('Text must be a string or richText content');
   return content.map(segment => {
     if (!segment || typeof segment !== 'object' || Object.hasOwn(segment,'text') === Object.hasOwn(segment,'math')) throw new TypeError('Rich text segment requires exactly one of text or math');
     if (Object.hasOwn(segment,'text')) {
       if (typeof segment.text !== 'string') throw new TypeError('Rich text text must be a string');
-      return escapeHtml(segment.text);
+      return formatPlainMathText(segment.text);
     }
     return renderMath(typeof segment.math === 'string' ? {latex:segment.math} : segment.math, true);
   }).join('');
