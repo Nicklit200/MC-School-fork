@@ -52,37 +52,61 @@ public class PostLessonHomeworkPushService {
      * The periodic scan also repairs failures between commit and capturing the event.
      */
     public void captureTerminal(UUID jobId) {
-        if (pilot.teacherId() == null) return;
-        jdbc.update("""
+        if (!pilot.enabled()) return;
+        if (pilot.allTeachersEnabled()) {
+            jdbc.update("""
             INSERT INTO post_lesson_homework_push_outbox
                 (id, job_id, recipient_id, subscription_id, event_state, event_finished_at)
             SELECT gen_random_uuid(), j.id, u.id, s.id, j.state, j.finished_at
               FROM post_lesson_homework_jobs j
               JOIN users u ON u.id = j.teacher_id AND u.role = 'TEACHER'
               JOIN push_subscriptions s ON s.user_id = u.id
-             WHERE j.id = ? AND j.teacher_id = ?
+             WHERE j.id = ?
                AND j.state IN ('PUBLISHED', 'FAILED')
                AND j.finished_at IS NOT NULL
                AND u.status = 'ACTIVE'
                AND u.archived = false
             ON CONFLICT (job_id, subscription_id, event_state, event_finished_at) DO NOTHING
+            """, jobId);
+            return;
+        }
+        jdbc.update("""
+             INSERT INTO post_lesson_homework_push_outbox
+                 (id, job_id, recipient_id, subscription_id, event_state, event_finished_at)
+             SELECT gen_random_uuid(), j.id, u.id, s.id, j.state, j.finished_at
+               FROM post_lesson_homework_jobs j
+               JOIN users u ON u.id = j.teacher_id AND u.role = 'TEACHER'
+               JOIN push_subscriptions s ON s.user_id = u.id
+              WHERE j.id = ? AND j.teacher_id = ?
+                AND j.state IN ('PUBLISHED', 'FAILED')
+                AND j.finished_at IS NOT NULL
+                AND u.status = 'ACTIVE'
+                AND u.archived = false
+             ON CONFLICT (job_id, subscription_id, event_state, event_finished_at) DO NOTHING
             """, jobId, pilot.teacherId());
     }
 
     @Scheduled(fixedDelayString = "${app.post-lesson-homework.push.poll-ms:5000}",
             initialDelayString = "${app.post-lesson-homework.push.initial-ms:12000}")
     public void sendPending() {
-        if (!webPush.isConfigured() || pilot.teacherId() == null) return;
+        if (!webPush.isConfigured() || !pilot.enabled()) return;
         try {
             // Only recent jobs are scanned to avoid replaying old school assignments
             // when the feature is first deployed; existing outbox retries persist.
-            List<UUID> recent = jdbc.query("""
-                    SELECT id FROM post_lesson_homework_jobs
-                     WHERE state IN ('PUBLISHED', 'FAILED')
-                       AND teacher_id = ?
-                       AND finished_at >= now() - INTERVAL '24 hours'
-                     ORDER BY finished_at DESC LIMIT 80
-                    """, (rs, i) -> rs.getObject("id", UUID.class), pilot.teacherId());
+            List<UUID> recent = pilot.allTeachersEnabled()
+                    ? jdbc.query("""
+                        SELECT id FROM post_lesson_homework_jobs
+                         WHERE state IN ('PUBLISHED', 'FAILED')
+                           AND finished_at >= now() - INTERVAL '24 hours'
+                         ORDER BY finished_at DESC LIMIT 80
+                        """, (rs, i) -> rs.getObject("id", UUID.class))
+                    : jdbc.query("""
+                        SELECT id FROM post_lesson_homework_jobs
+                         WHERE state IN ('PUBLISHED', 'FAILED')
+                           AND teacher_id = ?
+                           AND finished_at >= now() - INTERVAL '24 hours'
+                         ORDER BY finished_at DESC LIMIT 80
+                        """, (rs, i) -> rs.getObject("id", UUID.class), pilot.teacherId());
             for (UUID jobId : recent) captureTerminal(jobId);
             jdbc.update("""
                     UPDATE post_lesson_homework_push_outbox
