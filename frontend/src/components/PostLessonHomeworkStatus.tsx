@@ -11,7 +11,7 @@ function endedAt(room: OnlineClass): number {
 
 export function PostLessonHomeworkStatus({ eventId, de }: { eventId: string; de: boolean }) {
   const { user } = useAuth();
-  const isPilot = user?.id === '14e3c7c1-1fc8-41bd-858a-6c20efdd957a' && user.role === 'TEACHER';
+  const isPilot = user?.role === 'TEACHER';
   const [resolved, setResolved] = useState<{ eventId: string; id: string } | null>(null);
   const id = resolved?.eventId === eventId ? resolved.id : null;
   const [job, setJob] = useState<PostLessonHomeworkJob | null>(null);
