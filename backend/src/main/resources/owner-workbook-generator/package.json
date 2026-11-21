@@ -12,7 +12,7 @@
     "test:math": "node mathjax-smoke.mjs",
     "test:layout": "node --test layout.test.mjs",
     "test:plain": "node --test plain.test.mjs",
-    "test": "node mathjax-smoke.mjs && node diagrams.test.mjs && node --test visual-tasks.test.mjs layout.test.mjs plain.test.mjs pagination.test.mjs",
+    "test": "node mathjax-smoke.mjs && node diagrams.test.mjs && node --test math-typography.test.mjs visual-tasks.test.mjs layout.test.mjs plain.test.mjs pagination.test.mjs",
     "test:pagination": "node --test pagination.test.mjs"
   },
   "dependencies": {
