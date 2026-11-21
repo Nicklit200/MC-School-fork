@@ -171,8 +171,10 @@ public class PostLessonHomeworkJobService {
         try{
             Job job=tx.execute(st->{
                 db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code='INTERRUPTED',finished_at=now(),updated_at=now() WHERE state='RUNNING' AND lease_until<now()");
-                // Never process any pending teacher job outside the private pilot.
-                List<Job> list=db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' AND teacher_id=? ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row,pilot.teacherId());
+                // The exact-UUID pilot stays isolated; ALL safely selects queued jobs school-wide.
+                List<Job> list=pilot.allTeachersEnabled()
+                        ? db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row)
+                        : db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' AND teacher_id=? ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row,pilot.teacherId());
                 if(list.isEmpty())return null;
                 Job item=list.get(0);
                 db.update("UPDATE post_lesson_homework_jobs SET state='RUNNING',worker_id=?,lease_until=now()+INTERVAL '90 seconds',updated_at=now() WHERE id=?",workerId,item.id());
@@ -215,6 +217,8 @@ public class PostLessonHomeworkJobService {
     private void process(Job original)throws Exception{
         Job job=find(original.id());
         pilot.require(job.teacherId());
+        if(!users.existsByIdAndRoleAndStatusAndArchivedFalse(job.teacherId(),Role.TEACHER,UserStatus.ACTIVE))
+            throw new IllegalStateException("HOMEWORK_TEACHER_REVOKED");
         AuthenticatedUser teacher=new AuthenticatedUser(job.teacherId(),null,Role.TEACHER);
         progress(job,PostLessonHomeworkStage.RECIPIENT_SELECTION,null);
         List<Map<String,Object>> roster=json.readValue(job.roster(),List.class);

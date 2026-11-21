@@ -21,6 +21,20 @@ class PostLessonHomeworkPilotAccessTest {
         assertThrows(ResponseStatusException.class,()->access.require(OTHER));
     }
 
+    @Test void allTeachersRolloutAllowsOnlyTeacherRoles() {
+        var access = new PostLessonHomeworkPilotAccess("ALL");
+        assertTrue(access.allTeachersEnabled());
+        assertTrue(access.enabled());
+        assertNull(access.teacherId());
+        assertTrue(access.allowed(NICK));
+        assertTrue(access.allowed(OTHER));
+        assertDoesNotThrow(() -> access.require(new AuthenticatedUser(OTHER, null, Role.TEACHER)));
+        assertThrows(ResponseStatusException.class,
+                () -> access.require(new AuthenticatedUser(OTHER, null, Role.STUDENT)));
+        assertThrows(ResponseStatusException.class,
+                () -> access.require(new AuthenticatedUser(OTHER, null, Role.PARENT)));
+    }
+
     @Test void missingOrMalformedConfigFailsClosed() {
         var empty=new PostLessonHomeworkPilotAccess("");
         var malformed=new PostLessonHomeworkPilotAccess("not-a-uuid");
