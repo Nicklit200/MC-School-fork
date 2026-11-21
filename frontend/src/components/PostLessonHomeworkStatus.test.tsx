@@ -107,10 +107,14 @@ describe('PostLessonHomeworkStatus', () => {
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeEnabled();
   });
 
-  it('does not fetch private pilot status for other teachers', () => {
+  it('loads homework status for any authenticated teacher', async () => {
     auth.user = { id: 'another-teacher', role: 'TEACHER' };
-    const { container } = render(<PostLessonHomeworkStatus eventId="event" de={false} />);
-    expect(container).toBeEmptyDOMElement();
-    expect(onlineClassesApi.findByEvent).not.toHaveBeenCalled();
+    vi.mocked(onlineClassesApi.postLessonHomeworkStatus).mockResolvedValue({
+      state: 'PUBLISHED', generatedFiles: 7, expectedFiles: 7,
+    });
+    render(<PostLessonHomeworkStatus eventId="event" de={false} />);
+    expect(await screen.findByText('Домашка назначена')).toBeInTheDocument();
+    expect(onlineClassesApi.findByEvent).toHaveBeenCalledWith('event');
+    expect(onlineClassesApi.postLessonHomeworkStatus).toHaveBeenCalledWith('class');
   });
 });
