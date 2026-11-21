@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /** Durable phone pushes for terminal post-lesson homework jobs. */
@@ -30,22 +31,33 @@ public class PostLessonHomeworkPushService {
     private final PushSubscriptionRepository subscriptions;
     private final WebPushService webPush;
     private final PostLessonHomeworkPilotAccess pilot;
+    private final UUID monitorUserId;
 
     public PostLessonHomeworkPushService(JdbcTemplate jdbc, UserRepository users,
             PushSubscriptionRepository subscriptions, WebPushService webPush,
-            PostLessonHomeworkPilotAccess pilot) {
+            PostLessonHomeworkPilotAccess pilot,
+            @Value("${POST_LESSON_HOMEWORK_MONITOR_USER_ID:}") String configuredMonitorId) {
         this.jdbc = jdbc;
         this.users = users;
         this.subscriptions = subscriptions;
         this.webPush = webPush;
         this.pilot = pilot;
+        UUID parsed = null;
+        try {
+            if(configuredMonitorId != null && !configuredMonitorId.isBlank())
+                parsed = UUID.fromString(configuredMonitorId.trim());
+        } catch (IllegalArgumentException badConfiguration) {
+            LOG.warn("Invalid post-lesson homework monitor user ID; alerts disabled");
+        }
+        this.monitorUserId = parsed;
     }
 
     record Delivery(UUID id, UUID jobId, UUID recipientId, UUID subscriptionId, String eventState,
             Instant finishedAt, int attempts) {}
 
     record Result(String state, Instant finishedAt, UUID teacherId, String eventId,
-            String title, int days, int generatedFiles) {}
+            String title, int days, int generatedFiles, String failureCode,
+            String stage, Integer dayNumber, String teacherName) {}
 
     /**
      * Call after committing a terminal job state. Each device has a unique receipt.
@@ -59,7 +71,8 @@ public class PostLessonHomeworkPushService {
                 (id, job_id, recipient_id, subscription_id, event_state, event_finished_at)
             SELECT gen_random_uuid(), j.id, u.id, s.id, j.state, j.finished_at
               FROM post_lesson_homework_jobs j
-              JOIN users u ON u.id = j.teacher_id AND u.role = 'TEACHER'
+              JOIN users u ON u.role = 'TEACHER'
+                AND (u.id = j.teacher_id OR (j.state = 'FAILED' AND u.id = ?))
               JOIN push_subscriptions s ON s.user_id = u.id
              WHERE j.id = ?
                AND j.state IN ('PUBLISHED', 'FAILED')
@@ -67,7 +80,7 @@ public class PostLessonHomeworkPushService {
                AND u.status = 'ACTIVE'
                AND u.archived = false
             ON CONFLICT (job_id, subscription_id, event_state, event_finished_at) DO NOTHING
-            """, jobId);
+            """, monitorUserId, jobId);
             return;
         }
         jdbc.update("""
@@ -160,8 +173,8 @@ public class PostLessonHomeworkPushService {
             User recipient = users.findById(delivery.recipientId()).orElse(null);
             if (recipient == null || recipient.isArchived() || recipient.getStatus() != UserStatus.ACTIVE
                     || !pilot.allowed(result.teacherId())
-                    || !pilot.allowed(recipient.getId())
-                    || !isStaffRecipient(recipient.getId(), recipient.getRole(), result.teacherId())) {
+                    || !isStaffRecipient(recipient.getId(), recipient.getRole(),
+                            result.teacherId(), monitorUserId, result.state())) {
                 mark(delivery.id(), "SKIPPED");
                 return;
             }
@@ -171,10 +184,13 @@ public class PostLessonHomeworkPushService {
                 mark(delivery.id(), "SKIPPED");
                 return;
             }
-            String url = recipient.getRole() == Role.ADMIN
-                    ? "/admin/teachers/" + result.teacherId() + "/lessons/" + encode(result.eventId())
+            boolean monitorAlert = "FAILED".equals(result.state())
+                    && monitorUserId != null && monitorUserId.equals(recipient.getId())
+                    && !recipient.getId().equals(result.teacherId());
+            String url = monitorAlert ? "/teacher/lessons"
                     : "/teacher/lessons/" + encode(result.eventId()) + "?reviewHomework=1";
-            webPush.send(subscription, title(result), body(result), url,
+            webPush.send(subscription, monitorAlert ? "Mindcrafti: ошибка домашки преподавателя" : title(result),
+                    monitorAlert ? monitorFailureBody(result) : body(result), url,
                     "post-homework-" + delivery.jobId() + "-" + result.state());
             mark(delivery.id(), "SENT");
         } catch (RuntimeException failure) {
@@ -197,19 +213,47 @@ public class PostLessonHomeworkPushService {
 
     private Result currentResult(UUID jobId) {
         return jdbc.query("""
-                SELECT state, finished_at, teacher_id, event_id, lesson_title,
-                       days, generated_files
-                  FROM post_lesson_homework_jobs WHERE id = ?
+                SELECT j.state, j.finished_at, j.teacher_id, j.event_id, j.lesson_title,
+                       j.days, j.generated_files, j.failure_code,
+                       j.generation_stage, j.day_number,
+                       COALESCE(u.full_name, '') AS teacher_name
+                  FROM post_lesson_homework_jobs j
+                  LEFT JOIN users u ON u.id = j.teacher_id
+                 WHERE j.id = ?
                 """, (rs, i) -> new Result(
                     rs.getString("state"),
                     rs.getTimestamp("finished_at") == null ? null : rs.getTimestamp("finished_at").toInstant(),
                     rs.getObject("teacher_id", UUID.class), rs.getString("event_id"),
                     rs.getString("lesson_title"), rs.getInt("days"),
-                    rs.getInt("generated_files")), jobId).stream().findFirst().orElse(null);
+                    rs.getInt("generated_files"), rs.getString("failure_code"),
+                    rs.getString("generation_stage"), rs.getObject("day_number", Integer.class),
+                    rs.getString("teacher_name")), jobId).stream().findFirst().orElse(null);
     }
 
     static boolean isStaffRecipient(UUID recipient, Role role, UUID teacher) {
         return role == Role.TEACHER && Objects.equals(recipient, teacher);
+    }
+
+    static boolean isStaffRecipient(UUID recipient, Role role, UUID teacher,
+                                    UUID monitor, String state) {
+        return isStaffRecipient(recipient, role, teacher)
+                || (role == Role.TEACHER && "FAILED".equals(state)
+                    && monitor != null && monitor.equals(recipient));
+    }
+
+    static String monitorFailureBody(Result result) {
+        String teacher = result.teacherName() == null ? "" : result.teacherName();
+        String code = result.failureCode() == null ? "GENERATION_FAILED" : result.failureCode();
+        String stage = result.stage() == null ? "" : result.stage();
+        String label = result.title() == null ? "" : result.title();
+        return "Учитель: " + truncate(teacher, 45) + ". Урок: " + truncate(label, 65)
+                + ". Ошибка: " + truncate(code, 50)
+                + (stage.isBlank() ? "" : ". Этап: " + truncate(stage, 45))
+                + (result.dayNumber() == null ? "" : ". День: " + result.dayNumber()) + ".";
+    }
+
+    private static String truncate(String text, int limit) {
+        return text.length() <= limit ? text : text.substring(0, limit);
     }
 
     static String title(Result result) {
