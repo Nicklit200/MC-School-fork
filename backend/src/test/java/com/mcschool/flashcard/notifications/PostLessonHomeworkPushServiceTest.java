@@ -99,6 +99,17 @@ class PostLessonHomeworkPushServiceTest {
         assertFalse(PostLessonHomeworkPushService.isStaffRecipient(pupil,Role.STUDENT,teacher,admin,"FAILED"));
     }
 
+    @Test void ownerGetsFailurePushWithTeacherNameAndErrorCode() {
+        when(pilot.allTeachersEnabled()).thenReturn(true);
+        prepare("FAILED",Role.TEACHER,admin,"FAILED");
+        service.sendPending();
+        verify(webPush).send(any(PushSubscription.class),
+                eq("Mindcrafti: ошибка домашки преподавателя"),
+                allOf(contains("Джейла"),contains("HOMEWORK_JSON_INVALID")),
+                eq("/teacher/lessons"),
+                eq("post-homework-" + job + "-FAILED"));
+    }
+
     @Test void sendsOnlyAfterMatchingTerminalStatusToCurrentDeviceOwner() {
         prepare("PUBLISHED",Role.TEACHER,teacher);
         service.sendPending();
@@ -126,8 +137,13 @@ class PostLessonHomeworkPushServiceTest {
 
     @SuppressWarnings({"unchecked","rawtypes"})
     private void prepare(String state,Role role,UUID recipient) {
+        prepare(state,role,recipient,"PUBLISHED");
+    }
+
+    @SuppressWarnings({"unchecked","rawtypes"})
+    private void prepare(String state,Role role,UUID recipient,String eventState) {
         var delivery=new PostLessonHomeworkPushService.Delivery(
-                outboxId,job,recipient,subscriptionId,"PUBLISHED",finished,1);
+                outboxId,job,recipient,subscriptionId,eventState,finished,1);
         var result=new PostLessonHomeworkPushService.Result(
                 state,finished,teacher,"local-test-lesson",
                 "Test 2 | Brueche und Terme",3,3,"HOMEWORK_JSON_INVALID","AI_CONTENT",2,"Джейла");
