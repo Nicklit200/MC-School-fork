@@ -105,7 +105,7 @@ class PostLessonHomeworkPushServiceTest {
         service.sendPending();
         verify(webPush).send(any(PushSubscription.class),
                 eq("Mindcrafti: ошибка домашки преподавателя"),
-                allOf(contains("Джейла"),contains("HOMEWORK_JSON_INVALID")),
+                argThat((String body) -> body.contains("Джейла") && body.contains("HOMEWORK_JSON_INVALID")),
                 eq("/teacher/lessons"),
                 eq("post-homework-" + job + "-FAILED"));
     }
