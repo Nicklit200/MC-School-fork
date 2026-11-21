@@ -65,7 +65,17 @@ public class EmailNotificationService implements NotificationService {
         send(parent.getEmail(), parent.getFullName(), email);
     }
 
-    private void send(String toEmail, String toName, NotificationMessages.Email email) {
+    /**
+     * Strictly owner-only: no teacher, parent, group or CC recipient receives this alert.
+     * The result is checked by the durable transcript-alert outbox before closing a job.
+     */
+    @Override
+    public boolean sendOwnerMissingTranscript(String subject, String body) {
+        return send("nicolai@mindcrafti.de", "Mindcrafti owner",
+                new NotificationMessages.Email(subject, body));
+    }
+
+    private boolean send(String toEmail, String toName, NotificationMessages.Email email) {
         try {
             String body = brevoRequestBody(toEmail, toName, email);
             HttpRequest request = HttpRequest.newBuilder(BREVO_SEND_EMAIL_URI)
@@ -77,13 +87,17 @@ public class EmailNotificationService implements NotificationService {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                log.error("Brevo API email send failed for {}: status={} error={}", toEmail, response.statusCode(), response.body());
+                log.error("Brevo API email send failed for {}: status={}", toEmail, response.statusCode());
+                return false;
             }
+            return true;
         } catch (IOException e) {
             log.error("Brevo API email send failed for {}: {}", toEmail, e.getMessage());
+            return false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Brevo API email send interrupted for {}: {}", toEmail, e.getMessage());
+            return false;
         }
     }
 

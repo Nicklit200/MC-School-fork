@@ -59,4 +59,4 @@ jobs:
         run: ./mvnw -B -ntp -DskipTests package
       - name: Exercise LiveKit authorization, migrations and recordings with Testcontainers PostgreSQL
         working-directory: backend
-        run: ./mvnw -B -ntp '-Dtest=*OnlineClass*,*LiveKit*,*WaitingRoom*,*PersonalBoard*,*AnnotationPayload*,*ClassRetention*' test
+        run: ./mvnw -B -ntp '-Dtest=*OnlineClass*,*LiveKit*,*WaitingRoom*,*PersonalBoard*,*AnnotationPayload*,*ClassRetention*,*TranscriptExitAlert*' test
