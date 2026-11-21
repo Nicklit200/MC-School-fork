@@ -32,7 +32,7 @@ class PostLessonHomeworkPushServiceTest {
     private final UUID outboxId=UUID.fromString("00000000-0000-4000-a000-000000000035");
     private final Instant finished=Instant.parse("2026-11-17T10:40:00Z");
     private final PostLessonHomeworkPushService service=
-            new PostLessonHomeworkPushService(db,users,subscriptions,webPush,pilot);
+            new PostLessonHomeworkPushService(db,users,subscriptions,webPush,pilot,admin.toString());
 
     @BeforeEach void setup() {
         when(webPush.isConfigured()).thenReturn(true);
@@ -58,7 +58,7 @@ class PostLessonHomeworkPushServiceTest {
         verify(db).update(argThat(sql -> sql.contains("j.id = ?")
                         && !sql.contains("j.teacher_id = ?")
                         && sql.contains("u.id = j.teacher_id")
-                        && sql.contains("u.role = 'TEACHER'")), eq(job));
+                        && sql.contains("u.role = 'TEACHER'")), eq(admin), eq(job));
         verifyNoInteractions(webPush);
     }
 
@@ -72,17 +72,31 @@ class PostLessonHomeworkPushServiceTest {
 
     @Test void describesOnlyCommittedAssignmentsAsSuccess() {
         var result=new PostLessonHomeworkPushService.Result("PUBLISHED",finished,teacher,
-                "local-test-lesson","Тест | Brueche und Terme",7,21);
+                "local-test-lesson","Тест | Brueche und Terme",7,21,null,null,null,"Джейла");
         assertTrue(PostLessonHomeworkPushService.title(result).contains("назначена"));
         assertTrue(PostLessonHomeworkPushService.body(result).contains("7 дн., 3 уч."));
     }
 
     @Test void failureDoesNotMisrepresentAssignmentAsComplete() {
         var result=new PostLessonHomeworkPushService.Result("FAILED",finished,teacher,
-                "local-test-lesson","Тест | Brueche und Terme",7,6);
+                "local-test-lesson","Тест | Brueche und Terme",7,6,"HOMEWORK_JSON_INVALID","AI_CONTENT",2,"Джейла");
         assertTrue(PostLessonHomeworkPushService.title(result).contains("ошибка"));
         assertTrue(PostLessonHomeworkPushService.body(result).contains("не завершено"));
         assertFalse(PostLessonHomeworkPushService.body(result).contains("назначена"));
+    }
+
+    @Test void monitoringContainsTeacherAndStableErrorDetails() {
+        var result=new PostLessonHomeworkPushService.Result("FAILED",finished,teacher,
+                "local-test-lesson","Testunterricht",7,4,
+                "HOMEWORK_JSON_INVALID","AI_CONTENT",3,"Джейла");
+        String body=PostLessonHomeworkPushService.monitorFailureBody(result);
+        assertTrue(body.contains("Джейла"));
+        assertTrue(body.contains("HOMEWORK_JSON_INVALID"));
+        assertTrue(body.contains("AI_CONTENT"));
+        assertTrue(body.contains("3"));
+        assertTrue(PostLessonHomeworkPushService.isStaffRecipient(admin,Role.TEACHER,teacher,admin,"FAILED"));
+        assertFalse(PostLessonHomeworkPushService.isStaffRecipient(admin,Role.TEACHER,teacher,admin,"PUBLISHED"));
+        assertFalse(PostLessonHomeworkPushService.isStaffRecipient(pupil,Role.STUDENT,teacher,admin,"FAILED"));
     }
 
     @Test void sendsOnlyAfterMatchingTerminalStatusToCurrentDeviceOwner() {
@@ -116,17 +130,17 @@ class PostLessonHomeworkPushServiceTest {
                 outboxId,job,recipient,subscriptionId,"PUBLISHED",finished,1);
         var result=new PostLessonHomeworkPushService.Result(
                 state,finished,teacher,"local-test-lesson",
-                "Test 2 | Brueche und Terme",3,3);
+                "Test 2 | Brueche und Terme",3,3,"HOMEWORK_JSON_INVALID","AI_CONTENT",2,"Джейла");
         when(db.query(anyString(),any(RowMapper.class))).thenAnswer(invocation -> {
             String sql=invocation.getArgument(0,String.class);
             if(sql.contains("SELECT id FROM post_lesson_homework_jobs")) return List.of();
             if(sql.contains("RETURNING id, job_id")) return List.of(delivery);
-            if(sql.contains("SELECT state, finished_at")) return List.of(result);
+            if(sql.contains("SELECT j.state, j.finished_at")) return List.of(result);
             return List.of();
         });
         // Result lookup includes a jobId SQL bind, unlike the two-argument claim query.
         when(db.query(org.mockito.ArgumentMatchers.<String>argThat(
-                sql -> sql.contains("SELECT state, finished_at")),
+                sql -> sql.contains("SELECT j.state, j.finished_at")),
                 any(RowMapper.class), eq(job))).thenReturn(List.of(result));
         // First claim returns a pending device; subsequent claims are empty.
         final int[] claims={0};
