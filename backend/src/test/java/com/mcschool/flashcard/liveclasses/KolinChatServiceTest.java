@@ -29,7 +29,9 @@ class KolinChatServiceTest {
     private final OnlineClassTranscriptSegmentRepository segments = mock(OnlineClassTranscriptSegmentRepository.class);
     private final KolinTranscriptContextService transcripts = new KolinTranscriptContextService(segments, JsonMapper.builder().build());
     private final OnlineClassAccessService access = new OnlineClassAccessService(rooms, members, users, mock(OnlineClassParticipantRepository.class));
-    private final KolinChatService chat = new KolinChatService(access, groups, ai, JsonMapper.builder().build(), transcripts);
+    private final KolinQuestionJournal questionJournal = mock(KolinQuestionJournal.class);
+    private final UUID journalId = UUID.randomUUID();
+    private final KolinChatService chat = new KolinChatService(access, groups, ai, JsonMapper.builder().build(), transcripts, questionJournal);
     private User teacher, pupil, sameTeacherButDifferentClass, otherTeacher;
     private OnlineClass room;
     private StudentGroup group;
@@ -50,10 +52,21 @@ class KolinChatServiceTest {
         when(ai.isConfigured()).thenReturn(true);
         when(segments.findByOnlineClassIdOrderByStartMsDescIdDesc(any(),any())).thenReturn(List.of());
         when(ai.kolinReply(anyString(),anyList(),anyString())).thenReturn("1. 1/2 + 1/4\n2. 2/3 + 1/6");
+        when(questionJournal.record(any(),any(),any(),anyString(),anyString(),any(),any(),any())).thenReturn(journalId);
         host=principal(teacher);
     }
     private static AuthenticatedUser principal(User user){return new AuthenticatedUser(user.getId(),user.getEmail(),user.getRole());}
     private static KolinChatService.Request question(String text,KolinChatService.Context context){return new KolinChatService.Request(text,List.of(),context);}
+
+    @Test void journalsAValidQuestionWithOnlyItsSmallRoutingContext() {
+        var context=new KolinChatService.Context("student",pupil.getId(),3,"interactive");
+        chat.send(host,room.getId(),question("  Проверь решение  ",context));
+
+        verify(questionJournal).record(teacher.getId(),room.getId(),null,"Проверь решение",
+                "student",pupil.getId(),3,"interactive");
+        verify(questionJournal).answered(journalId);
+        verify(questionJournal,never()).failed(journalId);
+    }
 
     @Test void suppliesOnlyAuthoritativeSmallContextAndEightRecentMessages() throws Exception {
         var history=java.util.stream.IntStream.range(0,8).mapToObj(i->new KolinChatService.HistoryMessage(i%2==0?"user":"assistant","message-"+i)).toList();
