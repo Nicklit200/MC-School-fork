@@ -103,3 +103,30 @@
 }
 @keyframes lesson-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @media(prefers-reduced-motion:reduce) { .lesson-drawer-layer, .teacher-shell .lesson-drawer.teacher-content { animation: none; } }
+
+
+/* School tests are all-day informational markers, not video lesson bookings. */
+.lesson-agenda-day{position:relative}
+.school-assessment-day-indicator{position:absolute;right:6px;top:6px;font-size:15px;line-height:1}
+.school-assessments{margin:4px 0 18px;padding:12px 15px;border:1px solid var(--border);border-radius:15px;background:var(--surface)}
+.school-assessments__heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.school-assessments__heading strong{font-size:15px;color:var(--text)}
+.school-assessments .muted{font-size:12px;margin:4px 0}
+.school-assessment-card{border:1px solid #eab98b;border-radius:11px;background:var(--surface);margin:8px 0;overflow:hidden}
+.school-assessment-card__trigger{width:100%;border:0;background:rgba(250,164,74,.09);display:flex;align-items:center;gap:10px;padding:12px;text-align:left;color:var(--text);cursor:pointer}
+.school-assessment-card__trigger>span:nth-child(2){flex:1}
+.school-assessment-card__trigger strong{display:block;font-size:14px}
+.school-assessment-card__trigger small{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.school-assessment-card__emoji{font-size:23px}
+.school-assessment-card__details{padding:13px 16px;display:grid;gap:8px;font-size:13px;line-height:1.5}
+.school-assessment-card__details p,.school-assessment-card__details ul{margin:2px 0}
+.school-assessment-card__details ul{padding-left:20px}
+.school-assessment-card__quote{margin:4px 0;padding:9px 12px;border-left:3px solid #e9a25d;background:rgba(250,164,74,.08)}
+.school-assessment-card__details>.btn{justify-self:start}
+.school-assessment-editor{display:grid;gap:10px;margin-top:12px;border-top:1px solid var(--border);padding-top:14px}
+.school-assessment-editor__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.school-assessment-editor label{display:grid;gap:5px;font-size:12px;font-weight:650}
+.school-assessment-editor label:has(input[type=checkbox]){display:flex;align-items:center}
+.school-assessment-editor :is(input,textarea,select){width:100%;max-width:100%;box-sizing:border-box}
+.school-assessment-editor>.btn{justify-self:start}
+@media(max-width:650px){.school-assessment-editor__grid{grid-template-columns:1fr}.school-assessments__heading{flex-wrap:wrap}}
