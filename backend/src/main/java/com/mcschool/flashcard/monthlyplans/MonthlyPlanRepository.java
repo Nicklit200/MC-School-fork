@@ -10,4 +10,10 @@ public interface MonthlyPlanRepository extends JpaRepository<MonthlyPlan, UUID> 
             MonthlyPlanTargetType targetType,
             UUID targetId,
             String planMonth);
+    java.util.List<MonthlyPlan> findByTeacherIdAndTargetTypeAndTargetIdAndPlanMonthBetween(
+            UUID teacherId,
+            MonthlyPlanTargetType targetType,
+            UUID targetId,
+            String firstMonth,
+            String lastMonth);
 }

@@ -2,7 +2,7 @@ import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
 import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-2";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
-let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},individualMonthsByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
 const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"],[9,"grade-9"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
@@ -1051,16 +1051,26 @@ const schoolCalendarUI=createSchoolCalendarPanel({
   getStudentSchool:()=>selectedStudent()?.schoolType||selectedStudents()[0]?.schoolType||"WIRTSCHAFTSSCHULE",
   getStudents:()=>selectedStudents(),
   getMastery:studentId=>masteryByStudent[studentId]||{},
+  getIndividualMonths:studentId=>individualMonthsByStudent[studentId]||{},
   refreshMastery:async()=>{
     if(!boardId||!data||config?.publicMode)return;
     const chosen=selectedStudents();
-    const snapshots=await Promise.all(chosen.map(async student=>({
-      studentId:student.id,
-      snapshot:await request("GET",`${boardPath()}/students/${student.id}/mastery`)
-    })));
+    const yearNow=new Date(),schoolYearStart=yearNow.getMonth()>=7?yearNow.getFullYear():yearNow.getFullYear()-1;
+    const snapshots=await Promise.all(chosen.map(async student=>{
+      const [snapshot,year]=await Promise.all([
+        request("GET",`${boardPath()}/students/${student.id}/mastery`),
+        request("GET",`${boardPath()}/students/${student.id}/monthly-curricula?schoolYearStart=${schoolYearStart}`)
+      ]);
+      return {studentId:student.id,snapshot,year};
+    }));
     for(const item of snapshots){
       masteryByStudent[item.studentId]=item.snapshot?.mastery&&typeof item.snapshot.mastery==="object"
         ?item.snapshot.mastery:{};
+      individualMonthsByStudent[item.studentId]=Object.fromEntries(
+        (Array.isArray(item.year?.months)?item.year.months:[])
+          .filter(m=>typeof m.month==="string"&&/^\\d{4}-(0[1-9]|1[0-2])$/.test(m.month))
+          .map(m=>[String(Number(m.month.slice(-2))),m])
+      );
     }
     render();
   },
