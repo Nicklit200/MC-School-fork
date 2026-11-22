@@ -138,6 +138,8 @@ final class McpSiteFunctionRegistry {
         // read_site_function / execute_site_function bridge without reinstalling tools.
         add(functions, "skill_evidence", SkillEvidenceController.class, Scope.CALLER,
                 "evidence record");
+        add(functions, "school_assessments", SchoolAssessmentController.class, Scope.CALLER,
+                "list get create update");
         add(functions, "account", UserController.class, Scope.CALLER, "updateSettings");
         Map<String, Function> unique = new LinkedHashMap<>();
         for (Function function : functions) {
@@ -174,6 +176,7 @@ final class McpSiteFunctionRegistry {
             case "skill_boards" -> "list_skill_boards / get_skill_board / edit_skill_board / create_skill_board";
             case "skill_mastery" -> "get_skill_mastery / update_skill_mastery";
             case "skill_evidence" -> "get_skill_evidence / record_skill_evidence";
+            case "school_assessments" -> "school_assessments.list / school_assessments.create / school_assessments.update";
             case "teacher_help" -> "get_teacher_guide / show_teacher_guide / teacher_help.draft / teacher_help.publish";
             case "brand_guide" -> "get_brand_guide / update_brand_guide";
             case "stories_template" -> "get_story_template_info / get_story_template_chunk / update_story_template_master";
