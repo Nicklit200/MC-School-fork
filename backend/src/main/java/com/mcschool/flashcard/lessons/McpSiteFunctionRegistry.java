@@ -18,6 +18,7 @@ import com.mcschool.flashcard.settings.SchoolPromptSettingsController;
 import com.mcschool.flashcard.settings.StoryTemplateMasterController;
 import com.mcschool.flashcard.settings.StoryStudioProjectController;
 import com.mcschool.flashcard.skills.SkillBoardController;
+import com.mcschool.flashcard.skills.SchoolCalendarController;
 import com.mcschool.flashcard.skills.SkillMasteryController;
 import com.mcschool.flashcard.skills.SkillEvidenceController;
 import com.mcschool.flashcard.students.StudentChatGptProjectController;
@@ -132,6 +133,8 @@ final class McpSiteFunctionRegistry {
         add(functions, "stories_studio", StoryStudioProjectController.class, Scope.ADMIN, "info chunk download save");
         add(functions, "skill_boards", SkillBoardController.class, Scope.CALLER, "get");
         add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save create");
+        add(functions, "school_curriculum", SchoolCalendarController.class, Scope.CALLER, "get");
+        add(functions, "school_curriculum", SchoolCalendarController.class, Scope.ADMIN, "upsert");
         add(functions, "skill_mastery", SkillMasteryController.class, Scope.CALLER,
                 "students groups boardStudents mastery history update");
         // Existing MCH3 clients can inspect and append evidence via the
@@ -174,6 +177,7 @@ final class McpSiteFunctionRegistry {
             case "monthly_plans" -> "get_month_plan / update_month_plan";
             case "homework" -> "assign_homework_series / update_homework / delete_homework / find_student_homeworks / get_recent_homework_submissions";
             case "skill_boards" -> "list_skill_boards / get_skill_board / edit_skill_board / create_skill_board";
+            case "school_curriculum" -> "get_school_calendar / upsert_school_calendar";
             case "skill_mastery" -> "get_skill_mastery / update_skill_mastery";
             case "skill_evidence" -> "get_skill_evidence / record_skill_evidence";
             case "school_assessments" -> "school_assessments.list / school_assessments.create / school_assessments.update / school_assessments.readiness / school_assessments.skills";
