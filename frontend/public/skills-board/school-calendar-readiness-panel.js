@@ -1,4 +1,4 @@
-import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js?v=20261122-4";
+import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js?v=20261122-unassessed-zero";
 import {schoolYearMonthKey,schoolYearStartForDate} from "./school-calendar-month-index.js";
 
 /** Visible readiness is derived from the latest student skills, never stored as fake grades. */
@@ -70,7 +70,7 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
     if(!month)return null;
     const r=result(month),badge=element("em","calendar-month-readiness "+level(r),status(r));
     badge.title=r&&r.totalCount
-      ?`Навыки: ${r.assessedCount} из ${r.totalCount} проверено. Это оценка на сегодня, не готовность к контрольной.`
+      ?`Навыки: ${r.assessedCount} из ${r.totalCount} проверено. Непроверенные навыки учитываются как 0% только в расчёте готовности. Это не прогноз оценки.`
       :"Нет достаточных данных об освоении навыков";
     return badge;
   }
@@ -102,11 +102,11 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
       fill.style.width=r.coveragePercent+"%";bar.append(fill);coverage.append(bar);block.append(coverage);
     }
     const message=r.status==="ESTIMATED"
-      ?(r.unmappedTopics.length?"Предварительная оценка по проверенным навыкам. Есть темы вне расчёта, поэтому процент НЕ означает полную готовность к контрольной.":"Предварительная готовность по текущему освоению навыков. Не является прогнозом школьной оценки.")
+      ?(r.unmappedTopics.length?"Предварительная готовность по связанным навыкам. Непроверенные навыки учитываются как 0%, а темы без связи остаются вне расчёта. Процент НЕ означает полную готовность к контрольной.":"Предварительная готовность: непроверенные навыки учитываются как 0% до первой диагностики, но в карте навыков остаются без оценки. Не является прогнозом школьной оценки.")
       :r.status==="INSUFFICIENT_DATA"
         ?`Навыков пока недостаточно для достоверного общего процента.${r.observedPercent===null?"":" По оценённым навыкам среднее "+r.observedPercent+"%."}`
         :r.status==="NO_DATA"
-          ?"Эти навыки ещё не проверялись. Это не означает 0% знаний."
+          ?"Эти навыки ещё не проверялись. В расчёте готовности они дают 0%, но это не означает доказанное отсутствие знаний."
           :r.status==="UNMAPPED"
             ?"Темы не привязаны к навыкам карты. Без связей процент рассчитывать нельзя."
             :"Темы этого месяца ещё не добавлены.";
@@ -137,7 +137,7 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
         summary.append(element("span","calendar-skill-proof-title",skill.title));
         const score=element("strong","calendar-skill-proof-percent "+
           (skill.value===null?"unverified":skill.value>=80?"high":skill.value>=60?"medium":"low"),
-          skill.value===null?"Не оценён":skill.value+"%");
+          skill.value===null?"Не оценён · 0% в расчёте":skill.value+"%");
         summary.append(score);
         item.append(summary);
         const inside=element("div","calendar-skill-proof-body");
@@ -181,9 +181,9 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
     }
     if(r.unassessedSkills.length)
       block.append(element("p","calendar-readiness-unassessed",
-        `Не оценено навыков: ${r.unassessedSkills.length}. Они не считаются нулевыми.`));
+        `Не оценено навыков: ${r.unassessedSkills.length}. В готовности они временно учитываются как 0%, но оценка в карте не меняется.`));
     block.append(element("p","calendar-readiness-fineprint",
-      "Оценка действует на сегодня, не показывает результат на конец прошлого месяца. Индивидуальный план имеет приоритет над широкими разделами календаря; реальные темы и даты контрольных уточняйте в школе."));
+      "Готовность рассчитывается на сегодня: сумма процентов проверенных навыков, делённая на число всех привязанных навыков месяца. Не проверенные навыки в расчёте равны 0%; индивидуальная карта и данные наблюдений не изменяются. Реальные темы и контрольные уточняйте в школе."));
     return block;
   }
   return {selection,monthBadge,details,open,close,refresh};
