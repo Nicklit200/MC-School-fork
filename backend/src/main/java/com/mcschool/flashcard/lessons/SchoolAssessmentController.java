@@ -13,7 +13,10 @@ import org.springframework.web.bind.annotation.*;
 @PreAuthorize("hasAnyRole('ADMIN','TEACHER')")
 public class SchoolAssessmentController {
     private final SchoolAssessmentService service;
-    public SchoolAssessmentController(SchoolAssessmentService service) {this.service=service;}
+    private final SchoolAssessmentSkillService skills;
+    public SchoolAssessmentController(SchoolAssessmentService service,SchoolAssessmentSkillService skills) {
+        this.service=service;this.skills=skills;
+    }
     @GetMapping
     public List<SchoolAssessmentService.Assessment> list(@AuthenticationPrincipal AuthenticatedUser caller,
             @RequestParam(required=false) UUID teacherId) {
@@ -23,6 +26,21 @@ public class SchoolAssessmentController {
     public SchoolAssessmentService.Assessment get(@AuthenticationPrincipal AuthenticatedUser caller,@PathVariable UUID id) {
         return service.get(caller,id);
     }
+    /** This endpoint is read-only. Results always reflect the latest student skill mastery. */
+    @GetMapping("/{id}/readiness")
+    public SchoolAssessmentSkillService.Readiness readiness(
+            @AuthenticationPrincipal AuthenticatedUser caller,@PathVariable UUID id) {
+        return skills.readiness(caller,id);
+    }
+
+    /** Skills can be linked ONLY through the connector, not the calendar UI. */
+    @PutMapping("/{id}/skills")
+    public SchoolAssessmentSkillService.Readiness skills(
+            @AuthenticationPrincipal AuthenticatedUser caller,@PathVariable UUID id,
+            @RequestBody SchoolAssessmentSkillService.Edit body) {
+        return skills.skills(caller,id,body);
+    }
+
     @PostMapping
     public SchoolAssessmentService.Assessment create(@AuthenticationPrincipal AuthenticatedUser caller,
             @RequestBody SchoolAssessmentService.Create body) {
