@@ -2,6 +2,8 @@
  * Month-by-month reference curricula for /skills.
  * A calendar is one revisioned NOTE in the existing board, not pupil mastery.
  */
+import {createMonthlyReadinessPanel} from "./school-calendar-readiness-panel.js";
+
 export const schoolCalendarLabels = {
   WIRTSCHAFTSSCHULE:"Wirtschaftsschule", REALSCHULE:"Realschule",
   GYMNASIUM:"Gymnasium", MITTELSCHULE:"Mittelschule",
@@ -116,7 +118,7 @@ export function validateSchoolCalendar(value,board) {
   if(JSON.stringify(value).length>4000)throw Error("Календарь слишком подробный, сократите описания.");
   return true;
 }
-export function createSchoolCalendarPanel({getBoard,getStudentSchool,canEdit,onCommit,notify}) {
+export function createSchoolCalendarPanel({getBoard,getStudentSchool,getStudents,getMastery,refreshMastery,canEdit,onCommit,notify}) {
   const $=id=>document.getElementById(id);
   const panel=$("school-calendar-panel"),sheet=$("school-calendar-body"),monthButtons=$("calendar-months");
   const schoolSelect=$("calendar-school"),profileInput=$("calendar-profile");
@@ -125,6 +127,7 @@ export function createSchoolCalendarPanel({getBoard,getStudentSchool,canEdit,onC
     return{open(){},close(){},sync(){}};
   let school="WIRTSCHAFTSSCHULE",profile="vierstufig",month=11;
   let working=null,original="",dirty=false,saving=false;
+  const readiness=createMonthlyReadinessPanel({getBoard,getStudents,getMastery,refreshMastery,onChange:render});
   for(const [id,label] of Object.entries(schoolCalendarLabels)) {
     const option=el("option","",label);option.value=id;schoolSelect.append(option);
   }
@@ -147,6 +150,7 @@ export function createSchoolCalendarPanel({getBoard,getStudentSchool,canEdit,onC
   function close() {
     if(!guard())return;
     panel.hidden=true;
+    readiness.close();
   }
   $("school-calendar-close")?.addEventListener("click",close);
   panel.addEventListener("click",event=>{if(event.target===panel)close();});
@@ -209,12 +213,13 @@ export function createSchoolCalendarPanel({getBoard,getStudentSchool,canEdit,onC
     $("calendar-disclaimer").textContent=working.disclaimer;
     $("calendar-caution").textContent=working.status==="SCHOOL_CONFIRMED"
       ?"Даже подтверждённый план не гарантирует даты контрольных или фактический темп конкретного класса."
-      :"Это ориентир, не календарь проверочных Софии. Подтвердите реальные темы по школьной тетради.";
+      :"Это ориентир, не календарь проверочных ученика. Подтвердите реальные темы по школьной тетради.";
     const src=$("calendar-source-link");src.replaceChildren();
     if(working.sourceUrl?.startsWith("https://")){
       const link=el("a","",working.sourceLabel||"Источник");
       link.href=working.sourceUrl;link.target="_blank";link.rel="noopener noreferrer";src.append(link);
     }else src.textContent=working.sourceLabel||"Источник не указан";
+    readiness.selection(school);
     monthButtons.replaceChildren();
     for(const [value,label] of calendarMonths){
       const planned=working.months.find(x=>x.month===value);
@@ -222,12 +227,15 @@ export function createSchoolCalendarPanel({getBoard,getStudentSchool,canEdit,onC
         "calendar-month"+(month===value?" active":"")+(planned?" filled":""));
       tile.append(el("strong","",label),el("span","",planned?.weeks||"Нет данных"));
       if(planned?.topics?.length)tile.append(el("small","",planned.topics.slice(0,2).map(t=>t.name).join(", ")));
+      const badge=readiness.monthBadge(planned);
+      if(badge)tile.append(badge);
       monthButtons.append(tile);
     }
     sheet.replaceChildren();
     const title=calendarMonths.find(x=>x[0]===month)?.[1]||"Месяц";
     sheet.append(el("h3","",title));
     const record=working.months.find(m=>m.month===month);
+    sheet.append(readiness.details(record));
     if(!record){
       sheet.append(el("p","calendar-empty","Для этого месяца пока нет данных. Не следует предполагать темы и контрольные."));
       if(isEditable())sheet.append(button("＋ Добавить месяц",()=>{
@@ -301,6 +309,7 @@ export function createSchoolCalendarPanel({getBoard,getStudentSchool,canEdit,onC
       school=schoolCalendarLabels[selected]?selected:"WIRTSCHAFTSSCHULE";
       profile=defaultSchoolProfile(school);
       month=new Date().getMonth()+1;load();
+      readiness.open();
     },
     close,
     sync(){if(!panel.hidden&&!dirty)load();}
