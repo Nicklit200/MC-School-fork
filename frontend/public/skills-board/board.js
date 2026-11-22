@@ -1,5 +1,5 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
-import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-5";
+import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-unknown-zero";
 import {schoolYearStartForDate,indexStudentMonthlyCurricula} from "./school-calendar-month-index.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
