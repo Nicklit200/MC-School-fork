@@ -34,14 +34,16 @@ test("the strict YYYY-MM index keeps each month and ignores no valid date",()=>{
  assert.equal(result["2027-01"].skillIds.length,2);
  assert.deepEqual(result["2026-10"].skillIds,skillIds["2026-10"]);
 });
-test("scores for each month use only its own existing assessed map values",()=>{
+test("month readiness includes unknown linked skills as zero without borrowing other months' scores",()=>{
  const result=indexStudentMonthlyCurricula(payload,{studentId,boardId,schoolYearStart});
  function readiness(month){return calculateIndividualMonthReadiness(board,result[schoolYearMonthKey(2026,month)],scores,"REALSCHULE");}
- assert.deepEqual([9,10,11,12,1,2,7].map(m=>readiness(m).percent),[50,49,53,40,35,null,50]);
+ assert.deepEqual([9,10,11,12,1,2,7].map(m=>readiness(m).percent),[50,49,53,30,18,0,20]);
  assert.equal(readiness(12).assessedCount,3);
  assert.equal(readiness(12).totalCount,4);
  assert.equal(readiness(1).coveragePercent,50);
- assert.equal(readiness(2).status,"NO_DATA");
+ assert.equal(readiness(2).status,"ESTIMATED");
+ assert.equal(readiness(2).observedPercent,null);
+ assert.equal(readiness(2).unassessedSkills.length,3);
  assert.equal(readiness(7).assessedCount,2);
 });
 test("month key and school year boundaries are exact",()=>{
