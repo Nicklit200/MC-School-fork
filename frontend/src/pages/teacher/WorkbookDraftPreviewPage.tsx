@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { requestBlob } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
+import { PostLessonHomeworkPdfCanvas } from './PostLessonHomeworkPdfCanvas';
+import './post-lesson-homework-review.css';
 
 type PdfKind = 'workbook' | 'answers';
+type SavedPdf = { url: string; blob: Blob };
 
 /**
  * Stable school-site URL for an unpublished Mindcrafti workbook draft.
@@ -14,7 +17,7 @@ export function WorkbookDraftPreviewPage() {
   const { teacherId = '', draftId = '' } = useParams();
   const { user } = useAuth();
   const [kind, setKind] = useState<PdfKind>('workbook');
-  const [files, setFiles] = useState<Partial<Record<PdfKind, string>>>({});
+  const [files, setFiles] = useState<Partial<Record<PdfKind, SavedPdf>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isAdmin = user?.role === 'ADMIN';
@@ -34,15 +37,18 @@ export function WorkbookDraftPreviewPage() {
     async function load() {
       try {
         const prefix = `/workbook-drafts/${encodeURIComponent(teacherId)}/${encodeURIComponent(draftId)}`;
-        const workbook = URL.createObjectURL(await requestBlob(`${prefix}/workbook`));
-        urls.push(workbook);
+        const workbookBlob = await requestBlob(`${prefix}/workbook`);
         if (cancelled) return;
-        setFiles({ workbook });
+        const workbookUrl = URL.createObjectURL(workbookBlob);
+        urls.push(workbookUrl);
+        setFiles({ workbook: { url: workbookUrl, blob: workbookBlob } });
         setLoading(false);
         try {
-          const answers = URL.createObjectURL(await requestBlob(`${prefix}/answers`));
-          urls.push(answers);
-          if (!cancelled) setFiles(old => ({ ...old, answers }));
+          const answersBlob = await requestBlob(`${prefix}/answers`);
+          if (cancelled) return;
+          const answersUrl = URL.createObjectURL(answersBlob);
+          urls.push(answersUrl);
+          setFiles(old => ({ ...old, answers: { url: answersUrl, blob: answersBlob } }));
         } catch {
           // A missing answers file does not prevent viewing the student PDF.
         }
@@ -87,16 +93,17 @@ export function WorkbookDraftPreviewPage() {
           <button className="btn btn--secondary" type="button" onClick={() => setKind('answers')}
             aria-pressed={kind === 'answers'} disabled={!files.answers}>Ответы</button>
           {current && <>
-            <a className="btn btn--secondary" href={current} target="_blank" rel="noreferrer">Открыть PDF</a>
-            <a className="btn btn--secondary" href={current} download={filename}>Скачать PDF</a>
+            <a className="btn btn--secondary" href={current.url} target="_blank" rel="noreferrer">Открыть PDF</a>
+            <a className="btn btn--secondary" href={current.url} download={filename}>Скачать PDF</a>
           </>}
           <Link className="btn" to={back}>К урокам</Link>
         </nav>
       </header>
       {loading ? <div role="status" style={{ padding: 24 }}>Загружаем сохранённый PDF…</div>
         : error ? <div role="alert" style={{ padding: 24 }}>{error}</div>
-          : current ? <iframe title={kind === 'workbook' ? 'PDF рабочей тетради' : 'PDF ответов преподавателя'}
-              src={current} style={{ flex: 1, width: '100%', border: 'none', minHeight: 0 }}/>
+          : current ? <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <PostLessonHomeworkPdfCanvas key={kind} blob={current.blob} />
+            </main>
             : <div role="status" style={{ padding: 24 }}>Материал пока недоступен.</div>}
     </div>
   );
