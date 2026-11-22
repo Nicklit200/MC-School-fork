@@ -12,6 +12,12 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  // The skills editor is versioned by deployment, not by URL-hashed assets.
+  // Always revalidate its iframe, JS, and CSS instead of serving a browser cache.
+  if (url.pathname.startsWith('/skills-board/')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }));
+    return;
+  }
   event.respondWith(fetch(event.request));
 });
 
