@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import type {StudentListItem} from '../../api/types';
-import {schoolAssessmentsApi,type SchoolAssessment,type SchoolAssessmentDraft,type SchoolAssessmentKind} from '../../api/schoolAssessments';
+import {schoolAssessmentsApi,type SchoolAssessment,type SchoolAssessmentDraft,type SchoolAssessmentKind,type SchoolAssessmentReadiness} from '../../api/schoolAssessments';
 
 type Props={
   language:'DE'|'RU'; students:StudentListItem[]; selectedDate:string;
@@ -27,6 +27,26 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [expanded,setExpanded]=useState<string|null>(null);
+ const [readinessById,setReadinessById]=useState<Record<string,SchoolAssessmentReadiness>>({});
+ const [readinessErrors,setReadinessErrors]=useState<Record<string,string>>({});
+ // Fetch immediately so the percentage is visible even while the card is closed.
+ // Reload on calendar date/event changes, then revalidate on window focus.
+ useEffect(()=>{
+   const ids=events.filter(x=>x.examDate===selectedDate).map(x=>x.id);
+   let alive=true;
+   const refresh=()=>{
+     void Promise.all(ids.map(id=>schoolAssessmentsApi.readiness(id)
+       .then(data=>{if(alive)setReadinessById(old=>({...old,[id]:data}));})
+       .catch(error=>{if(alive)setReadinessErrors(old=>({...old,[id]:error instanceof Error?error.message:String(error)}));})
+     ));
+   };
+   refresh();
+   const onFocus=()=>refresh();
+   window.addEventListener('focus',onFocus);
+   const interval=window.setInterval(()=>{if(!document.hidden)refresh();},60000);
+   return ()=>{alive=false;window.removeEventListener('focus',onFocus);window.clearInterval(interval);};
+ },[events,selectedDate]);
+ function toggle(id:string){setExpanded(old=>old===id?null:id);}
  useEffect(()=>{if(!editor){setDraft(empty(selectedDate,students[0]?.id??''));setTopics('');}},[selectedDate,students,editor]);
  const shown=events.filter(event=>event.examDate===selectedDate);
  const start=(event?:SchoolAssessment)=>{
@@ -54,26 +74,36 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
      <button type="button" className="btn btn--secondary" onClick={()=>start()}>{language==='DE'?'+ Prüfung hinzufügen':'+ Добавить контрольную'}</button>
    </div>
    {shown.length===0&&!editor&&<p className="muted">{language==='DE'?'An diesem Tag sind keine Prüfungen eingetragen.':'На этот день контрольных пока нет.'}</p>}
-   {shown.map(event=><article className="school-assessment-card" key={event.id}>
-     <button type="button" className="school-assessment-card__trigger" aria-expanded={expanded===event.id}
-       onClick={()=>setExpanded(expanded===event.id?null:event.id)}>
-       <span className="school-assessment-card__emoji">📝</span>
-       <span><strong>{event.studentName}: {event.title}</strong><small>{kindNames[event.kind]} · {event.confirmationStatus==='SCHOOL_CONFIRMED'?'Подтверждено школой':'Сообщено, школа не подтверждала'}</small></span>
-       <span aria-hidden="true">{expanded===event.id?'▴':'▾'}</span>
-     </button>
-     {expanded===event.id&&<div className="school-assessment-card__details">
-       <strong>Предполагаемые темы</strong>
-       {event.topics.length?<ul>{event.topics.map(topic=><li key={topic}>{topic}</li>)}</ul>:<p className="muted">Темы ещё не указаны.</p>}
-       {event.notes&&<p>{event.notes}</p>}
-       <p className="muted">Источник: {{
-         TRANSCRIPT:'расшифровка урока',STUDENT_REPORTED:'со слов ученика',
-         TEACHER_NOTE:'заметка преподавателя',VOICE_NOTE:'голосовая заметка',
-         SCHOOL_DOCUMENT:'школьный документ'
-       }[event.sourceType]}{event.sourceRef?' · '+event.sourceRef:''}</p>
-       {event.sourceExcerpt&&<blockquote className="school-assessment-card__quote">{event.sourceExcerpt}</blockquote>}
-       <button type="button" className="btn btn--secondary" onClick={()=>start(event)}>Уточнить дату или темы</button>
-     </div>}
-   </article>)}
+   {shown.map(event=>{
+     const readiness=readinessById[event.id];
+     const overall=readiness?.percent;
+     return <article className="school-assessment-card" key={event.id}>
+       <button type="button" className="school-assessment-card__trigger" aria-expanded={expanded===event.id}
+         onClick={()=>toggle(event.id)}>
+         <span className="school-assessment-card__emoji">📝</span>
+         <span><strong>{event.studentName}: {event.title}</strong>
+           <small>{kindNames[event.kind]} · {event.confirmationStatus==='SCHOOL_CONFIRMED'?'Подтверждено школой':'Со слов ученика, школа не подтверждала'}</small>
+         </span>
+         <span className={'school-exam-readiness__badge'+(overall===null||overall===undefined?' is-unknown':'')}>
+           {overall===null||overall===undefined?'Не оценено':overall+'%'}
+         </span>
+         <span aria-hidden="true">{expanded===event.id?'▴':'▾'}</span>
+       </button>
+       {expanded===event.id&&<div className="school-assessment-card__details">
+         {readinessErrors[event.id]&&!readiness&&<p className="muted">Не удалось загрузить проценты</p>}
+         <div className="school-exam-topic-list">
+           {event.topics.map(topic=>{
+             const value=readiness?.topics?.find(entry=>entry.title===topic)?.percent;
+             return <div className="school-exam-topic" key={topic}>
+               <span>{topic}</span>
+               <strong>{value===null||value===undefined?'Не оценено':value+'%'}</strong>
+             </div>;
+           })}
+           {!event.topics.length&&<div className="school-exam-topic">Темы ещё не указаны</div>}
+         </div>
+       </div>}
+     </article>;
+   })}
    {editor&&<div className="school-assessment-editor">
      <div className="school-assessments__heading"><strong>{editing?'Изменить контрольную':'Новая контрольная'}</strong><button type="button" className="btn btn--ghost" onClick={()=>setEditor(false)}>Закрыть</button></div>
      <div className="school-assessment-editor__grid">

@@ -15,8 +15,17 @@ export type SchoolAssessmentDraft = {
  title:string;topics:string[];notes:string;sourceType:AssessmentSource;
  sourceRef?:string;sourceExcerpt?:string;confirmationStatus:ConfirmationStatus;
 };
+export type SchoolAssessmentSkillRow = {id:string;title:string;percent:number|null};
+export type SchoolAssessmentTopicRow = {title:string;percent:number|null;assessedCount:number;totalCount:number};
+export type SchoolAssessmentReadiness = {
+ assessmentId:string;studentId:string;boardId:string|null;
+ skills:SchoolAssessmentSkillRow[];topics:SchoolAssessmentTopicRow[];unmappedTopics:string[];
+ assessedCount:number;totalCount:number;coveragePercent:number;
+ percent:number|null;status:'NOT_LINKED'|'NO_VALID_SKILLS'|'NOT_ASSESSED'|'PARTIAL'|'ESTIMATED';
+};
 export const schoolAssessmentsApi = {
  list: ()=>request<SchoolAssessment[]>('GET','/school-assessments'),
+ readiness: (id:string)=>request<SchoolAssessmentReadiness>('GET','/school-assessments/'+encodeURIComponent(id)+'/readiness'),
  create: (data:SchoolAssessmentDraft,idempotencyKey:string)=>
    request<SchoolAssessment>('POST','/school-assessments',{...data,idempotencyKey}),
  update: (id:string,data:Omit<SchoolAssessmentDraft,'studentId'|'teacherId'> & {expectedRevision:number})=>
