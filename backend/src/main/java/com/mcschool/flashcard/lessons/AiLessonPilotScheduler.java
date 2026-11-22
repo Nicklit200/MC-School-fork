@@ -87,9 +87,13 @@ public class AiLessonPilotScheduler {
                 .findByTeacherIdAndEventId(teacher.getId(), eventId)
                 .orElse(null);
         if (preparation == null) return false;
-        return notBlank(preparation.getLessonPlan())
-                || preparation.hasWorkbook()
-                || preparation.hasAnswers();
+        // A finished lesson plan or PDF alone does not mean today's homework
+        // analysis was prepared. Keep retrying until both automatic sections exist.
+        String difficulties = preparation.getDifficulties();
+        String homework = preparation.getHomeworkNotes();
+        return difficulties != null && difficulties.contains("\"kind\":\"homework_errors_v1\"")
+                && homework != null
+                && (homework.contains(": задано ") || homework.contains("Предыдущий урок не найден"));
     }
 
     private void notifyPrepared(User teacher, GroupLessonResponse lesson) {
