@@ -209,7 +209,17 @@ function teacherBlock(b) {
     case 'exercise': return exercise(b);
     case 'facts': return factsBlock(b);
     case 'solutions': {
-      const rows = b.items.map(x => `<div class="solution-row"><span class="solution-label">${richText(x.label)}</span>${x.math ? math(x.math) : `<span class="solution-text">${richText(x.text)}</span>`}${x.note ? `<span class="solution-note">${richText(x.note)}</span>` : ''}</div>${x.explanation ? `<p class="rich-text">${richText(x.explanation)}</p>` : ''}`).join('');
+      // Never put the formula and the didactic note into competing flex cells.
+      // Long MathJax SVGs cannot wrap word-by-word, while notes must wrap as
+      // ordinary prose. Give each its own vertically stacked region.
+      const rows = b.items.map(x => `<div class="solution-row">
+        <span class="solution-label">${richText(x.label)}</span>
+        <div class="solution-content">
+          <div class="solution-main">${x.math ? math(x.math) : `<span class="solution-text">${richText(x.text)}</span>`}</div>
+          ${x.note ? `<div class="solution-note">${richText(x.note)}</div>` : ''}
+          ${x.explanation ? `<p class="solution-explanation">${richText(x.explanation)}</p>` : ''}
+        </div>
+      </div>`).join('');
       return `<section class="teacher-block solution-group"><div class="teacher-section-label">${richText(b.section)}</div><div class="teacher-section-title">${richText(b.title)}</div>${rows}${b.footerNote ? `<div class="solution-footnote">${richText(b.footerNote)}</div>` : ''}</section>`;
     }
     default: throw new TypeError(`Unknown teacher block: ${b.type}`);
