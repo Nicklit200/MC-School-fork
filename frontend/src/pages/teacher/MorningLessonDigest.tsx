@@ -44,49 +44,77 @@ function getHomeworkSummary(raw: string | null | undefined): Summary[] {
 }
 
 /** Derived data only: never treat an absent submitted PDF as a student's mistake. */
+function homeworkPercent(assigned: number, submitted: number): number {
+  if (assigned <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((submitted / assigned) * 100)));
+}
+
 export function MorningHomeworkSummary({raw, de}: {raw: string | null | undefined; de: boolean}) {
   const rows = getHomeworkSummary(raw);
-  if (!rows.length) return <p className="muted">{de ? 'Hausaufgabenübersicht wird bei der morgendlichen Vorbereitung erstellt.' : 'Сводка заданной и сданной домашки появится после утренней подготовки.'}</p>;
-  return <div className="morning-homework">
-    <p className="morning-digest-caption">{de ? 'Automatische Übersicht seit der letzten Stunde' : 'Автоматическая сводка после прошлого занятия'}</p>
+  if (!rows.length) return <div className="morning-homework-pending">
+    <div className="morning-homework-track morning-homework-track--pending" aria-hidden="true" />
+    <p className="muted">{de
+      ? 'Übersicht folgt nach der morgendlichen Vorbereitung.'
+      : 'Статистика появится после утренней подготовки.'}</p>
+  </div>;
+
+  const totalAssigned = rows.reduce((sum, row) => sum + row.assigned, 0);
+  const totalSubmitted = rows.reduce((sum, row) => sum + row.submitted, 0);
+  const totalPercent = homeworkPercent(totalAssigned, totalSubmitted);
+  return <div className="morning-homework morning-homework--compact">
+    <div className="morning-homework-overview">
+      <span>{de ? 'Hausaufgaben abgegeben' : 'Домашка сдана'}</span>
+      <strong>{totalSubmitted}/{totalAssigned} · {totalPercent}%</strong>
+    </div>
+    <div className="morning-homework-track" role="progressbar" aria-label={de ? 'Abgegebene Hausaufgaben insgesamt' : 'Сданная домашняя работа, всего'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={totalPercent}>
+      <span style={{width: totalPercent + '%'}} />
+    </div>
     {rows.map(row => <div className="morning-homework-row" key={row.student}>
-      <strong>{row.student}</strong>
-      <div className="morning-homework-metrics">
-        <span>{de ? 'Aufgegeben' : 'Задано'}: <b>{row.assigned}</b></span>
-        <span>{de ? 'Abgegeben' : 'Сдано'}: <b>{row.submitted}</b></span>
-        <span>{de ? 'Offen' : 'Ожидается'}: <b>{row.pending}</b></span>
+      <div className="morning-homework-row-heading">
+        <strong>{row.student}</strong>
+        <span>{row.submitted}/{row.assigned} · {homeworkPercent(row.assigned, row.submitted)}%</span>
+      </div>
+      <div className="morning-homework-track morning-homework-track--student" role="progressbar" aria-label={(de ? 'Hausaufgaben: ' : 'Домашка: ') + row.student} aria-valuemin={0} aria-valuemax={100} aria-valuenow={homeworkPercent(row.assigned, row.submitted)}>
+        <span style={{width: homeworkPercent(row.assigned, row.submitted) + '%'}} />
       </div>
     </div>)}
   </div>;
 }
 
+function HomeworkIssueCard({issue, de}: {issue: Issue; de: boolean}) {
+  return <article className="morning-error-card">
+    <div className="morning-error-heading">
+      <strong>{issue.student}</strong>
+      <span>{de ? 'Wiederholen' : 'Нужно разобрать'}</span>
+    </div>
+    <div className="morning-error-topic">{issue.difficulty}</div>
+    <div className="morning-error-section">
+      <span className="morning-error-label">{de ? 'Aufgabe' : 'Задание'}</span>
+      <p>{issue.task}</p>
+    </div>
+    <div className="morning-error-answer">
+      <span><b>{de ? 'Antwort des Kindes:' : 'Ответ ученика:'}</b> {issue.studentAnswer}</span>
+      <span><b>{de ? 'Richtig:' : 'Правильно:'}</b> {issue.correctAnswer}</span>
+    </div>
+    <p className="morning-error-source">{de ? 'Quelle' : 'Источник'}: {issue.source}{issue.page ? ' · ' + issue.page : ''}</p>
+  </article>;
+}
+
 export function MorningDifficulties({raw, de}: {raw: string | null | undefined; de: boolean}) {
   const issues = getIssues(raw);
-  if (issues === null) return <p className="muted">{de
-    ? 'Die wichtigsten Fehler aus überprüfbaren Hausaufgaben erscheinen hier nach der morgendlichen Vorbereitung.'
-    : 'Здесь появятся только основные ошибки из проверяемых домашних работ после утренней подготовки.'}</p>;
+  if (issues === null) return <p className="muted morning-difficulties-pending">{de
+    ? 'Die wichtigsten nachweisbaren Hausaufgabenfehler folgen nach der morgendlichen Prüfung.'
+    : 'Главные ошибки из проверенной домашки появятся после утренней подготовки.'}</p>;
   if (!issues.length) return <div className="morning-digest-neutral">{de
-    ? 'Keine ausreichend belegten Aufgabenfehler gefunden.'
-    : 'Нет надёжно подтверждённых ошибок для показа. Это не означает, что все задания решены правильно.'}</div>;
-  return <div className="morning-difficulties">
-    <p className="morning-digest-caption">{de
-      ? 'Wichtigste Schwierigkeiten: echte Aufgaben und Schülerantworten'
-      : 'Только основные затруднения: реальные задания и ответы учеников'}</p>
-    {issues.map((issue, i) => <article className="morning-error-card" key={issue.source + ':' + issue.page + ':' + i}>
-      <div className="morning-error-heading">
-        <strong>{issue.student}</strong>
-        <span>{de ? 'Wiederholen' : 'Нужно разобрать'}</span>
+    ? 'Keine nachweisbaren Aufgabenfehler zum Anzeigen.'
+    : 'Нет подтверждённых ошибок для показа.'}</div>;
+  return <div className="morning-difficulties morning-difficulties--compact">
+    <HomeworkIssueCard key={issues[0].source + ':0'} issue={issues[0]} de={de} />
+    {issues.length > 1 && <details className="morning-difficulties-more">
+      <summary>{de ? 'Weitere Fehler anzeigen: ' : 'Показать остальные ошибки: '}{issues.length - 1}</summary>
+      <div className="morning-difficulties-expanded">
+        {issues.slice(1).map((issue, index) => <HomeworkIssueCard key={issue.source + ':' + issue.page + ':' + index} issue={issue} de={de} />)}
       </div>
-      <div className="morning-error-topic">{issue.difficulty}</div>
-      <div className="morning-error-section">
-        <span className="morning-error-label">{de ? 'Aufgabe' : 'Задание'}</span>
-        <p>{issue.task}</p>
-      </div>
-      <div className="morning-error-answer">
-        <span><b>{de ? 'Antwort des Kindes:' : 'Ответ ученика:'}</b> {issue.studentAnswer}</span>
-        <span><b>{de ? 'Richtig:' : 'Правильно:'}</b> {issue.correctAnswer}</span>
-      </div>
-      <p className="morning-error-source">{de ? 'Quelle' : 'Источник'}: {issue.source}{issue.page ? ' · ' + issue.page : ''}</p>
-    </article>)}
+    </details>}
   </div>;
 }

@@ -55,6 +55,10 @@ describe('lesson workspace',()=>{
     expect(screen.getByText('Ответ ученика:')).toBeInTheDocument();
     expect(screen.getByText('Правильно:')).toBeInTheDocument();
     expect(screen.getByText('Мелисса')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar',{name:'Сданная домашняя работа, всего'})).toHaveAttribute('aria-valuenow','79');
+    expect(screen.getByRole('progressbar',{name:'Домашка: Мелисса'})).toHaveAttribute('aria-valuenow','71');
+    expect(screen.getByRole('progressbar',{name:'Домашка: София'})).toHaveAttribute('aria-valuenow','86');
+    expect(screen.getByText('11/14 · 79%')).toBeInTheDocument();
     expect(screen.getAllByText('София').length).toBeGreaterThan(0);
     expect(screen.queryByRole('textbox',{name:'Информация о домашке'})).not.toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Сохранить информацию'})).not.toBeInTheDocument();

@@ -120,7 +120,7 @@ jobs:
         run: npm ci
       - name: Post-lesson dialog behavior
         working-directory: frontend
-        run: npm test -- src/features/online-classes/PostLessonHomeworkDialog.test.tsx src/components/PostLessonHomeworkStatus.test.tsx src/pages/teacher/StudentHomeworksPage.test.tsx src/pages/teacher/PostLessonHomeworkPdfCanvas.test.tsx
+        run: npm test -- src/features/online-classes/PostLessonHomeworkDialog.test.tsx src/components/PostLessonHomeworkStatus.test.tsx src/pages/teacher/StudentHomeworksPage.test.tsx src/pages/teacher/PostLessonHomeworkPdfCanvas.test.tsx src/pages/teacher/LessonWorkspacePage.test.tsx src/pages/teacher/LessonCardsPanel.test.tsx
       - name: Typecheck and build
         working-directory: frontend
         run: npm run build
