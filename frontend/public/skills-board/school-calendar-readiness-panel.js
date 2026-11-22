@@ -2,7 +2,7 @@ import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./scho
 import {schoolYearMonthKey,schoolYearStartForDate} from "./school-calendar-month-index.js";
 
 /** Visible readiness is derived from the latest student skills, never stored as fake grades. */
-export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,getIndividualMonths,refreshMastery,onChange}) {
+export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,getEvidence,getIndividualMonths,refreshMastery,onChange}) {
   const byId=id=>document.getElementById(id);
   const panel=byId("school-calendar-panel");
   const studentSelect=byId("calendar-student");
@@ -113,31 +113,75 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
     block.append(element("p","calendar-readiness-explanation",message));
     if(r.unmappedTopics.length)block.append(element("p","calendar-readiness-alert",
       "Без связи с картой навыков: "+r.unmappedTopics.join(", ")+"."));
-    if(r.weakSkills.length)block.append(element("p","calendar-readiness-weak",
-      "Повторить: "+r.weakSkills.slice(0,4).map(x=>`${x.title} (${x.value}%)`).join(", ")
-      +(r.weakSkills.length>4?` и ещё ${r.weakSkills.length-4}`:"")));
-    if(r.unassessedSkills.length)block.append(element("p","calendar-readiness-unassessed",
-      `Не проверено навыков: ${r.unassessedSkills.length}. Они не считаются ошибками.`));
-    if(r.topics.length) {
-      const dropdown=element("details","calendar-readiness-details");
-      dropdown.append(element("summary","",`Все навыки по темам месяца (${r.topics.length})`));
-      for(const t of r.topics){
-        const group=element("div","calendar-readiness-topic");
-        group.append(element("strong","",t.name));
-        group.append(element("small","",t.totalCount
-          ?`Оценено ${t.assessedCount} из ${t.totalCount}${t.observedPercent===null?"":" · "+t.observedPercent+"% по оценённым"}`
-          :"Не привязано к навыкам"));
-        for(const skill of t.skills) {
-          const row=element("div","calendar-readiness-skill");
-          row.append(element("span","",skill.title),element("span",
-            skill.value===null?"unverified":skill.value>=80?"high":skill.value>=60?"medium":"low",
-            skill.value===null?"Нет оценки":skill.value+"%"));
-          group.append(row);
+    const orderedSkills=[...new Map(r.topics.flatMap(topic=>topic.skills)
+      .map(skill=>[skill.id,skill])).values()];
+    if(orderedSkills.length) {
+      const heading=element("h4","calendar-readiness-skills-heading",`Навыки месяца (${orderedSkills.length})`);
+      block.append(heading);
+      const grid=element("div","calendar-readiness-skills-grid");
+      const allEvidence=getEvidence?.(studentId);
+      const evidenceError=!Array.isArray(allEvidence)?allEvidence?.error:null;
+      const sourceNames={
+        LESSON:"Урок",HOMEWORK:"Домашнее задание",TEST:"Тест",
+        TEACHER_OBSERVATION:"Наблюдение преподавателя"
+      };
+      const independence={
+        FIRST_TRY:"Поняла с первого раза",INDEPENDENT:"Самостоятельно",
+        HINTED:"С подсказкой учителя",AFTER_EXPLANATION:"После объяснения",
+        NOT_YET:"Пока не справилась",UNKNOWN:"Степень самостоятельности неизвестна"
+      };
+      const evidenceRows=Array.isArray(allEvidence)?allEvidence:[];
+      for(const skill of orderedSkills) {
+        const item=element("details","calendar-skill-proof");
+        const summary=element("summary","calendar-skill-proof-summary");
+        summary.append(element("span","calendar-skill-proof-title",skill.title));
+        const score=element("strong","calendar-skill-proof-percent "+
+          (skill.value===null?"unverified":skill.value>=80?"high":skill.value>=60?"medium":"low"),
+          skill.value===null?"Не оценён":skill.value+"%");
+        summary.append(score);
+        item.append(summary);
+        const inside=element("div","calendar-skill-proof-body");
+        if(evidenceError) {
+          inside.append(element("p","calendar-proof-muted","Не удалось загрузить доказательства: "+evidenceError));
+        } else {
+          const relevant=evidenceRows.filter(entry=>entry.skillId===skill.id);
+          if(relevant.length===0) {
+            inside.append(element("p","calendar-proof-muted",
+              skill.value===null
+                ?"Навык ещё не оценивался. Доказательства будут появляться после анализа заданий."
+                :"Процент уже сохранён в карте, но обоснование пока не было записано. Нельзя достоверно указать самостоятельность без анализа уроков и домашки."));
+          } else {
+            const superseded=new Set(relevant.map(e=>e.supersedesId).filter(Boolean));
+            for(const observation of relevant.slice(0,8)){
+              const proof=element("div","calendar-proof-entry"+(superseded.has(observation.id)?" corrected":""));
+              const header=element("div","calendar-proof-header");
+              const source=sourceNames[observation.sourceType]||"Источник";
+              const timestamp=observation.observedAt?
+                new Date(observation.observedAt).toLocaleDateString("ru-RU"):"Дата не указана";
+              header.append(element("strong","",source+" · "+timestamp));
+              proof.append(header);
+              proof.append(element("p","calendar-proof-autonomy",independence[observation.autonomy]||"Наблюдение"));
+              proof.append(element("p","calendar-proof-explanation",observation.explanation||""));
+              if(observation.sourceExcerpt) proof.append(element("blockquote","calendar-proof-excerpt",observation.sourceExcerpt));
+              if(observation.sourceRef) proof.append(element("small","calendar-proof-ref","Источник: "+observation.sourceRef));
+              if(observation.masteryAfter!==null&&observation.masteryAfter!==undefined)
+                proof.append(element("small","calendar-proof-ref","Оценка после наблюдения: "+observation.masteryAfter+"%"));
+              if(superseded.has(observation.id))proof.append(element("small","calendar-proof-correction","Позже исправлено. Сохранено для истории."));
+              if(observation.correctionReason)proof.append(element("small","calendar-proof-correction","Причина уточнения: "+observation.correctionReason));
+              inside.append(proof);
+            }
+          }
         }
-        dropdown.append(group);
+        inside.append(element("p","calendar-proof-footnote",
+          "Наблюдения и исправления сохраняются через MCH3. Сам процент берётся из карты навыков."));
+        item.append(inside);
+        grid.append(item);
       }
-      block.append(dropdown);
+      block.append(grid);
     }
+    if(r.unassessedSkills.length)
+      block.append(element("p","calendar-readiness-unassessed",
+        `Не оценено навыков: ${r.unassessedSkills.length}. Они не считаются нулевыми.`));
     block.append(element("p","calendar-readiness-fineprint",
       "Оценка действует на сегодня, не показывает результат на конец прошлого месяца. Индивидуальный план имеет приоритет над широкими разделами календаря; реальные темы и даты контрольных уточняйте в школе."));
     return block;
