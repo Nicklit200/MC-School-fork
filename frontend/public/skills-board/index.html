@@ -6,7 +6,7 @@
   <title>Mindcrafti · Навыки</title>
   <link rel="stylesheet" href="./board.css?v=13">
   <link rel="stylesheet" href="./teacher-theme.css?v=20261023-1">
-  <link rel="stylesheet" href="./school-calendar.css?v=20261120-1">
+  <link rel="stylesheet" href="./school-calendar.css?v=20261122-1">
   <script src="./teacher-theme.js?v=20261023-1"></script>
 </head>
 <body>
@@ -94,6 +94,11 @@
         <label>Тип школы<select id="calendar-school" aria-label="Тип школы"></select></label>
         <label>Профиль<input id="calendar-profile" aria-label="Школьный профиль" value="vierstufig" autocomplete="off"></label>
         <span id="calendar-status">Не проверено</span>
+        <label id="calendar-student-wrap">Готовность ученика<select id="calendar-student" aria-label="Ученик для оценки готовности"></select></label>
+        <div class="calendar-refresh-controls">
+          <button id="calendar-refresh" type="button">Обновить оценки</button>
+          <span id="calendar-progress-updated" role="status">Загружаем оценки</span>
+        </div>
       </div>
       <div class="calendar-guidance">
         <p id="calendar-caution">План ориентировочный. Школьные контрольные требуется подтверждать.</p>
@@ -163,6 +168,6 @@
     <div id="inspector-body"></div>
   </aside>
 </div>
-<script type="module" src="./board.js?v=20261120-1"></script>
+<script type="module" src="./board.js?v=20261122-1"></script>
 </body>
 </html>
