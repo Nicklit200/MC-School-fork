@@ -7,6 +7,7 @@ on:
       - 'backend/src/test/java/com/mcschool/flashcard/skills/SchoolCalendar*.java'
       - 'frontend/public/skills-board/**'
       - 'frontend/tests/school-calendar.test.mjs'
+      - 'frontend/tests/school-calendar-readiness.test.mjs'
       - '.github/workflows/school-month-calendar.yml'
   push:
     branches: [feat/skills-school-monthly-plans-20261120]
@@ -27,10 +28,12 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Check school calendar model
-        run: node --test frontend/tests/school-calendar.test.mjs
+        run: node --test frontend/tests/school-calendar.test.mjs frontend/tests/school-calendar-readiness.test.mjs
       - name: Check skills board JS syntax
         run: |
           node --check frontend/public/skills-board/school-calendar.js
+          node --check frontend/public/skills-board/school-calendar-readiness.js
+          node --check frontend/public/skills-board/school-calendar-readiness-panel.js
           node --check frontend/public/skills-board/board.js
       - name: Build frontend
         working-directory: frontend
