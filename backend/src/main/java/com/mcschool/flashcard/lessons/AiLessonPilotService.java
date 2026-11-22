@@ -146,12 +146,17 @@ public class AiLessonPilotService {
 
                 Требования:
                 1. lessonPlan: конкретный план занятия по времени с заданиями и ожидаемыми ответами для преподавателя.
-                2. difficulties: что проверить в начале, какие ошибки из последних домашних работ и прошлого урока нужно разобрать.
-                3. homeworkDraft: черновик домашней работы на 10-15 минут, но не назначай её ученикам автоматически.
-                4. nextLessonFocus: кратко, куда двигаться дальше, если этот урок пройдет по плану.
-                5. Если в домашней работе видно исправление старой ошибки, не считай её текущей проблемой без дополнительных признаков.
-                6. Учитывай немецкую школьную терминологию, если это уместно.
-                7. Не выдумывай факты об ученике, которых нет в этих трёх источниках.
+                2. difficulties: ВЕРНИ ТОЛЬКО JSON-СТРОКУ вида {"kind":"homework_errors_v1","issues":[{"student":"имя","task":"дословно или точно по смыслу условие из PDF","studentAnswer":"фактический неправильный ответ из PDF","correctAnswer":"верный ответ и ключевой шаг","difficulty":"что именно не получается","source":"точное имя приложенного файла","page":"страница или номер задания"}]}.
+                Включи не более 2 самых важных подтверждённых ошибок НА КАЖДОГО ученика, максимум 5 на группу.
+                Только реальные ошибки в последних сданных домашних работах с видимым условием И ответом ученика. Если ответ неразборчив, отсутствует или проверить его нельзя, НЕ включай эту задачу.
+                Приоритет: повторяющиеся ошибки, существенные пробелы и навыки, нужные на ближайшем уроке. Не перечисляй каждую мелочь.
+                Не пиши, что получилось хорошо, не добавляй успехи, похвалу, зелёные достижения, общие пересказы или ошибки только из транскрипции.
+                Если нет надёжных ошибок, верни {"kind":"homework_errors_v1","issues":[]} без догадок.
+                3. homeworkDraft: черновик домашней работы на 10-15 минут для плана урока, но не назначай его ученикам и НЕ помещай в блок "Домашняя работа".
+                4. nextLessonFocus: кратко, какие из подтверждённых трудностей приоритетно разобрать на уроке.
+                5. Если старая ошибка уже исправлена в последней работе, не показывай её как текущую проблему.
+                6. Учитывай немецкую школьную терминологию, если уместно.
+                7. Не придумывай ни условие, ни ответ, ни ученика, ни источник. Имя source должно совпадать с приложенным PDF.
                 """.formatted(
                 context.lessonDescription(),
                 emptyFallback(context.monthPlanJson(), "План на месяц пока не заполнен."),
@@ -163,9 +168,10 @@ public class AiLessonPilotService {
                 teacher,
                 eventId,
                 new UpdateLessonPreparationRequest(
-                        draft.homeworkDraft(),
-                        draft.difficulties(),
-                        draft.lessonPlan(),
+                        context.homeworkSummary(),
+                        normalizeHomeworkErrorDigest(draft.difficulties(), context.homeworkFiles()),
+                        current.lessonPlan() == null || current.lessonPlan().isBlank()
+                                ? draft.lessonPlan() : current.lessonPlan(),
                         current.manualTranscriptText()));
     }
 
@@ -319,6 +325,57 @@ public class AiLessonPilotService {
                 .orElse("");
     }
 
+
+    /** The morning card is evidence-only: keep at most two meaningful errors per student,
+     * reject issues without a traceable submitted PDF, and never store a guessed answer.
+     * The saved preparation field is a small, versioned JSON string; no migration required.
+     */
+    private String normalizeHomeworkErrorDigest(String raw, List<HomeworkFile> availableFiles) {
+        List<Map<String, String>> verified = new java.util.ArrayList<>();
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = objectMapper.readValue(raw, Map.class);
+            if ("homework_errors_v1".equals(parsed.get("kind")) && parsed.get("issues") instanceof List<?> issues) {
+                Map<String, Integer> perStudent = new java.util.HashMap<>();
+                for (Object issue : issues) {
+                    if (!(issue instanceof Map<?, ?> fields)) continue;
+                    String student = digestField(fields, "student", 120);
+                    String task = digestField(fields, "task", 650);
+                    String studentAnswer = digestField(fields, "studentAnswer", 350);
+                    String correctAnswer = digestField(fields, "correctAnswer", 450);
+                    String difficulty = digestField(fields, "difficulty", 300);
+                    String source = digestField(fields, "source", 255);
+                    String page = digestField(fields, "page", 70);
+                    if (student.isBlank() || task.isBlank() || studentAnswer.isBlank()
+                            || correctAnswer.isBlank() || difficulty.isBlank() || source.isBlank()) continue;
+                    boolean inFiles = availableFiles.stream()
+                            .anyMatch(file -> file.studentName().equals(student) && file.filename().equals(source));
+                    if (!inFiles || perStudent.getOrDefault(student, 0) >= 2) continue;
+                    verified.add(Map.of(
+                            "student", student, "task", task, "studentAnswer", studentAnswer,
+                            "correctAnswer", correctAnswer, "difficulty", difficulty,
+                            "source", source, "page", page));
+                    perStudent.merge(student, 1, Integer::sum);
+                    if (verified.size() >= 5) break;
+                }
+            }
+        } catch (Exception ignored) {
+            // Invalid or unverifiable AI output must not create attributed mistakes.
+        }
+        try {
+            return objectMapper.writeValueAsString(Map.of("kind", "homework_errors_v1", "issues", verified));
+        } catch (Exception ex) {
+            return "{\"kind\":\"homework_errors_v1\",\"issues\":[]}";
+        }
+    }
+
+    private static String digestField(Map<?, ?> fields, String field, int limit) {
+        Object value = fields.get(field);
+        if (!(value instanceof String text)) return "";
+        String clean = text.trim().replaceAll("[\\p{Cntrl}&&[^\\n]]", " ");
+        return clean.length() <= limit ? clean : clean.substring(0, limit);
+    }
+
     private HomeworkEvidence completedHomeworkEvidence(
             GroupLessonResponse current,
             GroupLessonResponse previous) {
@@ -342,19 +399,32 @@ public class AiLessonPilotService {
             User student = userRepository.findById(studentId).orElse(null);
             if (student == null || student.isArchived()) continue;
 
-            List<Homework> submitted = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(studentId).stream()
+            List<Homework> all = homeworkRepository.findAllByStudentIdOrderByStartDateDescCreatedAtDesc(studentId);
+            java.time.LocalDate startDay = cutoff.atZone(SCHOOL_ZONE).toLocalDate();
+            java.time.LocalDate endDay = before.atZone(SCHOOL_ZONE).toLocalDate();
+            List<Homework> assigned = all.stream()
+                    .filter(Homework::hasWorksheet)
+                    .filter(homework -> !homework.getStartDate().isBefore(startDay))
+                    .filter(homework -> !homework.getStartDate().isAfter(endDay))
+                    .toList();
+            long submittedCount = assigned.stream()
+                    .filter(homework -> homework.isSubmitted()
+                            && homework.getSubmittedAt().isBefore(before)).count();
+            List<Homework> submitted = all.stream()
                     .filter(Homework::isSubmitted)
-                    .filter(homework -> homework.getSubmittedAt() != null)
                     .filter(homework -> !homework.getSubmittedAt().isBefore(cutoff))
-                    .filter(homework -> before == null || homework.getSubmittedAt().isBefore(before))
+                    .filter(homework -> homework.getSubmittedAt().isBefore(before))
                     .sorted(Comparator.comparing(Homework::getSubmittedAt).reversed())
                     .limit(7)
                     .sorted(Comparator.comparing(Homework::getSubmittedAt))
                     .toList();
 
             if (summary.length() > 0) summary.append("\n");
-            summary.append(student.getFullName()).append(": ").append(submitted.size())
-                    .append(" выполненных домашних работ после прошлого урока.");
+            summary.append(student.getFullName())
+                    .append(": задано ").append(assigned.size())
+                    .append(", сдано ").append(submittedCount)
+                    .append(", ещё не сдано ").append(Math.max(0, assigned.size() - submittedCount))
+                    .append(". В анализе не более 7 последних сданных работ.");
 
             for (Homework homework : submitted) {
                 byte[] pdf = homework.getSubmittedPdf();

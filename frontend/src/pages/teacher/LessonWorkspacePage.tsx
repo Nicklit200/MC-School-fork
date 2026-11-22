@@ -11,6 +11,7 @@ import { TrialInvitationPanel } from './TrialInvitationPanel';
 import { trialInvitationsApi } from '../../api/trialInvitations';
 import { LessonHomeworkSeriesPanel } from '../../components/LessonHomeworkSeriesPanel';
 import { PostLessonHomeworkStatus } from '../../components/PostLessonHomeworkStatus';
+import { MorningHomeworkSummary, MorningDifficulties } from './MorningLessonDigest';
 import { PersonalWorkbooksPanel } from './PersonalWorkbooksPanel';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
@@ -110,16 +111,6 @@ export function LessonWorkspacePage() {
       </div></>;
   }
 
-  async function save() {
-    if (!prep) return;
-    await perform(() => lessonPreparationApi.update(eventId, {
-      coveredMaterial: prep.coveredMaterial ?? '', homeworkNotes: prep.homeworkNotes ?? '', difficulties: prep.difficulties ?? '', lessonPlan: prep.lessonPlan ?? '',
-      transcriptText: prep.manualTranscriptText === undefined ? prep.transcriptText ?? '' : prep.manualTranscriptText ?? '',
-    }), de ? 'Gespeichert.' : 'Информация сохранена.');
-  }
-  function note(field: 'homeworkNotes' | 'difficulties') {
-    return <textarea className="input workspace-note" aria-label={field === 'homeworkNotes' ? (de ? 'Hausaufgabeninformationen' : 'Информация о домашке') : (de ? 'Schwierigkeiten' : 'Проблемы и сложности')} value={prep?.[field] ?? ''} onChange={e => setPrep(current => current ? { ...current, [field]: e.target.value } : current)} />;
-  }
   if (loading) return <p className="muted">{t('common.loading')}</p>;
   return <div className="lesson-workspace">
     <Link className="workspace-back" to="/teacher/lessons">← {de ? 'Zum Stundenplan' : 'Назад к расписанию'}</Link>
@@ -137,9 +128,9 @@ export function LessonWorkspacePage() {
         </div>
       </WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} /></div>
       <div className="workspace-info-grid">
-        <WorkspaceCard title={de ? 'Hausaufgaben' : 'Домашняя работа'} symbol="homework"><PostLessonHomeworkStatus eventId={eventId} de={de} /><button type="button" className="btn btn--secondary" onClick={() => homeworkDialog.current?.showModal()}>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</button>{note('homeworkNotes')}</WorkspaceCard>
+        <WorkspaceCard title={de ? 'Hausaufgaben' : 'Домашняя работа'} symbol="homework"><MorningHomeworkSummary raw={prep.homeworkNotes} de={de} /><PostLessonHomeworkStatus eventId={eventId} de={de} /><button type="button" className="btn btn--secondary" onClick={() => homeworkDialog.current?.showModal()}>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</button></WorkspaceCard>
         <LessonCardsPanel lesson={lesson} />
-        <WorkspaceCard title={de ? 'Schwierigkeiten' : 'Проблемы и сложности'} symbol="difficulties"><button type="button" className="btn btn--secondary" disabled={busy} onClick={() => void save()}>{busy ? (de ? 'Speichern…' : 'Сохраняем…') : (de ? 'Informationen speichern' : 'Сохранить информацию')}</button>{note('difficulties')}</WorkspaceCard>
+        <WorkspaceCard title={de ? 'Schwierigkeiten' : 'Проблемы и сложности'} symbol="difficulties"><MorningDifficulties raw={prep.difficulties} de={de} /></WorkspaceCard>
         <WorkspaceCard title={de ? 'Transkription' : 'Транскрипция'} symbol="transcript"><button type="button" className="btn btn--secondary" disabled={busy || !(prep.transcriptFilename || (prep.sonioxTranscriptText || prep.transcriptText || '').trim())} onClick={()=>{if(prep.transcriptFilename){open('transcript');return;}const url=URL.createObjectURL(new Blob([prep.sonioxTranscriptText || prep.transcriptText || ''],{type:'text/plain;charset=utf-8'}));window.open(url,'_blank','noopener,noreferrer');window.setTimeout(()=>URL.revokeObjectURL(url),60000);}}>{de?'Transkription öffnen':'Открыть транскрипцию'}</button></WorkspaceCard>
         <WorkspaceCard title={de ? 'Dokument der vergangenen Stunde' : 'Документ пройденного урока'} symbol="completed"><button type="button" className="btn btn--secondary" onClick={()=>documentsDialog.current?.showModal()}>{de?'Alle Dokumente':'Все документы'}</button>{!documents.length && <p className="muted">{de?'Das Dokument wird nach dem Unterricht hinzugefügt.':'Документ добавится после урока.'}</p>}</WorkspaceCard>
       </div></div>}
