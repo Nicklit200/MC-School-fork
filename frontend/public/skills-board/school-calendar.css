@@ -127,3 +127,44 @@
   .calendar-footer{padding:12px 16px}
   .calendar-topic{grid-template-columns:minmax(100px,1fr) minmax(110px,1fr) 29px;gap:6px}
 }
+
+/* Current evidence-based monthly readiness, never a promised school grade. */
+.calendar-controls{grid-template-columns:minmax(125px,1fr) minmax(125px,1fr) auto minmax(155px,1fr)}
+.calendar-refresh-controls{grid-column:1/-1;display:flex;align-items:center;gap:12px}
+#calendar-refresh{background:#eaf4ff;border:1px solid #a8cce4;color:#215578;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:12px}
+#calendar-refresh:disabled{opacity:.55}
+#calendar-progress-updated{font-size:11px;color:#718597}
+.calendar-month-readiness{font-size:11px;font-style:normal;font-weight:800;border-radius:6px;padding:3px 7px;max-width:100%;margin-top:auto}
+.calendar-month-readiness.high,.calendar-readiness-number.high{background:#dcfce7;color:#166534}
+.calendar-month-readiness.medium,.calendar-readiness-number.medium{background:#fef3c7;color:#92400e}
+.calendar-month-readiness.low,.calendar-readiness-number.low{background:#fee2e2;color:#991b1b}
+.calendar-month-readiness.unverified,.calendar-readiness-number.unverified{background:#e9edf2;color:#56687a}
+.calendar-month{min-height:98px}
+.calendar-readiness-summary{padding:12px 15px 14px;margin:8px 0 22px;border-radius:12px;border:1px solid #d5e6f3;background:#f7fbff}
+.calendar-readiness-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.calendar-readiness-heading strong{font-size:15px;color:#1f3c52}
+.calendar-readiness-number{font-size:13px;padding:6px 10px;border-radius:9px;font-weight:800}
+.calendar-readiness-explanation,.calendar-readiness-unassessed,.calendar-readiness-weak,.calendar-readiness-alert{font-size:12px;line-height:1.5;margin:10px 0 0;color:#445f75}
+.calendar-readiness-alert{color:#8e5211}
+.calendar-readiness-weak{color:#7b302c}
+.calendar-readiness-fineprint{font-size:11px;color:#647c8d;margin:13px 0 0}
+.calendar-coverage{font-size:12px;color:#4f687d;margin-top:12px}
+.calendar-coverage-track{height:7px;border-radius:10px;background:#dce5ed;margin-top:7px;overflow:hidden}
+.calendar-coverage-fill{height:100%;background:#3181bd;border-radius:10px}
+.calendar-readiness-details{margin-top:12px;border-top:1px solid #dce7ef;padding-top:10px}
+.calendar-readiness-details summary{cursor:pointer;font-size:12px;color:#2c6085;font-weight:750}
+.calendar-readiness-topic{margin:12px 0;padding:8px;background:white;border:1px solid #e5edf3;border-radius:9px}
+.calendar-readiness-topic>strong{display:block;font-size:12px;color:#29485f}
+.calendar-readiness-topic>small{display:block;font-size:11px;color:#71879a;margin:4px 0}
+.calendar-readiness-skill{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;padding:5px 0;border-top:1px solid #edf2f5}
+.calendar-readiness-skill span:last-child{white-space:nowrap;font-weight:750}
+.calendar-readiness-skill .high{color:#166534}
+.calendar-readiness-skill .medium{color:#92400e}
+.calendar-readiness-skill .low{color:#991b1b}
+.calendar-readiness-skill .unverified{color:#718497}
+@media(max-width:760px){
+ .calendar-controls{grid-template-columns:1fr 1fr}
+ #calendar-status{grid-column:auto}
+ .calendar-refresh-controls{grid-column:1/-1}
+ .calendar-month{min-height:88px}
+}
