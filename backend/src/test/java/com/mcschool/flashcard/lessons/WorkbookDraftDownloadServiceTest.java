@@ -48,6 +48,34 @@ class WorkbookDraftDownloadServiceTest {
     }
 
     @Test
+    void staffPreviewWorksWithoutExpiringTokenAndRechecksOwnership() {
+        assertArrayEquals(bytes, service.staffPreview(teacher,teacherId,draftId,"workbook").bytes());
+        assertArrayEquals(bytes, service.staffPreview(teacher,teacherId,draftId,"answers").bytes());
+        verify(lessons, times(2)).listGroupLessons(any());
+
+        var admin = new AuthenticatedUser(otherId,"admin@test.local",Role.ADMIN);
+        assertArrayEquals(bytes, service.staffPreview(admin,teacherId,draftId,"answers").bytes());
+
+        var student = new AuthenticatedUser(otherId,"student@test.local",Role.STUDENT);
+        assertThrows(RuntimeException.class,
+                () -> service.staffPreview(student,teacherId,draftId,"workbook"));
+        assertThrows(RuntimeException.class,
+                () -> service.staffPreview(teacher,otherId,draftId,"workbook"));
+        assertThrows(RuntimeException.class,
+                () -> service.staffPreview(teacher,teacherId,draftId,"transcript"));
+    }
+
+    @Test
+    void schoolSitePreviewReturnsInlinePdfWithoutPublicCapability() {
+        var controller = new WorkbookDraftStaffPreviewController(service);
+        var response = controller.preview(teacher,teacherId,draftId,"workbook");
+        assertEquals("application/pdf",response.getHeaders().getContentType().toString());
+        assertTrue(response.getHeaders().getContentDisposition().isInline());
+        assertEquals("no-store",response.getHeaders().getCacheControl());
+        assertArrayEquals(bytes,response.getBody());
+    }
+
+    @Test
     void signedLinkDownloadsExactBytesAndRechecksCurrentAuthorityAndLesson() {
         Map<String,Object> link=service.create(teacher,teacherId,draftId,"answers");
         assertEquals("2026-11-05T12:05:00Z",link.get("expiresAt"));
