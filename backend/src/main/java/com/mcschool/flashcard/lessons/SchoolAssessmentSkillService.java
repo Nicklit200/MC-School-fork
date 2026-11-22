@@ -185,7 +185,7 @@ public class SchoolAssessmentSkillService {
     @SuppressWarnings("unchecked")
     private Map<String,List<String>> readTopicIds(String value) {
         if(value==null||value.isBlank())return Map.of();
-        var parsed=mapper.readValue(value,Map.class);
+        Map<?,?> parsed=mapper.readValue(value,Map.class);
         Map<String,List<String>> result=new LinkedHashMap<>();
         for(var item:parsed.entrySet()){
             if(!(item.getKey() instanceof String key)||!(item.getValue() instanceof List<?> items))continue;
