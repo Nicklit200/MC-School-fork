@@ -78,7 +78,7 @@ export function WorkbookDraftPreviewPage() {
         justifyContent: 'space-between', flexWrap: 'wrap', borderBottom: '1px solid #e5e7eb' }}>
         <div>
           <div style={{ fontSize: 13, color: '#6b7280' }}>MINDCRAFTI SCHOOL · сохранённый черновик</div>
-          <strong>{kind === 'workbook' ? 'Рабочая тетрадь Виталины' : 'Ответы для преподавателя'}</strong>
+          <strong>{kind === 'workbook' ? 'Рабочая тетрадь' : 'Ответы для преподавателя'}</strong>
           <div style={{ fontSize: 12, color: '#6b7280' }}>Черновик не опубликован ученику</div>
         </div>
         <nav style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }} aria-label="Материалы">
