@@ -30,6 +30,51 @@ test('ChatGPT plain math strings normalize without touching solutions or algebra
   assert.match(teacher,/class="[^"]*math-latex/);
 });
 
+test('teacher solutions keep long formulas and notes in separate readable rows on a real A4 PDF', async()=>{
+  await mkdir(join(root,'out'),{recursive:true});
+  const dir=await mkdtemp(join(root,'out','teacher-notes-layout-'));
+  try {
+    const lesson=basic();
+    lesson.workbookPages=[{title:'Wiederholung',blocks:[{
+      type:'exercise',number:'07',title:'Berechne.',rows:[{
+        label:'',math:{latex:'-(3x-2)+2(x-4)'},work:true
+      }],writeLines:3
+    }]}];
+    lesson.teacherPages=[{title:'Lösungen',blocks:[{
+      type:'solutions',section:'Aufgaben 7-12',
+      title:'Lösungswege und didaktische Hinweise',
+      items:[
+        {label:'7.',math:{latex:'-3x+2+2x-8=-x-6'},
+          note:'19.11: записала -x+6, знак свободного члена.'},
+        {label:'8.',math:{latex:'6x-2-3x-6=3x-8'},
+          note:'16.11: перепутала 2·(-1) и подобные умножения, нужна дисциплина распределительного закона.'},
+        {label:'9.',math:{latex:'6x-15-2x-8+3x-1=7x-24'},
+          note:'21.11: верный промежуточный ход 4x-23+(6x-2)/2, но не доведено до конца.'},
+        {label:'10.',math:{latex:'(3x^2+10x-8)-(x^2+2x-3)=2x^2+8x-5'},
+          note:'Более сложный перенос: полный продукт скобок и минус перед результатом.'},
+        {label:'11.',math:{latex:'(2x-3)^2=(2x)^2-2\\cdot(2x)\\cdot3+3^2=4x^2-12x+9'},
+          note:'20.11: уже решила правильно, используем как опорный навык, не внушать, что это ошибка.'},
+        {label:'12.',math:{latex:'(3x+2)(3x-2)=(3x)^2-2^2=9x^2-4'},
+          note:'16.11: потребовалось напоминание о 3. биномиальной формуле.'},
+      ]
+    }]}];
+    lesson.qa={algebra:[{kind:'equivalence',expression:'-(3*x-2)+2*(x-4)',answer:'-x-6',restrictions:[]}]};
+    const src=join(dir,'vitalina.json');
+    await writeFile(src,JSON.stringify(lesson));
+    const run=spawnSync(process.execPath,[join(root,'generate.mjs'),
+      '--lesson='+src,'--out='+dir,'--basename=VitalinaAnswers'],
+      {encoding:'utf8',timeout:115000,env:process.env});
+    assert.equal(run.status,0,run.stderr||run.stdout||run.error?.message);
+    const report=JSON.parse(await readFile(join(dir,'VitalinaAnswers_layout-qa.json'),'utf8'));
+    assert.equal(report.passed,true);
+    const html=await readFile(join(dir,'VitalinaAnswers_Lehrerloesungen_60min.html'),'utf8');
+    assert.equal((html.match(/class="solution-content"/g)||[]).length,6);
+    assert.equal((html.match(/class="solution-note"/g)||[]).length,6);
+    assert.match(html,/Lösungswege und didaktische Hinweise/);
+    assert.ok((await readdir(dir)).includes('VitalinaAnswers_Lehrerloesungen_60min.pdf'));
+  }finally { await rm(dir,{recursive:true,force:true}); }
+});
+
 test('ChatGPT math normalization does not bypass strict formula safety or invalid math QA', async()=>{
   const lesson=basic();
   lesson.workbookPages[0].blocks=[{type:'exercise',number:'1',rows:[
