@@ -247,7 +247,6 @@ export function GroupLessonsPage() {
     return Array.from({length:count},(_,offset)=>{const date=addDays(start,offset);const key=localDateKey(date);return {key,date,lessons:lessonsByDay.get(key)??[]};});
   }, [weekCursor, lessonsByDay, calendarView, selectedDayKey]);
   const selectedLessons = lessonsByDay.get(selectedDayKey) ?? [];
-  const selectedAssessments = schoolAssessments.filter(entry=>entry.examDate===selectedDayKey);
   const visibleLessonsKey = selectedLessons.map(item =>
     [item.eventId, item.studentId ?? '', item.groupId ?? ''].join(':')).join('|');
   useEffect(() => {
