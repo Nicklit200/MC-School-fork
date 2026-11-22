@@ -1049,6 +1049,21 @@ new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAni
 const schoolCalendarUI=createSchoolCalendarPanel({
   getBoard:()=>data,
   getStudentSchool:()=>selectedStudent()?.schoolType||selectedStudents()[0]?.schoolType||"WIRTSCHAFTSSCHULE",
+  getStudents:()=>selectedStudents(),
+  getMastery:studentId=>masteryByStudent[studentId]||{},
+  refreshMastery:async()=>{
+    if(!boardId||!data||config?.publicMode)return;
+    const chosen=selectedStudents();
+    const snapshots=await Promise.all(chosen.map(async student=>({
+      studentId:student.id,
+      snapshot:await request("GET",`${boardPath()}/students/${student.id}/mastery`)
+    })));
+    for(const item of snapshots){
+      masteryByStudent[item.studentId]=item.snapshot?.mastery&&typeof item.snapshot.mastery==="object"
+        ?item.snapshot.mastery:{};
+    }
+    render();
+  },
   canEdit,
   onCommit:async(next)=>{
     const previousRevision=snapshot?.revision;
