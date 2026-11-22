@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useState, type ReactNode } from 'react';
 import { TeacherShell } from './TeacherShell';
 import { StudentShell } from './StudentShell';
+import { PushQuickStart } from './PushQuickStart';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n/I18nContext';
 import { api, setAccessToken, setSessionAccessToken } from '../api/client';
@@ -81,7 +82,10 @@ export function Layout({ children }: { children: ReactNode }) {
   if (isStudent) {
     return <StudentShell name={user.fullName} isImpersonating={isImpersonating} returningToAdmin={returningToAdmin}
       onlineClassesAvailable={onlineClassesAvailable}
-      onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>{children}</StudentShell>;
+      onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>
+      {!isImpersonating && <PushQuickStart userId={user.id} role="STUDENT" />}
+      {children}
+    </StudentShell>;
   }
 
   const links: { to: string; label: TranslationKey | string }[] = isStudent
@@ -150,7 +154,10 @@ export function Layout({ children }: { children: ReactNode }) {
           </button>
         )}
       </header>
-      <main className={`content${isStoriesWorkspace ? ' content--stories-workspace' : ''}`}>{children}</main>
+      <main className={`content${isStoriesWorkspace ? ' content--stories-workspace' : ''}`}>
+        {isParent && !isImpersonating && <PushQuickStart userId={user!.id} role="PARENT" />}
+        {children}
+      </main>
     </div>
   );
 }
