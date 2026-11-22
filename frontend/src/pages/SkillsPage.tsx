@@ -1,5 +1,5 @@
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { getAccessToken } from '../api/client';
 import { homePathForRole } from '../auth/roleRoutes';
@@ -8,6 +8,8 @@ export function SkillsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const frame = useRef<HTMLIFrameElement>(null);
+  // A new iframe URL on every route mount prevents a stale, cached skills shell.
+  const [frameNonce] = useState(() => Date.now().toString(36));
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'ADMIN' && user.role !== 'TEACHER') {
@@ -19,7 +21,7 @@ export function SkillsPage() {
       <iframe
         ref={frame}
         title="Карта навыков"
-        src={user.role === 'TEACHER' ? '/skills-board/index.html?v=20261102-4&theme=teacher' : '/skills-board/index.html?v=20261102-4'}
+        src={`/skills-board/index.html?v=${frameNonce}${user.role === 'TEACHER' ? '&theme=teacher' : ''}`}
         allow="fullscreen; clipboard-write"
         allowFullScreen
         style={{
