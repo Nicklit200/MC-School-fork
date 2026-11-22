@@ -81,3 +81,48 @@ export function calculateMonthReadiness(board, month, mastery = {}, schoolType =
     unmappedTopics
   };
 }
+
+/**
+ * The individual monthly curriculum is authoritative for which skills belong
+ * to that student's month. Unlike the broad textbook topics, this does not
+ * count unrelated future skills in the same curriculum section.
+ * A partial score remains visible with an explicit unmapped-topic warning.
+ * The server calculates the numerical readiness from these same saved values.
+ */
+export function calculateIndividualMonthReadiness(board, individual, mastery = {}, schoolType = "") {
+  if (!individual || !Array.isArray(individual.skillIds) || individual.skillIds.length === 0) return null;
+  const nodes = new Map((board?.nodes || []).map(node => [node.id, node]));
+  const ids = [...new Set(individual.skillIds)];
+  const skills = ids.map(id => nodes.get(id)).filter(node =>
+    node?.kind === "skill" && !node.archived
+      && (!Array.isArray(node.schoolTypes) || !node.schoolTypes.length
+          || !schoolType || node.schoolTypes.includes(schoolType)))
+    .map(node => {
+      const raw = Object.hasOwn(mastery || {}, node.id) ? mastery[node.id] : null;
+      const value = typeof raw === "number" && Number.isFinite(raw)
+        && raw >= 0 && raw <= 100 ? raw : null;
+      return {id: node.id, title: node.title, value};
+    });
+  const assessed = skills.filter(skill => skill.value !== null);
+  const totalCount = skills.length, assessedCount = assessed.length;
+  const observedPercent = assessedCount
+    ? Math.round(assessed.reduce((sum, skill) => sum + skill.value, 0) / assessedCount) : null;
+  const missingIds = ids.filter(id => !skills.some(skill => skill.id === id));
+  const unmappedTopics = [...(individual.unmappedTopics || []),
+    ...missingIds.map(id => "Нет активного навыка: " + id)];
+  return {
+    source: "INDIVIDUAL_PLAN",
+    status: assessedCount ? "ESTIMATED" : "NO_DATA",
+    percent: observedPercent, observedPercent,
+    coveragePercent: totalCount ? Math.round(100 * assessedCount / totalCount) : 0,
+    assessedCount, totalCount, mappedTopicCount: 1, topicCount: 1,
+    topics: [{
+      name: (individual.topics || []).join(" · ") || "Навыки индивидуального плана",
+      boardTopicId: null, totalCount, assessedCount, observedPercent, skills
+    }],
+    weakSkills: assessed.filter(skill => skill.value < 60).sort((a, b) => a.value - b.value),
+    strongSkills: assessed.filter(skill => skill.value >= 80).sort((a, b) => b.value - a.value),
+    unassessedSkills: skills.filter(skill => skill.value === null),
+    unmappedTopics
+  };
+}
