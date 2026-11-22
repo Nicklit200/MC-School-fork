@@ -9,6 +9,22 @@ export function calculateMonthReadiness(board, month, mastery = {}, schoolType =
     topics: [], weakSkills: [], strongSkills: [], unassessedSkills: [], unmappedTopics: []
   };
   if (!month || !Array.isArray(month.topics) || !board?.nodes || !board?.edges) return empty;
+  // Prefer exact month-to-skill mappings when the calendar provides them.
+  // This also works if the optional, pupil-specific monthly-plan endpoint is
+  // empty or unavailable; percentages always come from LIVE student mastery.
+  // Never average an entire topic subtree if the month lists precise skills.
+  if (Array.isArray(month.skillIds) && month.skillIds.length) {
+    const unmapped = [
+      ...(Array.isArray(month.unmappedTopics) ? month.unmappedTopics : []),
+      ...month.topics.filter(topic => !topic?.boardTopicId).map(topic => topic.name)
+    ];
+    const result = calculateIndividualMonthReadiness(board, {
+      skillIds: month.skillIds,
+      topics: month.topics.map(topic => topic.name),
+      unmappedTopics: [...new Set(unmapped)]
+    }, mastery, schoolType);
+    if (result) return {...result, source: "CALENDAR_SKILL_MAP"};
+  }
   const nodes = new Map(board.nodes.map(node => [node.id, node]));
   const children = new Map();
   for (const edge of board.edges) {
