@@ -22,7 +22,7 @@ public class SchoolAssessmentService {
                              LocalDate examDate,String kind,String title,List<String> topics,
                              String notes,String sourceType,String sourceRef,String sourceExcerpt,
                              String confirmationStatus,long revision,Instant createdAt,Instant updatedAt) {}
-    public record Create(UUID studentId,LocalDate examDate,String kind,String title,
+    public record Create(UUID teacherId,UUID studentId,LocalDate examDate,String kind,String title,
                          List<String> topics,String notes,String sourceType,String sourceRef,
                          String sourceExcerpt,String confirmationStatus,String idempotencyKey) {}
     public record Update(long expectedRevision,LocalDate examDate,String kind,String title,
@@ -37,9 +37,20 @@ public class SchoolAssessmentService {
         this.jdbc=jdbc;this.users=users;this.json=json;
     }
 
-    private void requireTeacher(AuthenticatedUser caller) {
-        if(caller==null||caller.id()==null||caller.role()!=Role.TEACHER)
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Нужен доступ преподавателя");
+    private UUID teacherScope(AuthenticatedUser caller,UUID selectedTeacher) {
+        if(caller==null||caller.id()==null)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Требуется вход");
+        if(caller.role()==Role.TEACHER) {
+            if(selectedTeacher!=null&&!selectedTeacher.equals(caller.id()))
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Чужой календарь недоступен");
+            return caller.id();
+        }
+        if(caller.role()==Role.ADMIN) {
+            if(selectedTeacher==null)throw bad("Администратору нужно указать teacherId");
+            User teacher=users.findById(selectedTeacher).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Преподаватель не найден"));
+            if(teacher.getRole()!=Role.TEACHER||teacher.isArchived())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Преподаватель не найден");
+            return selectedTeacher;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Доступ ограничен");
     }
 
     private void requirePupil(UUID studentId, UUID teacherId) {
@@ -69,30 +80,30 @@ public class SchoolAssessmentService {
         """;
 
     @Transactional(readOnly=true)
-    public List<Assessment> list(AuthenticatedUser caller) {
-        requireTeacher(caller);
+    public List<Assessment> list(AuthenticatedUser caller,UUID teacherId) {
+        UUID owner=teacherScope(caller,teacherId);
         return jdbc.query(SELECT+" WHERE a.teacher_id=? ORDER BY a.exam_date,a.title,a.id",
-                this::mapped,caller.id());
+                this::mapped,owner);
     }
 
     @Transactional(readOnly=true)
     public Assessment get(AuthenticatedUser caller,UUID id) {
-        requireTeacher(caller);
-        return jdbc.query(SELECT+" WHERE a.id=? AND a.teacher_id=?",this::mapped,id,caller.id())
+        if(caller==null||caller.id()==null||!Set.of(Role.ADMIN,Role.TEACHER).contains(caller.role()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Доступ ограничен");
+        return jdbc.query(SELECT+(caller.role()==Role.ADMIN?" WHERE a.id=?":" WHERE a.id=? AND a.teacher_id=?"),this::mapped,caller.role()==Role.ADMIN?new Object[]{id}:new Object[]{id,caller.id()})
             .stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Событие не найдено"));
     }
 
     @Transactional
     public Assessment create(AuthenticatedUser caller,Create data) {
-        requireTeacher(caller);
         if(data==null)throw bad("Укажите контрольную");
-        requirePupil(data.studentId(),caller.id());
+        UUID owner=teacherScope(caller,data.teacherId());
+        requirePupil(data.studentId(),owner);
         check(data.examDate(),data.kind(),data.title(),data.topics(),data.notes(),
             data.sourceType(),data.sourceRef(),data.sourceExcerpt(),data.confirmationStatus());
         String key=required(data.idempotencyKey(),128,"idempotencyKey");
         if(!key.matches("[A-Za-z0-9_.:-]{8,128}"))throw bad("Недопустимый ключ запроса");
         var replay=jdbc.query(SELECT+" WHERE a.teacher_id=? AND a.idempotency_key=?",
-            this::mapped,caller.id(),key);
+            this::mapped,owner,key);
         if(!replay.isEmpty()){
             Assessment old=replay.get(0);
             if(!Objects.equals(old.studentId(),data.studentId())||
@@ -115,7 +126,7 @@ public class SchoolAssessmentService {
                 created_by,updated_by)
             VALUES (?,?,?,?,?,?,CAST(? AS jsonb),?,?,?,?,?,?,?,?)
             ON CONFLICT(teacher_id,idempotency_key) DO NOTHING
-            """,id,caller.id(),data.studentId(),data.examDate(),data.kind(),data.title().trim(),
+            """,id,owner,data.studentId(),data.examDate(),data.kind(),data.title().trim(),
                 json.writeValueAsString(cleanTopics(data.topics())),nullable(data.notes()),
                 data.sourceType(),nullable(data.sourceRef()),nullable(data.sourceExcerpt()),
                 data.confirmationStatus(),key,caller.id(),caller.id());
@@ -125,9 +136,9 @@ public class SchoolAssessmentService {
 
     @Transactional
     public Assessment update(AuthenticatedUser caller,UUID id,Update data) {
-        requireTeacher(caller);
         if(data==null||data.expectedRevision()<1)throw bad("Укажите актуальную версию события");
         Assessment old=get(caller,id);
+        UUID owner=teacherScope(caller,old.teacherId());
         if(old.revision()!=data.expectedRevision())
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Событие изменено. Обновите календарь");
         check(data.examDate(),data.kind(),data.title(),data.topics(),data.notes(),
@@ -137,7 +148,7 @@ public class SchoolAssessmentService {
             INSERT INTO school_assessment_changes(assessment_id,old_revision,old_state,updated_by)
             SELECT id,revision,to_jsonb(school_assessments),? FROM school_assessments
             WHERE id=? AND teacher_id=? AND revision=?
-            """,caller.id(),id,caller.id(),data.expectedRevision());
+            """,caller.id(),id,owner,data.expectedRevision());
         int count=jdbc.update("""
             UPDATE school_assessments
             SET exam_date=?,kind=?,title=?,topics=CAST(? AS jsonb),notes=?,
@@ -147,7 +158,7 @@ public class SchoolAssessmentService {
             """,data.examDate(),data.kind(),data.title().trim(),
                 json.writeValueAsString(cleanTopics(data.topics())),nullable(data.notes()),
                 data.sourceType(),nullable(data.sourceRef()),nullable(data.sourceExcerpt()),
-                data.confirmationStatus(),caller.id(),id,caller.id(),data.expectedRevision());
+                data.confirmationStatus(),caller.id(),id,owner,data.expectedRevision());
         if(count!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Событие изменилось. Обновите календарь");
         return get(caller,id);
     }
