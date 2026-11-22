@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {calculateMonthReadiness} from "../public/skills-board/school-calendar-readiness.js";
+import {calculateMonthReadiness,calculateIndividualMonthReadiness} from "../public/skills-board/school-calendar-readiness.js";
 
 const board={nodes:[
 {id:"t",kind:"topic",title:"Ganze Zahlen"},
@@ -52,4 +52,51 @@ test("no plan and invalid topic references are not invented",()=>{
 test("non-finite and invalid mastery values are not assessed",()=>{
  const res=calculateMonthReadiness(board,month,{a:"error",b:150},"WIRTSCHAFTSSCHULE");
  assert.equal(res.status,"NO_DATA");assert.equal(res.assessedCount,0);
+});
+
+test("Vitalina November individual monthly plan agrees with her existing 53% MCH3 score",()=>{
+ const board={nodes:[
+  {id:"mc8-1-1",kind:"skill",title:"Terme"},
+  {id:"mc8-1-2",kind:"skill",title:"Klammern"},
+  {id:"mc8-1-3",kind:"skill",title:"Faktorisieren"},
+  {id:"mc8-1-4",kind:"skill",title:"Binomische Formeln"},
+  {id:"mc8-2-1",kind:"skill",title:"Gleichungen"},
+  {id:"mc8-2-2",kind:"skill",title:"Gleichungen mit Klammern"},
+  {id:"extra",kind:"skill",title:"Future content"}
+ ],edges:[]};
+ const plan={month:"2026-11",skillIds:["mc8-1-1","mc8-1-2","mc8-1-3","mc8-1-4","mc8-2-1","mc8-2-2"],
+  topics:["Brüche","Terme","Binomische Formeln"],
+  unmappedTopics:["Bruchrechnung needs separate assessment"]};
+ const scores={"mc8-1-1":65,"mc8-1-2":55,"mc8-1-3":40,"mc8-1-4":70,"mc8-2-1":55,"mc8-2-2":30,extra:0};
+ const result=calculateIndividualMonthReadiness(board,plan,scores,"REALSCHULE");
+ assert.equal(result.source,"INDIVIDUAL_PLAN");
+ assert.equal(result.status,"ESTIMATED");
+ assert.equal(result.percent,53);
+ assert.equal(result.assessedCount,6);
+ assert.equal(result.totalCount,6);
+ assert.equal(result.coveragePercent,100);
+ assert.equal(result.unmappedTopics.length,1);
+ assert.equal(result.topics[0].skills.length,6);
+});
+test("individual plan retains unassessed skills as unknown and updates dynamically",()=>{
+ const board={nodes:[{id:"a",kind:"skill",title:"a"},{id:"b",kind:"skill",title:"b"}],edges:[]};
+ const plan={skillIds:["a","b"],topics:["Algebra"],unmappedTopics:[]};
+ const before=calculateIndividualMonthReadiness(board,plan,{a:0},"REALSCHULE");
+ assert.equal(before.percent,0);
+ assert.equal(before.assessedCount,1);
+ assert.equal(before.unassessedSkills.length,1);
+ const after=calculateIndividualMonthReadiness(board,plan,{a:90,b:80},"REALSCHULE");
+ assert.equal(after.percent,85);
+ assert.equal(after.coveragePercent,100);
+});
+test("individual plan refuses archived or other-school skills, without fabricating readiness",()=>{
+ const board={nodes:[
+  {id:"a",kind:"skill",title:"a",archived:true},
+  {id:"b",kind:"skill",title:"b",schoolTypes:["GYMNASIUM"]}
+ ],edges:[]};
+ const result=calculateIndividualMonthReadiness(board,{skillIds:["a","b"],topics:[]},{a:95,b:95},"REALSCHULE");
+ assert.equal(result.percent,null);
+ assert.equal(result.totalCount,0);
+ assert.equal(result.unmappedTopics.length,2);
+ assert.equal(calculateIndividualMonthReadiness(board,{skillIds:[]},{a:90}),null);
 });
