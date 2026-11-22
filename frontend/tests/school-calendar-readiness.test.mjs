@@ -22,22 +22,23 @@ test("counts distinct relevant skills, not repeated topics or archived/other-sch
  assert.equal(res.percent,85);assert.equal(res.totalCount,2);assert.equal(res.assessedCount,2);
  assert.equal(res.status,"ESTIMATED");assert.equal(res.mappedTopicCount,2);
 });
-test("unassessed skills are unknown, explicitly assessed zero remains 0",()=>{
+test("unassessed skills lower readiness but retain unknown mastery, explicitly assessed zero remains 0",()=>{
  const res=calculateMonthReadiness(board,month,{a:0},"WIRTSCHAFTSSCHULE");
- assert.equal(res.status,"INSUFFICIENT_DATA");assert.equal(res.percent,null);
+ assert.equal(res.status,"ESTIMATED");assert.equal(res.percent,0);
  assert.equal(res.assessedCount,1);assert.equal(res.observedPercent,0);
  assert.equal(res.coveragePercent,50);assert.equal(res.unassessedSkills.length,1);
  assert.equal(res.weakSkills[0].value,0);
 });
-test("no mastery does not produce 0% readiness",()=>{
+test("no mastery produces zero readiness while all skills remain unassessed",()=>{
  const res=calculateMonthReadiness(board,month,{},"WIRTSCHAFTSSCHULE");
- assert.equal(res.status,"NO_DATA");assert.equal(res.percent,null);
+ assert.equal(res.status,"ESTIMATED");assert.equal(res.percent,0);
+ assert.equal(res.observedPercent,null);assert.equal(res.unassessedSkills.length,2);
  assert.equal(res.coveragePercent,0);
 });
 test("unlinked calendar topics suppress apparent readiness, even if some topics assessed",()=>{
  const mixed={topics:[...month.topics,{name:"Unlinked",boardTopicId:null}]};
  const res=calculateMonthReadiness(board,mixed,{a:90,b:90},"WIRTSCHAFTSSCHULE");
- assert.equal(res.status,"INSUFFICIENT_DATA");assert.equal(res.percent,null);
+ assert.equal(res.status,"ESTIMATED");assert.equal(res.percent,90);
  assert.deepEqual(res.unmappedTopics,["Unlinked"]);
 });
 test("updates reflect fresh mastery, without persisting duplicate monthly percentages",()=>{
@@ -51,7 +52,7 @@ test("no plan and invalid topic references are not invented",()=>{
 });
 test("non-finite and invalid mastery values are not assessed",()=>{
  const res=calculateMonthReadiness(board,month,{a:"error",b:150},"WIRTSCHAFTSSCHULE");
- assert.equal(res.status,"NO_DATA");assert.equal(res.assessedCount,0);
+ assert.equal(res.status,"ESTIMATED");assert.equal(res.percent,0);assert.equal(res.assessedCount,0);
 });
 
 test("Vitalina November individual monthly plan agrees with her existing 53% MCH3 score",()=>{
@@ -78,11 +79,12 @@ test("Vitalina November individual monthly plan agrees with her existing 53% MCH
  assert.equal(result.unmappedTopics.length,1);
  assert.equal(result.topics[0].skills.length,6);
 });
-test("individual plan retains unassessed skills as unknown and updates dynamically",()=>{
+test("individual plan retains unassessed mastery as unknown, counting 0 in readiness, and updates dynamically",()=>{
  const board={nodes:[{id:"a",kind:"skill",title:"a"},{id:"b",kind:"skill",title:"b"}],edges:[]};
  const plan={skillIds:["a","b"],topics:["Algebra"],unmappedTopics:[]};
  const before=calculateIndividualMonthReadiness(board,plan,{a:0},"REALSCHULE");
  assert.equal(before.percent,0);
+ assert.equal(before.observedPercent,0);
  assert.equal(before.assessedCount,1);
  assert.equal(before.unassessedSkills.length,1);
  const after=calculateIndividualMonthReadiness(board,plan,{a:90,b:80},"REALSCHULE");
@@ -98,6 +100,7 @@ test("individual plan refuses archived or other-school skills, without fabricati
  assert.equal(result.percent,null);
  assert.equal(result.totalCount,0);
  assert.equal(result.unmappedTopics.length,2);
+ assert.equal(result.status,"UNMAPPED");
  assert.equal(calculateIndividualMonthReadiness(board,{skillIds:[]},{a:90}),null);
 });
 
@@ -136,4 +139,33 @@ test("Vitalina calendar month note uses the exact assessed skills, not unrelated
  assert.equal(res.assessedCount,6);
  assert.equal(res.totalCount,6);
  assert.equal(res.unmappedTopics.length,1);
+});
+
+test("Sofia November counts the two unassessed skills as zero without changing mastery",()=>{
+ const board={nodes:[
+   {id:"negative",kind:"skill",title:"Отрицательные числа"},
+   {id:"absolute",kind:"skill",title:"Модуль и противоположное число"},
+   {id:"compare",kind:"skill",title:"Сравнение целых"},
+   {id:"add",kind:"skill",title:"Сложение и вычитание целых"},
+   {id:"multiply",kind:"skill",title:"Умножение и деление целых"},
+   {id:"signs",kind:"skill",title:"Выражения со знаками"}
+ ],edges:[]};
+ const plan={skillIds:["negative","absolute","compare","add","multiply","signs"],topics:["Ganze Zahlen"]};
+ const mastery={negative:65,compare:95,add:75,signs:30};
+ const result=calculateIndividualMonthReadiness(board,plan,mastery,"WIRTSCHAFTSSCHULE");
+ assert.equal(result.percent,44); // (65+95+75+30+0+0) / 6
+ assert.equal(result.observedPercent,66); // (65+95+75+30) / 4
+ assert.equal(result.coveragePercent,67);
+ assert.equal(result.assessedCount,4);
+ assert.equal(result.totalCount,6);
+ assert.equal(result.unassessedSkills.length,2);
+ assert.equal(result.unassessedSkills[0].value,null);
+ assert.deepEqual(mastery,{negative:65,compare:95,add:75,signs:30});
+});
+test("an unseen skill depresses individual readiness even if all observed skills are strong",()=>{
+ const b={nodes:[{id:"a",kind:"skill"},{id:"b",kind:"skill"},{id:"c",kind:"skill"}],edges:[]};
+ const r=calculateIndividualMonthReadiness(b,{skillIds:["a","b","c"]},{a:90,b:90},"WIRTSCHAFTSSCHULE");
+ assert.equal(r.percent,60);
+ assert.equal(r.observedPercent,90);
+ assert.equal(r.unassessedSkills.length,1);
 });
