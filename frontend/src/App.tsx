@@ -40,6 +40,7 @@ import { GroupLessonsWithDetailLinks } from './pages/teacher/GroupLessonsWithDet
 import { GroupLessonHistoryPage } from './pages/teacher/GroupLessonHistoryPage';
 import { LessonDetailWithHomeworkSeries } from './pages/teacher/LessonDetailWithHomeworkSeries';
 import { OwnerWorkbookNotificationPreviewPage } from './pages/teacher/OwnerWorkbookNotificationPreviewPage';
+import { WorkbookDraftPreviewPage } from './pages/teacher/WorkbookDraftPreviewPage';
 import { PostLessonHomeworkReviewPage } from './pages/teacher/PostLessonHomeworkReviewPage';
 import { MonthlyPlanPage } from './pages/teacher/MonthlyPlanPage';
 import { TodayPage } from './pages/student/TodayPage';
@@ -120,6 +121,8 @@ export function App() {
       <Route path="/teacher/lessons" element={<ProtectedRoute role="TEACHER"><Layout><GroupLessonsWithDetailLinks /></Layout></ProtectedRoute>} />
       <Route path="/teacher/lessons/:eventId" element={<ProtectedRoute role="TEACHER"><Layout><LessonDetailWithHomeworkSeries /></Layout></ProtectedRoute>} />
       <Route path="/teacher/post-homework-review/:classId" element={<ProtectedRoute role="TEACHER"><PostLessonHomeworkReviewPage /></ProtectedRoute>} />
+      <Route path="/workbook-drafts/:teacherId/:draftId"
+        element={<ProtectedRoute role={['ADMIN', 'TEACHER']}><WorkbookDraftPreviewPage /></ProtectedRoute>} />
       <Route path="/lesson-workbook-preview/:teacherId/:eventId"
         element={<ProtectedRoute role={['ADMIN', 'TEACHER']}><OwnerWorkbookNotificationPreviewPage /></ProtectedRoute>} />
       <Route path="/teacher/online-classes" element={<ProtectedRoute role="TEACHER"><Layout><Suspense fallback={<p>Загрузка уроков…</p>}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
