@@ -52,7 +52,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   if (originalSw) Object.defineProperty(navigator, 'serviceWorker', originalSw);
-  else delete (navigator as Navigator & { serviceWorker?: ServiceWorkerContainer }).serviceWorker;
+  else Reflect.deleteProperty(navigator, 'serviceWorker');
   if (originalAgent) Object.defineProperty(navigator, 'userAgent', originalAgent);
 });
 
