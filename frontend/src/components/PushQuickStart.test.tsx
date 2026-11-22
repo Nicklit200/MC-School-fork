@@ -54,6 +54,7 @@ afterEach(() => {
   if (originalSw) Object.defineProperty(navigator, 'serviceWorker', originalSw);
   else Reflect.deleteProperty(navigator, 'serviceWorker');
   if (originalAgent) Object.defineProperty(navigator, 'userAgent', originalAgent);
+  else Reflect.deleteProperty(navigator, 'userAgent');
 });
 
 describe('one-click parent/student push onboarding', () => {
