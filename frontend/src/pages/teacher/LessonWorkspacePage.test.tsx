@@ -50,10 +50,10 @@ describe('lesson workspace',()=>{
       coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'Автоматическая запись'
     } as never);
     mount(); await screen.findByRole('heading',{name:'Дроби'});
-    expect(screen.getByText('Знаки перед скобками')).toBeInTheDocument();
+    expect(screen.getByText('Ошибка со знаком')).toBeInTheDocument();
     expect(screen.getByText('Berechne -3 + 8.')).toBeInTheDocument();
-    expect(screen.getByText('Ответ ученика:')).toBeInTheDocument();
-    expect(screen.getByText('Правильно:')).toBeInTheDocument();
+    expect(screen.getByText('Ученик')).toBeInTheDocument();
+    expect(screen.getByText('Правильно')).toBeInTheDocument();
     expect(screen.getByText('Мелисса')).toBeInTheDocument();
     expect(screen.getByRole('progressbar',{name:'Сданная домашняя работа, всего'})).toHaveAttribute('aria-valuenow','79');
     expect(screen.getByRole('progressbar',{name:'Домашка: Мелисса'})).toHaveAttribute('aria-valuenow','71');
