@@ -20,12 +20,13 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class SchoolAssessmentSkillService {
     public record SkillRow(String id,String title,Integer percent) {}
+    public record TopicRow(String title,Integer percent,int assessedCount,int totalCount) {}
     public record Readiness(UUID assessmentId,UUID studentId,String boardId,
-                            List<SkillRow> skills,List<String> unmappedTopics,
+                            List<SkillRow> skills,List<TopicRow> topics,List<String> unmappedTopics,
                             int assessedCount,int totalCount,int coveragePercent,
                             Integer percent,String status) {}
     public record Edit(long expectedRevision,String boardId,List<String> skillIds,
-                       List<String> unmappedTopics) {}
+                       List<String> unmappedTopics,Map<String,List<String>> topicSkillIds) {}
 
     private final SchoolAssessmentService assessments;
     private final SkillBoardService boards;
@@ -41,14 +42,15 @@ public class SchoolAssessmentSkillService {
         this.users=users;this.jdbc=jdbc;this.mapper=mapper;
     }
 
-    private record Linked(String boardId,List<String> ids,List<String> unmappedTopics) {}
+    private record Linked(String boardId,List<String> ids,List<String> unmappedTopics,Map<String,List<String>> topicSkillIds) {}
     private Linked links(UUID id) {
         return jdbc.query("""
-           SELECT board_id,skill_ids::text,unmapped_topics::text
+           SELECT board_id,skill_ids::text,unmapped_topics::text,topic_skill_ids::text
            FROM school_assessments WHERE id=?
            """,(rs,row)->new Linked(rs.getString(1),
                 List.of(mapper.readValue(rs.getString(2),String[].class)),
-                List.of(mapper.readValue(rs.getString(3),String[].class))),id)
+                List.of(mapper.readValue(rs.getString(3),String[].class)),
+                readTopicIds(rs.getString(4))),id)
                 .stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Контрольная не найдена"));
     }
 
@@ -57,7 +59,8 @@ public class SchoolAssessmentSkillService {
         SchoolAssessmentService.Assessment event=assessments.get(caller,id);
         Linked linked=links(id);
         if(linked.boardId()==null||linked.ids().isEmpty())
-            return new Readiness(id,event.studentId(),linked.boardId(),List.of(),linked.unmappedTopics(),
+            return new Readiness(id,event.studentId(),linked.boardId(),List.of(),
+                event.topics().stream().map(title->new TopicRow(title,null,0,0)).toList(),linked.unmappedTopics(),
                 0,0,0,null,"NOT_LINKED");
         var board=boards.get(linked.boardId());
         var snapshot=mastery.get(linked.boardId(),event.studentId(),caller);
@@ -86,8 +89,27 @@ public class SchoolAssessmentSkillService {
         String status=total==0?"NO_VALID_SKILLS":
             assessed==0?"NOT_ASSESSED":
             assessed<total||!unknown.isEmpty()?"PARTIAL":"ESTIMATED";
+        Map<String,SkillRow> bySkill=new HashMap<>();
+        for(SkillRow row:rows)bySkill.put(row.id(),row);
+        List<TopicRow> topicRows=new ArrayList<>();
+        Set<String> linkedTopics=new HashSet<>();
+        for(String title:event.topics()) {
+            linkedTopics.add(title);
+            List<String> topicIds=linked.topicSkillIds().getOrDefault(title,List.of());
+            int counted=0,topicSum=0;
+            Set<String> used=new HashSet<>();
+            for(String skillId:topicIds) {
+                SkillRow row=bySkill.get(skillId);
+                if(row==null||!used.add(skillId))continue;
+                if(row.percent()!=null){counted++;topicSum+=row.percent();}
+            }
+            topicRows.add(new TopicRow(title,counted==0?null:(int)Math.round((double)topicSum/counted),
+                    counted,used.size()));
+        }
+        // The overall exam readiness is the mean of unique, assessed skill IDs,
+        // not an average of per-topic values (which could double-count skills).
         return new Readiness(id,event.studentId(),linked.boardId(),List.copyOf(rows),
-            List.copyOf(unknown),assessed,total,coverage,percent,status);
+            List.copyOf(topicRows),List.copyOf(unknown),assessed,total,coverage,percent,status);
     }
 
     @Transactional
@@ -101,7 +123,8 @@ public class SchoolAssessmentSkillService {
         if(input.boardId()==null||input.boardId().isBlank()||input.boardId().length()>128)
             throw bad("Укажите boardId");
         if(input.skillIds()==null||input.skillIds().size()>48||
-           input.unmappedTopics()==null||input.unmappedTopics().size()>32)
+           input.unmappedTopics()==null||input.unmappedTopics().size()>32||
+           input.topicSkillIds()==null||input.topicSkillIds().size()>24)
             throw bad("Слишком много навыков или неизвестных тем");
         var ids=new ArrayList<String>();
         for(String skillId:input.skillIds()) {
@@ -127,6 +150,21 @@ public class SchoolAssessmentSkillService {
                 allowed.add(node.id());
         if(ids.stream().anyMatch(skillId->!allowed.contains(skillId)))
             throw bad("Указан архивный, отсутствующий или неподходящий школе навык");
+        Set<String> selected=new HashSet<>(ids);
+        Map<String,List<String>> topicMap=new LinkedHashMap<>();
+        for(var entry:input.topicSkillIds().entrySet()){
+            if(entry.getKey()==null||!old.topics().contains(entry.getKey()))
+                throw bad("Тема отсутствует в контрольной");
+            List<String> linkedIds=entry.getValue();
+            if(linkedIds==null||linkedIds.size()>48||
+                linkedIds.stream().anyMatch(value->!selected.contains(value)))
+                throw bad("Тема должна содержать только навыки данной контрольной");
+            topicMap.put(entry.getKey(),new ArrayList<>(new LinkedHashSet<>(linkedIds)));
+        }
+        // Require every linked skill to belong to at least one named exam topic.
+        Set<String> linkedAll=new HashSet<>();
+        for(List<String> group:topicMap.values())linkedAll.addAll(group);
+        if(!linkedAll.containsAll(ids))throw bad("У каждого навыка должна быть тема контрольной");
         // Preserve previous event in the existing audit journal.
         jdbc.update("""
             INSERT INTO school_assessment_changes(assessment_id,old_revision,old_state,updated_by)
@@ -136,13 +174,27 @@ public class SchoolAssessmentSkillService {
         int affected=jdbc.update("""
             UPDATE school_assessments
             SET board_id=?,skill_ids=CAST(? AS jsonb),
-                unmapped_topics=CAST(? AS jsonb),revision=revision+1,updated_at=now(),updated_by=?
+                unmapped_topics=CAST(? AS jsonb),topic_skill_ids=CAST(? AS jsonb),
+                revision=revision+1,updated_at=now(),updated_by=?
             WHERE id=? AND teacher_id=? AND revision=?
             """,input.boardId(),mapper.writeValueAsString(ids),mapper.writeValueAsString(unmapped),
-            caller.id(),id,old.teacherId(),input.expectedRevision());
+            mapper.writeValueAsString(topicMap),caller.id(),id,old.teacherId(),input.expectedRevision());
         if(affected!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Конфликт версии контрольной");
         return readiness(caller,id);
     }
+    @SuppressWarnings("unchecked")
+    private Map<String,List<String>> readTopicIds(String value) {
+        if(value==null||value.isBlank())return Map.of();
+        var parsed=mapper.readValue(value,Map.class);
+        Map<String,List<String>> result=new LinkedHashMap<>();
+        for(var item:parsed.entrySet()){
+            if(!(item.getKey() instanceof String key)||!(item.getValue() instanceof List<?> items))continue;
+            result.put(key,items.stream().filter(String.class::isInstance)
+                .map(String.class::cast).toList());
+        }
+        return result;
+    }
+
     private static ResponseStatusException bad(String reason){
         return new ResponseStatusException(HttpStatus.BAD_REQUEST,reason);
     }
