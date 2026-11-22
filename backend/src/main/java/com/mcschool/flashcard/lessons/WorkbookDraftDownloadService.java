@@ -43,6 +43,19 @@ public class WorkbookDraftDownloadService {
         this.baseUrl=baseUrl.replaceAll("/+$",""); this.clock=clock;
     }
 
+    /**
+     * Authenticated website preview. No expiring capability is issued:
+     * every request rechecks staff status, selected teacher, exact lesson,
+     * and the original draft ownership before returning private PDF bytes.
+     */
+    public LessonPdfDraftService.PreviewFile staffPreview(AuthenticatedUser actor,
+            UUID teacherId, UUID draftId, String kind) {
+        AuthenticatedUser current = access.requireCurrentActor(actor);
+        requireStaff(current);
+        AuthenticatedUser teacher = access.requireTeacher(current, teacherId);
+        return authorizedFile(teacher, draftId, kind(kind));
+    }
+
     public Map<String,Object> create(AuthenticatedUser actor,UUID teacherId,UUID draftId,String kind) {
         requireConfigured();
         kind=kind(kind);
