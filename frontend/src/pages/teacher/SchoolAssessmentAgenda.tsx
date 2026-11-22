@@ -77,8 +77,6 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
    {shown.map(event=>{
      const readiness=readinessById[event.id];
      const overall=readiness?.percent;
-     const status=readiness?.status;
-     const incomplete=status==='PARTIAL'||status==='NO_VALID_SKILLS'||status==='NOT_LINKED';
      return <article className="school-assessment-card" key={event.id}>
        <button type="button" className="school-assessment-card__trigger" aria-expanded={expanded===event.id}
          onClick={()=>toggle(event.id)}>
@@ -88,7 +86,6 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
          </span>
          <span className={'school-exam-readiness__badge'+(overall===null||overall===undefined?' is-unknown':'')}>
            {overall===null||overall===undefined?'Не оценено':overall+'%'}
-           {incomplete&&overall!==null&&overall!==undefined?'*':''}
          </span>
          <span aria-hidden="true">{expanded===event.id?'▴':'▾'}</span>
        </button>
