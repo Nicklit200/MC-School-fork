@@ -11,6 +11,7 @@ import com.mcschool.flashcard.drive.TeacherGoogleDriveDownloadService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.lessons.dto.LessonPreparationResponse;
 import com.mcschool.flashcard.lessons.dto.UpdateLessonPreparationRequest;
+import com.mcschool.flashcard.monthlyplans.MonthlyReadinessCalculator;
 import com.mcschool.flashcard.monthlyplans.MonthlyPlanService;
 import com.mcschool.flashcard.monthlyplans.dto.MonthlyPlanResponse;
 import com.mcschool.flashcard.settings.SchoolBrandGuideService;
@@ -1077,7 +1078,7 @@ public class MindcraftiMcpController {
         monthPlanProperties.put("targetType", property("string", "Monthly plan target type: student or group."));
         monthPlanProperties.put("targetId", property("string", "Student or group UUID."));
         monthPlanProperties.put("month", property("string", "Plan month in YYYY-MM format."));
-        tools.add(tool("get_month_plan", "Read the current structured monthly teaching plan for one student or group. Use it before preparing the next lesson when the target has a plan for the current month.", schema(monthPlanProperties, List.of("targetType", "targetId", "month")), readOnlyAnnotations()));
+        tools.add(tool("get_month_plan", "Read a student or group monthly plan. For student plans with curriculum.skillIds, also return live readiness.percent, assessed, total and coverage derived from the same skill mastery that transcript analysis updates. Missing skill scores are unassessed, not zero. Use it before preparing the next lesson.", schema(monthPlanProperties, List.of("targetType", "targetId", "month")), readOnlyAnnotations()));
         monthPlanProperties.put("planJson", property("string", "Complete monthly plan encoded as a JSON object string. This replaces the current saved plan for the target and month."));
         tools.add(tool("update_month_plan", "Create or replace the structured monthly teaching plan for one student or group. Use this when the teacher asks to save or change the plan.", schema(monthPlanProperties, List.of("targetType", "targetId", "month", "planJson")), writeAnnotations()));
 
@@ -2742,11 +2743,53 @@ public class MindcraftiMcpController {
         return transcriptLessonGuard.auditAll();
     }
 
-    private MonthlyPlanResponse getMonthPlan(Map<String, Object> arguments, AuthContext auth) {
+    private Object getMonthPlan(Map<String, Object> arguments, AuthContext auth) {
         String targetType = required(arguments, "targetType");
         UUID targetId = uuid(required(arguments, "targetId"), "targetId");
         AuthenticatedUser teacher = homeworkTeacher(arguments, auth, targetType, targetId);
-        return monthlyPlanService.get(teacher, targetType, targetId, required(arguments, "month"));
+        MonthlyPlanResponse plan = monthlyPlanService.get(teacher, targetType, targetId,
+                required(arguments, "month"));
+        if (!"student".equalsIgnoreCase(targetType) || workbookMastery == null
+                || plan.planJson() == null || plan.planJson().isBlank()) return plan;
+
+        try {
+            var curriculum = objectMapper.readTree(plan.planJson()).path("curriculum");
+            String boardId = curriculum.path("boardId").asText("");
+            var linked = curriculum.path("skillIds");
+            if (boardId.isBlank() || !linked.isArray()) return plan;
+
+            List<String> skills = new ArrayList<>();
+            for (int i = 0; i < linked.size(); i++) {
+                var value = linked.get(i);
+                if (value.isTextual()) skills.add(value.asText());
+            }
+            List<String> unmapped = new ArrayList<>();
+            var uncovered = curriculum.path("unmappedTopics");
+            if (uncovered.isArray()) for (int i = 0; i < uncovered.size(); i++) {
+                var value = uncovered.get(i);
+                if (value.isTextual()) unmapped.add(value.asText());
+            }
+            var mastery = workbookMastery.get(boardId, targetId, teacher);
+            var readiness = MonthlyReadinessCalculator.calculate(skills, unmapped, mastery.mastery());
+            Map<String,Object> result = new LinkedHashMap<>();
+            result.put("id",plan.id());
+            result.put("targetType",plan.targetType());
+            result.put("targetId",plan.targetId());
+            result.put("month",plan.month());
+            result.put("planJson",plan.planJson());
+            result.put("hasDocument",plan.hasDocument());
+            result.put("documentFilename",plan.documentFilename());
+            result.put("version",plan.version());
+            result.put("updatedAt",plan.updatedAt());
+            result.put("readiness",readiness);
+            return result;
+        } catch (RuntimeException error) {
+            // A malformed or superseded curriculum mapping must never prevent
+            // a teacher from reading the stored lesson plan itself.
+            LOG.warn("Unable to calculate monthly readiness for target {}: {}",
+                    targetId, error.getClass().getSimpleName());
+            return plan;
+        }
     }
 
     private MonthlyPlanResponse updateMonthPlan(Map<String, Object> arguments, AuthContext auth) {
