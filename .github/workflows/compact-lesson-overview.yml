@@ -1,0 +1,33 @@
+name: Compact teacher lesson overview
+
+on:
+  pull_request:
+    branches: ['integration/railway-and-ux']
+    paths:
+      - 'frontend/src/pages/teacher/LessonWorkspacePage*'
+      - 'frontend/src/pages/teacher/LessonCardsPanel*'
+      - 'frontend/src/pages/teacher/MorningLessonDigest*'
+      - 'frontend/src/pages/teacher/lesson-workspace-compact.css'
+      - '.github/workflows/compact-lesson-overview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test -- src/pages/teacher/LessonWorkspacePage.test.tsx src/pages/teacher/LessonCardsPanel.test.tsx
+      - run: npm run build
