@@ -81,22 +81,42 @@ export function MorningHomeworkSummary({raw, de}: {raw: string | null | undefine
   </div>;
 }
 
-function HomeworkIssueCard({issue, de}: {issue: Issue; de: boolean}) {
+function compareDifference(student: string, correct: string): {wrong: string; right: string} | null {
+  const a = student.trim().replace(/−/g, '-').replace(/\s+/g, '');
+  const b = correct.trim().replace(/−/g, '-').replace(/\s+/g, '');
+  if (!a || !b || a === b) return null;
+  const left = a.match(/^(.*?)([+-])(\d+(?:[.,]\d+)?[a-zA-Z]*)$/);
+  const right = b.match(/^(.*?)([+-])(\d+(?:[.,]\d+)?[a-zA-Z]*)$/);
+  if (left && right && left[1] === right[1] && left[3] === right[3] && left[2] !== right[2])
+    return {wrong: left[2] + left[3], right: right[2] + right[3]};
+  return null;
+}
+function prettyMath(value: string): string { return value.replace(/-/g, '−'); }
+function HomeworkIssueCard({issue, de, index, total}: {issue: Issue; de: boolean; index: number; total: number}) {
+  const diff = compareDifference(issue.studentAnswer, issue.correctAnswer);
+  const date = /20\d{2}-(\d{2})-(\d{2})/.exec(issue.source);
+  const taskNumber = /(?:Aufgabe|Задание|№)\s*(\d+)/i.exec(issue.page);
+  const signError = /знак|vorzeichen/i.test(issue.difficulty);
   return <article className="morning-error-card">
-    <div className="morning-error-heading">
-      <strong>{issue.student}</strong>
-      <span>{de ? 'Wiederholen' : 'Нужно разобрать'}</span>
-    </div>
-    <div className="morning-error-topic">{issue.difficulty}</div>
+    <div className="morning-error-heading"><strong>{issue.student}</strong><span>{de ? 'Fehler' : 'Ошибка'} {index + 1} {de ? 'von' : 'из'} {total}</span></div>
+    <div className="morning-error-topic"><span className="morning-error-alert" aria-hidden="true">!</span>{signError ? (de ? 'Vorzeichenfehler' : 'Ошибка со знаком') : issue.difficulty}</div>
     <div className="morning-error-section">
-      <span className="morning-error-label">{de ? 'Aufgabe' : 'Задание'}</span>
+      <span className="morning-error-label">{de ? 'Aufgabe' : 'Задание'}{taskNumber ? ' ' + taskNumber[1] : ''}</span>
       <p>{issue.task}</p>
     </div>
     <div className="morning-error-answer">
-      <span><b>{de ? 'Antwort des Kindes:' : 'Ответ ученика:'}</b> {issue.studentAnswer}</span>
-      <span><b>{de ? 'Richtig:' : 'Правильно:'}</b> {issue.correctAnswer}</span>
+      <div className="morning-error-answer-box morning-error-answer-box--wrong">
+        <span className="morning-error-answer-caption"><span aria-hidden="true">×</span>{de ? 'Schüler' : 'Ученик'}</span>
+        <strong>{prettyMath(issue.studentAnswer)}</strong>
+      </div>
+      <div className="morning-error-answer-box morning-error-answer-box--right">
+        <span className="morning-error-answer-caption"><span aria-hidden="true">✓</span>{de ? 'Richtig' : 'Правильно'}</span>
+        <strong>{prettyMath(issue.correctAnswer)}</strong>
+      </div>
     </div>
-    <p className="morning-error-source">{de ? 'Quelle' : 'Источник'}: {issue.source}{issue.page ? ' · ' + issue.page : ''}</p>
+    {diff && <div className="morning-error-difference"><span aria-hidden="true">→</span> {de ? 'Unterschied:' : 'Разница:'} <b className="morning-error-wrong">{prettyMath(diff.wrong)}</b> {de ? 'statt' : 'вместо'} <b className="morning-error-right">{prettyMath(diff.right)}</b></div>}
+    <div className="morning-error-footer"><span>{de ? 'Hausaufgabe' : 'Домашняя работа'}{date ? ' · ' + date[2] + '.' + date[1] : ''}</span><span>{de ? 'Im Unterricht besprechen' : 'Разобрать на уроке'}</span></div>
+    <details className="morning-error-source-details"><summary>{de ? 'PDF-Quelle' : 'Источник PDF'}</summary><p>{issue.source}{issue.page ? ' · ' + issue.page : ''}</p></details>
   </article>;
 }
 
@@ -109,11 +129,11 @@ export function MorningDifficulties({raw, de}: {raw: string | null | undefined; 
     ? 'Keine nachweisbaren Aufgabenfehler zum Anzeigen.'
     : 'Нет подтверждённых ошибок для показа.'}</div>;
   return <div className="morning-difficulties morning-difficulties--compact">
-    <HomeworkIssueCard key={issues[0].source + ':0'} issue={issues[0]} de={de} />
+    <HomeworkIssueCard key={issues[0].source + ':0'} issue={issues[0]} de={de} index={0} total={issues.length} />
     {issues.length > 1 && <details className="morning-difficulties-more">
       <summary>{de ? 'Weitere Fehler anzeigen: ' : 'Показать остальные ошибки: '}{issues.length - 1}</summary>
       <div className="morning-difficulties-expanded">
-        {issues.slice(1).map((issue, index) => <HomeworkIssueCard key={issue.source + ':' + issue.page + ':' + index} issue={issue} de={de} />)}
+        {issues.slice(1).map((issue, index) => <HomeworkIssueCard key={issue.source + ':' + issue.page + ':' + index} issue={issue} de={de} index={index + 1} total={issues.length} />)}
       </div>
     </details>}
   </div>;
