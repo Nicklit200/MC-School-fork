@@ -100,3 +100,40 @@ test("individual plan refuses archived or other-school skills, without fabricati
  assert.equal(result.unmappedTopics.length,2);
  assert.equal(calculateIndividualMonthReadiness(board,{skillIds:[]},{a:90}),null);
 });
+
+test("calendar uses exact monthly skill IDs from its persisted note, not entire topic subtrees",()=>{
+ const board={nodes:[
+  {id:"t",kind:"topic",title:"Terme"},
+  ...["a","b","c","future"].map(id=>({id,kind:"skill",title:id}))
+ ],edges:["a","b","c","future"].map(id=>({source:"t",target:id,kind:"contains"}))};
+ const first={month:10,topics:[{name:"Terme",boardTopicId:"t"}],skillIds:["a","b"]};
+ const second={month:11,topics:[{name:"Terme",boardTopicId:"t"}],skillIds:["a","b","c"]};
+ const mastery={a:30,b:70,c:100,future:0};
+ const october=calculateMonthReadiness(board,first,mastery,"REALSCHULE");
+ const november=calculateMonthReadiness(board,second,mastery,"REALSCHULE");
+ assert.equal(october.percent,50);
+ assert.equal(october.totalCount,2);
+ assert.equal(october.source,"CALENDAR_SKILL_MAP");
+ assert.equal(november.percent,67);
+ assert.equal(november.totalCount,3);
+ assert.equal(november.source,"CALENDAR_SKILL_MAP");
+});
+test("Vitalina calendar month note uses the exact assessed skills, not unrelated topic descendants",()=>{
+ const board={nodes:[
+  {id:"mc8-t1",kind:"topic"},
+  {id:"mc8-t2",kind:"topic"},
+  ...["mc8-1-1","mc8-1-2","mc8-1-3","mc8-1-4","mc8-2-1","mc8-2-2","mc8-1-5","mc8-2-5"]
+    .map(id=>({id,kind:"skill",title:id,schoolTypes:["REALSCHULE"]}))
+ ],edges:[
+  ...["mc8-1-1","mc8-1-2","mc8-1-3","mc8-1-4","mc8-1-5"].map(id=>({source:"mc8-t1",target:id,kind:"contains"})),
+  ...["mc8-2-1","mc8-2-2","mc8-2-5"].map(id=>({source:"mc8-t2",target:id,kind:"contains"}))
+ ]};
+ const month={month:11,skillIds:["mc8-1-1","mc8-1-2","mc8-1-3","mc8-1-4","mc8-2-1","mc8-2-2"],
+ topics:[{name:"Terme",boardTopicId:"mc8-t1"},{name:"Gleichungen",boardTopicId:"mc8-t2"},{name:"Brüche",boardTopicId:null}]};
+ const scores={"mc8-1-1":65,"mc8-1-2":55,"mc8-1-3":40,"mc8-1-4":70,"mc8-2-1":55,"mc8-2-2":30,"mc8-1-5":20,"mc8-2-5":90};
+ const res=calculateMonthReadiness(board,month,scores,"REALSCHULE");
+ assert.equal(res.percent,53);
+ assert.equal(res.assessedCount,6);
+ assert.equal(res.totalCount,6);
+ assert.equal(res.unmappedTopics.length,1);
+});
