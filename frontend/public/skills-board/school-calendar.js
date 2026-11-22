@@ -2,7 +2,7 @@
  * Month-by-month reference curricula for /skills.
  * A calendar is one revisioned NOTE in the existing board, not pupil mastery.
  */
-import {createMonthlyReadinessPanel} from "./school-calendar-readiness-panel.js";
+import {createMonthlyReadinessPanel} from "./school-calendar-readiness-panel.js?v=20261122-3";
 
 export const schoolCalendarLabels = {
   WIRTSCHAFTSSCHULE:"Wirtschaftsschule", REALSCHULE:"Realschule",
