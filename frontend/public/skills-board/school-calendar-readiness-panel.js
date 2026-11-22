@@ -1,7 +1,7 @@
-import {calculateMonthReadiness} from "./school-calendar-readiness.js";
+import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js";
 
 /** Visible readiness is derived from the latest student skills, never stored as fake grades. */
-export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,refreshMastery,onChange}) {
+export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,getIndividualMonths,refreshMastery,onChange}) {
   const byId=id=>document.getElementById(id);
   const panel=byId("school-calendar-panel");
   const studentSelect=byId("calendar-student");
@@ -13,7 +13,12 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,ref
   const students=()=>getStudents?.()||[];
   const eligible=()=>students().filter(s=>Number(s.grade)===getBoard()?.grade&&s.schoolType===school);
   const student=()=>eligible().find(s=>s.id===studentId)||null;
-  const result=month=>student() ? calculateMonthReadiness(getBoard(),month,getMastery?.(studentId)||{},school) : null;
+  const result=month=>{
+    if(!student() || !month)return student()?calculateMonthReadiness(getBoard(),month,getMastery?.(studentId)||{},school):null;
+    const individual=getIndividualMonths?.(studentId)?.[String(month.month)]||null;
+    return calculateIndividualMonthReadiness(getBoard(),individual,getMastery?.(studentId)||{},school)
+      ||calculateMonthReadiness(getBoard(),month,getMastery?.(studentId)||{},school);
+  };
   const level=r=>r?.status!=="ESTIMATED"?"unverified":r.percent>=80?"high":r.percent>=60?"medium":"low";
   const status=r=>{
     if(!r)return "Нет подходящего ученика";
@@ -83,6 +88,7 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,ref
     heading.append(element("strong","",`Готовность ${s.fullName||"ученика"}`));
     heading.append(element("span","calendar-readiness-number "+level(r),status(r)));
     block.append(heading);
+    if(r.source==="INDIVIDUAL_PLAN")block.append(element("p","calendar-readiness-source","По индивидуальному плану ученика. Тот же набор навыков, что используется в месячном плане преподавателя."));
     if(r.totalCount>0) {
       const coverage=element("div","calendar-coverage");
       coverage.append(element("span","",`Подтверждено навыков: ${r.assessedCount} из ${r.totalCount} (${r.coveragePercent}%)`));
@@ -90,7 +96,7 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,ref
       fill.style.width=r.coveragePercent+"%";bar.append(fill);coverage.append(bar);block.append(coverage);
     }
     const message=r.status==="ESTIMATED"
-      ?"Предварительная готовность по текущему освоению навыков. Не является прогнозом школьной оценки."
+      ?(r.unmappedTopics.length?"Предварительная оценка по проверенным навыкам. Есть темы вне расчёта, поэтому процент НЕ означает полную готовность к контрольной.":"Предварительная готовность по текущему освоению навыков. Не является прогнозом школьной оценки.")
       :r.status==="INSUFFICIENT_DATA"
         ?`Навыков пока недостаточно для достоверного общего процента.${r.observedPercent===null?"":" По оценённым навыкам среднее "+r.observedPercent+"%."}`
         :r.status==="NO_DATA"
@@ -127,7 +133,7 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,ref
       block.append(dropdown);
     }
     block.append(element("p","calendar-readiness-fineprint",
-      "Оценка действует на сегодня, не показывает результат на конец прошлого месяца. Учитываются все навыки связанного раздела; реальные темы и даты контрольных уточняйте в школе."));
+      "Оценка действует на сегодня, не показывает результат на конец прошлого месяца. Индивидуальный план имеет приоритет над широкими разделами календаря; реальные темы и даты контрольных уточняйте в школе."));
     return block;
   }
   return {selection,monthBadge,details,open,close,refresh};
