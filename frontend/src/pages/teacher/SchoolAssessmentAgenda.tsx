@@ -29,7 +29,6 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
  const [expanded,setExpanded]=useState<string|null>(null);
  const [readinessById,setReadinessById]=useState<Record<string,SchoolAssessmentReadiness>>({});
  const [readinessErrors,setReadinessErrors]=useState<Record<string,string>>({});
- const [expanded,setExpanded]=useState<string|null>(null);
  // Fetch immediately so the percentage is visible even while the card is closed.
  // Reload on calendar date/event changes, then revalidate on window focus.
  useEffect(()=>{
