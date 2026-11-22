@@ -112,27 +112,84 @@ function pageUnits(blocks) {
   return units;
 }
 
+/**
+ * Adjacent workbook sections may arrive as one exercise per logical page.
+ * Recombine only physically compatible pages: never cross chapter/month,
+ * lesson time, section heading or other metadata boundaries.
+ */
+function compatibleStudentSections(a,b) {
+  const withoutBlocks=p=>Object.fromEntries(Object.entries(p).filter(([key])=>key!=='blocks'));
+  return JSON.stringify(withoutBlocks(a))===JSON.stringify(withoutBlocks(b));
+}
+function compactStudentSections(pages) {
+  const runs=[];
+  for(const p of pages) {
+    const previous=runs.at(-1);
+    if(previous && compatibleStudentSections(previous,p))previous.blocks.push(...p.blocks);
+    else runs.push({...p,blocks:[...p.blocks]});
+  }
+  return runs;
+}
+const majorVisualTypes=new Set([
+  'graph','coordinateGrid','geometry','visualTask','diagram','fractionStrips','numberLine','strips'
+]);
+function hasMajorVisual(block,depth=0) {
+  if(!block || depth>12)return false;
+  if(majorVisualTypes.has(block.type))return true;
+  const children=block.type==='split'
+    ? [...(block.left||[]),...(block.right||[])]
+    : block.children||[];
+  return children.some(item=>hasMajorVisual(item,depth+1));
+}
+function independentTaskCount(block,depth=0) {
+  if(!block || depth>12)return 0;
+  if(block.type==='exercise'||block.type==='taskCard')return 1;
+  const children=block.type==='split'
+    ? [...(block.left||[]),...(block.right||[])]
+    : block.children||[];
+  return children.reduce((sum,child)=>sum+independentTaskCount(child,depth+1),0);
+}
+
+/** Prefer two short/medium exercises per A4, without shrinking their workspace.
+ * Major diagrams/graphs reserve a dedicated A4 with their directly related task.
+ * The measured WeasyPrint geometry QA still has the final say and can repack.
+ */
 export function autoPaginatePages(pages,teacher=false) {
-  // Usually leave headroom for fonts and page headings. A visual and its first
-  // task may use more of the real A4 area; measured PDF QA remains authoritative.
   const target=teacher ? 167 : 158;
   const maximum=teacher ? 208 : 194;
   const output=[];
-  for(const [index,p] of pages.entries()) {
+  const input=teacher?pages:compactStudentSections(pages);
+  for(const [index,p] of input.entries()) {
     if(!p || !Array.isArray(p.blocks))throw new TypeError('Page '+(index+1)+' must contain blocks[]');
     if(!p.blocks.length){output.push(p);continue;}
-    let group=[];
-    const flush=()=>{if(group.length){output.push({...p,blocks:group});group=[];}};
+    let group=[], taskCount=0;
+    const flush=()=>{
+      if(group.length){output.push({...p,blocks:group});group=[];taskCount=0;}
+    };
     for(const unit of pageUnits(p.blocks)) {
-      const anchored=unit.length>1 && visualTypes.has(unit[0].type);
+      const visual=unit.some(b=>hasMajorVisual(b));
+      const anchored=unit.length>1 && majorVisualTypes.has(unit[0]?.type);
       if(anchored && contentHeightMm(unit,teacher)>maximum)
         throw new Error('Page '+(index+1)+': diagram and its next task exceed one A4 page. Use a shorter task or a smaller graph.');
+      if(!teacher && visual) {
+        // Graphs and constructions cannot share with another independent task.
+        flush();
+        group.push(...unit);
+        flush();
+        continue;
+      }
+      const nextTasks=unit.reduce((sum,b)=>sum+independentTaskCount(b),0);
+      // Page-count preference applies only to student worksheets (not compact
+      // teacher solutions); no more than two independent exercises per A4.
+      if(!teacher && group.length && taskCount+nextTasks>2)flush();
       const proposed=[...group,...unit];
-      // A short task directly underneath a visual is more important than the
-      // conservative 158 mm soft limit, but must still fit the A4 hard limit.
-      const limit=anchored ? maximum : target;
+      // For exactly two regular student tasks, allow up to the conservative
+      // physical A4 limit. PDF geometry QA will reflow if a real font is taller.
+      const limit=anchored || (!teacher && taskCount+nextTasks===2)
+        ? maximum : target;
       if(group.length && contentHeightMm(proposed,teacher)>limit)flush();
       group.push(...unit);
+      taskCount+=nextTasks;
     }
     flush();
   }
