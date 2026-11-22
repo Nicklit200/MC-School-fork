@@ -365,14 +365,14 @@ public class AiLessonPilotService {
         try {
             return objectMapper.writeValueAsString(Map.of("kind", "homework_errors_v1", "issues", verified));
         } catch (Exception ex) {
-            return "{\\"kind\\":\\"homework_errors_v1\\",\\"issues\\":[]}";
+            return "{\"kind\":\"homework_errors_v1\",\"issues\":[]}";
         }
     }
 
     private static String digestField(Map<?, ?> fields, String field, int limit) {
         Object value = fields.get(field);
         if (!(value instanceof String text)) return "";
-        String clean = text.trim().replaceAll("[\\\\p{Cntrl}&&[^\\\\n]]", " ");
+        String clean = text.trim().replaceAll("[\\p{Cntrl}&&[^\\n]]", " ");
         return clean.length() <= limit ? clean : clean.substring(0, limit);
     }
 
@@ -419,7 +419,7 @@ public class AiLessonPilotService {
                     .sorted(Comparator.comparing(Homework::getSubmittedAt))
                     .toList();
 
-            if (summary.length() > 0) summary.append("\\n");
+            if (summary.length() > 0) summary.append("\n");
             summary.append(student.getFullName())
                     .append(": задано ").append(assigned.size())
                     .append(", сдано ").append(submittedCount)
