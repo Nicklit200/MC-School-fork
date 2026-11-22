@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { LessonWorkspacePage } from './LessonWorkspacePage';
@@ -39,11 +39,25 @@ describe('lesson workspace',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Закрыть'}));
     expect(screen.getByText('Настройки срока и файла')).not.toBeVisible();
   });
-  it('saves edited notes without replacing preserved fields or automatic transcript',async()=>{
-    mount();await screen.findByRole('heading',{name:'Дроби'});
-    fireEvent.change(screen.getByRole('textbox',{name:'Информация о домашке'}),{target:{value:'Задания 4-6'}});
-    fireEvent.click(screen.getByRole('button',{name:'Сохранить информацию'}));
-    await waitFor(()=>expect(lessonPreparationApi.update).toHaveBeenCalledWith('lesson-1',{homeworkNotes:'Задания 4-6',difficulties:'Знаки',coveredMaterial:'Дроби',lessonPlan:'План',transcriptText:''}));
-    await screen.findByRole('status');
+  it('shows only key real homework mistakes and never the manual note fields',async()=>{
+    vi.mocked(lessonPreparationApi.get).mockResolvedValue({
+      eventId:'lesson-1',
+      homeworkNotes:'Мелисса: задано 7, сдано 5, ещё не сдано 2. В анализе 5 работ.\nСофия: задано 7, сдано 6, ещё не сдано 1.',
+      difficulties:JSON.stringify({kind:'homework_errors_v1',issues:[
+        {student:'София',difficulty:'Знаки перед скобками',task:'Berechne -3 + 8.',
+         studentAnswer:'-5',correctAnswer:'5',source:'sofia_2026-11-21.pdf',page:'Aufgabe 2'}
+      ]}),
+      coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'Автоматическая запись'
+    } as never);
+    mount(); await screen.findByRole('heading',{name:'Дроби'});
+    expect(screen.getByText('Знаки перед скобками')).toBeInTheDocument();
+    expect(screen.getByText('Berechne -3 + 8.')).toBeInTheDocument();
+    expect(screen.getByText('Ответ ученика:')).toBeInTheDocument();
+    expect(screen.getByText('Правильно:')).toBeInTheDocument();
+    expect(screen.getByText('Мелисса')).toBeInTheDocument();
+    expect(screen.getByText('София')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox',{name:'Информация о домашке'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Сохранить информацию'})).not.toBeInTheDocument();
+    expect(lessonPreparationApi.update).not.toHaveBeenCalled();
   });
 });
