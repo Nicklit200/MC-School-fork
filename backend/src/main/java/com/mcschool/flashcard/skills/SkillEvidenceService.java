@@ -48,7 +48,7 @@ public class SkillEvidenceService {
                 rs.getString("skill_id"),rs.getString("source_type"),rs.getString("source_ref"),
                 rs.getString("autonomy"),rs.getString("explanation"),rs.getString("source_excerpt"),
                 rs.getTimestamp("observed_at").toInstant(),rs.getTimestamp("recorded_at").toInstant(),
-                (Integer)rs.getObject("mastery_after"),rs.getObject("supersedes_id",UUID.class),
+                nullableInt(rs.getObject("mastery_after")),rs.getObject("supersedes_id",UUID.class),
                 rs.getString("correction_reason")),studentId,boardId);
     }
 
@@ -85,7 +85,7 @@ public class SkillEvidenceService {
                 rs.getString("source_type"),rs.getString("source_ref"),rs.getString("autonomy"),
                 rs.getString("explanation"),rs.getString("source_excerpt"),
                 rs.getTimestamp("observed_at").toInstant(),rs.getTimestamp("recorded_at").toInstant(),
-                (Integer)rs.getObject("mastery_after"),rs.getObject("supersedes_id",UUID.class),
+                nullableInt(rs.getObject("mastery_after")),rs.getObject("supersedes_id",UUID.class),
                 rs.getString("correction_reason")),studentId,boardId,key);
         if(!previous.isEmpty()){
             Evidence past=previous.get(0);
@@ -123,6 +123,8 @@ public class SkillEvidenceService {
             .findFirst().orElseThrow(()->new IllegalStateException("Наблюдение не сохранилось"));
         return new Recorded(saved,mastery.get(boardId,studentId,caller),false);
     }
+
+    private static Integer nullableInt(Object value){ return value==null?null:((Number)value).intValue(); }
 
     private static String bounded(String text,int max,String field){
         if(text==null||text.isBlank()||text.length()>max)throw bad("Укажите "+field+" (до "+max+" символов)");
