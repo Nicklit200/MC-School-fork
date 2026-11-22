@@ -531,7 +531,7 @@ window.addEventListener("message",async event=>{
         ]);
         return{student,masterySnapshot,historyEntries};
       }));
-      masteryByStudent={};masteryHistoryByStudent={};
+      masteryByStudent={};masteryHistoryByStudent={};individualMonthsByStudent={};
       for(const item of snapshots){
         masteryByStudent[item.student.id]=item.masterySnapshot?.mastery&&typeof item.masterySnapshot.mastery==="object"?item.masterySnapshot.mastery:{};
         masteryHistoryByStudent[item.student.id]=Array.isArray(item.historyEntries)?item.historyEntries:[];
