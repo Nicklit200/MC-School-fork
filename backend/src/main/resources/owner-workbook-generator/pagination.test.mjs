@@ -86,3 +86,58 @@ test('oversized visual-task pair fails instead of silently detaching exercise',(
   const graph={type:'graph'};
   assert.throws(()=>autoPaginatePages([{blocks:[graph,task(12,'04')]}]),/diagram and its next task exceed one A4 page/);
 });
+
+
+test('two standard Sachaufgaben from separate logical pages use the same A4',()=>{
+  const p1={title:'NOVEMBER · Ganze Zahlen',subtitle:'Klasse 6',blocks:[task(5,'01')]};
+  const p2={title:'NOVEMBER · Ganze Zahlen',subtitle:'Klasse 6',blocks:[task(5,'02')]};
+  const packed=autoPaginatePages([p1,p2]);
+  assert.equal(packed.length,1);
+  assert.deepEqual(packed[0].blocks.map(b=>b.number),['01','02']);
+  assert.equal(packed[0].blocks[0].writeLines,5);
+  assert.equal(packed[0].blocks[1].writeLines,5);
+  assert.doesNotThrow(()=>preflightPages(packed));
+});
+
+test('no more than two independent ordinary tasks per A4',()=>{
+  const input=[{title:'Same topic',blocks:[task(4,'01'),task(4,'02'),task(4,'03'),task(4,'04')]}];
+  const pages=autoPaginatePages(input);
+  assert.equal(pages.length,2);
+  assert.deepEqual(pages.map(p=>p.blocks.map(b=>b.number)),[['01','02'],['03','04']]);
+});
+
+test('chapter and month headings are not merged across section boundaries',()=>{
+  const pages=autoPaginatePages([
+    {title:'November',blocks:[task(4,'01')]},
+    {title:'Dezember',blocks:[task(4,'02')]}
+  ]);
+  assert.equal(pages.length,2);
+  assert.deepEqual(pages.map(p=>p.title),['November','Dezember']);
+});
+
+test('graph, geometry and visual tasks reserve their own page',()=>{
+  const cases=[
+    {type:'graph',series:[{kind:'linear',m:2,b:-1}]},
+    {type:'coordinateGrid'},
+    {type:'geometry',figure:'triangle'},
+    {type:'visualTask',figure:'coordinateGrid'}
+  ];
+  for(const visual of cases){
+    const p={title:'Visuelle Aufgaben',blocks:[task(4,'01'),visual,task(4,'02'),task(4,'03')]};
+    const pages=autoPaginatePages([p]);
+    const index=pages.findIndex(x=>x.blocks.some(b=>b.type===visual.type));
+    assert(index>=0);
+    assert.equal(pages[index].blocks.filter(b=>b.type==='exercise').length,1);
+    assert.equal(pages[index].blocks.find(b=>b.type==='exercise').number,'02');
+    assert.notEqual(pages.findIndex(x=>x.blocks.some(b=>b.number==='01')),index);
+    assert.notEqual(pages.findIndex(x=>x.blocks.some(b=>b.number==='03')),index);
+  }
+});
+
+test('oversized pair retains original answer area and splits',()=>{
+  const p={title:'Sachaufgaben',blocks:[task(8,'01'),task(8,'02')]};
+  const pages=autoPaginatePages([p]);
+  assert.equal(pages.length,2);
+  assert.equal(pages[0].blocks[0].writeLines,8);
+  assert.equal(pages[1].blocks[0].writeLines,8);
+});
