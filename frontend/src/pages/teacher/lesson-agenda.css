@@ -130,3 +130,21 @@
 .school-assessment-editor :is(input,textarea,select){width:100%;max-width:100%;box-sizing:border-box}
 .school-assessment-editor>.btn{justify-self:start}
 @media(max-width:650px){.school-assessment-editor__grid{grid-template-columns:1fr}.school-assessments__heading{flex-wrap:wrap}}
+
+/* Compact exam card: collapsed summary and only topics when expanded */
+.school-assessment-card__trigger>span:nth-child(2){flex:1;min-width:0}
+.school-exam-readiness__badge{
+  flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+  min-width:62px;border-radius:10px;padding:8px 12px;font-size:16px;
+  font-weight:800;background:#e7f3e8;color:#166534;
+}
+.school-exam-readiness__badge.is-unknown{font-size:12px;background:#edf1f5;color:#65788a}
+.school-exam-topic-list{display:grid;gap:0}
+.school-exam-topic{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:18px;padding:11px 5px;border-bottom:1px solid var(--border);
+  font-size:13px;line-height:1.45;
+}
+.school-exam-topic:last-child{border-bottom:0}
+.school-exam-topic strong{white-space:nowrap;font-size:14px;color:#315f83}
+.school-assessment-card__details{padding:6px 16px 10px;display:block}
