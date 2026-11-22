@@ -1,5 +1,6 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
-import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-2";
+import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-3";
+import {schoolYearStartForDate,indexStudentMonthlyCurricula} from "./school-calendar-month-index.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},individualMonthsByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
@@ -530,7 +531,7 @@ window.addEventListener("message",async event=>{
         ]);
         return{student,masterySnapshot,historyEntries};
       }));
-      masteryByStudent={};masteryHistoryByStudent={};
+      masteryByStudent={};masteryHistoryByStudent={};individualMonthsByStudent={};
       for(const item of snapshots){
         masteryByStudent[item.student.id]=item.masterySnapshot?.mastery&&typeof item.masterySnapshot.mastery==="object"?item.masterySnapshot.mastery:{};
         masteryHistoryByStudent[item.student.id]=Array.isArray(item.historyEntries)?item.historyEntries:[];
@@ -1055,7 +1056,7 @@ const schoolCalendarUI=createSchoolCalendarPanel({
   refreshMastery:async()=>{
     if(!boardId||!data||config?.publicMode)return;
     const chosen=selectedStudents();
-    const yearNow=new Date(),schoolYearStart=yearNow.getMonth()>=7?yearNow.getFullYear():yearNow.getFullYear()-1;
+    const schoolYearStart=schoolYearStartForDate();
     const snapshots=await Promise.all(chosen.map(async student=>{
       const [snapshot,year]=await Promise.all([
         request("GET",`${boardPath()}/students/${student.id}/mastery`),
@@ -1066,11 +1067,9 @@ const schoolCalendarUI=createSchoolCalendarPanel({
     for(const item of snapshots){
       masteryByStudent[item.studentId]=item.snapshot?.mastery&&typeof item.snapshot.mastery==="object"
         ?item.snapshot.mastery:{};
-      individualMonthsByStudent[item.studentId]=Object.fromEntries(
-        (Array.isArray(item.year?.months)?item.year.months:[])
-          .filter(m=>typeof m.month==="string"&&/^\\d{4}-(0[1-9]|1[0-2])$/.test(m.month))
-          .map(m=>[String(Number(m.month.slice(-2))),m])
-      );
+      individualMonthsByStudent[item.studentId]=indexStudentMonthlyCurricula(item.year,{
+        studentId:item.studentId,boardId,schoolYearStart
+      });
     }
     render();
   },

@@ -28,12 +28,13 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Check school calendar model
-        run: node --test frontend/tests/school-calendar.test.mjs frontend/tests/school-calendar-readiness.test.mjs
+        run: node --test frontend/tests/school-calendar.test.mjs frontend/tests/school-calendar-readiness.test.mjs frontend/tests/school-calendar-month-index.test.mjs
       - name: Check skills board JS syntax
         run: |
           node --check frontend/public/skills-board/school-calendar.js
           node --check frontend/public/skills-board/school-calendar-readiness.js
           node --check frontend/public/skills-board/school-calendar-readiness-panel.js
+          node --check frontend/public/skills-board/school-calendar-month-index.js
           node --check frontend/public/skills-board/board.js
       - name: Build frontend
         working-directory: frontend

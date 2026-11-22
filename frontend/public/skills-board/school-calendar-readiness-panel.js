@@ -1,4 +1,5 @@
-import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js";
+import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js?v=20261122-3";
+import {schoolYearMonthKey,schoolYearStartForDate} from "./school-calendar-month-index.js";
 
 /** Visible readiness is derived from the latest student skills, never stored as fake grades. */
 export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,getIndividualMonths,refreshMastery,onChange}) {
@@ -15,7 +16,7 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
   const student=()=>eligible().find(s=>s.id===studentId)||null;
   const result=month=>{
     if(!student() || !month)return student()?calculateMonthReadiness(getBoard(),month,getMastery?.(studentId)||{},school):null;
-    const individual=getIndividualMonths?.(studentId)?.[String(month.month)]||null;
+    const individual=getIndividualMonths?.(studentId)?.[schoolYearMonthKey(schoolYearStartForDate(),month.month)]||null;
     return calculateIndividualMonthReadiness(getBoard(),individual,getMastery?.(studentId)||{},school)
       ||calculateMonthReadiness(getBoard(),month,getMastery?.(studentId)||{},school);
   };
@@ -88,7 +89,12 @@ export function createMonthlyReadinessPanel({getBoard,getStudents,getMastery,get
     heading.append(element("strong","",`Готовность ${s.fullName||"ученика"}`));
     heading.append(element("span","calendar-readiness-number "+level(r),status(r)));
     block.append(heading);
-    if(r.source==="INDIVIDUAL_PLAN")block.append(element("p","calendar-readiness-source","По индивидуальному плану ученика. Тот же набор навыков, что используется в месячном плане преподавателя."));
+    if(r.source==="INDIVIDUAL_PLAN"){
+      block.append(element("p","calendar-readiness-source","Расчёт по навыкам индивидуального плана именно этого месяца. Используются текущие оценки из карты навыков."));
+      const mapped=getIndividualMonths?.(studentId)?.[schoolYearMonthKey(schoolYearStartForDate(),month?.month)];
+      if(Array.isArray(mapped?.topics)&&mapped.topics.length)
+        block.append(element("p","calendar-readiness-individual-topics","Темы индивидуального плана: "+mapped.topics.join(" · ")));
+    }
     if(r.totalCount>0) {
       const coverage=element("div","calendar-coverage");
       coverage.append(element("span","",`Подтверждено навыков: ${r.assessedCount} из ${r.totalCount} (${r.coveragePercent}%)`));
