@@ -49,4 +49,5 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: backend/pom.xml
+      - run: mvn -B -ntp -Dtest=MonthlyReadinessCalculatorTest test
       - run: mvn -B -ntp -DskipTests package
