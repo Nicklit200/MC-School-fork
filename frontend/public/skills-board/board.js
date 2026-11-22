@@ -3,7 +3,7 @@ import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-3";
 import {schoolYearStartForDate,indexStudentMonthlyCurricula} from "./school-calendar-month-index.js";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
-let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},individualMonthsByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
+let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},individualMonthsByStudent={},skillEvidenceByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
 const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"],[9,"grade-9"]]);let boardId="";
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
@@ -531,7 +531,7 @@ window.addEventListener("message",async event=>{
         ]);
         return{student,masterySnapshot,historyEntries};
       }));
-      masteryByStudent={};masteryHistoryByStudent={};individualMonthsByStudent={};
+      masteryByStudent={};masteryHistoryByStudent={};individualMonthsByStudent={};skillEvidenceByStudent={};
       for(const item of snapshots){
         masteryByStudent[item.student.id]=item.masterySnapshot?.mastery&&typeof item.masterySnapshot.mastery==="object"?item.masterySnapshot.mastery:{};
         masteryHistoryByStudent[item.student.id]=Array.isArray(item.historyEntries)?item.historyEntries:[];
@@ -1052,17 +1052,20 @@ const schoolCalendarUI=createSchoolCalendarPanel({
   getStudentSchool:()=>selectedStudent()?.schoolType||selectedStudents()[0]?.schoolType||"WIRTSCHAFTSSCHULE",
   getStudents:()=>selectedStudents(),
   getMastery:studentId=>masteryByStudent[studentId]||{},
+  getEvidence:studentId=>skillEvidenceByStudent[studentId]||[],
   getIndividualMonths:studentId=>individualMonthsByStudent[studentId]||{},
   refreshMastery:async()=>{
     if(!boardId||!data||config?.publicMode)return;
     const chosen=selectedStudents();
     const schoolYearStart=schoolYearStartForDate();
     const snapshots=await Promise.all(chosen.map(async student=>{
-      const [snapshot,year]=await Promise.all([
+      const [snapshot,year,evidence]=await Promise.all([
         request("GET",`${boardPath()}/students/${student.id}/mastery`),
-        request("GET",`${boardPath()}/students/${student.id}/monthly-curricula?schoolYearStart=${schoolYearStart}`)
+        request("GET",`${boardPath()}/students/${student.id}/monthly-curricula?schoolYearStart=${schoolYearStart}`),
+        request("GET",`${boardPath()}/students/${student.id}/evidence`)
+          .catch(error=>({readError:error?.message||"Доказательства недоступны"}))
       ]);
-      return {studentId:student.id,snapshot,year};
+      return {studentId:student.id,snapshot,year,evidence};
     }));
     for(const item of snapshots){
       masteryByStudent[item.studentId]=item.snapshot?.mastery&&typeof item.snapshot.mastery==="object"
@@ -1070,6 +1073,9 @@ const schoolCalendarUI=createSchoolCalendarPanel({
       individualMonthsByStudent[item.studentId]=indexStudentMonthlyCurricula(item.year,{
         studentId:item.studentId,boardId,schoolYearStart
       });
+      skillEvidenceByStudent[item.studentId]=Array.isArray(item.evidence)
+        ?item.evidence
+        :{error:item.evidence?.readError||"Не удалось прочитать доказательства"};
     }
     render();
   },
