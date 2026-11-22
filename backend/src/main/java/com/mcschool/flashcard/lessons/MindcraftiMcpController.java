@@ -2783,7 +2783,7 @@ public class MindcraftiMcpController {
             result.put("updatedAt",plan.updatedAt());
             result.put("readiness",readiness);
             return result;
-        } catch (RuntimeException error) {
+        } catch (Exception error) {
             // A malformed or superseded curriculum mapping must never prevent
             // a teacher from reading the stored lesson plan itself.
             LOG.warn("Unable to calculate monthly readiness for target {}: {}",
