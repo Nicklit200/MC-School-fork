@@ -2,7 +2,7 @@
  * Month-by-month reference curricula for /skills.
  * A calendar is one revisioned NOTE in the existing board, not pupil mastery.
  */
-import {createMonthlyReadinessPanel} from "./school-calendar-readiness-panel.js?v=20261122-4";
+import {createMonthlyReadinessPanel} from "./school-calendar-readiness-panel.js?v=20261122-5";
 
 export const schoolCalendarLabels = {
   WIRTSCHAFTSSCHULE:"Wirtschaftsschule", REALSCHULE:"Realschule",
@@ -118,7 +118,7 @@ export function validateSchoolCalendar(value,board) {
   if(JSON.stringify(value).length>4000)throw Error("Календарь слишком подробный, сократите описания.");
   return true;
 }
-export function createSchoolCalendarPanel({getBoard,getStudentSchool,getStudents,getMastery,refreshMastery,canEdit,onCommit,notify}) {
+export function createSchoolCalendarPanel({getBoard,getStudentSchool,getStudents,getMastery,getEvidence,getIndividualMonths,refreshMastery,canEdit,onCommit,notify}) {
   const $=id=>document.getElementById(id);
   const panel=$("school-calendar-panel"),sheet=$("school-calendar-body"),monthButtons=$("calendar-months");
   const schoolSelect=$("calendar-school"),profileInput=$("calendar-profile");
@@ -127,7 +127,7 @@ export function createSchoolCalendarPanel({getBoard,getStudentSchool,getStudents
     return{open(){},close(){},sync(){}};
   let school="WIRTSCHAFTSSCHULE",profile="vierstufig",month=11;
   let working=null,original="",dirty=false,saving=false;
-  const readiness=createMonthlyReadinessPanel({getBoard,getStudents,getMastery,refreshMastery,onChange:render});
+  const readiness=createMonthlyReadinessPanel({getBoard,getStudents,getMastery,getEvidence,getIndividualMonths,refreshMastery,onChange:render});
   for(const [id,label] of Object.entries(schoolCalendarLabels)) {
     const option=el("option","",label);option.value=id;schoolSelect.append(option);
   }

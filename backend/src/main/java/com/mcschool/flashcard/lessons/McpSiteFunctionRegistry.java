@@ -19,6 +19,7 @@ import com.mcschool.flashcard.settings.StoryTemplateMasterController;
 import com.mcschool.flashcard.settings.StoryStudioProjectController;
 import com.mcschool.flashcard.skills.SkillBoardController;
 import com.mcschool.flashcard.skills.SkillMasteryController;
+import com.mcschool.flashcard.skills.SkillEvidenceController;
 import com.mcschool.flashcard.students.StudentChatGptProjectController;
 import com.mcschool.flashcard.students.StudentController;
 import com.mcschool.flashcard.students.StudentStatusController;
@@ -133,6 +134,10 @@ final class McpSiteFunctionRegistry {
         add(functions, "skill_boards", SkillBoardController.class, Scope.ADMIN, "save create");
         add(functions, "skill_mastery", SkillMasteryController.class, Scope.CALLER,
                 "students groups boardStudents mastery history update");
+        // Existing MCH3 clients can inspect and append evidence via the
+        // read_site_function / execute_site_function bridge without reinstalling tools.
+        add(functions, "skill_evidence", SkillEvidenceController.class, Scope.CALLER,
+                "evidence record");
         add(functions, "account", UserController.class, Scope.CALLER, "updateSettings");
         Map<String, Function> unique = new LinkedHashMap<>();
         for (Function function : functions) {
@@ -168,6 +173,7 @@ final class McpSiteFunctionRegistry {
             case "homework" -> "assign_homework_series / update_homework / delete_homework / find_student_homeworks / get_recent_homework_submissions";
             case "skill_boards" -> "list_skill_boards / get_skill_board / edit_skill_board / create_skill_board";
             case "skill_mastery" -> "get_skill_mastery / update_skill_mastery";
+            case "skill_evidence" -> "get_skill_evidence / record_skill_evidence";
             case "teacher_help" -> "get_teacher_guide / show_teacher_guide / teacher_help.draft / teacher_help.publish";
             case "brand_guide" -> "get_brand_guide / update_brand_guide";
             case "stories_template" -> "get_story_template_info / get_story_template_chunk / update_story_template_master";

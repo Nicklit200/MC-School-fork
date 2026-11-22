@@ -168,3 +168,64 @@
  .calendar-refresh-controls{grid-column:1/-1}
  .calendar-month{min-height:88px}
 }
+
+
+/* Evidence-first compact school-calendar layout on desktop. */
+@media(min-width:900px) {
+ .school-calendar-overlay{padding:8px;align-items:stretch}
+ .school-calendar-sheet{
+   width:min(1500px,100%);height:calc(100dvh - 16px);max-height:none;
+   border-radius:16px;
+ }
+ .calendar-head{padding:11px 22px 8px}
+ .calendar-controls{padding:8px 22px;gap:9px 14px}
+ .calendar-guidance{padding:7px 22px;font-size:11px}
+ .calendar-months{padding:8px 22px;gap:7px}
+ .calendar-month{min-height:65px;padding:8px 10px}
+ .calendar-body{padding:8px 22px 14px}
+ .calendar-body h3{font-size:18px;margin:3px 0 8px}
+ .calendar-body h4{margin:10px 0 8px}
+ .calendar-readiness-summary{margin:3px 0 12px;padding:11px 14px}
+ .calendar-footer{padding:8px 22px}
+}
+.calendar-readiness-skills-heading{font-size:14px!important;margin:12px 0 8px!important;color:#29465d}
+.calendar-readiness-skills-grid{
+ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:8px;align-items:start;
+}
+.calendar-skill-proof{
+ border:1px solid #d8e5ef;border-radius:10px;background:#fff;
+ min-width:0;overflow:hidden;
+}
+.calendar-skill-proof[open]{grid-row:span 2;border-color:#8bb4d3}
+.calendar-skill-proof-summary{
+ list-style:none;display:flex;align-items:center;justify-content:space-between;
+ gap:12px;padding:9px 11px;cursor:pointer;
+}
+.calendar-skill-proof-summary::-webkit-details-marker{display:none}
+.calendar-skill-proof-summary::before{
+ content:"▸";font-size:14px;color:#5d7b93;flex-shrink:0;
+}
+.calendar-skill-proof[open]>.calendar-skill-proof-summary::before{content:"▾"}
+.calendar-skill-proof-title{flex:1;font-size:12px;color:#264258;font-weight:700;line-height:1.35}
+.calendar-skill-proof-percent{
+ font-size:13px;border-radius:7px;padding:5px 9px;white-space:nowrap;
+ background:#e8edf2;color:#66788a
+}
+.calendar-skill-proof-percent.high{background:#dcfce7;color:#166534}
+.calendar-skill-proof-percent.medium{background:#fef3c7;color:#92400e}
+.calendar-skill-proof-percent.low{background:#fee2e2;color:#991b1b}
+.calendar-skill-proof-body{padding:5px 11px 10px;border-top:1px solid #edf2f5}
+.calendar-proof-muted{font-size:12px;line-height:1.5;color:#60778a;margin:7px 0}
+.calendar-proof-entry{border-bottom:1px solid #e7edf2;padding:8px 0}
+.calendar-proof-entry.corrected{opacity:.66}
+.calendar-proof-header{font-size:11px;color:#36536b}
+.calendar-proof-autonomy{font-size:12px;font-weight:750;color:#345672;margin:5px 0}
+.calendar-proof-explanation{font-size:12px;line-height:1.45;margin:3px 0;color:#314c61}
+.calendar-proof-excerpt{font-size:11px;border-left:3px solid #bad1e4;margin:7px 0;padding-left:10px;color:#536c81}
+.calendar-proof-ref,.calendar-proof-correction{display:block;font-size:10px;color:#718698;margin:4px 0;overflow-wrap:anywhere}
+.calendar-proof-footnote{font-size:10px;color:#718497;margin:9px 0 0}
+@media(max-width:740px) {
+ .calendar-readiness-skills-grid{grid-template-columns:1fr}
+ .calendar-skill-proof[open]{grid-row:auto}
+}

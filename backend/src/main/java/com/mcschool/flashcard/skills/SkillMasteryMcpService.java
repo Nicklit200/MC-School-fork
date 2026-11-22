@@ -4,6 +4,7 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import java.util.*;
+import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -11,13 +12,15 @@ import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class SkillMasteryMcpService {
-    public static final Set<String> TOOL_NAMES = Set.of("get_skill_mastery", "update_skill_mastery");
+    public static final Set<String> TOOL_NAMES = Set.of("get_skill_mastery", "update_skill_mastery", "get_skill_evidence", "record_skill_evidence");
 
     private final SkillMasteryService mastery;
+    private final SkillEvidenceService evidence;
     private final ObjectMapper mapper;
 
-    public SkillMasteryMcpService(SkillMasteryService mastery, ObjectMapper mapper) {
+    public SkillMasteryMcpService(SkillMasteryService mastery, SkillEvidenceService evidence, ObjectMapper mapper) {
         this.mastery = mastery;
+        this.evidence = evidence;
         this.mapper = mapper;
     }
 
@@ -30,9 +33,27 @@ public class SkillMasteryMcpService {
         Map<String,Object> writeProps = new LinkedHashMap<>(readProps);
         writeProps.put("skillId", Map.of("type","string","description","Stable skill node ID from get_skill_board."));
         writeProps.put("mastery", Map.of("type","integer","minimum",0,"maximum",100,"description","Mastery percentage from 0 to 100."));
+        Map<String,Object> evidenceProps = new LinkedHashMap<>(readProps);
+        evidenceProps.put("skillId", Map.of("type","string","description","Exact current skill ID from get_skill_board"));
+        evidenceProps.put("sourceType", Map.of("type","string","enum",List.of("LESSON","HOMEWORK","TEST","TEACHER_OBSERVATION")));
+        evidenceProps.put("sourceRef", Map.of("type","string","description","Stable, concrete event ID, submission ID, test ID or observation reference. Never invent."));
+        evidenceProps.put("autonomy", Map.of("type","string","enum",List.of("FIRST_TRY","INDEPENDENT","HINTED","AFTER_EXPLANATION","NOT_YET","UNKNOWN")));
+        evidenceProps.put("explanation", Map.of("type","string","description","Factual, specific evidence supporting the judgement; no invented student behavior."));
+        evidenceProps.put("sourceExcerpt", Map.of("type","string","description","Optional short quotation from the existing transcript or homework, if actually inspected."));
+        evidenceProps.put("observedAt", Map.of("type","string","description","ISO-8601 timestamp when observation happened"));
+        evidenceProps.put("masteryAfter", Map.of("type","integer","minimum",0,"maximum",100,"description","Optional new mastery percentage. Omit if source evidence does not justify changing the existing skill value."));
+        evidenceProps.put("supersedesId", Map.of("type","string","description","Optional previous evidence UUID when correcting an earlier observation."));
+        evidenceProps.put("correctionReason", Map.of("type","string","description","Required when supersedesId is supplied; preserves both versions."));
+        evidenceProps.put("idempotencyKey", Map.of("type","string","description","Stable idempotency key, 8-128 characters; reuse for retries."));
         return List.of(
+            definition("get_skill_evidence",
+                "Read dated, source-linked observations for a student's skills, including autonomy and explanations. Previously saved percentages may have no documented proof; do not invent it.",
+                readProps,List.of("studentId"),true),
+            definition("record_skill_evidence",
+                "Append one concrete student skill observation and optional evidence-backed mastery update, preserving the previous history. Source must have actually been inspected. Never infer mastery merely from homework submission or unverified transcript claims. Corrections append rather than replace.",
+                evidenceProps,List.of("studentId","skillId","sourceType","sourceRef","autonomy","explanation","observedAt","idempotencyKey"),false),
             definition("get_skill_mastery",
-                "Read the saved mastery percentages for one Mindcrafti student on the skills board. Missing skill IDs mean 0%. Use get_skill_board as the curriculum source and this tool only for the pupil overlay. Teachers can read their own students; admins can read all active students.",
+                "Read the saved mastery percentages for one Mindcrafti student on the skills board. Missing skill IDs are unassessed, not demonstrated zero. Use get_skill_board as the curriculum source and this tool only for the pupil overlay. Teachers can read their own students; admins can read all active students.",
                 readProps, List.of("studentId"), true),
             definition("update_skill_mastery",
                 "Save one student's percentage for one concrete skill. Use this only when the administrator/teacher explicitly asks to record or update mastery, or when they explicitly asked you to assess current evidence and save the resulting percentage. Do not turn homework completion alone into mastery. This updates pupil progress, not the shared curriculum.",
@@ -44,12 +65,41 @@ public class SkillMasteryMcpService {
         try {
             if (!TOOL_NAMES.contains(name)) throw bad("Unknown mastery tool");
             requireUser(caller);
-            keys(args, name.equals("get_skill_mastery")
+            keys(args, (name.equals("get_skill_mastery") || name.equals("get_skill_evidence"))
                     ? Set.of("boardId","studentId")
-                    : Set.of("boardId","studentId","skillId","mastery"));
+                    : name.equals("record_skill_evidence")
+                        ? Set.of("boardId","studentId","skillId","sourceType","sourceRef",
+                                 "autonomy","explanation","sourceExcerpt","observedAt",
+                                 "masteryAfter","supersedesId","correctionReason","idempotencyKey")
+                        : Set.of("boardId","studentId","skillId","mastery"));
             String boardId = text(args,"boardId","grade-6");
             UUID studentId = uuid(text(args,"studentId",null),"studentId");
             AuthenticatedUser principal = new AuthenticatedUser(caller.getId(), caller.getEmail(), caller.getRole());
+            if (name.equals("get_skill_evidence")) {
+                return result(Map.of("evidence",evidence.list(boardId,studentId,principal),
+                        "source","mindcrafti_database","pagePath","/skills"),false);
+            }
+            if (name.equals("record_skill_evidence")) {
+                Object optionalMastery=args.get("masteryAfter");
+                Integer newMastery=null;
+                if(optionalMastery!=null){
+                    if(!(optionalMastery instanceof Number number) || number.doubleValue()!=Math.rint(number.doubleValue()))
+                        throw bad("masteryAfter must be an integer percentage");
+                    newMastery=((Number)optionalMastery).intValue();
+                }
+                SkillEvidenceService.Observation observation = new SkillEvidenceService.Observation(
+                    text(args,"skillId",null),text(args,"sourceType",null),text(args,"sourceRef",null),
+                    text(args,"autonomy",null),text(args,"explanation",null),
+                    args.containsKey("sourceExcerpt")?text(args,"sourceExcerpt",null):null,
+                    Instant.parse(text(args,"observedAt",null)),newMastery,
+                    args.containsKey("supersedesId")?uuid(text(args,"supersedesId",null),"supersedesId"):null,
+                    args.containsKey("correctionReason")?text(args,"correctionReason",null):null,
+                    text(args,"idempotencyKey",null));
+                var saved=evidence.record(boardId,studentId,observation,principal);
+                return result(Map.of("saved",true,"evidence",saved.evidence(),
+                    "snapshot",saved.snapshot(),"replayed",saved.replayed(),
+                    "source","mindcrafti_database","pagePath","/skills"),false);
+            }
             if (name.equals("get_skill_mastery")) {
                 return result(Map.of("snapshot", mastery.get(boardId,studentId,principal), "source","mindcrafti_database", "pagePath","/skills"), false);
             }
@@ -64,7 +114,7 @@ public class SkillMasteryMcpService {
             int status=ex.getStatusCode().value();
             String code=status==403?"FORBIDDEN":status==404?"NOT_FOUND":"INVALID_SKILL_MASTERY";
             return result(Map.of("saved",false,"errorCode",code,"message",ex.getReason()==null?code:ex.getReason()), true);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException | java.time.format.DateTimeParseException ex) {
             return result(Map.of("saved",false,"errorCode","INVALID_SKILL_MASTERY","message",ex.getMessage()==null?"Invalid mastery update":ex.getMessage()), true);
         }
     }
