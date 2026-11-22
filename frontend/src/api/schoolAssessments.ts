@@ -16,9 +16,10 @@ export type SchoolAssessmentDraft = {
  sourceRef?:string;sourceExcerpt?:string;confirmationStatus:ConfirmationStatus;
 };
 export type SchoolAssessmentSkillRow = {id:string;title:string;percent:number|null};
+export type SchoolAssessmentTopicRow = {title:string;percent:number|null;assessedCount:number;totalCount:number};
 export type SchoolAssessmentReadiness = {
  assessmentId:string;studentId:string;boardId:string|null;
- skills:SchoolAssessmentSkillRow[];unmappedTopics:string[];
+ skills:SchoolAssessmentSkillRow[];topics:SchoolAssessmentTopicRow[];unmappedTopics:string[];
  assessedCount:number;totalCount:number;coveragePercent:number;
  percent:number|null;status:'NOT_LINKED'|'NO_VALID_SKILLS'|'NOT_ASSESSED'|'PARTIAL'|'ESTIMATED';
 };
