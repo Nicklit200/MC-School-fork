@@ -1,0 +1,145 @@
+.ios-push-guide__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(11, 24, 39, .58);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: max(14px, env(safe-area-inset-top)) 12px max(14px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+.ios-push-guide {
+  width: min(100%, 480px);
+  max-height: min(92dvh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #fff;
+  color: #1b3042;
+  border-radius: 22px;
+  box-shadow: 0 18px 64px rgba(0,0,0,.28);
+  display: flex;
+  flex-direction: column;
+}
+.ios-push-guide__header {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px 9px;
+  align-items: center;
+}
+.ios-push-guide__logo {
+  width: 33px;
+  height: 33px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #ef6724;
+  color: #fff;
+  font-weight: 850;
+}
+.ios-push-guide__brand { font-size: 13px; font-weight: 750; }
+.ios-push-guide__close {
+  margin-left: auto;
+  background: #edf1f4;
+  color: #1b3042;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+.ios-push-guide__content { padding: 8px 20px 12px; }
+.ios-push-guide__eyebrow {
+  display: inline-block;
+  color: #a34c1c;
+  background: #fff2e8;
+  padding: 5px 10px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: .04em;
+}
+.ios-push-guide h2 {
+  margin: 12px 0 9px;
+  font-size: clamp(20px, 5vw, 26px);
+  line-height: 1.22;
+  color: #1b3042;
+}
+.ios-push-guide #ios-push-guide-intro {
+  font-size: 13px;
+  color: #516273;
+  line-height: 1.5;
+  margin: 0 0 13px;
+}
+.ios-push-guide__steps { padding: 0; margin: 0; list-style: none; display: grid; gap: 8px; }
+.ios-push-guide__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #e1e8ef;
+  border-radius: 12px;
+  padding: 11px 9px;
+  background: #fafcfe;
+}
+.ios-push-guide__step-number {
+  background: #eff3f6;
+  border-radius: 50%;
+  height: 24px;
+  width: 24px;
+  flex: 0 0 24px;
+  text-align: center;
+  line-height: 24px;
+  font-size: 12px;
+  font-weight: 780;
+}
+.ios-push-guide__step-icon {
+  width: 27px;
+  flex: 0 0 27px;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0d668e;
+  font-size: 22px;
+}
+.ios-push-guide__step-copy { flex: 1; min-width: 0; }
+.ios-push-guide__step-copy strong { display: block; font-size: 13px; line-height: 1.36; }
+.ios-push-guide__step-copy p { margin: 4px 0 0; color: #5a6d7f; line-height: 1.43; font-size: 12px; }
+.ios-push-guide__hint {
+  color: #687b8e;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 12px 0 0;
+}
+.ios-push-guide__footer {
+  display: grid;
+  gap: 8px;
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding: 12px 20px max(14px, env(safe-area-inset-bottom));
+  border-top: 1px solid #e8ecef;
+}
+.ios-push-guide__primary {
+  background: #153e58;
+  border: 0;
+  color: #fff;
+  border-radius: 11px;
+  min-height: 43px;
+  font-weight: 740;
+  cursor: pointer;
+}
+.ios-push-guide__secondary {
+  background: none;
+  border: 0;
+  color: #647386;
+  min-height: 34px;
+  cursor: pointer;
+}
+@media (max-height: 660px) {
+  .ios-push-guide { max-height: calc(100dvh - 20px); }
+  .ios-push-guide__step { padding: 7px; }
+  .ios-push-guide__content { padding-top: 0; }
+}

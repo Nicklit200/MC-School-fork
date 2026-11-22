@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
+import { IosPushInstallGuide } from './IosPushInstallGuide';
 
 type Role = 'PARENT' | 'STUDENT';
 type Phase = 'checking' | 'hidden' | 'ready' | 'ios-install' | 'denied' | 'enabled' | 'error';
@@ -65,19 +66,25 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
   const [config, setConfig] = useState<PushConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showIosGuide, setShowIosGuide] = useState(false);
 
   useEffect(() => {
     let active = true;
     setPhase('checking');
     setError(null);
     setConfig(null);
+    setShowIosGuide(false);
 
     const check = async () => {
       // On iPhone, Web Push is available to an installed Home Screen app,
       // not a normal Safari tab. Explain installation before feature detection.
       const iosBrowser = isIPhoneOrIPad() && !homeScreenApp();
       if (iosBrowser) {
-        if (active) setPhase('ios-install');
+        if (active) {
+          const snoozed = Number(localStorage.getItem(snoozeKey) || 0) > Date.now();
+          setPhase(snoozed ? 'hidden' : 'ios-install');
+          setShowIosGuide(!snoozed);
+        }
         return;
       }
       if (!supported()) { if (active) setPhase('hidden'); return; }
@@ -129,6 +136,7 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
   function later() {
     localStorage.setItem(snoozeKey, String(Date.now() + DISMISS_DAYS * 86400000));
     setPhase('hidden');
+    setShowIosGuide(false);
   }
 
   async function enable() {
@@ -179,7 +187,7 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
       : 'Напомним о домашке и ежедневных карточках.');
   const ios = phase === 'ios-install';
   const denied = phase === 'denied';
-  return <section className="panel" aria-label={de ? 'Benachrichtigungen einrichten' : 'Подключить уведомления'}
+  return <><section className="panel" aria-label={de ? 'Benachrichtigungen einrichten' : 'Подключить уведомления'}
     style={{ display: 'flex', gap: 12, padding: 16, marginBottom: 16, alignItems: 'flex-start' }}>
     <span aria-hidden="true" style={{ fontSize: 24 }}>🔔</span>
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -208,5 +216,11 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
         </button>
       </div>
     </div>
-  </section>;
+  </section>
+  {showIosGuide && ios && <IosPushInstallGuide de={de} role={role} onDismiss={() => {
+    setShowIosGuide(false);
+    localStorage.setItem(snoozeKey, String(Date.now() + DISMISS_DAYS * 86400000));
+    setPhase('hidden');
+  }} />}
+  </>;
 }

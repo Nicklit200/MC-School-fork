@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
@@ -94,12 +94,45 @@ describe('one-click parent/student push onboarding', () => {
     expect(subscribeBrowser).toHaveBeenCalledOnce();
   });
 
-  it('explains the iPhone Home Screen step instead of showing an impossible browser permission button', async () => {
+  it('automatically opens four iPhone setup steps for parents right after sign-in', async () => {
     Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' });
     mount('PARENT');
-    expect(await screen.findByText(/«На экран Домой»/)).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: /Как включить уведомления Mindcrafti на iPhone/ });
+    expect(within(dialog).getByRole('list').children).toHaveLength(4);
+    expect(within(dialog).getByText('Нажмите «Поделиться»')).toBeInTheDocument();
+    expect(within(dialog).getByText('Выберите «На экран Домой»')).toBeInTheDocument();
+    expect(within(dialog).getByText('Откройте Mindcrafti с нового значка')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Закрыть инструкцию' })).toHaveFocus();
     expect(screen.queryByRole('button', { name: 'Включить уведомления' })).not.toBeInTheDocument();
     expect(Notification.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('allows parents to dismiss the iPhone guide and prevents repeat interruptions', async () => {
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' });
+    const { unmount } = mount('PARENT');
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Напомнить позже' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    unmount();
+    mount('PARENT');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(Notification.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('never shows the Safari install walkthrough when iPhone opens the installed PWA', async () => {
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' });
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({ matches: true, media: '(display-mode: standalone)' })),
+    });
+    try {
+      mount('PARENT');
+      expect(await screen.findByRole('button', { name: 'Включить уведомления' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
+    }
   });
 
   it('snoozes the offer without nagging on the next visit', async () => {
