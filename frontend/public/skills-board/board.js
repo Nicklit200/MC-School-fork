@@ -1,5 +1,5 @@
 import {colors,kindLabels,clone,descendants,validateBoard} from "./model.js";
-import {createSchoolCalendarPanel} from "./school-calendar.js";
+import {createSchoolCalendarPanel} from "./school-calendar.js?v=20261122-2";
 const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
