@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../../api/client';
+import { api, request } from '../../api/client';
+import { calculateMonthReadiness, type CurriculumMonth } from './monthReadiness';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 
@@ -22,6 +23,8 @@ type PlanData = {
   mainGoal: string;
   monthNotes: string;
   lessons: PlanLesson[];
+  curriculum?: CurriculumMonth;
+  [key: string]: unknown;
 };
 
 export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
@@ -40,6 +43,13 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [yearReadiness, setYearReadiness] = useState<Array<{
+    month: string;
+    curriculum: CurriculumMonth;
+  }>>([]);
+  const [mastery, setMastery] = useState<Record<string, number> | null>(null);
+  const [masteryError, setMasteryError] = useState(false);
+  const [progressRevision, setProgressRevision] = useState(0);
 
   const backPath = targetType === 'STUDENT' ? '/students' : '/groups';
   const monthLabel = useMemo(() => formatMonth(month, language), [month, language]);
@@ -77,6 +87,45 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
 
     return () => { cancelled = true; };
   }, [targetId, targetType, month, t]);
+
+  // Skill mastery is the single source of truth. Any transcript-driven skill update
+  // changes these percentages automatically; no duplicate mutable monthly score exists.
+  useEffect(() => {
+    if (targetType !== 'STUDENT' || !targetId) return;
+    let live = true;
+    const months = Array.from({ length: 11 }, (_, index) => {
+      const date = new Date(2026, index + 8, 1);
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+    });
+    Promise.all(months.map(async (monthValue) => {
+      const response = await api.monthlyPlans.get('STUDENT', targetId, monthValue);
+      const curriculum = parsePlan(response.planJson).curriculum;
+      return curriculum?.boardId && Array.isArray(curriculum.skillIds)
+        ? { month: monthValue, curriculum } : null;
+    })).then((items) => {
+      if (live) setYearReadiness(items.filter((item): item is {
+        month: string; curriculum: CurriculumMonth;
+      } => item !== null));
+    }).catch(() => { if (live) setYearReadiness([]); });
+    return () => { live = false; };
+  }, [targetId, targetType]);
+
+  const selectedBoard = yearReadiness.find((item) => item.month === month)?.curriculum.boardId
+    ?? yearReadiness[0]?.curriculum.boardId;
+
+  useEffect(() => {
+    if (targetType !== 'STUDENT' || !targetId || !selectedBoard) return;
+    let live = true;
+    const load = () => {
+      void request<{ mastery: Record<string, number> }>('GET',
+        `/skill-boards/${encodeURIComponent(selectedBoard)}/students/${encodeURIComponent(targetId)}/mastery`)
+        .then((snapshot) => { if (live) { setMastery(snapshot.mastery); setMasteryError(false); } })
+        .catch(() => { if (live) { setMastery(null); setMasteryError(true); } });
+    };
+    load();
+    const interval = window.setInterval(load, 30000);
+    return () => { live = false; window.clearInterval(interval); };
+  }, [targetId, targetType, selectedBoard, progressRevision]);
 
   function updateLesson(id: string, patch: Partial<PlanLesson>) {
     setPlan((current) => ({
@@ -200,6 +249,46 @@ export function MonthlyPlanPage({ targetType }: { targetType: TargetType }) {
 
       {loading ? <p className="muted">{t('common.loading')}</p> : (
         <div className="stack" style={{ gap: 18 }}>
+          {targetType === 'STUDENT' && yearReadiness.length > 0 && (
+            <section className="panel stack" style={{ gap: 12 }} aria-label={language === 'DE' ? 'Monatskompetenzen' : 'Освоение по месяцам'}>
+              <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <h2 style={{ margin: 0 }}>{language === 'DE' ? 'Lernstand im Schuljahr' : 'Освоение по месяцам'}</h2>
+                <button type="button" className="btn btn--secondary" onClick={() => setProgressRevision(v => v + 1)}>
+                  {language === 'DE' ? 'Aktualisieren' : 'Обновить'}
+                </button>
+              </div>
+              <p className="muted" style={{ margin: 0 }}>
+                {language === 'DE' ? 'Aus bestätigten Kompetenzen berechnet. Nicht geprüfte Kompetenzen werden separat angezeigt. Aktualisierung alle 30 Sekunden.' :
+                  'По подтверждённым навыкам. Неоценённые навыки учитываются отдельно. Обновляется каждые 30 секунд.'}
+              </p>
+              {masteryError && <p role="alert">{language === 'DE' ? 'Kompetenzdaten konnten nicht geladen werden.' : 'Не удалось загрузить прогресс навыков.'}</p>}
+              <div className="stack" style={{ gap: 8 }}>
+                {yearReadiness.map(({ month: itemMonth, curriculum }) => {
+                  const stats = calculateMonthReadiness(curriculum, mastery);
+                  const active = itemMonth === month;
+                  return <button key={itemMonth} type="button"
+                    aria-current={active ? 'date' : undefined}
+                    onClick={() => setMonth(itemMonth)}
+                    className="btn btn--secondary"
+                    style={{ display: 'grid', textAlign: 'left', gap: 5, width: '100%',
+                      borderColor: active ? 'var(--color-primary, #b67830)' : undefined }}>
+                    <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                      <strong>{formatMonth(itemMonth, language)}</strong>
+                      <strong>{stats.assessed === 0 ? '—' : `${stats.percent}%`}</strong>
+                    </span>
+                    <span className="muted" style={{ fontSize: 12 }}>{curriculum.topics.join(' · ')}</span>
+                    <span style={{ height: 7, background: 'var(--border-color, #ddd)', borderRadius: 5, overflow: 'hidden' }}>
+                      <span style={{ display: 'block', width: `${stats.percent ?? 0}%`, height: '100%', background: 'var(--color-primary, #b67830)' }} />
+                    </span>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {language === 'DE' ? 'Bewertet' : 'Оценено'}: {stats.assessed}/{stats.total}
+                      {stats.unmappedCount ? ` · ${language === 'DE' ? 'Ohne Kompetenzkarte' : 'Без навыка в карте'}: ${stats.unmappedCount}` : ''}
+                    </span>
+                  </button>;
+                })}
+              </div>
+            </section>
+          )}
           <section className="panel stack" style={{ gap: 14 }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'end', gap: 14, flexWrap: 'wrap' }}>
               <div>
@@ -371,9 +460,12 @@ function parsePlan(planJson: string): PlanData {
         })
       : defaultPlan().lessons;
     return {
+      ...raw,
       mainGoal: typeof raw.mainGoal === 'string' ? raw.mainGoal : '',
       monthNotes: typeof raw.monthNotes === 'string' ? raw.monthNotes : '',
       lessons,
+      curriculum: raw.curriculum && typeof raw.curriculum === 'object'
+        ? raw.curriculum as CurriculumMonth : undefined,
     };
   } catch {
     return defaultPlan();
