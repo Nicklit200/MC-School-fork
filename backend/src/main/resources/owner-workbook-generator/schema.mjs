@@ -21,6 +21,27 @@ export function columns(value) {
   return value.map(v=>parseFloat(v)+'fr').join(' ');
 }
 /**
+ * Preserve the actual exercise while upgrading unambiguous written fractions
+ * such as "5/12 + 3/12" into inline MathJax fractions. Never convert dates,
+ * URLs, catalog paths or an already-structured richText segment.
+ */
+export function normalizeInlineFractions(value) {
+  if (typeof value !== 'string' || !value.includes('/')) return value;
+  const pattern = /(?<![A-Za-z0-9_/.])(-?\d{1,4})\s*\/\s*(\d{1,4})(?![A-Za-z0-9_/.])/g;
+  const segments = [];
+  let start = 0;
+  for (const match of value.matchAll(pattern)) {
+    if (match.index > start) segments.push({text:value.slice(start,match.index)});
+    if (Number(match[2])===0) throw new TypeError('Fraction denominator must not be zero');
+    segments.push({math:{latex:'\\frac{'+match[1]+'}{'+match[2]+'}'}});
+    start = match.index + match[0].length;
+  }
+  if (!segments.length) return value;
+  if (start < value.length) segments.push({text:value.slice(start)});
+  return {type:'richText',content:segments};
+}
+
+/**
  * Normalize only display-math fields produced by ChatGPT. Do not touch
  * qa.algebra assertions or solve/alter any exercise: the algebra checker must
  * still reject incorrect mathematics and unsafe TeX stays blocked by MathJax.
@@ -34,6 +55,20 @@ export function normalizeLessonMath(data) {
       for (const child of value) visit(child,depth+1);
       return;
     }
+    // Correct legacy plain-text math in visible exercise conditions and answers.
+    // Leave QA expressions and existing explicit richText untouched.
+    if (value.type==='exercise' || value.type==='taskCard') {
+      for (const field of ['subtitle','description','explanation'])
+        if (typeof value[field]==='string') value[field]=normalizeInlineFractions(value[field]);
+    }
+    if (value.type==='solutions' && Array.isArray(value.items)) {
+      for (const item of value.items) {
+        for (const field of ['text','note','explanation'])
+          if (typeof item?.[field]==='string') item[field]=normalizeInlineFractions(item[field]);
+      }
+    }
+    if (['callout','text','explanation'].includes(value.type) && typeof value.text==='string')
+      value.text=normalizeInlineFractions(value.text);
     // Canonicalize bare TeX strings only where the renderer expects formulas.
     if (typeof value.math==='string') value.math=asMath(value.math);
     if (value.type==='math' && typeof value.expression==='string')
