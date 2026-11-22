@@ -1,4 +1,4 @@
-import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js?v=20261122-3";
+import {calculateMonthReadiness, calculateIndividualMonthReadiness} from "./school-calendar-readiness.js?v=20261122-4";
 import {schoolYearMonthKey,schoolYearStartForDate} from "./school-calendar-month-index.js";
 
 /** Visible readiness is derived from the latest student skills, never stored as fake grades. */
