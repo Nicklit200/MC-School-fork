@@ -52,7 +52,7 @@ jobs:
         run: npm ci && npm run build
       - name: Backend calendar authorization and revision tests
         working-directory: backend
-        run: mvn -B -Dtest='SchoolCalendarMcpServiceTest,SkillBoardMcpServiceTest,SkillEvidenceMcpContractTest' test
+        run: mvn -B -Dtest='SchoolCalendarMcpServiceTest,SchoolCalendarControllerTest,SkillBoardMcpServiceTest,SkillEvidenceMcpContractTest' test
       - name: Compile backend service and MCP controller
         working-directory: backend
         run: mvn -B -DskipTests package
