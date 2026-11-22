@@ -92,11 +92,26 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
         // Permission already granted and subscription retained: no second user
         // gesture, settings visit, or test alert needed. Always rebind to the
         // currently authenticated user to avoid mixing parent/child devices.
-        if (Notification.permission === 'granted' && subscription
-          && validKeys(subscription, nextConfig.publicKey)) {
-          await api.push.subscribe(subscriptionData(subscription));
-          if (active) setPhase('enabled');
-          return;
+        if (Notification.permission === 'granted') {
+          try {
+            if (subscription && !validKeys(subscription, nextConfig.publicKey)) {
+              await subscription.unsubscribe();
+              subscription = null;
+            }
+            // Previously approved notifications may be restored without asking
+            // again, even if the browser discarded the original subscription.
+            if (!subscription) {
+              subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true, applicationServerKey: keyBuffer(nextConfig.publicKey),
+              });
+            }
+            await api.push.subscribe(subscriptionData(subscription));
+            if (active) setPhase('enabled');
+            return;
+          } catch {
+            // Some browsers require a new gesture to recreate an expired push
+            // subscription. Fall back to the same clear one-button flow.
+          }
         }
         if (!active) return;
         const snoozed = Number(localStorage.getItem(snoozeKey) || 0) > Date.now();
