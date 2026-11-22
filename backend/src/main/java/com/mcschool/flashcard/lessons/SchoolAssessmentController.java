@@ -10,13 +10,14 @@ import org.springframework.web.bind.annotation.*;
 /** Teacher-scoped, date-only school exams. No lesson or Google Meet is created. */
 @RestController
 @RequestMapping("/api/v1/school-assessments")
-@PreAuthorize("hasRole('TEACHER')")
+@PreAuthorize("hasAnyRole('ADMIN','TEACHER')")
 public class SchoolAssessmentController {
     private final SchoolAssessmentService service;
     public SchoolAssessmentController(SchoolAssessmentService service) {this.service=service;}
     @GetMapping
-    public List<SchoolAssessmentService.Assessment> list(@AuthenticationPrincipal AuthenticatedUser caller) {
-        return service.list(caller);
+    public List<SchoolAssessmentService.Assessment> list(@AuthenticationPrincipal AuthenticatedUser caller,
+            @RequestParam(required=false) UUID teacherId) {
+        return service.list(caller,teacherId);
     }
     @GetMapping("/{id}")
     public SchoolAssessmentService.Assessment get(@AuthenticationPrincipal AuthenticatedUser caller,@PathVariable UUID id) {
