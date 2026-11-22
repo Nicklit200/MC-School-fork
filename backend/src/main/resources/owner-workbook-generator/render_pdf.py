@@ -69,6 +69,21 @@ def inspect_layout(document):
             if box.element.get('data-qa') == 'answer' and box in principal:
                 if box.width < 37 or box.height < 18:
                     issues.append(f'Page {index + 1}: answer area too small')
+        # A long formula and a didactic note must occupy separate vertical
+        # bands. Generic A4 QA checks page overflow but does not detect two
+        # overlapping siblings inside a solution row (Vitalina regression).
+        for row in (b for b in principal if 'solution-row' in classes(b)):
+            descendants = list(row.descendants())
+            equations = [b for b in descendants
+                         if b is not row and 'solution-main' in classes(b)]
+            notes = [b for b in descendants
+                     if b is not row and ('solution-note' in classes(b)
+                                          or 'solution-explanation' in classes(b))]
+            if equations and notes:
+                formula_bottom = max(bounds(b)[3] for b in equations)
+                note_top = min(bounds(b)[1] for b in notes)
+                if note_top < formula_bottom - 1:
+                    issues.append(f'Page {index + 1}: solution formula overlaps teacher note')
         # Every painted descendant must fit its containing block horizontally.
         # This catches an SVG wider than a narrow split column even if the PDF
         # clips it and its path glyphs are absent from extracted text.
