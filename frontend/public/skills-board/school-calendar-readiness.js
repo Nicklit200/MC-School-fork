@@ -1,6 +1,6 @@
-/** Read-only monthly estimate from the current, explicitly assessed skill mastery.
- * No school-test forecasts or student progress writes. Missing skills are NOT zero.
- * Each month uses its linked topics; duplicate skills are counted once.
+/** Read-only monthly coverage-weighted readiness from the current skill mastery.
+ * Unassessed linked skills contribute 0 to READINESS (not stored mastery or observed score).
+ * No school-test forecasts or student progress writes. Duplicate skills count once.
  */
 export function calculateMonthReadiness(board, month, mastery = {}, schoolType = "") {
   const empty = {
@@ -77,16 +77,17 @@ export function calculateMonthReadiness(board, month, mastery = {}, schoolType =
   const observedPercent = assessedCount
     ? Math.round([...assessed.values()].reduce((sum, value) => sum + value, 0) / assessedCount) : null;
   const coveragePercent = totalCount ? Math.round(100 * assessedCount / totalCount) : 0;
-  const enough = assessedCount >= Math.min(3, totalCount) && totalCount > 0
-    && coveragePercent >= 60 && unmappedTopics.length === 0;
+  // Missing assessments have no demonstrated mastery, so 0 is used exclusively
+  // as their contribution to the readiness estimate. Never write it to the board.
+  const percent = totalCount
+    ? Math.round([...assessed.values()].reduce((sum, value) => sum + value, 0) / totalCount) : null;
   const skills = [...all.values()].map(skill => ({
     id: skill.id, title: skill.title,
     value: assessed.has(skill.id) ? assessed.get(skill.id) : null
   }));
   return {
-    status: enough ? "ESTIMATED" : totalCount === 0 ? "UNMAPPED"
-      : assessedCount === 0 ? "NO_DATA" : "INSUFFICIENT_DATA",
-    percent: enough ? observedPercent : null,
+    status: totalCount ? "ESTIMATED" : "UNMAPPED",
+    percent,
     observedPercent, coveragePercent, assessedCount, totalCount,
     mappedTopicCount: topics.length - unmappedTopics.length, topicCount: topics.length, topics,
     weakSkills: skills.filter(skill => skill.value !== null && skill.value < 60)
@@ -102,8 +103,9 @@ export function calculateMonthReadiness(board, month, mastery = {}, schoolType =
  * The individual monthly curriculum is authoritative for which skills belong
  * to that student's month. Unlike the broad textbook topics, this does not
  * count unrelated future skills in the same curriculum section.
- * A partial score remains visible with an explicit unmapped-topic warning.
- * The server calculates the numerical readiness from these same saved values.
+ * An unassessed mapped skill contributes zero to this conservative readiness,
+ * while still remaining unknown in the actual skill map and evidence records.
+ * An unmapped topic is flagged and is NEVER silently treated as a 0%-skill.
  */
 export function calculateIndividualMonthReadiness(board, individual, mastery = {}, schoolType = "") {
   if (!individual || !Array.isArray(individual.skillIds) || individual.skillIds.length === 0) return null;
@@ -123,13 +125,15 @@ export function calculateIndividualMonthReadiness(board, individual, mastery = {
   const totalCount = skills.length, assessedCount = assessed.length;
   const observedPercent = assessedCount
     ? Math.round(assessed.reduce((sum, skill) => sum + skill.value, 0) / assessedCount) : null;
+  const percent = totalCount
+    ? Math.round(assessed.reduce((sum, skill) => sum + skill.value, 0) / totalCount) : null;
   const missingIds = ids.filter(id => !skills.some(skill => skill.id === id));
   const unmappedTopics = [...(individual.unmappedTopics || []),
     ...missingIds.map(id => "Нет активного навыка: " + id)];
   return {
     source: "INDIVIDUAL_PLAN",
-    status: assessedCount ? "ESTIMATED" : "NO_DATA",
-    percent: observedPercent, observedPercent,
+    status: totalCount ? "ESTIMATED" : "UNMAPPED",
+    percent, observedPercent,
     coveragePercent: totalCount ? Math.round(100 * assessedCount / totalCount) : 0,
     assessedCount, totalCount, mappedTopicCount: 1, topicCount: 1,
     topics: [{
