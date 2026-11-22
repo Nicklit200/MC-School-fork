@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import type {StudentListItem} from '../../api/types';
-import {schoolAssessmentsApi,type SchoolAssessment,type SchoolAssessmentDraft,type SchoolAssessmentKind} from '../../api/schoolAssessments';
+import {schoolAssessmentsApi,type SchoolAssessment,type SchoolAssessmentDraft,type SchoolAssessmentKind,type SchoolAssessmentReadiness} from '../../api/schoolAssessments';
 
 type Props={
   language:'DE'|'RU'; students:StudentListItem[]; selectedDate:string;
@@ -27,6 +27,22 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [expanded,setExpanded]=useState<string|null>(null);
+ const [readinessById,setReadinessById]=useState<Record<string,SchoolAssessmentReadiness>>({});
+ const [readinessErrors,setReadinessErrors]=useState<Record<string,string>>({});
+ const [readinessBusy,setReadinessBusy]=useState<string|null>(null);
+ async function loadReadiness(id:string) {
+   setReadinessBusy(id);
+   setReadinessErrors(old=>({...old,[id]:''}));
+   try{
+     const data=await schoolAssessmentsApi.readiness(id);
+     setReadinessById(old=>({...old,[id]:data}));
+   }catch(err){setReadinessErrors(old=>({...old,[id]:err instanceof Error?err.message:String(err)}));}
+   finally{setReadinessBusy(null);}
+ }
+ function toggle(id:string) {
+   if(expanded===id){setExpanded(null);return;}
+   setExpanded(id);void loadReadiness(id);
+ }
  useEffect(()=>{if(!editor){setDraft(empty(selectedDate,students[0]?.id??''));setTopics('');}},[selectedDate,students,editor]);
  const shown=events.filter(event=>event.examDate===selectedDate);
  const start=(event?:SchoolAssessment)=>{
@@ -56,12 +72,41 @@ export function SchoolAssessmentAgenda({language,students,selectedDate,events,on
    {shown.length===0&&!editor&&<p className="muted">{language==='DE'?'An diesem Tag sind keine Prüfungen eingetragen.':'На этот день контрольных пока нет.'}</p>}
    {shown.map(event=><article className="school-assessment-card" key={event.id}>
      <button type="button" className="school-assessment-card__trigger" aria-expanded={expanded===event.id}
-       onClick={()=>setExpanded(expanded===event.id?null:event.id)}>
+       onClick={()=>toggle(event.id)}>
        <span className="school-assessment-card__emoji">📝</span>
        <span><strong>{event.studentName}: {event.title}</strong><small>{kindNames[event.kind]} · {event.confirmationStatus==='SCHOOL_CONFIRMED'?'Подтверждено школой':'Сообщено, школа не подтверждала'}</small></span>
        <span aria-hidden="true">{expanded===event.id?'▴':'▾'}</span>
      </button>
      {expanded===event.id&&<div className="school-assessment-card__details">
+       <div className="school-exam-readiness">
+         <div className="school-exam-readiness__top">
+           <strong>Готовность к контрольной по навыкам</strong>
+           <button type="button" className="btn btn--secondary" disabled={readinessBusy===event.id}
+             onClick={()=>void loadReadiness(event.id)}>Обновить оценки</button>
+         </div>
+         {readinessBusy===event.id&&!readinessById[event.id]&&<p className="muted">Загружаем навыки…</p>}
+         {readinessErrors[event.id]&&<p className="muted" role="alert">Не удалось загрузить оценки: {readinessErrors[event.id]}</p>}
+         {readinessById[event.id]&&(()=>{
+            const r=readinessById[event.id];
+            return <div>
+              <div className="school-exam-readiness__score">
+                <strong>{r.percent===null?'Не оценено':r.percent+'%'}</strong>
+                <span className="muted">Проверено {r.assessedCount} из {r.totalCount} навыков ({r.coveragePercent}%)</span>
+              </div>
+              <div className="school-exam-readiness__bar" role="progressbar" aria-label="Покрытие оценками" aria-valuenow={r.coveragePercent} aria-valuemin={0} aria-valuemax={100}>
+                <span style={{width:r.coveragePercent+'%'}}/>
+              </div>
+              {r.skills.length?<div className="school-exam-readiness__skills">
+                {r.skills.map(skill=><div key={skill.id} className="school-exam-readiness__skill">
+                  <span>{skill.title}</span><strong>{skill.percent===null?'Не оценено':skill.percent+'%'}</strong>
+                </div>)}
+              </div>:<p className="muted">Навыки контрольной пока не привязаны. Их можно привязать через коннектор MCH3.</p>}
+              {r.unmappedTopics.length>0&&<p className="school-exam-readiness__unmapped">Без активной оценки: {r.unmappedTopics.join(', ')}.</p>}
+              {r.status==='PARTIAL'&&<p className="muted">Предварительная оценка только по проверенным навыкам, не полная готовность к контрольной.</p>}
+              <small className="muted">Связи навыков редактируются через MCH3. Проценты берутся из карты навыков ученика.</small>
+            </div>;
+         })()}
+       </div>
        <strong>Предполагаемые темы</strong>
        {event.topics.length?<ul>{event.topics.map(topic=><li key={topic}>{topic}</li>)}</ul>:<p className="muted">Темы ещё не указаны.</p>}
        {event.notes&&<p>{event.notes}</p>}
