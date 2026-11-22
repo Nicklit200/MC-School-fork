@@ -53,7 +53,7 @@ public class SkillMasteryMcpService {
                 "Append one concrete student skill observation and optional evidence-backed mastery update, preserving the previous history. Source must have actually been inspected. Never infer mastery merely from homework submission or unverified transcript claims. Corrections append rather than replace.",
                 evidenceProps,List.of("studentId","skillId","sourceType","sourceRef","autonomy","explanation","observedAt","idempotencyKey"),false),
             definition("get_skill_mastery",
-                "Read the saved mastery percentages for one Mindcrafti student on the skills board. Missing skill IDs mean 0%. Use get_skill_board as the curriculum source and this tool only for the pupil overlay. Teachers can read their own students; admins can read all active students.",
+                "Read the saved mastery percentages for one Mindcrafti student on the skills board. Missing skill IDs are unassessed, not demonstrated zero. Use get_skill_board as the curriculum source and this tool only for the pupil overlay. Teachers can read their own students; admins can read all active students.",
                 readProps, List.of("studentId"), true),
             definition("update_skill_mastery",
                 "Save one student's percentage for one concrete skill. Use this only when the administrator/teacher explicitly asks to record or update mastery, or when they explicitly asked you to assess current evidence and save the resulting percentage. Do not turn homework completion alone into mastery. This updates pupil progress, not the shared curriculum.",
