@@ -1,6 +1,8 @@
 import { TeacherIcon } from '../../components/TeacherIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateLessonPanel } from './CreateLessonPanel';
+import { SchoolAssessmentAgenda } from './SchoolAssessmentAgenda';
+import { schoolAssessmentsApi,type SchoolAssessment } from '../../api/schoolAssessments';
 import { TrialAgendaCopyButton } from './TrialAgendaCopyButton';
 import { trialInvitationsApi } from '../../api/trialInvitations';
 import { Link } from 'react-router-dom';
@@ -46,6 +48,7 @@ export function GroupLessonsPage() {
   const [connection, setConnection] = useState<GoogleCalendarConnection | null>(null);
   const [teacher, setTeacher] = useState<User | null>(null);
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
+  const [schoolAssessments, setSchoolAssessments] = useState<SchoolAssessment[]>([]);
   const [invitedTrialIds, setInvitedTrialIds] = useState<string[]>([]);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [groups, setGroups] = useState<StudentGroup[]>([]);
@@ -159,10 +162,12 @@ export function GroupLessonsPage() {
       setConnection(googleConnection); setTeacher(currentTeacher); setStudents(studentList); setGroups(groupList);
     }).catch(failure => { if (live()) setOptionsError(toErrorMessage(failure, t)); })
       .finally(() => { if (live()) setOptionsLoading(false); });
+    const exams=schoolAssessmentsApi.list().then(items=>{if(live())setSchoolAssessments(items);})
+      .catch(()=>{if(live())setError(previous=>previous||'Не удалось загрузить контрольные. Проверьте соединение.');});
     const invitations = trialInvitationsApi.listMine().then(ids => {
       if (live()) setInvitedTrialIds(ids);
     }).catch(() => { /* Native unassigned trials remain shareable even when history is unavailable. */ });
-    await Promise.all([saved, refresh, options, invitations]);
+    await Promise.all([saved, refresh, options, invitations, exams]);
   }
 
   useEffect(() => {
@@ -242,6 +247,7 @@ export function GroupLessonsPage() {
     return Array.from({length:count},(_,offset)=>{const date=addDays(start,offset);const key=localDateKey(date);return {key,date,lessons:lessonsByDay.get(key)??[]};});
   }, [weekCursor, lessonsByDay, calendarView, selectedDayKey]);
   const selectedLessons = lessonsByDay.get(selectedDayKey) ?? [];
+  const selectedAssessments = schoolAssessments.filter(entry=>entry.examDate===selectedDayKey);
   const visibleLessonsKey = selectedLessons.map(item =>
     [item.eventId, item.studentId ?? '', item.groupId ?? ''].join(':')).join('|');
   useEffect(() => {
@@ -656,17 +662,20 @@ export function GroupLessonsPage() {
         {calendarView === 'month' && <div className="lesson-calendar-weekdays" aria-hidden="true">{weekdayLabels(language).map(label=><span key={label}>{label}</span>)}</div>}
         <div className={"lesson-agenda-days" + (calendarView === 'month' ? ' lesson-agenda-days--month' : '')} role="group" aria-label={language === 'DE' ? 'Unterrichtstag auswählen' : 'Выбрать день уроков'}>
           {scheduleDays.map((day, index) => <button type="button" key={day.key} className={'lesson-agenda-day' + (day.key === todayKey ? ' is-today' : '') + (calendarView === 'month' && day.date.getUTCMonth() !== selectedDate.getUTCMonth() ? ' is-outside-month' : '')}
-            aria-pressed={selectedDayKey === day.key} aria-label={formatAgendaDate(day.key, language) + ', ' + lessonCountText(day.lessons.length, language)} onClick={() => selectDate(day.key)}>
+            aria-pressed={selectedDayKey === day.key} aria-label={formatAgendaDate(day.key, language) + ', ' + lessonCountText(day.lessons.length, language) + (schoolAssessments.some(x=>x.examDate===day.key)?', контрольная':'')} onClick={() => selectDate(day.key)}>
             {calendarView === 'week' && <span>{weekdayLabels(language)[index % 7]}</span>}<strong>{day.date.getUTCDate()}</strong>
             <i className={day.lessons.length > 0 ? 'has-lessons' : ''} aria-hidden="true" />
+             {schoolAssessments.some(x=>x.examDate===day.key)&&<span className="school-assessment-day-indicator" aria-hidden="true">📝</span>}
           </button>)}
         </div>
         </div><div className="lesson-agenda-day-heading"><h2>{formatAgendaDate(selectedDayKey, language)}</h2><span>{lessonCountText(selectedLessons.length, language)}</span></div>
-        {refreshing && !loading && <p className="muted" role="status">{language === 'DE' ? 'Stundenplan wird aktualisiert…' : 'Обновляем расписание…'}</p>}
+        <SchoolAssessmentAgenda language={language} students={students} selectedDate={selectedDayKey}
+          events={schoolAssessments} onChanged={async()=>{setSchoolAssessments(await schoolAssessmentsApi.list());}} />
+         {refreshing && !loading && <p className="muted" role="status">{language === 'DE' ? 'Stundenplan wird aktualisiert…' : 'Обновляем расписание…'}</p>}
         {loading ? <p className="muted">{t('common.loading')}</p>
-          : selectedLessons.length ? <div className="lesson-agenda-list">{selectedLessons.map(renderLessonCard)}</div>
+           : selectedLessons.length ? <div className="lesson-agenda-list">{selectedLessons.map(renderLessonCard)}</div>
           : error ? <div className="teacher-empty-state"><button className="btn btn--secondary" type="button" onClick={() => void loadAll()}>{language === 'DE' ? 'Erneut versuchen' : 'Повторить загрузку'}</button></div>
-          : <div className="lesson-agenda-empty"><strong>{language === 'DE' ? 'Kein Unterricht geplant' : 'На этот день уроков нет'}</strong><p>{language === 'DE' ? 'Wähle einen anderen Tag oder plane einen neuen Unterricht.' : 'Выберите другой день или запланируйте новое занятие.'}</p></div>}
+           : <div className="lesson-agenda-empty"><strong>{language === 'DE' ? 'Kein Unterricht geplant' : 'На этот день уроков нет'}</strong><p>{language === 'DE' ? 'Wähle einen anderen Tag oder plane einen neuen Unterricht.' : 'Выберите другой день или запланируйте новое занятие.'}</p></div>}
       </section>
       <div className="lesson-agenda-integration">
       {connection?.connected !== true ? (
