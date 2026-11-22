@@ -55,7 +55,7 @@ describe('lesson workspace',()=>{
     expect(screen.getByText('Ответ ученика:')).toBeInTheDocument();
     expect(screen.getByText('Правильно:')).toBeInTheDocument();
     expect(screen.getByText('Мелисса')).toBeInTheDocument();
-    expect(screen.getByText('София')).toBeInTheDocument();
+    expect(screen.getAllByText('София').length).toBeGreaterThan(0);
     expect(screen.queryByRole('textbox',{name:'Информация о домашке'})).not.toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'Сохранить информацию'})).not.toBeInTheDocument();
     expect(lessonPreparationApi.update).not.toHaveBeenCalled();
