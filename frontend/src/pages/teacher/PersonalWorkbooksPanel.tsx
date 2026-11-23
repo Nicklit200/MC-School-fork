@@ -3,15 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { lessonPreparationApi, type PersonalWorkbooks } from '../../api/lessonPreparation';
 import { useI18n } from '../../i18n/I18nContext';
 import { api } from '../../api/client';
-import type { GroupLesson, StudentListItem } from '../../api/types';
+import type { GroupLesson } from '../../api/types';
 import { RemoveLessonParticipantButton } from './RemoveLessonParticipantButton';
 
 /** The server decides which teacher has access to the personal worksheet pilot. */
-export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students = [], onChanged }: {
+export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], onChanged }: {
   eventId: string;
   lesson?: GroupLesson | null;
   lessons?: GroupLesson[];
-  students?: StudentListItem[];
   onChanged?: () => Promise<void>;
 }) {
   const { language } = useI18n();
@@ -19,7 +18,6 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
   const [data, setData] = useState<{ eventId: string; value: PersonalWorkbooks } | null>(null);
   const [roster, setRoster] = useState<Array<{ studentId: string; studentName: string }>>([]);
   const [rosterLoaded, setRosterLoaded] = useState(false);
-  const [newStudentId, setNewStudentId] = useState('');
   const [moveStudentId, setMoveStudentId] = useState('');
   const [targetEventId, setTargetEventId] = useState('');
   const [editingRoster, setEditingRoster] = useState(false);
@@ -63,7 +61,6 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
     try {
       await operation();
       await refreshParticipants();
-      setNewStudentId('');
       setMoveStudentId('');
       setTargetEventId('');
       return true;
@@ -93,7 +90,6 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
   const value = data?.eventId === eventId ? data.value : null;
   if (!value?.enabled && !lesson) return null;
   const chosen = new Set(roster.map(item => item.studentId));
-  const available = students.filter(item => !chosen.has(item.id));
   const transferTargets = lessons.filter(item => item.eventId !== eventId
     && item.startsAt && Date.parse(item.startsAt) > Date.now());
 
@@ -176,17 +172,6 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
               : 'Изменения касаются только этого урока, не постоянной группы и других занятий.'}
           </p>
         </div>
-        {editable && rosterLoaded && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select className="input" value={newStudentId} aria-label={de ? 'Schüler auswählen' : 'Выбрать ученика для добавления'}
-            disabled={editingRoster} onChange={event => setNewStudentId(event.target.value)}>
-            <option value="">{de ? 'Schüler auswählen…' : 'Выбрать ученика…'}</option>
-            {available.map(student => <option key={student.id} value={student.id}>{student.fullName}</option>)}
-          </select>
-          <button type="button" className="btn" disabled={editingRoster || !newStudentId}
-            onClick={() => void editParticipants(() => api.lessons.addParticipant(eventId, newStudentId))}>
-            + {de ? 'Schüler hinzufügen' : 'Добавить ученика'}
-          </button>
-        </div>}
       </div>
       {!rosterLoaded && !rosterError && <p role="status" className="muted">
         {de ? 'Teilnehmer werden geladen…' : 'Загружаем участников…'}
