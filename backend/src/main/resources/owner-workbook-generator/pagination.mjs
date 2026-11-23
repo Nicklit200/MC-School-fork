@@ -94,13 +94,9 @@ function pageUnits(blocks) {
     const current=blocks[i], next=blocks[i+1], after=blocks[i+2];
     if(instructionTypes.has(current?.type) && visualTypes.has(next?.type)){
       // Compiled visual tasks are [instruction, graph]. Keep both on ONE A4.
-      // If the graph is followed by exactly one related exercise, keep that too.
-      const unit=[current,next];
-      if(after?.type==='exercise' && !visualTypes.has(blocks[i+3]?.type)){
-        unit.push(after);
-        i+=2;
-      }else i++;
-      units.push(unit);
+      // A following exercise may be a DIFFERENT assignment; do not swallow it.
+      units.push([current,next]);
+      i++;
     }else if(current?.type==='exercise' && visualTypes.has(next?.type) &&
              !(after?.type==='exercise' && !visualTypes.has(blocks[i+3]?.type))){
       // Some lessons put the instruction/exercise BEFORE the coordinate grid.
