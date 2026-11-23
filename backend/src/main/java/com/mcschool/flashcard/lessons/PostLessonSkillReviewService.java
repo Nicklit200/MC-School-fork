@@ -244,8 +244,11 @@ public class PostLessonSkillReviewService {
         if(student.getGrade()==null)
             return new StudentResult("NO_BOARD",null,"STUDENT_GRADE_UNSET",List.of());
         var matches=boards.list().stream().filter(board->board.grade()==student.getGrade()).toList();
-        if(matches.isEmpty())
-            return new StudentResult("NO_BOARD",null,"GRADE_BOARD_NOT_FOUND",List.of());
+        // Multiple programs for the same grade are ambiguous; do not silently
+        // assign the wrong school curriculum to a pupil.
+        if(matches.size()!=1)
+            return new StudentResult("NO_BOARD",null,
+                    matches.isEmpty()?"GRADE_BOARD_NOT_FOUND":"GRADE_BOARD_AMBIGUOUS",List.of());
         SkillBoardService.Snapshot board=boards.get(matches.get(0).id());
         List<SkillBoardService.Node> allowed=board.data().nodes().stream()
                 .filter(node->"skill".equals(node.kind()) && !node.archived()
@@ -256,15 +259,12 @@ public class PostLessonSkillReviewService {
 
         String personal=PersonalBoard.targetIdFor(studentId);
         String workbook=PersonalBoard.workbookTargetIdFor(studentId);
-        Integer strokes=jdbc.queryForObject("""
-            SELECT count(*) FROM online_class_annotation_events ev
-            JOIN online_class_annotation_documents doc ON doc.id=ev.document_id
-            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD'
-              AND doc.target_id IN (?,?) AND ev.actor_id=?
-              AND ev.operation_type IN ('ADD','UPDATE')
-            """,Integer.class,job.classId(),personal,workbook,studentId);
+        // The PDF is teacher-editable. Its mere presence cannot prove who wrote
+        // the solution. Only authenticated pupil strokes on a specific page
+        // are a valid writing source. Do NOT infer writing from a sheet upload.
+        Set<String> pupilInk=verifiedPupilInkPages(job.classId(),studentId,personal,workbook);
         String transcript=attributedTranscript(job,studentId);
-        if((strokes==null || strokes==0) && !transcript.contains("STUDENT "))
+        if(pupilInk.isEmpty() && !transcript.contains("STUDENT "))
             return new StudentResult("NO_EVIDENCE",board.id(),"NO_PUPIL_WORK_OR_SPEECH",List.of());
         List<PostLessonSkillAnalysisService.SourcePdf> files=new ArrayList<>();
         jdbc.query("""
@@ -288,9 +288,24 @@ public class PostLessonSkillReviewService {
         });
         List<PostLessonSkillAnalysisService.Observation> proposals=analyzer.analyze(
                 student.getFullName(),student.getGrade(),student.getSchoolType(),
-                allowed,notes.toString(),transcript,files);
+                allowed,notes.toString(),transcript,files,pupilInk);
         return new StudentResult(proposals.isEmpty()?"NO_EVIDENCE":"RECORDED",
                 board.id(),proposals.isEmpty()?"NO_CONFIRMED_SKILL_EVIDENCE":"",proposals);
+    }
+
+    /** Exact board and 1-based PDF page, constrained to the current pupil's ink. */
+    private Set<String> verifiedPupilInkPages(UUID classId,UUID pupil,String personal,String workbook){
+        List<String> locations=jdbc.query("""
+            SELECT DISTINCT doc.target_id,doc.page_index
+            FROM online_class_annotation_events ev
+            JOIN online_class_annotation_documents doc ON doc.id=ev.document_id
+            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD'
+              AND doc.target_id IN (?,?) AND ev.actor_id=?
+              AND ev.operation_type IN ('ADD','UPDATE')
+              AND doc.page_index >= 0 AND doc.page_index < 40
+            """,(rs,i)->rs.getString("target_id")+"#"+(rs.getInt("page_index")+1),
+            classId,personal,workbook,pupil);
+        return Set.copyOf(locations);
     }
 
     private String attributedTranscript(Job job,UUID pupil) {
@@ -324,8 +339,11 @@ public class PostLessonSkillReviewService {
             for(var candidate:result.proposals()){
                 Integer next=masteryAfter(before.get(candidate.skillId()),candidate);
                 String key="post-lesson:"+job.classId()+":"+candidate.skillId();
+                String verifiedSource="STUDENT_SPEECH".equals(candidate.origin())
+                        ? "student-speech"
+                        : candidate.sourceBoardId()+"#"+candidate.pageNumber();
                 var observation=new SkillEvidenceService.Observation(candidate.skillId(),"LESSON",
-                        job.classId().toString(),candidate.autonomy(),candidate.explanation(),
+                        job.classId()+":"+verifiedSource,candidate.autonomy(),candidate.explanation(),
                         candidate.excerpt(),Instant.now(),next,null,null,key);
                 evidence.record(result.boardId(),pupil,observation,teacher);
                 if(next!=null && !Objects.equals(next,before.get(candidate.skillId())))updates++;
