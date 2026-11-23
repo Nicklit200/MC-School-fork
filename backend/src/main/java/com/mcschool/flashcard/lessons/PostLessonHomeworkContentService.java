@@ -206,6 +206,15 @@ public class PostLessonHomeworkContentService {
                 "aboveBelow", set level to a number and at to null. For "zeros",
                 set both at and level to null. All graph solutions are calculated
                 by the server, not trusted to the model.
+                Every task must include sourceReference and evidenceStatus for
+                PRIVATE teacher review. Cite an actual transcript timestamp,
+                workbook page and task or a completed board, as accurately as
+                possible. NEVER invent an exact page or status. evidenceStatus
+                is SOLVED_INDEPENDENT, SOLVED_WITH_HELP, STARTED or UNCLEAR
+                for candidate source tasks. Do not build homework from
+                SKIPPED_AS_TOO_EASY or SHOWN_NOT_SOLVED exercises.
+                A single vector graph plus writing space uses the full
+                one-page layout, so if kind is graph return exactly ONE task.
                 For algebra tasks, visualGraph must be null.
                 The model only selects grounded graph coefficients and ranges.
                 The server creates native SVG/vector coordinate axes and graphs
@@ -277,6 +286,9 @@ public class PostLessonHomeworkContentService {
         taskFields.put("answer",Map.of("type","string"));
         taskFields.put("kind",Map.of("type","string","enum",List.of("equivalence","solution","graph")));
         taskFields.put("variable",Map.of("type","string","enum",List.of("","x","y","z","a","b","c","m","n")));
+        taskFields.put("sourceReference",Map.of("type","string"));
+        taskFields.put("evidenceStatus",Map.of("type","string","enum",
+                List.of("SOLVED_INDEPENDENT","SOLVED_WITH_HELP","STARTED","UNCLEAR")));
         Map<String,Object> graphFields=new LinkedHashMap<>();
         graphFields.put("family",Map.of("type","string","enum",List.of("linear","quadratic")));
         graphFields.put("objective",Map.of("type","string","enum",List.of("zeros","value","aboveBelow")));
