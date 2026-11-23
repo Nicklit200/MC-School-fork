@@ -34,6 +34,7 @@ public class PostLessonSkillAnalysisService {
     private final ObjectMapper json;
     private final HttpClient http;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PostLessonSkillAnalysisService(
             @Value("${OPENAI_API_KEY:}") String apiKey,
             @Value("${SKILL_REVIEW_OPENAI_MODEL:${HOMEWORK_OPENAI_MODEL:${OPENAI_MODEL:}}}") String model,
