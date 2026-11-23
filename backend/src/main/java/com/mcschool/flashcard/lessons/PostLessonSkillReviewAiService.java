@@ -17,7 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 public class PostLessonSkillReviewAiService {
     public record SourcePdf(String name, byte[] bytes) {}
     public record Finding(String skillId, String autonomy, String explanation,
-                          String sourceExcerpt, int pageNumber, int attempted,
+                          String sourceExcerpt, String sourceDocument, int pageNumber, int attempted,
                           int correct, double confidence) {}
 
     private final String key, model;
@@ -49,12 +49,13 @@ public class PostLessonSkillReviewAiService {
                     List.of("FIRST_TRY","INDEPENDENT","HINTED","AFTER_EXPLANATION","NOT_YET","UNKNOWN")),
             "explanation",Map.of("type","string"),
             "sourceExcerpt",Map.of("type","string"),
+            "sourceDocument",Map.of("type","string"),
             "pageNumber",Map.of("type","integer"),
             "attempted",Map.of("type","integer"),
             "correct",Map.of("type","integer"),
             "confidence",Map.of("type","number")));
         item.put("required",List.of("skillId","autonomy","explanation","sourceExcerpt",
-                "pageNumber","attempted","correct","confidence"));
+                "sourceDocument","pageNumber","attempted","correct","confidence"));
         return Map.of("type","object","additionalProperties",false,
             "properties",Map.of("findings",Map.of("type","array","items",item)),
             "required",List.of("findings"));
@@ -63,7 +64,7 @@ public class PostLessonSkillReviewAiService {
     @SuppressWarnings("unchecked")
     public List<Finding> assess(List<SkillBoardService.Node> skills,
             List<SourcePdf> pdfs, String pupilSpeech, String teacherSpeech,
-            Set<Integer> pagesWithPupilInk) throws Exception {
+            Set<String> pagesWithPupilInk) throws Exception {
         if(!configured())throw new IllegalStateException("SKILL_REVIEW_AI_NOT_CONFIGURED");
         if(skills.isEmpty() || (pdfs.isEmpty() && pupilSpeech.isBlank()))return List.of();
         if(skills.size()>160 || pdfs.size()>2)throw new IllegalArgumentException("SKILL_REVIEW_LIMIT");
@@ -86,7 +87,7 @@ public class PostLessonSkillReviewAiService {
             "curriculum",curriculum,
             "pupilSpeech",bounded(pupilSpeech,8000),
             "teacherSpeechSharedContextOnly",bounded(teacherSpeech,6500),
-            "pageNumbersWithPupilAuthoredInk",new TreeSet<>(pagesWithPupilInk)))));
+            "documentPagesWithPupilAuthoredInk",new TreeSet<>(pagesWithPupilInk)))));
         for(SourcePdf pdf:pdfs)
             parts.add(Map.of("type","input_file","filename",pdf.name(),
                 "file_data","data:application/pdf;base64,"+Base64.getEncoder().encodeToString(pdf.bytes())));
@@ -97,14 +98,16 @@ public class PostLessonSkillReviewAiService {
             pages (worksheet, teacher writing and possibly pupil writing). They are NOT automatically
             proof that the pupil completed or understood every task. The input also contains speech
             positively attributed to this pupil and separate teacher speech for context only.
-            pageNumbersWithPupilAuthoredInk lists 1-based PDF pages on which the server verified
-            that this pupil actually drew on their own board. Pages not in this list may have
+            documentPagesWithPupilAuthoredInk lists items such as workbook.pdf#4 on which
+            the server verified that this pupil drew on their own board.
+            Pages not in this list may have
             teacher annotations, but must NOT be treated as independent pupil work.
             NEVER attribute teacher speech or work to the pupil; never infer the pupil's work from the
             mere presence of an exercise, a prepared worksheet, or another person's example.
             Identify at most 8 specific skills from the provided exact ID list. Return findings ONLY
             where you see a concrete solved example, step, mistake, or attributable pupil explanation.
-            Give pageNumber (1-based for visible PDF evidence, 0 only for speech); briefly describe the
+            Give sourceDocument EXACTLY the supplied filename (or empty string for speech),
+            and pageNumber (1-based PDF page, 0 only for speech); briefly describe the
             verifiable working and the actual demonstrated skill in explanation (20..600 chars).
             Mark uncertainty conservatively: UNKNOWN when authorship or independence cannot be
             proven; NOT_YET for visible unresolved errors; HINTED/AFTER_EXPLANATION when teacher
@@ -152,17 +155,18 @@ public class PostLessonSkillReviewAiService {
             if(!Set.of("FIRST_TRY","INDEPENDENT","HINTED","AFTER_EXPLANATION","NOT_YET","UNKNOWN").contains(autonomy))continue;
             String explanation=bounded(Objects.toString(row.get("explanation"),""),600);
             if(explanation.length()<20)continue;
+            String sourceDocument=Objects.toString(row.get("sourceDocument"),"");
             int page=integer(row.get("pageNumber"),0);
             int attempted=integer(row.get("attempted"),0), correct=integer(row.get("correct"),0);
             double confidence=row.get("confidence") instanceof Number n?n.doubleValue():0;
             if(page<0||page>40||attempted<0||attempted>30||correct<0||correct>attempted
                     ||!Double.isFinite(confidence)||confidence<0||confidence>1)continue;
-            if(page>0 && pdfs.isEmpty())continue;
-            if(page==0 && pupilSpeech.isBlank())continue;
+            if(page>0 && pdfs.stream().noneMatch(pdf -> pdf.name().equals(sourceDocument)))continue;
+            if(page==0 && (!sourceDocument.isEmpty() || pupilSpeech.isBlank()))continue;
             if(confidence<0.65)continue;
             result.add(new Finding(skillId,autonomy,explanation,
                     bounded(Objects.toString(row.get("sourceExcerpt"),""),280),
-                    page,attempted,correct,confidence));
+                    sourceDocument,page,attempted,correct,confidence));
         }
         return List.copyOf(result);
     }
