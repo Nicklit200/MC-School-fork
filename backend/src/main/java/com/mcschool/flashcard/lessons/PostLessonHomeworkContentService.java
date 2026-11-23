@@ -24,26 +24,37 @@ public class PostLessonHomeworkContentService {
     private final ObjectMapper json;
     private final OwnerWorkbookPdfRenderService renderer;
     private final HttpClient client;
+    private final WorkbookContentService workbookGenerator;
 
     @Autowired
     public PostLessonHomeworkContentService(
             @Value("${OPENAI_API_KEY:}") String apiKey,
             @Value("${HOMEWORK_OPENAI_MODEL:${WORKBOOK_OPENAI_MODEL:${OPENAI_MODEL:}}}") String model,
-            ObjectMapper json,OwnerWorkbookPdfRenderService renderer) {
+            ObjectMapper json,OwnerWorkbookPdfRenderService renderer,
+            WorkbookContentService workbookGenerator) {
         this(apiKey,model,json,renderer,HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15)).build());
+                .connectTimeout(Duration.ofSeconds(15)).build(),workbookGenerator);
     }
 
-    /** Package-private for deterministic tests with a fake HTTP provider. */
+    /** Package-private legacy fake provider constructor for regression tests. */
     PostLessonHomeworkContentService(String apiKey,String model,ObjectMapper json,
             OwnerWorkbookPdfRenderService renderer,HttpClient client) {
+        this(apiKey,model,json,renderer,client,null);
+    }
+
+    /** Production uses workbookGenerator; the old content-only path is isolated to test fixtures. */
+    PostLessonHomeworkContentService(String apiKey,String model,ObjectMapper json,
+            OwnerWorkbookPdfRenderService renderer,HttpClient client,
+            WorkbookContentService workbookGenerator) {
         this.apiKey=apiKey==null?"":apiKey.trim();
         this.model=model==null?"":model.trim();
         this.json=Objects.requireNonNull(json);
         this.renderer=Objects.requireNonNull(renderer);
         this.client=Objects.requireNonNull(client);
+        this.workbookGenerator=workbookGenerator;
     }
-    public boolean configured(){return !apiKey.isEmpty()&&!model.isEmpty();}
+    public boolean configured(){return workbookGenerator!=null
+            ?workbookGenerator.isConfigured():!apiKey.isEmpty()&&!model.isEmpty();}
 
     private String ask(String instructions,Object evidence,String formatName,Map<String,Object> schema)throws Exception{
         if(!configured())throw new IllegalStateException("HOMEWORK_AI_NOT_CONFIGURED");
@@ -90,17 +101,32 @@ public class PostLessonHomeworkContentService {
      * The PDF's base64 bytes are NEVER embedded in the model's text context.
      */
     static Object inputWithWorksheet(Object evidence,ObjectMapper json)throws Exception{
-        if(!(evidence instanceof Map<?,?> raw) || !(raw.get("_lessonWorksheetPdfBase64") instanceof String pdf))
-            return json.writeValueAsString(evidence);
+        if(!(evidence instanceof Map<?,?> raw))return json.writeValueAsString(evidence);
+        // Never serialize internal base64 attachment buffers into the textual
+        // model context. PDF input stays restricted to this pupil's lesson.
         Map<String,Object> safe=new LinkedHashMap<>();
         for(var entry:raw.entrySet()){
             if(!(entry.getKey() instanceof String key))continue;
             if(!key.startsWith("_"))safe.put(key,entry.getValue());
         }
-        List<Map<String,Object>> parts=List.of(
-                Map.of("type","input_text","text",json.writeValueAsString(safe)),
-                Map.of("type","input_file","filename","lesson_worksheet.pdf",
+        List<Map<String,Object>> parts=new ArrayList<>();
+        parts.add(Map.of("type","input_text","text",json.writeValueAsString(safe)));
+        if(raw.get("_lessonWorksheetPdfBase64") instanceof String original && !original.isBlank()){
+            parts.add(Map.of("type","input_file","filename","lesson_worksheet.pdf",
+                    "file_data","data:application/pdf;base64,"+original));
+        }
+        if(raw.get("_completedBoardPdfFiles") instanceof List<?> completed) {
+            int count=0;
+            for(Object item:completed){
+                if(count>=3)break;
+                if(!(item instanceof Map<?,?> file))continue;
+                if(!(file.get("base64") instanceof String pdf) || pdf.isBlank())continue;
+                // Filenames are generated here, not taken from user/PDF text.
+                parts.add(Map.of("type","input_file","filename","completed_board_"+(++count)+".pdf",
                         "file_data","data:application/pdf;base64,"+pdf));
+            }
+        }
+        if(parts.size()==1)return json.writeValueAsString(safe);
         return List.of(Map.of("role","user","content",parts));
     }
 
@@ -158,6 +184,10 @@ public class PostLessonHomeworkContentService {
     GeneratedHomework makeWithReview(
             Map<String,Object> evidence,int day,int totalDays,String studentName,
             Consumer<PostLessonHomeworkStage> progress)throws Exception {
+        if(workbookGenerator!=null)
+            return makeWithCanonicalWorkbookGenerator(evidence,day,totalDays,studentName,progress);
+        // Legacy content schema is kept only for deterministic offline regression
+        // tests. All Spring-managed production requests use WorkbookContentService.
         // The model authors CONTENT ONLY; the server controls all MCH3 structures.
         // This is the same deterministic authoring contract used when a teacher
         // prepares a workbook through the school connector.
@@ -179,7 +209,39 @@ public class PostLessonHomeworkContentService {
                 display and adds all answer space. It also builds private teacher answers.
                 kind is "equivalence" for simplify/evaluate tasks, "solution" only
                 for a LINEAR one-variable equation with exactly one solution,
-                like "2*x+3=7". Do not use quadratic equations or identities.
+                like "2*x+3=7". Do not use quadratic equations or identities in
+                the algebra-only task format. To ask for roots of a parabola, use
+                kind "graph", NEVER a quadratic "solution" with one invented root.
+                For a graph task, leave expression, answer and variable empty and
+                supply visualGraph. Supported families are linear (coefficients
+                [m,b]) and quadratic ([a,b,c]); objectives zeros, value and
+                aboveBelow; xRange and yRange are two finite ascending bounds,
+                each span 1..20, graph coefficients bounded to -20..20.
+                For "value", set at to a number and level to null. For
+                "aboveBelow", set level to a number and at to null. For "zeros",
+                set both at and level to null. All graph solutions are calculated
+                by the server, not trusted to the model.
+                Every task must include sourceReference and evidenceStatus for
+                PRIVATE teacher review. Cite an actual transcript timestamp,
+                workbook page and task or a completed board, as accurately as
+                possible. NEVER invent an exact page or status. evidenceStatus
+                is SOLVED_INDEPENDENT, SOLVED_WITH_HELP, STARTED or UNCLEAR
+                for candidate source tasks. Do not build homework from
+                SKIPPED_AS_TOO_EASY or SHOWN_NOT_SOLVED exercises.
+                A single vector graph plus writing space uses the full
+                one-page layout, so if kind is graph return exactly ONE task.
+                For algebra tasks, visualGraph must be null.
+                The model only selects grounded graph coefficients and ranges.
+                The server creates native SVG/vector coordinate axes and graphs
+                with private teacher-side reference solutions and visual QA.
+                If graphPracticeRequired is true for the selected day, at least
+                one task MUST be a graph. Never silently downgrade a graph task
+                to a numerical substitution. Select the same type of activity
+                actually practiced in the lesson, not the first easy exercise
+                in the workbook. Inspect saved completed board PDFs as evidence
+                of pupil actions and the original worksheet only as a source
+                of tasks. Distinguish skipped, solved with help and unsolved
+                pages: do not claim independent mastery without evidence.
                 In the latter case provide the equation's variable, e.g. "x";
                 otherwise variable must be the empty string.
                 Use decimal points, parentheses, + - * / and integer powers ^ or **
@@ -237,8 +299,25 @@ public class PostLessonHomeworkContentService {
         taskFields.put("description",Map.of("type","string"));
         taskFields.put("expression",Map.of("type","string"));
         taskFields.put("answer",Map.of("type","string"));
-        taskFields.put("kind",Map.of("type","string","enum",List.of("equivalence","solution")));
+        taskFields.put("kind",Map.of("type","string","enum",List.of("equivalence","solution","graph")));
         taskFields.put("variable",Map.of("type","string","enum",List.of("","x","y","z","a","b","c","m","n")));
+        taskFields.put("sourceReference",Map.of("type","string"));
+        taskFields.put("evidenceStatus",Map.of("type","string","enum",
+                List.of("SOLVED_INDEPENDENT","SOLVED_WITH_HELP","STARTED","UNCLEAR")));
+        Map<String,Object> graphFields=new LinkedHashMap<>();
+        graphFields.put("family",Map.of("type","string","enum",List.of("linear","quadratic")));
+        graphFields.put("objective",Map.of("type","string","enum",List.of("zeros","value","aboveBelow")));
+        graphFields.put("coefficients",Map.of("type","array","items",Map.of("type","number"),
+                "minItems",2,"maxItems",3));
+        graphFields.put("xRange",Map.of("type","array","items",Map.of("type","number"),
+                "minItems",2,"maxItems",2));
+        graphFields.put("yRange",Map.of("type","array","items",Map.of("type","number"),
+                "minItems",2,"maxItems",2));
+        graphFields.put("at",Map.of("type",List.of("number","null")));
+        graphFields.put("level",Map.of("type",List.of("number","null")));
+        Map<String,Object> graphSchema=Map.of("type","object","properties",graphFields,
+                "required",new ArrayList<>(graphFields.keySet()),"additionalProperties",false);
+        taskFields.put("visualGraph",Map.of("anyOf",List.of(graphSchema,Map.of("type","null"))));
         Map<String,Object> taskSchema=Map.of("type","object","properties",taskFields,
                 "required",new ArrayList<>(taskFields.keySet()),"additionalProperties",false);
         Map<String,Object> contentFields=new LinkedHashMap<>();
@@ -248,12 +327,19 @@ public class PostLessonHomeworkContentService {
         contentFields.put("tasks",Map.of("type","array","items",taskSchema,"minItems",1,"maxItems",2));
         Map<String,Object> schema=Map.of("type","object","properties",contentFields,
                 "required",new ArrayList<>(contentFields.keySet()),"additionalProperties",false);
+        // Content validation must enforce the actual shape of a graph-based
+        // lesson. Otherwise a text-only model response can satisfy math QA
+        // and silently drop the very skill practiced during the class.
+        boolean graphLesson=graphDominatesLesson(evidence);
+        boolean graphPracticeRequired=graphLesson && (day==1 || day%2==1);
         String feedback=null;
         Map<String,Object> rejectedContent=null;
         for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
             Map<String,Object> attemptEvidence=new LinkedHashMap<>(evidence);
             attemptEvidence.put("dayNumber",day);
             attemptEvidence.put("totalDays",totalDays);
+            attemptEvidence.put("graphLessonEvidence",graphLesson);
+            attemptEvidence.put("graphPracticeRequired",graphPracticeRequired);
             if(feedback!=null){
                 Map<String,Object> repair=new LinkedHashMap<>();
                 repair.put("day",day);
@@ -278,6 +364,8 @@ public class PostLessonHomeworkContentService {
             String checked;
             try{
                 checked=PostLessonHomeworkMch3Template.fromContent(json,content,day,totalDays,studentName);
+                if(graphPracticeRequired && !containsGraphTask(content))
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_PRACTICE_REQUIRED");
                 // Algebra QA proves correctness, not educational novelty.
                 // Reject identical math or a third day of the same trivial form
                 // BEFORE rendering or publishing any new PDF.
@@ -326,6 +414,104 @@ public class PostLessonHomeworkContentService {
             }
         }
         throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+    }
+
+    /**
+     * The production homework path is the normal lesson-workbook generator.
+     * The only difference is the strict homework mode, source-evidence review
+     * and student/day-specific publication performed by the caller.
+     */
+    private GeneratedHomework makeWithCanonicalWorkbookGenerator(
+            Map<String,Object> evidence,int day,int totalDays,String studentName,
+            Consumer<PostLessonHomeworkStage> progress) throws Exception {
+        boolean graphics=graphDominatesLesson(evidence);
+        boolean requireGraph=graphics && (day==1 || day%2==1);
+        Map<String,Object> lessonContext=new LinkedHashMap<>(evidence);
+        lessonContext.put("graphLessonEvidence",graphics);
+        lessonContext.put("graphPracticeRequired",requireGraph);
+        lessonContext.put("dayNumber",day);
+        lessonContext.put("totalDays",totalDays);
+        String instruction="Create exactly one daily Mindcrafti homework worksheet from the last "
+                +"actually completed lesson. Use the CURRENT homeworkPrompt in context and "
+                +"the original workbook, transcript and completed board PDF. Prefer real "
+                +"worked tasks and their difficulty, not early problems skipped as too easy. "
+                +"Respect the same mathematical and vector drawing capabilities as our "
+                +"lesson workbooks. Keep one A4 page, up to two tasks, <=10 minutes, "
+                +"private answers and verified math.";
+        if(requireGraph)
+            instruction+=" A real programmatically rendered graph from the SAME school "
+                    +"workbook engine is MANDATORY today; numerical substitution without "
+                    +"a graph is not acceptable.";
+        for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
+            progress.accept(PostLessonHomeworkStage.AI_CONTENT);
+            WorkbookContentService.Content authored=workbookGenerator.generateHomework(
+                    lessonContext,instruction,day,totalDays,studentName);
+            progress.accept(PostLessonHomeworkStage.CONTENT_VALIDATION);
+            PostLessonHomeworkCanonicalAdapter.Reviewed checked;
+            try{
+                checked=PostLessonHomeworkCanonicalAdapter.inspect(json,authored,evidence);
+                if(requireGraph && !checked.hasGraphTask())
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_PRACTICE_REQUIRED");
+                PostLessonHomeworkSeriesDiversity.validate(checked.diversity(),
+                        evidence.get("previousGeneratedHomework"),day);
+            }catch(IllegalArgumentException rejected){
+                String reason=Objects.toString(rejected.getMessage(),"");
+                boolean repeated=Set.of(PostLessonHomeworkSeriesDiversity.REPEATED_EXPRESSION,
+                        PostLessonHomeworkSeriesDiversity.REPEATED_PATTERN).contains(reason);
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException(repeated?"HOMEWORK_DRAFT_REPETITION_FAILED"
+                            :"HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
+                lessonContext.put("repairReason",repeated
+                        ?PostLessonHomeworkSeriesDiversity.repairAdvice(reason)
+                        :"Previous attempt did not match the actual completed lesson or its required "
+                        +"native graphic task. Generate a fresh lessonJson, not a text substitute.");
+                continue;
+            }
+            progress.accept(PostLessonHomeworkStage.PDF_RENDER);
+            try{
+                OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(authored.lessonJson());
+                if(pdf.studentPages()!=1 || pdf.teacherPages()<1
+                        ||pdf.studentPdf().length<100 || pdf.teacherPdf().length<100)
+                    throw new IllegalArgumentException("HOMEWORK_PDF_INVALID");
+                return new GeneratedHomework(pdf,checked.review());
+            }catch(IllegalArgumentException failedRender){
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_RENDER_FAILED",failedRender);
+                lessonContext.put("repairReason","Keep the exact lesson skills and graph tasks, "
+                        +"but shorten the content to fit one complete A4 page with six writing lines.");
+            }catch(IllegalStateException failedRender){
+                if(!"Workbook studio QA did not pass".equals(failedRender.getMessage()))throw failedRender;
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_MATH_QA_FAILED",failedRender);
+                lessonContext.put("repairReason","The graphical or algebraic QA did not pass. "
+                        +"Use simpler but lesson-matched numbers with the same skill and native graph.");
+            }
+        }
+        throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+    }
+
+    static boolean containsGraphTask(Map<String,Object> content) {
+        if(!(content.get("tasks") instanceof List<?> tasks))return false;
+        return tasks.stream().anyMatch(task -> task instanceof Map<?,?> t
+                && "graph".equals(t.get("kind")));
+    }
+
+    static boolean graphDominatesLesson(Map<String,Object> evidence) {
+        // Detect from completed-lesson conversation, not planned topics in
+        // lessonPlan or monthlyPlan. Multiple mentions avoid forcing diagrams
+        // because a teacher only mentioned a graph in passing.
+        String transcript=Objects.toString(evidence.get("transcript"),"")+"\n"
+                +Objects.toString(evidence.get("liveTranscript"),"");
+        String teacher=Objects.toString(evidence.get("teacherNotes"),"")+"\n"
+                +Objects.toString(evidence.get("personalTeacherNotes"),"");
+        java.util.regex.Pattern terms=java.util.regex.Pattern.compile(
+                "(?iu)(?:график[а-я]*|парабол[а-я]*|нул[яейи]\\s+функци[а-я]*|"
+                +"graph[a-z]*|parabel[a-z]*|nullstell[a-z]*|scheitel[a-z]*|koordinat[a-z]*)");
+        if(terms.matcher(teacher).find())return true;
+        int count=0;
+        var matches=terms.matcher(transcript);
+        while(matches.find() && count<4)count++;
+        return count>=4;
     }
 
     /** Only fixed server diagnostic identifiers may enter logs, never a model response. */

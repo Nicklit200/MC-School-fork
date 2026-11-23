@@ -49,7 +49,7 @@ final class PostLessonHomeworkSeriesDiversity {
         boolean currentAllSimple = !tasks.isEmpty();
         for (Object raw : tasks) {
             if (!(raw instanceof Map<?,?> task)) continue;
-            String key = key(task.get("expression"));
+            String key = taskKey(task);
             if (key.isEmpty()) continue; // Existing field validation will reject it.
             if (!used.add(key)) throw new IllegalArgumentException(REPEATED_EXPRESSION);
             currentAllSimple &= isSimpleLinearZero(key);
@@ -61,6 +61,21 @@ final class PostLessonHomeworkSeriesDiversity {
                 && previousAllSimple.getOrDefault(day-1, false)
                 && previousAllSimple.getOrDefault(day-2, false))
             throw new IllegalArgumentException(REPEATED_PATTERN);
+    }
+
+    /** Stable fingerprint for both ordinary math and checked graphical tasks. */
+    static String taskKey(Map<?,?> task) {
+        if("graph".equals(task.get("kind"))) {
+            if(!(task.get("visualGraph") instanceof Map<?,?> graph))
+                return "";
+            String family=Objects.toString(graph.get("family"),"");
+            String objective=Objects.toString(graph.get("objective"),"");
+            String coefficients=Objects.toString(graph.get("coefficients"),"");
+            String at=Objects.toString(graph.get("at"),"");
+            String level=Objects.toString(graph.get("level"),"");
+            return key("graph:"+family+":"+objective+":"+coefficients+":"+at+":"+level);
+        }
+        return key(task.get("expression"));
     }
 
     static String key(Object value) {
