@@ -90,7 +90,9 @@ public class PostLessonSkillReviewService {
     }
 
     /** This method must run AFTER the room-end database transaction commits. */
-    @Transactional
+    // Spring's afterCommit callback still has the ended room's old resources bound.
+    // A fresh transaction is mandatory or the queued job may never commit.
+    @Transactional(propagation=org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void enqueueEndedClass(UUID classId) {
         OnlineClass room = classes.findById(classId).orElse(null);
         if(room == null || room.getStatus() != OnlineClassStatus.ENDED
