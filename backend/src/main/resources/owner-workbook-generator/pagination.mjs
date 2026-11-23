@@ -160,29 +160,30 @@ function independentTaskCount(block,depth=0) {
   return children.reduce((sum,child)=>sum+independentTaskCount(child,depth+1),0);
 }
 
-// A graph in side-by-side CSS columns has too little horizontal space and can
-// overflow A4. Unwrap graph-bearing layouts so each plot gets the full printable
-// width. taskCard remains atomic: its statement, plot and response space belong
-// to the SAME exercise.
+// Preserve compact one-task graphic layouts, but expand a row/grid/split that
+// combines MULTIPLE graphs or multiple independent tasks. Otherwise the renderer
+// could place several graph assignments into one narrow A4 row. taskCard remains
+// atomic so its statement, plot and answer area are never separated.
 const graphTypes = new Set(['graph','coordinateGrid']);
 const layoutTypes = new Set(['row','grid','split','column','stack']);
-function containsGraph(block,depth=0){
-  if(!block||depth>12)return false;
+function graphCount(block,depth=0){
+  if(!block||depth>12)return 0;
   if(graphTypes.has(block.type) ||
-      (block.type==='visualTask' && block.spec?.type==='graph'))return true;
+      (block.type==='visualTask' && block.spec?.type==='graph'))return 1;
   const children=block.type==='split'
     ? [...(block.left||[]),...(block.right||[])]
     : block.children||[];
-  return children.some(child=>containsGraph(child,depth+1));
+  return children.reduce((total,child)=>total+graphCount(child,depth+1),0);
 }
-function fullWidthGraphBlocks(blocks,depth=0){
+function separateGraphTasks(blocks,depth=0){
   if(depth>12)throw new TypeError('Graph layout nesting is too deep');
   return blocks.flatMap(block=>{
-    if(!layoutTypes.has(block?.type) || !containsGraph(block))return [block];
+    if(!layoutTypes.has(block?.type) || graphCount(block)===0 ||
+       (graphCount(block)===1 && independentTaskCount(block)<=1))return [block];
     const children=block.type==='split'
       ? [...(block.left||[]),...(block.right||[])]
       : block.children||[];
-    return fullWidthGraphBlocks(children,depth+1);
+    return separateGraphTasks(children,depth+1);
   });
 }
 
@@ -202,7 +203,7 @@ export function autoPaginatePages(pages,teacher=false) {
     const flush=()=>{
       if(group.length){output.push({...p,blocks:group});group=[];taskCount=0;}
     };
-    for(const unit of pageUnits(teacher ? p.blocks : fullWidthGraphBlocks(p.blocks))) {
+    for(const unit of pageUnits(teacher ? p.blocks : separateGraphTasks(p.blocks))) {
       const visual=unit.some(b=>hasMajorVisual(b));
       const anchored=unit.length>1 && majorVisualTypes.has(unit[0]?.type);
       if(anchored && contentHeightMm(unit,teacher)>maximum)
