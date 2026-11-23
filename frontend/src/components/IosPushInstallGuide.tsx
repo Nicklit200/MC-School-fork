@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import './ios-push-install-guide.css';
 
-type Props = { de: boolean; role: 'PARENT' | 'STUDENT'; onDismiss: () => void };
+type Props = { de: boolean; role: 'PARENT' | 'STUDENT' | 'TEACHER' | 'ADMIN'; onDismiss: () => void };
 
 function ShareIcon() {
   return (
@@ -105,8 +105,11 @@ export function IosPushInstallGuide({ de, role, onDismiss }: Props) {
             {role === 'PARENT'
               ? (de ? 'Damit du Erinnerungen zur Lernarbeit deines Kindes erhältst, füge die Schule zuerst als App auf deinem Home-Bildschirm hinzu.'
                 : 'Чтобы получать напоминания о домашней работе ребёнка, сначала добавьте школу на экран iPhone.')
-              : (de ? 'Damit du keine Hausaufgaben verpasst, füge die Schule zuerst als App auf deinem Home-Bildschirm hinzu.'
-                : 'Чтобы не пропускать домашку, сначала добавьте школу на главный экран iPhone.')}
+              : role === 'STUDENT'
+                ? (de ? 'Damit du keine Hausaufgaben verpasst, füge die Schule zuerst als App auf deinem Home-Bildschirm hinzu.'
+                    : 'Чтобы не пропускать домашку, сначала добавьте школу на главный экран iPhone.')
+                : (de ? 'Für Warnungen über Workbook-Fehler installieren Sie Mindcrafti als App auf dem Home-Bildschirm.'
+                    : 'Чтобы получать предупреждения об ошибках генератора, добавьте Mindcrafti на главный экран iPhone.')}
           </p>
           <ol className="ios-push-guide__steps">
             {steps.map((step, index) => (
