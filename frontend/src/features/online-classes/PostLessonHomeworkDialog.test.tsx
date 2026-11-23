@@ -4,7 +4,7 @@ import { PostLessonHomeworkDialog } from './PostLessonHomeworkDialog';
 import { onlineClassesApi } from '../../api/onlineClasses';
 
 vi.mock('../../api/onlineClasses', () => ({
-  onlineClassesApi: { postLessonHomework: vi.fn(), postLessonHomeworkRecipients: vi.fn(), retryPostLessonHomework: vi.fn(), transcribePostLessonHomework: vi.fn() },
+  onlineClassesApi: { postLessonHomework: vi.fn(), postLessonHomeworkRecipients: vi.fn(), retryPostLessonHomework: vi.fn(), transcribePostLessonHomework: vi.fn(), postLessonSkillReviewStatus: vi.fn() },
 }));
 
 describe('PostLessonHomeworkDialog', () => {
@@ -12,6 +12,7 @@ describe('PostLessonHomeworkDialog', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(onlineClassesApi.postLessonHomeworkRecipients).mockResolvedValue([{id: 'sofia', name:'София'}, {id:'semen', name:'Семён'}]);
+    vi.mocked(onlineClassesApi.postLessonSkillReviewStatus).mockResolvedValue({ state: 'QUEUED', totalStudents: 2, processedStudents: 0 });
     vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({
       state: 'QUEUED', jobId: 'job', classId: 'class',
     });
