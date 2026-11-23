@@ -41,6 +41,10 @@ export function GroupDetailPage() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteName, setDeleteName] = useState('');
+  const [deletingGroup, setDeletingGroup] = useState(false);
 
   const [homeworkStartDate, setHomeworkStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [homeworkDays, setHomeworkDays] = useState(1);
@@ -172,6 +176,23 @@ export function GroupDetailPage() {
   }, [group]);
 
   if (!groupId) return <div className="banner banner--error">Группа не найдена</div>;
+
+  async function confirmDeleteGroup() {
+    if (!group || !groupId || deletingGroup || deleteName.trim() !== group.name) return;
+    setDeletingGroup(true);
+    setError(null);
+    try {
+      await api.groups.remove(groupId);
+      setDeleteOpen(false);
+      setActionsOpen(false);
+      navigate('/groups', { replace: true });
+    } catch (e) {
+      setError(toErrorMessage(e, t));
+      setDeleteOpen(false);
+    } finally {
+      setDeletingGroup(false);
+    }
+  }
 
   function goBack() {
     if (window.history.length > 1) {
@@ -362,8 +383,46 @@ export function GroupDetailPage() {
         <button type="button" onClick={() => navigate(`/groups/${groupId}/month-plan`)}><span>План на месяц</span></button>
         <div className="group-detail-tabs__spacer" />
         <button className="group-message-btn" type="button" disabled>✉ <span>Написать группе</span></button>
-        <button className="teacher-more-btn" type="button" title="Дополнительно">⋮</button>
+        <div className="group-actions-menu">
+          <button className="teacher-more-btn" type="button" aria-label="Действия с группой"
+            aria-expanded={actionsOpen} aria-haspopup="menu" title="Дополнительно"
+            onClick={() => setActionsOpen(open => !open)}>⋮</button>
+          {actionsOpen && <div className="group-actions-dropdown" role="menu">
+            <button type="button" role="menuitem" className="group-actions-delete"
+              onClick={() => { setActionsOpen(false); setDeleteName(''); setDeleteOpen(true); }}>
+              Удалить группу
+            </button>
+          </div>}
+        </div>
       </div>
+
+      {deleteOpen && <div className="group-delete-overlay">
+        <div className="group-delete-dialog" role="alertdialog" aria-modal="true"
+          aria-labelledby="group-delete-title" aria-describedby="group-delete-description">
+          <h2 id="group-delete-title">Удалить группу «{group?.name}»?</h2>
+          <p id="group-delete-description">
+            Группа исчезнет из списка. Ученики, их домашние задания, карточки и история занятий
+            сохранятся. Если у группы есть текущие или будущие уроки, удаление будет заблокировано,
+            пока ты их не перенесёшь или не отменишь.
+          </p>
+          <label className="group-delete-label" htmlFor="group-delete-confirm-name">
+            Введи точное название группы для подтверждения:
+          </label>
+          <input id="group-delete-confirm-name" className="input" autoFocus
+            value={deleteName} disabled={deletingGroup}
+            onChange={event => setDeleteName(event.target.value)}
+            placeholder={group?.name ?? ''} />
+          <div className="group-delete-actions">
+            <button className="btn btn--secondary" type="button" disabled={deletingGroup}
+              onClick={() => { setDeleteOpen(false); setDeleteName(''); }}>Отмена</button>
+            <button className="btn btn--danger" type="button"
+              disabled={deletingGroup || !group || deleteName.trim() !== group.name}
+              onClick={() => void confirmDeleteGroup()}>
+              {deletingGroup ? 'Удаление…' : 'Удалить группу'}
+            </button>
+          </div>
+        </div>
+      </div>}
 
       {pageTab === 'overview' && (
         <>
