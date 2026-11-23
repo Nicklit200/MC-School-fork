@@ -255,8 +255,11 @@ export const onlineClassesApi = {
 
   end: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/end`),
 
-  postLessonHomework: (classId: string, days: number, teacherInstructions: string) =>
-    request<PostLessonHomeworkJob>('POST', `/online-classes/${classId}/post-lesson-homework`, { days, teacherInstructions }),
+  postLessonHomeworkRecipients: (classId: string) =>
+    request<Array<{id: string; name: string}>>('GET', '/online-classes/' + classId + '/post-lesson-homework/recipients'),
+
+  postLessonHomework: (classId: string, days: number, teacherInstructions: string, recipientStudentIds?: string[]) =>
+    request<PostLessonHomeworkJob>('POST', `/online-classes/${classId}/post-lesson-homework`, { days, teacherInstructions, recipientStudentIds }),
 
   postLessonHomeworkStatus: (classId: string) =>
     request<PostLessonHomeworkJob>('GET', `/online-classes/${classId}/post-lesson-homework`),
