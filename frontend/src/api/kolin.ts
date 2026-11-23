@@ -8,6 +8,8 @@ export interface KolinContext {
   format?: 'pdf' | 'interactive';
 }
 
+export interface KolinMemoryTurn { question: string; answer: string; at: string }
+
 export interface KolinHistoryMessage {
   role: 'user' | 'assistant';
   text: string;
@@ -126,6 +128,7 @@ const worksheetPath = (classId: string, id: string) => `${base(classId)}/workshe
 
 export const kolinApi = {
   status: (classId: string) => request<{ configured: boolean }>('GET', `${base(classId)}/status`),
+  recentMemory: (classId: string) => request<KolinMemoryTurn[]>('GET', `${base(classId)}/memory`),
   reviewTarget: (classId: string, text: string, context: KolinContext) =>
     request<KolinReviewTarget>('POST', `${base(classId)}/review-target`, { text, context }),
   send: (classId: string, text: string, history: KolinHistoryMessage[], context: KolinContext, clientMessageId?: string, boardReview?: KolinBoardSnapshot) =>

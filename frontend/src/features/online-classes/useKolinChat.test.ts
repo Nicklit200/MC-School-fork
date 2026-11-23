@@ -7,13 +7,14 @@ import { KolinReviewUnavailable } from './useKolinBoardReview';
 import type { KolinBoardSnapshot, KolinBoardContext } from '../../api/kolin';
 
 vi.mock('../../api/kolin', async importOriginal => ({ ...await importOriginal<typeof import('../../api/kolin')>(),
-  kolinApi: { status: vi.fn(), send: vi.fn(), appendWorksheet: vi.fn() } }));
+  kolinApi: { status: vi.fn(), recentMemory: vi.fn(), send: vi.fn(), appendWorksheet: vi.fn() } }));
 
 const transcriptContext: KolinTranscriptContext = { state: 'included', segmentCount: 12, truncated: true,
   latestSegmentAt: '2026-11-07T15:45:00Z', fromMs: 120000, toMs: 525000, transcriptionActive: false };
 
 beforeEach(() => {
   vi.mocked(kolinApi.status).mockReset().mockResolvedValue({ configured: true });
+  vi.mocked(kolinApi.recentMemory).mockReset().mockResolvedValue([]);
   vi.mocked(kolinApi.send).mockReset().mockResolvedValue({ type: 'text', text: '1) 1/2 + 1/4\n2) 2/3 + 1/6' });
   vi.mocked(kolinApi.appendWorksheet).mockReset();
 });
@@ -28,6 +29,24 @@ async function ask(result: { current: ReturnType<typeof useKolinChat> }, text: s
 }
 
 describe('private Kolyn lesson session', () => {
+  it('restores a saved dialogue once, then continues with the remembered context', async () => {
+    vi.mocked(kolinApi.recentMemory).mockResolvedValueOnce([
+      { question: 'Что у Виталины?', answer: 'Повторить дроби.', at: '2026-11-16T15:00:00Z' },
+    ]);
+    const { result } = renderHook(() => useKolinChat('class-1', 'teacher', true));
+    await open(result);
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    expect(result.current.messages.map(message=>message.text)).toEqual(['Что у Виталины?', 'Повторить дроби.']);
+    await ask(result, 'Продолжим');
+    expect(vi.mocked(kolinApi.send).mock.calls[0][2]).toEqual([
+      { role: 'user', text: 'Что у Виталины?' },
+      { role: 'assistant', text: 'Повторить дроби.' },
+    ]);
+    act(() => result.current.close());
+    await open(result);
+    expect(kolinApi.recentMemory).toHaveBeenCalledExactlyOnceWith('class-1');
+  });
+
   const shot: KolinBoardSnapshot = { studentId: 'melissa', boardId: 'personal-melissa', pageNumber: 3, totalPageCount: 4,
     documentVersion: 7, revision: 12, observedAt: '2026-11-09T16:00:00Z', capturedAt: '2026-11-09T16:00:01Z',
     imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==', scope: 'current_page', additionalPages: [] };

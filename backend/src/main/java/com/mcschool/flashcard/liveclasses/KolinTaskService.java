@@ -24,6 +24,8 @@ public class KolinTaskService {
             @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) KolinBoardReviewService.Metadata board) {}
     @org.springframework.beans.factory.annotation.Autowired
     private KolinBoardReviewService reviews;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinLessonMemoryService memory;
     private final AiLessonPilotService ai;
     private final KolinTaskRoster roster;
     private final KolinWorksheetStore store;
@@ -57,10 +59,60 @@ public class KolinTaskService {
                 images.add(Map.of("pageNumber",request.boardReview().pageNumber(),"imageDataUrl",request.boardReview().imageDataUrl()));
                 if(request.boardReview().additionalPages()!=null) for(var page:request.boardReview().additionalPages())
                     images.add(Map.of("pageNumber",page.pageNumber(),"imageDataUrl",page.imageDataUrl()));
+                boolean resume=memory!=null && "workbook".equals(board.scope())
+                    && KolinBoardReviewService.incrementalReview(question);
+                var inspectedPages=new java.util.HashSet<Integer>();
+                if(resume) {
+                    // A changed or newly written page needs fresh analysis. An
+                    // unchanged page must never be regraded merely because the
+                    // previous answer was in the teacher's chat history.
+                    var checks=memory.comparison(teacher,room.getId(),board);
+                    var state=new java.util.HashMap<Integer,String>();
+                    for(var item:checks) state.put((Integer)item.get("pageNumber"),(String)item.get("state"));
+                    images.removeIf(item -> {
+                        int page=(Integer)item.get("pageNumber");
+                        long ink=board.pages().stream().filter(p->p.pageNumber()==page)
+                            .mapToLong(KolinBoardReviewService.PageMetadata::revision).findFirst().orElse(0L);
+                        return ink<=0 || "checked_unchanged".equals(state.get(page));
+                    });
+                    context.put("previousReviewPageStates",checks);
+                    context.put("reviewMode","changes_since_previous_check");
+                    if(images.isEmpty()) {
+                        stage="STORE";
+                        String unchanged="После предыдущей проверки на сохранённых страницах ученика нет новых "
+                            + "или изменённых рукописных записей. Это не означает, что все задания решены верно. "
+                            + "Если ученик писал только что, дождитесь сохранения штрихов и повторите проверку.";
+                        return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",unchanged,transcript,
+                            board.studentId(),board.studentName(),0,0,null,null).withBoard(board);
+                    }
+                }
+                images.forEach(image->inspectedPages.add((Integer)image.get("pageNumber")));
+                context.put("inspectedPageNumbers",inspectedPages.stream().sorted().toList());
                 String answer=ai.kolinReviewReply(mapper.writeValueAsString(context),history,question,images);
                 stage="STORE";
-                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",answer,transcript,
+                var reply=store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",answer,transcript,
                         board.studentId(),board.studentName(),0,0,null,null).withBoard(board);
+                if(memory!=null) {
+                    try {
+                        // A pupil edit during model inference must not result in
+                        // a checkpoint for the now-outdated page.
+                        reviews.requireCurrent(teacher,room.getId(),request.boardReview());
+                        var checked=board.pages().stream()
+                            .filter(page->inspectedPages.contains(page.pageNumber())).toList();
+                        var metadata=new KolinBoardReviewService.Metadata(
+                            board.studentId(),board.studentName(),board.boardId(),board.pageNumber(),
+                            board.documentVersion(),board.revision(),board.capturedAt(),board.imageSha256(),
+                            board.scope(),board.totalPageCount(),checked);
+                        memory.rememberReview(teacher,room.getId(),metadata,request.boardReview());
+                    } catch(RuntimeException ex) {
+                        // Keep the valid dated answer, but never pretend the
+                        // current pupil work was checked if it changed.
+                        org.slf4j.LoggerFactory.getLogger(getClass()).warn(
+                            "Kolyn review checkpoint not recorded: classId={} cause={}",
+                            room.getId(),ex.getClass().getSimpleName());
+                    }
+                }
+                return reply;
             }
             var pupils=roster.read(room);
             context.put("roster",pupils);

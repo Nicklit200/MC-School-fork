@@ -229,4 +229,35 @@ class KolinChatServiceTest {
         assertThat(reply.transcriptContext().state()).isEqualTo("unavailable");
         verify(ai).kolinReply(argThat(value->value.contains("unavailable")&&!value.contains("FOREIGN_PRIVATE_SPEECH")),anyList(),anyString());
     }
+
+    @Test void privateLessonMemoryAndAuthorizedStudentHistoryArePassedAsEvidence() throws Exception {
+        var memory=mock(KolinLessonMemoryService.class);
+        var history=mock(KolinStudentHistoryContextService.class);
+        ReflectionTestUtils.setField(chat,"memory",memory);
+        ReflectionTestUtils.setField(chat,"studentHistory",history);
+        var context=new KolinChatService.Context("student",pupil.getId(),1);
+        String question="Что проходили с Виталиной на прошлом уроке?";
+        when(memory.recent(host,room.getId())).thenReturn(List.of(
+            Map.of("question","Проверь задание 3","answer","У Виталины ошибка в третьем задании")));
+        when(history.read(host,room,question,context)).thenReturn(Map.of(
+            "state","available","studentName","Виталина","pastLessons",List.of(
+                Map.of("date","2026-11-09","coveredMaterial","Bruchrechnen"))));
+        chat.send(host,room.getId(),question(question,context));
+        verify(ai).kolinReply(argThat(value->value.contains("recentTeacherMemory")
+            && value.contains("У Виталины ошибка")
+            && value.contains("studentHistory") && value.contains("Bruchrechnen")),
+            anyList(),eq(question));
+    }
+
+    @Test void savedMemoryEndpointDoesNotGrantOtherTeachersOrStudentsSchoolAccess() {
+        var memory=mock(KolinLessonMemoryService.class);
+        ReflectionTestUtils.setField(chat,"memory",memory);
+        assertThatThrownBy(()->chat.recentMemory(principal(otherTeacher),room.getId()))
+            .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(()->chat.recentMemory(principal(pupil),room.getId()))
+            .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(memory);
+    }
+
+
 }
