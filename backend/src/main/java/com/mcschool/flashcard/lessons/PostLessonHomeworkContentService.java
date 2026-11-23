@@ -179,7 +179,30 @@ public class PostLessonHomeworkContentService {
                 display and adds all answer space. It also builds private teacher answers.
                 kind is "equivalence" for simplify/evaluate tasks, "solution" only
                 for a LINEAR one-variable equation with exactly one solution,
-                like "2*x+3=7". Do not use quadratic equations or identities.
+                like "2*x+3=7". Do not use quadratic equations or identities in
+                the algebra-only task format. To ask for roots of a parabola, use
+                kind "graph", NEVER a quadratic "solution" with one invented root.
+                For a graph task, leave expression, answer and variable empty and
+                supply visualGraph. Supported families are linear (coefficients
+                [m,b]) and quadratic ([a,b,c]); objectives zeros, value and
+                aboveBelow; xRange and yRange are two finite ascending bounds,
+                each span 1..20, graph coefficients bounded to -20..20.
+                For "value", set at to a number and level to null. For
+                "aboveBelow", set level to a number and at to null. For "zeros",
+                set both at and level to null. All graph solutions are calculated
+                by the server, not trusted to the model.
+                For algebra tasks, visualGraph must be null.
+                The model only selects grounded graph coefficients and ranges.
+                The server creates native SVG/vector coordinate axes and graphs
+                with private teacher-side reference solutions and visual QA.
+                If graphPracticeRequired is true for the selected day, at least
+                one task MUST be a graph. Never silently downgrade a graph task
+                to a numerical substitution. Select the same type of activity
+                actually practiced in the lesson, not the first easy exercise
+                in the workbook. Inspect saved completed board PDFs as evidence
+                of pupil actions and the original worksheet only as a source
+                of tasks. Distinguish skipped, solved with help and unsolved
+                pages: do not claim independent mastery without evidence.
                 In the latter case provide the equation's variable, e.g. "x";
                 otherwise variable must be the empty string.
                 Use decimal points, parentheses, + - * / and integer powers ^ or **
@@ -237,8 +260,22 @@ public class PostLessonHomeworkContentService {
         taskFields.put("description",Map.of("type","string"));
         taskFields.put("expression",Map.of("type","string"));
         taskFields.put("answer",Map.of("type","string"));
-        taskFields.put("kind",Map.of("type","string","enum",List.of("equivalence","solution")));
+        taskFields.put("kind",Map.of("type","string","enum",List.of("equivalence","solution","graph")));
         taskFields.put("variable",Map.of("type","string","enum",List.of("","x","y","z","a","b","c","m","n")));
+        Map<String,Object> graphFields=new LinkedHashMap<>();
+        graphFields.put("family",Map.of("type","string","enum",List.of("linear","quadratic")));
+        graphFields.put("objective",Map.of("type","string","enum",List.of("zeros","value","aboveBelow")));
+        graphFields.put("coefficients",Map.of("type","array","items",Map.of("type","number"),
+                "minItems",2,"maxItems",3));
+        graphFields.put("xRange",Map.of("type","array","items",Map.of("type","number"),
+                "minItems",2,"maxItems",2));
+        graphFields.put("yRange",Map.of("type","array","items",Map.of("type","number"),
+                "minItems",2,"maxItems",2));
+        graphFields.put("at",Map.of("type",List.of("number","null")));
+        graphFields.put("level",Map.of("type",List.of("number","null")));
+        Map<String,Object> graphSchema=Map.of("type","object","properties",graphFields,
+                "required",new ArrayList<>(graphFields.keySet()),"additionalProperties",false);
+        taskFields.put("visualGraph",Map.of("anyOf",List.of(graphSchema,Map.of("type","null"))));
         Map<String,Object> taskSchema=Map.of("type","object","properties",taskFields,
                 "required",new ArrayList<>(taskFields.keySet()),"additionalProperties",false);
         Map<String,Object> contentFields=new LinkedHashMap<>();
@@ -248,12 +285,19 @@ public class PostLessonHomeworkContentService {
         contentFields.put("tasks",Map.of("type","array","items",taskSchema,"minItems",1,"maxItems",2));
         Map<String,Object> schema=Map.of("type","object","properties",contentFields,
                 "required",new ArrayList<>(contentFields.keySet()),"additionalProperties",false);
+        // Content validation must enforce the actual shape of a graph-based
+        // lesson. Otherwise a text-only model response can satisfy math QA
+        // and silently drop the very skill practiced during the class.
+        boolean graphLesson=graphDominatesLesson(evidence);
+        boolean graphPracticeRequired=graphLesson && (day==1 || day%2==1);
         String feedback=null;
         Map<String,Object> rejectedContent=null;
         for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
             Map<String,Object> attemptEvidence=new LinkedHashMap<>(evidence);
             attemptEvidence.put("dayNumber",day);
             attemptEvidence.put("totalDays",totalDays);
+            attemptEvidence.put("graphLessonEvidence",graphLesson);
+            attemptEvidence.put("graphPracticeRequired",graphPracticeRequired);
             if(feedback!=null){
                 Map<String,Object> repair=new LinkedHashMap<>();
                 repair.put("day",day);
@@ -278,6 +322,8 @@ public class PostLessonHomeworkContentService {
             String checked;
             try{
                 checked=PostLessonHomeworkMch3Template.fromContent(json,content,day,totalDays,studentName);
+                if(graphPracticeRequired && !containsGraphTask(content))
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_PRACTICE_REQUIRED");
                 // Algebra QA proves correctness, not educational novelty.
                 // Reject identical math or a third day of the same trivial form
                 // BEFORE rendering or publishing any new PDF.
@@ -326,6 +372,30 @@ public class PostLessonHomeworkContentService {
             }
         }
         throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+    }
+
+    static boolean containsGraphTask(Map<String,Object> content) {
+        if(!(content.get("tasks") instanceof List<?> tasks))return false;
+        return tasks.stream().anyMatch(task -> task instanceof Map<?,?> t
+                && "graph".equals(t.get("kind")));
+    }
+
+    static boolean graphDominatesLesson(Map<String,Object> evidence) {
+        // Detect from completed-lesson conversation, not planned topics in
+        // lessonPlan or monthlyPlan. Multiple mentions avoid forcing diagrams
+        // because a teacher only mentioned a graph in passing.
+        String transcript=Objects.toString(evidence.get("transcript"),"")+"\n"
+                +Objects.toString(evidence.get("liveTranscript"),"");
+        String teacher=Objects.toString(evidence.get("teacherNotes"),"")+"\n"
+                +Objects.toString(evidence.get("personalTeacherNotes"),"");
+        java.util.regex.Pattern terms=java.util.regex.Pattern.compile(
+                "(?iu)(?:график[а-я]*|парабол[а-я]*|нул[яейи]\\s+функци[а-я]*|"
+                +"graph[a-z]*|parabel[a-z]*|nullstell[a-z]*|scheitel[a-z]*|koordinat[a-z]*)");
+        if(terms.matcher(teacher).find())return true;
+        int count=0;
+        var matches=terms.matcher(transcript);
+        while(matches.find() && count<4)count++;
+        return count>=4;
     }
 
     /** Only fixed server diagnostic identifiers may enter logs, never a model response. */
