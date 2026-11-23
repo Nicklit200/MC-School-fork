@@ -30,6 +30,23 @@ class NotificationContentTest {
     }
 
     @Test
+    void workbookFailuresContainSafeStaffLinksAndStateWhenRetriesAreExhausted() {
+        AppLinks links = new AppLinks("https://school.test/");
+        java.util.UUID teacherId = java.util.UUID.fromString("14e3c7c1-1fc8-41bd-858a-6c20efdd957a");
+        String link = links.staffLessonLink(teacherId, "local-event-7", true);
+        assertThat(link).isEqualTo("https://school.test/admin/teachers/" + teacherId + "/lessons/local-event-7");
+        assertThat(links.staffLessonLink(teacherId, "local-event-7", false))
+                .isEqualTo("https://school.test/teacher/lessons/local-event-7");
+        NotificationMessages.Email ru = NotificationMessages.ownerWorkbookFailure(
+                Language.RU, "local-event-7", 4, "WORKBOOK_LAYOUT_QA", link);
+        assertThat(ru.subject()).contains("Mindcrafti");
+        assertThat(ru.body()).contains("попытки").contains("WORKBOOK_LAYOUT_QA").contains(link);
+        NotificationMessages.Email de = NotificationMessages.ownerWorkbookFailure(
+                Language.DE, "local-event-7", 1, "WORKBOOK_LAYOUT_QA", link);
+        assertThat(de.body()).contains("automatische Korrektur").contains(link);
+    }
+
+    @Test
     void reminderEmailIncludesTaskCountsAndLoginLink() {
         NotificationMessages.Email de = NotificationMessages.dailyTaskReminder(
                 Language.DE, "Sam", 5, 1, "http://app/today");
