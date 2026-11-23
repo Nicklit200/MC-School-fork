@@ -254,18 +254,25 @@ describe('WhiteboardPanel', () => {
     expect(await screen.findByText('125%')).toBeInTheDocument();
 
     rerender(content(true));
-    expect(container.querySelector('.whiteboard--compact-preview')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Страницы доски' })).not.toBeInTheDocument();
+    expect(container.querySelector('.whiteboard--compact-preview.whiteboard--continuous')).toBeInTheDocument();
+    const overviewPages = screen.getByRole('region', { name: 'Страницы доски' });
+    expect(overviewPages.querySelectorAll('article')).toHaveLength(2);
     expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.view).toBe(DEFAULT_VIEW);
     expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.navigationLocked).toBe(false);
-    act(() => pageCanvasProps.get('WHITEBOARD:personal-student:0')!.onViewChange({ zoom: 2, panX: -120, panY: -80 }));
-    expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.view).toEqual({ zoom: 2, panX: -120, panY: -80 });
+    // One-finger swipes and mouse-wheel scrolling use the same local scroll
+    // callback; the pupil's viewport and the teacher's focused zoom stay intact.
+    act(() => pageCanvasProps.get('WHITEBOARD:personal-student:0')!.onScrollGesture(0, 140));
+    expect(overviewPages.scrollTop).toBe(140);
+    expect(localStorage.getItem('mc.board.pageLayout:teacher')).toBe('continuous');
+    expect(publish.mock.calls.some(([event]) => event.type === 'student-view')).toBe(false);
 
     rerender(content(false));
     expect(await screen.findByRole('region', { name: 'Страницы доски' })).toBeInTheDocument();
     expect(screen.getByText('125%')).toBeInTheDocument();
+    expect(localStorage.getItem('mc.board.pageLayout:teacher')).toBe('continuous');
     rerender(content(true));
-    expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.view).toEqual({ zoom: 2, panX: -120, panY: -80 });
+    expect(pageCanvasProps.get('WHITEBOARD:personal-student:0')?.view).toBe(DEFAULT_VIEW);
+    expect(screen.getByRole('region', { name: 'Страницы доски' })).toBeInTheDocument();
   });
 
   describe('following the pupil viewport', () => {
