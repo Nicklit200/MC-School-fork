@@ -53,8 +53,16 @@ class KolinChatControllerTest {
     @Test void teacherCanReadOnlyConfigurationAndReceiveTextReply() throws Exception {
         var teacher=authenticate(Role.TEACHER);
         when(chat.status(teacher,classId)).thenReturn(Map.of("configured",true));
+        var saved=new KolinQuestionJournal.View(UUID.randomUUID(),UUID.randomUUID(),"Дай задания","group",
+                null,3,"pdf",KolinTeacherQuestion.Status.ANSWERED,java.time.Instant.parse("2026-11-14T10:00:00Z"),
+                java.time.Instant.parse("2026-11-14T10:00:01Z"));
+        when(chat.questions(teacher,classId)).thenReturn(List.of(saved));
         when(chat.send(eq(teacher),eq(classId),any())).thenReturn(new KolinChatService.Reply("text","1. 1/2 + 1/4"));
         mvc.perform(get(base()+"/status")).andExpect(status().isOk()).andExpect(content().json("{\"configured\":true}"));
+        mvc.perform(get(base()+"/questions")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control","no-store"))
+                .andExpect(jsonPath("$[0].text").value("Дай задания"))
+                .andExpect(jsonPath("$[0].status").value("ANSWERED"));
         mvc.perform(post(base()+"/messages").contentType("application/json").content("{\"text\":\"Дай задания\",\"history\":[],\"context\":{\"targetType\":\"group\",\"currentWorkbookPage\":3}}"))
                 .andExpect(status().isOk()).andExpect(content().json("{\"type\":\"text\",\"text\":\"1. 1/2 + 1/4\"}"));
         verify(chat).send(eq(teacher),eq(classId),argThat(r->r.context().currentWorkbookPage()==3&&r.text().equals("Дай задания")));
@@ -65,6 +73,7 @@ class KolinChatControllerTest {
             var caller=authenticate(role);
             assertThatThrownBy(()->controller.status(caller,classId)).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->controller.send(caller,classId,new KolinChatService.Request("Hi",List.of(),null))).isInstanceOf(AccessDeniedException.class);
+            assertThatThrownBy(()->controller.questions(caller,classId)).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->controller.preview(caller,classId,UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->controller.pdf(caller,classId,UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
             assertThatThrownBy(()->controller.append(caller,classId,UUID.randomUUID())).isInstanceOf(AccessDeniedException.class);
