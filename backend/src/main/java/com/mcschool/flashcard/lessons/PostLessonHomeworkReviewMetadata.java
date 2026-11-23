@@ -20,7 +20,9 @@ final class PostLessonHomeworkReviewMetadata {
                 Map<String,Object> info=new LinkedHashMap<>();
                 info.put("title",shortText(task.get("title"),145));
                 info.put("description",shortText(task.get("description"),200));
-                info.put("expression",shortText(task.get("expression"),200));
+                // Store a stable mathematical graph fingerprint for cross-day
+                // diversity checks. No teacher answer is ever stored here.
+                info.put("expression",shortText(PostLessonHomeworkSeriesDiversity.taskKey(task),200));
                 tasks.add(info);
             }
         }
