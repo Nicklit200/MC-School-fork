@@ -231,11 +231,10 @@ public class GoogleCalendarLessonService {
                 Role.TEACHER
         );
         return listGroupLessons(teacherCaller).stream()
-                .filter(lesson -> student.id().equals(lesson.studentId())
-                        || (lesson.groupId() != null
-                        && groupMemberRepository.existsByGroupIdAndStudentId(lesson.groupId(), student.id()))
-                        || (lesson.participantStudentIds() != null
-                        && lesson.participantStudentIds().contains(student.id())))
+                // The saved occurrence roster is authoritative. A removed member of
+                // the permanent group must not regain entry to this specific lesson.
+                .filter(lesson -> lesson.participantStudentIds() != null
+                        && lesson.participantStudentIds().contains(student.id()))
                 .sorted(Comparator.comparing(GroupLessonResponse::startsAt))
                 .toList();
     }

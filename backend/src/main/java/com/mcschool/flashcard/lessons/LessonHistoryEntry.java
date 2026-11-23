@@ -58,6 +58,9 @@ public class LessonHistoryEntry {
     @Column(name = "participant_student_ids", columnDefinition = "text")
     private String participantStudentIds;
 
+    @Column(name = "participants_manually_edited", nullable = false)
+    private boolean participantsManuallyEdited;
+
     @Column(nullable = false, length = 500)
     private String title;
 
@@ -113,7 +116,7 @@ public class LessonHistoryEntry {
         this.groupName = lesson.groupName();
         this.studentId = lesson.studentId();
         this.studentName = lesson.studentName();
-        if (this.participantStudentIds == null || this.participantStudentIds.isBlank()) {
+        if (!participantsManuallyEdited && (this.participantStudentIds == null || this.participantStudentIds.isBlank())) {
             this.participantStudentIds = encodeParticipants(lesson.participantStudentIds());
         }
         this.title = lesson.title();
@@ -137,8 +140,15 @@ public class LessonHistoryEntry {
 
     /** Explicit reassignment replaces the enrollment snapshot for a native lesson. */
     public void reassign(GroupLessonResponse lesson) {
+        this.participantsManuallyEdited = false;
         sync(lesson);
         this.participantStudentIds = encodeParticipants(lesson.participantStudentIds());
+    }
+
+    /** Add/remove students only for this occurrence; even an empty roster persists. */
+    public void replaceParticipants(List<UUID> ids) {
+        this.participantStudentIds = encodeParticipants(ids);
+        this.participantsManuallyEdited = true;
     }
 
     public GroupLessonResponse toResponse() {
