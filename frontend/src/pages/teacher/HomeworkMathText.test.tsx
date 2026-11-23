@@ -5,7 +5,7 @@ import { HomeworkMathText, homeworkMathSegments, plainMathToLatex } from './Home
 describe('teacher homework mathematical typography', () => {
   it('renders slash fractions as stacked math in the exercise and answers', () => {
     const { container } = render(<HomeworkMathText value="-1/2+3/4-(-1/4), вычислить" />);
-    expect(container.querySelectorAll('.katex')).toHaveLength(1);
+    expect(container.querySelectorAll('.katex')).toHaveLength(2);
     expect(container.querySelectorAll('mfrac')).toHaveLength(3);
     expect(container).toHaveTextContent('вычислить');
     expect(container.textContent).not.toContain('frac{');
