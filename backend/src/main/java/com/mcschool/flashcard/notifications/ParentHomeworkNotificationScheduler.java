@@ -58,7 +58,7 @@ public class ParentHomeworkNotificationScheduler {
     @Scheduled(
             cron = "${app.parent-homework-reminders.cron:0 0 19 * * *}",
             zone = "${app.parent-homework-reminders.zone:Europe/Berlin}")
-    @Transactional(readOnly = true)
+    @Transactional
     public void notifyParents() {
         LocalDate today = LocalDate.now(zone);
 
