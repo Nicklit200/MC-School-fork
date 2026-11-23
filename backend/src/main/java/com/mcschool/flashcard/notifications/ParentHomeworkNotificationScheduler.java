@@ -76,6 +76,8 @@ public class ParentHomeworkNotificationScheduler {
             }
 
             // Keep the existing email/logging fallback for unfinished PDF homework.
+            // A school username alone does not supply an email destination.
+            boolean emailAvailable = parent.getEmail() != null && !parent.getEmail().isBlank();
             if (openHomeworks > 0) {
                 notificationService.sendParentMissedHomework(parent, student, openHomeworks);
             }
@@ -96,9 +98,15 @@ public class ParentHomeworkNotificationScheduler {
                 }
             }
 
+            // Do not silently confuse "no registered phone" with a sent message.
+            if (subscriptions == 0 || (subscriptions > 0 && delivered == 0)) {
+                log.warn("Parent progress notification cannot reach a phone: parentId={} studentId={} openHomeworks={} dueCards={} devices={} accepted={} hasEmail={} pushConfigured={}",
+                        parent.getId(), student.getId(), openHomeworks, dueCards, subscriptions,
+                        delivered, emailAvailable, webPushService.isConfigured());
+            }
             log.info(
-                    "Parent progress check: parentId={} studentId={} openHomeworks={} dueCards={} subscriptions={} delivered={}",
-                    parent.getId(), student.getId(), openHomeworks, dueCards, subscriptions, delivered);
+                    "Parent progress check: parentId={} studentId={} openHomeworks={} dueCards={} subscriptions={} delivered={} hasEmail={}",
+                    parent.getId(), student.getId(), openHomeworks, dueCards, subscriptions, delivered, emailAvailable);
         }
     }
 
