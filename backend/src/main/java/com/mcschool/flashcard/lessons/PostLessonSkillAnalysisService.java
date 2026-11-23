@@ -214,14 +214,26 @@ public class PostLessonSkillAnalysisService {
     static List<Observation> validateVerified(Map<String,Object> parsed,
             List<SkillBoardService.Node> allowed,Set<String> studentInk,
             Set<String> pdfBoardIds,boolean authenticatedStudentSpeech) {
-        return validate(parsed,allowed).stream().filter(row -> {
-            if("WRITING".equals(row.origin()))
-                return pdfBoardIds.contains(row.sourceBoardId()) && row.pageNumber()>=1
-                        && studentInk.contains(row.sourceBoardId()+"#"+row.pageNumber());
-            return "STUDENT_SPEECH".equals(row.origin())
-                    && row.sourceBoardId().isBlank() && row.pageNumber()==0
-                    && authenticatedStudentSpeech;
-        }).toList();
+        if(parsed==null || !(parsed.get("observations") instanceof List<?> entries))return List.of();
+        // Filter by verified provenance BEFORE deduplicating skill IDs. A
+        // hallucinated first candidate cannot suppress a later valid one.
+        List<Observation> accepted=new ArrayList<>();
+        Set<String> selected=new HashSet<>();
+        for(Object raw:entries) {
+            if(!(raw instanceof Map<?,?>))continue;
+            List<Observation> candidates=validate(Map.of("observations",List.of(raw)),allowed);
+            if(candidates.isEmpty())continue;
+            Observation row=candidates.get(0);
+            boolean valid="WRITING".equals(row.origin())
+                    ? pdfBoardIds.contains(row.sourceBoardId()) && row.pageNumber()>=1
+                      && studentInk.contains(row.sourceBoardId()+"#"+row.pageNumber())
+                    : "STUDENT_SPEECH".equals(row.origin())
+                      && row.sourceBoardId().isBlank() && row.pageNumber()==0
+                      && authenticatedStudentSpeech;
+            if(valid && selected.add(row.skillId()))accepted.add(row);
+            if(accepted.size()==8)break;
+        }
+        return List.copyOf(accepted);
     }
 
     private static int boundedInt(Object value,int min,int max) {
