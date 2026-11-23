@@ -2,8 +2,18 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lessonPreparationApi, type PersonalWorkbook } from '../../api/lessonPreparation';
+import { api } from '../../api/client';
+import type { GroupLesson } from '../../api/types';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { PersonalWorkbooksPanel } from './PersonalWorkbooksPanel';
+
+vi.mock('../../api/client', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../api/client')>();
+  return { ...actual, api: { ...actual.api, lessons: { ...actual.api.lessons,
+    participants: vi.fn(), addParticipant: vi.fn(), removeParticipant: vi.fn(),
+    transferParticipant: vi.fn(),
+  } } };
+});
 
 vi.mock('../../api/lessonPreparation', () => ({ lessonPreparationApi: {
   personalWorkbooks: vi.fn(), uploadPersonalWorkbook: vi.fn(), personalWorkbookUrl: vi.fn(),
@@ -13,15 +23,73 @@ vi.mock('../../api/lessonPreparation', () => ({ lessonPreparationApi: {
 const alice: PersonalWorkbook = { studentId: 'alice', studentName: 'Анна', hasWorkbook: true, filename: 'anna.pdf', version: 2 };
 const bob: PersonalWorkbook = { studentId: 'bob', studentName: 'Борис', hasWorkbook: false, filename: null, version: 0 };
 const mount = () => render(<I18nProvider><PersonalWorkbooksPanel eventId="lesson-1" /></I18nProvider>);
+const futureLesson: GroupLesson = {
+  eventId: 'lesson-1', bindingKey: 'lesson-1', title: 'Группа 1', groupId: 'group1',
+  groupName: 'Группа 1', studentId: null, studentName: null,
+  startsAt: '2099-11-27T17:00:00Z', endsAt: '2099-11-27T18:00:00Z',
+  participantStudentIds: ['alice', 'bob'], meetUrl: null, calendarUrl: null,
+};
+const mountWithRoster = (onChanged = vi.fn(async () => {})) =>
+  render(<I18nProvider><PersonalWorkbooksPanel eventId="lesson-1"
+    lesson={futureLesson} lessons={[futureLesson]} students={[
+      { id: 'alice', fullName: 'Анна' },
+      { id: 'bob', fullName: 'Борис' },
+      { id: 'sofia', fullName: 'София' },
+    ] as any} onChanged={onChanged} /></I18nProvider>);
 
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.setItem('language', 'RU');
   vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: true, students: [alice, bob] });
+  vi.mocked(api.lessons.participants).mockResolvedValue([
+    { studentId: 'alice', studentName: 'Анна' },
+    { studentId: 'bob', studentName: 'Борис' },
+  ]);
+  vi.mocked(api.lessons.removeParticipant).mockResolvedValue([]);
+  vi.mocked(api.lessons.addParticipant).mockResolvedValue([]);
 });
 afterEach(cleanup);
 
 describe('personal lesson worksheets', () => {
+  it('shows a compact minus by each personal workbook and confirms removal for only this occurrence', async () => {
+    const onChanged = vi.fn(async () => {});
+    mountWithRoster(onChanged);
+    const bobCard = await screen.findByRole('region', { name: 'Борис' });
+    const minus = await within(bobCard).findByRole('button', { name: 'Убрать Борис только из этого урока' });
+    await userEvent.click(minus);
+    expect(api.lessons.removeParticipant).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Основная группа, остальные уроки и сохранённые тетради не изменятся.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Отмена' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(api.lessons.removeParticipant).not.toHaveBeenCalled();
+
+    await userEvent.click(minus);
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Да, убрать только из этого урока',
+    }));
+    await waitFor(() => expect(api.lessons.removeParticipant).toHaveBeenCalledWith('lesson-1', 'bob'));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('adds one temporary student right beside the workbook cards', async () => {
+    mountWithRoster();
+    const select = await screen.findByRole('combobox', { name: 'Выбрать ученика для добавления' });
+    await userEvent.selectOptions(select, 'sofia');
+    await userEvent.click(screen.getByRole('button', { name: '+ Добавить ученика' }));
+    await waitFor(() => expect(api.lessons.addParticipant).toHaveBeenCalledWith('lesson-1', 'sofia'));
+  });
+
+  it('never removes a student when confirmation is dismissed', async () => {
+    mountWithRoster();
+    const minus = await screen.findByRole('button', { name: 'Убрать Анна только из этого урока' });
+    await userEvent.click(minus);
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(api.lessons.removeParticipant).not.toHaveBeenCalled();
+  });
+
   it('keeps the upload controls hidden when the server has not enabled this account', async () => {
     vi.mocked(lessonPreparationApi.personalWorkbooks).mockResolvedValue({ enabled: false, students: [] });
     mount();
