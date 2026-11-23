@@ -7,6 +7,7 @@ import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.lessons.GoogleCalendarLessonService;
 import com.mcschool.flashcard.lessons.LessonParticipantsService;
+import com.mcschool.flashcard.lessons.PostLessonSkillReviewService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassConnectionResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassResponse;
@@ -54,6 +55,9 @@ public class OnlineClassService {
     private final Clock clock;
     @org.springframework.beans.factory.annotation.Autowired
     private LessonParticipantsService lessonParticipants;
+
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private PostLessonSkillReviewService postLessonSkillReview;
     private final NotebookCameraService notebookCameras;
     private final TeacherPresenceService teacherPresence;
 
@@ -415,7 +419,31 @@ public class OnlineClassService {
     public OnlineClassResponse end(AuthenticatedUser caller, UUID classId) {
         OnlineClass onlineClass = requireHostForMutation(caller, classId);
         finishSession(onlineClass, now());
+        // The browser has archived the personal PDFs before calling this endpoint.
+        // A slow or failing AI review must NEVER hold open the classroom's
+        // transaction, delay ending the lesson, or prevent post-lesson homework.
+        if (postLessonSkillReview != null && !onlineClass.isTeacherOnly()) {
+            UUID endedClassId = onlineClass.getId();
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { queueSkillReview(endedClassId); }
+                    });
+            } else {
+                queueSkillReview(endedClassId);
+            }
+        }
         return toResponse(onlineClass, caller);
+    }
+
+    private void queueSkillReview(UUID endedClassId) {
+        try {
+            postLessonSkillReview.enqueueEndedClass(endedClassId);
+        } catch (RuntimeException failure) {
+            // This is observability, not an excuse to undo a successfully ended room.
+            log.warn("Could not queue skill review class={} type={}",
+                    endedClassId, failure.getClass().getSimpleName());
+        }
     }
 
     @Transactional
