@@ -85,14 +85,21 @@ public class PersonalWorkbookDraftService {
                             || saved.workbookSizeBytes() != mergedWorkbook.bytes().length
                             || saved.answersSizeBytes() != mergedAnswers.bytes().length)
                         throw new IllegalStateException("Personal PDF readback did not match the approved additive draft");
-                    return Map.of("published", true, "sourceDraftId", draftId.toString(),
-                            "teacherId", teacher.id().toString(), "eventId", eventId,
-                            "studentId", studentId.toString(), "workbookFilename", saved.filename(),
-                            "answersFilename", saved.answersFilename(),
-                            "workbookVersion", saved.version(), "answersVersion", saved.answersVersion(),
-                            "workbookPages", mergedWorkbook.pages(), "answersPages", mergedAnswers.pages(),
-                            "workbookAdded", !Arrays.equals(personalWorkbook, mergedWorkbook.bytes()),
-                            "sourceRetained", true, "sharedMaterialPreserved", true);
+                    return Map.ofEntries(
+                            Map.entry("published", true),
+                            Map.entry("sourceDraftId", draftId.toString()),
+                            Map.entry("teacherId", teacher.id().toString()),
+                            Map.entry("eventId", eventId),
+                            Map.entry("studentId", studentId.toString()),
+                            Map.entry("workbookFilename", saved.filename()),
+                            Map.entry("answersFilename", saved.answersFilename()),
+                            Map.entry("workbookVersion", saved.version()),
+                            Map.entry("answersVersion", saved.answersVersion()),
+                            Map.entry("workbookPages", mergedWorkbook.pages()),
+                            Map.entry("answersPages", mergedAnswers.pages()),
+                            Map.entry("workbookAdded", !Arrays.equals(personalWorkbook, mergedWorkbook.bytes())),
+                            Map.entry("sourceRetained", true),
+                            Map.entry("sharedMaterialPreserved", true));
                 }));
     }
 
