@@ -140,7 +140,7 @@ class PostLessonHomeworkGraphicContentTest {
                 "tasks",List.of(numberTask));
         String output=json.writeValueAsString(Map.of("status","completed",
                 "output",List.of(Map.of("type","message","content",List.of(
-                        Map.of("type","output_text","text",json.writeValueAsString(draft))))));
+                        Map.of("type","output_text","text",json.writeValueAsString(draft)))))));
         HttpClient http=mock(HttpClient.class);
         @SuppressWarnings("unchecked")
         HttpResponse<String> reply=mock(HttpResponse.class);
