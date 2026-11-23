@@ -63,6 +63,30 @@ class PostLessonHomeworkWorksheetSourceTest {
         assertTrue(((String)input).contains("Nur für Testschüler"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test void completedBoardPdfIsAvailableToVisionWithoutLeakingBase64IntoText() throws Exception {
+        byte[] written=worksheetPdf("Marked nullstellen on the completed board.");
+        String encoded=Base64.getEncoder().encodeToString(written);
+        Map<String,Object> evidence=new java.util.LinkedHashMap<>();
+        evidence.put("transcript","We used the completed graph.");
+        evidence.put("completedBoardPdfSources",List.of("completed_board_1.pdf: personal"));
+        evidence.put("_completedBoardPdfFiles",List.of(Map.of(
+                "source","personal","base64",encoded)));
+        Object result=PostLessonHomeworkContentService.inputWithWorksheet(
+                evidence,new ObjectMapper());
+        assertInstanceOf(List.class,result);
+        var messages=(List<Map<String,Object>>)result;
+        var parts=(List<Map<String,Object>>)messages.get(0).get("content");
+        assertEquals(2,parts.size());
+        String plain=(String)parts.get(0).get("text");
+        assertTrue(plain.contains("completed_board_1.pdf: personal"));
+        assertFalse(plain.contains(encoded));
+        assertFalse(plain.contains("_completedBoardPdfFiles"));
+        assertEquals("input_file",parts.get(1).get("type"));
+        assertEquals("completed_board_1.pdf",parts.get(1).get("filename"));
+        assertEquals("data:application/pdf;base64,"+encoded,parts.get(1).get("file_data"));
+    }
+
     private static byte[] worksheetPdf(String example)throws Exception {
         try(var pdf=new PDDocument()){
             PDPage page=new PDPage();
