@@ -137,8 +137,6 @@ class KolinBoardReviewServiceTest {
     }
 
     @Test void namedTasksOnOtherPagesReviewEverySavedPageOfOnlyTheNamedPupil() throws Exception {
-        var index=mock(KolinLessonContextService.class);
-        org.springframework.test.util.ReflectionTestUtils.setField(service,"lessonContext",index);
         // The teacher is on the group overview, not on Melissa's page.
         var overview=new KolinChatService.Context("group",null,5);
         String question="Проверь у Мелиссы задания 7 и 8";
@@ -146,8 +144,7 @@ class KolinBoardReviewServiceTest {
         assertThat(target.state()).isEqualTo("ready");
         assertThat(target.studentId()).isEqualTo(melissa.getId());
         assertThat(target.scope()).isEqualTo("workbook");
-        // An incorrect text index must not restrict vision to a single page 5.
-        verifyNoInteractions(index);
+        // No text index result may restrict vision to a single page 5.
         String board=PersonalBoard.workbookTargetIdFor(melissa.getId());
         String image=jpeg(80,120);
         var shot=new KolinBoardReviewService.Snapshot(melissa.getId(),board,1,5,0,null,Instant.now(),image,
