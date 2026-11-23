@@ -349,7 +349,7 @@ public class PostLessonSkillReviewService {
         if(proposal.confidence()<93 || proposal.correctExamples()<2
                 || !"CORRECT".equals(proposal.correctness())
                 || !Set.of("FIRST_TRY","INDEPENDENT").contains(proposal.autonomy())) return null;
-        return previous==null?60:Math.min(95,previous+5);
+        return previous==null?60:previous>=95?previous:Math.min(95,previous+5);
     }
 
     private void fail(Job job,Exception failure) {
