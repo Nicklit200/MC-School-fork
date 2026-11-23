@@ -245,7 +245,7 @@ export function LessonWorkspacePage() {
           <div><strong>{de ? 'Arbeitsheft' : 'Рабочая тетрадь'}</strong>{fileControls('workbook')}</div>
           <div><strong title={de ? 'Nur für Lehrkräfte sichtbar' : 'Видно только преподавателю'}>{de ? 'Lösungen' : 'Решения'}</strong>{fileControls('answers')}</div>
         </div>
-      </WorkspaceCard><PersonalWorkbooksPanel key={eventId + ':' + workbooksRevision} eventId={eventId} /></div>
+      </WorkspaceCard><PersonalWorkbooksPanel key={eventId + ':' + workbooksRevision} eventId={eventId} lesson={lesson} /></div>
     </div>}
     <dialog className="workspace-homework-dialog" ref={cardsDialog} aria-label={de ? 'Karten' : 'Карточки'}><div className="workspace-dialog-heading"><h2>{de ? 'Karten' : 'Карточки'}</h2><button type="button" className="teacher-icon-button" aria-label={de ? 'Schließen' : 'Закрыть'} onClick={() => cardsDialog.current?.close()}>×</button></div><LessonCardsPanel lesson={lesson} /></dialog>
     <dialog className="workspace-homework-dialog workspace-add-student-dialog" ref={addStudentDialog}
