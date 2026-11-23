@@ -30,6 +30,13 @@ public class AppLinks {
         return frontendBaseUrl + "/parent";
     }
 
+    public String staffLessonLink(UUID ownerTeacherId, String eventId, boolean admin) {
+        String safeEvent = URLEncoder.encode(eventId, StandardCharsets.UTF_8);
+        return frontendBaseUrl + (admin
+                ? "/admin/teachers/" + ownerTeacherId + "/lessons/" + safeEvent
+                : "/teacher/lessons/" + safeEvent);
+    }
+
     public String teacherHomeworkLink(UUID studentId, UUID homeworkId) {
         return frontendBaseUrl + "/teacher/students/" + studentId + "/homeworks/" + homeworkId;
     }
