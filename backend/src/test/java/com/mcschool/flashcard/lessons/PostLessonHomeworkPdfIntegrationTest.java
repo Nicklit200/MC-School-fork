@@ -215,4 +215,71 @@ class PostLessonHomeworkPdfIntegrationTest {
         verifyNoInteractions(drafts,brand);
     }
 
+
+    @Test
+    @SuppressWarnings({"unchecked","rawtypes"})
+    void sharedWorkbookGeneratorBuildsActualGraphicalHomeworkPdf() throws Exception {
+        HttpClient provider=mock(HttpClient.class);
+        HttpClient unusedLegacy=mock(HttpClient.class);
+        LessonPdfDraftService drafts=mock(LessonPdfDraftService.class);
+        SchoolBrandGuideService brand=mock(SchoolBrandGuideService.class);
+        var renderer=new OwnerWorkbookPdfRenderService(json,drafts,brand);
+        ReflectionTestUtils.setField(renderer,"modulesDirectory",System.getenv("MINDCRAFTI_WORKBOOK_MODULES"));
+
+        Map<String,Object> graph=new LinkedHashMap<>();
+        graph.put("type","graph");
+        graph.put("objective","zeros");
+        graph.put("language","ru");
+        graph.put("series",List.of(Map.of("kind","quadratic","parameters",List.of(-1,0,4))));
+        graph.put("xRange",List.of(-4,4));
+        graph.put("yRange",List.of(-5,5));
+        Map<String,Object> draft=new LinkedHashMap<>();
+        draft.put("meta",Map.of("school","MINDCRAFTI SCHOOL","subject","MATHEMATIK",
+                "durationMinutes",30,"homeworkEstimatedMinutes",7));
+        draft.put("workbookPages",List.of(Map.of("title","Нули параболы",
+                "subtitle","Quadratische Funktionen","blocks",List.of(
+                        Map.of("type","callout","label","Merke",
+                                "text","Nullstellen - пересечения с осью X."),
+                        Map.of("type","visualTask","number",1,"spec",graph),
+                        Map.of("type","answerLines","lines",6)))));
+        draft.put("teacherPages",List.of(Map.of("title","Lösungen",
+                "blocks",List.of(Map.of("type","teacherNote",
+                        "label","Antwort","title","Privat",
+                        "paragraphs",List.of("Nullstellen x=-2 und x=2."))))));
+        draft.put("qa",Map.of("algebra",List.of(Map.of("number",1,"kind","visualValue"))));
+        String response=json.writeValueAsString(Map.of(
+                "lessonJson",json.writeValueAsString(draft),
+                "lessonPlan","Transcript minute 37: pupil worked on graph nullstellen",
+                "difficulties",""));
+        HttpResponse<String> providerResponse=mock(HttpResponse.class);
+        when(providerResponse.statusCode()).thenReturn(200);
+        when(providerResponse.body()).thenReturn(json.writeValueAsString(Map.of(
+                "status","completed","output",List.of(Map.of(
+                        "content",List.of(Map.of("type","output_text","text",response)))))));
+        when(provider.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class)))
+                .thenReturn(providerResponse);
+
+        var canonical=new WorkbookContentService("fake-key","model",json,provider);
+        var automatic=new PostLessonHomeworkContentService(
+                "fake-key","ignored-legacy-model",json,renderer,unusedLegacy,canonical);
+        var result=automatic.makeWithReview(Map.of(
+                "transcript","We worked on the Parabel graph. The Nullstellen were "
+                        +"explained by drawing on the graph, then we discussed Scheitelpunkt.",
+                "homeworkPrompt","Use actually completed graphs and source evidence."),1,7,
+                "Fictional Child",stage->{});
+        assertEquals("WORKBOOK_CANONICAL",result.review().get("generator"));
+        assertEquals(true,result.pdf().qa().get("mathPassed"));
+        assertEquals(true,result.pdf().qa().get("layoutPassed"));
+        try(PDDocument pupil=Loader.loadPDF(result.pdf().studentPdf());
+            PDDocument teacher=Loader.loadPDF(result.pdf().teacherPdf())){
+            assertEquals(1,pupil.getNumberOfPages());
+            assertFalse(pupil.isEncrypted());
+            assertTrue(new PDFTextStripper().getText(pupil).contains("Quadratische Funktionen"));
+            assertFalse(new PDFTextStripper().getText(pupil).contains("Fictional Child"));
+            assertTrue(new PDFTextStripper().getText(teacher).contains("Lösungen"));
+        }
+        verify(provider,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+        verifyNoInteractions(unusedLegacy);
+    }
+
 }
