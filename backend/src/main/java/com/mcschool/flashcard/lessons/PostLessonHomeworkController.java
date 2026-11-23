@@ -11,7 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-/** Teacher-only endpoints. Never accept recipient IDs or PDFs from a browser. */
+/** Teacher-only endpoints. Explicit recipient IDs are validated against the lesson roster. */
 @RestController
 @RequestMapping("/api/v1/online-classes/{classId}/post-lesson-homework")
 @PreAuthorize("hasRole('TEACHER')")
@@ -33,6 +33,12 @@ public class PostLessonHomeworkController {
             @PathVariable UUID classId,@Valid @RequestBody PostLessonHomeworkJobService.Request request){
         pilot.require(teacher);
         return jobs.enqueue(teacher,classId,request);
+    }
+
+    @GetMapping("/recipients")
+    public java.util.List<Map<String,Object>> recipients(
+            @AuthenticationPrincipal AuthenticatedUser teacher, @PathVariable UUID classId) {
+        return jobs.recipients(teacher, classId);
     }
 
     @GetMapping
