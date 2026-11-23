@@ -33,6 +33,9 @@ public class StudentGroup {
     @Column(nullable = false, length = 120)
     private String name;
 
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
     @Column(name = "google_drive_transcript_folder_id", length = 255)
     private String googleDriveTranscriptFolderId;
 
@@ -64,6 +67,11 @@ public class StudentGroup {
             throw new IllegalArgumentException("An active teacher account is required");
         }
         this.teacher = teacher;
+    }
+
+    /** A removed group remains stored for historical lesson and plan references. */
+    public void archive(Instant when) {
+        if (archivedAt == null) archivedAt = when;
     }
 
     public void updateTranscriptFolder(String folderId) {

@@ -28,4 +28,5 @@ public interface LessonHistoryRepository extends JpaRepository<LessonHistoryEntr
             String studentId);
 
     List<LessonHistoryEntry> findAllByGroupIdAndDeletedAtIsNullOrderByStartsAtDesc(UUID groupId);
+    boolean existsByGroupIdAndDeletedAtIsNullAndEndsAtAfter(UUID groupId, Instant endsAfter);
 }

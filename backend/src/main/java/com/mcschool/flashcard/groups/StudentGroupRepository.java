@@ -7,5 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface StudentGroupRepository extends JpaRepository<StudentGroup, UUID> {
     List<StudentGroup> findAllByTeacherIdOrderByNameAsc(UUID teacherId);
+    List<StudentGroup> findAllByTeacherIdAndArchivedAtIsNullOrderByNameAsc(UUID teacherId);
     Optional<StudentGroup> findByIdAndTeacherId(UUID id, UUID teacherId);
+    Optional<StudentGroup> findByIdAndTeacherIdAndArchivedAtIsNull(UUID id, UUID teacherId);
 }

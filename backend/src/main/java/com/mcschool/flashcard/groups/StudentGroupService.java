@@ -12,6 +12,8 @@ import com.mcschool.flashcard.groups.dto.CreateStudentGroupRequest;
 import com.mcschool.flashcard.groups.dto.ImportGroupCardsRequest;
 import com.mcschool.flashcard.groups.dto.StudentGroupResponse;
 import com.mcschool.flashcard.groups.dto.UpdateGroupTranscriptFolderRequest;
+import com.mcschool.flashcard.lessons.GoogleCalendarLessonBindingRepository;
+import com.mcschool.flashcard.lessons.LessonHistoryRepository;
 import com.mcschool.flashcard.homeworks.Homework;
 import com.mcschool.flashcard.homeworks.HomeworkPdfService;
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
@@ -21,11 +23,14 @@ import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
 import com.mcschool.flashcard.users.UserResponse;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -41,6 +46,8 @@ public class StudentGroupService {
     private final CardPushNotificationService cardPushNotificationService;
     private final HomeworkPdfService homeworkPdfService;
     private final GoogleDriveStructureService googleDriveStructureService;
+    private final GoogleCalendarLessonBindingRepository calendarBindingRepository;
+    private final LessonHistoryRepository lessonHistoryRepository;
 
     // Kept for unit tests and older construction sites. Spring uses the annotated constructor below.
     public StudentGroupService(StudentGroupRepository groupRepository,
@@ -52,7 +59,21 @@ public class StudentGroupService {
                                CardPushNotificationService cardPushNotificationService,
                                HomeworkPdfService homeworkPdfService) {
         this(groupRepository, memberRepository, userRepository, homeworkRepository, cardRepository,
-                notificationService, cardPushNotificationService, homeworkPdfService, null);
+                notificationService, cardPushNotificationService, homeworkPdfService, null, null, null);
+    }
+
+    public StudentGroupService(StudentGroupRepository groupRepository,
+                               StudentGroupMemberRepository memberRepository,
+                               UserRepository userRepository,
+                               HomeworkRepository homeworkRepository,
+                               CardRepository cardRepository,
+                               NotificationService notificationService,
+                               CardPushNotificationService cardPushNotificationService,
+                               HomeworkPdfService homeworkPdfService,
+                               GoogleDriveStructureService googleDriveStructureService) {
+        this(groupRepository, memberRepository, userRepository, homeworkRepository, cardRepository,
+                notificationService, cardPushNotificationService, homeworkPdfService, googleDriveStructureService,
+                null, null);
     }
 
     @Autowired
@@ -64,7 +85,9 @@ public class StudentGroupService {
                                NotificationService notificationService,
                                CardPushNotificationService cardPushNotificationService,
                                HomeworkPdfService homeworkPdfService,
-                               GoogleDriveStructureService googleDriveStructureService) {
+                               GoogleDriveStructureService googleDriveStructureService,
+                               GoogleCalendarLessonBindingRepository calendarBindingRepository,
+                               LessonHistoryRepository lessonHistoryRepository) {
         this.groupRepository = groupRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
@@ -74,6 +97,8 @@ public class StudentGroupService {
         this.cardPushNotificationService = cardPushNotificationService;
         this.homeworkPdfService = homeworkPdfService;
         this.googleDriveStructureService = googleDriveStructureService;
+        this.calendarBindingRepository = calendarBindingRepository;
+        this.lessonHistoryRepository = lessonHistoryRepository;
     }
 
     @Transactional
@@ -103,7 +128,7 @@ public class StudentGroupService {
 
     @Transactional(readOnly = true)
     public List<StudentGroupResponse> list(AuthenticatedUser teacher) {
-        return groupRepository.findAllByTeacherIdOrderByNameAsc(teacher.id()).stream()
+        return groupRepository.findAllByTeacherIdAndArchivedAtIsNullOrderByNameAsc(teacher.id()).stream()
                 .map(this::response)
                 .toList();
     }
@@ -111,6 +136,21 @@ public class StudentGroupService {
     @Transactional(readOnly = true)
     public StudentGroupResponse get(AuthenticatedUser teacher, UUID groupId) {
         return response(requireOwnedGroup(teacher.id(), groupId));
+    }
+
+    /** Hide one teacher-owned group. Student profiles, homework, cards, and lesson history stay intact. */
+    @Transactional
+    public void remove(AuthenticatedUser teacher, UUID groupId) {
+        StudentGroup group = requireOwnedGroup(teacher.id(), groupId);
+        if (lessonHistoryRepository.existsByGroupIdAndDeletedAtIsNullAndEndsAtAfter(groupId, Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Group has ongoing or future lessons. Reassign or cancel them before removing the group.");
+        }
+        // Recurring Calendar bindings should not reactivate the deleted group.
+        calendarBindingRepository.deleteAll(calendarBindingRepository.findAllByGroupId(groupId));
+        // Cards and PDF homework are per student and are not deleted with membership.
+        memberRepository.deleteAllByGroupId(groupId);
+        group.archive(Instant.now());
     }
 
     @Transactional
@@ -191,7 +231,7 @@ public class StudentGroupService {
     }
 
     private StudentGroup requireOwnedGroup(UUID teacherId, UUID groupId) {
-        return groupRepository.findByIdAndTeacherId(groupId, teacherId)
+        return groupRepository.findByIdAndTeacherIdAndArchivedAtIsNull(groupId, teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
     }
 
