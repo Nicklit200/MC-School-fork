@@ -58,7 +58,11 @@ public class EmailNotificationService implements NotificationService {
 
     @Override
     public void sendParentMissedHomework(User parent, User student, long unfinishedHomeworkCount) {
-        if (parent.getEmail() == null || parent.getEmail().isBlank()) return;
+        if (parent.getEmail() == null || parent.getEmail().isBlank()) {
+            log.warn("Evening homework email not sent: parentId={} studentId={} reason=NO_EMAIL_ADDRESS",
+                    parent.getId(), student.getId());
+            return;
+        }
         NotificationMessages.Email email = NotificationMessages.parentMissedHomework(
                 parent.getPreferredLanguage(), parent.getFullName(), student.getFullName(),
                 unfinishedHomeworkCount, appLinks.parentLink());
