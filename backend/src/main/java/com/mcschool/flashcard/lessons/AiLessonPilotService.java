@@ -57,7 +57,7 @@ public class AiLessonPilotService {
 
     public AiLessonPilotService(
             @Value("${OPENAI_API_KEY:}") String apiKey,
-            @Value("${OPENAI_MODEL:gpt-5.6-terra}") String model,
+            @Value("${OPENAI_MODEL:${HOMEWORK_OPENAI_MODEL:gpt-5.6-terra}}") String model,
             ObjectMapper objectMapper,
             GoogleCalendarLessonService lessonService,
             LessonPreparationService preparationService,
@@ -128,7 +128,7 @@ public class AiLessonPilotService {
                 Используй ТОЛЬКО три источника учебного контекста:
                 1. месячный план;
                 2. транскрипцию предыдущего урока;
-                3. выполненные учениками домашние работы после предыдущего урока, максимум 7 последних на каждого ученика.
+                3. выполненные учениками домашние работы после предыдущего урока, максимум 7 последних на каждого ученика. Если предыдущего урока нет, используй только семь календарных дней до текущего занятия.
 
                 Не используй старые домашние работы до предыдущего урока и не опирайся на другие старые заметки.
 
@@ -141,7 +141,7 @@ public class AiLessonPilotService {
                 2. ТРАНСКРИПЦИЯ ПРЕДЫДУЩЕГО УРОКА:
                 %s
 
-                3. ВЫПОЛНЕННЫЕ ДОМАШКИ ПОСЛЕ ПРЕДЫДУЩЕГО УРОКА:
+                3. ВЫПОЛНЕННЫЕ ДОМАШКИ ПОСЛЕ ПРЕДЫДУЩЕГО УРОКА (или за последние 7 дней для нового ученика):
                 %s
 
                 Требования:
@@ -168,8 +168,11 @@ public class AiLessonPilotService {
                 teacher,
                 eventId,
                 new UpdateLessonPreparationRequest(
-                        context.homeworkSummary(),
-                        normalizeHomeworkErrorDigest(draft.difficulties(), context.homeworkFiles()),
+                        current.homeworkNotes() == null || current.homeworkNotes().isBlank()
+                                ? context.homeworkSummary() : current.homeworkNotes(),
+                        current.difficulties() == null || current.difficulties().isBlank()
+                                ? normalizeHomeworkErrorDigest(draft.difficulties(), context.homeworkFiles())
+                                : current.difficulties(),
                         current.lessonPlan() == null || current.lessonPlan().isBlank()
                                 ? draft.lessonPlan() : current.lessonPlan(),
                         current.manualTranscriptText()));
@@ -379,9 +382,10 @@ public class AiLessonPilotService {
     private HomeworkEvidence completedHomeworkEvidence(
             GroupLessonResponse current,
             GroupLessonResponse previous) {
-        if (previous == null || previous.endsAt() == null) {
-            return new HomeworkEvidence("Предыдущий урок не найден, поэтому старые домашние работы не загружаются.", List.of());
-        }
+        // A new pupil may have homework even before their first tracked lesson.
+        // Use an explicitly bounded seven-school-day window instead of reporting
+        // no homework and leaving the morning card unpopulated.
+        boolean hasPrevious = previous != null && previous.endsAt() != null;
 
         List<UUID> studentIds = current.participantStudentIds() == null
                 ? List.of()
@@ -392,8 +396,12 @@ public class AiLessonPilotService {
 
         List<HomeworkFile> files = new java.util.ArrayList<>();
         StringBuilder summary = new StringBuilder();
-        Instant cutoff = previous.endsAt();
         Instant before = current.startsAt();
+        Instant cutoff = hasPrevious ? previous.endsAt()
+                : before.atZone(SCHOOL_ZONE).toLocalDate().minusDays(6)
+                        .atStartOfDay(SCHOOL_ZONE).toInstant();
+        if (!hasPrevious)
+            summary.append("Предыдущий урок не найден. Сводка за последние 7 календарных дней.\n");
 
         for (UUID studentId : studentIds) {
             User student = userRepository.findById(studentId).orElse(null);
@@ -440,7 +448,7 @@ public class AiLessonPilotService {
         }
 
         if (summary.length() == 0) {
-            summary.append("После предыдущего урока выполненных домашних работ не найдено.");
+            summary.append("Для этого урока нет ученика с доступной домашней работой.");
         }
         summary.append("\nВсего PDF для анализа: ").append(files.size()).append(".");
         return new HomeworkEvidence(summary.toString(), files);

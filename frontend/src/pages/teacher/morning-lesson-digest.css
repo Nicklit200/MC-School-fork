@@ -17,3 +17,10 @@
 .morning-error-answer b{color:#8e3434}
 .morning-error-source{font-size:.73rem;margin:0;color:#7c878e;overflow-wrap:anywhere}
 .morning-digest-neutral{border-radius:10px;border:1px solid #dfe8ed;background:#f7fafb;padding:1rem;color:#5b7082;line-height:1.5;font-size:.9rem}
+
+.morning-homework-remaining{font-size:.82rem;color:#64748b}
+.morning-difficulties-overview{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .75rem;padding:.65rem .8rem;border:1px solid #f3d0d0;border-radius:11px;background:#fff8f8}
+.morning-difficulties-overview strong{font-size:.92rem;color:#a52e36}
+.morning-difficulties-overview span{font-size:.77rem;color:#806970;line-height:1.45}
+.morning-digest-neutral strong{display:block;font-weight:750;color:#476576}
+.morning-digest-neutral p{margin:.35rem 0 0}
