@@ -426,3 +426,17 @@ body > .board-toolbar__color-popover[role='dialog'] input { width:32px; height:2
   .online-class-room--original-v3 .online-class-room__lesson-actions { order:0; flex:0 1 auto; flex-wrap:nowrap; max-width:42%; }
   .online-class-room--original-v3 .online-class-room__board-controls { flex-basis:220px; }
 }
+
+/* Every pupil's PDF in "All students" is its own independent scroll viewport.
+   The teacher can swipe or wheel between pages without publishing a new pupil view. */
+.student-workspaces--overview .whiteboard--compact-preview:not(.whiteboard--following-student) .whiteboard__pages--continuous {
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: auto;
+}
+.student-workspaces--overview .whiteboard--compact-preview:not(.whiteboard--following-student) .whiteboard__pages--continuous > .whiteboard__document {
+  max-width: none;
+}
