@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import './morning-lesson-digest.css';
 
 type Issue = {
@@ -93,13 +94,35 @@ function compareDifference(student: string, correct: string): {wrong: string; ri
   return null;
 }
 function prettyMath(value: string): string { return value.replace(/-/g, '−'); }
-function HomeworkIssueCard({issue, de, index, total}: {issue: Issue; de: boolean; index: number; total: number}) {
+function HomeworkIssueCard({issue, de, index, total, onNavigate}: {
+  issue: Issue;
+  de: boolean;
+  index: number;
+  total: number;
+  onNavigate: (direction: -1 | 1) => void;
+}) {
   const diff = compareDifference(issue.studentAnswer, issue.correctAnswer);
   const date = /20\d{2}-(\d{2})-(\d{2})/.exec(issue.source);
   const taskNumber = /(?:Aufgabe|Задание|№)\s*(\d+)/i.exec(issue.page);
   const signError = /знак|vorzeichen/i.test(issue.difficulty);
   return <article className="morning-error-card">
-    <div className="morning-error-heading"><strong>{issue.student}</strong><span>{de ? 'Fehler' : 'Ошибка'} {index + 1} {de ? 'von' : 'из'} {total}</span></div>
+    <div className="morning-error-heading">
+      <strong>{issue.student}</strong>
+      <div className="morning-error-navigation" role="group"
+        aria-label={de ? 'Fehler wechseln' : 'Переключение ошибок'}>
+        {total > 1 && <button type="button" className="morning-error-nav-button"
+          aria-label={de ? 'Vorheriger Fehler' : 'Предыдущая ошибка'}
+          title={de ? 'Vorheriger Fehler' : 'Предыдущая ошибка'}
+          onClick={() => onNavigate(-1)}>←</button>}
+        <span className="morning-error-counter" aria-live="polite">
+          {de ? 'Fehler' : 'Ошибка'} {index + 1} {de ? 'von' : 'из'} {total}
+        </span>
+        {total > 1 && <button type="button" className="morning-error-nav-button"
+          aria-label={de ? 'Nächster Fehler' : 'Следующая ошибка'}
+          title={de ? 'Nächster Fehler' : 'Следующая ошибка'}
+          onClick={() => onNavigate(1)}>→</button>}
+      </div>
+    </div>
     <div className="morning-error-topic"><span className="morning-error-alert" aria-hidden="true">!</span>{signError ? (de ? 'Vorzeichenfehler' : 'Ошибка со знаком') : issue.difficulty}</div>
     <div className="morning-error-section">
       <span className="morning-error-label">{de ? 'Aufgabe' : 'Задание'}{taskNumber ? ' ' + taskNumber[1] : ''}</span>
@@ -123,6 +146,8 @@ function HomeworkIssueCard({issue, de, index, total}: {issue: Issue; de: boolean
 
 export function MorningDifficulties({raw, de}: {raw: string | null | undefined; de: boolean}) {
   const issues = getIssues(raw);
+  // Store the source with the index so a new lesson's results always start at error 1.
+  const [selection, setSelection] = useState<{raw: string | null | undefined; index: number}>({raw, index: 0});
   if (issues === null) return <p className="muted morning-difficulties-pending">{de
     ? 'Die wichtigsten nachweisbaren Hausaufgabenfehler folgen nach der morgendlichen Prüfung.'
     : 'Главные ошибки из проверенной домашки появятся после утренней подготовки.'}</p>;
@@ -131,18 +156,21 @@ export function MorningDifficulties({raw, de}: {raw: string | null | undefined; 
     <p>{de ? 'Für diese Abgaben sind keine zuverlässig belegten Fehler erfasst. Das bedeutet nicht, dass alles korrekt ist.'
       : 'В проверенных материалах нет надёжно подтверждённых ошибок. Это не означает, что вся домашка решена верно.'}</p>
   </div>;
+  const currentIndex = selection.raw === raw && selection.index < issues.length ? selection.index : 0;
+  const navigate = (direction: -1 | 1) => {
+    setSelection(previous => ({
+      raw,
+      index: ((previous.raw === raw ? previous.index : 0) + direction + issues.length) % issues.length,
+    }));
+  };
   return <div className="morning-difficulties morning-difficulties--compact">
     <div className="morning-difficulties-overview" role="status">
       <strong>{de ? 'Wichtige Fehler zur Besprechung: ' : 'Главных ошибок для разбора: '}{issues.length}</strong>
       <span>{de ? 'Ausgewählte, belegte Beispiele; keine Gesamtzahl aller Fehler.'
         : 'Только основные подтверждённые примеры, не общее число всех ошибок.'}</span>
     </div>
-    <HomeworkIssueCard key={issues[0].source + ':0'} issue={issues[0]} de={de} index={0} total={issues.length} />
-    {issues.length > 1 && <details className="morning-difficulties-more">
-      <summary>{de ? 'Weitere Fehler anzeigen: ' : 'Показать остальные ошибки: '}{issues.length - 1}</summary>
-      <div className="morning-difficulties-expanded">
-        {issues.slice(1).map((issue, index) => <HomeworkIssueCard key={issue.source + ':' + issue.page + ':' + index} issue={issue} de={de} index={index + 1} total={issues.length} />)}
-      </div>
-    </details>}
+    <HomeworkIssueCard key={issues[currentIndex].source + ':' + currentIndex}
+      issue={issues[currentIndex]} de={de} index={currentIndex} total={issues.length}
+      onNavigate={navigate} />
   </div>;
 }
