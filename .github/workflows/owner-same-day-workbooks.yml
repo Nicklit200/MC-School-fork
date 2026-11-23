@@ -5,6 +5,13 @@ on:
     branches: [integration/railway-and-ux]
     paths:
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/OwnerSameDayWorkbookService.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/notifications/**'
+      - 'backend/src/test/java/com/mcschool/flashcard/notifications/**'
+      - 'frontend/src/components/PushQuickStart*'
+      - 'frontend/src/components/Layout.tsx'
+      - 'frontend/src/pages/parent/ParentPage*'
+      - 'frontend/src/pages/admin/AdminAccountsPage*'
+      - 'frontend/src/api/client.ts'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/OwnerWorkbookLessonCreated.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotController.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotService.java'
@@ -37,7 +44,7 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - run: mvn -B -ntp '-Dtest=OwnerSameDayWorkbookServiceTest,ManualLessonServiceTest,AiLessonPilotSchedulerTest' test
+      - run: mvn -B -ntp '-Dtest=OwnerSameDayWorkbookServiceTest,ManualLessonServiceTest,AiLessonPilotSchedulerTest,NotificationContentTest,EmailNotificationServiceTest,NotificationServiceContextTest,ParentNotificationDeliveryTest' test
 
   frontend:
     runs-on: ubuntu-24.04
@@ -53,4 +60,5 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test -- src/components/PushQuickStart.test.tsx src/pages/parent/ParentPage.test.tsx src/pages/admin/AdminAccountsPage.test.tsx src/components/Layout.test.tsx
       - run: npm run build
