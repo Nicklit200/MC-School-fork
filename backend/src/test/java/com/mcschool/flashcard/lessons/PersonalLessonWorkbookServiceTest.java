@@ -186,4 +186,65 @@ class PersonalLessonWorkbookServiceTest {
         assertThat(row.answersSizeBytes()).isEqualTo(5678L);
         verify(answerRepository, never()).findByTeacherIdAndEventIdAndStudentId(any(), any(), any());
     }
+
+    private static byte[] pages(int count, String marker) throws Exception {
+        try (var document = new PDDocument(); var out = new ByteArrayOutputStream()) {
+            for (int i = 0; i < count; i++) document.addPage(new PDPage());
+            document.getDocumentInformation().setTitle(marker);
+            document.save(out);
+            return out.toByteArray();
+        }
+    }
+
+    @Test
+    void approvedDraftAddsPagesAndPreservesOldSharedAndPrivateWorkbooks() throws Exception {
+        byte[] shared = pages(2, "Old shared material");
+        byte[] newGraph = pages(6, "New graph tasks");
+        UUID draftId = UUID.randomUUID();
+
+        var first = PersonalWorkbookDraftService.addPages(null, shared, newGraph, draftId);
+        assertThat(first.combined()).isTrue();
+        assertThat(first.pages()).isEqualTo(8);
+        try (var pdf = org.apache.pdfbox.Loader.loadPDF(first.bytes())) {
+            assertThat(pdf.getNumberOfPages()).isEqualTo(8);
+            assertThat(pdf.getDocumentInformation().getCustomMetadataValue("MindcraftiAppendedDraftIds"))
+                    .contains(draftId.toString());
+        }
+        // The exact originals remain unchanged, and a repeat never appends again.
+        try (var old = org.apache.pdfbox.Loader.loadPDF(shared);
+             var graph = org.apache.pdfbox.Loader.loadPDF(newGraph)) {
+            assertThat(old.getNumberOfPages()).isEqualTo(2);
+            assertThat(graph.getNumberOfPages()).isEqualTo(6);
+        }
+        var replay = PersonalWorkbookDraftService.addPages(first.bytes(), shared, newGraph, draftId);
+        assertThat(replay.bytes()).isSameAs(first.bytes());
+        assertThat(replay.pages()).isEqualTo(8);
+    }
+
+    @Test
+    void repairOldReplacementByInheritingSharedPagesWithoutDuplicatingGraphDraft() throws Exception {
+        byte[] shared = pages(3, "Old worksheet");
+        byte[] publishedStandalone = pages(6, "Already published graphs");
+        UUID graphDraft = UUID.randomUUID();
+        var recovered = PersonalWorkbookDraftService.addPages(publishedStandalone, shared, publishedStandalone, graphDraft);
+        assertThat(recovered.pages()).isEqualTo(9);
+        assertThat(recovered.combined()).isTrue();
+        var second = PersonalWorkbookDraftService.addPages(recovered.bytes(), shared, publishedStandalone, graphDraft);
+        assertThat(second.pages()).isEqualTo(9);
+        assertThat(second.bytes()).isSameAs(recovered.bytes());
+        var fresh = PersonalWorkbookDraftService.addPages(recovered.bytes(), shared, pages(2, "Next lesson"),
+                UUID.randomUUID());
+        assertThat(fresh.pages()).isEqualTo(11);
+        assertThat(fresh.combined()).isTrue();
+    }
+
+    @Test
+    void additivePdfFailsClosedWithoutMutatingExistingBytes() throws Exception {
+        byte[] previous = pages(1, "Protected original");
+        byte[] original = previous.clone();
+        assertThatThrownBy(() -> PersonalWorkbookDraftService.addPages(previous, null,
+                "%PDF-corrupted".getBytes(java.nio.charset.StandardCharsets.UTF_8), UUID.randomUUID()))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(previous).isEqualTo(original);
+    }
 }
