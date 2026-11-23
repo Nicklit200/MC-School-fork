@@ -34,6 +34,24 @@ class KolinBoardReviewServiceTest {
         assertThat(target.studentId()).isEqualTo(melissa.getId());
         assertThat(target.state()).isEqualTo("ready");
     }
+    @Test void misspelledSecondPageTargetsTheActualSecondPageOfTheNamedPupil() {
+        when(roster.read(room)).thenReturn(List.of(new KolinTaskRoster.Pupil(melissa.getId(),"Виталина"),
+                new KolinTaskRoster.Pupil(sofia.getId(),"Мелисса")));
+        var context=new KolinChatService.Context("student",sofia.getId(),7);
+        var target=service.resolve(host,room.getId(),
+                new KolinBoardReviewService.TargetRequest("Првоерь вторую страницу Виталины",context));
+        assertThat(target.state()).isEqualTo("ready");
+        assertThat(target.studentId()).isEqualTo(melissa.getId());
+        assertThat(target.scope()).isEqualTo("task_page");
+        assertThat(target.pageNumber()).isEqualTo(2);
+    }
+    @Test void namedPageReferencesNeverBecomeGuessedExerciseNumbers() {
+        assertThat(KolinBoardReviewService.namedPageNumber("Проверь третью страницу")).isEqualTo(3);
+        assertThat(KolinBoardReviewService.namedPageNumber("Проверь страницу №7")).isEqualTo(7);
+        assertThat(KolinBoardReviewService.namedPageNumber("Check page 8")).isEqualTo(8);
+        assertThat(KolinBoardReviewService.namedPageNumber("Проверь задание 7")).isNull();
+        assertThat(KolinBoardReviewService.namedPageNumber("Проверь страницу 0")).isNull();
+    }
     @Test void unknownOrAmbiguousNamesNeverFallBackToAnotherPupil() {
         var context=new KolinChatService.Context("student",melissa.getId(),1);
         for(String question:List.of("Проверь задание у Маши","Проверь Мелиссу и Софию","Проверь решение Анны",

@@ -769,7 +769,7 @@ function RoomBody({
             <AnswersPanelResizer storageKey={currentUserId} videosOpen={videosOpen} />
           </>)}
           {connection.host && kolin.open && (<>
-            <KolinPanel chat={kolin} context={{
+            <KolinPanel chat={kolin} currentStudentName={students.find(student => student.userId === personalBoardOwner(activeBoard))?.displayName} context={{
               ...(personalBoardOwner(activeBoard) ? { targetType: 'student' as const, studentId: personalBoardOwner(activeBoard)! } : { targetType: 'group' as const }),
               ...(Number.isInteger(teacherPages[activeBoard] ?? studentPages[activeBoard])
                 ? { currentWorkbookPage: (teacherPages[activeBoard] ?? studentPages[activeBoard]) + 1 } : {}),

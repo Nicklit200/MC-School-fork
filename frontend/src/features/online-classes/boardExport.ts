@@ -251,7 +251,9 @@ export async function captureBoardPage(classId: string, studentId: string | null
   const privateBoard = shared ? null : personalWorkbookBoardId(studentId);
   const privateVersion = privateBoard ? (await onlineClassesApi.documentVersion(classId, privateBoard)).version : 0;
   const expectedBoard = shared ? 'board-1' : privateVersion > 0 ? privateBoard! : personalBoardId(studentId);
-  if (scope === 'current_page' && boardId !== expectedBoard) throw new Error('Review source changed');
+  // An empty hint means the host explicitly selected this pupil's visible page.
+  // Resolve the actual private-workbook vs inherited-board id from the server.
+  if (scope === 'current_page' && boardId !== '' && boardId !== expectedBoard) throw new Error('Review source changed');
   boardId = expectedBoard;
   // Legacy personal boards inherit the common lesson PDF. They do not own a
   // second copy of that PDF, and its version must be checked independently.
