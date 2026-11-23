@@ -13,6 +13,7 @@ vi.mock('../../api/client', async (importOriginal) => {
   return { ...actual, api: { ...actual.api,
     adminAccounts: { ...actual.api.adminAccounts, list: vi.fn(), teacherOptions: vi.fn(), assignTeacher: vi.fn(), transferStudents: vi.fn() },
     teachers: { ...actual.api.teachers, list: vi.fn() },
+    push: { ...actual.api.push, parentReadiness: vi.fn() },
   } };
 });
 
@@ -37,6 +38,16 @@ describe('admin account loading and teacher transfer', () => {
     vi.mocked(api.adminAccounts.list).mockImplementation(async (role) => role === 'STUDENT' ? [student] : [parent]);
     vi.mocked(api.teachers.list).mockResolvedValue([oldTeacher, newTeacher]);
     vi.mocked(api.adminAccounts.teacherOptions).mockResolvedValue(teacherOptions);
+    vi.mocked(api.push.parentReadiness).mockResolvedValue([
+      { parentId: 'parent', registeredDevices: 0, emailAvailable: false, linkedChildren: 1 },
+    ]);
+  });
+
+  it('explains why a linked parent cannot receive evening push', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', {name:'Родители (1)'}));
+    expect(await screen.findByText(/не подключено ни одного устройства/)).toBeInTheDocument();
+    expect(screen.getByText(/Email для резервных уведомлений не указан/)).toBeInTheDocument();
   });
 
   it('keeps loaded students and transfer controls when only parents fail to load', async () => {
