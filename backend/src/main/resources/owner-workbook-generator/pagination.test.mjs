@@ -134,6 +134,67 @@ test('graph, geometry and visual tasks reserve their own page',()=>{
   }
 });
 
+test('compiled graph instructions stay with each graph on a dedicated A4',()=>{
+  const graph=()=>({type:'graph',series:[{kind:'linear',m:1,b:0}]});
+  const original={title:'Funktionen',blocks:[
+    task(3,'00'),
+    {type:'text',text:'1. Zeichne die erste Gerade.'},graph(),
+    {type:'text',text:'2. Zeichne die zweite Gerade.'},graph(),
+    task(3,'03')
+  ]};
+  const pages=autoPaginatePages([original]);
+  assert.equal(pages.length,4);
+  assert.deepEqual(pages[1].blocks.map(b=>b.type),['text','graph']);
+  assert.deepEqual(pages[2].blocks.map(b=>b.type),['text','graph']);
+  assert.match(pages[1].blocks[0].text,/erste/);
+  assert.match(pages[2].blocks[0].text,/zweite/);
+  assert(pages.every(p=>p.blocks.filter(b=>b.type==='graph').length<=1));
+  assert.doesNotThrow(()=>preflightPages(pages));
+});
+
+test('exercise immediately BEFORE its graph stays on the same A4',()=>{
+  const pages=autoPaginatePages([{title:'Koordinaten',blocks:[
+    task(3,'01'),{type:'coordinateGrid',xRange:[-5,5],yRange:[-5,5]}
+  ]}]);
+  assert.equal(pages.length,1);
+  assert.deepEqual(pages[0].blocks.map(b=>b.type),['exercise','coordinateGrid']);
+});
+
+test('two graph task cards inside one grid become two full-page tasks',()=>{
+  const cards=['A','B'].map(title=>({type:'taskCard',title,children:[
+    {type:'graph',series:[{kind:'linear',m:2,b:1}]},
+    {type:'answerLines',lines:2}
+  ]}));
+  const pages=autoPaginatePages([{title:'Grafikaufgaben',blocks:[
+    {type:'grid',columns:2,children:cards}
+  ]}]);
+  assert.equal(pages.length,2);
+  assert.deepEqual(pages.map(p=>p.blocks[0].title),['A','B']);
+  assert(pages.every(p=>p.blocks.length===1 && p.blocks[0].type==='taskCard'));
+  assert.doesNotThrow(()=>preflightPages(pages));
+});
+
+test('one graph card and a separate calculation in a grid cannot share an A4',()=>{
+  const pages=autoPaginatePages([{title:'Gemischt',blocks:[
+    {type:'grid',columns:2,children:[
+      {type:'taskCard',title:'Graph',children:[{type:'graph'}]},
+      task(3,'02')
+    ]}
+  ]}]);
+  assert.equal(pages.length,2);
+  assert.equal(pages[0].blocks[0].title,'Graph');
+  assert.equal(pages[1].blocks[0].number,'02');
+});
+
+test('single graphic assignment in a split retains its compact layout',()=>{
+  const split={type:'split',columns:['42%','58%'],
+    left:[{type:'taskCard',title:'Zeichne die Funktion',children:[{type:'answerLines',lines:2}]}],
+    right:[{type:'coordinateGrid',xRange:[-5,5],yRange:[-5,5]}]};
+  const pages=autoPaginatePages([{title:'Koordinaten',blocks:[split]}]);
+  assert.equal(pages.length,1);
+  assert.deepEqual(pages[0].blocks,[split]);
+});
+
 test('oversized pair retains original answer area and splits',()=>{
   const p={title:'Sachaufgaben',blocks:[task(8,'01'),task(8,'02')]};
   const pages=autoPaginatePages([p]);
