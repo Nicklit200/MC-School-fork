@@ -17,6 +17,25 @@ class OwnerSameDayWorkbookServiceTest {
                 .isEqualTo("/teacher/lessons/local-mark");
     }
 
+    @Test void identifiesMeasuredA4FailuresForBoundedRepair() {
+        assertThat(OwnerSameDayWorkbookService.isRepairableLayoutFailure(
+                new IllegalArgumentException("Workbook generation/QA failed: Layout QA failed: Page 4: text or SVG exceeds its block")))
+                .isTrue();
+        assertThat(OwnerSameDayWorkbookService.isRepairableLayoutFailure(
+                new IllegalArgumentException("A4 page packing exhausted")))
+                .isTrue();
+        assertThat(OwnerSameDayWorkbookService.isRepairableLayoutFailure(
+                new IllegalArgumentException("Page 2: diagram and its next task exceed one A4 page")))
+                .isTrue();
+    }
+
+    @Test void neverRepairsIncorrectMathOrProviderErrorsAsLayout() {
+        assertThat(OwnerSameDayWorkbookService.isRepairableLayoutFailure(
+                new IllegalArgumentException("Algebra QA did not pass"))).isFalse();
+        assertThat(OwnerSameDayWorkbookService.isRepairableLayoutFailure(
+                new IllegalStateException("Workbook content provider returned HTTP 401"))).isFalse();
+    }
+
     @Test void beforeNineDoesNotGenerate() {
         assertThat(OwnerSameDayWorkbookService.eligibleAt(OWNER,
                 Instant.parse("2026-11-17T16:00:00Z"),
