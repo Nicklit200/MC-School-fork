@@ -200,7 +200,7 @@ public class PostLessonSkillAnalysisService {
                     || !Set.of("WRITING","STUDENT_SPEECH").contains(origin)
                     || confidence < 85 || explanation.length() < 18 || excerpt.length() < 8) continue;
             String source=Objects.toString(map.get("sourceBoardId"),"");
-            int page=boundedInt(map.get("pageNumber"),0,40);
+            int page=map.containsKey("pageNumber") ? boundedInt(map.get("pageNumber"),0,40) : 0;
             if(page<0)continue;
             seen.add(id);
             result.add(new Observation(id, autonomy, correctness, origin,
