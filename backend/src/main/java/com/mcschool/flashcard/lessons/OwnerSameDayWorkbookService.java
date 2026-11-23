@@ -125,7 +125,7 @@ public class OwnerSameDayWorkbookService {
             UPDATE owner_same_day_workbook_jobs
                SET state='QUEUED', error_code=NULL, updated_at=now()
              WHERE teacher_id=? AND lesson_date=? AND state='FAILED'
-               AND attempts < 3 AND updated_at < now() - INTERVAL '2 minutes'
+               AND attempts < 4 AND updated_at < now() - INTERVAL '2 minutes'
             """, OWNER, LocalDate.now(BERLIN));
         List<GroupLessonResponse> today = lessons.listSavedGroupLessons(actor);
         for (GroupLessonResponse lesson : today) {
@@ -157,7 +157,11 @@ public class OwnerSameDayWorkbookService {
         result.put("enabled", enabled);
         result.put("eventId", eventId);
         result.put("state", records.isEmpty() ? "NOT_STARTED" : records.get(0).get("state"));
-        if (!records.isEmpty()) result.put("updatedAt", records.get(0).get("updated_at").toString());
+        if (!records.isEmpty()) {
+            result.put("updatedAt", records.get(0).get("updated_at").toString());
+            Object errorCode = records.get(0).get("error_code");
+            if (errorCode != null) result.put("errorCode", errorCode.toString());
+        }
         return result;
     }
 
@@ -207,13 +211,39 @@ public class OwnerSameDayWorkbookService {
                 return;
             }
             Map<String, Object> context = evidence.workbookGenerationContext(actor, eventId);
-            WorkbookContentService.Content generated = content.generate(context,
-                    "Create the entire upcoming lesson's individual mathematics worksheet in German. "
+            String instruction = "Create the entire upcoming lesson's individual mathematics worksheet in German. "
                     + "Use the previous lesson, actually submitted homework evidence, and monthly plan. "
                     + "Target the calendar duration. Include full separate teacher solutions. "
-                    + "Do not invent errors, and use the current school workbook prompt.");
-            Map<String, Object> result = renderer.create(actor, eventId,
-                    generated.lessonJson(), generated.lessonPlan(), generated.difficulties());
+                    + "Do not invent errors, and use the current school workbook prompt.";
+            WorkbookContentService.Content generated = content.generate(context, instruction);
+            Map<String, Object> result;
+            try {
+                result = renderer.create(actor, eventId,
+                        generated.lessonJson(), generated.lessonPlan(), generated.difficulties());
+            } catch (IllegalArgumentException firstFailure) {
+                // Layout is measured by WeasyPrint; valid JSON alone cannot guarantee A4.
+                // Keep the strict QA gate, but give the AI ONE bounded repair attempt
+                // before the scheduled job consumes another full retry.
+                if (!isRepairableLayoutFailure(firstFailure)) throw firstFailure;
+                LOG.warn("Owner workbook A4 layout QA failed for event {}; regenerating once with shorter maths", eventId);
+                String repairInstruction = instruction + """
+                
+                The previous complete worksheet FAILED the mandatory A4 layout check.
+                Create a NEW, simpler and shorter complete structured lessonJson, not a patch.
+                For every student page: at most ONE independent exercise with at most THREE
+                short calculation rows. Keep each TeX expression under 60 characters.
+                Do not use split, grid or side-by-side layouts for mathematical expressions.
+                Give any graph or diagram its own page and keep its caption short.
+                For teacher solutions: at most THREE short solution items per page,
+                each TeX expression under 60 characters; put explanations in text, not
+                in one long formula. Add pages if needed rather than squeezing content.
+                Keep the calendar duration, pedagogical topics, valid algebra assertions,
+                separate teacher answers, and every mandatory mathematics/layout QA.
+                """;
+                generated = content.generate(context, repairInstruction);
+                result = renderer.create(actor, eventId,
+                        generated.lessonJson(), generated.lessonPlan(), generated.difficulties());
+            }
             UUID draftId = UUID.fromString(String.valueOf(result.get("draftId")));
             // Validate the day and start time again: AI or rendering may
             // finish after the lesson begins, or the teacher may reschedule.
@@ -249,7 +279,8 @@ public class OwnerSameDayWorkbookService {
                 Thread.currentThread().interrupt();
                 return;
             }
-            String code = ex.getClass().getSimpleName();
+            String code = isRepairableLayoutFailure(ex)
+                    ? "WORKBOOK_LAYOUT_QA" : ex.getClass().getSimpleName();
             LOG.error("Owner workbook generation failed for event {} [{}]", eventId, code, ex);
             db.update("""
                 UPDATE owner_same_day_workbook_jobs SET state='FAILED',
@@ -259,6 +290,20 @@ public class OwnerSameDayWorkbookService {
             if (owner != null) push(owner, "Не удалось создать тетрадь",
                     "Автоматическая подготовка не завершилась. Откройте урок для повторного запуска.", eventId, false);
         }
+    }
+
+    /** Only genuine renderer layout violations may trigger an AI rewrite.
+     * Never weaken mathematical correctness or bypass PDF layout verification.
+     */
+    static boolean isRepairableLayoutFailure(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && (message.contains("Layout QA failed")
+                    || message.contains("A4 page packing exhausted")
+                    || message.contains("diagram and its next task exceed one A4 page")
+                    || message.contains("Generated PDF failed the mandatory layout check"))) return true;
+        }
+        return false;
     }
 
     private static boolean interrupted(Throwable error) {
