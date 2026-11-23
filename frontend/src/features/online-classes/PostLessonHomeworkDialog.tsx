@@ -10,6 +10,10 @@ type Props = { classId: string; title: string; language: string; onDone: () => v
 export function PostLessonHomeworkDialog({ classId, title, language, onDone }: Props) {
   const de = language === 'DE';
   const [days, setDays] = useState(7);
+  const [recipients, setRecipients] = useState<Array<{id: string; name: string}>>([]);
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(true);
+  const [recipientsError, setRecipientsError] = useState(false);
   const [instructions, setInstructions] = useState('');
   const [pending, setPending] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -28,6 +32,23 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
       stream.current?.getTracks().forEach(track => track.stop());
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setRecipientsLoading(true);
+    setRecipientsError(false);
+    void onlineClassesApi.postLessonHomeworkRecipients(classId).then(rows => {
+      if (!active) return;
+      setRecipients(rows);
+      setSelectedRecipients(rows.map(row => row.id));
+      setRecipientsLoading(false);
+    }).catch(() => {
+      if (!active) return;
+      setRecipientsError(true);
+      setRecipientsLoading(false);
+    });
+    return () => { active = false; };
+  }, [classId]);
 
   const toggleVoice = async () => {
     setError(null);
@@ -83,12 +104,12 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
   };
 
   const submit = async () => {
-    if (pending || recording || transcribing) return;
+    if (pending || recording || transcribing || recipientsLoading || recipientsError || selectedRecipients.length === 0) return;
     setPending(true); setError(null);
     try {
       const result = failedJob
         ? await onlineClassesApi.retryPostLessonHomework(classId)
-        : await onlineClassesApi.postLessonHomework(classId, days, instructions);
+        : await onlineClassesApi.postLessonHomework(classId, days, instructions, selectedRecipients);
       if (result.state === 'FAILED') {
         setFailedJob(result);
         setError(postLessonHomeworkFailureMessage(result.failureCode, de));
@@ -141,6 +162,34 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
           </p>
         </div>
         <div className="post-homework-main">
+          <h3>{de ? 'Wer bekommt Hausaufgaben?' : 'Кому задать домашку?'}</h3>
+          <p className="post-homework-hint">{de ? 'Alle sind vorausgewählt. Entfernen Sie den Haken, um jemanden auszunehmen.' :
+            'По умолчанию выбраны все участники. Снимите галочку с тех, кому не нужно задавать.'}</p>
+          {recipientsLoading && <p role="status">Загружаем участников…</p>}
+          {recipientsError && <p role="alert" className="post-homework-error">
+            {de ? 'Teilnehmer konnten nicht geladen werden. Bitte das Fenster erneut öffnen.' :
+              'Не удалось проверить участников. Закройте и откройте окно заново.'}
+          </p>}
+          {!recipientsLoading && !recipientsError && recipients.length === 0 && <p role="alert">
+            {de ? 'Keine Teilnehmer in dieser Stunde.' : 'В этом уроке нет участников.'}
+          </p>}
+          {!recipientsLoading && !recipientsError && recipients.map(student => (
+            <label key={student.id} className="post-homework-hint"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
+              <input type="checkbox" checked={selectedRecipients.includes(student.id)}
+                disabled={pending || Boolean(failedJob)} onChange={event => {
+                  setSelectedRecipients(previous => event.target.checked
+                    ? [...previous, student.id] : previous.filter(id => id !== student.id));
+                }} />
+              {student.name}
+            </label>
+          ))}
+          {!recipientsLoading && !recipientsError && recipients.length > 0 && selectedRecipients.length === 0 &&
+            <p role="alert" className="post-homework-error">
+              {de ? 'Bitte mindestens einen Schüler auswählen.' : 'Выберите хотя бы одного ученика.'}
+            </p>}
+        </div>
+        <div className="post-homework-main">
           <h3>{de ? 'Zusätzliche Anweisungen' : 'Дополнительные указания преподавателя'}</h3>
           <textarea className="post-homework-textarea" value={instructions}
             maxLength={3000} onChange={event => setInstructions(event.target.value)}
@@ -170,7 +219,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
           <button type="button" className="post-homework-skip" onClick={onDone} disabled={pending || transcribing}>
             {failedJob ? (de ? 'Schließen' : 'Закрыть') : (de ? 'Überspringen' : 'Пропустить')}
           </button>
-          <button type="button" className="post-homework-submit" disabled={pending || transcribing || recording}
+          <button type="button" className="post-homework-submit" disabled={pending || transcribing || recording || recipientsLoading || recipientsError || selectedRecipients.length === 0}
             onClick={() => void submit()}>
             {pending ? (de ? 'Wird gestartet…' : 'Запускаем…') :
               failedJob ? (de ? 'Erstellung erneut versuchen' : 'Повторить создание') :

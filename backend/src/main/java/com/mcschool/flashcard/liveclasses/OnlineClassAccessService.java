@@ -3,6 +3,7 @@ package com.mcschool.flashcard.liveclasses;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.groups.StudentGroupMemberRepository;
+import com.mcschool.flashcard.lessons.LessonParticipantsService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -32,6 +33,9 @@ public class OnlineClassAccessService {
     private final StudentGroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
     private final OnlineClassParticipantRepository participantRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private LessonParticipantsService lessonParticipants;
 
     public OnlineClassAccessService(OnlineClassRepository classRepository,
                                     StudentGroupMemberRepository groupMemberRepository,
@@ -139,6 +143,13 @@ public class OnlineClassAccessService {
         }
         if (caller.role() != Role.STUDENT) {
             return false;
+        }
+        // Every scheduled occurrence has its own authoritative roster.
+        // This also permits a guest on an individual lesson, without joining a group.
+        if (lessonParticipants != null && lessonParticipants.hasLesson(
+                onlineClass.getTeacher().getId(), onlineClass.getEventId())) {
+            return lessonParticipants.includes(onlineClass.getTeacher().getId(),
+                    onlineClass.getEventId(), caller.id());
         }
         if (onlineClass.isGroupClass()) {
             return groupMemberRepository.existsByGroupIdAndStudentId(

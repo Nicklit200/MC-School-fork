@@ -6,6 +6,7 @@ import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.groups.StudentGroup;
 import com.mcschool.flashcard.groups.StudentGroupRepository;
 import com.mcschool.flashcard.lessons.GoogleCalendarLessonService;
+import com.mcschool.flashcard.lessons.LessonParticipantsService;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassConnectionResponse;
 import com.mcschool.flashcard.liveclasses.dto.OnlineClassResponse;
@@ -51,6 +52,8 @@ public class OnlineClassService {
     private final OnlineClassProperties properties;
     private final OnlineClassMetrics metrics;
     private final Clock clock;
+    @org.springframework.beans.factory.annotation.Autowired
+    private LessonParticipantsService lessonParticipants;
     private final NotebookCameraService notebookCameras;
     private final TeacherPresenceService teacherPresence;
 
@@ -309,12 +312,23 @@ public class OnlineClassService {
                 OnlineClassStatus.LOBBY_OPEN, OnlineClassStatus.LIVE);
         Instant from = LessonEntryPolicy.dayStart(now());
 
-        List<OnlineClass> classes = caller.role() == Role.TEACHER
-                ? classRepository.findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(caller.id(), active)
-                : classRepository.findVisibleToStudent(caller.id(), from,
-                        List.of(OnlineClassStatus.LOBBY_OPEN, OnlineClassStatus.LIVE),
-                        List.of(OnlineClassStatus.SCHEDULED, OnlineClassStatus.LOBBY_OPEN, OnlineClassStatus.LIVE,
-                                OnlineClassStatus.ENDED, OnlineClassStatus.CANCELLED));
+        List<OnlineClass> classes;
+        if (caller.role() == Role.TEACHER) {
+            classes = classRepository.findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(caller.id(), active);
+        } else if (caller.role() == Role.STUDENT) {
+            User student = accessService.requireActiveUser(caller.id());
+            if (student.getTeacher() == null) return List.of();
+            UUID teacherId = student.getTeacher().getId();
+            classes = classRepository.findAllByTeacherIdAndStatusInOrderByScheduledStartAtAsc(teacherId,
+                    List.of(OnlineClassStatus.SCHEDULED, OnlineClassStatus.LOBBY_OPEN,
+                            OnlineClassStatus.LIVE, OnlineClassStatus.ENDED, OnlineClassStatus.CANCELLED)).stream()
+                    .filter(room -> !room.getScheduledStartAt().isBefore(from)
+                            || room.isConnectable())
+                    .filter(room -> accessService.canParticipate(caller, room))
+                    .toList();
+        } else {
+            return List.of();
+        }
 
         return classes.stream()
                 .map(item -> toResponse(item, caller)).toList();

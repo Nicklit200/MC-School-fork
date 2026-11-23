@@ -37,6 +37,8 @@ public class PersonalLessonWorkbookService {
     private final StudentGroupMemberRepository members;
     private final LessonPreparationService preparations;
     private PersonalLessonAnswersRepository answersRepository;
+    @Autowired
+    private LessonParticipantsService lessonParticipants;
 
     public PersonalLessonWorkbookService(PersonalLessonWorkbookRepository repository,
             GoogleCalendarLessonService lessons, UserRepository users,
@@ -171,6 +173,9 @@ public class PersonalLessonWorkbookService {
     @Transactional(readOnly = true, noRollbackFor = ResourceNotFoundException.class)
     public List<User> studentsForClass(OnlineClass lesson) {
         UUID teacherId = lesson.getTeacher().getId();
+        if (lessonParticipants != null && lessonParticipants.hasLesson(teacherId, lesson.getEventId())) {
+            return lessonParticipants.students(teacherId, lesson.getEventId());
+        }
         return lesson.isGroupClass()
                 ? groupStudents(teacherId, lesson.getGroup().getId())
                 : singleStudent(teacherId, lesson.getStudent() == null ? null : lesson.getStudent().getId());
@@ -180,6 +185,9 @@ public class PersonalLessonWorkbookService {
         if (eventId == null || eventId.isBlank() || eventId.length() > 255) throw notFound();
         GroupLessonResponse lesson = lessons.listGroupLessons(teacher).stream()
                 .filter(item -> item.eventId().equals(eventId)).findFirst().orElseThrow(this::notFound);
+        if (lessonParticipants != null && lessonParticipants.hasLesson(teacher.id(), eventId)) {
+            return lessonParticipants.students(teacher.id(), eventId);
+        }
         if (lesson.groupId() != null) return groupStudents(teacher.id(), lesson.groupId());
         if (lesson.studentId() != null) return singleStudent(teacher.id(), lesson.studentId());
         throw notFound();

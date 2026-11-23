@@ -57,6 +57,8 @@ public class PostLessonHomeworkJobService {
     private final PostLessonHomeworkContentService generator;
     private final PostLessonHomeworkPushService jobPush;
     private final PostLessonHomeworkPilotAccess pilot;
+    @org.springframework.beans.factory.annotation.Autowired
+    private LessonParticipantsService lessonParticipants;
     private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
         Thread t=new Thread(r,"mindcrafti-post-lesson-homework");t.setDaemon(true);return t;
     });
@@ -81,7 +83,9 @@ public class PostLessonHomeworkJobService {
         this.jobPush=jobPush;this.pilot=pilot;
     }
 
-    public record Request(int days,String teacherInstructions) {}
+    public record Request(int days,String teacherInstructions,List<UUID> recipientStudentIds) {
+        public Request(int days,String teacherInstructions){this(days,teacherInstructions,null);}
+    }
     record Job(UUID id,UUID classId,UUID teacherId,String eventId,int days,LocalDate startDate,
             String instructions,String roster,String selection,String state,int generated,int expected,
             String failureCode,String stage,Integer dayNumber) {}
@@ -98,14 +102,16 @@ public class PostLessonHomeworkJobService {
             OnlineClass lesson=access.requireHost(teacher,classId);
             if(lesson.getStatus()!=OnlineClassStatus.ENDED)
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Finish the online lesson first");
-            List<Map<String,Object>> roster=snapshotRoster(teacher,lesson);
-            if(roster.isEmpty())throw new ResponseStatusException(HttpStatus.CONFLICT,"No active pupils in this lesson");
+            List<Map<String,Object>> allStudents=snapshotRoster(teacher,lesson);
+            if(allStudents.isEmpty())throw new ResponseStatusException(HttpStatus.CONFLICT,"No active pupils in this lesson");
+            List<Map<String,Object>> roster=selectRecipients(allStudents,request.recipientStudentIds());
             LocalDate first=LocalDate.now(ZONE).plusDays(1);
             List<Job> existing=db.query("SELECT * FROM post_lesson_homework_jobs WHERE class_id=? FOR UPDATE",
                     this::row,classId);
             if(!existing.isEmpty()){
                 Job job=existing.get(0);
-                if(job.days()!=request.days()||!job.instructions().equals(notes))
+                if(job.days()!=request.days()||!job.instructions().equals(notes)
+                        || !job.roster().equals(json.writeValueAsString(roster)))
                     throw new ResponseStatusException(HttpStatus.CONFLICT,"Homework already requested for this lesson; review its status");
                 return response(job);
             }
@@ -142,9 +148,30 @@ public class PostLessonHomeworkJobService {
         });
     }
 
+    /** Display authoritative students before submission; the browser cannot supply an arbitrary recipient. */
+    public List<Map<String,Object>> recipients(AuthenticatedUser teacher,UUID classId){
+        pilot.require(teacher);
+        OnlineClass lesson=access.requireHost(teacher,classId);
+        return snapshotRoster(teacher,lesson);
+    }
+
+    private static List<Map<String,Object>> selectRecipients(List<Map<String,Object>> available,List<UUID> selected){
+        if(selected==null)return available;
+        if(selected.isEmpty()||selected.size()!=new HashSet<>(selected).size())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Select at least one unique recipient");
+        Set<String> ids=selected.stream().map(UUID::toString).collect(java.util.stream.Collectors.toSet());
+        List<Map<String,Object>> result=available.stream()
+                .filter(item->ids.contains(String.valueOf(item.get("id")))).toList();
+        if(result.size()!=ids.size())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Recipients must be current students of this lesson");
+        return result;
+    }
+
     private List<Map<String,Object>> snapshotRoster(AuthenticatedUser teacher,OnlineClass lesson){
         List<User> students;
-        if(lesson.getGroup()!=null){
+        if(lessonParticipants!=null && lessonParticipants.hasLesson(teacher.id(),lesson.getEventId())){
+            students=lessonParticipants.students(teacher.id(),lesson.getEventId());
+        } else if(lesson.getGroup()!=null){
             students=members.findAllByGroupIdOrderByStudentFullNameAsc(lesson.getGroup().getId()).stream()
                     .map(m->m.getStudent()).toList();
         } else if(lesson.getStudent()!=null){
@@ -471,7 +498,10 @@ public class PostLessonHomeworkJobService {
                 db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))","post-homework:"+id+":"+date);
                 if(!users.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(id,teacher.id(),Role.STUDENT,UserStatus.ACTIVE))
                     throw new IllegalStateException("HOMEWORK_STUDENT_CHANGED");
-                if(source.getGroup()!=null && !members.existsByGroupIdAndStudentId(source.getGroup().getId(),id))
+                if(lessonParticipants != null && lessonParticipants.hasLesson(teacher.id(),job.eventId())) {
+                    if(!lessonParticipants.includes(teacher.id(),job.eventId(),id))
+                        throw new IllegalStateException("HOMEWORK_MEMBERSHIP_CHANGED");
+                } else if(source.getGroup()!=null && !members.existsByGroupIdAndStudentId(source.getGroup().getId(),id))
                     throw new IllegalStateException("HOMEWORK_MEMBERSHIP_CHANGED");
                 // An existing worksheet on this date is not a collision.
                 // HomeworkPdfService.createWorksheetHomework creates a fresh UUID,

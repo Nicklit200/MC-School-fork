@@ -14,7 +14,7 @@ const currentUser = vi.hoisted(() => ({ id: 'regular-teacher' }));
 vi.mock('../../api/client', async importOriginal => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return { ...actual, api: { ...actual.api,
-    lessons: { ...actual.api.lessons, groupLessons: vi.fn() },
+    lessons: { ...actual.api.lessons, groupLessons: vi.fn(), participants: vi.fn(), savedGroupLessons: vi.fn() },
     students: { ...actual.api.students, list: vi.fn(), get: vi.fn() },
     homeworks: { ...actual.api.homeworks, listForStudent: vi.fn() },
   } };
@@ -42,6 +42,8 @@ beforeEach(() => {
     static revokeObjectURL = vi.fn();
   });
   currentUser.id = 'regular-teacher';
+  vi.mocked(api.lessons.participants).mockResolvedValue([]);
+  vi.mocked(api.lessons.savedGroupLessons).mockResolvedValue([]);
   vi.mocked(api.lessons.groupLessons).mockResolvedValue([{
     eventId: 'local-trial', bindingKey: 'local-trial', title: 'Пробный урок', groupId: null, groupName: null, studentId: null, studentName: null, participantStudentIds: [],
     startsAt: '2026-10-23T00:00:00Z', endsAt: '2026-10-23T01:00:00Z', meetUrl: null, calendarUrl: null,

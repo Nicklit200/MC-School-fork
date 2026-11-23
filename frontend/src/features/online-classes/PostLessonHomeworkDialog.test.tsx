@@ -4,20 +4,21 @@ import { PostLessonHomeworkDialog } from './PostLessonHomeworkDialog';
 import { onlineClassesApi } from '../../api/onlineClasses';
 
 vi.mock('../../api/onlineClasses', () => ({
-  onlineClassesApi: { postLessonHomework: vi.fn(), retryPostLessonHomework: vi.fn(), transcribePostLessonHomework: vi.fn() },
+  onlineClassesApi: { postLessonHomework: vi.fn(), postLessonHomeworkRecipients: vi.fn(), retryPostLessonHomework: vi.fn(), transcribePostLessonHomework: vi.fn() },
 }));
 
 describe('PostLessonHomeworkDialog', () => {
   const onDone = vi.fn();
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(onlineClassesApi.postLessonHomeworkRecipients).mockResolvedValue([{id: 'sofia', name:'София'}, {id:'semen', name:'Семён'}]);
     vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({
       state: 'QUEUED', jobId: 'job', classId: 'class',
     });
   });
   afterEach(cleanup);
 
-  it('highlights every day through the selected number, without extra cards or student selector', () => {
+  it('highlights every day through the selected number, with participants selected by default', async () => {
     render(<PostLessonHomeworkDialog classId="class" title="Группа 1" language="RU" onDone={onDone} />);
     const controls = screen.getByRole('group', { name: 'Количество дней' });
     const buttons = Array.from(controls.querySelectorAll('button'));
@@ -27,7 +28,8 @@ describe('PostLessonHomeworkDialog', () => {
     expect(buttons.map(button => button.classList.contains('is-selected')))
       .toEqual([true, true, true, false, false, false, false]);
     expect(screen.queryByText('День 1')).toBeNull();
-    expect(screen.queryByText('Всем')).toBeNull();
+    expect(await screen.findByLabelText('София')).toBeChecked();
+    expect(screen.getByLabelText('Семён')).toBeChecked();
   });
 
   it('sends teacher notes and days, then closes only after the server acknowledges the job', async () => {
@@ -36,9 +38,12 @@ describe('PostLessonHomeworkDialog', () => {
     fireEvent.change(screen.getByPlaceholderText(/Мелиссы сегодня не было/), {
       target: { value: 'Мелиссы сегодня не было, ей не задавай.' },
     });
+    await screen.findByLabelText('София');
+    fireEvent.click(screen.getByLabelText('София'));
+    await screen.findByLabelText('София');
     fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
     await waitFor(() => expect(onlineClassesApi.postLessonHomework).toHaveBeenCalledWith(
-      'class', 5, 'Мелиссы сегодня не было, ей не задавай.',
+      'class', 5, 'Мелиссы сегодня не было, ей не задавай.', ['semen'],
     ));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
@@ -46,6 +51,7 @@ describe('PostLessonHomeworkDialog', () => {
   it('keeps the modal open when enqueue fails', async () => {
     vi.mocked(onlineClassesApi.postLessonHomework).mockRejectedValue(new Error('offline'));
     render(<PostLessonHomeworkDialog classId="class" title="Группа 1" language="RU" onDone={onDone} />);
+    await screen.findByLabelText('София');
     fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Не удалось запустить домашку.'));
     expect(onDone).not.toHaveBeenCalled();
@@ -63,6 +69,7 @@ describe('PostLessonHomeworkDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '5' }));
     const notes = screen.getByRole('textbox');
     fireEvent.change(notes, { target: { value: 'Повторить нули функций.' } });
+    await screen.findByLabelText('София');
     fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('не вернул пригодный ответ');
@@ -83,6 +90,7 @@ describe('PostLessonHomeworkDialog', () => {
     vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({ state: 'FAILED', failureCode: 'GENERATION_FAILED' });
     vi.mocked(onlineClassesApi.retryPostLessonHomework).mockResolvedValue({ state: 'FAILED', failureCode: 'RENDERER_UNAVAILABLE' });
     render(<PostLessonHomeworkDialog classId="class" title="Sonja" language="DE" onDone={onDone} />);
+    await screen.findByLabelText('София');
     fireEvent.click(screen.getByRole('button', { name: 'Hausaufgaben im Hintergrund zuweisen' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Erstellung erneut versuchen' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('PDF-Erstellung ist nicht betriebsbereit'));
@@ -93,6 +101,7 @@ describe('PostLessonHomeworkDialog', () => {
   it('does not close when the server returns no job', async () => {
     vi.mocked(onlineClassesApi.postLessonHomework).mockResolvedValue({ state: 'NONE' });
     render(<PostLessonHomeworkDialog classId="class" title="Соня" language="RU" onDone={onDone} />);
+    await screen.findByLabelText('София');
     fireEvent.click(screen.getByRole('button', { name: 'Задать домашнее задание' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Сервер не подтвердил запуск');
     expect(onDone).not.toHaveBeenCalled();
