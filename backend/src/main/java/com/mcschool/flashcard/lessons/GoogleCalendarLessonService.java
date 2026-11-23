@@ -86,7 +86,7 @@ public class GoogleCalendarLessonService {
             // Calendar must keep working even if Meet event delivery is not configured yet.
         }
 
-        List<StudentGroup> groups = groupRepository.findAllByTeacherIdOrderByNameAsc(teacher.id());
+        List<StudentGroup> groups = groupRepository.findAllByTeacherIdAndArchivedAtIsNullOrderByNameAsc(teacher.id());
         List<User> students = userRepository.findAllByTeacherIdAndArchivedFalseOrderByFullNameAsc(teacher.id()).stream()
                 .filter(user -> user.getRole() == Role.STUDENT)
                 .toList();
@@ -278,7 +278,7 @@ public class GoogleCalendarLessonService {
         }
         User teacherEntity = userRepository.findById(teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher account no longer exists"));
-        StudentGroup group = groupRepository.findByIdAndTeacherId(groupId, teacher.id())
+        StudentGroup group = groupRepository.findByIdAndTeacherIdAndArchivedAtIsNull(groupId, teacher.id())
                 .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
 
         GoogleCalendarLessonBinding binding = bindingRepository.findByTeacherIdAndEventKey(teacher.id(), bindingKey)
