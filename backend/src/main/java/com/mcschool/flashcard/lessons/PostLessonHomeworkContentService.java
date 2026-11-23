@@ -24,26 +24,37 @@ public class PostLessonHomeworkContentService {
     private final ObjectMapper json;
     private final OwnerWorkbookPdfRenderService renderer;
     private final HttpClient client;
+    private final WorkbookContentService workbookGenerator;
 
     @Autowired
     public PostLessonHomeworkContentService(
             @Value("${OPENAI_API_KEY:}") String apiKey,
             @Value("${HOMEWORK_OPENAI_MODEL:${WORKBOOK_OPENAI_MODEL:${OPENAI_MODEL:}}}") String model,
-            ObjectMapper json,OwnerWorkbookPdfRenderService renderer) {
+            ObjectMapper json,OwnerWorkbookPdfRenderService renderer,
+            WorkbookContentService workbookGenerator) {
         this(apiKey,model,json,renderer,HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15)).build());
+                .connectTimeout(Duration.ofSeconds(15)).build(),workbookGenerator);
     }
 
-    /** Package-private for deterministic tests with a fake HTTP provider. */
+    /** Package-private legacy fake provider constructor for regression tests. */
     PostLessonHomeworkContentService(String apiKey,String model,ObjectMapper json,
             OwnerWorkbookPdfRenderService renderer,HttpClient client) {
+        this(apiKey,model,json,renderer,client,null);
+    }
+
+    /** Production uses workbookGenerator; the old content-only path is isolated to test fixtures. */
+    PostLessonHomeworkContentService(String apiKey,String model,ObjectMapper json,
+            OwnerWorkbookPdfRenderService renderer,HttpClient client,
+            WorkbookContentService workbookGenerator) {
         this.apiKey=apiKey==null?"":apiKey.trim();
         this.model=model==null?"":model.trim();
         this.json=Objects.requireNonNull(json);
         this.renderer=Objects.requireNonNull(renderer);
         this.client=Objects.requireNonNull(client);
+        this.workbookGenerator=workbookGenerator;
     }
-    public boolean configured(){return !apiKey.isEmpty()&&!model.isEmpty();}
+    public boolean configured(){return workbookGenerator!=null
+            ?workbookGenerator.isConfigured():!apiKey.isEmpty()&&!model.isEmpty();}
 
     private String ask(String instructions,Object evidence,String formatName,Map<String,Object> schema)throws Exception{
         if(!configured())throw new IllegalStateException("HOMEWORK_AI_NOT_CONFIGURED");
@@ -173,6 +184,10 @@ public class PostLessonHomeworkContentService {
     GeneratedHomework makeWithReview(
             Map<String,Object> evidence,int day,int totalDays,String studentName,
             Consumer<PostLessonHomeworkStage> progress)throws Exception {
+        if(workbookGenerator!=null)
+            return makeWithCanonicalWorkbookGenerator(evidence,day,totalDays,studentName,progress);
+        // Legacy content schema is kept only for deterministic offline regression
+        // tests. All Spring-managed production requests use WorkbookContentService.
         // The model authors CONTENT ONLY; the server controls all MCH3 structures.
         // This is the same deterministic authoring contract used when a teacher
         // prepares a workbook through the school connector.
@@ -396,6 +411,80 @@ public class PostLessonHomeworkContentService {
                         +"Use simpler, shorter mathematical tasks while preserving source topics.";
                 if(attempt==MAX_DRAFT_ATTEMPTS)
                     throw new IllegalStateException("HOMEWORK_DRAFT_MATH_QA_FAILED",rejected);
+            }
+        }
+        throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+    }
+
+    /**
+     * The production homework path is the normal lesson-workbook generator.
+     * The only difference is the strict homework mode, source-evidence review
+     * and student/day-specific publication performed by the caller.
+     */
+    private GeneratedHomework makeWithCanonicalWorkbookGenerator(
+            Map<String,Object> evidence,int day,int totalDays,String studentName,
+            Consumer<PostLessonHomeworkStage> progress) throws Exception {
+        boolean graphics=graphDominatesLesson(evidence);
+        boolean requireGraph=graphics && (day==1 || day%2==1);
+        Map<String,Object> lessonContext=new LinkedHashMap<>(evidence);
+        lessonContext.put("graphLessonEvidence",graphics);
+        lessonContext.put("graphPracticeRequired",requireGraph);
+        lessonContext.put("dayNumber",day);
+        lessonContext.put("totalDays",totalDays);
+        String instruction="Create exactly one daily Mindcrafti homework worksheet from the last "
+                +"actually completed lesson. Use the CURRENT homeworkPrompt in context and "
+                +"the original workbook, transcript and completed board PDF. Prefer real "
+                +"worked tasks and their difficulty, not early problems skipped as too easy. "
+                +"Respect the same mathematical and vector drawing capabilities as our "
+                +"lesson workbooks. Keep one A4 page, up to two tasks, <=10 minutes, "
+                +"private answers and verified math.";
+        if(requireGraph)
+            instruction+=" A real programmatically rendered graph from the SAME school "
+                    +"workbook engine is MANDATORY today; numerical substitution without "
+                    +"a graph is not acceptable.";
+        for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
+            progress.accept(PostLessonHomeworkStage.AI_CONTENT);
+            WorkbookContentService.Content authored=workbookGenerator.generateHomework(
+                    lessonContext,instruction,day,totalDays,studentName);
+            progress.accept(PostLessonHomeworkStage.CONTENT_VALIDATION);
+            PostLessonHomeworkCanonicalAdapter.Reviewed checked;
+            try{
+                checked=PostLessonHomeworkCanonicalAdapter.inspect(json,authored,evidence);
+                if(requireGraph && !checked.hasGraphTask())
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_PRACTICE_REQUIRED");
+                PostLessonHomeworkSeriesDiversity.validate(checked.diversity(),
+                        evidence.get("previousGeneratedHomework"),day);
+            }catch(IllegalArgumentException rejected){
+                String reason=Objects.toString(rejected.getMessage(),"");
+                boolean repeated=Set.of(PostLessonHomeworkSeriesDiversity.REPEATED_EXPRESSION,
+                        PostLessonHomeworkSeriesDiversity.REPEATED_PATTERN).contains(reason);
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException(repeated?"HOMEWORK_DRAFT_REPETITION_FAILED"
+                            :"HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
+                lessonContext.put("repairReason",repeated
+                        ?PostLessonHomeworkSeriesDiversity.repairAdvice(reason)
+                        :"Previous attempt did not match the actual completed lesson or its required "
+                        +"native graphic task. Generate a fresh lessonJson, not a text substitute.");
+                continue;
+            }
+            progress.accept(PostLessonHomeworkStage.PDF_RENDER);
+            try{
+                OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(authored.lessonJson());
+                if(pdf.studentPages()!=1 || pdf.teacherPages()<1
+                        ||pdf.studentPdf().length<100 || pdf.teacherPdf().length<100)
+                    throw new IllegalArgumentException("HOMEWORK_PDF_INVALID");
+                return new GeneratedHomework(pdf,checked.review());
+            }catch(IllegalArgumentException failedRender){
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_RENDER_FAILED",failedRender);
+                lessonContext.put("repairReason","Keep the exact lesson skills and graph tasks, "
+                        +"but shorten the content to fit one complete A4 page with six writing lines.");
+            }catch(IllegalStateException failedRender){
+                if(!"Workbook studio QA did not pass".equals(failedRender.getMessage()))throw failedRender;
+                if(attempt==MAX_DRAFT_ATTEMPTS)
+                    throw new IllegalStateException("HOMEWORK_DRAFT_MATH_QA_FAILED",failedRender);
+                lessonContext.put("repairReason","The graphical or algebraic QA did not pass. "
+                        +"Use simpler but lesson-matched numbers with the same skill and native graph.");
             }
         }
         throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
