@@ -56,7 +56,11 @@ function TranscriptContextNote({ context, de }: { context: KolinTranscriptContex
   </footer>;
 }
 
-export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolinChat>; context: KolinContext }) {
+export function KolinPanel({ chat, context, currentStudentName }: {
+  chat: ReturnType<typeof useKolinChat>;
+  context: KolinContext;
+  currentStudentName?: string;
+}) {
   const { language } = useI18n();
   const de = language === 'DE';
   const log = useRef<HTMLOListElement>(null);
@@ -71,7 +75,11 @@ export function KolinPanel({ chat, context }: { chat: ReturnType<typeof useKolin
   return <aside id="kolin-panel" className="answers-panel kolin-panel" aria-label="Kolyn">
     <header className="answers-panel__heading">
       <div><strong className="kolin-panel__title">Kolyn</strong>
-        <p className="kolin-panel__subtitle">{de ? 'KI-Assistent für Lehrkräfte' : 'AI-помощник преподавателя'}</p></div>
+        <p className="kolin-panel__subtitle">{de ? 'KI-Assistent für Lehrkräfte' : 'AI-помощник преподавателя'}</p>
+        <p className="kolin-panel__view-context" aria-live="polite">{de ? 'Ansicht: ' : 'Сейчас открыто: '}
+          {context.targetType === 'student' ? currentStudentName || (de ? 'Schüler' : 'Ученик') : de ? 'Gemeinsame Tafel' : 'Общая доска'}
+          {context.currentWorkbookPage ? ` · ${de ? 'Seite' : 'стр.'} ${context.currentWorkbookPage}` : ''}
+        </p></div>
       <button type="button" className="answers-panel__close" onClick={chat.close}
         aria-label={de ? 'Kolyn schließen' : 'Закрыть Kolyn'}>×</button>
     </header>
