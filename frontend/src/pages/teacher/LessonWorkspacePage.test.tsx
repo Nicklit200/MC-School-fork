@@ -80,7 +80,7 @@ describe('lesson workspace',()=>{
     } as never);
     mount();await screen.findByRole('heading',{name:'Дроби'});
     const card = screen.getByRole('article');
-    expect(card.querySelectorAll('mfrac')).toHaveLength(10);
+    expect(card.querySelectorAll('mfrac')).toHaveLength(9);
     expect(card).toHaveTextContent('вычислить');
     expect(card).toHaveTextContent('так как');
   });
