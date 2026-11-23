@@ -139,7 +139,7 @@ export function LessonWorkspacePage() {
       if (epoch !== generation.current) return;
       const enrolled = new Set(roster.map(student => student.studentId));
       setAvailableStudents(students.filter(student =>
-        student.status === 'ACTIVE' && !student.archived && !enrolled.has(student.id))
+        student.status === 'ACTIVE' && !enrolled.has(student.id))
         .sort((a, b) => a.fullName.localeCompare(b.fullName)));
     }).catch(e => {
       if (epoch === generation.current) setStudentError(toErrorMessage(e, t));
