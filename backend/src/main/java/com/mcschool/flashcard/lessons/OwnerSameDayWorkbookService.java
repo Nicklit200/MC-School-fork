@@ -8,6 +8,7 @@ import com.mcschool.flashcard.notifications.WebPushService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import com.mcschool.flashcard.users.UserStatus;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -323,11 +324,41 @@ public class OwnerSameDayWorkbookService {
     }
 
     private void push(User owner, String title, String body, String eventId, boolean openWorkbook) {
-        if (!webPush.isConfigured()) return;
-        String target = notificationPath(eventId, openWorkbook);
-        for (PushSubscription subscription : subscriptions.findAllByUserId(owner.getId())) {
-            try { webPush.send(subscription, title, body, target, "owner-workbook-" + eventId); }
-            catch (RuntimeException ignored) { /* One broken phone never blocks publication. */ }
+        if (!webPush.isConfigured()) {
+            LOG.warn("Owner workbook alert not deliverable: event={} reason=WEB_PUSH_NOT_CONFIGURED", eventId);
+            return;
+        }
+        // The owner often uses the ADMIN account, not the teacher account
+        // used to produce the workbook. Send to both roles without exposing
+        // teacher-only endpoints to admins.
+        List<User> recipients = new java.util.ArrayList<>();
+        recipients.add(owner);
+        for (User admin : users.findAdminAccountsByRole(Role.ADMIN)) {
+            if (admin.getStatus() == UserStatus.ACTIVE && !admin.isArchived()
+                    && !admin.getId().equals(owner.getId())) recipients.add(admin);
+        }
+        for (User recipient : recipients) {
+            String target = recipient.getRole() == Role.ADMIN && !openWorkbook
+                    ? "/admin/teachers/" + OWNER + "/lessons/" + eventId
+                    : notificationPath(eventId, openWorkbook);
+            List<PushSubscription> phones = subscriptions.findAllByUserId(recipient.getId());
+            if (phones.isEmpty()) {
+                LOG.warn("Owner workbook alert not deliverable: event={} role={} reason=NO_REGISTERED_DEVICE",
+                        eventId, recipient.getRole());
+                continue;
+            }
+            int accepted = 0;
+            for (PushSubscription subscription : phones) {
+                try {
+                    webPush.send(subscription, title, body, target, "owner-workbook-" + eventId);
+                    accepted++;
+                } catch (RuntimeException failed) {
+                    LOG.warn("Owner workbook push rejected: event={} role={} errorType={}",
+                            eventId, recipient.getRole(), failed.getClass().getSimpleName());
+                }
+            }
+            LOG.info("Owner workbook alert: event={} role={} devices={} accepted={}",
+                    eventId, recipient.getRole(), phones.size(), accepted);
         }
     }
 
