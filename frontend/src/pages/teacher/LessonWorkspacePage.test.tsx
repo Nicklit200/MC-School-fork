@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { LessonWorkspacePage } from './LessonWorkspacePage';
@@ -7,7 +7,7 @@ import { api, request } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPreparation';
 // The workspace is mounted for a signed-in teacher, outside the private pilot.
 vi.mock('../../auth/AuthContext',()=>({useAuth:()=>({user:{id:'teacher-1',role:'TEACHER'}})}));
-vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn()}},request:vi.fn()}));
+vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn(),participants:vi.fn(),addParticipant:vi.fn(),savedGroupLessons:vi.fn()},students:{list:vi.fn()}},request:vi.fn()}));
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn(),update:vi.fn(),assignHomeworkSeries:vi.fn()},completedLessonApi:{list:vi.fn()}}));
 vi.mock('./PersonalWorkbooksPanel',()=>({PersonalWorkbooksPanel:()=> <div>Мелисса: тетрадь и решения</div>}));
 vi.mock('./GoogleDrivePdfPicker',()=>({GoogleDrivePdfPicker:()=> <button>Google Drive</button>}));
@@ -16,6 +16,10 @@ vi.mock('../../features/online-classes/StartOnlineClassButton',()=>({StartOnline
 beforeEach(()=>{
   cleanup();localStorage.clear();vi.mocked(request).mockResolvedValue([] as never);
   vi.mocked(api.lessons.groupLessons).mockResolvedValue([{eventId:'lesson-1',title:'Дроби',groupName:'Математика',startsAt:'2026-11-05T14:00:00Z',endsAt:'2026-11-05T15:00:00Z'}] as never);
+  vi.mocked(api.lessons.participants).mockResolvedValue([{studentId:'alice',studentName:'Алиса'}]);
+  vi.mocked(api.lessons.addParticipant).mockResolvedValue([]);
+  vi.mocked(api.students.list).mockResolvedValue([{id:'alice',fullName:'Алиса',status:'ACTIVE'},{id:'sofia',fullName:'София',status:'ACTIVE'}] as never);
+  vi.mocked(api.lessons.savedGroupLessons).mockResolvedValue([]);
   vi.mocked(lessonPreparationApi.get).mockResolvedValue({eventId:'lesson-1',homeworkNotes:'Задания 1-3',difficulties:'Знаки',coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'Автоматическая запись'} as never);
   vi.mocked(completedLessonApi.list).mockResolvedValue([]);
   vi.mocked(lessonPreparationApi.update).mockResolvedValue({} as never);
@@ -28,9 +32,18 @@ describe('lesson workspace',()=>{
     mount();await screen.findByRole('heading',{name:'Дроби'});
     expect(screen.queryByText('AI пилот Николая')).not.toBeInTheDocument();
     expect(screen.queryByText('Камера тетради')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading',{name:'Документ пройденного урока'})).toBeInTheDocument();
+    expect(screen.queryByRole('heading',{name:'Документ пройденного урока'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading',{name:'Транскрипция'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading',{name:'Карточки'})).not.toBeInTheDocument();
     expect(screen.queryByText('Просмотреть текст')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'Все документы'}));
+    const menuButton=screen.getByRole('button',{name:'Дополнительные действия урока'});
+    fireEvent.click(menuButton);
+    expect(menuButton).toHaveAttribute('aria-expanded','true');
+    const menu=screen.getByRole('menu');
+    expect(within(menu).getByRole('menuitem',{name:'Добавить ученика'})).toBeDisabled();
+    expect(within(menu).getByRole('menuitem',{name:'Открыть транскрипцию'})).toBeEnabled();
+    fireEvent.click(within(menu).getByRole('menuitem',{name:'Документ пройденного урока'}));
+    expect(menuButton).toHaveAttribute('aria-expanded','false');
     expect(screen.getByRole('dialog')).toHaveTextContent('Документ добавится после урока.');
     fireEvent.click(screen.getByRole('button',{name:'Закрыть'}));
     expect(screen.getByText('Настройки срока и файла')).not.toBeVisible();
@@ -39,6 +52,34 @@ describe('lesson workspace',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Закрыть'}));
     expect(screen.getByText('Настройки срока и файла')).not.toBeVisible();
   });
+  it('opens the cards from the header menu instead of a permanent card',async()=>{
+    mount();await screen.findByRole('heading',{name:'Дроби'});
+    expect(screen.queryByRole('heading',{name:'Карточки'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Дополнительные действия урока'}));
+    fireEvent.click(screen.getByRole('menuitem',{name:'Открыть карточки'}));
+    const dialog=screen.getByRole('dialog',{name:'Карточки'});
+    expect(within(dialog).getByRole('heading',{name:'Карточки'})).toBeInTheDocument();
+    expect(within(dialog).getByRole('button',{name:'Задать карточки'})).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button',{name:'Закрыть'}));
+    expect(dialog).not.toBeVisible();
+  });
+  it('adds a student once to a future lesson without changing group memberships',async()=>{
+    vi.mocked(api.lessons.groupLessons).mockResolvedValue([{eventId:'lesson-1',title:'Дроби',groupName:'Математика',startsAt:'2099-11-27T17:00:00Z',endsAt:'2099-11-27T18:30:00Z'}] as never);
+    mount();await screen.findByRole('heading',{name:'Дроби'});
+    fireEvent.click(screen.getByRole('button',{name:'Дополнительные действия урока'}));
+    fireEvent.click(screen.getByRole('menuitem',{name:'Добавить ученика'}));
+    const dialog=screen.getByRole('dialog',{name:'Добавить ученика в этот урок'});
+    expect(dialog).toHaveTextContent('Постоянная группа и остальные уроки не меняются.');
+    const select=await within(dialog).findByRole('combobox',{name:'Выбрать ученика'});
+    await waitFor(()=>expect(within(select).queryByRole('option',{name:'София'})).toBeInTheDocument());
+    expect(within(select).queryByRole('option',{name:'Алиса'})).not.toBeInTheDocument();
+    fireEvent.change(select,{target:{value:'sofia'}});
+    fireEvent.click(within(dialog).getByRole('button',{name:'Добавить только в этот урок'}));
+    await waitFor(()=>expect(api.lessons.addParticipant).toHaveBeenCalledWith('lesson-1','sofia'));
+    await waitFor(()=>expect(dialog).not.toBeVisible());
+    expect(screen.getByRole('status')).toHaveTextContent('Ученик добавлен только в этот урок.');
+  });
+
   it('switches the displayed homework error with previous and next arrows, wrapping at both ends',async()=>{
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({
       eventId:'lesson-1',

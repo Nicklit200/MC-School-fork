@@ -532,3 +532,121 @@
 .teacher-shell .lesson-workspace .morning-error-katex .katex-html {
   white-space: nowrap;
 }
+
+/* Compact lesson actions beside the main Start Online Lesson button. */
+.teacher-shell .lesson-workspace .workspace-summary { overflow: visible; }
+.teacher-shell .lesson-workspace .workspace-summary > .workspace-summary-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  width: auto;
+  max-width: 55%;
+  margin-left: auto;
+  min-width: 0;
+  text-align: right;
+}
+.teacher-shell .lesson-workspace .workspace-summary-actions .online-class-start {
+  flex: 0 1 auto;
+  max-width: none;
+  margin: 0;
+}
+.teacher-shell .lesson-workspace .workspace-summary-actions .online-class-start > .btn,
+.teacher-shell .lesson-workspace .workspace-summary-actions > .btn { white-space: nowrap; }
+.teacher-shell .lesson-workspace .workspace-more-actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+.teacher-shell .lesson-workspace .workspace-more-toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 40px;
+  border: 1px solid var(--border, #e4e8ec);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text, #273443);
+  font: inherit;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.teacher-shell .lesson-workspace .workspace-more-toggle:hover,
+.teacher-shell .lesson-workspace .workspace-more-toggle[aria-expanded="true"] {
+  background: var(--teacher-selected, #fff3eb);
+  color: var(--teacher-selected-text, #b84606);
+  border-color: var(--teacher-selected-border, #f8c6a6);
+}
+.teacher-shell .lesson-workspace .workspace-more-menu {
+  position: absolute;
+  z-index: 110;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(270px, calc(100vw - 38px));
+  box-sizing: border-box;
+  padding: 6px;
+  background: var(--surface, #fff);
+  color: var(--text, #273443);
+  border: 1px solid var(--border, #e4e8ec);
+  border-radius: 13px;
+  box-shadow: 0 16px 42px rgba(30, 36, 48, .13);
+  text-align: left;
+}
+.teacher-shell .lesson-workspace .workspace-more-menu button {
+  display: block;
+  width: 100%;
+  min-height: 39px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.teacher-shell .lesson-workspace .workspace-more-menu button:hover:not(:disabled),
+.teacher-shell .lesson-workspace .workspace-more-menu button:focus-visible {
+  background: var(--teacher-selected, #fff1e5);
+  color: var(--teacher-selected-text, #ba520e);
+}
+.teacher-shell .lesson-workspace .workspace-more-menu button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.teacher-shell .lesson-workspace .workspace-add-student-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.teacher-shell .lesson-workspace .workspace-add-student-field .input { width: 100%; }
+.teacher-shell .lesson-workspace .workspace-add-student-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+.teacher-shell .lesson-workspace .workspace-homework-dialog:has(.workspace-cards-card) {
+  width: min(760px, calc(100% - 30px));
+}
+.teacher-shell .lesson-workspace .workspace-homework-dialog .workspace-cards-card {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+  background: transparent;
+}
+@media(max-width: 800px) {
+  .teacher-shell .lesson-workspace .workspace-summary { flex-wrap: wrap; }
+  .teacher-shell .lesson-workspace .workspace-summary > .workspace-summary-actions {
+    max-width: 100%;
+    margin-left: auto;
+  }
+}

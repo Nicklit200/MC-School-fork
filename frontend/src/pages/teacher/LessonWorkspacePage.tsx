@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi, type CompletedLessonDocument } from '../../api/lessonPreparation';
-import type { GroupLesson, LessonPreparation } from '../../api/types';
+import type { GroupLesson, LessonPreparation, StudentListItem } from '../../api/types';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
 import { TrialInvitationPanel } from './TrialInvitationPanel';
 import { trialInvitationsApi } from '../../api/trialInvitations';
@@ -34,7 +34,32 @@ export function LessonWorkspacePage() {
   const [loading, setLoading] = useState(true);
   const documentsDialog = useRef<HTMLDialogElement>(null);
   const homeworkDialog = useRef<HTMLDialogElement>(null);
+  const cardsDialog = useRef<HTMLDialogElement>(null);
+  const addStudentDialog = useRef<HTMLDialogElement>(null);
+  const actionsMenu = useRef<HTMLDivElement>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [availableStudents, setAvailableStudents] = useState<StudentListItem[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [studentOptionsLoading, setStudentOptionsLoading] = useState(false);
+  const [studentAdding, setStudentAdding] = useState(false);
+  const [studentError, setStudentError] = useState('');
+  const [workbooksRevision, setWorkbooksRevision] = useState(0);
   const generation = useRef(0);
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const handleOutside = (event: PointerEvent) => {
+      if (!actionsMenu.current?.contains(event.target as Node)) setActionsOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActionsOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [actionsOpen]);
   useEffect(() => {
     if (searchParams.get('reviewHomework') !== '1') return;
     let active = true;
@@ -59,6 +84,7 @@ export function LessonWorkspacePage() {
   useEffect(() => {
     const epoch = ++generation.current;
     setLoading(true); setError(''); setNotice(''); setPrep(null); setLesson(null); setDocuments([]);
+    setActionsOpen(false); setSelectedStudentId(''); setAvailableStudents([]);
     Promise.all([api.lessons.groupLessons(), lessonPreparationApi.get(eventId), completedLessonApi.list(eventId).catch(() => [] as CompletedLessonDocument[])])
       .then(([lessons, preparation, docs]) => { if (epoch === generation.current) { setLesson(lessons.find(item => item.eventId === eventId) ?? null); setPrep(preparation); setDocuments(docs); } })
       .catch(e => { if (epoch === generation.current) setError(toErrorMessage(e, t)); })
@@ -91,6 +117,58 @@ export function LessonWorkspacePage() {
       } catch(e) { tab?.close(); throw e; }
     });
   }
+  function openTranscript() {
+    if (!prep) return;
+    if (prep.transcriptFilename) { open('transcript'); return; }
+    const transcript = prep.sonioxTranscriptText || prep.transcriptText || '';
+    if (!transcript.trim()) return;
+    const url = URL.createObjectURL(new Blob([transcript], { type: 'text/plain;charset=utf-8' }));
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  function showAddStudentDialog() {
+    if (!lesson || Date.parse(lesson.startsAt) <= Date.now()) return;
+    setActionsOpen(false);
+    setStudentError('');
+    setSelectedStudentId('');
+    setAvailableStudents([]);
+    setStudentOptionsLoading(true);
+    addStudentDialog.current?.showModal();
+    const epoch = generation.current;
+    void Promise.all([api.students.list(), api.lessons.participants(eventId)]).then(([students, roster]) => {
+      if (epoch !== generation.current) return;
+      const enrolled = new Set(roster.map(student => student.studentId));
+      setAvailableStudents(students.filter(student =>
+        student.status === 'ACTIVE' && !enrolled.has(student.id))
+        .sort((a, b) => a.fullName.localeCompare(b.fullName)));
+    }).catch(e => {
+      if (epoch === generation.current) setStudentError(toErrorMessage(e, t));
+    }).finally(() => {
+      if (epoch === generation.current) setStudentOptionsLoading(false);
+    });
+  }
+  async function addStudentToThisLesson() {
+    if (!selectedStudentId || !lesson || studentAdding) return;
+    setStudentAdding(true);
+    setStudentError('');
+    const epoch = generation.current;
+    try {
+      await api.lessons.addParticipant(eventId, selectedStudentId);
+      if (epoch !== generation.current) return;
+      setWorkbooksRevision(value => value + 1);
+      setNotice(de ? 'Schüler nur zu dieser Stunde hinzugefügt.' : 'Ученик добавлен только в этот урок.');
+      addStudentDialog.current?.close();
+      void api.lessons.savedGroupLessons().then(lessons => {
+        if (epoch === generation.current) {
+          setLesson(current => lessons.find(item => item.eventId === eventId) ?? current);
+        }
+      }).catch(() => { /* The participant list refreshes in the workbook panel. */ });
+    } catch (e) {
+      if (epoch === generation.current) setStudentError(toErrorMessage(e, t));
+    } finally {
+      if (epoch === generation.current) setStudentAdding(false);
+    }
+  }
   function fileControls(kind: Kind) {
     const filename = kind === 'workbook' ? prep?.workbookFilename : kind === 'answers' ? prep?.answersFilename : prep?.transcriptFilename;
     const isAnswers = kind === 'answers';
@@ -119,7 +197,36 @@ export function LessonWorkspacePage() {
     {error && <div role="alert" className="banner banner--error">{error}</div>}
     {notice && <div role="status" className="banner banner--success">{notice}</div>}
     <section className="workspace-summary panel"><div><span>{de ? 'Teilnehmer' : 'Участники'}</span><strong>{lesson?.groupName || lesson?.studentName || (de ? 'Probestunde' : 'Пробный урок')}</strong></div><div><span>{de ? 'Format' : 'Формат'}</span><strong>{de ? 'Online' : 'Онлайн'} · {lesson ? Math.round((Date.parse(lesson.endsAt) - Date.parse(lesson.startsAt)) / 60000) : 60} {de ? 'Minuten' : 'минут'}</strong></div>
-      {lesson && (import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true' ? <StartOnlineClassButton eventId={lesson.eventId} /> : lesson.meetUrl ? <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">{de ? 'Online-Unterricht starten' : 'Начать онлайн-урок'}</a> : <Link className="btn" to={`/lesson-board/${encodeURIComponent(eventId)}`}>{de ? 'Tafel öffnen' : 'Открыть доску урока'}</Link>)}
+      {lesson && <div className="workspace-summary-actions">
+        {import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true'
+          ? <StartOnlineClassButton eventId={lesson.eventId} />
+          : lesson.meetUrl
+            ? <a className="btn" href={lesson.meetUrl} target="_blank" rel="noreferrer">{de ? 'Online-Unterricht starten' : 'Начать онлайн-урок'}</a>
+            : <Link className="btn" to={`/lesson-board/${encodeURIComponent(eventId)}`}>{de ? 'Tafel öffnen' : 'Открыть доску урока'}</Link>}
+        <div className="workspace-more-actions" ref={actionsMenu}>
+          <button type="button" className="workspace-more-toggle"
+            aria-label={de ? 'Weitere Unterrichtsaktionen' : 'Дополнительные действия урока'}
+            aria-expanded={actionsOpen} aria-haspopup="menu" title={de ? 'Weitere Aktionen' : 'Дополнительно'}
+            onClick={() => setActionsOpen(open => !open)}>⋮</button>
+          {actionsOpen && <div className="workspace-more-menu" role="menu">
+            <button type="button" role="menuitem" disabled={Date.parse(lesson.startsAt) <= Date.now()}
+              onClick={showAddStudentDialog}>{de ? 'Schüler hinzufügen' : 'Добавить ученика'}</button>
+            <button type="button" role="menuitem"
+              onClick={() => { setActionsOpen(false); cardsDialog.current?.showModal(); }}>
+              {de ? 'Karten öffnen' : 'Открыть карточки'}
+            </button>
+            <button type="button" role="menuitem"
+              disabled={busy || !(prep?.transcriptFilename || (prep?.sonioxTranscriptText || prep?.transcriptText || '').trim())}
+              onClick={() => { setActionsOpen(false); openTranscript(); }}>
+              {de ? 'Transkription öffnen' : 'Открыть транскрипцию'}
+            </button>
+            <button type="button" role="menuitem"
+              onClick={() => { setActionsOpen(false); documentsDialog.current?.showModal(); }}>
+              {de ? 'Dokument der vergangenen Stunde' : 'Документ пройденного урока'}
+            </button>
+          </div>}
+        </div>
+      </div>}
     </section>
     {lesson && !lesson.groupId && (!lesson.studentId || previousTrialInvite) && <TrialInvitationPanel eventId={eventId} de={de} />}
     {prep && <div className="workspace-columns">
@@ -129,16 +236,8 @@ export function LessonWorkspacePage() {
           <PostLessonHomeworkStatus eventId={eventId} de={de} />
           <button type="button" className="btn btn--secondary" onClick={() => homeworkDialog.current?.showModal()}>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</button>
         </WorkspaceCard>
-        <LessonCardsPanel lesson={lesson} />
         <WorkspaceCard title={de ? 'Schwierigkeiten' : 'Проблемы и сложности'} symbol="difficulties" className="workspace-difficulties-card">
           <MorningDifficulties raw={prep.difficulties} de={de} />
-        </WorkspaceCard>
-        <WorkspaceCard title={de ? 'Transkription' : 'Транскрипция'} symbol="transcript" className="workspace-quick-card">
-          <button type="button" className="btn btn--secondary" disabled={busy || !(prep.transcriptFilename || (prep.sonioxTranscriptText || prep.transcriptText || '').trim())} onClick={()=>{if(prep.transcriptFilename){open('transcript');return;}const url=URL.createObjectURL(new Blob([prep.sonioxTranscriptText || prep.transcriptText || ''],{type:'text/plain;charset=utf-8'}));window.open(url,'_blank','noopener,noreferrer');window.setTimeout(()=>URL.revokeObjectURL(url),60000);}}>{de?'Transkription öffnen':'Открыть транскрипцию'}</button>
-        </WorkspaceCard>
-        <WorkspaceCard title={de ? 'Dokument der vergangenen Stunde' : 'Документ пройденного урока'} symbol="completed" className="workspace-quick-card">
-          <button type="button" className="btn btn--secondary" onClick={()=>documentsDialog.current?.showModal()}>{de?'Alle Dokumente':'Все документы'}</button>
-          {!documents.length && <span className="workspace-resource-hint">{de?'Noch kein Dokument':'Пока нет документа'}</span>}
         </WorkspaceCard>
       </div>
       <div className="workspace-materials"><WorkspaceCard title={de ? 'Gemeinsames Arbeitsheft' : 'Общая рабочая тетрадь'} symbol="workbook">
@@ -146,8 +245,42 @@ export function LessonWorkspacePage() {
           <div><strong>{de ? 'Arbeitsheft' : 'Рабочая тетрадь'}</strong>{fileControls('workbook')}</div>
           <div><strong title={de ? 'Nur für Lehrkräfte sichtbar' : 'Видно только преподавателю'}>{de ? 'Lösungen' : 'Решения'}</strong>{fileControls('answers')}</div>
         </div>
-      </WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} /></div>
+      </WorkspaceCard><PersonalWorkbooksPanel key={eventId + ':' + workbooksRevision} eventId={eventId} lesson={lesson} /></div>
     </div>}
+    <dialog className="workspace-homework-dialog" ref={cardsDialog} aria-label={de ? 'Karten' : 'Карточки'}><div className="workspace-dialog-heading"><h2>{de ? 'Karten' : 'Карточки'}</h2><button type="button" className="teacher-icon-button" aria-label={de ? 'Schließen' : 'Закрыть'} onClick={() => cardsDialog.current?.close()}>×</button></div><LessonCardsPanel lesson={lesson} /></dialog>
+    <dialog className="workspace-homework-dialog workspace-add-student-dialog" ref={addStudentDialog}
+      aria-label={de ? 'Schüler zu dieser Stunde hinzufügen' : 'Добавить ученика в этот урок'}
+      onCancel={event => { if (studentAdding) event.preventDefault(); }}>
+      <div className="workspace-dialog-heading">
+        <h2>{de ? 'Schüler zu dieser Stunde hinzufügen' : 'Добавить ученика в этот урок'}</h2>
+        <button type="button" className="teacher-icon-button" disabled={studentAdding}
+          aria-label={de ? 'Schließen' : 'Закрыть'} onClick={() => addStudentDialog.current?.close()}>×</button>
+      </div>
+      <p className="muted">{de
+        ? 'Nur für diesen Termin. Die feste Gruppe und andere Stunden bleiben unverändert.'
+        : 'Только для этого занятия. Постоянная группа и остальные уроки не меняются.'}</p>
+      {studentOptionsLoading && <p role="status">{de ? 'Schüler werden geladen…' : 'Загружаем учеников…'}</p>}
+      {!studentOptionsLoading && !studentError && availableStudents.length === 0 && <p className="muted">
+        {de ? 'Keine weiteren aktiven Schüler verfügbar.' : 'Нет других активных учеников для добавления.'}
+      </p>}
+      {!studentOptionsLoading && availableStudents.length > 0 && <label className="workspace-add-student-field">
+        <span>{de ? 'Schüler' : 'Ученик'}</span>
+        <select className="input" aria-label={de ? 'Schüler auswählen' : 'Выбрать ученика'} value={selectedStudentId}
+          disabled={studentAdding} onChange={event => setSelectedStudentId(event.target.value)}>
+          <option value="">{de ? 'Schüler auswählen…' : 'Выберите ученика…'}</option>
+          {availableStudents.map(student => <option value={student.id} key={student.id}>{student.fullName}</option>)}
+        </select>
+      </label>}
+      {studentError && <p role="alert" className="banner banner--error">{studentError}</p>}
+      <div className="workspace-add-student-actions">
+        <button type="button" className="btn btn--secondary" disabled={studentAdding}
+          onClick={() => addStudentDialog.current?.close()}>{de ? 'Abbrechen' : 'Отмена'}</button>
+        <button type="button" className="btn" disabled={studentAdding || studentOptionsLoading || !selectedStudentId}
+          onClick={() => void addStudentToThisLesson()}>
+          {studentAdding ? (de ? 'Hinzufügen…' : 'Добавляем…') : (de ? 'Nur zu dieser Stunde hinzufügen' : 'Добавить только в этот урок')}
+        </button>
+      </div>
+    </dialog>
     <dialog className="workspace-homework-dialog" ref={documentsDialog}><div className="workspace-dialog-heading"><h2>{de?'Alle Dokumente':'Все документы'}</h2><button type="button" className="teacher-icon-button" aria-label={de?'Schließen':'Закрыть'} onClick={()=>documentsDialog.current?.close()}>×</button></div><div className="workspace-document-list">{documents.length ? documents.map(doc=><button type="button" className="workspace-document" key={doc.id} onClick={()=>void perform(()=>completedLessonApi.open(eventId,doc.id))}>{doc.filename} ↗</button>) : <p className="muted">{de?'Das Dokument wird nach dem Unterricht hinzugefügt.':'Документ добавится после урока.'}</p>}</div></dialog>
     <dialog className="workspace-homework-dialog" ref={homeworkDialog}><div className="workspace-dialog-heading"><h2>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</h2><button type="button" className="teacher-icon-button" aria-label={de ? 'Schließen' : 'Закрыть'} onClick={() => homeworkDialog.current?.close()}>×</button></div><LessonHomeworkSeriesPanel lesson={lesson} onAssign={(startDate, days, files) => lessonPreparationApi.assignHomeworkSeries(eventId, startDate, days, files)} /></dialog>
   </div>;
