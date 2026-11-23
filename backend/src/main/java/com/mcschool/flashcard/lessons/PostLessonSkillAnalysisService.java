@@ -27,7 +27,14 @@ import tools.jackson.databind.ObjectMapper;
 public class PostLessonSkillAnalysisService {
     public record SourcePdf(String boardId, byte[] bytes) {}
     public record Observation(String skillId, String autonomy, String correctness, String origin,
-                              int correctExamples, int confidence, String explanation, String excerpt) {}
+                              int correctExamples, int confidence, String explanation, String excerpt,
+                              String sourceBoardId, int pageNumber) {
+        /** Keeps older direct audit/test callers compatible; production requires a verified source. */
+        public Observation(String skillId, String autonomy, String correctness, String origin,
+                           int correctExamples, int confidence, String explanation, String excerpt) {
+            this(skillId,autonomy,correctness,origin,correctExamples,confidence,explanation,excerpt,"",0);
+        }
+    }
 
     private final String apiKey;
     private final String model;
@@ -55,7 +62,8 @@ public class PostLessonSkillAnalysisService {
 
     public List<Observation> analyze(String pupil, Integer grade, String schoolType,
             List<SkillBoardService.Node> allowedSkills, String teacherContext,
-            String attributedTranscript, List<SourcePdf> personalAnnotatedPdfs) throws Exception {
+            String attributedTranscript, List<SourcePdf> personalAnnotatedPdfs,
+            Set<String> pupilWrittenPages) throws Exception {
         if (!configured()) throw new IllegalStateException("SKILL_REVIEW_AI_UNAVAILABLE");
         if (allowedSkills.isEmpty() || (attributedTranscript.isBlank() && personalAnnotatedPdfs.isEmpty()))
             return List.of();
@@ -77,7 +85,10 @@ public class PostLessonSkillAnalysisService {
                 + "Allowed SKILL IDs:\n" + catalog
                 + "Personal PDFs, if attached, contain the pupil's worksheet PLUS saved handwriting. "
                 + "An untouched printed exercise is NOT proof it was solved. "
-                + "Do not attribute teacher's handwriting to the pupil.";
+                + "Do not attribute teacher's handwriting to the pupil.\n"
+                + "Pupil-authored ink verified by the server for these exact boardId#page markers ONLY:\n"
+                + String.join(", ",pupilWrittenPages) + "\n"
+                + "Available source board IDs: " + personalAnnotatedPdfs.stream().map(SourcePdf::boardId).toList();
 
         List<Map<String, Object>> parts = new ArrayList<>();
         parts.add(Map.of("type", "input_text", "text", context));
@@ -88,7 +99,7 @@ public class PostLessonSkillAnalysisService {
                     || source.bytes().length > 8_000_000
                     || totalBytes + source.bytes().length > 12_000_000) continue;
             totalBytes += source.bytes().length;
-            parts.add(Map.of("type", "input_file", "filename", "pupil-annotated-board.pdf",
+            parts.add(Map.of("type", "input_file", "filename", source.boardId() + ".pdf",
                     "file_data", "data:application/pdf;base64,"
                             + java.util.Base64.getEncoder().encodeToString(source.bytes())));
         }
@@ -107,6 +118,11 @@ public class PostLessonSkillAnalysisService {
             Provide at most 8 nonduplicate skills, chosen ONLY from exact supplied skill IDs.
             Each observation MUST cite a concrete page and calculation or a STUDENT transcript
             quotation with timestamp. Do not use the teacher's statements as student proof.
+            "sourceBoardId" and "pageNumber" MUST identify the precise provided personal PDF
+            and 1-based page for WRITING, and must be empty/zero for STUDENT_SPEECH.
+            Only pages listed under verified pupil-authored ink are eligible for WRITING.
+            If the pupil's work cannot be separated from teacher marks, do not claim
+            independent mastery merely because they both wrote on the same page.
             "correctExamples" counts distinct demonstrably correct independent solutions,
             not exercises printed on the sheet. Do not count an unanswered worksheet.
             If you cannot verify a mathematical answer, set correctness=UNCERTAIN,
@@ -126,9 +142,12 @@ public class PostLessonSkillAnalysisService {
                         "correctExamples", Map.of("type", "integer"),
                         "confidence", Map.of("type", "integer"),
                         "explanation", Map.of("type", "string"),
-                        "excerpt", Map.of("type", "string")),
+                        "excerpt", Map.of("type", "string"),
+                        "sourceBoardId", Map.of("type", "string"),
+                        "pageNumber", Map.of("type", "integer")),
                 "required", List.of("skillId", "autonomy", "correctness", "origin",
-                        "correctExamples", "confidence", "explanation", "excerpt"));
+                        "correctExamples", "confidence", "explanation", "excerpt",
+                        "sourceBoardId", "pageNumber"));
         Map<String,Object> format = Map.of("type", "object", "additionalProperties", false,
                 "properties", Map.of("observations", Map.of("type", "array", "items", field)),
                 "required", List.of("observations"));
@@ -153,7 +172,9 @@ public class PostLessonSkillAnalysisService {
             throw new IllegalStateException("SKILL_REVIEW_AI_INCOMPLETE");
         @SuppressWarnings("unchecked")
         Map<String,Object> parsed = json.readValue(WorkbookContentService.outputText(raw), Map.class);
-        return validate(parsed, allowedSkills);
+        return validateVerified(parsed,allowedSkills,pupilWrittenPages,
+                personalAnnotatedPdfs.stream().map(SourcePdf::boardId).collect(java.util.stream.Collectors.toSet()),
+                attributedTranscript.contains("STUDENT "));
     }
 
     /** All model output is advisory until checked against this server's catalog. */
@@ -178,12 +199,29 @@ public class PostLessonSkillAnalysisService {
                     || !Set.of("CORRECT","INCORRECT","PARTIAL").contains(correctness)
                     || !Set.of("WRITING","STUDENT_SPEECH").contains(origin)
                     || confidence < 85 || explanation.length() < 18 || excerpt.length() < 8) continue;
+            String source=Objects.toString(map.get("sourceBoardId"),"");
+            int page=boundedInt(map.get("pageNumber"),0,40);
+            if(page<0)continue;
             seen.add(id);
             result.add(new Observation(id, autonomy, correctness, origin,
-                    correct, confidence, explanation, excerpt));
+                    correct, confidence, explanation, excerpt, source, page));
             if (result.size() == 8) break;
         }
         return List.copyOf(result);
+    }
+
+    /** The model never has authority to choose a different pupil or invent an ink source. */
+    static List<Observation> validateVerified(Map<String,Object> parsed,
+            List<SkillBoardService.Node> allowed,Set<String> studentInk,
+            Set<String> pdfBoardIds,boolean authenticatedStudentSpeech) {
+        return validate(parsed,allowed).stream().filter(row -> {
+            if("WRITING".equals(row.origin()))
+                return pdfBoardIds.contains(row.sourceBoardId()) && row.pageNumber()>=1
+                        && studentInk.contains(row.sourceBoardId()+"#"+row.pageNumber());
+            return "STUDENT_SPEECH".equals(row.origin())
+                    && row.sourceBoardId().isBlank() && row.pageNumber()==0
+                    && authenticatedStudentSpeech;
+        }).toList();
     }
 
     private static int boundedInt(Object value,int min,int max) {
