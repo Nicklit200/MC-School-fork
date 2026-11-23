@@ -31,6 +31,13 @@ final class PostLessonHomeworkMch3Template {
         if(!(rawTasks instanceof List<?> list) || list.isEmpty() || list.size()>2)
             throw new IllegalArgumentException("HOMEWORK_CONTENT_TASK_COUNT");
 
+        // A full vector plot plus six handwriting lines has its own A4 page
+        // budget. Never squeeze a second problem under an unreadable graph.
+        long graphicalTasks=list.stream().filter(item -> item instanceof Map<?,?> task
+                && "graph".equals(task.get("kind"))).count();
+        if(graphicalTasks>0 && list.size()>1)
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_ONE_TASK_PER_PAGE");
+
         List<Map<String,Object>> studentBlocks = new ArrayList<>();
         if(!independent) {
             if(hint.isBlank()) throw new IllegalArgumentException("HOMEWORK_CONTENT_HINT_MISSING");
@@ -46,6 +53,12 @@ final class PostLessonHomeworkMch3Template {
             String title = text(task, "title", 145, true);
             String description = text(task, "description", 200, false);
             String kind = text(task, "kind", 20, true);
+            // Evidence labels never enter the pupil PDF. Reject exercises
+            // explicitly classified as skipped or only displayed.
+            String status=text(task,"evidenceStatus",30,false);
+            if(java.util.Set.of("SKIPPED_AS_TOO_EASY","SHOWN_NOT_SOLVED").contains(status))
+                throw new IllegalArgumentException("HOMEWORK_SOURCE_NOT_PRACTICED");
+            text(task,"sourceReference",160,false);
             String label = String.format("%02d",i+1);
 
             // Graph tasks use the SAME MCH3 visualTask renderer as teacher workbooks.
