@@ -112,10 +112,9 @@ class PostLessonHomeworkSharedGeneratorTest {
 
         var request=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);
         verify(fake,times(1)).send(request.capture(),any(HttpResponse.BodyHandler.class));
-        var payload=json.readTree(request.getValue().bodyPublisher().orElseThrow()
-                .contentLength()>=0?"{}":"{}");
-        // The real model path is proven by the shared provider and no old provider.
-        assertNotNull(payload);
+        assertEquals("https://api.openai.com/v1/responses",
+                request.getValue().uri().toString());
+        // Only the shared model is consulted for document content.
         verifyNoInteractions(legacy);
         var source=org.mockito.ArgumentCaptor.forClass(String.class);
         verify(renderer).renderStudio(source.capture());
