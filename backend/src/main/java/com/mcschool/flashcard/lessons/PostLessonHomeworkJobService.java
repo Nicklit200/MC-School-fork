@@ -41,6 +41,9 @@ public class PostLessonHomeworkJobService {
     private static final ZoneId ZONE=ZoneId.of("Europe/Berlin");
     private static final int MAX_SOURCE_WORKBOOK_PDF_BYTES=8_000_000;
     private static final int MAX_SOURCE_WORKBOOK_TEXT_CHARS=16_000;
+    private static final int MAX_LESSON_TRANSCRIPT_CHARS=48_000;
+    private static final int MAX_COMPLETED_BOARD_PDF_BYTES=3_000_000;
+    private static final int MAX_TOTAL_BOARD_ATTACHMENT_BYTES=8_000_000;
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
     private final ObjectMapper json;
@@ -378,32 +381,67 @@ public class PostLessonHomeworkJobService {
             data.put("lessonDifficulties",Objects.toString(p.getDifficulties(),""));
             data.put("lessonHomeworkNotes",Objects.toString(p.getHomeworkNotes(),""));
             String transcript=Objects.toString(lessonPreparation.transcriptTextForAnalysis(p),"");
-            if(transcript.length()>24000)transcript=transcript.substring(transcript.length()-24000);
+            // Keep full ordinary lessons, not only their ending. A lost
+            // early segment can be the teacher's explicit decision to skip
+            // overly easy exercises. Mark longer transcripts as incomplete.
+            if(transcript.length()>MAX_LESSON_TRANSCRIPT_CHARS) {
+                data.put("transcriptTruncated",true);
+                transcript=transcript.substring(0,4000)
+                        +"\n[... middle of lesson transcript omitted due to size ...]\n"
+                        +transcript.substring(transcript.length()-(MAX_LESSON_TRANSCRIPT_CHARS-4000));
+            } else data.put("transcriptTruncated",false);
             data.put("transcript",transcript);
         });
         // Only THIS pupil's saved board plus the shared board; other pupils' writing stays private.
         List<String> boardText=new ArrayList<>();
+        List<Map<String,Object>> completedBoardPdfs=new ArrayList<>();
+        List<String> completedBoardSources=new ArrayList<>();
+        int[] totalAttachedBytes={0};
         db.query("SELECT board_id,pdf FROM completed_lesson_documents WHERE class_id=? AND teacher_id=? ORDER BY updated_at DESC",rs->{
             String board=rs.getString("board_id");
+            // Explicit class + teacher + exact student board ownership is
+            // essential: never attach a different pupil's private pages.
             boolean permitted="board-1".equals(board)
                     ||PersonalBoard.ownerOf(board).map(studentId::equals).orElse(false);
             if(!permitted)return;
             byte[] bytes=rs.getBytes("pdf");
             if(bytes==null||bytes.length>5_000_000)return;
             try(var document=org.apache.pdfbox.Loader.loadPDF(bytes)){
+                if(document.getNumberOfPages()<1||document.getNumberOfPages()>40)return;
                 String extracted=new org.apache.pdfbox.text.PDFTextStripper().getText(document);
                 if(extracted!=null&&!extracted.isBlank()){
                     String safe=extracted.length()>10000?extracted.substring(0,10000):extracted;
                     boardText.add(board+": "+safe);
                 }
-            }catch(Exception ignored){ /* Handwriting-heavy boards may have no extractable text. */ }
+                // PDFBox text extraction cannot see handwritten strokes or
+                // image-only pages. Attach the actual completed PDF to the
+                // multimodal model along with the original lesson workbook.
+                // Bound pages, count and total bytes before encoding.
+                if(completedBoardPdfs.size()<3
+                        &&bytes.length<=MAX_COMPLETED_BOARD_PDF_BYTES
+                        &&totalAttachedBytes[0]+bytes.length<=MAX_TOTAL_BOARD_ATTACHMENT_BYTES){
+                    String source="board-1".equals(board)?"shared"
+                            :PersonalBoard.isWorkbook(board)?"personal-workbook":"personal";
+                    completedBoardPdfs.add(Map.of("source",source,
+                            "base64",Base64.getEncoder().encodeToString(bytes)));
+                    completedBoardSources.add("completed_board_"+completedBoardPdfs.size()+".pdf: "+source);
+                    totalAttachedBytes[0]+=bytes.length;
+                }
+            }catch(Exception ignored){ /* An unreadable board must not break transcription evidence. */ }
         },job.classId(),teacher.id());
         data.put("savedBoardText",String.join("\\n",boardText));
+        if(!completedBoardPdfs.isEmpty()) {
+            data.put("_completedBoardPdfFiles",completedBoardPdfs);
+            data.put("completedBoardPdfSources",completedBoardSources);
+        }
         List<String> live=transcriptSegments.findAllByOnlineClassIdOrderByStartMsAscIdAsc(job.classId()).stream()
                 .map(s->s.getText()).filter(s->s!=null&&!s.isBlank()).toList();
-        if(!live.isEmpty()){
+        // Do not pay for the same transcription twice. The live transcript
+        // remains a fallback if the archived lesson transcription is missing.
+        if(!live.isEmpty() && Objects.toString(data.get("transcript"),"").isBlank()){
             String joined=String.join("\n",live);
-            data.put("liveTranscript",joined.length()>24000?joined.substring(joined.length()-24000):joined);
+            data.put("liveTranscript",joined.length()>MAX_LESSON_TRANSCRIPT_CHARS
+                    ?joined.substring(joined.length()-MAX_LESSON_TRANSCRIPT_CHARS):joined);
         }
         var plan=monthlyPlans.get(teacher,"student",studentId,java.time.YearMonth.from(job.startDate()).toString());
         data.put("monthlyPlan",plan.planJson()==null?"":plan.planJson().substring(0,Math.min(14000,plan.planJson().length())));
@@ -431,6 +469,7 @@ public class PostLessonHomeworkJobService {
                 ||!Objects.toString(data.get("liveTranscript"),"").isBlank()
                 ||!Objects.toString(data.get("coveredMaterial"),"").isBlank()
                 ||!Objects.toString(data.get("savedBoardText"),"").isBlank()
+                ||!completedBoardPdfs.isEmpty()
                 ||worksheet!=null);
         if(!hasLesson)throw new IllegalStateException("HOMEWORK_LESSON_EVIDENCE_MISSING");
         return data;
