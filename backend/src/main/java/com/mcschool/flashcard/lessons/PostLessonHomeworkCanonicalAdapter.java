@@ -36,11 +36,11 @@ final class PostLessonHomeworkCanonicalAdapter {
             throw new IllegalArgumentException("HOMEWORK_CANONICAL_QA_MISSING");
 
         List<Map<String,Object>> tasks=new ArrayList<>();
+        List<Map<?,?>> taskBlocks=new ArrayList<>();
+        collectTaskBlocks(blocks,taskBlocks,0);
         boolean hasGraph=false;
-        for(Object raw:blocks) {
-            if(!(raw instanceof Map<?,?> block)) continue;
+        for(Map<?,?> block:taskBlocks) {
             String type=Objects.toString(block.get("type"),"");
-            if(!"exercise".equals(type) && !"visualTask".equals(type))continue;
             int number=taskNumber(block.get("number"));
             Map<?,?> assertion=matchingAssertion(checks,number);
             String expression;
@@ -77,6 +77,20 @@ final class PostLessonHomeworkCanonicalAdapter {
         // Staff-only. Never include source transcript or private answers in pupil PDF.
         review.put("sourceEvidenceNote",shortText(authored.lessonPlan(),1000));
         return new Reviewed(review,summary,hasGraph);
+    }
+
+    /** Same child-container traversal as McpHomeworkDraftValidator.countTasks. */
+    private static void collectTaskBlocks(List<?> blocks,List<Map<?,?>> found,int depth) {
+        if(depth>12)throw new IllegalArgumentException("HOMEWORK_CANONICAL_NESTING");
+        for(Object raw:blocks) {
+            if(!(raw instanceof Map<?,?> block))continue;
+            String type=Objects.toString(block.get("type"),"");
+            if("exercise".equals(type) || "visualTask".equals(type))
+                found.add(block);
+            for(String key:List.of("children","left","right"))
+                if(block.get(key) instanceof List<?> nested)
+                    collectTaskBlocks(nested,found,depth+1);
+        }
     }
 
     private static int taskNumber(Object value){
