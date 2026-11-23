@@ -155,7 +155,7 @@ public class AiLessonPilotScheduler {
         preparationWorker.shutdownNow();
     }
 
-    private boolean alreadyPrepared(User teacher, String eventId) {
+    boolean alreadyPrepared(User teacher, String eventId) {
         LessonPreparation preparation = preparationRepository
                 .findByTeacherIdAndEventId(teacher.getId(), eventId)
                 .orElse(null);
