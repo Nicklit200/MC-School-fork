@@ -297,39 +297,163 @@
 }
 
 
-/* Homework errors: concise dark comparison card, readable on phones. */
+/* Homework errors: light, high-contrast comparison card in the Mindcrafti palette. */
 .teacher-shell .lesson-workspace .morning-error-card {
-  background:#191c1f;border:1px solid var(--border);border-radius:15px;
-  padding:14px;gap:11px;color:var(--text);min-width:0;
+  background: #fffdfa;
+  border: 1px solid #eadfd3;
+  border-left: 3px solid #f28b4b;
+  border-radius: 15px;
+  padding: 14px;
+  gap: 11px;
+  color: #273443;
+  min-width: 0;
+  box-shadow: 0 2px 9px rgba(74, 50, 31, .035);
 }
-.teacher-shell .lesson-workspace .morning-error-heading strong{font-size:16px;color:var(--text)}
-.teacher-shell .lesson-workspace .morning-error-heading span{background:none;padding:0;color:var(--muted);font-size:11px;font-weight:500}
-.teacher-shell .lesson-workspace .morning-error-topic{display:flex;align-items:center;gap:9px;font-size:15px;color:var(--text);font-weight:700}
-.teacher-shell .lesson-workspace .morning-error-alert{display:grid;place-items:center;flex:0 0 20px;width:20px;height:20px;border:2px solid #fa555e;border-radius:50%;color:#fa555e;font-size:13px}
-.teacher-shell .lesson-workspace .morning-error-section{background:#292d30;border:0;border-radius:11px;padding:12px}
-.teacher-shell .lesson-workspace .morning-error-label{font-size:11px;color:var(--muted)}
-.teacher-shell .lesson-workspace .morning-error-section p{font-size:16px;font-weight:650;line-height:1.4;color:var(--text);margin:4px 0 0;white-space:pre-wrap}
-.teacher-shell .lesson-workspace .morning-error-answer{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
-.teacher-shell .lesson-workspace .morning-error-answer-box{display:grid;gap:11px;min-width:0;padding:12px;border-radius:11px;overflow-wrap:anywhere}
-.teacher-shell .lesson-workspace .morning-error-answer-box--wrong{background:#2c1417;color:#ff6469}
-.teacher-shell .lesson-workspace .morning-error-answer-box--right{background:#0b2117;color:#54d989}
-.teacher-shell .lesson-workspace .morning-error-answer-caption{display:flex;align-items:center;gap:6px;color:#f0f3f2;font-size:12px;font-weight:650}
-.teacher-shell .lesson-workspace .morning-error-answer-caption>span{display:grid;place-items:center;width:17px;height:17px;border:1.5px solid currentColor;border-radius:50%}
-.teacher-shell .lesson-workspace .morning-error-answer-box--wrong .morning-error-answer-caption>span{color:#ff6469}
-.teacher-shell .lesson-workspace .morning-error-answer-box--right .morning-error-answer-caption>span{color:#54d989}
-.teacher-shell .lesson-workspace .morning-error-answer-box>strong{font-size:clamp(17px,2.4vw,22px);font-weight:750;line-height:1.2;white-space:pre-wrap;overflow-wrap:anywhere}
-.teacher-shell .lesson-workspace .morning-error-difference{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px;font-size:13px;line-height:1.4;color:var(--text)}
-.teacher-shell .lesson-workspace .morning-error-difference>span{color:var(--muted);margin-right:3px}
-.teacher-shell .lesson-workspace .morning-error-wrong{color:#ff6469}
-.teacher-shell .lesson-workspace .morning-error-right{color:#54d989}
-.teacher-shell .lesson-workspace .morning-error-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid var(--border);padding-top:10px;color:var(--muted);font-size:11px}
-.teacher-shell .lesson-workspace .morning-error-footer>span:last-child{color:var(--text)}
-.teacher-shell .lesson-workspace .morning-error-source-details{font-size:10px;color:var(--muted);min-width:0}
-.teacher-shell .lesson-workspace .morning-error-source-details summary{cursor:pointer;width:max-content;max-width:100%}
-.teacher-shell .lesson-workspace .morning-error-source-details p{margin:4px 0 0;overflow-wrap:anywhere}
-@media(max-width:700px){
-  .teacher-shell .lesson-workspace .morning-error-answer{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .teacher-shell .lesson-workspace .morning-error-card{padding:12px}
-  .teacher-shell .lesson-workspace .morning-error-answer-box{padding:10px}
+.teacher-shell .lesson-workspace .morning-error-heading strong {
+  font-size: 16px;
+  color: #263446;
 }
-@media(max-width:330px){.teacher-shell .lesson-workspace .morning-error-answer{grid-template-columns:1fr}}
+.teacher-shell .lesson-workspace .morning-error-heading span {
+  background: none;
+  padding: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+}
+.teacher-shell .lesson-workspace .morning-error-topic {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  color: #9a4137;
+  font-weight: 700;
+}
+.teacher-shell .lesson-workspace .morning-error-alert {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #c84e48;
+  border-radius: 50%;
+  color: #c84e48;
+  font-size: 13px;
+}
+.teacher-shell .lesson-workspace .morning-error-section {
+  background: #fff8f1;
+  border: 1px solid #f1e3d6;
+  border-radius: 11px;
+  padding: 12px;
+}
+.teacher-shell .lesson-workspace .morning-error-label {
+  font-size: 11px;
+  color: #805b46;
+}
+.teacher-shell .lesson-workspace .morning-error-section p {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: #243446;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.teacher-shell .lesson-workspace .morning-error-answer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 11px;
+  overflow-wrap: anywhere;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box--wrong {
+  background: #fff0ef;
+  border: 1px solid #f1d3d0;
+  color: #b32634;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box--right {
+  background: #eef9f2;
+  border: 1px solid #cce8d5;
+  color: #177249;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #495467;
+  font-size: 12px;
+  font-weight: 650;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box--wrong .morning-error-answer-caption {
+  color: #9f2936;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box--right .morning-error-answer-caption {
+  color: #176844;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-caption > span {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box--wrong .morning-error-answer-caption > span { color: #b32634; }
+.teacher-shell .lesson-workspace .morning-error-answer-box--right .morning-error-answer-caption > span { color: #177249; }
+.teacher-shell .lesson-workspace .morning-error-answer-box > strong {
+  font-size: clamp(17px, 2.4vw, 22px);
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.teacher-shell .lesson-workspace .morning-error-difference {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #334155;
+}
+.teacher-shell .lesson-workspace .morning-error-difference > span { color: #69798d; margin-right: 3px; }
+.teacher-shell .lesson-workspace .morning-error-wrong { color: #b32634; }
+.teacher-shell .lesson-workspace .morning-error-right { color: #177249; }
+.teacher-shell .lesson-workspace .morning-error-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid #e9e2da;
+  padding-top: 10px;
+  color: #66788b;
+  font-size: 11px;
+}
+.teacher-shell .lesson-workspace .morning-error-footer > span:last-child { color: #a45a2a; }
+.teacher-shell .lesson-workspace .morning-error-source-details {
+  font-size: 10px;
+  color: #617489;
+  min-width: 0;
+}
+.teacher-shell .lesson-workspace .morning-error-source-details summary {
+  cursor: pointer;
+  width: max-content;
+  max-width: 100%;
+}
+.teacher-shell .lesson-workspace .morning-error-source-details p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .teacher-shell .lesson-workspace .morning-error-answer { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .teacher-shell .lesson-workspace .morning-error-card { padding: 12px; }
+  .teacher-shell .lesson-workspace .morning-error-answer-box { padding: 10px; }
+}
+@media (max-width: 330px) {
+  .teacher-shell .lesson-workspace .morning-error-answer { grid-template-columns: 1fr; }
+}
