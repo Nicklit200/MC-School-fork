@@ -90,17 +90,32 @@ public class PostLessonHomeworkContentService {
      * The PDF's base64 bytes are NEVER embedded in the model's text context.
      */
     static Object inputWithWorksheet(Object evidence,ObjectMapper json)throws Exception{
-        if(!(evidence instanceof Map<?,?> raw) || !(raw.get("_lessonWorksheetPdfBase64") instanceof String pdf))
-            return json.writeValueAsString(evidence);
+        if(!(evidence instanceof Map<?,?> raw))return json.writeValueAsString(evidence);
+        // Never serialize internal base64 attachment buffers into the textual
+        // model context. PDF input stays restricted to this pupil's lesson.
         Map<String,Object> safe=new LinkedHashMap<>();
         for(var entry:raw.entrySet()){
             if(!(entry.getKey() instanceof String key))continue;
             if(!key.startsWith("_"))safe.put(key,entry.getValue());
         }
-        List<Map<String,Object>> parts=List.of(
-                Map.of("type","input_text","text",json.writeValueAsString(safe)),
-                Map.of("type","input_file","filename","lesson_worksheet.pdf",
+        List<Map<String,Object>> parts=new ArrayList<>();
+        parts.add(Map.of("type","input_text","text",json.writeValueAsString(safe)));
+        if(raw.get("_lessonWorksheetPdfBase64") instanceof String original && !original.isBlank()){
+            parts.add(Map.of("type","input_file","filename","lesson_worksheet.pdf",
+                    "file_data","data:application/pdf;base64,"+original));
+        }
+        if(raw.get("_completedBoardPdfFiles") instanceof List<?> completed) {
+            int count=0;
+            for(Object item:completed){
+                if(count>=3)break;
+                if(!(item instanceof Map<?,?> file))continue;
+                if(!(file.get("base64") instanceof String pdf) || pdf.isBlank())continue;
+                // Filenames are generated here, not taken from user/PDF text.
+                parts.add(Map.of("type","input_file","filename","completed_board_"+(++count)+".pdf",
                         "file_data","data:application/pdf;base64,"+pdf));
+            }
+        }
+        if(parts.size()==1)return json.writeValueAsString(safe);
         return List.of(Map.of("role","user","content",parts));
     }
 
