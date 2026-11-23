@@ -8,11 +8,20 @@ import com.mcschool.flashcard.notifications.WebPushService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import jakarta.annotation.PreDestroy;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -21,9 +30,27 @@ import org.springframework.stereotype.Component;
 public class AiLessonPilotScheduler {
 
     private static final ZoneId SCHOOL_ZONE = ZoneId.of("Europe/Berlin");
+    private static final LocalTime MORNING_START = LocalTime.of(9, 0);
+    private static final Logger LOG = LoggerFactory.getLogger(AiLessonPilotScheduler.class);
+    private static final int MAX_DAILY_ATTEMPTS = 3;
 
     @Value("${app.ai-lesson-pilot.scheduler-enabled:false}")
     private boolean schedulerEnabled;
+
+    // The owner workbook pilot is explicitly configured to run after 09:00.
+    // Its morning homework analysis must not depend on the separate pilot
+    // toggle in the teacher's profile, or on successful PDF rendering.
+    @Value("${app.owner-morning-workbook.enabled:false}")
+    private boolean ownerMorningWorkbookEnabled;
+
+    private final ExecutorService preparationWorker = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "morning-homework-digests");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Set<String> inflight = ConcurrentHashMap.newKeySet();
+    private final Map<String, Integer> failedAttempts = new ConcurrentHashMap<>();
+    private final Map<String, Instant> nextRetry = new ConcurrentHashMap<>();
 
     private final UserRepository userRepository;
     private final GoogleCalendarLessonService lessonService;
@@ -49,22 +76,28 @@ public class AiLessonPilotScheduler {
 
     @Scheduled(cron = "0 * * * * *", zone = "Europe/Berlin")
     public void prepareNickLessons() {
-        if (!schedulerEnabled) return;
+        if (!schedulerEnabled && !ownerMorningWorkbookEnabled) return;
         if (!aiService.isConfigured()) return;
 
         User teacher = userRepository.findById(AiLessonPilotService.PILOT_TEACHER_ID)
                 .filter(user -> user.getRole() == Role.TEACHER)
                 .filter(user -> !user.isArchived())
                 .orElse(null);
-        if (teacher == null || !teacher.isAiLessonPilotEnabled()) return;
+        if (teacher == null) return;
 
         LocalTime nowTime = LocalTime.now(SCHOOL_ZONE).withSecond(0).withNano(0);
-        LocalTime preparationTime = parseTime(teacher.getAiPreparationTime());
-        if (nowTime.isBefore(preparationTime)) return;
+        if (!shouldPrepare(schedulerEnabled, ownerMorningWorkbookEnabled,
+                teacher.isAiLessonPilotEnabled(), parseTime(teacher.getAiPreparationTime()), nowTime))
+            return;
 
         AuthenticatedUser caller = new AuthenticatedUser(teacher.getId(), teacher.getEmail(), teacher.getRole());
         Instant now = Instant.now();
         LocalDate today = LocalDate.now(SCHOOL_ZONE);
+        // All retries are scoped by school-local day so a failed lesson cannot
+        // accumulate unlimited LLM calls from the one-minute scheduler.
+        String prefix = today + "|";
+        failedAttempts.keySet().removeIf(key -> !key.startsWith(prefix) && !inflight.contains(key));
+        nextRetry.keySet().removeIf(key -> !key.startsWith(prefix) && !inflight.contains(key));
         List<GroupLessonResponse> lessons = lessonService.listGroupLessons(caller);
 
         for (GroupLessonResponse lesson : lessons) {
@@ -73,13 +106,53 @@ public class AiLessonPilotScheduler {
             if (lesson.groupId() == null && lesson.studentId() == null) continue;
             if (alreadyPrepared(teacher, lesson.eventId())) continue;
 
+            String key = prefix + lesson.eventId();
+            if (failedAttempts.getOrDefault(key, 0) >= MAX_DAILY_ATTEMPTS) continue;
+            Instant retryAt = nextRetry.get(key);
+            if (retryAt != null && retryAt.isAfter(now)) continue;
+            if (!inflight.add(key)) continue;
+
             try {
-                aiService.prepareLesson(caller, lesson.eventId());
-                notifyPrepared(teacher, lesson);
-            } catch (RuntimeException ignored) {
-                // The next scheduler run will retry only if the lesson is still unprepared.
+                preparationWorker.submit(() -> {
+                    try {
+                        // A human or another trigger may have populated the
+                        // lesson while this job was waiting in the queue.
+                        if (alreadyPrepared(teacher, lesson.eventId())) return;
+                        aiService.prepareLesson(caller, lesson.eventId());
+                        if (!alreadyPrepared(teacher, lesson.eventId()))
+                            throw new IllegalStateException("Morning lesson digest is incomplete");
+                        failedAttempts.remove(key);
+                        nextRetry.remove(key);
+                        LOG.info("Morning homework analysis ready event={}", lesson.eventId());
+                        notifyPrepared(teacher, lesson);
+                    } catch (RuntimeException failure) {
+                        int attempt = failedAttempts.merge(key, 1, Integer::sum);
+                        nextRetry.put(key, Instant.now().plus(Duration.ofMinutes(3)));
+                        LOG.warn("Morning homework analysis failed event={} attempt={}/{} errorType={}",
+                                lesson.eventId(), attempt, MAX_DAILY_ATTEMPTS,
+                                failure.getClass().getSimpleName());
+                        if (attempt >= MAX_DAILY_ATTEMPTS) notifyFailed(teacher, lesson);
+                    } finally {
+                        inflight.remove(key);
+                    }
+                });
+            } catch (RuntimeException failure) {
+                inflight.remove(key);
+                LOG.warn("Morning homework analysis could not be queued event={} errorType={}",
+                        lesson.eventId(), failure.getClass().getSimpleName());
             }
         }
+    }
+
+    static boolean shouldPrepare(boolean pilotScheduler, boolean ownerMorning,
+            boolean teacherPilotEnabled, LocalTime teacherTime, LocalTime now) {
+        return (ownerMorning && !now.isBefore(MORNING_START))
+                || (pilotScheduler && teacherPilotEnabled && !now.isBefore(teacherTime));
+    }
+
+    @PreDestroy
+    public void close() {
+        preparationWorker.shutdownNow();
     }
 
     private boolean alreadyPrepared(User teacher, String eventId) {
@@ -87,13 +160,26 @@ public class AiLessonPilotScheduler {
                 .findByTeacherIdAndEventId(teacher.getId(), eventId)
                 .orElse(null);
         if (preparation == null) return false;
-        // A finished lesson plan or PDF alone does not mean today's homework
-        // analysis was prepared. Keep retrying until both automatic sections exist.
+        // Existing manually curated lesson digests also count. Never replace
+        // the group lesson's confirmed errors just to satisfy the scheduler.
         String difficulties = preparation.getDifficulties();
         String homework = preparation.getHomeworkNotes();
-        return difficulties != null && difficulties.contains("\"kind\":\"homework_errors_v1\"")
-                && homework != null
-                && (homework.contains(": задано ") || homework.contains("Предыдущий урок не найден"));
+        return difficulties != null && !difficulties.isBlank()
+                && homework != null && !homework.isBlank();
+    }
+
+    private void notifyFailed(User teacher, GroupLessonResponse lesson) {
+        if (!webPushService.isConfigured()) return;
+        String url = "/teacher/lessons/" + lesson.eventId();
+        for (PushSubscription subscription : subscriptionRepository.findAllByUserId(teacher.getId())) {
+            try {
+                webPushService.send(subscription, "Подготовка домашки не завершилась",
+                        "Проверка домашней работы для урока не удалась после трёх попыток. Откройте урок.",
+                        url);
+            } catch (RuntimeException ignored) {
+                // Push must not interrupt the next lesson's preparation.
+            }
+        }
     }
 
     private void notifyPrepared(User teacher, GroupLessonResponse lesson) {
