@@ -1,6 +1,8 @@
 package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.users.User;
+import com.mcschool.flashcard.users.Role;
+import com.mcschool.flashcard.lessons.AiLessonPilotService;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -67,6 +69,19 @@ public class EmailNotificationService implements NotificationService {
                 parent.getPreferredLanguage(), parent.getFullName(), student.getFullName(),
                 unfinishedHomeworkCount, appLinks.parentLink());
         send(parent.getEmail(), parent.getFullName(), email);
+    }
+
+    @Override
+    public void sendOwnerWorkbookFailure(User recipient, String eventId, int attempt, String errorCode) {
+        if (recipient.getEmail() == null || recipient.getEmail().isBlank()) {
+            log.warn("Owner workbook email not sent: role={} reason=NO_EMAIL_ADDRESS", recipient.getRole());
+            return;
+        }
+        NotificationMessages.Email email = NotificationMessages.ownerWorkbookFailure(
+                recipient.getPreferredLanguage(), eventId, attempt, errorCode,
+                appLinks.staffLessonLink(AiLessonPilotService.PILOT_TEACHER_ID,
+                        eventId, recipient.getRole() == Role.ADMIN));
+        send(recipient.getEmail(), recipient.getFullName(), email);
     }
 
     private void send(String toEmail, String toName, NotificationMessages.Email email) {
