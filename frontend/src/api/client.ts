@@ -114,7 +114,8 @@ export const api = {
     impersonateParent: (parentId: string) => request<AuthResponse>('POST', `/auth/impersonate/parent/${parentId}`),
   },
   users: { updateLanguage: (preferredLanguage: Language) => request<User>('PUT', '/users/me/settings', { preferredLanguage }), changePassword: (password: string) => request<void>('PUT', '/users/me/password', { password }) },
-  push: { config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'), status: () => request<{enabled:boolean; registeredDevices:number; ready:boolean; emailAvailable:boolean}>('GET','/push/status'), subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('POST', '/push/subscriptions', subscription), unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('DELETE', '/push/subscriptions', subscription), test: () => request<void>('POST', '/push/test') },
+  push: { config: () => request<{ enabled: boolean; publicKey: string }>('GET', '/push/config'), status: () => request<{enabled:boolean; registeredDevices:number; ready:boolean; emailAvailable:boolean}>('GET','/push/status'),
+    parentReadiness: () => request<{parentId:string; registeredDevices:number; emailAvailable:boolean; linkedChildren:number}[]>('GET','/push/admin/parents'), subscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('POST', '/push/subscriptions', subscription), unsubscribe: (subscription: { endpoint: string; p256dh: string; auth: string }) => request<void>('DELETE', '/push/subscriptions', subscription), test: () => request<void>('POST', '/push/test') },
   teachers: {
     list: () => request<User[]>('GET', '/teachers'),
     create: (fullName: string, email: string, username: string, password: string) =>
