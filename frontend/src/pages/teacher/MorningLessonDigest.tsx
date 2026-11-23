@@ -65,6 +65,7 @@ export function MorningHomeworkSummary({raw, de}: {raw: string | null | undefine
     <div className="morning-homework-overview">
       <span>{de ? 'Hausaufgaben abgegeben' : 'Домашка сдана'}</span>
       <strong>{totalSubmitted}/{totalAssigned} · {totalPercent}%</strong>
+      <span className="morning-homework-remaining">{de ? 'Noch nicht abgegeben: ' : 'Не сдано: '}{rows.reduce((sum, row) => sum + row.pending, 0)}</span>
     </div>
     <div className="morning-homework-track" role="progressbar" aria-label={de ? 'Abgegebene Hausaufgaben insgesamt' : 'Сданная домашняя работа, всего'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={totalPercent}>
       <span style={{width: totalPercent + '%'}} />
@@ -72,7 +73,7 @@ export function MorningHomeworkSummary({raw, de}: {raw: string | null | undefine
     {rows.map(row => <div className="morning-homework-row" key={row.student}>
       <div className="morning-homework-row-heading">
         <strong>{row.student}</strong>
-        <span>{row.submitted}/{row.assigned} · {homeworkPercent(row.assigned, row.submitted)}%</span>
+        <span>{row.submitted}/{row.assigned} · {homeworkPercent(row.assigned, row.submitted)}% · {de ? 'offen' : 'не сдано'} {row.pending}</span>
       </div>
       <div className="morning-homework-track morning-homework-track--student" role="progressbar" aria-label={(de ? 'Hausaufgaben: ' : 'Домашка: ') + row.student} aria-valuemin={0} aria-valuemax={100} aria-valuenow={homeworkPercent(row.assigned, row.submitted)}>
         <span style={{width: homeworkPercent(row.assigned, row.submitted) + '%'}} />
@@ -125,10 +126,17 @@ export function MorningDifficulties({raw, de}: {raw: string | null | undefined; 
   if (issues === null) return <p className="muted morning-difficulties-pending">{de
     ? 'Die wichtigsten nachweisbaren Hausaufgabenfehler folgen nach der morgendlichen Prüfung.'
     : 'Главные ошибки из проверенной домашки появятся после утренней подготовки.'}</p>;
-  if (!issues.length) return <div className="morning-digest-neutral">{de
-    ? 'Keine nachweisbaren Aufgabenfehler zum Anzeigen.'
-    : 'Нет подтверждённых ошибок для показа.'}</div>;
+  if (!issues.length) return <div className="morning-digest-neutral">
+    <strong>{de ? 'Belegte Fehler zur Besprechung: 0' : 'Подтверждённых ошибок для разбора: 0'}</strong>
+    <p>{de ? 'Für diese Abgaben sind keine zuverlässig belegten Fehler erfasst. Das bedeutet nicht, dass alles korrekt ist.'
+      : 'В проверенных материалах нет надёжно подтверждённых ошибок. Это не означает, что вся домашка решена верно.'}</p>
+  </div>;
   return <div className="morning-difficulties morning-difficulties--compact">
+    <div className="morning-difficulties-overview" role="status">
+      <strong>{de ? 'Wichtige Fehler zur Besprechung: ' : 'Главных ошибок для разбора: '}{issues.length}</strong>
+      <span>{de ? 'Ausgewählte, belegte Beispiele; keine Gesamtzahl aller Fehler.'
+        : 'Только основные подтверждённые примеры, не общее число всех ошибок.'}</span>
+    </div>
     <HomeworkIssueCard key={issues[0].source + ':0'} issue={issues[0]} de={de} index={0} total={issues.length} />
     {issues.length > 1 && <details className="morning-difficulties-more">
       <summary>{de ? 'Weitere Fehler anzeigen: ' : 'Показать остальные ошибки: '}{issues.length - 1}</summary>
