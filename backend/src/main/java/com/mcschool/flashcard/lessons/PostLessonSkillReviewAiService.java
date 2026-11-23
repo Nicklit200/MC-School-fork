@@ -62,7 +62,8 @@ public class PostLessonSkillReviewAiService {
 
     @SuppressWarnings("unchecked")
     public List<Finding> assess(List<SkillBoardService.Node> skills,
-            List<SourcePdf> pdfs, String pupilSpeech, String teacherSpeech) throws Exception {
+            List<SourcePdf> pdfs, String pupilSpeech, String teacherSpeech,
+            Set<Integer> pagesWithPupilInk) throws Exception {
         if(!configured())throw new IllegalStateException("SKILL_REVIEW_AI_NOT_CONFIGURED");
         if(skills.isEmpty() || (pdfs.isEmpty() && pupilSpeech.isBlank()))return List.of();
         if(skills.size()>160 || pdfs.size()>2)throw new IllegalArgumentException("SKILL_REVIEW_LIMIT");
@@ -84,7 +85,8 @@ public class PostLessonSkillReviewAiService {
         parts.add(Map.of("type","input_text","text",mapper.writeValueAsString(Map.of(
             "curriculum",curriculum,
             "pupilSpeech",bounded(pupilSpeech,8000),
-            "teacherSpeechSharedContextOnly",bounded(teacherSpeech,6500)))));
+            "teacherSpeechSharedContextOnly",bounded(teacherSpeech,6500),
+            "pageNumbersWithPupilAuthoredInk",new TreeSet<>(pagesWithPupilInk)))));
         for(SourcePdf pdf:pdfs)
             parts.add(Map.of("type","input_file","filename",pdf.name(),
                 "file_data","data:application/pdf;base64,"+Base64.getEncoder().encodeToString(pdf.bytes())));
@@ -95,6 +97,9 @@ public class PostLessonSkillReviewAiService {
             pages (worksheet, teacher writing and possibly pupil writing). They are NOT automatically
             proof that the pupil completed or understood every task. The input also contains speech
             positively attributed to this pupil and separate teacher speech for context only.
+            pageNumbersWithPupilAuthoredInk lists 1-based PDF pages on which the server verified
+            that this pupil actually drew on their own board. Pages not in this list may have
+            teacher annotations, but must NOT be treated as independent pupil work.
             NEVER attribute teacher speech or work to the pupil; never infer the pupil's work from the
             mere presence of an exercise, a prepared worksheet, or another person's example.
             Identify at most 8 specific skills from the provided exact ID list. Return findings ONLY
