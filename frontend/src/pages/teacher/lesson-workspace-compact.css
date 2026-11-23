@@ -320,6 +320,59 @@
   font-size: 11px;
   font-weight: 500;
 }
+
+/* Compact carousel controls: error count stays between the two arrows. */
+.teacher-shell .lesson-workspace .morning-error-heading {
+  gap: 12px;
+}
+.teacher-shell .lesson-workspace .morning-error-navigation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.teacher-shell .lesson-workspace .morning-error-navigation .morning-error-counter {
+  color: #64748b;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  text-align: center;
+  min-width: 72px;
+}
+.teacher-shell .lesson-workspace .morning-error-navigation .morning-error-nav-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 1px solid #f0d7c1;
+  border-radius: 9px;
+  background: #fff4e9;
+  color: #ae4f15;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.teacher-shell .lesson-workspace .morning-error-navigation .morning-error-nav-button:hover {
+  background: #ffe8d4;
+  border-color: #e8b686;
+}
+.teacher-shell .lesson-workspace .morning-error-navigation .morning-error-nav-button:focus-visible {
+  outline: 2px solid #ef801e;
+  outline-offset: 2px;
+}
+@media (max-width: 390px) {
+  .teacher-shell .lesson-workspace .morning-error-heading { flex-wrap: wrap; }
+  .teacher-shell .lesson-workspace .morning-error-navigation { gap: 5px; }
+}
 .teacher-shell .lesson-workspace .morning-error-topic {
   display: flex;
   align-items: center;
