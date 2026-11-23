@@ -6,6 +6,7 @@ import { lessonPreparationApi, completedLessonApi, type CompletedLessonDocument 
 import { aiPilotApi, type OwnerWorkbookStatus } from '../../api/aiPilot';
 import { useAuth } from '../../auth/AuthContext';
 import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '../../api/types';
+import { LessonParticipantsPanel } from './LessonParticipantsPanel';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
@@ -88,6 +89,8 @@ export function LessonDetailPage() {
   const { user } = useAuth();
   const isNickAiPilot = user?.id === NICK_AI_PILOT_TEACHER_ID;
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
+  const [allLessons, setAllLessons] = useState<GroupLesson[]>([]);
+  const [allStudents, setAllStudents] = useState<StudentListItem[]>([]);
   const hasLessonAudience = Boolean(lesson?.studentId || lesson?.groupId);
   const modernClassroomEnabled = import.meta.env.VITE_MINDCRAFTI_LIVEKIT_ENABLED === 'true';
   const [lessonStudents, setLessonStudents] = useState<LessonStudent[]>([]);
@@ -147,6 +150,8 @@ export function LessonDetailPage() {
         if (cancelled) return;
         const currentLesson = lessons.find((item) => item.eventId === eventId) ?? null;
         setLesson(currentLesson);
+        setAllLessons(lessons);
+        setAllStudents(allStudents);
         setPreparation(prep);
         setCoveredMaterial(prep.coveredMaterial ?? '');
         setHomeworkNotes(prep.homeworkNotes ?? '');
@@ -537,6 +542,18 @@ export function LessonDetailPage() {
 
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
+      {lesson && <LessonParticipantsPanel lesson={lesson} lessons={allLessons} students={allStudents}
+        onChanged={async () => {
+          const latest = await api.lessons.savedGroupLessons();
+          setAllLessons(latest);
+          const updated = latest.find(item => item.eventId === eventId);
+          if (updated) {
+            setLesson(updated);
+            setLessonStudents(allStudents.filter(student => updated.participantStudentIds.includes(student.id))
+              .map(student => ({ id: student.id, fullName: student.fullName,
+                chatGptProjectUrl: student.chatGptProjectUrl })));
+          }
+        }} />}
 
       {isNickAiPilot && (
         <section className="panel" style={{ padding: 18, margin: '0 0 18px', border: '1px solid var(--teacher-selected-border, #f0c7ad)', background: 'var(--teacher-selected, #fffaf7)' }}>
