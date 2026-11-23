@@ -204,6 +204,23 @@ export interface PostLessonHomeworkJob {
   dayNumber?: number | null;
 }
 
+export interface PostLessonSkillReviewJob {
+  state: 'NONE' | 'QUEUED' | 'RUNNING' | 'DONE' | 'PARTIAL' | 'FAILED';
+  totalStudents?: number;
+  processedStudents?: number;
+  attempts?: number;
+  failureCode?: string;
+  finishedAt?: string;
+  students?: Array<{
+    studentId: string;
+    state: 'RECORDED' | 'NO_EVIDENCE' | 'NO_BOARD' | 'ERROR';
+    observations: number;
+    masteryUpdates: number;
+    detail: string;
+    boardId: string;
+  }>;
+}
+
 export interface PostLessonHomeworkReviewTask {
   title: string;
   description: string;
@@ -254,6 +271,9 @@ export const onlineClassesApi = {
   start: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/start`),
 
   end: (classId: string) => request<OnlineClass>('POST', `/online-classes/${classId}/end`),
+
+  postLessonSkillReviewStatus: (classId: string) =>
+    request<PostLessonSkillReviewJob>('GET', `/online-classes/${classId}/skill-review`),
 
   postLessonHomeworkRecipients: (classId: string) =>
     request<Array<{id: string; name: string}>>('GET', '/online-classes/' + classId + '/post-lesson-homework/recipients'),
