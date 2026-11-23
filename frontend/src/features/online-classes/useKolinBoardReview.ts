@@ -3,6 +3,7 @@ import { kolinApi, type KolinBoardSnapshot, type KolinContext } from '../../api/
 import { useClassEvents, type ReceivedEvent } from './useClassEvents';
 import { VIEW_TOPIC } from './events';
 import { personalBoardOwner } from './boards';
+import { flushClassAnnotations } from './annotationSync';
 
 export class KolinReviewUnavailable extends Error {}
 export class KolinReviewTooLarge extends Error {}
@@ -45,21 +46,33 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
     const whole = target.scope === 'workbook';
     const first = target.scope === 'first_page';
     const taskPage = target.scope === 'task_page';
+    // The host's selected personal page is authoritative for a question about
+    // the page they are viewing. Do not require that pupil to be online or
+    // looking at the same page on their own device.
+    const teacherPage = !shared && target.studentId === context.studentId
+      && context.targetType === 'student' && Number.isSafeInteger(context.currentWorkbookPage)
+      && (context.currentWorkbookPage ?? 0) >= 1 && (context.currentWorkbookPage ?? 0) <= 1000;
     if (taskPage && (typeof target.pageNumber !== 'number'
       || !Number.isSafeInteger(target.pageNumber) || target.pageNumber < 1 || target.pageNumber > 1000))
       throw new KolinReviewUnavailable();
-    if (!shared && !whole && !first && !taskPage && (!observed || Date.now() - observed.receivedAt > REVIEW_PAGE_MAX_AGE))
+    if (!shared && !whole && !first && !taskPage && !teacherPage
+        && (!observed || Date.now() - observed.receivedAt > REVIEW_PAGE_MAX_AGE))
       throw new KolinReviewUnavailable();
     try {
+      // The captured JPEG includes the server's saved handwriting. Flush the
+      // host's pending ink first, or a just-written answer could be missing.
+      await flushClassAnnotations(classId, teacherId, () => pages.current.scope === scope);
       const { captureBoardPage } = await import('./boardExport');
-      const boardId = shared ? 'board-1' : taskPage ? '' : observed?.boardId ?? '';
+      const boardId = shared ? 'board-1' : taskPage || teacherPage ? '' : observed?.boardId ?? '';
       const index = taskPage ? target.pageNumber! - 1 :
-        first ? 0 : shared ? Math.max(0, (context.currentWorkbookPage ?? 1) - 1) : observed?.page ?? 0;
+        first ? 0 : shared ? Math.max(0, (context.currentWorkbookPage ?? 1) - 1)
+        : teacherPage ? context.currentWorkbookPage! - 1 : observed?.page ?? 0;
       const snapshot = await captureBoardPage(classId, target.studentId ?? null, boardId, index,
-        taskPage ? null : observed ? new Date(observed.receivedAt).toISOString() : null,
+        taskPage ? null : teacherPage ? new Date().toISOString()
+          : observed ? new Date(observed.receivedAt).toISOString() : null,
         taskPage ? 'task_page' : whole ? 'workbook' : first ? 'first_page' : 'current_page');
       const latest = current();
-      if (pages.current.scope !== scope || !shared && !whole && !first && !taskPage
+      if (pages.current.scope !== scope || !shared && !whole && !first && !taskPage && !teacherPage
         && (!latest || latest.boardId !== observed!.boardId || latest.page !== observed!.page
           || Date.now() - latest.receivedAt > REVIEW_PAGE_MAX_AGE)) throw new KolinReviewUnavailable();
       return snapshot;
