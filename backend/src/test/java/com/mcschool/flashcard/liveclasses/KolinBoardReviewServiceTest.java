@@ -60,6 +60,32 @@ class KolinBoardReviewServiceTest {
         when(roster.read(room)).thenReturn(List.of(new KolinTaskRoster.Pupil(melissa.getId(),"Мелисса А"),new KolinTaskRoster.Pupil(sofia.getId(),"Мелисса Б")));
         assertThat(service.resolve(room,"Проверь Мелиссу",context).state()).isEqualTo("clarify");
     }
+    @Test void allExercisesForMelissaUseAuthorizedPupilWorkbookEvenWhenTeacherViewsPageFive() {
+        var selected=new KolinChatService.Context("student",melissa.getId(),5);
+        for(String question:List.of("Проверь все задания Мелиссы",
+                "Проверь все задания у Мелиссы","Проверь всё задания Мелиссы",
+                "Проверь все задания")) {
+            var target=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(question,selected));
+            assertThat(target.state()).as(question).isEqualTo("ready");
+            assertThat(target.studentId()).as(question).isEqualTo(melissa.getId());
+            assertThat(target.scope()).as(question).isEqualTo("workbook");
+        }
+        var fromOverview=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(
+                "Проверь все задания Мелиссы",new KolinChatService.Context("group",null,5)));
+        assertThat(fromOverview.studentId()).isEqualTo(melissa.getId());
+        assertThat(fromOverview.scope()).isEqualTo("workbook");
+    }
+    @Test void otherPupilsNameMustNeverBeMistakenForSelectedMelissa() {
+        var selected=new KolinChatService.Context("student",melissa.getId(),5);
+        var other=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(
+                "Проверь все задания Софии",selected));
+        assertThat(other.state()).isEqualTo("ready");
+        assertThat(other.studentId()).isEqualTo(sofia.getId());
+        var unknown=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(
+                "Проверь все задания Маши",selected));
+        assertThat(unknown.state()).isEqualTo("clarify");
+        assertThat(unknown.message()).contains("Открыта личная доска");
+    }
     @Test void ordinaryRequestsDoNotCaptureBoardAndSelectedPupilCanBeReviewedWithoutAName() {
         var context=new KolinChatService.Context("student",melissa.getId(),8);
         for(String question:List.of("Дай задания Мелиссе","Как объяснить дроби?","Проверь решение: 2+2=4"))
