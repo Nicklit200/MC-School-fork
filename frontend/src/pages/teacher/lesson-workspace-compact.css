@@ -510,3 +510,25 @@
 @media (max-width: 330px) {
   .teacher-shell .lesson-workspace .morning-error-answer { grid-template-columns: 1fr; }
 }
+
+/* Readable stacked fractions, roots and exponents in homework error cards. */
+.teacher-shell .lesson-workspace .morning-error-math-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.teacher-shell .lesson-workspace .morning-error-katex {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
+  margin: .1em .06em;
+}
+.teacher-shell .lesson-workspace .morning-error-katex .katex {
+  font-size: 1.08em;
+  color: inherit;
+}
+.teacher-shell .lesson-workspace .morning-error-answer-box .morning-error-katex .katex {
+  font-size: 1.04em;
+}
+.teacher-shell .lesson-workspace .morning-error-katex .katex-html {
+  white-space: nowrap;
+}

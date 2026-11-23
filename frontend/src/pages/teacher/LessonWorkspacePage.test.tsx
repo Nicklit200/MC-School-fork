@@ -68,6 +68,22 @@ describe('lesson workspace',()=>{
     expect(screen.getByText('Ошибка 1 из 3')).toBeInTheDocument();
   });
 
+  it('typesets fractions and square roots in the exercise and both answers',async()=>{
+    vi.mocked(lessonPreparationApi.get).mockResolvedValue({
+      eventId:'lesson-1', homeworkNotes:'',
+      difficulties:JSON.stringify({kind:'homework_errors_v1',issues:[{
+        student:'София', difficulty:'Дроби', task:'-1/2+3/4-(-1/4), вычислить',
+        studentAnswer:'12/8', correctAnswer:'1/2, так как -4/8+6/8+2/8=4/8',
+        source:'sofia_2026-11-21.pdf', page:'Aufgabe 1',
+      }]}),
+      coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'',
+    } as never);
+    mount();await screen.findByRole('heading',{name:'Дроби'});
+    const card = screen.getByRole('article');
+    expect(card.querySelectorAll('mfrac')).toHaveLength(9);
+    expect(card).toHaveTextContent('вычислить');
+    expect(card).toHaveTextContent('так как');
+  });
   it('shows only key real homework mistakes and never the manual note fields',async()=>{
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({
       eventId:'lesson-1',
@@ -80,7 +96,7 @@ describe('lesson workspace',()=>{
     } as never);
     mount(); await screen.findByRole('heading',{name:'Дроби'});
     expect(screen.getByText('Ошибка со знаком')).toBeInTheDocument();
-    expect(screen.getByText('Berechne -3 + 8.')).toBeInTheDocument();
+    expect(screen.getByRole('article')).toHaveTextContent('Berechne');
     expect(screen.getByText('Ученик')).toBeInTheDocument();
     expect(screen.getByText('Правильно')).toBeInTheDocument();
     expect(screen.getByText('Мелисса')).toBeInTheDocument();

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HomeworkMathText } from './HomeworkMathText';
 import './morning-lesson-digest.css';
 
 type Issue = {
@@ -93,7 +94,6 @@ function compareDifference(student: string, correct: string): {wrong: string; ri
     return {wrong: left[2] + left[3], right: right[2] + right[3]};
   return null;
 }
-function prettyMath(value: string): string { return value.replace(/-/g, '−'); }
 function HomeworkIssueCard({issue, de, index, total, onNavigate}: {
   issue: Issue;
   de: boolean;
@@ -126,19 +126,19 @@ function HomeworkIssueCard({issue, de, index, total, onNavigate}: {
     <div className="morning-error-topic"><span className="morning-error-alert" aria-hidden="true">!</span>{signError ? (de ? 'Vorzeichenfehler' : 'Ошибка со знаком') : issue.difficulty}</div>
     <div className="morning-error-section">
       <span className="morning-error-label">{de ? 'Aufgabe' : 'Задание'}{taskNumber ? ' ' + taskNumber[1] : ''}</span>
-      <p>{issue.task}</p>
+      <p><HomeworkMathText value={issue.task} /></p>
     </div>
     <div className="morning-error-answer">
       <div className="morning-error-answer-box morning-error-answer-box--wrong">
         <span className="morning-error-answer-caption"><span aria-hidden="true">×</span>{de ? 'Schüler' : 'Ученик'}</span>
-        <strong>{prettyMath(issue.studentAnswer)}</strong>
+        <strong><HomeworkMathText value={issue.studentAnswer} /></strong>
       </div>
       <div className="morning-error-answer-box morning-error-answer-box--right">
         <span className="morning-error-answer-caption"><span aria-hidden="true">✓</span>{de ? 'Richtig' : 'Правильно'}</span>
-        <strong>{prettyMath(issue.correctAnswer)}</strong>
+        <strong><HomeworkMathText value={issue.correctAnswer} /></strong>
       </div>
     </div>
-    {diff && <div className="morning-error-difference"><span aria-hidden="true">→</span> {de ? 'Unterschied:' : 'Разница:'} <b className="morning-error-wrong">{prettyMath(diff.wrong)}</b> {de ? 'statt' : 'вместо'} <b className="morning-error-right">{prettyMath(diff.right)}</b></div>}
+    {diff && <div className="morning-error-difference"><span aria-hidden="true">→</span> {de ? 'Unterschied:' : 'Разница:'} <b className="morning-error-wrong"><HomeworkMathText value={diff.wrong} /></b> {de ? 'statt' : 'вместо'} <b className="morning-error-right"><HomeworkMathText value={diff.right} /></b></div>}
     <div className="morning-error-footer"><span>{de ? 'Hausaufgabe' : 'Домашняя работа'}{date ? ' · ' + date[2] + '.' + date[1] : ''}</span><span>{de ? 'Im Unterricht besprechen' : 'Разобрать на уроке'}</span></div>
     <details className="morning-error-source-details"><summary>{de ? 'PDF-Quelle' : 'Источник PDF'}</summary><p>{issue.source}{issue.page ? ' · ' + issue.page : ''}</p></details>
   </article>;
