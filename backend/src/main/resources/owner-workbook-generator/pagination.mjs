@@ -87,26 +87,36 @@ export function preflightPages(pages, teacher=false) {
 // Treat that visual + task (including a two-column exercise grid) as one unit:
 // never leave the drawing alone at the bottom of an A4 page.
 const visualTypes = new Set(['graph','coordinateGrid','geometry','visualTask','strips']);
-function hasExercise(block,depth=0) {
-  if(!block || depth>12)return false;
-  if(block.type==='exercise' || block.type==='taskCard')return true;
-  const children = (block.type==='split' ? [...(block.left||[]),...(block.right||[])] : block.children)||[];
-  return children.some(child=>hasExercise(child,depth+1));
-}
+const instructionTypes = new Set(['text','explanation','richText']);
 function pageUnits(blocks) {
   const units=[];
   for(let i=0;i<blocks.length;i++){
-    const visual=blocks[i], next=blocks[i+1], after=blocks[i+2];
-    if(visualTypes.has(visual?.type) && hasExercise(next)){
-      units.push([visual,next]);
+    const current=blocks[i], next=blocks[i+1], after=blocks[i+2];
+    if(instructionTypes.has(current?.type) && visualTypes.has(next?.type)){
+      // Compiled visual tasks are [instruction, graph]. Keep both on ONE A4.
+      // If the graph is followed by exactly one related exercise, keep that too.
+      const unit=[current,next];
+      if(after?.type==='exercise' && !visualTypes.has(blocks[i+3]?.type)){
+        unit.push(after);
+        i+=2;
+      }else i++;
+      units.push(unit);
+    }else if(current?.type==='exercise' && visualTypes.has(next?.type) &&
+             !(after?.type==='exercise' && !visualTypes.has(blocks[i+3]?.type))){
+      // Some lessons put the instruction/exercise BEFORE the coordinate grid.
+      units.push([current,next]);
       i++;
-    }else if(visualTypes.has(visual?.type) &&
-      ['text','explanation','richText'].includes(next?.type) &&
-      blockHeightMm(next)<=16 && hasExercise(after)){
-      units.push([visual,next,after]);
+    }else if(visualTypes.has(current?.type) && independentTaskCount(next)===1){
+      // Never pull a whole grid containing multiple unrelated tasks beside a graph.
+      units.push([current,next]);
+      i++;
+    }else if(visualTypes.has(current?.type) &&
+      instructionTypes.has(next?.type) && blockHeightMm(next)<=16 &&
+      independentTaskCount(after)===1){
+      units.push([current,next,after]);
       i+=2;
     }else{
-      units.push([visual]);
+      units.push([current]);
     }
   }
   return units;
@@ -150,6 +160,32 @@ function independentTaskCount(block,depth=0) {
   return children.reduce((sum,child)=>sum+independentTaskCount(child,depth+1),0);
 }
 
+// A graph in side-by-side CSS columns has too little horizontal space and can
+// overflow A4. Unwrap graph-bearing layouts so each plot gets the full printable
+// width. taskCard remains atomic: its statement, plot and response space belong
+// to the SAME exercise.
+const graphTypes = new Set(['graph','coordinateGrid']);
+const layoutTypes = new Set(['row','grid','split','column','stack']);
+function containsGraph(block,depth=0){
+  if(!block||depth>12)return false;
+  if(graphTypes.has(block.type) ||
+      (block.type==='visualTask' && block.spec?.type==='graph'))return true;
+  const children=block.type==='split'
+    ? [...(block.left||[]),...(block.right||[])]
+    : block.children||[];
+  return children.some(child=>containsGraph(child,depth+1));
+}
+function fullWidthGraphBlocks(blocks,depth=0){
+  if(depth>12)throw new TypeError('Graph layout nesting is too deep');
+  return blocks.flatMap(block=>{
+    if(!layoutTypes.has(block?.type) || !containsGraph(block))return [block];
+    const children=block.type==='split'
+      ? [...(block.left||[]),...(block.right||[])]
+      : block.children||[];
+    return fullWidthGraphBlocks(children,depth+1);
+  });
+}
+
 /** Prefer two short/medium exercises per A4, without shrinking their workspace.
  * Major diagrams/graphs reserve a dedicated A4 with their directly related task.
  * The measured WeasyPrint geometry QA still has the final say and can repack.
@@ -166,7 +202,7 @@ export function autoPaginatePages(pages,teacher=false) {
     const flush=()=>{
       if(group.length){output.push({...p,blocks:group});group=[];taskCount=0;}
     };
-    for(const unit of pageUnits(p.blocks)) {
+    for(const unit of pageUnits(teacher ? p.blocks : fullWidthGraphBlocks(p.blocks))) {
       const visual=unit.some(b=>hasMajorVisual(b));
       const anchored=unit.length>1 && majorVisualTypes.has(unit[0]?.type);
       if(anchored && contentHeightMm(unit,teacher)>maximum)
