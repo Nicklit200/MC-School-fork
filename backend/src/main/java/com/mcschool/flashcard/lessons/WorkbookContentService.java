@@ -56,6 +56,11 @@ public class WorkbookContentService {
                 do not claim any errors unless actual analyzed submission evidence is provided. Do not invent profile facts.
                 Return lessonJson as a JSON string with meta, workbookPages, teacherPages. Use German student-facing text.
                 Every page must have title, subtitle, blocks. Keep each A4 page comfortably within one page, 2-3 tasks maximum.
+                For GRAPH / coordinate-grid tasks in lesson workbooks, dedicate ONE full A4 pupil page to ONE graph task.
+                Keep its German task instruction, graph/coordinate grid and sufficient answer space together on that page.
+                Never put two graph tasks side by side or inside the same grid/split/row; use separate workbookPages.
+                Do not put an unrelated exercise on a graph page. Preserve a readable, correctly scaled graph.
+                Daily homeworkMode still follows its separate single-page-per-day contract.
                 meta.durationMinutes must equal calendarDurationMinutes. Keep student and teacher answers strictly separate.
                 Math expressions use {"latex":"..."}; rich text uses {"type":"richText","content":[{"text":"..."},{"math":"..."}]}.
                 Supported blocks: callout {label,text}, exercise {number,title,subtitle,rows:[{label,math,work:true}],writeLines},
