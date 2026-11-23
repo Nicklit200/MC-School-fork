@@ -881,6 +881,17 @@ function storeTripDocument(t, { documentType, filename, mimeType, buffer, vehicl
   if(!['auftrag','cmr_loading','cmr_unloading','cmr','pod','rechnung','other'].includes(documentType))throw Object.assign(new Error('Unsupported document type'),{status:400});
   const paper=readPaperInput({paperAvailable,paperNote});
   if(typeof filename!=='string'||!filename.trim()||filename.length>500||/[\u0000-\u001f]/.test(filename))throw Object.assign(new Error('Invalid filename'),{status:400});
+  if(!Buffer.isBuffer(buffer)||!buffer.length)throw Object.assign(new Error('Uploaded file is empty'),{status:400});
+  if(/\.pdf$/i.test(filename)&&!buffer.subarray(0,1024).includes(Buffer.from('%PDF-')))throw Object.assign(new Error('PDF file content is invalid'),{status:400});
+  // Repeated MCP calls must not produce duplicate attachments for the same trip and type.
+  for(const existing of db.prepare("SELECT * FROM documents WHERE trip_id=? AND doc_type=? AND size=?").all(t.id,documentType,buffer.length)){
+    let existingBytes;
+    try{existingBytes=fs.readFileSync(path.join(DOCS_DIR,existing.stored_name));}catch{continue;}
+    if(existingBytes.equals(buffer)){
+      const trip=getTripByAny(t.id);
+      return {uploaded:true,alreadyPresent:true,document:docOut(existing),trip:{...trip,readiness:readiness(trip),missing:missingForTrip(trip)}};
+    }
+  }
   const id = crypto.randomUUID();
   const ext = path.extname(filename).replace(/[^.a-zA-Z0-9]/g,"").slice(0,10);
   const stored = id + ext;
@@ -1199,13 +1210,15 @@ function systemOverview() {
     database: "Local Windows SQLite",
     files: "Local documents in DATA_DIR",
     connector: CONNECTOR_TOKEN ? "Enabled" : "Disabled",
-    serverVersion:'2.0.0',
+    serverVersion:'2.1.0',
     capabilities:{invoiceDispatch:true,statusDates:true,statusHistory:true,completeExcel:true,paperTracking:true,signedConnectorResources:true}
   };
 }
 
 function queryTrips(args = {}) {
-  if(args.paper_available!==undefined&&typeof args.paper_available!=='boolean')throw Object.assign(new Error('paper_available must be a boolean'),{status:400});
+  for(const key of ['paper_available','has_price','has_cmr_file']){
+    if(args[key]!==undefined&&typeof args[key]!=='boolean')throw Object.assign(new Error(key+' must be a boolean'),{status:400});
+  }
   let sql = "SELECT * FROM trips WHERE 1=1";
   const vals = [];
   if (args.query) {
@@ -1219,6 +1232,11 @@ function queryTrips(args = {}) {
   if (args.vehicle) { sql += " AND LOWER(COALESCE(vehicle_plates,'')) LIKE ?"; vals.push("%" + String(args.vehicle).toLowerCase() + "%"); }
   sql += " ORDER BY date DESC, created_at DESC LIMIT 500";
   let rows = db.prepare(sql).all(...vals).map(tripOut);
+  if(args.has_price!==undefined)rows=rows.filter(trip=>(trip.priceEur!==null)===args.has_price);
+  if(args.has_cmr_file!==undefined){
+    const cmrTripIds=new Set(db.prepare("SELECT DISTINCT trip_id FROM documents WHERE doc_type IN ('cmr_loading','cmr_unloading','cmr','pod')").all().map(row=>row.trip_id));
+    rows=rows.filter(trip=>cmrTripIds.has(trip.id)===args.has_cmr_file);
+  }
   if(args.paper_available!==undefined)rows=rows.filter(trip=>(trip.paperDocumentCount>0)===args.paper_available);
   if (args.readiness) rows = rows.filter(t => readiness(t) === args.readiness);
   if(args.include_hidden_companies===false)rows=rows.filter(t=>db.prepare('SELECT active FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1').get(t.customer)?.active!==0);
@@ -2099,7 +2117,7 @@ const toolDefs = [
   },
   {
     name: "list_trips",
-    description: "List Tsubera trips with document completeness. Supports date range, customer, text query and readiness filter.",
+    description: "List Tsubera trips, including filters for known price and ACTUALLY attached CMR/POD file (not merely a status flag). Use has_price=true and has_cmr_file=true; paper originals are NOT required.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2111,7 +2129,9 @@ const toolDefs = [
         readiness: { type: "string", enum: ["ready_for_rechnung","missing_documents","rechnung_created","invoice_sent","documents_received","payment_received"] },
         statuses:{type:"array",items:{type:"string",enum:tripFilterStatuses},description:"Multiple selected statuses use OR."},
         include_hidden_companies:{type:"boolean",description:"Defaults to true for all records; false limits to current companies."},
-        paper_available:{type:'boolean',description:'True: at least one uploaded document has confirmed paper-copy possession, including other files. False: no confirmed paper copy. Combines with other filters using AND.'}
+        paper_available:{type:'boolean',description:'True: at least one uploaded document has confirmed paper-copy possession, including other files. False: no confirmed paper copy. Combines with other filters using AND.'},
+        has_price:{type:'boolean',description:'True: a price is recorded for the trip, independently of document status.'},
+        has_cmr_file:{type:'boolean',description:'True: actual uploaded CMR (loading or unloading) or POD document file is stored. No paper copy required. Combine with customer="DC Cargo", has_price=true to find all priced DC Cargo trips with files.'}
       },
       additionalProperties: false
     },
@@ -2304,7 +2324,7 @@ const toolDefs = [
   },
   {
     name: "upload_document",
-    description: "Upload a document file to an existing Tsubera trip. Supports Auftrag, CMR after loading, final CMR/POD after unloading, Rechnung, and other files. Maximum decoded file size is 10 MB.",
+    description: "ACTUALLY attach a file in ONE MCP call. Provide EITHER content_base64 (real file bytes up to 10 MB) OR source_url (accessible signed HTTPS download URL up to 20 MB). Supports PDF, CMR/POD and other types. A ChatGPT file ID or sandbox path alone is not accessible to the server. Only uploaded=true with document.id confirms upload.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2315,9 +2335,10 @@ const toolDefs = [
         paper_note:{type:"string",maxLength:2000},
         mime_type: { type: "string" },
         vehicle_plate: { type: "string", description: "Optional vehicle plate detected/selected from this document. It will be assigned to the tour." },
-        content_base64: { type: "string", description: "Base64 encoded raw file content, without data: prefix." }
+        content_base64: { type: "string", description: "Raw file bytes encoded in Base64, without data: prefix; maximum 10 MB decoded. Do not send the file name, file ID, or sandbox path." },
+        source_url: { type: "string", description: "Alternative: temporary signed PUBLICLY REACHABLE HTTPS file download URL; maximum 20 MB. Do not use sandbox: URLs, file IDs, or private file pages." }
       },
-      required: ["trip_id_or_number","document_type","filename","content_base64"],
+      required: ["trip_id_or_number","document_type","filename"],
       additionalProperties: false
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
@@ -2384,7 +2405,7 @@ const toolDefs = [
 ];
 
 async function callTool(name, args, req) {
-  if(name==='get_capabilities')return {serverVersion:'2.0.0',overview:systemOverview(),tripFields:Object.keys(tripOut(db.prepare('SELECT * FROM trips LIMIT 1').get())||dispatchFields),tools:toolDefs.map(tool=>({name:tool.name,inputSchema:tool.inputSchema,annotations:tool.annotations})),notes:['Dates not supplied for historical events remain unknown.','Dispatch tracking records facts; it never sends email or paper post.','Receipt rollback clears its date/countdown; configured payment terms remain.','MCP signed resources expire after 15 minutes.']};
+  if(name==='get_capabilities')return {serverVersion:'2.1.0',overview:systemOverview(),tripFields:Object.keys(tripOut(db.prepare('SELECT * FROM trips LIMIT 1').get())||dispatchFields),tools:toolDefs.map(tool=>({name:tool.name,inputSchema:tool.inputSchema,annotations:tool.annotations})),notes:['Dates not supplied for historical events remain unknown.','Dispatch tracking records facts; it never sends email or paper post.','Receipt rollback clears its date/countdown; configured payment terms remain.','MCP signed resources expire after 15 minutes.','For file upload, pass real Base64 bytes or a server-reachable signed HTTPS URL; ChatGPT file IDs and sandbox paths are not sufficient.','Use list_trips has_price=true and has_cmr_file=true for price plus attached CMR/POD, regardless of paper.']};
   if(name==='export_trips_excel'){
     let trips;
     if(args.trip_ids!==undefined){
@@ -2625,20 +2646,27 @@ async function callTool(name, args, req) {
   if (name === "upload_document") {
     const t = getTripByAny(args.trip_id_or_number);
     if (!t) return { uploaded: false, error: "Trip not found" };
-    if (!args.filename || !args.document_type || !args.content_base64) throw new Error("filename, document_type and content_base64 are required");
-    let buf;
-    if (String(args.content_base64).startsWith("url:")) {
-      const downloaded = await downloadUrlToBuffer(String(args.content_base64).slice(4), 10 * 1024 * 1024);
-      buf = downloaded.buffer;
-    } else {
-      try { buf = Buffer.from(args.content_base64, "base64"); } catch { throw new Error("Invalid base64 content"); }
+    if (!args.filename || !args.document_type) throw Object.assign(new Error("filename and document_type are required"),{status:400});
+    const legacyUrl=typeof args.content_base64==='string'&&args.content_base64.startsWith('url:')?args.content_base64.slice(4):'';
+    const sourceUrl=args.source_url||legacyUrl;
+    const hasBase64=typeof args.content_base64==='string'&&!!args.content_base64&&!legacyUrl;
+    if((sourceUrl?1:0)+(hasBase64?1:0)!==1)throw Object.assign(new Error("Provide exactly one source: content_base64 or a reachable signed HTTPS source_url. Private ChatGPT file IDs and sandbox paths are not URLs."),{status:400});
+    let buf,sourceMime='';
+    if(sourceUrl){
+      const downloaded=await downloadUrlToBuffer(sourceUrl,20*1024*1024);
+      buf=downloaded.buffer;sourceMime=downloaded.mime;
+    }else{
+      const encoded=args.content_base64;
+      if(encoded.length>14*1024*1024)throw Object.assign(new Error("Base64 upload exceeds the 10 MB file limit"),{status:413});
+      if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded))throw Object.assign(new Error("Invalid Base64 document content"),{status:400});
+      buf=Buffer.from(encoded,'base64');
+      if(buf.length>10*1024*1024)throw Object.assign(new Error("File exceeds 10 MB Base64 upload limit"),{status:413});
     }
-    if (!buf.length) throw new Error("Uploaded file is empty");
-    if (buf.length > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB MCP upload limit");
+    if(!buf.length)throw Object.assign(new Error("Uploaded file is empty"),{status:400});
     return storeTripDocument(t, {
       documentType: args.document_type,
       filename: args.filename,
-      mimeType: args.mime_type || "application/octet-stream",
+      mimeType: args.mime_type || sourceMime || "application/octet-stream",
       buffer: buf,
       vehiclePlate: args.vehicle_plate,
       paperAvailable:args.paper_available??false,paperNote:args.paper_note??''
@@ -2713,8 +2741,8 @@ async function handleMcp(req, res, token) {
       return json(res, 200, { ...base, result: {
         protocolVersion: requested,
         capabilities: { tools: {} },
-        serverInfo: { name: "tsubera-transport-documents", version: "2.0.0" },
-        instructions: "Tsubera live transport tracker. Read get_capabilities for current schemas. Read/search trips, companies, vehicles, document metadata, dates, status history and invoice dispatch details; update them only as requested. Dispatch fields record how an invoice was sent; tools do not send email or paper post. Never invent historical dates. Receipt rollback clears its date/countdown but preserves configured payment days. Mark paper possession only on explicit user confirmation; a copy does not prove originals or mailing. For a file already in ChatGPT/local working files, prefer create_document_upload_url and POST raw bytes to its scoped expiring URL. get_document returns a scoped expiring download. export_trips_excel preserves requested IDs/order or supplied filters. Normal web APIs remain authenticated. Fakturownia is optional read-only and API credentials never appear in results."
+        serverInfo: { name: "tsubera-transport-documents", version: "2.1.0" },
+        instructions: "Tsubera live transport tracker. Read get_capabilities for current schemas. Read/search trips, companies, vehicles, document metadata, dates, status history and invoice dispatch details; update them only as requested. Dispatch fields record how an invoice was sent; tools do not send email or paper post. Never invent historical dates. Receipt rollback clears its date/countdown but preserves configured payment days. Mark paper possession only on explicit user confirmation; a copy does not prove originals or mailing. For ChatGPT files: prefer upload_document in ONE call, passing content_base64 if the client's original bytes are accessible, or a signed HTTPS source_url if available. Private ChatGPT file IDs and sandbox paths are not fetchable by this server. create_document_upload_url is ONLY useful if the client can actually POST raw bytes to it. An upload URL alone is NOT a saved document. Verify uploaded=true plus document.id or get_trip. Find priced trips with real CMR/POD files using list_trips with customer, has_price=true, has_cmr_file=true; this needs no paper original. get_document returns a scoped expiring download. export_trips_excel preserves requested IDs/order or supplied filters. Normal web APIs remain authenticated. Fakturownia is optional read-only and API credentials never appear in results."
       }});
     }
     if (msg.method === "ping") return json(res, 200, { ...base, result: {} });
