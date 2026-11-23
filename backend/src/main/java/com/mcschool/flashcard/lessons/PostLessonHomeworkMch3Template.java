@@ -45,16 +45,34 @@ final class PostLessonHomeworkMch3Template {
                 throw new IllegalArgumentException("HOMEWORK_CONTENT_TASK_INVALID");
             String title = text(task, "title", 145, true);
             String description = text(task, "description", 200, false);
+            String kind = text(task, "kind", 20, true);
+            String label = String.format("%02d",i+1);
+
+            // Graph tasks use the SAME MCH3 visualTask renderer as teacher workbooks.
+            // Only coefficient data enters the diagram. The model cannot inject
+            // pixels, SVG, answers, a separate display expression or a fake QA result.
+            if("graph".equals(kind)) {
+                if(!text(task,"expression",200,false).isBlank()
+                        || !text(task,"answer",130,false).isBlank()
+                        || !text(task,"variable",8,false).isBlank())
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_ALGEBRA_FIELDS");
+                Map<String,Object> spec = graphSpec(task.get("visualGraph"),independent);
+                studentBlocks.add(Map.of("type","visualTask","number",i+1,"spec",spec));
+                studentBlocks.add(Map.of("type","answerLines","lines",6));
+                assertions.add(Map.of("number",i+1,"kind","visualValue"));
+                continue;
+            }
+
+            if(task.get("visualGraph")!=null)
+                throw new IllegalArgumentException("HOMEWORK_ALGEBRA_VISUAL_UNEXPECTED");
             String expression = text(task, "expression", 200, true);
             String answer = text(task, "answer", 130, true);
-            String kind = text(task, "kind", 20, true);
             String variable = text(task, "variable", 8, false);
             // One authoritative expression feeds both the visible formula and
             // algebra QA. Old mathTokens are deliberately ignored, including
             // blanks, answers or a different problem the model supplied there.
             verifyPedagogicalTitle(title,expression);
             Object math = PostLessonHomeworkMath.student(expression,kind,variable);
-            String label = String.format("%02d", i+1);
             Map<String,Object> exercise = new LinkedHashMap<>();
             exercise.put("type","exercise");
             exercise.put("number",label);
@@ -65,10 +83,8 @@ final class PostLessonHomeworkMch3Template {
             studentBlocks.add(exercise);
 
             // Never trust a free-form explanation as an unchecked teacher answer.
-            // Render the same expression and proposed answer that SymPy checks
-            // in qa.algebra; the teacher may explain steps live.
             String checkedAnswer = kind.equals("solution")
-                    ? expression + "  →  " + variable + " = " + answer
+                    ? expression + "  ->  " + variable + " = " + answer
                     : expression + " = " + answer;
             answers.add(Map.of("label",label,"text",checkedAnswer));
             Map<String,Object> assertion = new LinkedHashMap<>();
@@ -84,8 +100,6 @@ final class PostLessonHomeworkMch3Template {
                 case "solution" -> {
                     if(!expression.contains("=") || !variable.matches("[a-z]"))
                         throw new IllegalArgumentException("HOMEWORK_CONTENT_EQUATION_INVALID");
-                    // Prove a unique linear solution, rather than accepting a
-                    // proposed value merely because substitution happens to work.
                     assertion.put("kind","linearSolution");
                     assertion.put("equation",expression);
                     assertion.put("solution",Map.of(variable,answer));
@@ -110,16 +124,72 @@ final class PostLessonHomeworkMch3Template {
         Map<String,Object> document = new LinkedHashMap<>();
         document.put("meta",meta);
         document.put("workbookPages",List.of(page));
+        List<Map<String,Object>> teacherBlocks = new ArrayList<>();
+        if(!answers.isEmpty())teacherBlocks.add(Map.of("type","solutions",
+                "section",topic,"title","Antworten","items",answers));
+        else teacherBlocks.add(Map.of("type","teacherNote","label","GRAFIK",
+                "title","Grafiklösungen","paragraphs",List.of(
+                "Die automatisch geprüften Grafiklösungen folgen auf den Referenzseiten.")));
         document.put("teacherPages",List.of(Map.of(
-                "title","Lösungen",
-                "subtitle","Nur für Lehrkräfte",
-                "blocks",List.of(Map.of("type","solutions", "section",topic,
-                        "title","Antworten", "items",answers)))));
+                "title","Lösungen","subtitle","Nur für Lehrkräfte","blocks",teacherBlocks)));
         document.put("qa",Map.of("algebra",assertions));
 
         // Same MCH3 school validation used for manually-authored homework.
         String source = mapper.writeValueAsString(document);
         return McpHomeworkDraftValidator.normalize(mapper,source,day,totalDays,studentName);
+    }
+
+    private static Map<String,Object> graphSpec(Object raw, boolean independent) {
+        if(!(raw instanceof Map<?,?> graph))
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_SPEC_REQUIRED");
+        String objective = String.valueOf(graph.get("objective"));
+        if(!java.util.Set.of("zeros","value","aboveBelow").contains(objective))
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_OBJECTIVE");
+        List<Double> coefficients = boundedNumbers(graph.get("coefficients"),3,false);
+        if(Math.abs(coefficients.get(0))<1e-9)
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_NOT_QUADRATIC");
+        List<Double> xRange = boundedNumbers(graph.get("xRange"),2,true);
+        List<Double> yRange = boundedNumbers(graph.get("yRange"),2,true);
+        Map<String,Object> spec = new LinkedHashMap<>();
+        spec.put("type","graph");
+        spec.put("language",independent?"de":"ru");
+        spec.put("objective",objective);
+        spec.put("series",List.of(Map.of("kind","quadratic","parameters",coefficients)));
+        spec.put("xRange",xRange);
+        spec.put("yRange",yRange);
+        switch(objective) {
+            case "value" -> {
+                double at = finiteNumber(graph.get("at"));
+                if(at<xRange.get(0)||at>xRange.get(1))
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_AT_OUTSIDE_RANGE");
+                spec.put("at",at);
+            }
+            case "aboveBelow" -> {
+                double level = finiteNumber(graph.get("level"));
+                if(level<yRange.get(0)||level>yRange.get(1))
+                    throw new IllegalArgumentException("HOMEWORK_GRAPH_LEVEL_OUTSIDE_RANGE");
+                spec.put("level",level);
+            }
+            default -> { }
+        }
+        return spec;
+    }
+
+    private static List<Double> boundedNumbers(Object raw,int size,boolean range) {
+        if(!(raw instanceof List<?> values) || values.size()!=size)
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_NUMBERS");
+        List<Double> out = new ArrayList<>();
+        for(Object item:values)out.add(finiteNumber(item));
+        if(range && (out.get(1)-out.get(0)<1 || out.get(1)-out.get(0)>20))
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_RANGE");
+        return out;
+    }
+
+    private static double finiteNumber(Object raw) {
+        if(!(raw instanceof Number n) || !Double.isFinite(n.doubleValue())
+                || Math.abs(n.doubleValue())>20)
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_NUMBER_INVALID");
+        return n.doubleValue();
     }
 
     /**
