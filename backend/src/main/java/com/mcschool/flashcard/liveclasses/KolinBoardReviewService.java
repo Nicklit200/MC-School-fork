@@ -18,7 +18,10 @@ import org.springframework.stereotype.Service;
 public class KolinBoardReviewService {
     public static final int MAX_IMAGE_BYTES = 1_500_000;
     private static final String JPEG = "data:image/jpeg;base64,";
-    private static final Pattern REVIEW = Pattern.compile("(?iu)(провер[ьиья]|проверь|посмотр|разбер|разоб[ер]|оцени|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|check|review|mistake|wrong|prüf|pruf|kontrollier|schau|fehler)");
+    private static final Pattern REVIEW = Pattern.compile("(?iu)(провер[ьиья]|проверь|првоер\\p{L}*|провре\\p{L}*|посмотр|разбер|разоб[ер]|оцени|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|check|review|mistake|wrong|prüf|pruf|kontrollier|schau|fehler)");
+    // A named page is a page number, not an exercise number. Ordinal wording
+    // ("вторую страницу") must not silently fall back to the pupil's own view.
+    private static final Pattern SECOND_PAGE = Pattern.compile("(?iu)(?:втор\\p{L}*\\s+(?:страниц|лист)\\p{L}*|(?:страниц|лист)\\p{L}*\\s*(?:№\\s*)?2\\b|second\\s+page|page\\s+2|zweite\\s+seite|seite\\s+2)");
     private static final Pattern WHOLE = Pattern.compile("(?iu)(всю|весь|всех.{0,10}страниц|тетрад|документ|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|workbook|document|all.{0,10}page|mistake|wrong|fehler|heft|gesamte)");
     private static final Pattern EXPLAIN = Pattern.compile("(?iu)(об[ъь]?[яе]сн|поясн|разъясн|покаж|найди|где|erklär|erklar|explain|show|find|where)");
     private static final Pattern FIRST_PAGE = Pattern.compile("(?iu)(?:перв\\p{L}*|задани\\p{L}*\\s*(?:№\\s*)?1\\b|страниц\\p{L}*\\s*(?:№\\s*)?1\\b|лист\\p{L}*\\s*(?:№\\s*)?1\\b|first\\s+(?:page|sheet|task|exercise))");
@@ -62,6 +65,10 @@ public class KolinBoardReviewService {
     public Target resolve(AuthenticatedUser teacher, UUID classId, TargetRequest request) {
         OnlineClass room=access.requireHost(teacher,classId);
         Target target=resolve(room,request.text(),request.context());
+        if ("ready".equals(target.state()) && REVIEW.matcher(request.text()).find()
+                && SECOND_PAGE.matcher(request.text()).find()) {
+            return new Target("ready",target.studentId(),target.studentName(),null,"task_page",2);
+        }
         // When the teacher explicitly asks to review a numbered task, inspect
         // its *actual saved PDF page*, not a guessed index or current pupil tab.
         if (lessonContext!=null && REVIEW.matcher(request.text()).find()
