@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { HomeworkMathText, homeworkMathSegments, plainMathToLatex } from './HomeworkMathText';
 
 describe('teacher homework mathematical typography', () => {
