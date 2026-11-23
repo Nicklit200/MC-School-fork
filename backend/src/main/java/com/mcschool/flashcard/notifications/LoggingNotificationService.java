@@ -30,6 +30,12 @@ public class LoggingNotificationService implements NotificationService {
     }
 
     @Override
+    public void sendOwnerWorkbookFailure(User recipient, String eventId, int attempt, String errorCode) {
+        log.warn("[notification] Workbook failure alert NOT EMAILED: role={} event={} attempt={} code={} reason=MAIL_DISABLED",
+                recipient.getRole(), eventId, attempt, errorCode);
+    }
+
+    @Override
     public void sendParentMissedHomework(User parent, User student, long unfinishedHomeworkCount) {
         log.info("[notification] Parent reminder for {} — child={} unfinishedHomework={} link={} (email not enabled)",
                 parent.getEmail(), student.getFullName(), unfinishedHomeworkCount, appLinks.parentLink());

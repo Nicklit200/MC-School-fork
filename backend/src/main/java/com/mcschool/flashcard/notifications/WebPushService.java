@@ -69,9 +69,9 @@ public class WebPushService {
             if (status == 404 || status == 410
                     || (status == 400 && responseBody.contains("VapidPkHashMismatch"))) {
                 subscriptionRepository.delete(subscription);
-                if (status == 400) {
-                    throw new IllegalStateException("Push subscription used an old VAPID key and was removed");
-                }
+                // 404/410 were previously counted as delivered by callers.
+                // Removing an expired subscription is NOT a successful push.
+                throw new IllegalStateException("Push subscription expired (HTTP " + status + ") and was removed");
             } else if (status >= 400) {
                 String endpointHost;
                 try {

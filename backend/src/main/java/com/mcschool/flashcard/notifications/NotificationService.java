@@ -11,4 +11,7 @@ public interface NotificationService {
 
     /** Tell a linked parent that the child still has unfinished homework for today. */
     void sendParentMissedHomework(User parent, User student, long unfinishedHomeworkCount);
+
+    /** Email fallback when a teacher or administrator has no working phone push. */
+    void sendOwnerWorkbookFailure(User recipient, String eventId, int attempt, String errorCode);
 }

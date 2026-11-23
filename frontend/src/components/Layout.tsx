@@ -76,7 +76,10 @@ export function Layout({ children }: { children: ReactNode }) {
   if (isTeacher) {
     return <TeacherShell user={user} isImpersonating={isImpersonating} returningToAdmin={returningToAdmin}
       onlineClassesAvailable={onlineClassesAvailable}
-      onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>{children}</TeacherShell>;
+      onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>
+        {!isImpersonating && <PushQuickStart userId={user.id} role="TEACHER" />}
+        {children}
+      </TeacherShell>;
   }
 
   if (isStudent) {
@@ -156,6 +159,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
       <main className={`content${isStoriesWorkspace ? ' content--stories-workspace' : ''}`}>
         {isParent && !isImpersonating && <PushQuickStart userId={user!.id} role="PARENT" />}
+        {isAdmin && !isImpersonating && <PushQuickStart userId={user!.id} role="ADMIN" />}
         {children}
       </main>
     </div>

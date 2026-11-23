@@ -2,12 +2,14 @@ package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.dto.GroupLessonResponse;
+import com.mcschool.flashcard.notifications.NotificationService;
 import com.mcschool.flashcard.notifications.PushSubscription;
 import com.mcschool.flashcard.notifications.PushSubscriptionRepository;
 import com.mcschool.flashcard.notifications.WebPushService;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import com.mcschool.flashcard.users.UserStatus;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,6 +54,7 @@ public class OwnerSameDayWorkbookService {
     private final LessonPdfDraftService drafts;
     private final PushSubscriptionRepository subscriptions;
     private final WebPushService webPush;
+    private final NotificationService emailAlerts;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "owner-same-day-workbooks");
         thread.setDaemon(true);
@@ -66,7 +69,8 @@ public class OwnerSameDayWorkbookService {
             GoogleCalendarLessonService lessons, LessonPreparationRepository preparations,
             AiLessonPilotService evidence, WorkbookContentService content,
             OwnerWorkbookPdfRenderService renderer, LessonPdfDraftService drafts,
-            PushSubscriptionRepository subscriptions, WebPushService webPush) {
+            PushSubscriptionRepository subscriptions, WebPushService webPush,
+            NotificationService emailAlerts) {
         this.db = db;
         this.users = users;
         this.lessons = lessons;
@@ -77,6 +81,7 @@ public class OwnerSameDayWorkbookService {
         this.drafts = drafts;
         this.subscriptions = subscriptions;
         this.webPush = webPush;
+        this.emailAlerts = emailAlerts;
     }
 
     /** Immediate, post-commit trigger after the teacher presses Create lesson. */
@@ -287,8 +292,37 @@ public class OwnerSameDayWorkbookService {
                   error_code=?,updated_at=now() WHERE teacher_id=? AND event_id=?
                 """, code.substring(0, Math.min(code.length(), 120)), OWNER, eventId);
             User owner = owner();
-            if (owner != null) push(owner, "Не удалось создать тетрадь",
-                    "Автоматическая подготовка не завершилась. Откройте урок для повторного запуска.", eventId, false);
+            if (owner != null) {
+                push(owner, "Не удалось создать тетрадь",
+                        "Автоматическая подготовка не завершилась. Откройте урок для повторного запуска.", eventId, false);
+                // Email on the first and final bounded attempts; a push without
+                // any subscribed device cannot be the only warning channel.
+                try {
+                    Integer attempts = db.queryForObject("""
+                            SELECT attempts FROM owner_same_day_workbook_jobs
+                             WHERE teacher_id=? AND event_id=?
+                            """, Integer.class, OWNER, eventId);
+                    if (attempts != null && (attempts == 1 || attempts >= 4)) {
+                        List<User> recipients = new java.util.ArrayList<>();
+                        recipients.add(owner);
+                        recipients.addAll(users.findAdminAccountsByRole(Role.ADMIN).stream()
+                                .filter(u -> u.getStatus() == UserStatus.ACTIVE && !u.isArchived())
+                                .toList());
+                        Set<String> emailed = new java.util.HashSet<>();
+                        for (User recipient : recipients) {
+                            if (recipient.getEmail() == null || recipient.getEmail().isBlank()) continue;
+                            if (!emailed.add(recipient.getEmail().trim().toLowerCase(java.util.Locale.ROOT))) continue;
+                            try { emailAlerts.sendOwnerWorkbookFailure(recipient, eventId, attempts, code); }
+                            catch (RuntimeException deliveryFailure) {
+                                LOG.warn("Owner workbook email alert failed event={} role={}", eventId, recipient.getRole());
+                            }
+                        }
+                    }
+                } catch (RuntimeException notificationFailure) {
+                    LOG.warn("Owner workbook email alert dispatch failed event={} errorType={}",
+                            eventId, notificationFailure.getClass().getSimpleName());
+                }
+            }
         }
     }
 
@@ -323,11 +357,41 @@ public class OwnerSameDayWorkbookService {
     }
 
     private void push(User owner, String title, String body, String eventId, boolean openWorkbook) {
-        if (!webPush.isConfigured()) return;
-        String target = notificationPath(eventId, openWorkbook);
-        for (PushSubscription subscription : subscriptions.findAllByUserId(owner.getId())) {
-            try { webPush.send(subscription, title, body, target, "owner-workbook-" + eventId); }
-            catch (RuntimeException ignored) { /* One broken phone never blocks publication. */ }
+        if (!webPush.isConfigured()) {
+            LOG.warn("Owner workbook alert not deliverable: event={} reason=WEB_PUSH_NOT_CONFIGURED", eventId);
+            return;
+        }
+        // The owner often uses the ADMIN account, not the teacher account
+        // used to produce the workbook. Send to both roles without exposing
+        // teacher-only endpoints to admins.
+        List<User> recipients = new java.util.ArrayList<>();
+        recipients.add(owner);
+        for (User admin : users.findAdminAccountsByRole(Role.ADMIN)) {
+            if (admin.getStatus() == UserStatus.ACTIVE && !admin.isArchived()
+                    && !admin.getId().equals(owner.getId())) recipients.add(admin);
+        }
+        for (User recipient : recipients) {
+            String target = recipient.getRole() == Role.ADMIN && !openWorkbook
+                    ? "/admin/teachers/" + OWNER + "/lessons/" + eventId
+                    : notificationPath(eventId, openWorkbook);
+            List<PushSubscription> phones = subscriptions.findAllByUserId(recipient.getId());
+            if (phones.isEmpty()) {
+                LOG.warn("Owner workbook alert not deliverable: event={} role={} reason=NO_REGISTERED_DEVICE",
+                        eventId, recipient.getRole());
+                continue;
+            }
+            int accepted = 0;
+            for (PushSubscription subscription : phones) {
+                try {
+                    webPush.send(subscription, title, body, target, "owner-workbook-" + eventId);
+                    accepted++;
+                } catch (RuntimeException failed) {
+                    LOG.warn("Owner workbook push rejected: event={} role={} errorType={}",
+                            eventId, recipient.getRole(), failed.getClass().getSimpleName());
+                }
+            }
+            LOG.info("Owner workbook alert: event={} role={} devices={} accepted={}",
+                    eventId, recipient.getRole(), phones.size(), accepted);
         }
     }
 
