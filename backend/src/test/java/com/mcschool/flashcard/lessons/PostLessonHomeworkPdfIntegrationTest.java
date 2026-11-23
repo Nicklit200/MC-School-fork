@@ -156,4 +156,63 @@ class PostLessonHomeworkPdfIntegrationTest {
         verify(http,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
         verifyNoInteractions(drafts,brand);
     }
+
+    @Test
+    @SuppressWarnings({"unchecked","rawtypes"})
+    void aFinishedGraphLessonProducesARealVectorParabolaAndPrivateSolutions() throws Exception {
+        HttpClient http=mock(HttpClient.class);
+        LessonPdfDraftService drafts=mock(LessonPdfDraftService.class);
+        SchoolBrandGuideService brand=mock(SchoolBrandGuideService.class);
+        var renderer=new OwnerWorkbookPdfRenderService(json,drafts,brand);
+        ReflectionTestUtils.setField(renderer,"modulesDirectory",System.getenv("MINDCRAFTI_WORKBOOK_MODULES"));
+        var service=new PostLessonHomeworkContentService("fake-key","fake-model",json,renderer,http);
+
+        Map<String,Object> graph=new LinkedHashMap<>();
+        graph.put("family","quadratic");
+        graph.put("objective","zeros");
+        graph.put("coefficients",List.of(-1,0,4));
+        graph.put("xRange",List.of(-4,4));
+        graph.put("yRange",List.of(-5,5));
+        graph.put("at",null);
+        graph.put("level",null);
+        Map<String,Object> task=new LinkedHashMap<>(Map.of(
+                "title","Nullstellen ablesen","description","Verwende den fertigen Graphen.",
+                "expression","","answer","","kind","graph","variable","",
+                "sourceReference","Transkript 00:34, Nullstellen an der Tafel",
+                "evidenceStatus","SOLVED_WITH_HELP"));
+        task.put("visualGraph",graph);
+        Map<String,Object> content=Map.of(
+                "topic","Quadratische Funktionen","subtitle","Parabel und Nullstellen",
+                "hint","Merke: Nullstellen sind Schnittpunkte mit der x-Achse.",
+                "tasks",List.of(task));
+        HttpResponse<String> reply=mock(HttpResponse.class);
+        when(reply.statusCode()).thenReturn(200);
+        when(reply.body()).thenReturn(json.writeValueAsString(Map.of("status","completed",
+                "output",List.of(Map.of("type","message","content",List.of(
+                        Map.of("type","output_text","text",json.writeValueAsString(content))))))));
+        when(http.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(reply);
+        var output=service.make(Map.of(
+                "homeworkPrompt","Use the lesson's graph, not its easy preliminary algebra.",
+                "transcript","Die Parabel am Graph hat Nullstellen. Die Schüler lesen den Graph ab. "
+                        +"Wir besprechen die Nullstellen und den Scheitelpunkt."),1,7,"Fictional Pupil");
+        assertEquals(1,output.studentPages());
+        assertTrue(output.teacherPages()>=1);
+        assertTrue(output.studentPdf().length>1000);
+        assertTrue(output.teacherPdf().length>1000);
+        assertEquals(true,output.qa().get("mathPassed"));
+        assertEquals(true,output.qa().get("layoutPassed"));
+        try(PDDocument pupil=Loader.loadPDF(output.studentPdf());
+            PDDocument staff=Loader.loadPDF(output.teacherPdf())){
+            assertEquals(1,pupil.getNumberOfPages());
+            String pupilText=new PDFTextStripper().getText(pupil);
+            String staffText=new PDFTextStripper().getText(staff);
+            assertTrue(pupilText.contains("Quadratische Funktionen"));
+            assertFalse(pupilText.contains("Nur für Lehrkräfte"));
+            assertFalse(pupilText.contains("Transkript 00:34"));
+            assertTrue(staffText.contains("Nur für Lehrkräfte"));
+        }
+        verify(http,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+        verifyNoInteractions(drafts,brand);
+    }
+
 }
