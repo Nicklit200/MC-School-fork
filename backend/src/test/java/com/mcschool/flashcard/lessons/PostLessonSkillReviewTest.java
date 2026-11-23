@@ -74,6 +74,41 @@ class PostLessonSkillReviewTest {
     }
 
     @Test
+    void evidenceRequiresCorrectPupilBoardAndExactInkPage() {
+        String personal="personal-workbook-00000000-0000-4000-8000-000000000001";
+        var falsePage=new java.util.HashMap<String,Object>(proposal("skill-fractions",99,2));
+        falsePage.put("sourceBoardId",personal);
+        falsePage.put("pageNumber",3);
+        var realPage=new java.util.HashMap<String,Object>(proposal("skill-fractions",99,2));
+        realPage.put("sourceBoardId",personal);
+        realPage.put("pageNumber",4);
+        var otherPupil=new java.util.HashMap<String,Object>(proposal("skill-fractions",99,2));
+        otherPupil.put("sourceBoardId","personal-workbook-00000000-0000-4000-8000-000000000002");
+        otherPupil.put("pageNumber",4);
+        var mixed=Map.<String,Object>of("observations",List.of(falsePage,otherPupil,realPage));
+        assertThat(PostLessonSkillAnalysisService.validateVerified(mixed,List.of(allowed()),
+                java.util.Set.of(personal+"#4"),java.util.Set.of(personal),false))
+                .extracting(PostLessonSkillAnalysisService.Observation::pageNumber)
+                .containsExactly(4);
+        assertThat(PostLessonSkillAnalysisService.validateVerified(mixed,List.of(allowed()),
+                java.util.Set.of(),java.util.Set.of(personal),false)).isEmpty();
+    }
+
+    @Test
+    void teacherSpeechCannotProveStudentMastery() {
+        var speech=new java.util.HashMap<String,Object>(proposal("skill-fractions",99,2));
+        speech.put("origin","STUDENT_SPEECH");
+        speech.put("sourceBoardId","");
+        speech.put("pageNumber",0);
+        assertThat(PostLessonSkillAnalysisService.validateVerified(
+                Map.of("observations",List.of(speech)),List.of(allowed()),
+                java.util.Set.of(),java.util.Set.of(),false)).isEmpty();
+        assertThat(PostLessonSkillAnalysisService.validateVerified(
+                Map.of("observations",List.of(speech)),List.of(allowed()),
+                java.util.Set.of(),java.util.Set.of(),true)).hasSize(1);
+    }
+
+    @Test
     void lowCertaintyAndNonSkillCatalogNodesAreRejected() {
         var topic=new SkillBoardService.Node("topic-fractions","topic","Brüche","Brüche",
                 "chapter","","","orange",0,0,false);
