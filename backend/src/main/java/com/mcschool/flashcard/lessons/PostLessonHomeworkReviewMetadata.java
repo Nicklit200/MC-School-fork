@@ -23,6 +23,8 @@ final class PostLessonHomeworkReviewMetadata {
                 // Store a stable mathematical graph fingerprint for cross-day
                 // diversity checks. No teacher answer is ever stored here.
                 info.put("expression",shortText(PostLessonHomeworkSeriesDiversity.taskKey(task),200));
+                info.put("sourceReference",shortText(task.get("sourceReference"),160));
+                info.put("evidenceStatus",shortText(task.get("evidenceStatus"),30));
                 tasks.add(info);
             }
         }
