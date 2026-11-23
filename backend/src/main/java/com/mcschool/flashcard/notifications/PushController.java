@@ -4,8 +4,11 @@ import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
+import com.mcschool.flashcard.users.UserStatus;
 import jakarta.validation.Valid;
 import java.util.Map;
+import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -54,6 +57,22 @@ public class PushController {
                 "registeredDevices", devices,
                 "ready", webPushService.isConfigured() && devices > 0,
                 "emailAvailable", user.getEmail() != null && !user.getEmail().isBlank());
+    }
+
+    /** Administrator's diagnostics: who can actually receive evening reminders? */
+    @GetMapping("/admin/parents")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> parentDeliveryReadiness() {
+        return userRepository.findAdminAccountsByRole(Role.PARENT).stream()
+                .filter(parent -> parent.getStatus() == UserStatus.ACTIVE && !parent.isArchived())
+                .map(parent -> Map.<String, Object>of(
+                        "parentId", parent.getId().toString(),
+                        "registeredDevices", subscriptionRepository.findAllByUserId(parent.getId()).size(),
+                        "emailAvailable", parent.getEmail() != null && !parent.getEmail().isBlank(),
+                        "linkedChildren", userRepository.findAllByParentIdAndArchivedFalseOrderByFullNameAsc(
+                                parent.getId()).size()
+                )).toList();
     }
 
     @PostMapping("/subscriptions")
