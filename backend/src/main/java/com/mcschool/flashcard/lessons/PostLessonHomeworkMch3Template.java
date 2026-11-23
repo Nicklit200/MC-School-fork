@@ -145,16 +145,23 @@ final class PostLessonHomeworkMch3Template {
         String objective = String.valueOf(graph.get("objective"));
         if(!java.util.Set.of("zeros","value","aboveBelow").contains(objective))
             throw new IllegalArgumentException("HOMEWORK_GRAPH_OBJECTIVE");
-        List<Double> coefficients = boundedNumbers(graph.get("coefficients"),3,false);
+        String family=String.valueOf(graph.get("family"));
+        if(!java.util.Set.of("quadratic","linear").contains(family))
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_FAMILY");
+        if(!graph.keySet().stream().allMatch(key ->
+                java.util.Set.of("family","objective","coefficients","xRange","yRange","at","level").contains(key)))
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_UNKNOWN_PROPERTY");
+        List<Double> coefficients = boundedNumbers(graph.get("coefficients"),
+                "quadratic".equals(family)?3:2,false);
         if(Math.abs(coefficients.get(0))<1e-9)
-            throw new IllegalArgumentException("HOMEWORK_GRAPH_NOT_QUADRATIC");
+            throw new IllegalArgumentException("HOMEWORK_GRAPH_DEGENERATE");
         List<Double> xRange = boundedNumbers(graph.get("xRange"),2,true);
         List<Double> yRange = boundedNumbers(graph.get("yRange"),2,true);
         Map<String,Object> spec = new LinkedHashMap<>();
         spec.put("type","graph");
         spec.put("language",independent?"de":"ru");
         spec.put("objective",objective);
-        spec.put("series",List.of(Map.of("kind","quadratic","parameters",coefficients)));
+        spec.put("series",List.of(Map.of("kind",family,"parameters",coefficients)));
         spec.put("xRange",xRange);
         spec.put("yRange",yRange);
         switch(objective) {
