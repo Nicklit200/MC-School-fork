@@ -34,8 +34,6 @@ public class KolinBoardReviewService {
     private final KolinTaskRoster roster;
     private final OnlineClassDocumentService documents;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
-    private KolinLessonContextService lessonContext;
-    @org.springframework.beans.factory.annotation.Autowired(required=false)
     private OnlineClassAnnotationDocumentRepository annotations;
 
     public KolinBoardReviewService(OnlineClassAccessService access, KolinTaskRoster roster, OnlineClassDocumentService documents) {
@@ -70,23 +68,16 @@ public class KolinBoardReviewService {
         Integer requestedPage=namedPageNumber(request.text());
         if ("ready".equals(target.state()) && REVIEW.matcher(request.text()).find() && requestedPage!=null)
             return new Target("ready",target.studentId(),target.studentName(),null,"task_page",requestedPage);
-        // When the teacher explicitly asks to review a numbered task, inspect
-        // its *actual saved PDF page*, not a guessed index or current pupil tab.
-        if (lessonContext!=null && REVIEW.matcher(request.text()).find()
-                && KolinExerciseIndex.requestedNumber(request.text())!=null
-                && !"clarify".equals(target.state())) {
-            try {
-                var location=lessonContext.locateTask(teacher,room,request.text(),request.context());
-                if(location.isPresent()) {
-                    var task=location.get();
-                    return new Target("ready",task.studentId(),task.studentName(),
-                        null,"task_page",task.pageNumber());
-                }
-            } catch(RuntimeException ignored) {
-                // Preserve the existing explicit-current-page flow, never fail
-                // all of Kolyn because one saved PDF cannot be indexed.
-            }
-        }
+        // A request for exercise 7 (or exercises 7 and 8) means the numbered
+        // EXERCISES, not PDF page 7 and not the page the teacher/pupil is viewing.
+        // The text-layer index can be absent or imperfect, especially for
+        // scanned worksheets and multi-exercise requests. Give vision every saved
+        // page of the authorized recipient so it can locate all requested tasks.
+        // The existing 40-page/16 MB snapshot limits still apply; never silently
+        // substitute the currently opened page if the workbook is too large.
+        if ("ready".equals(target.state()) && REVIEW.matcher(request.text()).find()
+                && KolinExerciseIndex.requestedNumber(request.text())!=null)
+            return new Target("ready",target.studentId(),target.studentName(),null,"workbook");
         return target;
     }
     static Integer namedPageNumber(String text) {

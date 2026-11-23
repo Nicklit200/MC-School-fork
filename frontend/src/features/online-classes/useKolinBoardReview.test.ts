@@ -63,6 +63,12 @@ it('can review the whole saved workbook without pretending the pupil is online',
   await result.current('Что неправильно решила Мелисса?', {});
   expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 0, null, 'workbook');
 });
+it('reviews all saved pages when asked about tasks 7 and 8, ignoring the open page and pupil view', async () => {
+  mocks.target.mockResolvedValue({ state: 'ready', studentId: pupil, studentName: 'Мелисса', scope: 'workbook' });
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Проверь у Мелиссы задания 7 и 8', { targetType: 'group', currentWorkbookPage: 5 });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 0, null, 'workbook');
+});
 it('does not capture ordinary conversation or ambiguous recipients', async () => {
   const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
   for (const state of ['not_requested', 'clarify']) {

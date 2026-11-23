@@ -136,29 +136,45 @@ class KolinBoardReviewServiceTest {
         assertThat(named.studentId()).isEqualTo(melissa.getId());
     }
 
-    @Test void serverLocatesAndValidatesNumberedTaskOnTheCorrectSavedPupilPage() throws Exception {
-        var index=mock(KolinLessonContextService.class);
-        org.springframework.test.util.ReflectionTestUtils.setField(service,"lessonContext",index);
-        var context=new KolinChatService.Context("group",null,1);
-        String question="Проверь задание 7";
-        when(index.locateTask(host,room,question,context))
-            .thenReturn(Optional.of(new KolinLessonContextService.TaskLocation(melissa.getId(),"Мелисса",3)));
-        var target=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(question,context));
-        assertThat(target).extracting(KolinBoardReviewService.Target::state).isEqualTo("ready");
+    @Test void namedTasksOnOtherPagesReviewEverySavedPageOfOnlyTheNamedPupil() throws Exception {
+        // The teacher is on the group overview, not on Melissa's page.
+        var overview=new KolinChatService.Context("group",null,5);
+        String question="Проверь у Мелиссы задания 7 и 8";
+        var target=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(question,overview));
+        assertThat(target.state()).isEqualTo("ready");
         assertThat(target.studentId()).isEqualTo(melissa.getId());
-        assertThat(target).extracting(KolinBoardReviewService.Target::scope).isEqualTo("task_page");
-        assertThat(target.pageNumber()).isEqualTo(3);
-        String image=jpeg(80,100), privateBoard=PersonalBoard.workbookTargetIdFor(melissa.getId());
-        var snapshot=new KolinBoardReviewService.Snapshot(melissa.getId(),privateBoard,
-            3,5,2,null,Instant.now(),image,"task_page",5,List.of());
-        var validated=service.validate(host,room,question,context,snapshot);
-        assertThat(validated.scope()).isEqualTo("task_page");
-        assertThat(validated.pageNumber()).isEqualTo(3);
-        var spoof=new KolinBoardReviewService.Snapshot(melissa.getId(),privateBoard,
-            2,5,2,null,Instant.now(),image,"task_page",5,List.of());
-        assertThatThrownBy(()->service.validate(host,room,question,context,spoof))
-            .isInstanceOf(KolinRequestException.class);
-        verify(index,atLeast(2)).locateTask(host,room,question,context);
+        assertThat(target.scope()).isEqualTo("workbook");
+        // No text index result may restrict vision to a single page 5.
+        String board=PersonalBoard.workbookTargetIdFor(melissa.getId());
+        String image=jpeg(80,120);
+        var shot=new KolinBoardReviewService.Snapshot(melissa.getId(),board,1,5,0,null,Instant.now(),image,
+                "workbook",5,List.of(
+                    new KolinBoardReviewService.Page(2,0,image),
+                    new KolinBoardReviewService.Page(3,0,image),
+                    new KolinBoardReviewService.Page(4,9,image),
+                    new KolinBoardReviewService.Page(5,0,image)));
+        var metadata=service.validate(host,room,question,overview,shot);
+        assertThat(metadata.scope()).isEqualTo("workbook");
+        assertThat(metadata.pages()).extracting(KolinBoardReviewService.PageMetadata::pageNumber)
+                .containsExactly(1,2,3,4,5);
+        var crossStudent=new KolinBoardReviewService.Snapshot(sofia.getId(),
+                PersonalBoard.workbookTargetIdFor(sofia.getId()),1,5,0,null,Instant.now(),image,
+                "workbook",1,List.of());
+        assertThatThrownBy(()->service.validate(host,room,question,overview,crossStudent))
+                .isInstanceOf(KolinRequestException.class);
+    }
+    @Test void explicitExerciseOneAlsoSearchesTheWorkbookButNamedPdfPageKeepsItsPage() {
+        var selected=new KolinChatService.Context("student",melissa.getId(),5);
+        for(String question:List.of("Проверь задание 7", "Проверь задания 7 и 8",
+                "Проверь первое задание", "Проверь 7-е задание")) {
+            var target=service.resolve(host,room.getId(),new KolinBoardReviewService.TargetRequest(question,selected));
+            assertThat(target.scope()).as(question).isEqualTo("workbook");
+            assertThat(target.studentId()).isEqualTo(melissa.getId());
+        }
+        var page=service.resolve(host,room.getId(),
+                new KolinBoardReviewService.TargetRequest("Проверь страницу 4 Мелиссы",selected));
+        assertThat(page.scope()).isEqualTo("task_page");
+        assertThat(page.pageNumber()).isEqualTo(4);
     }
 
     @Test void aPupilStrokeAfterTaskPageSnapshotInvalidatesTheReviewBeforeVision() throws Exception {

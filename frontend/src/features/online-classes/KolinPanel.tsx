@@ -56,10 +56,11 @@ function TranscriptContextNote({ context, de }: { context: KolinTranscriptContex
   </footer>;
 }
 
-export function KolinPanel({ chat, context, currentStudentName }: {
+export function KolinPanel({ chat, context, currentStudentName, allStudentsOverview = false }: {
   chat: ReturnType<typeof useKolinChat>;
   context: KolinContext;
   currentStudentName?: string;
+  allStudentsOverview?: boolean;
 }) {
   const { language } = useI18n();
   const de = language === 'DE';
@@ -77,7 +78,9 @@ export function KolinPanel({ chat, context, currentStudentName }: {
       <div><strong className="kolin-panel__title">Kolyn</strong>
         <p className="kolin-panel__subtitle">{de ? 'KI-Assistent für Lehrkräfte' : 'AI-помощник преподавателя'}</p>
         <p className="kolin-panel__view-context" aria-live="polite">{de ? 'Ansicht: ' : 'Сейчас открыто: '}
-          {context.targetType === 'student' ? currentStudentName || (de ? 'Schüler' : 'Ученик') : de ? 'Gemeinsame Tafel' : 'Общая доска'}
+          {allStudentsOverview ? de ? 'Alle Schüler' : 'Все ученики'
+            : context.targetType === 'student' ? currentStudentName || (de ? 'Schüler' : 'Ученик')
+            : de ? 'Gemeinsame Tafel' : 'Общая доска'}
           {context.currentWorkbookPage ? ` · ${de ? 'Seite' : 'стр.'} ${context.currentWorkbookPage}` : ''}
         </p></div>
       <button type="button" className="answers-panel__close" onClick={chat.close}
@@ -90,8 +93,8 @@ export function KolinPanel({ chat, context, currentStudentName }: {
         : 'Я Kolyn. Помогу объяснить тему, разобрать решение и подготовить задания.'}
         <p>{de ? 'Bei Ihrer Frage nutze ich das gespeicherte Transkript dieses Unterrichts. Ich gebe keine automatischen Hinweise.'
           : 'Когда вы задаёте вопрос, я использую сохранённую расшифровку этого урока. Автоматических подсказок нет.'}</p>
-        <p>{de ? 'Sagen Sie zum Beispiel: Prüfe Melissas Lösung. Ich prüfe ihre aktuell geöffnete persönliche Seite.'
-          : 'Например: «Проверь задание у Мелиссы». Проверю текущую страницу её открытой личной доски.'}</p></li>}
+        <p>{de ? 'Zum Beispiel: Prüfe Melissas Aufgaben 7 und 8. Ich suche auf ihren gespeicherten Heftseiten.'
+          : 'Например: «Проверь задания 7 и 8 у Мелиссы». Найду их на сохранённых страницах её тетради.'}</p></li>}
       {chat.messages.map(message => <li key={message.id} className={`kolin-panel__message kolin-panel__message--${message.role}`}
         data-role={message.role} data-message-type={message.type}>
         <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolyn' : de ? 'Sie' : 'Вы'}</span>
