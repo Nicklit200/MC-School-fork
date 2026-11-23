@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { onlineClassesApi, type PostLessonHomeworkJob } from '../../api/onlineClasses';
+import { onlineClassesApi, type PostLessonHomeworkJob, type PostLessonSkillReviewJob } from '../../api/onlineClasses';
 import { ApiRequestError } from '../../api/client';
 import { postLessonHomeworkFailureMessage, postLessonHomeworkStageMessage } from './postLessonHomeworkMessages';
 import '../../styles/post-lesson-homework.css';
@@ -15,6 +15,7 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
   const [recipientsLoading, setRecipientsLoading] = useState(true);
   const [recipientsError, setRecipientsError] = useState(false);
   const [instructions, setInstructions] = useState('');
+  const [skillReview, setSkillReview] = useState<PostLessonSkillReviewJob | null>(null);
   const [pending, setPending] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -48,6 +49,20 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
       setRecipientsLoading(false);
     });
     return () => { active = false; };
+  }, [classId]);
+
+  // The server reviews each pupil's skills independently after End for all.
+  // Polling is informational; it never re-triggers the analysis.
+  useEffect(() => {
+    let live = true;
+    const refresh = () => {
+      void onlineClassesApi.postLessonSkillReviewStatus(classId)
+        .then(result => { if (live) setSkillReview(result); })
+        .catch(() => { /* Finishing the lesson does not depend on diagnostics. */ });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 8000);
+    return () => { live = false; window.clearInterval(timer); };
   }, [classId]);
 
   const toggleVoice = async () => {
@@ -145,6 +160,25 @@ export function PostLessonHomeworkDialog({ classId, title, language, onDone }: P
             <p>{title} · {de ? 'Nach Unterrichtsende' : 'После завершения урока'}</p>
           </div>
         </header>
+        <div className="post-homework-main" role="status" aria-live="polite">
+          <h3>{de ? 'Lernfortschritt' : 'Карта навыков'}</h3>
+          <p className="post-homework-hint">{!skillReview || skillReview.state === 'NONE'
+            ? (de ? 'Die Analyse wird nach Unterrichtsende automatisch gestartet.'
+              : 'После урока сервер автоматически анализирует навыки каждого ученика.')
+            : skillReview.state === 'QUEUED' || skillReview.state === 'RUNNING'
+              ? (de ? `Analyse läuft: ${skillReview.processedStudents ?? 0} von ${skillReview.totalStudents ?? 0} Schülern.`
+                : `Анализируем записи и транскрипцию: ${skillReview.processedStudents ?? 0} из ${skillReview.totalStudents ?? 0} учеников.`)
+              : skillReview.state === 'DONE' || skillReview.state === 'PARTIAL'
+                ? (de
+                  ? `Fertig: ${skillReview.processedStudents ?? 0} Schüler. Evidenzen: ${skillReview.students?.reduce((sum, pupil) => sum + pupil.observations, 0) ?? 0}.`
+                  : `Обработано: ${skillReview.processedStudents ?? 0} учеников. Подтверждённых наблюдений: ${skillReview.students?.reduce((sum, pupil) => sum + pupil.observations, 0) ?? 0}, изменений процентов: ${skillReview.students?.reduce((sum, pupil) => sum + pupil.masteryUpdates, 0) ?? 0}.`)
+                : (de ? 'Die automatische Überprüfung ist fehlgeschlagen. Bereits gespeicherte Daten bleiben erhalten.'
+                    : 'Автоматическая проверка не завершилась. Сохранённые результаты не потеряны.')}
+          </p>
+          <p className="post-homework-hint">{de
+            ? 'Nur nachweisbare Leistungen ändern die Fähigkeitskarte. Unklare Aufgaben werden nicht bewertet.'
+            : 'Только подтверждённые решения изменяют навыки. Неясные или непройденные задания не засчитываются.'}</p>
+        </div>
         <div className="post-homework-main">
           <h3>{de ? 'Für wie viele Tage Hausaufgaben?' : 'На сколько дней задать домашку?'}</h3>
           <div className="post-homework-days" role="group" aria-label={de ? 'Anzahl der Tage' : 'Количество дней'}>
