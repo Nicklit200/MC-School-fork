@@ -78,7 +78,7 @@ public class LessonParticipantsService {
     public List<Participant> add(AuthenticatedUser teacher, String eventId, UUID studentId) {
         requireTeacher(teacher);
         requireStudent(teacher.id(), studentId);
-        LessonHistoryEntry lesson = editable(teacher.id(), eventId);
+        LessonHistoryEntry lesson = editableForAdd(teacher.id(), eventId);
         Set<UUID> roster = new LinkedHashSet<>(lesson.toResponse().participantStudentIds());
         if (roster.add(studentId)) {
             lesson.replaceParticipants(new ArrayList<>(roster));
@@ -127,6 +127,25 @@ public class LessonParticipantsService {
         history.save(target);
         log.info("Lesson participant transferred teacher={} student={} from={} to={}",
                 teacher.id(), studentId, sourceEventId, targetEventId);
+    }
+
+    /**
+     * A teacher may restore a missing pupil to the currently ongoing lesson.
+     * Addition is safe while the room is LIVE or LOBBY_OPEN: access is checked
+     * against this roster on the next connect. Removing/transferring students
+     * remains restricted to lessons that have not opened.
+     */
+    private LessonHistoryEntry editableForAdd(UUID teacherId, String eventId) {
+        LessonHistoryEntry lesson = history.findLockedByTeacherIdAndEventId(teacherId, eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        if (lesson.getDeletedAt() != null || !Instant.now().isBefore(lesson.getEndsAt())
+                || rooms.findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(teacherId, eventId)
+                    .stream().anyMatch(room -> room.getStatus() == OnlineClassStatus.ENDED
+                            || room.getStatus() == OnlineClassStatus.CANCELLED)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot add a participant after the lesson has ended or been cancelled");
+        }
+        return lesson;
     }
 
     private LessonHistoryEntry editable(UUID teacherId, String eventId) {
