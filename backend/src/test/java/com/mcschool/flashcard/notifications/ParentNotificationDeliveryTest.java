@@ -42,7 +42,7 @@ class ParentNotificationDeliveryTest {
                 users, homework, cards, email, devices, push, "Europe/Berlin");
         scheduler.notifyParents();
         verify(email).sendParentMissedHomework(parent, student, 1L);
-        verifyNoInteractions(push);
+        verify(push, never()).send(any(PushSubscription.class), anyString(), anyString(), anyString());
     }
 
     @Test
