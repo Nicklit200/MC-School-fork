@@ -43,6 +43,19 @@ public class PushController {
         return Map.of("enabled", webPushService.isConfigured(), "publicKey", webPushService.publicKey());
     }
 
+    /** Current account only. Exposes readiness, never device endpoints or VAPID secrets. */
+    @GetMapping("/status")
+    @Transactional(readOnly = true)
+    public Map<String, Object> status(@AuthenticationPrincipal AuthenticatedUser principal) {
+        User user = userRepository.findById(principal.id()).orElseThrow();
+        int devices = subscriptionRepository.findAllByUserId(principal.id()).size();
+        return Map.of(
+                "enabled", webPushService.isConfigured(),
+                "registeredDevices", devices,
+                "ready", webPushService.isConfigured() && devices > 0,
+                "emailAvailable", user.getEmail() != null && !user.getEmail().isBlank());
+    }
+
     @PostMapping("/subscriptions")
     @Transactional
     public ResponseEntity<Void> subscribe(@AuthenticationPrincipal AuthenticatedUser principal,
