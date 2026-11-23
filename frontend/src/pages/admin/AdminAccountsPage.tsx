@@ -26,6 +26,7 @@ export function AdminAccountsPage() {
   const activeRole: ManagedRole = searchParams.get('role') === 'PARENT' ? 'PARENT' : 'STUDENT';
   const [students, setStudents] = useState<AdminAccount[]>([]);
   const [parents, setParents] = useState<AdminAccount[]>([]);
+  const [parentDelivery, setParentDelivery] = useState<Record<string, {registeredDevices:number; emailAvailable:boolean; linkedChildren:number}>>({});
   const [teachers, setTeachers] = useState<User[]>([]);
   const [teacherOptions, setTeacherOptions] = useState<TeacherAssignmentOption[]>([]);
   const [teacherSelections, setTeacherSelections] = useState<Record<string, string>>({});
@@ -43,6 +44,9 @@ export function AdminAccountsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoadState(loadingResources);
+    void api.push.parentReadiness()
+      .then(rows => { if (!cancelled) setParentDelivery(Object.fromEntries(rows.map(({parentId,...status})=>[parentId,status]))); })
+      .catch(() => { if (!cancelled) setParentDelivery({}); });
     Promise.allSettled([
       api.adminAccounts.list('STUDENT'),
       api.adminAccounts.list('PARENT'),
@@ -245,6 +249,14 @@ export function AdminAccountsPage() {
               <div className="list-row__title">{account.fullName}</div>
               <div className="muted">{account.username ? `Логин: ${account.username}` : account.email || 'Логин ещё не задан'}</div>
               {account.username && account.email && <div className="muted">{account.email}</div>}
+              {activeRole === 'PARENT' && parentDelivery[account.id] && <div className="muted" style={{marginTop:6}}>
+                {parentDelivery[account.id].linkedChildren === 0
+                  ? 'Напоминания: нет привязанного ученика.'
+                  : parentDelivery[account.id].registeredDevices > 0
+                    ? 'Push подключён: ' + parentDelivery[account.id].registeredDevices + ' устройств.'
+                    : 'Вечерние push не придут: не подключено ни одного устройства.'}
+                {!parentDelivery[account.id].emailAvailable && ' Email для резервных уведомлений не указан.'}
+              </div>}
               {activeRole === 'STUDENT' && account.teacherFullName && <div className="muted">Учитель: {account.teacherFullName}</div>}
             </div>
             <span className={`pill ${account.status === 'ACTIVE' ? 'pill--learned' : 'pill--active'}`}>{account.status}</span>
