@@ -35,7 +35,7 @@ class StudentGroupRemovalTest {
             null, bindings, lessons);
     private final UUID teacherId = UUID.randomUUID();
     private final UUID groupId = UUID.randomUUID();
-    private final AuthenticatedUser teacher = new AuthenticatedUser(teacherId, Role.TEACHER);
+    private final AuthenticatedUser teacher = new AuthenticatedUser(teacherId, "teacher@example.test", Role.TEACHER);
     private final StudentGroup group = mock(StudentGroup.class);
 
     @BeforeEach
