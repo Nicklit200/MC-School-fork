@@ -165,7 +165,7 @@ public class PostLessonSkillAnalysisService {
         for (Object entry : entries) {
             if (!(entry instanceof Map<?,?> map)) continue;
             String id = Objects.toString(map.get("skillId"), "");
-            if (!valid.contains(id) || !seen.add(id)) continue;
+            if (!valid.contains(id) || seen.contains(id)) continue;
             String autonomy = Objects.toString(map.get("autonomy"), "");
             String correctness = Objects.toString(map.get("correctness"), "");
             String origin = Objects.toString(map.get("origin"), "");
@@ -177,6 +177,7 @@ public class PostLessonSkillAnalysisService {
                     || !Set.of("CORRECT","INCORRECT","PARTIAL").contains(correctness)
                     || !Set.of("WRITING","STUDENT_SPEECH").contains(origin)
                     || confidence < 85 || explanation.length() < 18 || excerpt.length() < 8) continue;
+            seen.add(id);
             result.add(new Observation(id, autonomy, correctness, origin,
                     correct, confidence, explanation, excerpt));
             if (result.size() == 8) break;
