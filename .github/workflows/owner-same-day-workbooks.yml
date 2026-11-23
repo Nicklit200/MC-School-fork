@@ -8,9 +8,11 @@ on:
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/OwnerWorkbookLessonCreated.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotController.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotService.java'
+      - 'backend/src/main/java/com/mcschool/flashcard/lessons/AiLessonPilotScheduler.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/ManualLessonService.java'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/WorkbookContentService.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/OwnerSameDayWorkbookServiceTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/AiLessonPilotSchedulerTest.java'
       - 'backend/src/test/java/com/mcschool/flashcard/lessons/ManualLessonServiceTest.java'
       - 'frontend/src/pages/teacher/LessonDetailPage.tsx'
       - 'frontend/src/api/aiPilot.ts'
@@ -35,7 +37,7 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - run: mvn -B -ntp '-Dtest=OwnerSameDayWorkbookServiceTest,ManualLessonServiceTest' test
+      - run: mvn -B -ntp '-Dtest=OwnerSameDayWorkbookServiceTest,ManualLessonServiceTest,AiLessonPilotSchedulerTest' test
 
   frontend:
     runs-on: ubuntu-24.04
