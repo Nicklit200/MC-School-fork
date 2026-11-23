@@ -4,10 +4,11 @@ import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
 import { IosPushInstallGuide } from './IosPushInstallGuide';
 
-type Role = 'PARENT' | 'STUDENT';
+type Role = 'PARENT' | 'STUDENT' | 'TEACHER' | 'ADMIN';
 type Phase = 'checking' | 'hidden' | 'ready' | 'ios-install' | 'denied' | 'enabled' | 'error';
 type PushConfig = { enabled: boolean; publicKey: string };
-const DISMISS_DAYS = 14;
+// Parent and staff alerts are time-sensitive; never hide setup for two weeks.
+const DISMISS_DAYS = 1;
 
 function isIPhoneOrIPad() {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -178,13 +179,17 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
 
   if (phase === 'checking' || phase === 'hidden' || phase === 'enabled') return null;
 
+  const staff = role === 'ADMIN' || role === 'TEACHER';
   const title = de ? 'Keine wichtigen Schulnachrichten verpassen'
     : 'Не пропускайте важное от школы';
-  const description = role === 'PARENT'
-    ? (de ? 'Erhalten Sie Erinnerungen, wenn Hausaufgaben oder Lernkarten Ihres Kindes offen sind.'
-      : 'Получайте напоминания, если ребёнок не выполнил домашку или карточки.')
-    : (de ? 'Wir erinnern dich an offene Hausaufgaben und tägliche Lernkarten.'
-      : 'Напомним о домашке и ежедневных карточках.');
+  const description = staff
+    ? (de ? 'Aktivieren Sie Warnungen über fehlgeschlagene Arbeitshefte und wichtige Schulereignisse.'
+      : 'Включите уведомления об ошибках генератора рабочих тетрадей и важных событиях школы.')
+    : role === 'PARENT'
+      ? (de ? 'Erhalten Sie Erinnerungen, wenn Hausaufgaben oder Lernkarten Ihres Kindes offen sind.'
+        : 'Получайте напоминания, если ребёнок не выполнил домашку или карточки.')
+      : (de ? 'Wir erinnern dich an offene Hausaufgaben und tägliche Lernkarten.'
+        : 'Напомним о домашке и ежедневных карточках.');
   const ios = phase === 'ios-install';
   const denied = phase === 'denied';
   return <><section className="panel" aria-label={de ? 'Benachrichtigungen einrichten' : 'Подключить уведомления'}
@@ -208,7 +213,9 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
           {busy ? (de ? 'Wird aktiviert…' : 'Подключаем…')
             : (de ? 'Benachrichtigungen aktivieren' : 'Включить уведомления')}
         </button>}
-        <Link className="btn btn--secondary" to={role === 'PARENT' ? '/parent/settings' : '/settings'}>
+        <Link className="btn btn--secondary" to={role === 'PARENT' ? '/parent/settings'
+          : role === 'TEACHER' ? '/teacher/settings'
+          : role === 'ADMIN' ? '/admin/settings' : '/settings'}>
           {de ? 'Einstellungen' : 'Настройки'}
         </Link>
         <button className="btn btn--ghost" type="button" onClick={later}>
