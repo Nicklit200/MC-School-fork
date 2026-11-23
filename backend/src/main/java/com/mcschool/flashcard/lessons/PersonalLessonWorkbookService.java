@@ -173,7 +173,7 @@ public class PersonalLessonWorkbookService {
     @Transactional(readOnly = true, noRollbackFor = ResourceNotFoundException.class)
     public List<User> studentsForClass(OnlineClass lesson) {
         UUID teacherId = lesson.getTeacher().getId();
-        if (lessonParticipants.hasLesson(teacherId, lesson.getEventId())) {
+        if (lessonParticipants != null && lessonParticipants.hasLesson(teacherId, lesson.getEventId())) {
             return lessonParticipants.students(teacherId, lesson.getEventId());
         }
         return lesson.isGroupClass()
@@ -185,7 +185,7 @@ public class PersonalLessonWorkbookService {
         if (eventId == null || eventId.isBlank() || eventId.length() > 255) throw notFound();
         GroupLessonResponse lesson = lessons.listGroupLessons(teacher).stream()
                 .filter(item -> item.eventId().equals(eventId)).findFirst().orElseThrow(this::notFound);
-        if (lessonParticipants.hasLesson(teacher.id(), eventId)) {
+        if (lessonParticipants != null && lessonParticipants.hasLesson(teacher.id(), eventId)) {
             return lessonParticipants.students(teacher.id(), eventId);
         }
         if (lesson.groupId() != null) return groupStudents(teacher.id(), lesson.groupId());
