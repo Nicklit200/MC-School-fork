@@ -283,19 +283,20 @@ test('A4 pagination gives eight-line handwritten solutions separate pages',async
   assert.doesNotMatch(workbook, /class="time-pill"/, 'No time badge artwork');
 });
 
-test('preflight counts parallel columns by maximum and stacked rows by sum',async()=>{
+test('multiple coordinate-grid tasks inside layouts each get their own A4',async()=>{
   const graph=()=>({type:'coordinateGrid',xRange:[-5,5],yRange:[-5,5]});
   for(const block of [
     {type:'row',children:Array.from({length:4},graph)},
     {type:'grid',columns:2,children:Array.from({length:4},graph)},
-    {type:'split',left:[graph(),graph()],right:[graph(),graph()]}
+    {type:'split',left:[graph(),graph()],right:[graph(),graph()]},
+    {type:'stack',children:Array.from({length:4},graph)}
   ]) {
     const lesson=basic();lesson.workbookPages[0].blocks=[block];
-    await render(lesson);
+    const {workbook}=await render(lesson);
+    assert.equal((workbook.match(/<article class="sheet student/g)||[]).length,4,
+      'Four independent coordinate grids must not be crammed onto one A4');
   }
   const lesson=basic();
-  lesson.workbookPages[0].blocks=[{type:'stack',children:Array.from({length:4},graph)}];
-  await assert.rejects(()=>render(lesson),/(?:likely to overflow A4|one block too large for A4)/);
   lesson.workbookPages[0].blocks=Array.from({length:20},()=>({type:'divider'}));
   await render(lesson);
 });
