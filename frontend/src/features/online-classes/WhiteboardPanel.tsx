@@ -305,11 +305,15 @@ export function WhiteboardPanel({
   });
   const locked = navigationLocked(isHost, follow.following) || studentFollowRequested;
   const annotationAllowed = canAnnotate && !studentFollowRequested;
-  // Manual overview navigation is independent of the focused workspace. A
-  // followed pupil can use either paged or continuous document navigation.
+  // A teacher browsing all pupils must be able to scroll each PDF with a
+  // finger inside that pupil's tile. This uses the existing continuous-document
+  // gesture pipeline, but never changes the pupil's page or the teacher's
+  // focused-board layout preference.
+  const overviewWorkbookScroll = compactPreview && Boolean(pdfDocument) && !studentFollowRequested;
   const continuous = targetType === 'WHITEBOARD' && (studentFollowRequested
     ? studentView?.layout === 'continuous'
-    : !compactPreview && (canAnnotate || follow.followLayout === 'continuous') && (follow.followLayout ?? layout) === 'continuous');
+    : overviewWorkbookScroll || (!compactPreview && (canAnnotate || follow.followLayout === 'continuous')
+      && (follow.followLayout ?? layout) === 'continuous'));
 
   useLayoutEffect(() => {
     if (!studentView) return;
