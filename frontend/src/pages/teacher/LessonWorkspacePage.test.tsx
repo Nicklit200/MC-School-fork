@@ -39,6 +39,35 @@ describe('lesson workspace',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Закрыть'}));
     expect(screen.getByText('Настройки срока и файла')).not.toBeVisible();
   });
+  it('switches the displayed homework error with previous and next arrows, wrapping at both ends',async()=>{
+    vi.mocked(lessonPreparationApi.get).mockResolvedValue({
+      eventId:'lesson-1',
+      homeworkNotes:'София: задано 2, сдано 2, ещё не сдано 0.',
+      difficulties:JSON.stringify({kind:'homework_errors_v1',issues:[
+        {student:'София', difficulty:'Знак', task:'Первое задание', studentAnswer:'-1', correctAnswer:'1', source:'sofia-2026-11-21.pdf', page:'Aufgabe 1'},
+        {student:'Виталина', difficulty:'Раскрытие скобок', task:'Второе задание', studentAnswer:'2', correctAnswer:'3', source:'vitalina-2026-11-21.pdf', page:'Aufgabe 2'},
+        {student:'Мелисса', difficulty:'Вычисление', task:'Третье задание', studentAnswer:'4', correctAnswer:'5', source:'melissa-2026-11-21.pdf', page:'Aufgabe 3'},
+      ]}),
+      coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'Автоматическая запись',
+    } as never);
+    mount();await screen.findByRole('heading',{name:'Дроби'});
+    expect(screen.getByText('Первое задание')).toBeInTheDocument();
+    expect(screen.getByText('Ошибка 1 из 3')).toBeInTheDocument();
+    expect(screen.queryByText('Второе задание')).not.toBeInTheDocument();
+    expect(screen.queryByText('Показать остальные ошибки: 2')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Следующая ошибка'}));
+    expect(screen.getByText('Второе задание')).toBeInTheDocument();
+    expect(screen.getByText('Ошибка 2 из 3')).toBeInTheDocument();
+    expect(screen.queryByText('Первое задание')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Предыдущая ошибка'}));
+    expect(screen.getByText('Первое задание')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Предыдущая ошибка'}));
+    expect(screen.getByText('Третье задание')).toBeInTheDocument();
+    expect(screen.getByText('Ошибка 3 из 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Следующая ошибка'}));
+    expect(screen.getByText('Ошибка 1 из 3')).toBeInTheDocument();
+  });
+
   it('shows only key real homework mistakes and never the manual note fields',async()=>{
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({
       eventId:'lesson-1',
