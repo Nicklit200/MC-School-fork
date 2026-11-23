@@ -7,6 +7,7 @@ import type { KolinBoardSnapshot } from '../../api/kolin';
 const mocks = vi.hoisted(() => ({ target: vi.fn(), capture: vi.fn(), handler: null as ((packet: ReceivedEvent) => void) | null }));
 vi.mock('../../api/kolin', () => ({ kolinApi: { reviewTarget: mocks.target } }));
 vi.mock('./boardExport', () => ({ captureBoardPage: mocks.capture }));
+vi.mock('./annotationSync', () => ({ flushClassAnnotations: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./useClassEvents', () => ({ useClassEvents: (_id: string, _topic: string, handler: typeof mocks.handler) => { mocks.handler = handler; } }));
 const pupil = '11111111-1111-4111-8111-111111111111';
 const boardId = `personal-workbook-${pupil}`;
@@ -23,6 +24,17 @@ it('captures the pupil reported page without relying on teacher selection', asyn
   const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
   act(() => mocks.handler!(packet()));
   await result.current('Проверь Мелиссу', { studentId: 'someone-else', currentWorkbookPage: 1 });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, boardId, 2, expect.any(String), 'current_page');
+});
+it('captures the teacher-visible second personal page without a pupil view event', async () => {
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  await result.current('Првоерь эту страницу', { targetType: 'student', studentId: pupil, currentWorkbookPage: 2 });
+  expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, '', 1, expect.any(String), 'current_page');
+});
+it('keeps a named different pupil bound to their actual page instead of the teachers page', async () => {
+  const { result } = renderHook(() => useKolinBoardReview('lesson', 'teacher', true));
+  act(() => mocks.handler!(packet()));
+  await result.current('Проверь Мелиссу', { targetType: 'student', studentId: 'other-pupil', currentWorkbookPage: 9 });
   expect(mocks.capture).toHaveBeenCalledWith('lesson', pupil, boardId, 2, expect.any(String), 'current_page');
 });
 it('rejects spoofed, stale, future, shared-board and other-room reports', () => {
