@@ -24,7 +24,9 @@ public class KolinBoardReviewService {
             "(?iu)(?:(?<!\\p{L})(?:страниц|лист)\\p{L}*\\s*(?:№\\s*)?(\\d{1,3})(?!\\d)|(?<![A-Za-z])(?:page|sheet|seite)\\s*(\\d{1,3})(?!\\d))");
     private static final Pattern ORDINAL_PAGE = Pattern.compile(
             "(?iu)(?<!\\p{L})(перв\\p{L}*|втор\\p{L}*|трет\\p{L}*|треть\\p{L}*|четв[её]рт\\p{L}*|пят\\p{L}*|шест\\p{L}*|седьм\\p{L}*|восьм\\p{L}*|девят\\p{L}*|десят\\p{L}*)\\s+(?:страниц|лист)\\p{L}*");
-    private static final Pattern WHOLE = Pattern.compile("(?iu)(всю|весь|всех.{0,10}страниц|тетрад|документ|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|workbook|document|all.{0,10}page|mistake|wrong|fehler|heft|gesamte)");
+    // "Проверь все задания" requests the WHOLE saved pupil workbook, not
+    // whichever PDF page the teacher currently has open.
+    private static final Pattern WHOLE = Pattern.compile("(?iu)(всю|весь|(?:все|всё)\\s+(?:задан|упражнен|пример|задач|решени|работ|ошиб)\\p{L}*|всех.{0,10}страниц|тетрад|документ|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|workbook|document|all.{0,10}(?:page|task|exercise)|mistake|wrong|fehler|heft|gesamte|alle\\s+(?:aufgaben|übungen))");
     private static final Pattern EXPLAIN = Pattern.compile("(?iu)(об[ъь]?[яе]сн|поясн|разъясн|покаж|найди|где|erklär|erklar|explain|show|find|where)");
     private static final Pattern FIRST_PAGE = Pattern.compile("(?iu)(?:перв\\p{L}*|задани\\p{L}*\\s*(?:№\\s*)?1\\b|страниц\\p{L}*\\s*(?:№\\s*)?1\\b|лист\\p{L}*\\s*(?:№\\s*)?1\\b|first\\s+(?:page|sheet|task|exercise))");
     private static final Pattern EXERCISE = Pattern.compile("(?iu)(?:задан|упражнен|пример|страниц|лист|доск|worksheet|exercise|task|page|board|seite|aufgab)");
@@ -123,13 +125,19 @@ public class KolinBoardReviewService {
         if (matches.size()>1) return clarify();
         if (explicitlyShared) return new Target("ready",null,"Общая доска",null,scope);
         if (matches.size()==1) return ready(matches.get(0),scope);
-        if (explicit) return clarify();
-        if (context!=null && "group".equals(context.targetType()))
-            return new Target("ready",null,"Общая доска",null,scope);
         UUID selected=context==null?null:context.studentId();
         if(selected==null && room.getStudent()!=null) selected=room.getStudent().getId();
         UUID id=selected;
         var pupil=pupils.stream().filter(p->p.id().equals(id)).findFirst();
+        // An explicitly different or unrecognized pupil name must never be
+        // silently redirected to the currently selected pupil.
+        if (explicit) return pupil.map(p -> new Target("clarify",null,null,
+                "Открыта личная доска «"+p.name()+"», но имя в запросе не совпало с участником этого урока. " +
+                "Уточните имя: менять выбранного ученика не нужно.",scope)).orElseGet(KolinBoardReviewService::clarify);
+        if (context!=null && "group".equals(context.targetType()))
+            return new Target("ready",null,"Общая доска",null,scope);
+        // A selected pupil is authoritative only after verifying live lesson
+        // membership on the server, not merely trusting a client-side ID.
         return pupil.map(p->ready(p,scope)).orElseGet(KolinBoardReviewService::clarify);
     }
     private static Target ready(KolinTaskRoster.Pupil pupil,String scope) { return new Target("ready",pupil.id(),pupil.name(),null,scope); }
