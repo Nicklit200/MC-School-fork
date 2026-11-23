@@ -6,7 +6,6 @@ import { lessonPreparationApi, completedLessonApi, type CompletedLessonDocument 
 import { aiPilotApi, type OwnerWorkbookStatus } from '../../api/aiPilot';
 import { useAuth } from '../../auth/AuthContext';
 import type { GroupLesson, Homework, LessonPreparation, StudentListItem } from '../../api/types';
-import { LessonParticipantsPanel } from './LessonParticipantsPanel';
 import { toErrorMessage } from '../../lib/errors';
 import { useI18n } from '../../i18n/I18nContext';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
@@ -542,18 +541,7 @@ export function LessonDetailPage() {
 
       {error && <div className="banner banner--error" style={{ marginBottom: 14 }}>{error}</div>}
       {message && <div className="banner banner--success" style={{ marginBottom: 14 }}>{message}</div>}
-      {lesson && <LessonParticipantsPanel lesson={lesson} lessons={allLessons} students={allStudents}
-        onChanged={async () => {
-          const latest = await api.lessons.savedGroupLessons();
-          setAllLessons(latest);
-          const updated = latest.find(item => item.eventId === eventId);
-          if (updated) {
-            setLesson(updated);
-            setLessonStudents(allStudents.filter(student => updated.participantStudentIds.includes(student.id))
-              .map(student => ({ id: student.id, fullName: student.fullName,
-                chatGptProjectUrl: student.chatGptProjectUrl })));
-          }
-        }} />}
+
 
       {isNickAiPilot && (
         <section className="panel" style={{ padding: 18, margin: '0 0 18px', border: '1px solid var(--teacher-selected-border, #f0c7ad)', background: 'var(--teacher-selected, #fffaf7)' }}>
@@ -633,7 +621,18 @@ export function LessonDetailPage() {
         </section>
       )}
 
-      <PersonalWorkbooksPanel eventId={eventId} />
+      <PersonalWorkbooksPanel eventId={eventId} lesson={lesson} lessons={allLessons} students={allStudents}
+        onChanged={async () => {
+          const latest = await api.lessons.savedGroupLessons();
+          setAllLessons(latest);
+          const updated = latest.find(item => item.eventId === eventId);
+          if (updated) {
+            setLesson(updated);
+            setLessonStudents(allStudents.filter(student => updated.participantStudentIds.includes(student.id))
+              .map(student => ({ id: student.id, fullName: student.fullName,
+                chatGptProjectUrl: student.chatGptProjectUrl })));
+          }
+        }} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14, marginBottom: 18 }}>
         <MaterialPanel
