@@ -21,9 +21,9 @@ public class KolinBoardReviewService {
     private static final Pattern REVIEW = Pattern.compile("(?iu)(провер[ьиья]|проверь|првоер\\p{L}*|провре\\p{L}*|посмотр|разбер|разоб[ер]|оцени|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|check|review|mistake|wrong|prüf|pruf|kontrollier|schau|fehler)");
     // A numbered PDF page must not be confused with an exercise number.
     private static final Pattern NUMBERED_PAGE = Pattern.compile(
-            "(?iu)(?:\\b(?:страниц|лист)\\p{L}*\\s*(?:№\\s*)?(\\d{1,3})\\b|\\b(?:page|sheet|seite)\\s*(\\d{1,3})\\b)");
+            "(?iu)(?:(?<!\\p{L})(?:страниц|лист)\\p{L}*\\s*(?:№\\s*)?(\\d{1,3})(?!\\d)|(?<![A-Za-z])(?:page|sheet|seite)\\s*(\\d{1,3})(?!\\d))");
     private static final Pattern ORDINAL_PAGE = Pattern.compile(
-            "(?iu)\\b(перв\\p{L}*|втор\\p{L}*|трет\\p{L}*|треть\\p{L}*|четв[её]рт\\p{L}*|пят\\p{L}*|шест\\p{L}*|седьм\\p{L}*|восьм\\p{L}*|девят\\p{L}*|десят\\p{L}*)\\s+(?:страниц|лист)\\p{L}*");
+            "(?iu)(?<!\\p{L})(перв\\p{L}*|втор\\p{L}*|трет\\p{L}*|треть\\p{L}*|четв[её]рт\\p{L}*|пят\\p{L}*|шест\\p{L}*|седьм\\p{L}*|восьм\\p{L}*|девят\\p{L}*|десят\\p{L}*)\\s+(?:страниц|лист)\\p{L}*");
     private static final Pattern WHOLE = Pattern.compile("(?iu)(всю|весь|всех.{0,10}страниц|тетрад|документ|неправиль|ошиб|что.{0,20}реш|как.{0,20}реш|workbook|document|all.{0,10}page|mistake|wrong|fehler|heft|gesamte)");
     private static final Pattern EXPLAIN = Pattern.compile("(?iu)(об[ъь]?[яе]сн|поясн|разъясн|покаж|найди|где|erklär|erklar|explain|show|find|where)");
     private static final Pattern FIRST_PAGE = Pattern.compile("(?iu)(?:перв\\p{L}*|задани\\p{L}*\\s*(?:№\\s*)?1\\b|страниц\\p{L}*\\s*(?:№\\s*)?1\\b|лист\\p{L}*\\s*(?:№\\s*)?1\\b|first\\s+(?:page|sheet|task|exercise))");
