@@ -67,6 +67,29 @@ final class NotificationMessages {
                         + "Посмотреть статус:\n" + parentLink + "\n\nMindcraft School");
     }
 
+    static Email ownerWorkbookFailure(Language language, String eventId,
+            int attempt, String errorCode, String lessonUrl) {
+        boolean finalFailure = attempt >= 4;
+        if (language == Language.DE) {
+            return new Email(finalFailure ? "Mindcrafti: Arbeitsheft-Generierung fehlgeschlagen"
+                    : "Mindcrafti: Fehler bei der Arbeitsheft-Generierung",
+                    "Fehler bei der morgendlichen Arbeitsheft-Generierung.\n"
+                    + "Unterricht: " + eventId + "\n"
+                    + "Fehler: " + errorCode + "\n"
+                    + (finalFailure ? "Automatische Versuche ausgeschöpft."
+                        : "Der Server versucht eine automatische Korrektur.") + "\n"
+                    + "Unterricht öffnen: " + lessonUrl);
+        }
+        return new Email(finalFailure ? "Mindcrafti: тетрадь не удалось создать"
+                : "Mindcrafti: ошибка генератора тетради",
+                "Утренний генератор обнаружил ошибку при создании тетради.\n"
+                + "Урок: " + eventId + "\n"
+                + "Код ошибки: " + errorCode + "\n"
+                + (finalFailure ? "Автоматические попытки исчерпаны."
+                    : "Сервер попробует исправить документ автоматически.") + "\n"
+                + "Открыть урок: " + lessonUrl);
+    }
+
     private static String dailyLineRu(long cards, long homeworks) {
         if (cards > 0 && homeworks > 0) return "На сегодня: " + cards + " карточек и " + homeworks + " домашка.";
         if (cards > 0) return "На сегодня нужно повторить " + cards + " карточек.";
