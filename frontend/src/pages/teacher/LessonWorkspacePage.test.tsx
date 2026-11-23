@@ -96,7 +96,7 @@ describe('lesson workspace',()=>{
     } as never);
     mount(); await screen.findByRole('heading',{name:'Дроби'});
     expect(screen.getByText('Ошибка со знаком')).toBeInTheDocument();
-    expect(screen.getByText('Berechne')).toBeInTheDocument();
+    expect(screen.getByRole('article')).toHaveTextContent('Berechne');
     expect(screen.getByText('Ученик')).toBeInTheDocument();
     expect(screen.getByText('Правильно')).toBeInTheDocument();
     expect(screen.getByText('Мелисса')).toBeInTheDocument();
