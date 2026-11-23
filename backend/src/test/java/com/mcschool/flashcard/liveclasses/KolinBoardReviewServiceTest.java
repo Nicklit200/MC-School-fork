@@ -34,6 +34,17 @@ class KolinBoardReviewServiceTest {
         assertThat(target.studentId()).isEqualTo(melissa.getId());
         assertThat(target.state()).isEqualTo("ready");
     }
+    @Test void misspelledSecondPageTargetsTheActualSecondPageOfTheNamedPupil() {
+        when(roster.read(room)).thenReturn(List.of(new KolinTaskRoster.Pupil(melissa.getId(),"Виталина"),
+                new KolinTaskRoster.Pupil(sofia.getId(),"Мелисса")));
+        var context=new KolinChatService.Context("student",sofia.getId(),7);
+        var target=service.resolve(host,room.getId(),
+                new KolinBoardReviewService.TargetRequest("Првоерь вторую страницу Виталины",context));
+        assertThat(target.state()).isEqualTo("ready");
+        assertThat(target.studentId()).isEqualTo(melissa.getId());
+        assertThat(target.scope()).isEqualTo("task_page");
+        assertThat(target.pageNumber()).isEqualTo(2);
+    }
     @Test void unknownOrAmbiguousNamesNeverFallBackToAnotherPupil() {
         var context=new KolinChatService.Context("student",melissa.getId(),1);
         for(String question:List.of("Проверь задание у Маши","Проверь Мелиссу и Софию","Проверь решение Анны",
