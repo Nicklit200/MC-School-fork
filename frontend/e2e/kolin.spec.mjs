@@ -28,15 +28,18 @@ function worksheetPdf(pageCount = 1) {
   return Buffer.from(`${pdf}trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
 }
 
-async function setup(page, role = 'teacher') {
+async function setup(page, role = 'teacher', automaticReview = false) {
   const state = { teacherId: TEACHER, posts: [], annotationWrites: [], requests: [], errors: [], failOnce: false, failStatusOnce: false, responseGate: null, configured: true, transcriptContext: undefined,
-    worksheet: undefined, appends: [], appendFailOnce: false, appendGate: null };
+    worksheet: undefined, appends: [], appendFailOnce: false, appendGate: null, automaticReview, savedAnalyses: [] };
   const documents = new Map();
   state.documents = documents;
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     state.requests.push({ path, method });
+    if (path.endsWith('/kolin/page-analyses/enabled')) return route.fulfill({ json: { enabled: state.automaticReview } });
+    if (path.endsWith('/kolin/page-analyses/candidates')) return route.fulfill({ json: [] });
+    if (path.endsWith('/kolin/page-analyses') && method === 'GET') return route.fulfill({ json: state.savedAnalyses });
     if (path.endsWith('/kolin/review-target')) return route.fulfill({ json: state.review
       ? { state: 'ready', studentId: MELISSA, studentName: 'Мелисса', scope: state.reviewScope ?? 'current_page' } : { state: 'not_requested' } });
     if (path.endsWith('/kolin/status')) {
@@ -341,7 +344,7 @@ test('student has no Kolyn button, pane or API traffic', async ({ page }) => {
 
 test('unconfigured Kolyn is readable and disabled without sending a message', async ({ page }) => {
   const state = await setup(page); state.configured = false;
-  expect(state.requests.filter(request => request.path.includes('/kolin/'))).toEqual([]);
+  expect(state.requests.filter(request => request.path.includes('/kolin/') && !request.path.endsWith('/page-analyses/enabled'))).toEqual([]);
   await openKolin(page);
   await expect(panel(page).getByText('Kolyn пока недоступен.', { exact: true })).toBeVisible();
   await input(page).fill('Дай задание'); await input(page).press('Enter');
@@ -387,7 +390,7 @@ test('each answer keeps its own transcript coverage and does not resend transcri
   await expect(notes.last()).toContainText(/неактивна/i);
   expect(state.posts[1].body.history).toEqual([{ role: 'user', text: 'Объясни последнюю ошибку' }, { role: 'assistant', text: firstReply }]);
   for (const post of state.posts) assertCompact(post.body);
-  expect(state.requests.filter(request => request.path.includes('/kolin/') && !request.path.endsWith('/review-target')).map(request => request.method)).toEqual(['GET', 'POST', 'POST']);
+  expect(state.requests.filter(request => request.path.includes('/kolin/') && !request.path.endsWith('/review-target') && !request.path.endsWith('/page-analyses/enabled')).map(request => request.method)).toEqual(['GET', 'POST', 'POST']);
   expect(state.requests.filter(request => request.path.endsWith('/review-target'))).toHaveLength(2);
   expect(state.errors).toEqual([]);
 });
