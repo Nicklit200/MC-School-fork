@@ -43,6 +43,7 @@ import { ParticipantListPanel } from './ParticipantListPanel';
 import { WaitingRoomPanel } from './WaitingRoomPanel';
 import { useAnswersPanel } from './useAnswersPanel';
 import { useKolinChat } from './useKolinChat';
+import { useAutomaticPageAnalysis } from './useAutomaticPageAnalysis';
 import { useKolinBoardReview } from './useKolinBoardReview';
 import { KolinPanel } from './KolinPanel';
 import { DocumentWhiteboardPanel } from './DocumentWhiteboardPanel';
@@ -414,6 +415,7 @@ function RoomBody({
   const answerStudentName = answerStudentId ? personalWorkbookData?.students.find(student => student.studentId === answerStudentId)?.studentName : undefined;
   const answers = useAnswersPanel(eventId, connection.host, answerStudentId, currentUserId,
     connection.host && Boolean(personalBoardOwner(activeBoard)) && !personalWorkbookData);
+  useAutomaticPageAnalysis(classId, currentUserId, connection.host && connectionState === ConnectionState.Connected);
   const prepareKolinReview = useKolinBoardReview(classId, currentUserId, connection.host);
   const kolin = useKolinChat(classId, currentUserId, connection.host, prepareKolinReview);
   const toggleAnswers = () => { kolin.close(); answers.toggle(); };
