@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
 import { kolinApi, type KolinPageAnalysisResult } from '../../api/kolin';
 import { KolinRichText } from './KolinRichText';
-import { automaticPageAnalysisEnabled } from './useAutomaticPageAnalysis';
 
-export function SavedPageAnalysis({ classId, studentId, pageNumber, de }: {
-  classId: string; studentId?: string; pageNumber?: number; de: boolean;
+export function SavedPageAnalysis({ classId, studentId, pageNumber, de, enabled }: {
+  classId: string; studentId?: string; pageNumber?: number; de: boolean; enabled: boolean;
 }) {
   const scope = JSON.stringify([classId, studentId, pageNumber]);
   const [stored, setStored] = useState<{ scope: string; result?: KolinPageAnalysisResult; failed?: boolean }>();
   const current = stored?.scope === scope ? stored : undefined;
   useEffect(() => {
-    if (!automaticPageAnalysisEnabled || !studentId || !pageNumber) return;
+    if (!enabled || !studentId || !pageNumber) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function poll() {
@@ -26,8 +25,8 @@ export function SavedPageAnalysis({ classId, studentId, pageNumber, de }: {
     }
     void poll();
     return () => { stopped = true; clearTimeout(timer); };
-  }, [classId, studentId, pageNumber, scope]);
-  if (!automaticPageAnalysisEnabled || !studentId || !pageNumber) return null;
+  }, [classId, studentId, pageNumber, scope, enabled]);
+  if (!enabled || !studentId || !pageNumber) return null;
   const row = current?.result;
   const status = current?.failed ? (de ? 'Analyse nicht verfügbar' : 'Анализ недоступен') :
     row?.state === 'READY' ? (de ? 'Gespeicherte Prüfung' : 'Сохранённая проверка') :
