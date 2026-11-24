@@ -4,7 +4,6 @@ import { useClassEvents, type ReceivedEvent } from './useClassEvents';
 import { VIEW_TOPIC } from './events';
 import { personalBoardOwner } from './boards';
 import { flushClassAnnotations } from './annotationSync';
-import { automaticPageAnalysisEnabled } from './useAutomaticPageAnalysis';
 
 export class KolinReviewUnavailable extends Error {}
 export class KolinReviewTooLarge extends Error {}
@@ -19,7 +18,7 @@ export function observedPupilPage({ event, senderIdentity }: ReceivedEvent, clas
   return { boardId: event.boardId, page: event.page, at: event.at, receivedAt: now, senderIdentity: senderIdentity!, active: event.active !== false };
 }
 
-export function useKolinBoardReview(classId: string, teacherId: string, enabled: boolean) {
+export function useKolinBoardReview(classId: string, teacherId: string, enabled: boolean, automaticPageAnalysisEnabled = false) {
   const scope = `${classId}:${teacherId}:${enabled}`;
   const pages = useRef<{ scope: string; entries: Map<string, PupilPage> }>({ scope, entries: new Map() });
   if (pages.current.scope !== scope) pages.current = { scope, entries: new Map() };
@@ -84,5 +83,5 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
       if (error instanceof Error && error.message === 'REVIEW_TOO_LARGE') throw new KolinReviewTooLarge();
       throw new KolinReviewUnavailable();
     }
-  }, [classId, enabled, scope]);
+  }, [classId, enabled, scope, automaticPageAnalysisEnabled]);
 }
