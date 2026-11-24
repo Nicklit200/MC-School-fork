@@ -5,7 +5,7 @@ on:
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/CompletedLessonReport*'
       - 'backend/src/main/java/com/mcschool/flashcard/lessons/PostLessonSkill*'
       - 'backend/src/main/resources/db/migration/V121_1__completed_lesson_report.sql'
-      - 'backend/src/test/java/com/mcschool/flashcard/lessons/CompletedLessonReportTest.java'
+      - 'backend/src/test/java/com/mcschool/flashcard/lessons/CompletedLessonReport*.java'
       - 'frontend/src/pages/teacher/CompletedLessonReportDialog*'
       - 'frontend/src/pages/teacher/completed-lesson-report.css'
       - 'frontend/src/pages/teacher/LessonWorkspacePage*'
@@ -29,7 +29,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
       - name: Verify report access, evidence and PDF output
         working-directory: backend
-        run: mvn -B -ntp -Dtest=CompletedLessonReportTest,PostLessonSkillReviewTest test
+        run: mvn -B -ntp -Dtest=CompletedLessonReportTest,CompletedLessonReportIntegrationTest,PostLessonSkillReviewTest test
   frontend:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
