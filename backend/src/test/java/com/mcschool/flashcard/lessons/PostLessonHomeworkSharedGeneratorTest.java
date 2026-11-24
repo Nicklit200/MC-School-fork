@@ -135,4 +135,75 @@ class PostLessonHomeworkSharedGeneratorTest {
         verify(fake,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
         verifyNoInteractions(renderer);
     }
+    @Test void singleTaskMissingQaNumberIsRecoveredWithoutWeakeningMathChecks() throws Exception {
+        Map<String,Object> doc=numericDocument();
+        doc.put("qa",Map.of("algebra",List.of(Map.of(
+                "kind","equivalence","expression","2+3","answer","5"))));
+        HttpClient fake=workbookProvider(doc);
+        var workbook=new WorkbookContentService("fake-key","single-workbook-model",json,fake);
+        var result=workbook.generateHomework(Map.of(),"",1,7,"Test Pupil");
+        Map<?,?> normalized=json.readValue(result.lessonJson(),Map.class);
+        Map<?,?> qa=(Map<?,?>)normalized.get("qa");
+        Map<?,?> check=(Map<?,?>)((List<?>)qa.get("algebra")).get(0);
+        assertEquals(1,check.get("number"));
+        assertEquals("2+3",check.get("expression"));
+        assertEquals("5",check.get("answer"));
+        verify(fake,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+    }
+
+    @Test void invalidMathTokensGetSpecificRepairAndValidSecondResponse() throws Exception {
+        Map<String,Object> valid=numericDocument();
+        Map<String,Object> invalid=new LinkedHashMap<>(valid);
+        Map<String,Object> page=new LinkedHashMap<>((Map<String,Object>)((List<?>)valid.get("workbookPages")).get(0));
+        page.put("blocks",List.of(
+                Map.of("type","callout","label","Merke","text","Сложи числа."),
+                Map.of("type","exercise","number",1,"title","Berechne.",
+                        "rows",List.of(Map.of("math",Map.of("tokens",List.of()),"work",true)),
+                        "writeLines",6)));
+        invalid.put("workbookPages",List.of(page));
+        HttpClient fake=mock(HttpClient.class);
+        HttpResponse<String> bad=mock(HttpResponse.class), good=mock(HttpResponse.class);
+        when(bad.statusCode()).thenReturn(200);
+        when(good.statusCode()).thenReturn(200);
+        when(bad.body()).thenReturn(providerBody(invalid));
+        when(good.body()).thenReturn(providerBody(valid));
+        when(fake.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(bad,good);
+        var workbook=new WorkbookContentService("fake-key","single-workbook-model",json,fake);
+        var result=workbook.generateHomework(Map.of(),"",1,7,"Test Pupil");
+        assertTrue(result.lessonJson().contains("2+3"));
+        verify(fake,times(2)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+        assertTrue(WorkbookContentService.homeworkRepairAdvice(new IllegalArgumentException(
+                "Workbook math tokens must be 1..100 nonempty strings")).contains("tokens:[]"));
+        assertTrue(WorkbookContentService.homeworkRepairAdvice(new IllegalArgumentException(
+                "Homework qa.algebra must include a numeric task number")).contains("JSON integer"));
+    }
+
+    @Test void ambiguousMissingNumbersRemainInvalidAndFailureIsActionable() throws Exception {
+        Map<String,Object> doc=numericDocument();
+        Map<String,Object> page=new LinkedHashMap<>((Map<String,Object>)((List<?>)doc.get("workbookPages")).get(0));
+        page.put("blocks",List.of(
+                Map.of("type","callout","label","Merke","text","Сложи числа."),
+                Map.of("type","exercise","number",1,"title","Berechne.",
+                        "rows",List.of(Map.of("math",Map.of("latex","2+3"),"work",true)),"writeLines",6),
+                Map.of("type","exercise","number",2,"title","Berechne.",
+                        "rows",List.of(Map.of("math",Map.of("latex","3+4"),"work",true)),"writeLines",6)));
+        doc.put("workbookPages",List.of(page));
+        doc.put("qa",Map.of("algebra",List.of(
+                Map.of("kind","equivalence","expression","2+3","answer","5"),
+                Map.of("kind","equivalence","expression","3+4","answer","7"))));
+        HttpClient fake=workbookProvider(doc);
+        var workbook=new WorkbookContentService("fake-key","single-workbook-model",json,fake);
+        var failure=assertThrows(IllegalStateException.class,()->
+                workbook.generateHomework(Map.of(),"",1,7,"Test Pupil"));
+        assertEquals("HOMEWORK_JSON_INVALID",PostLessonHomeworkFailure.code(failure));
+        verify(fake,times(3)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+    }
+
+    private String providerBody(Map<String,Object> document) throws Exception {
+        return json.writeValueAsString(Map.of("status","completed","output",List.of(
+                Map.of("content",List.of(Map.of("type","output_text","text",
+                        json.writeValueAsString(Map.of("lessonJson",json.writeValueAsString(document),
+                                "lessonPlan","Source transcript 00:12","difficulties",""))))))));
+    }
+
 }
