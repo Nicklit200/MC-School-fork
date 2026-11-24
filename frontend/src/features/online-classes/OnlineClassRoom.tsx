@@ -792,6 +792,7 @@ function RoomBody({
                   <DocumentWhiteboardPanel
                     sharedDocument={boardDocument}
                     personalWorkbooksEnabled={connection.host ? personalWorkbookData?.enabled : undefined}
+                    automaticPageAnalysisEnabled={automaticPageAnalysisEnabled}
                     classId={classId}
                     actorId={currentUserId}
                     isHost={connection.host}
@@ -838,6 +839,7 @@ function RoomBody({
               <DocumentWhiteboardPanel
                 sharedDocument={boardDocument}
                 personalWorkbooksEnabled={personalWorkbookData?.enabled}
+                automaticPageAnalysisEnabled={automaticPageAnalysisEnabled}
                 classId={classId}
                 actorId={currentUserId}
                 isHost
