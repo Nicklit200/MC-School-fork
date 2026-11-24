@@ -221,6 +221,38 @@ export interface PostLessonSkillReviewJob {
   }>;
 }
 
+export interface CompletedLessonReport {
+  studentId: string;
+  studentName: string;
+  state: 'READY' | 'NO_EVIDENCE' | 'NO_BOARD';
+  detail: string;
+  archivedPdfs: number;
+  verifiedInkPages: number;
+  verifiedSpeech: boolean;
+  observations: Array<{
+    skillId: string;
+    skillTitle: string;
+    autonomy: string;
+    correctness: string;
+    origin: string;
+    correctExamples: number;
+    confidence: number;
+    explanation: string;
+    excerpt: string;
+    sourceBoardId: string;
+    pageNumber: number;
+  }>;
+}
+
+export interface CompletedLessonReportJob {
+  id: string;
+  state: 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';
+  createdAt: string;
+  finishedAt?: string | null;
+  failureCode?: string | null;
+  report?: CompletedLessonReport | null;
+}
+
 export interface PostLessonHomeworkReviewTask {
   title: string;
   description: string;
@@ -274,6 +306,18 @@ export const onlineClassesApi = {
 
   postLessonSkillReviewStatus: (classId: string) =>
     request<PostLessonSkillReviewJob>('GET', `/online-classes/${classId}/skill-review`),
+
+  completedLessonReportRecipients: (classId: string) =>
+    request<Array<{ id: string; name: string }>>('GET', `/online-classes/${encodeURIComponent(classId)}/completed-lesson-report/recipients`),
+
+  completedLessonReports: (classId: string, studentId: string) =>
+    request<CompletedLessonReportJob[]>('GET', `/online-classes/${encodeURIComponent(classId)}/completed-lesson-report?studentId=${encodeURIComponent(studentId)}`),
+
+  createCompletedLessonReport: (classId: string, studentId: string, requestId: string, teacherInstructions: string) =>
+    request<CompletedLessonReportJob>('POST', `/online-classes/${encodeURIComponent(classId)}/completed-lesson-report`, { studentId, requestId, teacherInstructions }),
+
+  completedLessonReportPdf: (classId: string, studentId: string, reportId: string, de: boolean) =>
+    requestBlob(`/online-classes/${encodeURIComponent(classId)}/completed-lesson-report/${encodeURIComponent(reportId)}/pdf?studentId=${encodeURIComponent(studentId)}&language=${de ? 'DE' : 'RU'}`),
 
   postLessonHomeworkRecipients: (classId: string) =>
     request<Array<{id: string; name: string}>>('GET', '/online-classes/' + classId + '/post-lesson-homework/recipients'),

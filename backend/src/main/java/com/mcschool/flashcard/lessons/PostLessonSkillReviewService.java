@@ -52,7 +52,19 @@ public class PostLessonSkillReviewService {
 
     private record Job(UUID classId, UUID teacherId, String eventId, String rosterJson, int attempts) {}
     private record StudentResult(String state, String boardId, String detail,
-                                 List<PostLessonSkillAnalysisService.Observation> proposals) {}
+                                 List<PostLessonSkillAnalysisService.Observation> proposals,
+                                 int archivedPdfs,int verifiedInkPages,boolean verifiedSpeech) {
+        StudentResult(String state,String boardId,String detail,List<PostLessonSkillAnalysisService.Observation> proposals) {
+            this(state,boardId,detail,proposals,0,0,false);
+        }
+    }
+
+    public record ReportRecipient(UUID id,String name) {}
+    public record ReportObservation(String skillId,String skillTitle,String autonomy,String correctness,
+            String origin,int correctExamples,int confidence,String explanation,String excerpt,
+            String sourceBoardId,int pageNumber) {}
+    public record PreviewReport(UUID studentId,String studentName,String state,String detail,
+            int archivedPdfs,int verifiedInkPages,boolean verifiedSpeech,List<ReportObservation> observations) {}
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -156,6 +168,78 @@ public class PostLessonSkillReviewService {
         return status;
     }
 
+    /** Manual report selection uses the historical class roster, never arbitrary pupil IDs. */
+    @Transactional(readOnly=true)
+    public List<ReportRecipient> previewRecipients(AuthenticatedUser teacher,UUID classId) {
+        OnlineClass room=classAccess.requireHost(teacher,classId);
+        if(room.getStatus()!=OnlineClassStatus.ENDED || room.isTeacherOnly()
+                || room.getEventId()==null || room.getEventId().isBlank())
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,"Finish the online lesson first");
+        return reportRoster(teacher,room);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ReportRecipient> reportRoster(AuthenticatedUser teacher,OnlineClass room) {
+        List<String> saved=jdbc.query("""
+                SELECT roster_json::text FROM post_lesson_skill_review_jobs
+                WHERE class_id=? AND teacher_id=?
+                """,(rs,i)->rs.getString(1),room.getId(),teacher.id());
+        List<UUID> ids;
+        if(!saved.isEmpty()) {
+            List<String> snapshot=json.readValue(saved.get(0),List.class);
+            ids=snapshot.stream().map(UUID::fromString).toList();
+        } else if(lessonParticipants.hasLesson(teacher.id(),room.getEventId())) {
+            ids=lessonParticipants.students(teacher.id(),room.getEventId()).stream().map(User::getId).toList();
+        } else if(room.getStudent()!=null) {
+            ids=List.of(room.getStudent().getId());
+        } else {
+            // Older group lessons without a snapshot: only actual admitted/joined pupils.
+            ids=jdbc.query("""
+                    SELECT user_id FROM online_class_participants
+                    WHERE class_id=? AND class_role='STUDENT'
+                      AND (first_joined_at IS NOT NULL OR admission_state='ADMITTED')
+                    ORDER BY created_at
+                    """,(rs,i)->rs.getObject("user_id",UUID.class),room.getId());
+        }
+        if(ids.size()>MAX_PUPILS)
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,"Too many pupils");
+        return ids.stream().distinct().map(users::findById).flatMap(java.util.Optional::stream)
+                .filter(s->s.getRole()==Role.STUDENT && s.getStatus()==UserStatus.ACTIVE
+                        && !s.isArchived() && s.getTeacher()!=null && teacher.id().equals(s.getTeacher().getId()))
+                .map(s->new ReportRecipient(s.getId(),s.getFullName())).toList();
+    }
+
+    /** Same evidence pipeline as the automatic worker, without any mastery/evidence writes. */
+    public PreviewReport preview(AuthenticatedUser teacher,UUID classId,UUID studentId,String focus) throws Exception {
+        if(focus!=null && focus.length()>3000)throw new IllegalArgumentException("Teacher focus is too long");
+        var target=tx.execute(st->{
+            OnlineClass room=classAccess.requireHost(teacher,classId);
+            if(room.getStatus()!=OnlineClassStatus.ENDED || room.isTeacherOnly()
+                    || room.getEventId()==null || room.getEventId().isBlank())
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.CONFLICT,"Finish the online lesson first");
+            ReportRecipient pupil=reportRoster(teacher,room).stream()
+                    .filter(s->s.id().equals(studentId)).findFirst()
+                    .orElseThrow(()->new com.mcschool.flashcard.common.ResourceNotFoundException("Lesson pupil not found"));
+            return new java.util.AbstractMap.SimpleImmutableEntry<>(
+                    new Job(classId,teacher.id(),room.getEventId(),"[]",1),pupil);
+        });
+        if(target==null)throw new IllegalStateException("REPORT_TARGET_MISSING");
+        StudentResult result=review(target.getKey(),studentId,focus);
+        Map<String,String> names=new LinkedHashMap<>();
+        if(result.boardId()!=null && !result.proposals().isEmpty())
+            for(var node:boards.get(result.boardId()).data().nodes()) names.put(node.id(),node.title());
+        List<ReportObservation> observations=result.proposals().stream().map(row->new ReportObservation(
+                row.skillId(),names.getOrDefault(row.skillId(),row.skillId()),row.autonomy(),row.correctness(),
+                row.origin(),row.correctExamples(),row.confidence(),row.explanation(),row.excerpt(),
+                row.sourceBoardId(),row.pageNumber())).toList();
+        return new PreviewReport(studentId,target.getValue().name(),
+                "RECORDED".equals(result.state())?"READY":result.state(),result.detail(),
+                result.archivedPdfs(),result.verifiedInkPages(),result.verifiedSpeech(),observations);
+    }
+
     @Scheduled(fixedDelayString="${app.post-lesson-skill-review.poll-ms:6000}",initialDelayString="${app.post-lesson-skill-review.initial-ms:14000}")
     public void tick() {
         if (!busy.compareAndSet(false,true)) return;
@@ -237,6 +321,10 @@ public class PostLessonSkillReviewService {
     }
 
     private StudentResult review(Job job,UUID studentId)throws Exception {
+        return review(job,studentId,"");
+    }
+
+    private StudentResult review(Job job,UUID studentId,String focus)throws Exception {
         if(!users.existsByIdAndTeacherIdAndRoleAndStatusAndArchivedFalse(
                 studentId,job.teacherId(),Role.STUDENT,UserStatus.ACTIVE))
             return new StudentResult("ERROR",null,"STUDENT_NO_LONGER_ASSIGNED",List.of());
@@ -264,8 +352,7 @@ public class PostLessonSkillReviewService {
         // are a valid writing source. Do NOT infer writing from a sheet upload.
         Set<String> pupilInk=verifiedPupilInkPages(job.classId(),studentId,personal,workbook);
         String transcript=attributedTranscript(job,studentId);
-        if(pupilInk.isEmpty() && !transcript.contains("STUDENT "))
-            return new StudentResult("NO_EVIDENCE",board.id(),"NO_PUPIL_WORK_OR_SPEECH",List.of());
+        boolean hasSpeech=transcript.lines().anyMatch(line->line.startsWith("STUDENT [t="));
         List<PostLessonSkillAnalysisService.SourcePdf> files=new ArrayList<>();
         jdbc.query("""
             SELECT board_id,pdf FROM completed_lesson_documents
@@ -277,8 +364,12 @@ public class PostLessonSkillReviewService {
                 if(pdf!=null && pdf.length<=8_000_000 && pdf.length>=5)
                     files.add(new PostLessonSkillAnalysisService.SourcePdf(rs.getString("board_id"),pdf));
             },job.classId(),job.teacherId(),workbook,personal,workbook);
-        if(files.isEmpty() && !transcript.contains("STUDENT "))
-            return new StudentResult("NO_EVIDENCE",board.id(),"ANNOTATED_PDF_NOT_SAVED",List.of());
+        if(pupilInk.isEmpty() && !hasSpeech)
+            return new StudentResult("NO_EVIDENCE",board.id(),"NO_PUPIL_WORK_OR_SPEECH",
+                    List.of(),files.size(),pupilInk.size(),hasSpeech);
+        if(files.isEmpty() && !hasSpeech)
+            return new StudentResult("NO_EVIDENCE",board.id(),"ANNOTATED_PDF_NOT_SAVED",
+                    List.of(),0,pupilInk.size(),false);
 
         StringBuilder notes=new StringBuilder();
         preparations.findByTeacherIdAndEventId(job.teacherId(),job.eventId()).ifPresent(p->{
@@ -288,9 +379,10 @@ public class PostLessonSkillReviewService {
         });
         List<PostLessonSkillAnalysisService.Observation> proposals=analyzer.analyze(
                 student.getFullName(),student.getGrade(),student.getSchoolType(),
-                allowed,notes.toString(),transcript,files,pupilInk);
+                allowed,notes.toString(),transcript,files,pupilInk,focus);
         return new StudentResult(proposals.isEmpty()?"NO_EVIDENCE":"RECORDED",
-                board.id(),proposals.isEmpty()?"NO_CONFIRMED_SKILL_EVIDENCE":"",proposals);
+                board.id(),proposals.isEmpty()?"NO_CONFIRMED_SKILL_EVIDENCE":"",proposals,
+                files.size(),pupilInk.size(),hasSpeech);
     }
 
     /** Exact board and 1-based PDF page, constrained to the current pupil's ink. */
@@ -316,7 +408,7 @@ public class PostLessonSkillReviewService {
             """,rs->{
                 UUID speaker=rs.getObject("user_id",UUID.class);
                 if(!pupil.equals(speaker)&&!job.teacherId().equals(speaker))return;
-                String text=Objects.toString(rs.getString("text"),"").strip();
+                String text=Objects.toString(rs.getString("text"),"").replaceAll("[\\r\\n]+"," ").strip();
                 if(text.isEmpty() || result.length()>=18000)return;
                 String who=pupil.equals(speaker)?"STUDENT":"TEACHER";
                 String label=who+" [t="+rs.getLong("start_ms")/1000+"s]: ";

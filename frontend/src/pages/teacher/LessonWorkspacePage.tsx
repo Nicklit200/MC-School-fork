@@ -13,6 +13,7 @@ import { LessonHomeworkSeriesPanel } from '../../components/LessonHomeworkSeries
 import { PostLessonHomeworkStatus } from '../../components/PostLessonHomeworkStatus';
 import { MorningHomeworkSummary, MorningDifficulties } from './MorningLessonDigest';
 import { PersonalWorkbooksPanel } from './PersonalWorkbooksPanel';
+import { CompletedLessonReportDialog } from './CompletedLessonReportDialog';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
 import './lesson-workspace-compact.css';
@@ -32,6 +33,7 @@ export function LessonWorkspacePage() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reportEventId, setReportEventId] = useState<string | null>(null);
   const documentsDialog = useRef<HTMLDialogElement>(null);
   const homeworkDialog = useRef<HTMLDialogElement>(null);
   const generation = useRef(0);
@@ -137,7 +139,10 @@ export function LessonWorkspacePage() {
           <button type="button" className="btn btn--secondary" disabled={busy || !(prep.transcriptFilename || (prep.sonioxTranscriptText || prep.transcriptText || '').trim())} onClick={()=>{if(prep.transcriptFilename){open('transcript');return;}const url=URL.createObjectURL(new Blob([prep.sonioxTranscriptText || prep.transcriptText || ''],{type:'text/plain;charset=utf-8'}));window.open(url,'_blank','noopener,noreferrer');window.setTimeout(()=>URL.revokeObjectURL(url),60000);}}>{de?'Transkription öffnen':'Открыть транскрипцию'}</button>
         </WorkspaceCard>
         <WorkspaceCard title={de ? 'Dokument der vergangenen Stunde' : 'Документ пройденного урока'} symbol="completed" className="workspace-quick-card">
-          <button type="button" className="btn btn--secondary" onClick={()=>documentsDialog.current?.showModal()}>{de?'Alle Dokumente':'Все документы'}</button>
+          <div className="completed-report-actions">
+            <button type="button" className="btn btn--secondary" onClick={()=>setReportEventId(eventId)}>{de?'Dokument erstellen':'Создать документ'}</button>
+            <button type="button" className="btn btn--secondary" onClick={()=>documentsDialog.current?.showModal()}>{de?'Alle Dokumente':'Все документы'}</button>
+          </div>
           {!documents.length && <span className="workspace-resource-hint">{de?'Noch kein Dokument':'Пока нет документа'}</span>}
         </WorkspaceCard>
       </div>
@@ -148,6 +153,7 @@ export function LessonWorkspacePage() {
         </div>
       </WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} /></div>
     </div>}
+    {reportEventId === eventId && <CompletedLessonReportDialog key={eventId} eventId={eventId} title={lesson?.title || ''} de={de} onClose={()=>setReportEventId(null)} />}
     <dialog className="workspace-homework-dialog" ref={documentsDialog}><div className="workspace-dialog-heading"><h2>{de?'Alle Dokumente':'Все документы'}</h2><button type="button" className="teacher-icon-button" aria-label={de?'Schließen':'Закрыть'} onClick={()=>documentsDialog.current?.close()}>×</button></div><div className="workspace-document-list">{documents.length ? documents.map(doc=><button type="button" className="workspace-document" key={doc.id} onClick={()=>void perform(()=>completedLessonApi.open(eventId,doc.id))}>{doc.filename} ↗</button>) : <p className="muted">{de?'Das Dokument wird nach dem Unterricht hinzugefügt.':'Документ добавится после урока.'}</p>}</div></dialog>
     <dialog className="workspace-homework-dialog" ref={homeworkDialog}><div className="workspace-dialog-heading"><h2>{de ? 'Hausaufgaben vergeben' : 'Выдать домашку'}</h2><button type="button" className="teacher-icon-button" aria-label={de ? 'Schließen' : 'Закрыть'} onClick={() => homeworkDialog.current?.close()}>×</button></div><LessonHomeworkSeriesPanel lesson={lesson} onAssign={(startDate, days, files) => lessonPreparationApi.assignHomeworkSeries(eventId, startDate, days, files)} /></dialog>
   </div>;
