@@ -18,6 +18,13 @@ public class KolinPageAnalysisController {
     private final KolinPageAnalysisService service;
     public KolinPageAnalysisController(KolinPageAnalysisService service) { this.service=service; }
 
+    @GetMapping("/enabled")
+    public ResponseEntity<java.util.Map<String,Boolean>> enabled(@AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable UUID classId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+                java.util.Map.of("enabled",service.enabled(teacher,classId)));
+    }
+
     @PostMapping
     public ResponseEntity<KolinPageAnalysisStore.Result> analyze(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId, @Valid @RequestBody KolinBoardReviewService.Snapshot snapshot) {
