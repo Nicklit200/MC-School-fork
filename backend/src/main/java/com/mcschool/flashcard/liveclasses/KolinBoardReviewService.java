@@ -31,7 +31,7 @@ public class KolinBoardReviewService {
     private static final Pattern FIRST_PAGE = Pattern.compile("(?iu)(?:перв\\p{L}*|задани\\p{L}*\\s*(?:№\\s*)?1\\b|страниц\\p{L}*\\s*(?:№\\s*)?1\\b|лист\\p{L}*\\s*(?:№\\s*)?1\\b|first\\s+(?:page|sheet|task|exercise))");
     private static final Pattern EXERCISE = Pattern.compile("(?iu)(?:задан|упражнен|пример|страниц|лист|доск|worksheet|exercise|task|page|board|seite|aufgab)");
     private static final Pattern EXPLICIT_SHARED = Pattern.compile("(?iu)(?:общ\\p{L}*\\s+(?:доск|тетрад|лист|страниц|задан)|на\\s+общ\\p{L}*|shared\\s+(?:board|worksheet)|group\\s+(?:board|worksheet))");
-    private static final Pattern WORK = Pattern.compile("(?iu)(задан|решени|реша|доск|страниц|тетрад|работ|ошиб|напис|правиль|aufgab|lös|losung|seite|tafel|heft|arbeit|fehler|work|page|board|solution|answer)");
+    private static final Pattern WORK = Pattern.compile("(?iu)(задан|решени|реша|доск|страниц|лист|тетрад|работ|ошиб|напис|правиль|aufgab|lös|losung|seite|tafel|heft|arbeit|fehler|work|page|board|solution|answer)");
     private final OnlineClassAccessService access;
     private final KolinTaskRoster roster;
     private final OnlineClassDocumentService documents;
@@ -120,7 +120,7 @@ public class KolinBoardReviewService {
             return new Target("not_requested",null,null,null);
         if (matches.isEmpty() && !explicit && !namedPage && !explicitlyShared && text.matches("(?s).*\\d.*")
                 && KolinExerciseIndex.requestedNumber(text)==null
-                && !Pattern.compile("(?iu)(доск|страниц|тетрад|учени|tafel|seite|heft|schüler|board|page|pupil)").matcher(text).find())
+                && !Pattern.compile("(?iu)(доск|страниц|лист|тетрад|учени|tafel|seite|heft|schüler|board|page|pupil)").matcher(text).find())
             return new Target("not_requested",null,null,null);
         if (matches.size()>1) return clarify();
         if (explicitlyShared) return new Target("ready",null,"Общая доска",null,scope);
@@ -149,7 +149,7 @@ public class KolinBoardReviewService {
         var mentions=Pattern.compile("(?iuU)\\b(?:проверь|посмотри|разбери|оцени|задани[ея]|решени[ея]|работ[уыа]|тетрад[ьи])(?=\\s+(\\p{L}+))").matcher(text);
         var generic=Set.of("пожалуйста","сейчас","заодно","ещё","еще","тоже","у","для","на","в","из","с","по","и",
                 "это","этот","эту","эти","текущее","текущую","всю","весь","все","всё","его","её","ее","мое","моё","мои",
-                "решение","решения","задание","задания","работу","работы","тетрадь","страницу","страницы","ответ","ответы",
+                "решение","решения","задание","задания","работу","работы","тетрадь","страницу","страницы","лист","листа","листы","ответ","ответы",
                 "вычисления","правильность","полностью","целиком","ниже","выше","что","как","верно","правильно",
                 "первую","первого","первое","первой","первый","первые","вторую","второго","второе","второй","вторые");
         while(mentions.find()) if(!generic.contains(mentions.group(1).toLowerCase(Locale.ROOT))) return true;
