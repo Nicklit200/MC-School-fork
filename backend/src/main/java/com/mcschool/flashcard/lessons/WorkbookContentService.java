@@ -63,9 +63,11 @@ public class WorkbookContentService {
         if (!isConfigured()) throw new IllegalStateException("Server content generation is not configured. Call prepare_workbook_context, prepare structured lessonJson using rendererContract, then call generate_lesson_workbook_draft with lessonJson and contextToken. Alternatively configure OPENAI_API_KEY and WORKBOOK_OPENAI_MODEL or OPENAI_MODEL on the server.");
         if (instruction != null && instruction.length() > 6000)
             throw new IllegalArgumentException("instruction must contain at most 6000 characters");
-        String sample;
-        try (var input = new ClassPathResource("owner-workbook-generator/lesson.sample.json").getInputStream()) {
-            sample = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        String sample = "";
+        if (homework == null) {
+            try (var input = new ClassPathResource("owner-workbook-generator/lesson.sample.json").getInputStream()) {
+                sample = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            }
         }
         String instructions = """
                 Create lesson-specific Mindcrafti mathematics content as structured JSON, never images, HTML, CSS, code or URLs.
@@ -94,8 +96,10 @@ public class WorkbookContentService {
                 For rational expressions include domain restrictions such as ["x != 3"] both in qa.algebra and pupil text.
                 The bounded algebra checker supports fractions, roots and polynomial algebra, not symbolic variable exponents.
                 Do not generate homework, assignments, schedule mutations or publication instructions.
-                Renderer example (structure only, replace its topic, students and dates with the exact context):
-                """ + sample;
+                """;
+        if (homework == null) {
+            instructions += "\nRenderer example (structure only, replace its topic, students and dates with the exact context):\n" + sample;
+        }
         if(homework!=null) {
             // Do not maintain an independent simplified homework generator.
             // Reuse the same mathematical author and full MCH3 visual blocks
@@ -109,6 +113,8 @@ public class WorkbookContentService {
                         "Use exactly ONE student A4 page for this day, ONE or TWO short independent tasks, under TEN minutes including reading.")
                 .replace("meta.durationMinutes must equal calendarDurationMinutes.",
                         "meta.durationMinutes must be 30 and meta.homeworkEstimatedMinutes must be 1..10.")
+                .replace("{\"kind\":\"equivalence\",", "{\"number\":1,\"kind\":\"equivalence\",")
+                .replace("{\"kind\":\"solution\",", "{\"number\":1,\"kind\":\"solution\",")
                 .replace("Do not generate homework, assignments, schedule mutations or publication instructions.",
                         "This request IS a single daily homework PDF draft; NEVER assign it, publish it, or modify existing work.")
                 + """
@@ -141,8 +147,21 @@ public class WorkbookContentService {
                 use the normal generator's complete supported types.
                 In meta set school MINDCRAFTI SCHOOL, subject MATHEMATIK,
                 durationMinutes 30, homeworkEstimatedMinutes 1..10.
-                Every actual task has a matching numeric qa.algebra assertion,
-                including kind visualValue for native graph visualTask blocks.
+                Each exercise or visualTask has an integer number: 1, or 1 and 2.
+                Every task must have EXACTLY ONE corresponding qa.algebra object
+                with an explicit JSON integer "number" equal to that task's number
+                (never omit it, quote it, or add QA for the scaffold). Examples:
+                {"number":1,"kind":"equivalence","expression":"2*x+3*x","answer":"5*x","restrictions":[]}
+                {"number":1,"kind":"solution","equation":"2*x+3=7","solution":{"x":2},"restrictions":[]}
+                {"number":1,"kind":"visualValue"} for a native visualTask.
+                Choose the applicable QA kind for each task; these are alternatives.
+                Every exercise has exactly ONE row and writeLines:6. Its row.math
+                must be {"latex":"a real nonempty expression"} or {"tokens":["one","or","more"]}.
+                NEVER use empty tokens [], blank tokens, empty math objects or null.
+                For optional text-only content, omit math entirely rather than
+                inserting a placeholder. Actual math and QA may never be omitted.
+                Graph visualTask uses an exact spec and a separate answerLines
+                block with lines:6 and spacing:"8mm".
                 Separate private teacherPages must provide correct teacher answers;
                 never show solutions in workbookPages.
                 Do not show student names, dates, Tag/day numbers or internal metadata
@@ -152,6 +171,7 @@ public class WorkbookContentService {
                 what was solved with or without teacher help. Do not invent certainty.
                 Preserve one-page A4 layout and mathematical QA. Never publish.
                 """;
+            instructions += homeworkExample(homework);
         }
         Map<String,Object> schema = Map.of("type", "object", "properties", Map.of(
                 "lessonJson", Map.of("type", "string"), "lessonPlan", Map.of("type", "string"),
@@ -180,7 +200,7 @@ public class WorkbookContentService {
             if (attempt > 1) input.put("serverRepairRequest", Map.of(
                     "previousAttempt", attempt - 1,
                     "failureType", lastContentError == null ? "INVALID_CONTENT" : lastContentError.getClass().getSimpleName(),
-                    "instruction", (homework==null ? "" :
+                    "instruction", (homework==null ? "" : homeworkRepairAdvice(lastContentError) + " " +
                             "Keep EXACTLY one daily A4 pupil page, 1..2 tasks, max 10 minutes, private answers, "
                             +"six writing lines per task, correct homework day language, and preserve native graph tasks. ")
                             + "Generate a NEW, shorter, valid complete lessonJson string. "
@@ -208,8 +228,10 @@ public class WorkbookContentService {
             try {
                 Content generated=validateContentText(outputText(body));
                 if(homework==null)return generated;
-                // Canonical lessonJson plus homework-specific safety constraints.
-                String checked=McpHomeworkDraftValidator.normalize(json,generated.lessonJson(),
+                // Repair only unambiguous task-number metadata; do not invent
+                // mathematics or bypass the canonical homework validator.
+                String numbered=normalizeHomeworkQaNumbers(generated.lessonJson());
+                String checked=McpHomeworkDraftValidator.normalize(json,numbered,
                         homework.day(),homework.totalDays(),homework.studentName());
                 return new Content(checked,generated.lessonPlan(),generated.difficulties());
             } catch (Exception badContent) {
@@ -218,8 +240,101 @@ public class WorkbookContentService {
         }
         // Preserve the existing validation contract for callers/tests.
         // Unexpected malformed model JSON still surfaces as a server failure.
+        if (homework != null) {
+            String providerCode = PostLessonHomeworkFailure.code(lastContentError);
+            if ("AI_REFUSED".equals(providerCode) || "AI_EMPTY_RESPONSE".equals(providerCode))
+                throw lastContentError;
+            throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED", lastContentError);
+        }
         if (lastContentError instanceof IllegalArgumentException badInput) throw badInput;
         throw new IllegalStateException("Workbook content invalid after three attempts", lastContentError);
+    }
+
+    /** Small mode-specific example; never provide a conflicting multi-page lesson example. */
+    private static String homeworkExample(HomeworkDay homework) {
+        boolean independent = homework.day() >= 5 || homework.day() == homework.totalDays();
+        String scaffold = independent ? "" :
+                "{\"type\":\"callout\",\"label\":\"Merke\",\"text\":\"Сложи коэффициенты одинаковых слагаемых.\"},";
+        return "\n" + (independent
+                ? "TODAY is an independent German-only check: no callout, explanation or example."
+                : "TODAY requires a brief Russian scaffold as the first block.")
+                + "\nCanonical HOMEWORK lessonJson example (replace the exercise with the actual lesson topic, never copy it blindly):\n"
+                + """
+                  {"meta":{"school":"MINDCRAFTI SCHOOL","subject":"MATHEMATIK","durationMinutes":30,"homeworkEstimatedMinutes":5},
+                   "workbookPages":[{"title":"Terme","subtitle":"Vereinfache.","blocks":[%s
+                     {"type":"exercise","number":1,"title":"Fasse zusammen.","rows":[{"label":"","math":{"latex":"2x+3x"},"work":true}],"writeLines":6}]}],
+                   "teacherPages":[{"title":"Lösungen","subtitle":"","blocks":[{"type":"solutions","section":"1","title":"Lösung","items":[{"label":"1","math":{"latex":"2x+3x=5x"}}]}]}],
+                   "qa":{"algebra":[{"number":1,"kind":"equivalence","expression":"2*x+3*x","answer":"5*x","restrictions":[]}]}}
+                  """.formatted(scaffold);
+    }
+
+    /** Fixed repair advice only: never send arbitrary exception messages or pupil data back. */
+    static String homeworkRepairAdvice(Exception error) {
+        String reason = error == null ? "" : java.util.Objects.toString(error.getMessage(), "");
+        return switch (reason) {
+            case "Homework qa.algebra must include a numeric task number",
+                 "Homework qa.algebra numbers must uniquely match tasks 1..1",
+                 "Homework qa.algebra numbers must uniquely match tasks 1..2",
+                 "Every homework task needs exactly one linked qa.algebra assertion",
+                 "Homework must include qa.algebra for every numbered exercise",
+                 "Homework task number is required" ->
+                    "REPAIR: each task and its sole qa.algebra assertion require the same explicit JSON integer number (1 or 2). Never use a quoted number, duplicate, missing number or extra assertion.";
+            case "Workbook math tokens must be 1..100 nonempty strings",
+                 "Workbook math expression is empty",
+                 "Workbook math requires exactly one latex or tokens",
+                 "Workbook LaTeX must be a nonempty string",
+                 "Workbook math value has an unsupported structure" ->
+                    "REPAIR: every present math field must contain real nonempty LaTeX or 1..100 nonblank string tokens. Never return tokens:[], blank tokens, null or empty math. Omit optional math for text-only fields; keep actual exercise expressions and QA.";
+            case "Each homework task requires at least 6 full-width handwriting lines (8 mm apart)",
+                 "Homework answer lines require at least 8 mm spacing" ->
+                    "REPAIR: exercise.writeLines must be 6; each graph needs a separate answerLines block with lines:6 and spacing:8mm.";
+            default -> "REPAIR: follow the exact one-page homework example and all canonical validation rules.";
+        };
+    }
+
+    /**
+     * Normalize explicit numeric-string QA identifiers, or fill the sole missing
+     * identifier when there is exactly one task and one assertion. The task
+     * itself must already have the explicit number 1; ambiguous multi-task
+     * omissions and conflicting values remain invalid. No math is changed.
+     */
+    @SuppressWarnings("unchecked")
+    private String normalizeHomeworkQaNumbers(String source) throws Exception {
+        Map<String,Object> doc=json.readValue(source,Map.class);
+        if (!(doc.get("qa") instanceof Map<?,?> qa)
+                || !(qa.get("algebra") instanceof List<?> checks)) return source;
+        boolean single=false;
+        if (checks.size()==1 && doc.get("workbookPages") instanceof List<?> pages
+                && pages.size()==1 && pages.get(0) instanceof Map<?,?> page
+                && page.get("blocks") instanceof List<?> blocks) {
+            var tasks=new java.util.ArrayList<Map<?,?>>();
+            collectHomeworkTasks(blocks,tasks,0);
+            single=tasks.size()==1 && "1".equals(String.valueOf(tasks.get(0).get("number")));
+        }
+        boolean changed=false;
+        for (Object raw:checks) {
+            if (!(raw instanceof Map<?,?> check)) continue;
+            Object number=check.get("number");
+            if (number instanceof String text && ("1".equals(text) || "2".equals(text))) {
+                ((Map<String,Object>)check).put("number",Integer.valueOf(text));
+                changed=true;
+            } else if (single && number==null) {
+                ((Map<String,Object>)check).put("number",1);
+                changed=true;
+            }
+        }
+        return changed ? json.writeValueAsString(doc) : source;
+    }
+
+    private static void collectHomeworkTasks(List<?> blocks,List<Map<?,?>> tasks,int depth) {
+        if(depth>12) return;
+        for(Object raw:blocks) {
+            if(!(raw instanceof Map<?,?> block)) continue;
+            if("exercise".equals(block.get("type")) || "visualTask".equals(block.get("type")))
+                tasks.add(block);
+            for(String key:List.of("children","left","right"))
+                if(block.get(key) instanceof List<?> nested) collectHomeworkTasks(nested,tasks,depth+1);
+        }
     }
 
     /** Parses and validates the inner JSON before any PDF is rendered or attached. */
