@@ -4,6 +4,7 @@ import { useClassEvents, type ReceivedEvent } from './useClassEvents';
 import { VIEW_TOPIC } from './events';
 import { personalBoardOwner } from './boards';
 import { flushClassAnnotations } from './annotationSync';
+import { automaticPageAnalysisEnabled } from './useAutomaticPageAnalysis';
 
 export class KolinReviewUnavailable extends Error {}
 export class KolinReviewTooLarge extends Error {}
@@ -40,6 +41,9 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
     if (target.state === 'not_requested' || target.state === 'clarify') return;
     if (target.state !== 'ready') throw new KolinReviewUnavailable();
     const shared = target.studentId == null;
+    // In incremental mode personal review questions use persisted analysis,
+    // not a new image capture. Shared-board review keeps its explicit old path.
+    if (!shared && automaticPageAnalysisEnabled) return;
     const current = () => pages.current.scope === scope && target.studentId
       ? pages.current.entries.get(target.studentId) : undefined;
     const observed = current();
