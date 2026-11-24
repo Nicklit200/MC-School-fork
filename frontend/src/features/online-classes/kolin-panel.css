@@ -124,3 +124,10 @@
 @media(max-width:600px) {
   .kolin-rich__formula { padding:8px 6px; }
 }
+
+/* Read-only current page feedback; never covers the writing surface. */
+.kolin-saved-page { flex-shrink:0; min-width:0; border:1px solid var(--v3-edge); border-radius:8px; padding:8px 10px; font-size:12px; overflow-wrap:anywhere; }
+.kolin-saved-page summary { cursor:pointer; font-weight:650; }
+.kolin-saved-page p { margin:6px 0 0; color:var(--v3-muted); }
+.kolin-saved-page__content { max-height:180px; overflow:auto; overscroll-behavior:contain; margin-top:8px; }
+.kolin-saved-page__content small { color:var(--v3-muted); }
