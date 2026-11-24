@@ -131,3 +131,44 @@
 .kolin-saved-page p { margin:6px 0 0; color:var(--v3-muted); }
 .kolin-saved-page__content { max-height:180px; overflow:auto; overscroll-behavior:contain; margin-top:8px; }
 .kolin-saved-page__content small { color:var(--v3-muted); }
+
+/* A real sibling column, not an overlay on the writing surface. The selected
+   worksheet owns its review; the chat can stay closed. Reserve space from the
+   start, not when the provider response arrives. */
+.kolyn-board-review-layout {
+  display:flex; flex:1 1 auto; width:100%; height:100%; min-width:0; min-height:0;
+  container-type:inline-size; overflow:hidden;
+}
+.kolyn-board-review-canvas {
+  position:relative; display:flex; flex:1 1 0; min-width:0; min-height:0;
+}
+.kolyn-board-review-canvas > .whiteboard {
+  flex:1 1 auto; min-width:0; min-height:0; width:100%; height:100%;
+}
+.kolin-saved-page--inline {
+  --v3-edge:#444b51; --v3-muted:#abb4ba; --v3-text:#eef2f1;
+  display:flex; flex-direction:column; gap:10px; flex:0 0 clamp(205px,32%,340px);
+  box-sizing:border-box; min-width:0; min-height:0;
+  margin:calc(var(--classroom-page-top,64px) + 2px) 8px calc(var(--classroom-dock-height,0px) + 12px) 0;
+  padding:12px; color:var(--v3-text); background:#272b2f; overflow:hidden;
+}
+.kolin-saved-page--inline > header {
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  padding-bottom:8px; border-bottom:1px solid var(--v3-edge);
+}
+.kolin-saved-page--inline > header strong {font-size:13px}
+.kolin-saved-page--inline > header span {font-size:10px;color:#ffb47c}
+.kolin-saved-page--inline .kolin-saved-page__status {font-size:11px;color:var(--v3-muted)}
+.kolin-saved-page--inline .kolin-saved-page__content {
+  flex:1 1 auto; min-height:0; max-height:none; overflow:auto;
+  overscroll-behavior:contain; touch-action:pan-y;
+}
+.kolin-saved-page--inline .kolin-rich__callout {padding:8px}
+@container (max-width: 580px) {
+  .kolin-saved-page--inline {
+    flex:0 0 29%; min-height:105px; margin:0 8px 8px;
+  }
+  .kolyn-board-review-layout:has(> .kolin-saved-page--inline) {flex-direction:column}
+  .kolin-saved-page--inline > header {padding-bottom:4px}
+  .kolin-saved-page--inline .kolin-saved-page__content {margin-top:0}
+}
