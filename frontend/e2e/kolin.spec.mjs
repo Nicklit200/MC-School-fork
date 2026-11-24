@@ -477,3 +477,30 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     expect(state.errors).toEqual([]);
   });
 }
+
+test('automatic review stays next to the pupil page and chat reuses it without another image', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const state = await setup(page, 'teacher', true);
+  state.savedAnalyses = [{ id: randomUUID(), studentId: MELISSA, boardId: 'personal-' + MELISSA,
+    pageNumber: 1, documentVersion: 0, sharedDocumentVersion: 0, revision: 4, state: 'READY',
+    text: '✅ Правильно: $\\frac{1}{2}$\n❌ Ошибка: неверный знак',
+    capturedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), failureCode: null }];
+  await page.getByRole('button', { name: 'Доска ученика: Мелисса', exact: true }).click();
+  const feedback = page.getByRole('complementary', { name: 'Проверка листа', exact: true });
+  await expect(feedback).toBeVisible();
+  await expect(feedback.getByText(/неверный знак/)).toBeVisible();
+  await expect(feedback.locator('.kolin-rich__callout--correct .katex')).toHaveCount(1);
+  const canvas = page.locator('.kolyn-board-review-canvas:visible').first();
+  const [left, right] = await Promise.all([canvas.boundingBox(), feedback.boundingBox()]);
+  expect(left.width).toBeGreaterThan(200);
+  expect(right.x).toBeGreaterThanOrEqual(left.x + left.width - 1);
+  await expect(panel(page)).not.toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('automatic-page-review.png') });
+  state.review = true;
+  await openKolin(page);
+  await send(page, state, 'Проверь лист');
+  expect(state.posts[0].body.boardReview).toBeUndefined();
+  assertCompact(state.posts[0].body);
+  expect(state.requests.filter(r => r.method === 'POST' && r.path.endsWith('/page-analyses'))).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
