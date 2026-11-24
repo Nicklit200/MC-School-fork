@@ -62,6 +62,7 @@ public class KolinPageAnalysisStore {
                 JOIN online_class_annotation_events ev ON ev.document_id=doc.id
                 WHERE doc.class_id=? AND doc.target_type='WHITEBOARD'
                   AND doc.target_id=? AND doc.page_index=? AND doc.revision=?
+                  AND doc.updated_at <= now() - interval '30 seconds'
                   AND ev.actor_id=? AND ev.operation_type IN ('ADD','UPDATE')
             )
             """,Boolean.class,key.classId(),key.boardId(),key.pageNumber()-1,key.revision(),key.studentId()));
