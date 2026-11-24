@@ -26,7 +26,7 @@ jobs:
           cache-dependency-path: backend/pom.xml
       - name: Test page analysis and existing review safeguards
         working-directory: backend
-        run: mvn -B -ntp -Dtest=KolinPageAnalysisServiceTest,KolinBoardReviewServiceTest,KolinChatServiceTest test
+        run: mvn -B -ntp -Dtest=KolinPageAnalysisServiceTest,KolinPageAnalysisStoreIntegrationTest,KolinBoardReviewServiceTest,KolinChatServiceTest test
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -42,4 +42,4 @@ jobs:
       - working-directory: frontend
         run: npm run typecheck
       - working-directory: frontend
-        run: npm test -- src/features/online-classes/useAutomaticPageAnalysis.test.ts src/features/online-classes/useKolinBoardReview.test.ts src/features/online-classes/useKolinChat.test.ts
+        run: npm test -- src/features/online-classes/useAutomaticPageAnalysis.test.ts src/features/online-classes/useKolinBoardReview.test.ts src/features/online-classes/useKolinChat.test.ts src/features/online-classes/DocumentWhiteboardPanel.test.tsx src/features/online-classes/KolinRichText.test.tsx
