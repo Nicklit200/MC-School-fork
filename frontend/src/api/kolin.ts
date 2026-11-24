@@ -143,6 +143,8 @@ const base = (classId: string) => `/online-classes/${encodeURIComponent(classId)
 const worksheetPath = (classId: string, id: string) => `${base(classId)}/worksheets/${encodeURIComponent(id)}`;
 
 export const kolinApi = {
+  pageAnalysisEnabled: (classId: string) =>
+    request<{ enabled: boolean }>('GET', `${base(classId)}/page-analyses/enabled`),
   pageAnalysisCandidates: (classId: string) =>
     request<KolinPageAnalysisCandidate[]>('GET', `${base(classId)}/page-analyses/candidates`),
   analyzePage: (classId: string, snapshot: KolinBoardSnapshot) =>
