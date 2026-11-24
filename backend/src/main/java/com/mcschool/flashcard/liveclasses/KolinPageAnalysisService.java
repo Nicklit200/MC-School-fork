@@ -18,6 +18,8 @@ public class KolinPageAnalysisService {
     private final KolinPageAnalysisStore store;
     private final AiLessonPilotService ai;
     private final ObjectMapper mapper;
+    @org.springframework.beans.factory.annotation.Value("${KOLYN_AUTO_PAGE_ANALYSIS_TEACHER_ID:}")
+    private String pilotTeacherId="";
 
     public KolinPageAnalysisService(OnlineClassAccessService access, KolinTaskRoster roster,
             OnlineClassDocumentService documents, KolinBoardReviewService reviews,
@@ -26,10 +28,20 @@ public class KolinPageAnalysisService {
         this.store=store; this.ai=ai; this.mapper=mapper;
     }
 
+    /** Fail-closed rollout: only the configured teacher may start automatic paid reviews. */
+    public boolean enabledFor(AuthenticatedUser teacher) {
+        return teacher!=null && teacher.id()!=null && teacher.id().toString().equals(pilotTeacherId);
+    }
+
+    public boolean enabled(AuthenticatedUser teacher, UUID classId) {
+        access.requireHost(teacher,classId);
+        return enabledFor(teacher);
+    }
+
     public KolinPageAnalysisStore.Result analyze(AuthenticatedUser teacher, UUID classId,
             KolinBoardReviewService.Snapshot snapshot) {
         var room=access.requireHost(teacher,classId);
-        if (room.getStatus()!=OnlineClassStatus.LIVE || snapshot==null || snapshot.studentId()==null
+        if (!enabledFor(teacher) || room.getStatus()!=OnlineClassStatus.LIVE || snapshot==null || snapshot.studentId()==null
                 || !"task_page".equals(snapshot.scope()) || snapshot.revision()<=0)
             throw KolinRequestException.reviewUnavailable();
         var metadata=reviews.validatePersonalPage(room,snapshot);
@@ -66,6 +78,7 @@ public class KolinPageAnalysisService {
 
     public List<KolinPageAnalysisStore.Result> current(AuthenticatedUser teacher, UUID classId, UUID studentId) {
         var room=access.requireHost(teacher,classId);
+        if (!enabledFor(teacher)) return List.of();
         requirePupil(room,studentId);
         String workbook=PersonalBoard.workbookTargetIdFor(studentId);
         long privateVersion=documents.workbookVersion(teacher,classId,workbook);
@@ -77,7 +90,7 @@ public class KolinPageAnalysisService {
 
     public List<KolinPageAnalysisStore.Candidate> candidates(AuthenticatedUser teacher, UUID classId) {
         var room=access.requireHost(teacher,classId);
-        if (room.getStatus()!=OnlineClassStatus.LIVE || !ai.isConfigured()) return List.of();
+        if (!enabledFor(teacher) || room.getStatus()!=OnlineClassStatus.LIVE || !ai.isConfigured()) return List.of();
         return roster.read(room).stream().flatMap(pupil-> {
             UUID studentId=pupil.id();
             String workbook=PersonalBoard.workbookTargetIdFor(studentId);
