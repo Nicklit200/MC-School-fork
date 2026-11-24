@@ -5,6 +5,8 @@ import type { KolinFailureCode, useKolinChat } from './useKolinChat';
 import { KolinWorksheetCard } from './KolinWorksheetCard';
 import { KolinReviewCard } from './KolinReviewCard';
 import { KolinRichText } from './KolinRichText';
+import { SavedPageAnalysis } from './SavedPageAnalysis';
+import { automaticPageAnalysisEnabled } from './useAutomaticPageAnalysis';
 import './kolin-panel.css';
 
 function lessonTime(milliseconds: number) {
@@ -86,13 +88,17 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
       <button type="button" className="answers-panel__close" onClick={chat.close}
         aria-label={de ? 'Kolyn schließen' : 'Закрыть Kolyn'}>×</button>
     </header>
+    <SavedPageAnalysis classId={chat.classId} studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} />
     <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
       onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
       {!chat.messages.length && <li className="kolin-panel__welcome">{de
         ? 'Ich bin Kolyn. Ich helfe beim Erklären, beim Besprechen von Lösungen und beim Vorbereiten von Aufgaben.'
         : 'Я Kolyn. Помогу объяснить тему, разобрать решение и подготовить задания.'}
-        <p>{de ? 'Bei Ihrer Frage nutze ich das gespeicherte Transkript dieses Unterrichts. Ich gebe keine automatischen Hinweise.'
-          : 'Когда вы задаёте вопрос, я использую сохранённую расшифровку этого урока. Автоматических подсказок нет.'}</p>
+        <p>{automaticPageAnalysisEnabled
+          ? de ? 'Ich nutze gespeicherte Seitenanalysen und das Transkript. Noch nicht geprüfte Seiten kennzeichne ich.'
+            : 'Использую сохранённые проверки листов и расшифровку урока. Непроверенные листы отмечаю отдельно.'
+          : de ? 'Bei Ihrer Frage nutze ich das gespeicherte Transkript dieses Unterrichts. Ich gebe keine automatischen Hinweise.'
+            : 'Когда вы задаёте вопрос, я использую сохранённую расшифровку этого урока. Автоматических подсказок нет.'}</p>
         <p>{de ? 'Zum Beispiel: Prüfe Melissas Aufgaben 7 und 8. Ich suche auf ihren gespeicherten Heftseiten.'
           : 'Например: «Проверь задания 7 и 8 у Мелиссы». Найду их на сохранённых страницах её тетради.'}</p></li>}
       {chat.messages.map(message => <li key={message.id} className={`kolin-panel__message kolin-panel__message--${message.role}`}
