@@ -478,22 +478,50 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
   });
 }
 
-test('automatic review stays next to the pupil page and chat reuses it without another image', async ({ page }, testInfo) => {
+test('each worksheet review scrolls with its own page, and chat reuses it without a new image', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const state = await setup(page, 'teacher', true);
-  state.savedAnalyses = [{ id: randomUUID(), studentId: MELISSA, boardId: 'personal-' + MELISSA,
-    pageNumber: 1, documentVersion: 0, sharedDocumentVersion: 0, revision: 4, state: 'READY',
-    text: '✅ Правильно: $\\frac{1}{2}$\n❌ Ошибка: неверный знак',
-    capturedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), failureCode: null }];
+  const boardId = 'personal-' + MELISSA;
+  const docId = randomUUID();
+  state.documents.set(docId, { id: docId, targetType: 'WHITEBOARD', targetId: boardId, pageIndex: 1,
+    revision: 1, sourceWidth: 595, sourceHeight: 842, snapshotSavedAt: null });
+  state.savedAnalyses = [
+    { id: randomUUID(), studentId: MELISSA, boardId, pageNumber: 1, documentVersion: 0, sharedDocumentVersion: 0, revision: 4, state: 'READY',
+      text: '✅ Правильно: $\\frac{1}{2}$\n❌ Ошибка: неверный знак',
+      capturedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), failureCode: null },
+    { id: randomUUID(), studentId: MELISSA, boardId, pageNumber: 2, documentVersion: 0, sharedDocumentVersion: 0, revision: 1, state: 'READY',
+      text: '💡 Совет: проверь вторую строку',
+      capturedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), failureCode: null }
+  ];
   await page.getByRole('button', { name: 'Доска ученика: Мелисса', exact: true }).click();
-  const feedback = page.getByRole('complementary', { name: 'Проверка листа', exact: true });
-  await expect(feedback).toBeVisible();
-  await expect(feedback.getByText(/неверный знак/)).toBeVisible();
-  await expect(feedback.locator('.kolin-rich__callout--correct .katex')).toHaveCount(1);
-  const canvas = page.locator('.kolyn-board-review-canvas:visible').first();
-  const [left, right] = await Promise.all([canvas.boundingBox(), feedback.boundingBox()]);
-  expect(left.width).toBeGreaterThan(200);
+  const first = page.getByRole('complementary', { name: 'Проверка листа · 1', exact: true });
+  const second = page.getByRole('complementary', { name: 'Проверка листа · 2', exact: true });
+  await expect(first.getByText(/неверный знак/)).toBeVisible();
+  await expect(second.getByText(/проверь вторую строку/)).toBeAttached();
+  await expect(first.locator('.kolin-rich__callout--correct .katex')).toHaveCount(1);
+  const rail = page.locator('.whiteboard--page-reviews:visible .whiteboard__pages--continuous');
+  const paper = rail.locator('.whiteboard__page[data-page-index="0"] > .whiteboard__page-surface');
+  const [left, right] = await Promise.all([paper.boundingBox(), first.boundingBox()]);
+  expect(left.width).toBeGreaterThan(150);
   expect(right.x).toBeGreaterThanOrEqual(left.x + left.width - 1);
+  expect(Math.abs(left.y - right.y)).toBeLessThan(2);
+  expect(await first.evaluate(node => node.closest('.whiteboard__page').dataset.pageIndex)).toBe('0');
+  expect(await second.evaluate(node => node.closest('.whiteboard__page').dataset.pageIndex)).toBe('1');
+  const initialTop = await first.evaluate(node => node.getBoundingClientRect().top);
+  const distance = await rail.evaluate(node => {
+    const a = node.querySelector('[data-page-index="0"]'), b = node.querySelector('[data-page-index="1"]');
+    const distance = b.offsetTop - a.offsetTop;
+    node.scrollTop += distance;
+    return distance;
+  });
+  await expect.poll(async () => first.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(initialTop - Math.min(distance / 2, 100));
+  await expect(second).toBeInViewport();
+  const [paperTop, feedbackTop] = await Promise.all([
+    rail.locator('.whiteboard__page[data-page-index="1"]').evaluate(node => node.getBoundingClientRect().top),
+    second.evaluate(node => node.getBoundingClientRect().top),
+  ]);
+  expect(Math.abs(paperTop - feedbackTop)).toBeLessThan(2);
+  await expect(first).not.toContainText('проверь вторую строку');
   await expect(panel(page)).not.toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('automatic-page-review.png') });
   state.review = true;
