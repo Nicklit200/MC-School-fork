@@ -75,6 +75,20 @@ public class KolinPageAnalysisService {
         return store.current(classId,teacher.id(),studentId,board,version,shared);
     }
 
+    public List<KolinPageAnalysisStore.Candidate> candidates(AuthenticatedUser teacher, UUID classId) {
+        var room=access.requireHost(teacher,classId);
+        if (room.getStatus()!=OnlineClassStatus.LIVE || !ai.isConfigured()) return List.of();
+        return roster.read(room).stream().flatMap(pupil-> {
+            UUID studentId=pupil.id();
+            String workbook=PersonalBoard.workbookTargetIdFor(studentId);
+            long privateVersion=documents.workbookVersion(teacher,classId,workbook);
+            String board=privateVersion>0?workbook:PersonalBoard.targetIdFor(studentId);
+            long version=privateVersion>0?privateVersion:documents.workbookVersion(teacher,classId,board);
+            long shared=privateVersion>0?0L:documents.workbookVersion(teacher,classId,"board-1");
+            return store.candidates(classId,teacher.id(),studentId,board,version,shared).stream();
+        }).limit(16).toList();
+    }
+
     private void requirePupil(OnlineClass room, UUID studentId) {
         if (studentId==null || roster.read(room).stream().noneMatch(pupil->studentId.equals(pupil.id())))
             throw KolinRequestException.reviewUnavailable();
