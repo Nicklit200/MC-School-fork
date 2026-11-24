@@ -6,7 +6,6 @@ import { KolinWorksheetCard } from './KolinWorksheetCard';
 import { KolinReviewCard } from './KolinReviewCard';
 import { KolinRichText } from './KolinRichText';
 import { SavedPageAnalysis } from './SavedPageAnalysis';
-import { automaticPageAnalysisEnabled } from './useAutomaticPageAnalysis';
 import './kolin-panel.css';
 
 function lessonTime(milliseconds: number) {
@@ -58,11 +57,12 @@ function TranscriptContextNote({ context, de }: { context: KolinTranscriptContex
   </footer>;
 }
 
-export function KolinPanel({ chat, context, currentStudentName, allStudentsOverview = false }: {
+export function KolinPanel({ chat, context, currentStudentName, allStudentsOverview = false, automaticPageAnalysisEnabled = false }: {
   chat: ReturnType<typeof useKolinChat>;
   context: KolinContext;
   currentStudentName?: string;
   allStudentsOverview?: boolean;
+  automaticPageAnalysisEnabled?: boolean;
 }) {
   const { language } = useI18n();
   const de = language === 'DE';
@@ -88,7 +88,7 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
       <button type="button" className="answers-panel__close" onClick={chat.close}
         aria-label={de ? 'Kolyn schließen' : 'Закрыть Kolyn'}>×</button>
     </header>
-    <SavedPageAnalysis classId={chat.classId} studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} />
+    <SavedPageAnalysis classId={chat.classId} studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} enabled={automaticPageAnalysisEnabled} />
     <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
       onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
       {!chat.messages.length && <li className="kolin-panel__welcome">{de
