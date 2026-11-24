@@ -91,6 +91,10 @@ class KolinBoardReviewServiceTest {
         for(String question:List.of("Дай задания Мелиссе","Как объяснить дроби?","Проверь решение: 2+2=4"))
             assertThat(service.resolve(room,question,context).state()).isEqualTo("not_requested");
         assertThat(service.resolve(room,"Проверь решение",context).studentId()).isEqualTo(melissa.getId());
+        var sheet=service.resolve(room,"Проверь лист",context);
+        assertThat(sheet.studentId()).isEqualTo(melissa.getId());
+        assertThat(sheet.scope()).isEqualTo("current_page");
+        assertThat(service.resolve(room,"Проверь лист Софии",context).studentId()).isEqualTo(sofia.getId());
         assertThat(service.resolve(room,"Проверь задание",null).state()).isEqualTo("clarify");
         assertThat(service.resolve(room,"Проверь Софию",context).studentId()).isEqualTo(sofia.getId());
     }
