@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { kolinApi, type KolinPageAnalysisCandidate, type KolinBoardSnapshot } from '../../api/kolin';
-
-export const automaticPageAnalysisEnabled = import.meta.env.VITE_KOLYN_AUTO_PAGE_ANALYSIS === 'true';
 
 const POLL_MS = 8000;
 const MAX_LOCAL_SKIPS = 256;
@@ -17,8 +15,21 @@ export function matchesAnalysisCandidate(candidate: KolinPageAnalysisCandidate, 
  * without navigating the teacher or pupil viewport. One request in flight per host tab;
  * the durable unique key protects across tabs/replicas. No automatic charge retry. */
 export function useAutomaticPageAnalysis(classId: string, teacherId: string, enabled: boolean) {
+  const scope = JSON.stringify([classId, teacherId]);
+  const [permission, setPermission] = useState<{ scope: string; enabled: boolean }>();
+  const automaticPageAnalysisEnabled = enabled && permission?.scope === scope && permission.enabled;
   useEffect(() => {
-    if (!enabled || !automaticPageAnalysisEnabled) return;
+    if (!enabled) return;
+    let stopped = false;
+    void kolinApi.pageAnalysisEnabled(classId).then(result => {
+      if (!stopped) setPermission({ scope, enabled: result.enabled === true });
+    }).catch(() => {
+      if (!stopped) setPermission({ scope, enabled: false });
+    });
+    return () => { stopped = true; };
+  }, [classId, scope, enabled]);
+  useEffect(() => {
+    if (!automaticPageAnalysisEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const skipped = new Set<string>();
@@ -56,5 +67,6 @@ export function useAutomaticPageAnalysis(classId: string, teacherId: string, ena
     }
     void run();
     return () => { stopped = true; clearTimeout(timer); };
-  }, [classId, teacherId, enabled]);
+  }, [classId, teacherId, automaticPageAnalysisEnabled]);
+  return Boolean(automaticPageAnalysisEnabled);
 }
