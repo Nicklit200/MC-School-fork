@@ -18,7 +18,7 @@ export function observedPupilPage({ event, senderIdentity }: ReceivedEvent, clas
   return { boardId: event.boardId, page: event.page, at: event.at, receivedAt: now, senderIdentity: senderIdentity!, active: event.active !== false };
 }
 
-export function useKolinBoardReview(classId: string, teacherId: string, enabled: boolean) {
+export function useKolinBoardReview(classId: string, teacherId: string, enabled: boolean, automaticPageAnalysisEnabled = false) {
   const scope = `${classId}:${teacherId}:${enabled}`;
   const pages = useRef<{ scope: string; entries: Map<string, PupilPage> }>({ scope, entries: new Map() });
   if (pages.current.scope !== scope) pages.current = { scope, entries: new Map() };
@@ -40,6 +40,9 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
     if (target.state === 'not_requested' || target.state === 'clarify') return;
     if (target.state !== 'ready') throw new KolinReviewUnavailable();
     const shared = target.studentId == null;
+    // In incremental mode personal review questions use persisted analysis,
+    // not a new image capture. Shared-board review keeps its explicit old path.
+    if (!shared && automaticPageAnalysisEnabled) return;
     const current = () => pages.current.scope === scope && target.studentId
       ? pages.current.entries.get(target.studentId) : undefined;
     const observed = current();
@@ -80,5 +83,5 @@ export function useKolinBoardReview(classId: string, teacherId: string, enabled:
       if (error instanceof Error && error.message === 'REVIEW_TOO_LARGE') throw new KolinReviewTooLarge();
       throw new KolinReviewUnavailable();
     }
-  }, [classId, enabled, scope]);
+  }, [classId, enabled, scope, automaticPageAnalysisEnabled]);
 }

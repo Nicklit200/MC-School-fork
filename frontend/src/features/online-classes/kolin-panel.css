@@ -124,3 +124,47 @@
 @media(max-width:600px) {
   .kolin-rich__formula { padding:8px 6px; }
 }
+
+/* Read-only current page feedback; never covers the writing surface. */
+.kolin-saved-page { flex-shrink:0; min-width:0; border:1px solid var(--v3-edge); border-radius:8px; padding:8px 10px; font-size:12px; overflow-wrap:anywhere; }
+.kolin-saved-page summary { cursor:pointer; font-weight:650; }
+.kolin-saved-page p { margin:6px 0 0; color:var(--v3-muted); }
+.kolin-saved-page__content { max-height:180px; overflow:auto; overscroll-behavior:contain; margin-top:8px; }
+.kolin-saved-page__content small { color:var(--v3-muted); }
+
+/* Every review is a child of its own page article in the SAME scroll rail.
+   Its reserved width never overlays the writing canvas or changes when an
+   answer arrives. The existing page identity and normalized ink stay intact. */
+.whiteboard--original-v3.whiteboard--page-reviews .whiteboard__page > .whiteboard__page-surface.whiteboard__stage {
+  left:0;
+  right:calc(var(--kolyn-review-width) + var(--kolyn-review-gap));
+  width:auto;
+}
+.whiteboard--page-reviews .whiteboard__page > .kolin-saved-page--inline {
+  --v3-edge:#444b51; --v3-muted:#abb4ba; --v3-text:#eef2f1;
+  position:absolute; top:0; bottom:0; right:0;
+  width:var(--kolyn-review-width); box-sizing:border-box;
+  display:flex; flex-direction:column; gap:10px;
+  margin:0; min-width:0; min-height:0;
+  padding:12px; color:var(--v3-text); background:#272b2f; overflow:hidden;
+  touch-action:none;
+}
+.whiteboard--page-reviews .whiteboard__pages--paged .whiteboard__page > .kolin-saved-page--inline {
+  top:var(--classroom-page-top,132px);
+  bottom:var(--classroom-page-bottom,68px);
+  right:8px;
+  width:calc(var(--kolyn-review-width) - 8px);
+}
+.kolin-saved-page--inline > header {
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+  padding-bottom:8px; border-bottom:1px solid var(--v3-edge);
+}
+.kolin-saved-page--inline > header strong {font-size:13px}
+.kolin-saved-page--inline > header span {font-size:10px;color:#ffb47c}
+.kolin-saved-page--inline .kolin-saved-page__status {font-size:11px;color:var(--v3-muted)}
+.kolin-saved-page--inline .kolin-saved-page__content {
+  flex:1 1 auto; min-height:0; max-height:none; overflow:auto;
+  overscroll-behavior:auto;
+  touch-action:pan-y;
+}
+.kolin-saved-page--inline .kolin-rich__callout {padding:8px}

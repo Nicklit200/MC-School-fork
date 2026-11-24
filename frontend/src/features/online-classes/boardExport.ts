@@ -245,7 +245,7 @@ export async function exportBoardPdf({
 
 /** An on-demand saved-board snapshot; it never opens or navigates a visible board. */
 export async function captureBoardPage(classId: string, studentId: string | null, boardId: string, pageIndex: number,
-  observedAt: string | null, scope: 'current_page' | 'first_page' | 'workbook' | 'task_page' = 'current_page'): Promise<KolinBoardSnapshot> {
+  observedAt: string | null, scope: 'current_page' | 'first_page' | 'workbook' | 'task_page' = 'current_page', pupilInkOnly = false): Promise<KolinBoardSnapshot> {
   if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= 1000) throw new Error('Invalid review page');
   const shared = studentId === null;
   const privateBoard = shared ? null : personalWorkbookBoardId(studentId);
@@ -294,7 +294,10 @@ export async function captureBoardPage(classId: string, studentId: string | null
       const width = Math.min(EXPORT_WIDTH, Math.floor(2400 * aspect));
       const height = Math.round(width / aspect);
       if (width < 32 || height < 32) throw new Error('Invalid review dimensions');
-      const imageDataUrl = renderPage(foldOperations(operations), width, height, aspect, background);
+      const folded = foldOperations(operations);
+      const marks = pupilInkOnly ? folded.filter(mark => mark.layerOwnerId === studentId) : folded;
+      if (pupilInkOnly && marks.length === 0) throw new Error('NO_PUPIL_INK');
+      const imageDataUrl = renderPage(marks, width, height, aspect, background);
       imageChars += imageDataUrl.length;
       if (dataUrlToBytes(imageDataUrl).length > 1_500_000 || imageChars > 16_000_000) throw new Error('REVIEW_TOO_LARGE');
       captured.push({ pageNumber: index + 1, revision: operations.at(-1)?.sequence ?? 0, imageDataUrl });

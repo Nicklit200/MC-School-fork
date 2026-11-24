@@ -59,6 +59,24 @@ export interface KolinBoardSnapshot {
   totalPageCount: number;
   additionalPages: { pageNumber: number; revision: number; imageDataUrl: string }[];
 }
+export interface KolinPageAnalysisCandidate {
+  studentId: string;
+  boardId: string;
+  pageNumber: number;
+  documentVersion: number;
+  sharedDocumentVersion: number;
+  revision: number;
+}
+
+export interface KolinPageAnalysisResult extends KolinPageAnalysisCandidate {
+  id: string;
+  state: 'RUNNING' | 'READY' | 'FAILED';
+  text: string | null;
+  failureCode: string | null;
+  capturedAt: string;
+  finishedAt: string | null;
+}
+
 export interface KolinBoardContext extends Omit<KolinBoardSnapshot, 'observedAt' | 'imageDataUrl' | 'additionalPages'> {
   studentName: string;
   imageSha256: string;
@@ -125,6 +143,14 @@ const base = (classId: string) => `/online-classes/${encodeURIComponent(classId)
 const worksheetPath = (classId: string, id: string) => `${base(classId)}/worksheets/${encodeURIComponent(id)}`;
 
 export const kolinApi = {
+  pageAnalysisEnabled: (classId: string) =>
+    request<{ enabled: boolean }>('GET', `${base(classId)}/page-analyses/enabled`),
+  pageAnalysisCandidates: (classId: string) =>
+    request<KolinPageAnalysisCandidate[]>('GET', `${base(classId)}/page-analyses/candidates`),
+  analyzePage: (classId: string, snapshot: KolinBoardSnapshot) =>
+    request<KolinPageAnalysisResult>('POST', `${base(classId)}/page-analyses`, snapshot),
+  savedPageAnalyses: (classId: string, studentId: string) =>
+    request<KolinPageAnalysisResult[]>('GET', `${base(classId)}/page-analyses?studentId=${encodeURIComponent(studentId)}`),
   status: (classId: string) => request<{ configured: boolean }>('GET', `${base(classId)}/status`),
   reviewTarget: (classId: string, text: string, context: KolinContext) =>
     request<KolinReviewTarget>('POST', `${base(classId)}/review-target`, { text, context }),

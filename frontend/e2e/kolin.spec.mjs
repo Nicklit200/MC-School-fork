@@ -28,15 +28,18 @@ function worksheetPdf(pageCount = 1) {
   return Buffer.from(`${pdf}trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
 }
 
-async function setup(page, role = 'teacher') {
+async function setup(page, role = 'teacher', automaticReview = false) {
   const state = { teacherId: TEACHER, posts: [], annotationWrites: [], requests: [], errors: [], failOnce: false, failStatusOnce: false, responseGate: null, configured: true, transcriptContext: undefined,
-    worksheet: undefined, appends: [], appendFailOnce: false, appendGate: null };
+    worksheet: undefined, appends: [], appendFailOnce: false, appendGate: null, automaticReview, savedAnalyses: [] };
   const documents = new Map();
   state.documents = documents;
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     state.requests.push({ path, method });
+    if (path.endsWith('/kolin/page-analyses/enabled')) return route.fulfill({ json: { enabled: state.automaticReview } });
+    if (path.endsWith('/kolin/page-analyses/candidates')) return route.fulfill({ json: [] });
+    if (path.endsWith('/kolin/page-analyses') && method === 'GET') return route.fulfill({ json: state.savedAnalyses });
     if (path.endsWith('/kolin/review-target')) return route.fulfill({ json: state.review
       ? { state: 'ready', studentId: MELISSA, studentName: 'Мелисса', scope: state.reviewScope ?? 'current_page' } : { state: 'not_requested' } });
     if (path.endsWith('/kolin/status')) {
@@ -341,7 +344,7 @@ test('student has no Kolyn button, pane or API traffic', async ({ page }) => {
 
 test('unconfigured Kolyn is readable and disabled without sending a message', async ({ page }) => {
   const state = await setup(page); state.configured = false;
-  expect(state.requests.filter(request => request.path.includes('/kolin/'))).toEqual([]);
+  expect(state.requests.filter(request => request.path.includes('/kolin/') && !request.path.endsWith('/page-analyses/enabled'))).toEqual([]);
   await openKolin(page);
   await expect(panel(page).getByText('Kolyn пока недоступен.', { exact: true })).toBeVisible();
   await input(page).fill('Дай задание'); await input(page).press('Enter');
@@ -387,7 +390,7 @@ test('each answer keeps its own transcript coverage and does not resend transcri
   await expect(notes.last()).toContainText(/неактивна/i);
   expect(state.posts[1].body.history).toEqual([{ role: 'user', text: 'Объясни последнюю ошибку' }, { role: 'assistant', text: firstReply }]);
   for (const post of state.posts) assertCompact(post.body);
-  expect(state.requests.filter(request => request.path.includes('/kolin/') && !request.path.endsWith('/review-target')).map(request => request.method)).toEqual(['GET', 'POST', 'POST']);
+  expect(state.requests.filter(request => request.path.includes('/kolin/') && !request.path.endsWith('/review-target') && !request.path.endsWith('/page-analyses/enabled')).map(request => request.method)).toEqual(['GET', 'POST', 'POST']);
   expect(state.requests.filter(request => request.path.endsWith('/review-target'))).toHaveLength(2);
   expect(state.errors).toEqual([]);
 });
@@ -474,3 +477,58 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     expect(state.errors).toEqual([]);
   });
 }
+
+test('each worksheet review scrolls with its own page, and chat reuses it without a new image', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const state = await setup(page, 'teacher', true);
+  const boardId = 'personal-' + MELISSA;
+  const docId = randomUUID();
+  state.documents.set(docId, { id: docId, targetType: 'WHITEBOARD', targetId: boardId, pageIndex: 1,
+    revision: 1, sourceWidth: 595, sourceHeight: 842, snapshotSavedAt: null });
+  state.savedAnalyses = [
+    { id: randomUUID(), studentId: MELISSA, boardId, pageNumber: 1, documentVersion: 0, sharedDocumentVersion: 0, revision: 4, state: 'READY',
+      text: '✅ Правильно: $\\frac{1}{2}$\n❌ Ошибка: неверный знак',
+      capturedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), failureCode: null },
+    { id: randomUUID(), studentId: MELISSA, boardId, pageNumber: 2, documentVersion: 0, sharedDocumentVersion: 0, revision: 1, state: 'READY',
+      text: '💡 Совет: проверь вторую строку',
+      capturedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), failureCode: null }
+  ];
+  await page.getByRole('button', { name: 'Доска ученика: Мелисса', exact: true }).click();
+  const first = page.getByRole('complementary', { name: 'Проверка листа · 1', exact: true });
+  const second = page.getByRole('complementary', { name: 'Проверка листа · 2', exact: true });
+  await expect(first.getByText(/неверный знак/)).toBeVisible();
+  await expect(second.getByText(/проверь вторую строку/)).toBeAttached();
+  await expect(first.locator('.kolin-rich__callout--correct .katex')).toHaveCount(1);
+  const rail = page.locator('.whiteboard--page-reviews:visible .whiteboard__pages--continuous');
+  const paper = rail.locator('.whiteboard__page[data-page-index="0"] > .whiteboard__page-surface');
+  const [left, right] = await Promise.all([paper.boundingBox(), first.boundingBox()]);
+  expect(left.width).toBeGreaterThan(150);
+  expect(right.x).toBeGreaterThanOrEqual(left.x + left.width - 1);
+  expect(Math.abs(left.y - right.y)).toBeLessThan(2);
+  expect(await first.evaluate(node => node.closest('.whiteboard__page').dataset.pageIndex)).toBe('0');
+  expect(await second.evaluate(node => node.closest('.whiteboard__page').dataset.pageIndex)).toBe('1');
+  const initialTop = await first.evaluate(node => node.getBoundingClientRect().top);
+  const distance = await rail.evaluate(node => {
+    const a = node.querySelector('[data-page-index="0"]'), b = node.querySelector('[data-page-index="1"]');
+    const distance = b.offsetTop - a.offsetTop;
+    node.scrollTop += distance;
+    return distance;
+  });
+  await expect.poll(async () => first.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(initialTop - Math.min(distance / 2, 100));
+  await expect(second).toBeInViewport();
+  const [paperTop, feedbackTop] = await Promise.all([
+    rail.locator('.whiteboard__page[data-page-index="1"]').evaluate(node => node.getBoundingClientRect().top),
+    second.evaluate(node => node.getBoundingClientRect().top),
+  ]);
+  expect(Math.abs(paperTop - feedbackTop)).toBeLessThan(2);
+  await expect(first).not.toContainText('проверь вторую строку');
+  await expect(panel(page)).not.toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('automatic-page-review.png') });
+  state.review = true;
+  await openKolin(page);
+  await send(page, state, 'Проверь лист');
+  expect(state.posts[0].body.boardReview).toBeUndefined();
+  assertCompact(state.posts[0].body);
+  expect(state.requests.filter(r => r.method === 'POST' && r.path.endsWith('/page-analyses'))).toEqual([]);
+  expect(state.errors).toEqual([]);
+});

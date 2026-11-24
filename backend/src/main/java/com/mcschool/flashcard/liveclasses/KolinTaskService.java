@@ -62,6 +62,15 @@ public class KolinTaskService {
                 return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",answer,transcript,
                         board.studentId(),board.studentName(),0,0,null,null).withBoard(board);
             }
+            if(Boolean.TRUE.equals(context.get("cachedPageReview"))) {
+                stage="TEXT_MODEL";
+                String answer=ai.kolinReply(mapper.writeValueAsString(context),history,question);
+                if(answer==null || answer.isBlank() || answer.length()>10000)
+                    throw new IllegalStateException("Invalid cached review reply");
+                stage="STORE";
+                return store.complete(teacher,room.getId(),reserved.id(),reserved.attemptId(),"text",answer,transcript,
+                        null,null,0,0,null,null);
+            }
             var pupils=roster.read(room);
             context.put("roster",pupils);
             String previous=store.previousDraft(teacher,room.getId());

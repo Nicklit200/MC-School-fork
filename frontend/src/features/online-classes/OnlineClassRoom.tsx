@@ -43,6 +43,7 @@ import { ParticipantListPanel } from './ParticipantListPanel';
 import { WaitingRoomPanel } from './WaitingRoomPanel';
 import { useAnswersPanel } from './useAnswersPanel';
 import { useKolinChat } from './useKolinChat';
+import { useAutomaticPageAnalysis } from './useAutomaticPageAnalysis';
 import { useKolinBoardReview } from './useKolinBoardReview';
 import { KolinPanel } from './KolinPanel';
 import { DocumentWhiteboardPanel } from './DocumentWhiteboardPanel';
@@ -414,7 +415,8 @@ function RoomBody({
   const answerStudentName = answerStudentId ? personalWorkbookData?.students.find(student => student.studentId === answerStudentId)?.studentName : undefined;
   const answers = useAnswersPanel(eventId, connection.host, answerStudentId, currentUserId,
     connection.host && Boolean(personalBoardOwner(activeBoard)) && !personalWorkbookData);
-  const prepareKolinReview = useKolinBoardReview(classId, currentUserId, connection.host);
+  const automaticPageAnalysisEnabled = useAutomaticPageAnalysis(classId, currentUserId, connection.host && connectionState === ConnectionState.Connected);
+  const prepareKolinReview = useKolinBoardReview(classId, currentUserId, connection.host, automaticPageAnalysisEnabled);
   const kolin = useKolinChat(classId, currentUserId, connection.host, prepareKolinReview);
   const toggleAnswers = () => { kolin.close(); answers.toggle(); };
   const boardDocument = useBoardDocument(classId);
@@ -769,7 +771,7 @@ function RoomBody({
             <AnswersPanelResizer storageKey={currentUserId} videosOpen={videosOpen} />
           </>)}
           {connection.host && kolin.open && (<>
-            <KolinPanel chat={kolin} allStudentsOverview={showingAllStudents}
+            <KolinPanel chat={kolin} allStudentsOverview={showingAllStudents} automaticPageAnalysisEnabled={automaticPageAnalysisEnabled}
               currentStudentName={students.find(student => student.userId === personalBoardOwner(activeBoard))?.displayName} context={{
               ...(personalBoardOwner(activeBoard) ? { targetType: 'student' as const, studentId: personalBoardOwner(activeBoard)! } : { targetType: 'group' as const }),
               ...(Number.isInteger(teacherPages[activeBoard] ?? studentPages[activeBoard])
@@ -790,6 +792,7 @@ function RoomBody({
                   <DocumentWhiteboardPanel
                     sharedDocument={boardDocument}
                     personalWorkbooksEnabled={connection.host ? personalWorkbookData?.enabled : undefined}
+                    automaticPageAnalysisEnabled={automaticPageAnalysisEnabled}
                     classId={classId}
                     actorId={currentUserId}
                     isHost={connection.host}
@@ -836,6 +839,7 @@ function RoomBody({
               <DocumentWhiteboardPanel
                 sharedDocument={boardDocument}
                 personalWorkbooksEnabled={personalWorkbookData?.enabled}
+                automaticPageAnalysisEnabled={automaticPageAnalysisEnabled}
                 classId={classId}
                 actorId={currentUserId}
                 isHost

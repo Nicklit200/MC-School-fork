@@ -51,6 +51,7 @@ import {
 } from './WhiteboardCanvas';
 
 import { WhiteboardPageSurface, type PageSurfaceHandle, type PageSurfaceStatus } from './WhiteboardPageSurface';
+import { PageAnalysisFeedback, useSavedPageAnalyses } from './SavedPageAnalysis';
 import { useBoardPageLayout } from './useBoardPageLayout';
 import { useAnnotationPageSync } from './useAnnotationPageSync';
 import type { NotebookCameraGeometry } from './notebookCameraGeometry';
@@ -111,6 +112,7 @@ export function WhiteboardPanel({
   overlay,
   active = true,
   compactPreview = false,
+  automaticPageAnalysisEnabled = false,
   followStudent = false,
   observedPage,
   onPageChange,
@@ -140,6 +142,7 @@ export function WhiteboardPanel({
   active?: boolean;
   /** Read-only overview with an independent local pan/zoom for each pupil. */
   compactPreview?: boolean;
+  automaticPageAnalysisEnabled?: boolean;
   /** Teacher opt-in: reproduce the owner's visible document region. */
   followStudent?: boolean;
   /** Page currently being viewed by the student who owns this board. */
@@ -161,6 +164,11 @@ export function WhiteboardPanel({
   const personal = isPersonalBoard(targetId);
   const ownerId = personalBoardOwner(targetId);
   const studentFollowRequested = isHost && personal && followStudent;
+  // Only the authorized host's own focused, independently navigated PDF view.
+  // The exact pupil-viewport mirror and four-board overview remain unchanged.
+  const showPageAnalysis = isHost && Boolean(ownerId) && targetType === 'WHITEBOARD'
+    && automaticPageAnalysisEnabled && !compactPreview && !studentFollowRequested;
+  const pageAnalyses = useSavedPageAnalyses(classId, ownerId ?? undefined, targetId, showPageAnalysis && active);
   const [tool, setTool] = useState<Tool>('pen');
   const [toolSettings, setToolSettings] = useState<Record<Tool, ToolSettings>>(
     () => boardToolPreferences.get(`${classId}:${actorId}`) ?? DEFAULT_TOOL_SETTINGS,
@@ -414,10 +422,14 @@ export function WhiteboardPanel({
   }, [continuous, locked, active, classId, targetType, targetId, cancelDocumentFrame]);
   const layoutWidth = studentView?.layout === 'continuous' ? studentView.viewport.width : pageWidth;
   const layoutHeight = studentView?.layout === 'continuous' ? Math.max(1, Math.round(studentView.viewport.height * .92)) : pageHeight;
-  const basePageSizes = useMemo(() => Array.from({ length: pages.count }, (_, index) => documentPageSize(layoutWidth, layoutHeight,
+  const reviewWidth = showPageAnalysis ? Math.max(165, Math.min(340, Math.round(layoutWidth * .32))) : 0;
+  const reviewGap = showPageAnalysis ? 12 : 0;
+  const reviewExtra = reviewWidth + reviewGap;
+  const paperLayoutWidth = showPageAnalysis ? Math.max(140, layoutWidth - reviewExtra) : layoutWidth;
+  const basePageSizes = useMemo(() => Array.from({ length: pages.count }, (_, index) => documentPageSize(paperLayoutWidth, layoutHeight,
     pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT))),
-  [pages.count, layoutWidth, layoutHeight, pageAspects, sourceAspect]);
-  const baseRailWidth = Math.max(...basePageSizes.map(size => size.width));
+  [pages.count, paperLayoutWidth, layoutHeight, pageAspects, sourceAspect]);
+  const baseRailWidth = Math.max(...basePageSizes.map(size => size.width)) + reviewExtra;
   const baseRailHeight = useMemo(() => basePageSizes.reduce((sum, size) => sum + size.height, 0)
     + 24 * Math.max(0, basePageSizes.length - 1), [basePageSizes]);
   const displayedDocumentZoom = studentView?.layout === 'continuous'
@@ -473,6 +485,9 @@ export function WhiteboardPanel({
     const root = scrollRef.current;
     if (targetType !== 'WHITEBOARD' || !root) return;
     const wheel = (event: WheelEvent) => {
+      // Wheel inside an answer may scroll its own text; normal document wheel
+      // otherwise scrolls the common rail, moving every worksheet/review pair.
+      if ((event.target as Element).closest('.kolin-saved-page__content') && !event.ctrlKey && !event.metaKey) return;
       // Page surfaces handle their own wheel. This also covers blank margins
       // around a page without applying the same event twice.
       if ((event.target as Element).closest('.whiteboard__surface')) return;
@@ -690,7 +705,8 @@ export function WhiteboardPanel({
       for (const handle of pageHandles.current.values()) handle.canvas()?.setDocumentNavigation?.(false);
     }
     const navigationPointer = event.pointerType === 'touch' || (event.pointerType === 'mouse' && (tool === 'pan' || event.button === 1));
-    const fromPage = Boolean((event.target as Element).closest('.whiteboard__page'));
+    const fromPage = Boolean((event.target as Element).closest('.whiteboard__page'))
+      && !(event.target as Element).closest('.kolin-saved-page--inline');
     const ignoredTouch = event.pointerType === 'touch' && (isPalmContact('touch', event.width, event.height) || penPointers.current.size > 0 || nativePenPages.current.size > 0 || Date.now() - lastPenContact.current < 350);
     if (event.pointerType === 'touch' && !ignoredTouch && !locked) {
       documentContacts.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -863,7 +879,7 @@ export function WhiteboardPanel({
   };
 
   return (
-    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}${continuous ? ' whiteboard--continuous' : ''}${compactPreview ? ' whiteboard--compact-preview' : ''}${studentFollowRequested ? ' whiteboard--following-student' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
+    <section className={`whiteboard school-islands-board whiteboard--original-v3${camera ? ' whiteboard--camera' : ''}${continuous ? ' whiteboard--continuous' : ''}${compactPreview ? ' whiteboard--compact-preview' : ''}${studentFollowRequested ? ' whiteboard--following-student' : ''}${showPageAnalysis ? ' whiteboard--page-reviews' : ''}`} aria-label={t('onlineClass.board.viewLabel')} onKeyDown={onKeyDown}>
       <div className="whiteboard__topline">
       {annotationAllowed && (
         <BoardToolbar
@@ -937,6 +953,9 @@ export function WhiteboardPanel({
           role={continuous ? 'region' : undefined} aria-label={continuous ? (language === 'DE' ? 'Unterrichtsseiten' : 'Страницы доски') : undefined}
           tabIndex={continuous ? 0 : undefined} onScroll={handleScroll}
           onPointerDownCapture={event => {
+            // The review is read-only. Its internal text scroll/selection must
+            // never start a drawing gesture on the worksheet.
+            if ((event.target as Element).closest('.kolin-saved-page__content')) return;
             beginDocumentPointer(event);
             drawingPage.current = Number((event.target as Element).closest('[data-page-index]')?.getAttribute('data-page-index') ?? pages.current);
             pointerScrollStart.current = scrollRef.current?.scrollTop ?? 0;
@@ -949,7 +968,11 @@ export function WhiteboardPanel({
             className="whiteboard__page" data-page-index={index} hidden={!continuous && index !== pages.current}
             aria-current={index === pages.current ? 'page' : undefined}
             aria-label={t('onlineClass.board.page.current', { current: index + 1, total: pages.count })}
-            style={continuous ? { width: basePageSizes[index].width * displayedDocumentZoom, height: basePageSizes[index].height * displayedDocumentZoom } : undefined}>
+            style={continuous || showPageAnalysis ? {
+              ...(continuous ? { width: (basePageSizes[index].width + reviewExtra) * displayedDocumentZoom, height: basePageSizes[index].height * displayedDocumentZoom } : {}),
+              ...(showPageAnalysis ? { '--kolyn-review-width': `${reviewWidth * (continuous ? displayedDocumentZoom : 1)}px`,
+                '--kolyn-review-gap': `${reviewGap * (continuous ? displayedDocumentZoom : 1)}px` } : {}),
+            } as CSSProperties : undefined}>
             {(visitedPages.has(index) || index === pages.current) && <WhiteboardPageSurface
               ref={handle => { if (handle) { pageHandles.current.set(index, handle); if (documentNavigationActive.current) handle.canvas()?.setDocumentNavigation?.(true); } else pageHandles.current.delete(index); }}
               classId={classId} actorId={actorId} isHost={isHost} targetType={targetType} targetId={targetId} pageIndex={index}
@@ -967,6 +990,8 @@ export function WhiteboardPanel({
               onDocumentReady={pageSync.documentReady}
               onCanvasGeometry={reportCanvasGeometry} onScrollGesture={scrollPages}
             />}
+            {showPageAnalysis && <PageAnalysisFeedback current={pageAnalyses} pageNumber={index + 1}
+              de={language === 'DE'} inline />}
           </article>)}
           </div>
         </div>
