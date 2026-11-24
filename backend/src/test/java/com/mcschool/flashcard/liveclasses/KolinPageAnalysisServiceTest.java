@@ -39,6 +39,7 @@ class KolinPageAnalysisServiceTest {
     }
 
     @BeforeEach void setup() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"pilotTeacherId",host.id().toString());
         room.start(now);
         when(access.requireHost(host,room.getId())).thenReturn(room);
         when(roster.read(room)).thenReturn(List.of(new KolinTaskRoster.Pupil(pupil.getId(),"Pupil")));
@@ -91,6 +92,14 @@ class KolinPageAnalysisServiceTest {
         assertThat(KolinChatService.includePageAnalyses(context,List.of(receipt("RUNNING",null),receipt("READY","saved facts")))).isTrue();
         assertThat(context.get("savedPageAnalyses")).isEqualTo(List.of(receipt("READY","saved facts")));
         assertThat(context).containsKey("savedPageAnalysisCoverage");
+    }
+
+    @Test void disabledPilotCannotClaimOrCallProvider() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"pilotTeacherId","");
+        assertThat(service.enabled(host,room.getId())).isFalse();
+        assertThat(service.candidates(host,room.getId())).isEmpty();
+        assertThatThrownBy(()->service.analyze(host,room.getId(),snapshot)).isInstanceOf(KolinRequestException.class);
+        verifyNoInteractions(store,ai);
     }
 
     @Test void keyRejectsOtherPupilsBoardAndSharedBoard() {
