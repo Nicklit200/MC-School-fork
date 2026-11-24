@@ -9,6 +9,7 @@ CREATE TABLE kolyn_page_analyses (
     document_version BIGINT NOT NULL CHECK (document_version >= 0),
     shared_document_version BIGINT NOT NULL CHECK (shared_document_version >= 0),
     ink_revision BIGINT NOT NULL CHECK (ink_revision > 0),
+    pupil_ink_revision BIGINT NOT NULL CHECK (pupil_ink_revision > 0 AND pupil_ink_revision <= ink_revision),
     image_sha256 VARCHAR(64) NOT NULL,
     analysis_version INTEGER NOT NULL CHECK (analysis_version > 0),
     state VARCHAR(16) NOT NULL CHECK (state IN ('RUNNING','READY','FAILED')),
@@ -18,7 +19,7 @@ CREATE TABLE kolyn_page_analyses (
     finished_at TIMESTAMPTZ,
     CONSTRAINT uq_kolyn_page_analysis_revision UNIQUE
       (class_id, teacher_id, student_id, board_id, page_number,
-       document_version, shared_document_version, ink_revision, analysis_version),
+       document_version, shared_document_version, pupil_ink_revision, analysis_version),
     CHECK ((state='READY') = (analysis_text IS NOT NULL))
 );
 CREATE INDEX idx_kolyn_page_analyses_pupil
