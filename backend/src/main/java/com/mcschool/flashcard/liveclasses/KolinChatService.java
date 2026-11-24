@@ -90,6 +90,7 @@ public class KolinChatService {
     public Reply send(AuthenticatedUser teacher, UUID classId, Request request) {
         OnlineClass room = access.requireHost(teacher, classId);
         var context = compactContext(room, request.context());
+        Context documentContext=request.context();
         String question = text(request.text());
         KolinBoardReviewService.Metadata board=null;
         if (reviews!=null) {
@@ -114,6 +115,11 @@ public class KolinChatService {
                         .filter(result->page==null || result.pageNumber()==page).toList();
                 context.put("targetType","student");
                 context.put("targetName",resolved.studentName());
+                // A named pupil may differ from the currently open board. Never
+                // mix the selected pupil's document index with another pupil's receipts.
+                documentContext=new Context("student",resolved.studentId(),page);
+                if(page==null)context.remove("currentWorkbookPage");
+                else context.put("currentWorkbookPage",page);
                 if (!includePageAnalyses(context,receipts)) {
                     return new Reply("text", "Для этого запроса пока нет завершённого анализа актуальных записей ученика. "+
                             "Дождитесь автоматической проверки изменённого листа. Отсутствие анализа не означает отсутствие ошибок.");
@@ -150,7 +156,7 @@ public class KolinChatService {
             // ranked server-side; old documents and unverified handwriting are never invented.
             if (lessonContext != null) {
                 try {
-                    context.put("lessonDocuments", lessonContext.read(teacher, room, question, request.context()));
+                    context.put("lessonDocuments", lessonContext.read(teacher, room, question, documentContext));
                 } catch (RuntimeException ex) {
                     LoggerFactory.getLogger(getClass()).warn("Kolyn lesson context unavailable: classId={} errorType={}",
                             classId, ex.getClass().getSimpleName());
