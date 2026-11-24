@@ -35,6 +35,8 @@ public class KolinPageAnalysisStore {
                          String state, String text, String failureCode,
                          Instant capturedAt, Instant finishedAt) {}
     public record Claim(boolean acquired, Result result) {}
+    public record Candidate(UUID studentId, String boardId, int pageNumber,
+                            long documentVersion, long sharedDocumentVersion, long revision) {}
     private static final String EXACT = """
         class_id=? AND teacher_id=? AND student_id=? AND board_id=? AND page_number=?
         AND document_version=? AND shared_document_version=? AND ink_revision=? AND analysis_version=?
@@ -63,6 +65,40 @@ public class KolinPageAnalysisStore {
                   AND ev.actor_id=? AND ev.operation_type IN ('ADD','UPDATE')
             )
             """,Boolean.class,key.classId(),key.boardId(),key.pageNumber()-1,key.revision(),key.studentId()));
+    }
+
+    /** Durable metadata only; no PDF/image bytes are read to find settled revisions.
+     * Require a real pupil operation since the last layer/all clear.
+     * The final renderer separately discards pages with no visible pupil ink. */
+    @Transactional(readOnly=true)
+    public List<Candidate> candidates(UUID classId, UUID teacherId, UUID studentId, String boardId,
+                                      long documentVersion, long sharedVersion) {
+        return jdbc.query("""
+            SELECT doc.page_index,doc.revision
+            FROM online_class_annotation_documents doc
+            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD' AND doc.target_id=?
+              AND doc.page_index BETWEEN 0 AND 999 AND doc.revision>0
+              AND doc.updated_at <= now() - interval '30 seconds'
+              AND EXISTS (
+                SELECT 1 FROM online_class_annotation_events ev
+                WHERE ev.document_id=doc.id AND ev.actor_id=? AND ev.operation_type IN ('ADD','UPDATE')
+                  AND ev.sequence > COALESCE((
+                    SELECT MAX(cl.sequence) FROM online_class_annotation_events cl
+                    WHERE cl.document_id=doc.id AND (cl.operation_type='CLEAR_ALL'
+                      OR (cl.operation_type='CLEAR_LAYER' AND cl.layer_owner_id=?))
+                  ),0)
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM kolyn_page_analyses a
+                WHERE a.class_id=doc.class_id AND a.teacher_id=? AND a.student_id=?
+                  AND a.board_id=doc.target_id AND a.page_number=doc.page_index+1
+                  AND a.document_version=? AND a.shared_document_version=?
+                  AND a.ink_revision=doc.revision AND a.analysis_version=?
+              )
+            ORDER BY doc.updated_at,doc.page_index LIMIT 8
+            """,(rs,i)->new Candidate(studentId,boardId,rs.getInt("page_index")+1,
+                documentVersion,sharedVersion,rs.getLong("revision")),
+                classId,boardId,studentId,studentId,teacherId,studentId,documentVersion,sharedVersion,ANALYSIS_VERSION);
     }
 
     /** The provider runs outside this short transaction. Never auto-retry a paid call
