@@ -24,6 +24,12 @@ public class KolinPageAnalysisController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.analyze(teacher,classId,snapshot));
     }
 
+    @GetMapping("/candidates")
+    public ResponseEntity<List<KolinPageAnalysisStore.Candidate>> candidates(@AuthenticationPrincipal AuthenticatedUser teacher,
+            @PathVariable UUID classId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.candidates(teacher,classId));
+    }
+
     @GetMapping
     public ResponseEntity<List<KolinPageAnalysisStore.Result>> current(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId,@RequestParam UUID studentId) {
