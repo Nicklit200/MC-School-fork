@@ -101,7 +101,7 @@ public class KolinChatService {
                 context.put("targetName",board.studentName());
                 context.put("currentWorkbookPage",board.pageNumber());
                 context.put("boardReview",board);
-            } else if ("ready".equals(target.state()) && target.studentId()!=null && pageAnalyses!=null) {
+            } else if ("ready".equals(target.state()) && target.studentId()!=null && pageAnalyses!=null && pageAnalyses.enabledFor(teacher)) {
                 // No image in this request: use only the exact current revision's saved facts.
                 var resolved=reviews.resolve(teacher,classId,new KolinBoardReviewService.TargetRequest(question,request.context()));
                 if (!"ready".equals(resolved.state()) || !target.studentId().equals(resolved.studentId()))
@@ -128,7 +128,7 @@ public class KolinChatService {
         }
         // Normal teacher questions and worksheet generation may reuse facts too.
         // Do not pull another pupil's private history into a group-scoped chat.
-        if (pageAnalyses!=null && board==null && !context.containsKey("savedPageAnalyses")
+        if (pageAnalyses!=null && pageAnalyses.enabledFor(teacher) && board==null && !context.containsKey("savedPageAnalyses")
                 && "student".equals(context.get("targetType"))) {
             UUID selected=request.context()==null?null:request.context().studentId();
             if(selected==null && room.getStudent()!=null) selected=room.getStudent().getId();
