@@ -1,11 +1,13 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Suspense, useEffect } from 'react';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { DocumentWhiteboardPanel } from './DocumentWhiteboardPanel';
 import { useBoardDocumentState } from './useBoardDocument';
+import { kolinApi } from '../../api/kolin';
 
 const fixtures = vi.hoisted(() => ({ panels: [] as Record<string, any>[], unmounts: vi.fn() }));
+vi.mock('../../api/kolin', () => ({ kolinApi: { savedPageAnalyses: vi.fn() } }));
 vi.mock('./useBoardDocument', () => ({ useBoardDocumentState: vi.fn() }));
 vi.mock('./WhiteboardPanel', () => ({ WhiteboardPanel: (props: Record<string, any>) => {
   fixtures.panels.push(props);
@@ -16,6 +18,7 @@ const shared = { pageCount: 4, renderPage: vi.fn(), destroy: vi.fn() };
 const worksheet = { pageCount: 1, renderPage: vi.fn(), destroy: vi.fn() };
 beforeEach(() => {
   vi.clearAllMocks(); fixtures.panels.length = 0;
+  vi.mocked(kolinApi.savedPageAnalyses).mockResolvedValue([]);
   vi.mocked(useBoardDocumentState).mockReturnValue({ status: 'empty', document: null, version: 0 });
 });
 afterEach(cleanup);
@@ -90,4 +93,41 @@ describe('unified My board PDF source', () => {
     expect(fixtures.panels.every(panel => panel.document === shared)).toBe(true);
     expect(fixtures.panels.at(-1)?.targetType).toBe('NOTEBOOK_CAMERA');
   });
+  it('shows the same typeset feedback beside the exact personal sheet while chat is closed', async () => {
+    vi.mocked(kolinApi.savedPageAnalyses).mockResolvedValue([
+      { id: 'one', studentId: 'a', boardId: 'personal-a', pageNumber: 1,
+        revision: 5, documentVersion: 0, sharedDocumentVersion: 0, state: 'READY',
+        text: '✅ Правильно: $\\frac{1}{2}$\n❌ Ошибка: пропущен знак',
+        failureCode: null, capturedAt: '2026-11-24T16:00:00Z', finishedAt: '2026-11-24T16:00:01Z' },
+      { id: 'two', studentId: 'a', boardId: 'personal-a', pageNumber: 2,
+        revision: 8, documentVersion: 0, sharedDocumentVersion: 0, state: 'READY',
+        text: '💡 Совет: проверь вторую строку', failureCode: null,
+        capturedAt: '2026-11-24T16:01:00Z', finishedAt: '2026-11-24T16:01:01Z' },
+      { id: 'foreign', studentId: 'b', boardId: 'personal-b', pageNumber: 1,
+        revision: 1, documentVersion: 0, sharedDocumentVersion: 0, state: 'READY',
+        text: 'Foreign private page', failureCode: null,
+        capturedAt: '2026-11-24T16:00:00Z', finishedAt: '2026-11-24T16:00:00Z' },
+    ]);
+    render(wrap(myBoard({ automaticPageAnalysisEnabled: true })));
+    const board = await screen.findByTestId('personal-a');
+    const panel = await screen.findByRole('complementary', { name: 'Проверка листа' });
+    await within(panel).findByText(/пропущен знак/);
+    expect(board.closest('.kolyn-board-review-layout')).toContainElement(panel);
+    expect(panel.querySelector('.kolin-rich__callout--correct .mfrac')).not.toBeNull();
+    expect(panel.querySelector('.kolin-rich__callout--incorrect')).not.toBeNull();
+    expect(panel).not.toHaveTextContent('Foreign private page');
+    act(() => fixtures.panels.at(-1)?.onPageChange(1));
+    expect(await within(panel).findByText(/проверь вторую строку/)).toBeInTheDocument();
+    expect(panel).not.toHaveTextContent('пропущен знак');
+    expect(kolinApi.savedPageAnalyses).toHaveBeenCalledWith('class-1', 'a');
+  });
+
+  it('never exposes the teacher analysis to pupils or shrinks the four-board overview', async () => {
+    render(wrap(<>{myBoard({ automaticPageAnalysisEnabled: true, isHost: false })}
+      {myBoard({ automaticPageAnalysisEnabled: true, targetId: 'personal-b', compactPreview: true })}</>));
+    await screen.findByTestId('personal-b');
+    expect(screen.queryByRole('complementary', { name: 'Проверка листа' })).not.toBeInTheDocument();
+    expect(kolinApi.savedPageAnalyses).not.toHaveBeenCalled();
+  });
+
 });
