@@ -39,6 +39,8 @@ public class KolinChatService {
     @org.springframework.beans.factory.annotation.Autowired
     private KolinBoardReviewService reviews;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private KolinPageAnalysisService pageAnalyses;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
     private KolinLessonContextService lessonContext;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
     private KolinClassDiagnosticsService classDiagnostics;
@@ -99,9 +101,42 @@ public class KolinChatService {
                 context.put("targetName",board.studentName());
                 context.put("currentWorkbookPage",board.pageNumber());
                 context.put("boardReview",board);
+            } else if ("ready".equals(target.state()) && target.studentId()!=null && pageAnalyses!=null) {
+                // No image in this request: use only the exact current revision's saved facts.
+                var resolved=reviews.resolve(teacher,classId,new KolinBoardReviewService.TargetRequest(question,request.context()));
+                if (!"ready".equals(resolved.state()) || !target.studentId().equals(resolved.studentId()))
+                    throw KolinRequestException.reviewUnavailable();
+                Integer page="task_page".equals(resolved.scope())?resolved.pageNumber():
+                        "first_page".equals(resolved.scope())?Integer.valueOf(1):
+                        "current_page".equals(resolved.scope()) && request.context()!=null
+                        && resolved.studentId().equals(request.context().studentId())?request.context().currentWorkbookPage():null;
+                var receipts=pageAnalyses.current(teacher,classId,resolved.studentId()).stream()
+                        .filter(result->page==null || result.pageNumber()==page).toList();
+                context.put("targetType","student");
+                context.put("targetName",resolved.studentName());
+                if (!includePageAnalyses(context,receipts)) {
+                    return new Reply("text", "Для этого запроса пока нет завершённого анализа актуальных записей ученика. "+
+                            "Дождитесь автоматической проверки изменённого листа. Отсутствие анализа не означает отсутствие ошибок.");
+                }
+                context.put("cachedPageReview",true);
+                context.put("savedPageAnalysisScope",resolved.scope());
+                if(page!=null) context.put("requestedPage",page);
             } else if (!"not_requested".equals(target.state())) {
                 return new Reply("text",target.message()!=null?target.message():
                     "Не удалось получить текущую страницу ученика. Обновите страницу урока, попросите ученика открыть личную доску и повторите запрос.");
+            }
+        }
+        // Normal teacher questions and worksheet generation may reuse facts too.
+        // Do not pull another pupil's private history into a group-scoped chat.
+        if (pageAnalyses!=null && board==null && !context.containsKey("savedPageAnalyses")
+                && "student".equals(context.get("targetType"))) {
+            UUID selected=request.context()==null?null:request.context().studentId();
+            if(selected==null && room.getStudent()!=null) selected=room.getStudent().getId();
+            if(selected!=null) {
+                try { includePageAnalyses(context,pageAnalyses.current(teacher,classId,selected)); }
+                catch(RuntimeException ex) {
+                    context.put("savedPageAnalysisCoverage","unavailable");
+                }
             }
         }
         List<Map<String, String>> history = history(request.history());
@@ -150,6 +185,25 @@ public class KolinChatService {
         } finally {
             pendingTeachers.remove(teacher.id());
         }
+    }
+
+    /** Complete, bounded receipts only; pending or omitted pages cannot count as checked. */
+    static boolean includePageAnalyses(Map<String,Object> context,List<KolinPageAnalysisStore.Result> receipts) {
+        var kept=new ArrayList<KolinPageAnalysisStore.Result>();
+        int chars=0;
+        int ready=0;
+        for(var receipt:receipts) {
+            if(!"READY".equals(receipt.state()) || receipt.text()==null) continue;
+            ready++;
+            if(kept.size()>=20 || chars+receipt.text().length()>24000) continue;
+            kept.add(receipt); chars+=receipt.text().length();
+        }
+        if(kept.isEmpty()) return false;
+        context.put("savedPageAnalyses",kept);
+        context.put("savedPageAnalysisCoverage",Map.of("readyReceipts",ready,"includedReceipts",kept.size(),
+                "pendingOrFailedReceipts",receipts.size()-ready,
+                "limitation","Only listed current revisions were analyzed; other pages may be unreviewed. No new image was examined for this question."));
+        return true;
     }
 
     private KolinTranscriptContextService.Context transcript(OnlineClass room) {
