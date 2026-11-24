@@ -33,12 +33,12 @@ function MyWhiteboardPanel({ sharedDocument, personalWorkbooksEnabled, observedP
       ? (language === 'DE' ? 'Die Tafel konnte nicht geladen werden. Erneuter Versuch folgt…' : 'Не удалось загрузить доску. Повторяем попытку…')
       : (language === 'DE' ? 'Tafel wird geladen…' : 'Загружаем доску…')}
   </div>;
+  const showAnalysis = props.isHost && automaticPageAnalysisEnabled && !props.compactPreview;
   const board = <WhiteboardPanel {...props} key={`${props.classId}:${props.targetType ?? 'WHITEBOARD'}:${targetId}`}
     targetId={targetId} observedPage={observedPages ? observedPages[targetId] : props.observedPage}
-    onPageChange={props.isHost ? onPageChange : props.onPageChange}
+    onPageChange={showAnalysis ? onPageChange : props.onPageChange}
     document={inherited ? sharedDocument : own.document} />;
-  if (!props.isHost) return board;
-  const showAnalysis = automaticPageAnalysisEnabled && !props.compactPreview;
+  if (!showAnalysis) return board;
   const pageNumber = selected?.boardId === targetId ? selected.index + 1 : (observedPages?.[targetId] ?? props.observedPage ?? 0) + 1;
   return <div className="kolyn-board-review-layout">
     <div className="kolyn-board-review-canvas">{board}</div>
