@@ -186,6 +186,15 @@ public class KolinBoardReviewService {
         return validateResolved(resolve(teacher,room.getId(),new TargetRequest(text,context)),snapshot);
     }
 
+    /** Server-authorized fixed-page review for the independent analysis endpoint. */
+    public Metadata validatePersonalPage(OnlineClass room, Snapshot snapshot) {
+        if (snapshot==null || snapshot.studentId()==null || !"task_page".equals(snapshot.scope()))
+            throw KolinRequestException.reviewUnavailable();
+        var pupil=roster.read(room).stream().filter(p->p.id().equals(snapshot.studentId())).findFirst()
+                .orElseThrow(KolinRequestException::reviewUnavailable);
+        return validateResolved(new Target("ready",pupil.id(),pupil.name(),null,"task_page",snapshot.pageNumber()),snapshot);
+    }
+
     private Metadata validateResolved(Target target, Snapshot snapshot) {
         if(!"ready".equals(target.state()) || snapshot==null || !Objects.equals(target.studentId(),snapshot.studentId())
                 || (target.studentId()==null ? !"board-1".equals(snapshot.boardId())
