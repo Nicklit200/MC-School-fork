@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { kolinApi, type KolinPageAnalysisCandidate, type KolinBoardSnapshot } from '../../api/kolin';
 
-const POLL_MS = 8000;
+const POLL_MS = 3000;
 const MAX_LOCAL_SKIPS = 256;
 
 export function matchesAnalysisCandidate(candidate: KolinPageAnalysisCandidate, snapshot: KolinBoardSnapshot): boolean {
