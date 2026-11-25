@@ -96,4 +96,32 @@ describe('Kolyn rich explanation renderer', () => {
   });
 
 
+  it('renders the multiline single-dollar fraction chain from worksheet feedback', () => {
+    const source = [
+      'Далее:',
+      '$\\frac{3(2x+3)+2(x-1)}{12}',
+      '=\\frac{6x+9+2x-2}{12}',
+      '=\\frac{8x+7}{12}$.',
+      '**Правильный ответ:** $\\frac{8x+7}{12}$.',
+    ].join('\n');
+    const view = render(<KolinRichText text={source} />);
+    const formula = view.container.querySelector('.katex-display .katex-html');
+    expect(formula?.querySelectorAll('.mfrac')).toHaveLength(3);
+    expect(view.container.querySelector('.kolin-rich__math-fallback')).toBeNull();
+    expect(formula).not.toHaveTextContent('\\frac');
+  });
+
+  it('renders multiline parenthesized math inside colored feedback', () => {
+    const view = render(<KolinRichText text={'✅ Верно:\n\\(\\frac{1}{2}+\\frac{1}{4}\n=\\frac{3}{4}\\)'} />);
+    expect(view.container.querySelectorAll('.kolin-rich__callout--correct .katex-display .mfrac')).toHaveLength(3);
+    expect(view.container.querySelector('.kolin-rich__math-fallback')).toBeNull();
+  });
+
+  it('preserves plain text and existing inline math', () => {
+    expect(parseKolinBlocks('Price $10\nPrice $20')).toEqual([{ kind: 'paragraph', text: 'Price $10\nPrice $20' }]);
+    const view = render(<KolinRichText text={'$2+3=5$ and $\\frac{1}{2}$'} />);
+    expect(view.container.querySelectorAll('.katex')).toHaveLength(2);
+    expect(view.container.querySelector('.katex-display')).toBeNull();
+  });
+
 });
