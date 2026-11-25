@@ -31,9 +31,33 @@ function statusLine(line: string): { kind: KolinBlockKind; text: string } | null
   return null;
 }
 
+/**
+ * A provider can accidentally delimit a complete derivation with inline
+ * math delimiters. Promote multiline math to display math before splitting
+ * Markdown into lines. Keep existing display math, code and prose intact.
+ */
+function normalizeMultilineMath(value: string): string {
+  const tokens = /\x60[^\x60]*\x60|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\\\(([\s\S]*?)\\\)|\\\$|\$((?:\\[^\r\n]|[^\\$])+)\$/g;
+  return value.replace(tokens, (match, parens: string | undefined, dollars: string | undefined) => {
+    const source = parens ?? dollars;
+    if (!source || !source.includes('\n') || /\n[ \t]*\n/.test(source)) return match;
+    // Don't consume ordinary prose between accidental currency signs.
+    if (dollars && !/\\[a-zA-Z]+|[=^_{}]/.test(source)) return match;
+    const rows = source.trim().split('\n').map(row => row.trim()).filter(Boolean);
+    if (!rows.length) return match;
+    const chain = rows.length > 1 && rows.slice(1).every(row => row.startsWith('='))
+      && !/\\begin\s*\{|\\\\|&/.test(source);
+    // Align equality chains vertically so they fit the narrow feedback pane.
+    const math = chain
+      ? '\\begin{aligned}' + rows.map(row => '&' + row).join('\\\\') + '\\end{aligned}'
+      : rows.join(' ');
+    return '\\[' + math + '\\]';
+  });
+}
+
 /** Parse only our small, safe Markdown subset. Never use HTML from a model response. */
 export function parseKolinBlocks(value: string): KolinBlock[] {
-  const lines = value.replace(/\r\n?/g, '\n').split('\n');
+  const lines = normalizeMultilineMath(value.replace(/\r\n?/g, '\n')).split('\n');
   const blocks: KolinBlock[] = [];
   const paragraph: string[] = [];
   const flush = () => {
