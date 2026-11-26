@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { CardSummary, DailyReviewHistoryItem, Homework, StudentInvitation, StudentListItem, SchoolType } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { askStudentUsername, studentUsernameError } from '../../lib/studentUsername';
 import { TeacherIcon } from '../../components/TeacherIcon';
 
 type TodayCompletion = {
@@ -20,6 +21,7 @@ export function StudentsPage() {
   const [school, setSchool] = useState<SchoolType>('GYMNASIUM');
   const [fullName, setFullName] = useState('');
   const [createdStudent, setCreatedStudent] = useState<StudentInvitation | null>(null);
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +95,25 @@ export function StudentsPage() {
       await reload();
     } catch (e) {
       setError(toErrorMessage(e, t));
+    }
+  }
+
+  async function renameUsername(student: StudentListItem) {
+    if (editingUsername) return;
+    const username = askStudentUsername(student.username, language);
+    if (!username) return;
+    setEditingUsername(student.id);
+    setError(null);
+    try {
+      const updated = await api.students.renameUsername(student.id, username);
+      setStudents(current => current.map(item => item.id === updated.id ? updated : item));
+      setCreatedStudent(current => current?.student.id === updated.id ? { ...current, student: { ...current.student, username: updated.username } } : current);
+      setOpenMenuId(null);
+      window.alert(language === 'DE' ? 'Neuer Login: ' + updated.username : 'Новый логин: ' + updated.username);
+    } catch (e) {
+      setError(studentUsernameError(e, language));
+    } finally {
+      setEditingUsername(null);
     }
   }
 
@@ -263,6 +284,7 @@ export function StudentsPage() {
                             <span>⌘</span>{language === 'DE' ? 'Passwort festlegen/ändern' : 'Задать/изменить пароль'}
                           </button>
                           <button type="button" onClick={() => void renameStudent(student)}><span>✎</span>{language === 'DE' ? 'Name ändern' : 'Изменить имя'}</button>
+                          <button type="button" disabled={Boolean(editingUsername)} onClick={() => void renameUsername(student)}><span>✎</span>{language === 'DE' ? 'Login ändern' : 'Изменить логин'}</button>
                           {student.status === 'INACTIVE' ? (
                             <button type="button" onClick={() => void reactivateStudent(student)}>
                               <span>✓</span>{language === 'DE' ? 'Aktivieren' : 'Сделать активным'}
