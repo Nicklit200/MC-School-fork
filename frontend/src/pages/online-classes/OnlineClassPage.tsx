@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { onlineClassesApi } from '../../api/onlineClasses';
@@ -26,6 +26,10 @@ export function OnlineClassPage() {
   const { user } = useAuth();
   const canCreateHomework = user?.role === 'TEACHER';
   const navigate = useNavigate();
+  const location = useLocation();
+  const guestState = location.state as { trialMedia?: PrejoinChoice; trialClassId?: string } | null;
+  const guestMedia = guestState?.trialClassId === classId ? guestState?.trialMedia : undefined;
+  const guestAutoJoin = useRef(Boolean(guestMedia));
   const session = useClassSession(classId);
   const now = useLessonEntryClock(session.onlineClass?.serverNow);
   const [postLessonHomework, setPostLessonHomework] = useState<{ id: string; title: string } | null>(null);
@@ -34,12 +38,19 @@ export function OnlineClassPage() {
   const [mediaApiStatus, setMediaApiStatus] = useState<MediaApiStatus>('idle');
   const [liveKitErrorCategory, setLiveKitErrorCategory] = useState<LiveKitErrorCategory | null>(null);
   const [connectedBeforeDrop, setConnectedBeforeDrop] = useState<boolean | null>(null);
-  const [initialMedia, setInitialMedia] = useState<PrejoinChoice>({
+  const [initialMedia, setInitialMedia] = useState<PrejoinChoice>(guestMedia ?? {
     videoDeviceId: null,
     audioDeviceId: null,
     cameraEnabled: false,
     microphoneEnabled: false,
   });
+
+  const guestEntry = session.onlineClass ? lessonEntry(session.onlineClass, session.onlineClass.scheduledStartAt, now) : null;
+  useEffect(() => {
+    if (!guestAutoJoin.current || !guestEntry?.canJoin || session.phase !== 'ready') return;
+    guestAutoJoin.current = false;
+    void session.requestConnection();
+  }, [guestEntry?.canJoin, session.phase, session.requestConnection]);
 
   if (postLessonHomework) {
     return <PostLessonHomeworkDialog classId={postLessonHomework.id} title={postLessonHomework.title}
@@ -228,13 +239,21 @@ export function OnlineClassPage() {
         {session.phase === 'failed' && <p>{t('error.generic')}</p>}
       </div>
 
-      <PrejoinPanel
+      {guestAutoJoin.current && !entry?.canJoin ? (
+        <section className="prejoin">
+          <p role="status">{language === 'DE' ? 'Geräte geprüft. Wir warten auf die Lehrkraft.' : 'Устройства проверены. Ожидаем преподавателя.'}</p>
+          <button type="button" className="prejoin__retry" onClick={() => { guestAutoJoin.current = false; setInitialMedia(previous => ({ ...previous })); }}>
+            {language === 'DE' ? 'Geräte erneut prüfen' : 'Проверить устройства снова'}
+          </button>
+        </section>
+      ) : session.phase === 'requesting' || session.phase === 'waiting' ? null : <PrejoinPanel
         joinDisabled={session.phase === 'requesting' || session.phase === 'waiting' || Boolean(entry && !entry.canJoin)}
         onJoin={(choice) => {
+          guestAutoJoin.current = false;
           setInitialMedia(choice);
           void session.requestConnection();
         }}
-      />
+      />}
     </div>
   );
 }
