@@ -77,3 +77,57 @@
   .parent-dashboard__child select { min-width:0; width:100%; }
   .parent-dashboard__chat .btn { width:100%; }
 }
+
+
+/* Parent homework calendar: one equal-sided status tile with only the date. */
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: 9px;
+  background: var(--status-bg);
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day[data-status='EMPTY'] {
+  background: var(--surface);
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day-number {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  font-size: clamp(12px, 3.3cqw, 17px);
+  line-height: 1;
+  font-weight: 750;
+  color: var(--status-color);
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day[aria-current='date'] .homework-calendar__day-number {
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--student-orange);
+  border-color: var(--student-orange);
+}
+@container (max-width:420px) {
+  .student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__grid,
+  .student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__weekdays {
+    gap: 4px;
+  }
+  .student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day {
+    border-radius: 6px;
+  }
+}
