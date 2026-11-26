@@ -26,6 +26,7 @@ type Props<T extends CalendarHomework> = {
   lessons?: StudentCalendarLesson[];
   lessonsLoading?: boolean;
   lessonsError?: string | null;
+  compactDays?: boolean;
 };
 
 type StatusCounts = Partial<Record<HomeworkHistoryStatus, number>>;
@@ -42,7 +43,7 @@ const dateFromKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 const dateKey = (date: Date) => date.toISOString().slice(0, 10);
 const monthKey = (key: string) => `${key.slice(0, 7)}-01`;
 
-export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks, language, renderHomework, getStatus = resolveHomeworkHistoryStatus, onSelectionChange, lessons, lessonsLoading = false, lessonsError = null }: Props<T>) {
+export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks, language, renderHomework, getStatus = resolveHomeworkHistoryStatus, onSelectionChange, lessons, lessonsLoading = false, lessonsError = null, compactDays = false }: Props<T>) {
   const [now, setNow] = useState(() => new Date());
   const today = getSchoolDateString(now);
   const [month, setMonth] = useState(() => monthKey(today));
@@ -145,7 +146,7 @@ export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks,
   }
 
   return (
-    <section className="panel homework-calendar" aria-label={text.calendar}>
+    <section className="panel homework-calendar" data-compact-days={compactDays || undefined} aria-label={text.calendar}>
       <div className="homework-calendar__toolbar">
         <h3 id={titleId} className="homework-calendar__title" aria-live="polite">{monthTitle}</h3>
         <div className="homework-calendar__navigation">
@@ -209,7 +210,7 @@ export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks,
               aria-current={key === today ? 'date' : undefined} aria-controls={detailsId}
               onClick={() => selectDay(key)}>
               <span className="homework-calendar__day-number">{date.getUTCDate()}</span>
-              {dayLessons.length > 0 && <span className="homework-calendar__lesson-tiles" aria-hidden="true">
+              {!compactDays && dayLessons.length > 0 && <span className="homework-calendar__lesson-tiles" aria-hidden="true">
                 {dayLessons.map(lesson => {
                   const status = resolveCalendarLessonStatus(lesson, now);
                   return <span key={lesson.key} className="homework-calendar__lesson-tile" data-lesson-status={status}>
@@ -218,7 +219,7 @@ export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks,
                   </span>;
                 })}
               </span>}
-              <span className="homework-calendar__marks" aria-hidden="true">
+              {!compactDays && <span className="homework-calendar__marks" aria-hidden="true">
                 {present.map(status => (
                   <span key={status} className="homework-calendar__mark" data-status={status}>
                     <span className="homework-calendar__symbol">{symbols[status]}</span>
@@ -226,7 +227,7 @@ export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks,
                     <strong className="homework-calendar__count">{counts[status]}</strong>
                   </span>
                 ))}
-              </span>
+              </span>}
             </button>
           );
         })}
