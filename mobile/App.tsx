@@ -198,7 +198,8 @@ export default function App() {
       ) : (
         <WebView
           key={user.id ?? user.role ?? 'school'}
-          source={{ uri: SCHOOL_ORIGIN + (user.role === 'PARENT' ? '/parent' : '/') }}
+          source={{ uri: SCHOOL_ORIGIN + (user.role === 'PARENT' ? '/parent' : '/') + '?mobileRefresh=20261126-2' }}
+          cacheEnabled={false}
           originWhitelist={[SCHOOL_ORIGIN]}
           injectedJavaScriptBeforeContentLoaded={bootstrap}
           javaScriptEnabled
