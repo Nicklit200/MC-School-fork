@@ -53,7 +53,9 @@ public class ParentSkillProgressService {
     public record LessonObservation(String topic, String outcome, String explanation, String excerpt) {}
     public record LessonImprovement(String topic, String comparison, String before,
                                     String after, String explanation, String beforeQuote,
-                                    String afterQuote) {}
+                                    String afterQuote, String skillId,
+                                    Integer masteryBefore, Integer masteryAfter,
+                                    String scoreStatus) {}
     public record Lesson(UUID id, String title, Instant endedAt, String reviewState,
                          String summary, String summarySource, List<LessonEvidence> evidence,
                          List<LessonObservation> observations, List<LessonImprovement> improvements) {}
@@ -463,6 +465,12 @@ public class ParentSkillProgressService {
         }
     }
 
+    private static Integer scoreValue(Object value) {
+        if (!(value instanceof Number n)) return null;
+        int v=n.intValue();
+        return v>=0 && v<=100?v:null;
+    }
+
     private List<LessonImprovement> readRecapImprovements(String encoded) {
         if (encoded == null || encoded.isBlank()) return List.of();
         try {
@@ -480,7 +488,11 @@ public class ParentSkillProgressService {
                 result.add(new LessonImprovement(topic,mode,before,after,
                         Objects.toString(row.get("explanation"),""),
                         Objects.toString(row.get("beforeQuote"),""),
-                        Objects.toString(row.get("afterQuote"),"")));
+                        Objects.toString(row.get("afterQuote"),""),
+                        Objects.toString(row.get("skillId"),""),
+                        scoreValue(row.get("masteryBefore")),
+                        scoreValue(row.get("masteryAfter")),
+                        Objects.toString(row.get("scoreStatus"),"")));
             }
             return List.copyOf(result);
         } catch(Exception invalid) {
