@@ -93,7 +93,13 @@ function SelectedLessonSkills({ data, language, lessonId }: {
     {say(language, 'Выберите точку на графике, чтобы посмотреть изменения конкретного урока.',
       'Wählen Sie einen Punkt aus, um Änderungen dieser Stunde zu sehen.')}
   </p>;
-  const updates = (point.changes ?? []).filter(x => x.previous !== x.current);
+  const gradedSkills = new Set((lesson.improvements ?? [])
+    .filter(item => item.scoreStatus === 'SCORED' && item.masteryAfter != null)
+    .map(item => item.skillId));
+  const recordedChanges = (point.changes ?? []).filter(x => x.previous !== x.current);
+  const updates = recordedChanges.filter(change => !gradedSkills.has(change.skillId));
+  const currentIndex = (data.lessonProgress ?? []).findIndex(x => x.lessonId === lessonId);
+  const lastPoint = currentIndex > 0 ? data.lessonProgress[currentIndex-1] : null;
   const grouped = data.topics.map(topic => ({
     topic, updates: updates.filter(x => data.skills.some(s => s.id === x.skillId && s.topicId === topic.id)),
   })).filter(group => group.updates.length);
@@ -124,31 +130,68 @@ function SelectedLessonSkills({ data, language, lessonId }: {
     <div className="parent-progress__selected-heading">
       <div><small className="parent-progress__muted">{day(point.endedAt,language)}</small>
         <h3>{point.lessonTitle}</h3></div>
-      <span className="parent-progress__muted">{updates.length} {say(language,'изменений','Änderungen')}</span>
+      <div className="parent-progress__lesson-totals">
+        <span className="parent-progress__muted">
+          {recordedChanges.length > 0
+            ? recordedChanges.map(c => c.skillTitle).join(' · ')
+            : say(language, 'Изменений процентов нет', 'Keine Prozentänderungen')}
+        </span>
+        {point.confirmedPercent != null && <span className="parent-progress__total-score">
+          {say(language,'Освоение класса:','Lernplan:')} {lastPoint?.confirmedPercent == null
+            ? percent(point.confirmedPercent)
+            : `${percent(lastPoint.confirmedPercent)} → ${percent(point.confirmedPercent)}`}
+        </span>}
+      </div>
     </div>
-    {(lesson.improvements ?? []).length > 0 && <section className="parent-progress__improvements">
+    {(lesson.improvements ?? []).some(item => item.scoreStatus === 'SCORED'
+      && item.skillId && recordedChanges.some(c => c.skillId === item.skillId)) &&
+      <section className="parent-progress__improvements">
       <h3>{say(language, 'Что действительно улучшилось', 'Was sich nachweislich verbessert hat')}</h3>
-      {lesson.improvements.map((item,index) => <article key={`${item.topic}-${index}`}
-          className="parent-progress__improvement">
-        <div className="parent-progress__dated-change-title">
-          <strong>{item.topic}</strong>
-          <span className="parent-progress__observation-tag parent-progress__observation-tag--independent">
-            {item.comparison === 'BETWEEN_LESSONS'
-              ? say(language, 'С прошлого урока', 'Seit der letzten Stunde')
-              : say(language, 'В ходе урока', 'Während der Stunde')}
-          </span>
-        </div>
-        <div className="parent-progress__improvement-compare">
-          <div><small>{say(language, 'Раньше', 'Vorher')}</small><p>{item.before}</p></div>
-          <div><small>{say(language, 'Теперь', 'Jetzt')}</small><p>{item.after}</p></div>
-        </div>
-        <p>{item.explanation}</p>
-        <details className="parent-progress__improvement-proof">
-          <summary>{say(language, 'Показать подтверждение из транскрипции', 'Belege aus dem Transkript anzeigen')}</summary>
-          <p><strong>{say(language, 'Раньше:', 'Vorher:')}</strong> {item.beforeQuote}</p>
-          <p><strong>{say(language, 'Теперь:', 'Jetzt:')}</strong> {item.afterQuote}</p>
-        </details>
-      </article>)}
+      {lesson.improvements.filter(item => item.scoreStatus === 'SCORED'
+        && item.skillId && recordedChanges.some(c => c.skillId === item.skillId)).map((item,index) => {
+        const scoredChange = recordedChanges.find(c => c.skillId === item.skillId &&
+          c.sourceType === 'LESSON');
+        const earlier = scoredChange?.previous ?? item.masteryBefore;
+        const later = scoredChange?.current ?? item.masteryAfter;
+        const hasScore = later != null && (item.scoreStatus === 'SCORED' || scoredChange != null);
+        return <article key={`${item.topic}-${index}`} className="parent-progress__improvement">
+          <div className="parent-progress__dated-change-title">
+            <strong>{data.skills.find(skill => skill.id === item.skillId)?.title ?? item.topic}</strong>
+            <span className="parent-progress__observation-tag parent-progress__observation-tag--independent">
+              {item.comparison === 'BETWEEN_LESSONS'
+                ? say(language,'С прошлого урока','Seit der letzten Stunde')
+                : say(language,'В ходе урока','Während der Stunde')}
+            </span>
+          </div>
+          <div className="parent-progress__improvement-compare">
+            <div>
+              <small>{say(language,'Было','Vorher')}</small>
+              <strong>{hasScore
+                ? earlier == null ? say(language,'Не оценено','Nicht bewertet') : percent(earlier)
+                : '—'}</strong>
+            </div>
+            <div>
+              <small>{say(language,'Стало','Nachher')}</small>
+              <strong>{hasScore ? percent(later) : '—'}</strong>
+            </div>
+          </div>
+          <p className="parent-progress__improvement-description">
+            <strong>{say(language,'Что изменилось:','Was sich geändert hat:')}</strong>
+            {' '}{item.before} → {item.after}
+          </p>
+          <p>{item.explanation}</p>
+          {!hasScore && <small className="parent-progress__muted">
+            {say(language, 'Наблюдение подтверждено, но численная оценка навыка пока не обновлена.',
+              'Die Beobachtung ist belegt, aber der Kompetenzwert wurde noch nicht geändert.')}
+          </small>}
+          <details className="parent-progress__improvement-proof">
+            <summary>{say(language,'Показать подтверждение из транскрипции',
+              'Belege aus dem Transkript anzeigen')}</summary>
+            <p><strong>{say(language,'Ранее:','Früher:')}</strong> {item.beforeQuote}</p>
+            <p><strong>{say(language,'Позже:','Später:')}</strong> {item.afterQuote}</p>
+          </details>
+        </article>;
+      })}
     </section>}
     {grouped.length || ungrouped.length
       ? <div className="parent-progress__dated-topic-list">
@@ -161,38 +204,12 @@ function SelectedLessonSkills({ data, language, lessonId }: {
         </section>}
       </div>
       : <p className="parent-progress__muted">
-        {(lesson.improvements ?? []).length
-          ? say(language, 'Проценты карты в этом занятии не пересчитывались; подтверждённые улучшения показаны выше.',
-              'Die Prozentwerte wurden nicht verändert; die belegten Fortschritte stehen oben.')
-          : say(language,'За это занятие в истории карты навыков нет подтверждённых изменений процентов.',
-              'Für diese Stunde sind keine bestätigten Prozentänderungen gespeichert.')}
+        {recordedChanges.length > 0
+          ? say(language, 'Остальных изменений процентов за этот урок нет.',
+              'Es gibt keine weiteren Prozentänderungen für diese Stunde.')
+          : say(language,'За этот урок в карте навыков не записано изменений процентов.',
+              'Für diese Stunde sind keine Prozentänderungen in der Kompetenzkarte gespeichert.')}
       </p>}
-    {(lesson.observations ?? []).length > 0 && <div className="parent-progress__observations">
-      <div className="parent-progress__section-title">
-        <h3>{say(language, 'Что удалось на уроке и над чем работали',
-          'Beobachtungen und Lernschritte')}</h3>
-        <span className="parent-progress__muted">{say(language,
-          'По транскрипции · без изменения процента', 'Transkript · ohne Prozentänderung')}</span>
-      </div>
-      {lesson.observations.map((item,index) => {
-        const status = item.outcome === 'INDEPENDENT' ? say(language, 'Самостоятельно', 'Selbstständig')
-          : item.outcome === 'WITH_HELP' ? say(language, 'С подсказкой', 'Mit Hilfe')
-          : item.outcome === 'DIFFICULTY' ? say(language, 'Нужна практика', 'Weiter üben')
-          : say(language, 'Разбирали на уроке', 'Im Unterricht behandelt');
-        return <article className="parent-progress__observation" key={`${item.topic}-${index}`}>
-          <div className="parent-progress__dated-change-title">
-            <strong>{item.topic}</strong>
-            <span className={`parent-progress__observation-tag parent-progress__observation-tag--${item.outcome.toLowerCase()}`}>
-              {status}
-            </span>
-          </div>
-          <p className="parent-progress__dated-change-explanation">{item.explanation}</p>
-          {item.excerpt && <p className="parent-progress__source">
-            <strong>{say(language, 'Из транскрипции:', 'Aus dem Transkript:')}</strong> {item.excerpt}
-          </p>}
-        </article>;
-      })}
-    </div>}
   </div>;
 }
 
@@ -220,7 +237,6 @@ export function ParentSkillsPage() {
   const [data, setData] = useState<ParentSkillsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -236,7 +252,7 @@ export function ParentSkillsPage() {
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    setLoading(true);setError('');setData(null);setExpandedTopic(null);setSelectedLessonId(null);
+    setLoading(true);setError('');setData(null);setSelectedLessonId(null);
     parentApi.skills(selected).then(result => { if(live) setData(result); })
       .catch(e => { if(live) setError(String(e?.message ?? e)); })
       .finally(() => { if(live) setLoading(false); });
@@ -268,35 +284,15 @@ export function ParentSkillsPage() {
             onSelect={id => setSelectedLessonId(current => current === id ? null : id)} />
 
         </section>
-        <section className="parent-progress__topics">
-          <div className="parent-progress__section-title"><h2>{say(language,'Темы и навыки','Themen und Kompetenzen')}</h2>
-            <span className="parent-progress__muted">{selectedLessonId
-              ? say(language,'Изменения выбранного занятия','Änderungen dieser Stunde')
-              : `${data.totalSkills} ${say(language,'навыков','Kompetenzen')}`}</span></div>
-          {selectedLessonId
-            ? <SelectedLessonSkills data={data} language={language} lessonId={selectedLessonId} />
-            : data.topics.map(topic => {
-                const expanded=expandedTopic===topic.id;
-                return <div className="parent-progress__topic" key={topic.id}>
-                  <button type="button" className="parent-progress__topic-heading" aria-expanded={expanded}
-                    onClick={()=>setExpandedTopic(expanded?null:topic.id)}>
-                    <span className="parent-progress__topic-name"><strong>{topic.title}</strong>
-                      <small>{topic.assessedSkills} / {topic.totalSkills} {say(language,'проверено','bewertet')}</small></span>
-                    <span className="parent-progress__topic-bar"><span style={{ width: `${topic.confirmedPercent}%` }}/></span>
-                    <strong className="parent-progress__topic-value">{topic.assessedSkills ? percent(topic.confirmedPercent) : '—'}</strong>
-                    <span className="parent-progress__chevron" aria-hidden="true">{expanded?'⌃':'⌄'}</span>
-                  </button>
-                  {expanded && <div className="parent-progress__skill-list">
-                    {data.skills.filter(skill=>skill.topicId===topic.id).map(skill=>
-                      <div className="parent-progress__skill" key={skill.id}>
-                        <div><strong>{skill.title}</strong>{skill.germanTitle && <small>{skill.germanTitle}</small>}</div>
-                        <span className="parent-progress__skill-bar"><span style={{width:`${skill.mastery??0}%`}}/></span>
-                        <strong>{percent(skill.mastery)}</strong>
-                      </div>)}
-                  </div>}
-                </div>;
-              })}
-        </section>
+        {selectedLessonId && <section className="parent-progress__topics">
+          <div className="parent-progress__section-title">
+            <h2>{say(language,'Изменившиеся навыки','Veränderte Kompetenzen')}</h2>
+            <span className="parent-progress__muted">
+              {say(language,'Только реальные изменения из карты навыков','Nur nachgewiesene Änderungen der Kompetenzkarte')}
+            </span>
+          </div>
+          <SelectedLessonSkills data={data} language={language} lessonId={selectedLessonId} />
+        </section>}
         <SelectedLessonRecap data={data} language={language} lessonId={selectedLessonId} />
         <p className="parent-progress__footnote">{say(language,
           'Проценты основаны на сохранённых проверках Mindcrafti. История изменений и доказательства показываются отдельно. Отсутствие оценки не означает отсутствие знаний.',

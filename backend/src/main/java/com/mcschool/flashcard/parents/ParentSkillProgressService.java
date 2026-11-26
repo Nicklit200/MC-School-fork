@@ -45,7 +45,7 @@ public class ParentSkillProgressService {
                                     Integer previous, int current, Instant changedAt,
                                     String sourceType, String explanation, String excerpt) {}
     public record LessonProgressPoint(UUID lessonId, String lessonTitle, Instant endedAt,
-                                      Integer confirmedPercent, int assessedSkills,
+                                      Double confirmedPercent, int assessedSkills,
                                       List<LessonSkillChange> changes) {}
     public record LessonEvidence(String skillId, String skillTitle, Integer previous,
                                  Integer current, String autonomy, String explanation,
@@ -53,7 +53,9 @@ public class ParentSkillProgressService {
     public record LessonObservation(String topic, String outcome, String explanation, String excerpt) {}
     public record LessonImprovement(String topic, String comparison, String before,
                                     String after, String explanation, String beforeQuote,
-                                    String afterQuote) {}
+                                    String afterQuote, String skillId,
+                                    Integer masteryBefore, Integer masteryAfter,
+                                    String scoreStatus) {}
     public record Lesson(UUID id, String title, Instant endedAt, String reviewState,
                          String summary, String summarySource, List<LessonEvidence> evidence,
                          List<LessonObservation> observations, List<LessonImprovement> improvements) {}
@@ -63,7 +65,7 @@ public class ParentSkillProgressService {
                                    String explanation, String excerpt) {}
     public record Dashboard(UUID studentId, String studentName, Integer grade,
                             String schoolType, String boardId, String boardTitle,
-                            String curriculumSource, Integer confirmedPercent,
+                            String curriculumSource, Double confirmedPercent,
                             Integer assessedAveragePercent, int assessedSkills, int totalSkills,
                             Instant updatedAt, List<Topic> topics, List<Skill> skills,
                             List<TrendPoint> trend, List<Lesson> lessons,
@@ -150,8 +152,8 @@ public class ParentSkillProgressService {
         int total = skills.size();
         int currentSum = skills.stream().filter(s -> s.mastery() != null)
                 .mapToInt(s -> s.mastery()).sum();
-        Integer confirmed = assessed == 0 || total == 0 ? null :
-                (int)Math.round((double)currentSum / total);
+        Double confirmed = assessed == 0 || total == 0 ? null :
+                Math.round(10.0 * currentSum / total) / 10.0;
         Integer average = assessed == 0 ? null : (int)Math.round((double)currentSum / assessed);
 
         List<Change> history = jdbc.query("""
@@ -413,18 +415,35 @@ public class ParentSkillProgressService {
                             explanation, source == null ? null : source.excerpt()));
         }
 
+        // Replay scores exactly once. Re-reading an older manual edit at
+        // every lesson would erase an improvement retroactively attributed to
+        // an earlier lesson (the scoring job may run days after that lesson).
+        Set<Change> assigned = new HashSet<>();
+        pointChanges.values().forEach(assigned::addAll);
         Map<String, Integer> baseline = new HashMap<>();
+        Map<UUID,List<Change>> unattributedByLesson = new HashMap<>();
+        Instant firstEnd = chronologicalLessons.get(0).at();
+        for (Change change : history) {
+            if (!allowed.contains(change.skillId()) || assigned.contains(change)) continue;
+            if (!change.at().isAfter(firstEnd)) {
+                baseline.put(change.skillId(),change.current());
+                continue;
+            }
+            for (LessonRow lesson : chronologicalLessons) {
+                if (!change.at().isAfter(lesson.at())) {
+                    unattributedByLesson.computeIfAbsent(lesson.id(),
+                            unused -> new ArrayList<>()).add(change);
+                    break;
+                }
+            }
+        }
         List<LessonProgressPoint> result = new ArrayList<>();
         for (LessonRow lesson : chronologicalLessons) {
-            // Historical scores from before the first available lesson must
-            // already be reflected in the first point, but have NO fake "lesson change".
-            for (Change change : history) {
-                if (allowed.contains(change.skillId()) && !change.at().isAfter(lesson.at()))
-                    baseline.put(change.skillId(), change.current());
-            }
+            for (Change change : unattributedByLesson.getOrDefault(lesson.id(), List.of()))
+                baseline.put(change.skillId(), change.current());
             for (Change change : pointChanges.getOrDefault(lesson.id(), List.of()))
                 baseline.put(change.skillId(), change.current());
-            Integer percent = baseline.isEmpty() ? null : confirmedPercent(baseline, allowed);
+            Double percent = baseline.isEmpty() ? null : confirmedPercentExact(baseline, allowed);
             // Several updates to one skill on the same day are consolidated.
             Map<String, LessonSkillChange> unique = new LinkedHashMap<>();
             for (LessonSkillChange step : explainedChanges.getOrDefault(lesson.id(), List.of())) {
@@ -463,6 +482,12 @@ public class ParentSkillProgressService {
         }
     }
 
+    private static Integer scoreValue(Object value) {
+        if (!(value instanceof Number n)) return null;
+        int v=n.intValue();
+        return v>=0 && v<=100?v:null;
+    }
+
     private List<LessonImprovement> readRecapImprovements(String encoded) {
         if (encoded == null || encoded.isBlank()) return List.of();
         try {
@@ -480,7 +505,11 @@ public class ParentSkillProgressService {
                 result.add(new LessonImprovement(topic,mode,before,after,
                         Objects.toString(row.get("explanation"),""),
                         Objects.toString(row.get("beforeQuote"),""),
-                        Objects.toString(row.get("afterQuote"),"")));
+                        Objects.toString(row.get("afterQuote"),""),
+                        Objects.toString(row.get("skillId"),""),
+                        scoreValue(row.get("masteryBefore")),
+                        scoreValue(row.get("masteryAfter")),
+                        Objects.toString(row.get("scoreStatus"),"")));
             }
             return List.copyOf(result);
         } catch(Exception invalid) {
@@ -507,6 +536,16 @@ public class ParentSkillProgressService {
         return skills.stream().filter(node -> Boolean.TRUE.equals(node.core())
                 || (schoolType != null && node.schoolTypes() != null
                     && node.schoolTypes().contains(schoolType))).toList();
+    }
+
+    static double confirmedPercentExact(Map<String,Integer> scores, Set<String> allowed) {
+        if (allowed.isEmpty()) return 0;
+        int sum = 0;
+        for (String id : allowed) {
+            Integer mastery = scores.get(id);
+            if (mastery != null) sum += Math.max(0, Math.min(100, mastery));
+        }
+        return Math.round(10.0 * sum / allowed.size()) / 10.0;
     }
 
     static int confirmedPercent(Map<String,Integer> scores, Set<String> allowed) {
