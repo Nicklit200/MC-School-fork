@@ -464,9 +464,19 @@ public class PostLessonSkillReviewService {
         return previous==null?60:previous>=95?previous:Math.min(95,previous+5);
     }
 
+    /** Only a fixed error identifier may be persisted/logged; never transcript or API output. */
+    static String safeFailureCode(Exception failure) {
+        String message = Objects.toString(failure.getMessage(), "");
+        if (message.matches("SKILL_REVIEW_AI_(?:HTTP_[0-9]{3}|OUTPUT_LIMIT|INCOMPLETE|EMPTY_RESPONSE|RESPONSE_TOO_LARGE)")
+                || message.equals("SKILL_REVIEW_AI_UNAVAILABLE"))
+            return message;
+        return "ANALYSIS_OR_STORAGE_FAILED";
+    }
+
     private void fail(Job job,Exception failure) {
-        LOG.warn("Skill review job class={} failed attempt={} type={}",
-                job.classId(),job.attempts(),failure.getClass().getSimpleName());
+        String code=safeFailureCode(failure);
+        LOG.warn("Skill review job class={} failed attempt={} code={} type={}",
+                job.classId(),job.attempts(),code,failure.getClass().getSimpleName());
         try {
             tx.executeWithoutResult(st->jdbc.update("""
                 UPDATE post_lesson_skill_review_jobs
@@ -474,7 +484,7 @@ public class PostLessonSkillReviewService {
                     updated_at=now(),finished_at=CASE WHEN ?>=? THEN now() ELSE NULL END
                 WHERE class_id=? AND worker_id=? AND state='RUNNING'
                 """,job.attempts()>=MAX_ATTEMPTS?"FAILED":"QUEUED",
-                    "ANALYSIS_OR_STORAGE_FAILED",job.attempts(),MAX_ATTEMPTS,
+                    code,job.attempts(),MAX_ATTEMPTS,
                     job.classId(),workerId));
         } catch(RuntimeException persistenceFailure) {
             LOG.warn("Could not persist skill-review failure class={}",job.classId());
