@@ -48,8 +48,10 @@ public class ExpoPushSender {
             return tokens.size();
         } catch (ResponseStatusException ex) {
             throw ex;
-        } catch (Exception ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Expo push request interrupted");
+        } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Expo push service unavailable");
         }
     }
