@@ -1,4 +1,4 @@
-import { ApiRequestError, getAccessToken, request, requestBlob } from './client';
+import { ApiRequestError, apiFetch, request, requestBlob } from './client';
 
 /**
  * Online-class API. Kept in its own module rather than added to the `api`
@@ -340,10 +340,8 @@ export const onlineClassesApi = {
   transcribePostLessonHomework: async (classId: string, file: File): Promise<string> => {
     const form = new FormData();
     form.append('audio', file);
-    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
-    const token = getAccessToken();
-    const response = await fetch(`${base}/online-classes/${classId}/post-lesson-homework/transcribe`, {
-      method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form,
+    const response = await apiFetch(`/online-classes/${classId}/post-lesson-homework/transcribe`, {
+      method: 'POST', body: form,
     });
     const responseText = await response.text();
     let payload: { text?: string; errorCode?: string; message?: string } = {};

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { getExpiredSessionPath } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { homePathForRole } from '../auth/roleRoutes';
 import { useI18n } from '../i18n/I18nContext';
@@ -52,6 +53,7 @@ export function LoginPage() {
             : 'Войдите, чтобы продолжить работу в системе'}
         </p>
 
+        {getExpiredSessionPath() === '/login' && !error && <div className="banner" role="status">{language === 'DE' ? 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.' : 'Сессия завершилась. Войдите снова, чтобы продолжить.'}</div>}
         {error && <div className="banner banner--error">{t('login.error')}</div>}
 
         <label className="field login-field">
