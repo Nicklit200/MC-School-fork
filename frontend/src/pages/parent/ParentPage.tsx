@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { parentApi } from '../../api/parent';
 import type { ParentChildStatus, ParentHomeworkStatus } from '../../api/types';
-import { ParentTeacherChat } from '../../components/ParentTeacherChat';
 import { HomeworkHistoryCalendar } from '../../components/HomeworkHistoryCalendar';
 import { useI18n } from '../../i18n/I18nContext';
 import { getSchoolDateString, homeworkHistoryText, resolveHomeworkHistoryStatus, type HomeworkHistoryStatus } from '../../lib/homeworkHistory';
-import { ParentNotifications } from './ParentNotifications';
 import './parent-dashboard.css';
 
 export function ParentPage() {
@@ -15,7 +13,6 @@ export function ParentPage() {
   const [selectedId, setSelectedId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -42,48 +39,18 @@ export function ParentPage() {
         <span className="parent-dashboard__date">{formatDate(today, language)}</span>
       </header>
 
-      <ParentNotifications compact />
       {error && <div className="banner banner--error" role="alert">{error}</div>}
       {loading ? <p className="muted" role="status">{de ? 'Laden…' : 'Загрузка…'}</p> : !error && !child ? (
         <div className="panel parent-dashboard__empty">{de ? 'Diesem Konto ist noch kein Kind zugeordnet.' : 'Ребёнок пока не привязан к этому аккаунту.'}</div>
       ) : child ? <>
-        <section className="parent-dashboard__child" aria-label={de ? 'Ausgewähltes Kind' : 'Выбранный ребёнок'}>
-          <span className="student-shell__avatar" aria-hidden="true">{child.studentName.trim().charAt(0).toLocaleUpperCase() || 'M'}</span>
-          {children.length > 1 ? (
-            <label>
-              <span className="muted">{de ? 'Kind auswählen' : 'Выберите ребёнка'}</span>
-              <select className="input" value={child.studentId} onChange={(event) => {
-                setSelectedId(event.target.value);
-                setChatOpen(false);
-              }}>
-                {children.map((item) => <option key={item.studentId} value={item.studentId}>{item.studentName}</option>)}
-              </select>
-            </label>
-          ) : <div><span className="muted">{de ? 'Ihr Kind' : 'Ваш ребёнок'}</span><h2>{child.studentName}</h2></div>}
-        </section>
-
-        <div className="student-today__grid parent-dashboard__summary">
-          <section className="panel student-today__review">
-            <h2>{de ? 'Hausaufgaben heute' : 'Домашние задания сегодня'}</h2>
-            <p className="result__stat">{child.homeworkCompletedToday}<span className="parent-dashboard__total"> / {child.homeworkAssignedToday}</span></p>
-            <span className={`pill ${child.homeworkAssignedToday === 0 ? 'parent-dashboard__neutral' : child.homeworkOpenToday === 0 ? 'pill--learned' : 'pill--pending'}`}>
-              {child.homeworkAssignedToday === 0 ? (de ? 'Keine Aufgaben' : 'Не задано')
-                : child.homeworkOpenToday === 0 ? (de ? 'Alles erledigt' : 'Всё выполнено')
-                : (de ? 'Noch offen' : 'Ожидает выполнения')}
-            </span>
-            <p className="muted">{de ? 'Erledigte Aufgaben für heute' : 'Выполнено заданий на сегодня'}</p>
-          </section>
-          <section className="panel student-today__homework">
-            <h2>{de ? 'Lernkarten heute' : 'Карточки сегодня'}</h2>
-            <p className="result__stat">{child.cardsDueToday === 0 ? (de ? 'Erledigt' : 'Готово') : child.cardsDueToday}</p>
-            <span className={`pill ${child.cardsDueToday === 0 ? 'pill--learned' : 'pill--pending'}`}>
-              {child.cardsDueToday === 0 ? (de ? 'Nichts mehr offen' : 'Всё выполнено') : (de ? 'Noch zu wiederholen' : 'Нужно повторить')}
-            </span>
-            <p className="muted">{child.cardsDueToday === 0
-              ? (de ? 'Für heute sind keine Wiederholungen offen.' : 'На сегодня нет карточек к повторению.')
-              : (de ? 'Verbleibende Karten zur Wiederholung' : 'Осталось карточек к повторению')}</p>
-          </section>
-        </div>
+        {children.length > 1 && (
+          <label className="parent-dashboard__child-picker">
+            <span className="muted">{de ? 'Kind auswählen' : 'Выберите ребёнка'}</span>
+            <select className="input" value={child.studentId} onChange={(event) => setSelectedId(event.target.value)}>
+              {children.map((item) => <option key={item.studentId} value={item.studentId}>{item.studentName}</option>)}
+            </select>
+          </label>
+        )}
 
         <section className="parent-dashboard__history" aria-labelledby="parent-homework-history">
           <div className="parent-dashboard__section-heading">
@@ -114,15 +81,6 @@ export function ParentPage() {
               }} />
         </section>
 
-        <section className="panel parent-dashboard__chat">
-          <div className="parent-dashboard__section-heading">
-            <div><h2>{de ? 'Kontakt zur Lehrkraft' : 'Связь с учителем'}</h2><p className="muted">{de ? 'Fragen zu den Aufgaben oder zum Unterricht' : 'Вопросы о заданиях и занятиях ребёнка'}</p></div>
-            <button className="btn btn--secondary" type="button" aria-expanded={chatOpen} aria-controls="parent-teacher-chat" onClick={() => setChatOpen((open) => !open)}>
-              {chatOpen ? (de ? 'Chat schließen' : 'Скрыть чат') : (de ? 'Chat öffnen' : 'Открыть чат')}
-            </button>
-          </div>
-          {chatOpen && <div id="parent-teacher-chat"><ParentTeacherChat key={child.studentId} studentId={child.studentId} studentName={child.studentName} language={language} viewerRole="PARENT" /></div>}
-        </section>
       </> : null}
     </div>
   );
