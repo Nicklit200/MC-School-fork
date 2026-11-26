@@ -283,3 +283,5 @@
 .parent-progress__improvement-proof summary {cursor:pointer;color:var(--student-orange);font-weight:650;}
 .parent-progress__improvement-proof p {line-height:1.6;margin:9px 0 2px;overflow-wrap:anywhere;}
 @media(max-width:600px) {.parent-progress__improvement {padding:13px;}.parent-progress__improvement-compare {grid-template-columns:1fr;}}
+
+.parent-progress__improvement-halo {fill:none;stroke:#93d6bd;stroke-width:2.5;opacity:.95;pointer-events:none;}
