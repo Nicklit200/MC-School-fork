@@ -77,7 +77,7 @@ describe('PrejoinPanel', () => {
 
     const retry = screen.getByRole('button', { name: /erneut|Повторить/i });
     await userEvent.click(retry);
-    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(6));
   });
 
   it('distinguishes missing hardware from a denied permission', async () => {
@@ -134,14 +134,15 @@ describe('PrejoinPanel', () => {
     } as unknown as MediaStream;
     const getUserMedia = vi.fn()
       .mockRejectedValueOnce(Object.assign(new Error('camera blocked'), { name: 'NotAllowedError' }))
-      .mockResolvedValueOnce(audioStream);
+      .mockResolvedValueOnce(audioStream)
+      .mockRejectedValueOnce(Object.assign(new Error('camera blocked'), { name: 'NotAllowedError' }));
     setMediaDevices({
       getUserMedia,
       enumerateDevices: vi.fn().mockResolvedValue(devices),
     });
     const onJoin = renderPanel();
-    await screen.findByRole('button', { name: /Только микрофон|Nur Mikrofon/ });
-    await userEvent.click(screen.getByRole('button', { name: /Только микрофон|Nur Mikrofon/ }));
+    // The independent audio fallback now runs automatically.
+    await screen.findByRole('option', { name: 'Built-in mic' });
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ video: false, audio: true }));
     await screen.findByRole('option', { name: 'Built-in mic' });
     await userEvent.click(screen.getByRole('button', { name: /Beitreten|Присоединиться/i }));
@@ -227,7 +228,7 @@ describe('PrejoinPanel', () => {
     await screen.findByRole('option', { name: 'Headset microphone' });
     await userEvent.selectOptions(screen.getByRole('combobox', { name: /Микрофон|Mikrofon/i }), 'mic-2');
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({
-      video: true, audio: { deviceId: { ideal: 'mic-2' } },
+      video: { deviceId: { exact: 'cam-1' } }, audio: { deviceId: { exact: 'mic-2' } },
     }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Beitreten|Присоединиться/i })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: /Beitreten|Присоединиться/i }));
