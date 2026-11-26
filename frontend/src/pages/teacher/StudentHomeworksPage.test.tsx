@@ -65,6 +65,10 @@ function findRow(filename: string): HTMLElement {
   return row;
 }
 
+async function selectFixtureDate(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: /^20\.11\.2026/ }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // The fixture is a future assignment; keep calendar-dependent labels stable.
@@ -81,9 +85,10 @@ describe('Homework history three-dot actions', () => {
   it('displays separate records and a compact menu when both PDFs have the same date', async () => {
     const user = userEvent.setup();
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     expect(screen.getByText(b.worksheetFilename!)).toBeInTheDocument();
-    expect(screen.getAllByText('20.11.2026')).toHaveLength(2);
+    expect(screen.getAllByText('20.11.2026').filter(node => node.closest('.homework-history-row'))).toHaveLength(2);
     const row = findRow(a.worksheetFilename!);
     const toggle = within(row).getByRole('button', { name: /Действия с домашкой/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -102,6 +107,7 @@ describe('Homework history three-dot actions', () => {
   it('opens the existing PDF editor via the action menu', async () => {
     const user = userEvent.setup();
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     await user.click(within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Редактировать' }));
@@ -112,6 +118,7 @@ describe('Homework history three-dot actions', () => {
   it('opens the existing PDF viewer via the action menu', async () => {
     const user = userEvent.setup();
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     await user.click(within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Посмотреть' }));
@@ -125,6 +132,7 @@ describe('Homework history three-dot actions', () => {
       .mockResolvedValueOnce([a, b])
       .mockResolvedValue([b]);
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     await user.click(within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Удалить' }));
@@ -142,6 +150,7 @@ describe('Homework history three-dot actions', () => {
   it('cancels deletion without touching the original homework', async () => {
     const user = userEvent.setup();
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     await user.click(within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Удалить' }));
@@ -155,6 +164,7 @@ describe('Homework history three-dot actions', () => {
     const user = userEvent.setup();
     vi.mocked(api.homeworks.remove).mockRejectedValue(new Error('Сервер отказал'));
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     await user.click(within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Удалить' }));
@@ -169,6 +179,7 @@ describe('Homework history three-dot actions', () => {
   it('closes the menu after clicking away or pressing Escape', async () => {
     const user = userEvent.setup();
     mount();
+    await selectFixtureDate(user);
     await screen.findByText(a.worksheetFilename!);
     const toggle = within(findRow(a.worksheetFilename!)).getByRole('button', { name: /Действия с домашкой/ });
     await user.click(toggle);
@@ -178,5 +189,64 @@ describe('Homework history three-dot actions', () => {
     await user.click(toggle);
     await user.click(screen.getByRole('heading', { name: 'История домашки' }));
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+});
+
+describe('Monthly homework history', () => {
+  it('shows the requested colors and opens the selected day without mixing its assignments', async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date('2026-11-26T12:00:00Z'));
+    vi.mocked(api.homeworks.listForStudent).mockResolvedValue([
+      homework('done', 'On-time.pdf', { startDate: '2026-11-23', deadlineAt: '2026-11-23T23:00:00Z', submitted: true, submittedAt: '2026-11-23T18:00:00Z' }),
+      homework('late', 'Late.pdf', { startDate: '2026-11-24', deadlineAt: '2026-11-24T23:00:00Z', submitted: true, submittedAt: '2026-11-25T09:00:00Z', submittedLate: true }),
+      homework('missed', 'Missing.pdf', { startDate: '2026-11-25', deadlineAt: '2026-11-25T23:00:00Z', overdue: true }),
+      homework('today', 'Today.pdf', { startDate: '2026-11-26', deadlineAt: '2026-11-26T23:00:00Z' }),
+      homework('future', 'Future.pdf', { startDate: '2026-11-27', deadlineAt: '2026-11-27T23:00:00Z' }),
+    ]);
+    mount();
+    expect(await screen.findByRole('button', { name: /^23\.11\.2026/ })).toHaveAttribute('data-status', 'DONE');
+    expect(screen.getByRole('button', { name: /^24\.11\.2026/ })).toHaveAttribute('data-status', 'LATE');
+    expect(screen.getByRole('button', { name: /^25\.11\.2026/ })).toHaveAttribute('data-status', 'MISSED');
+    expect(screen.getByRole('button', { name: /^26\.11\.2026/ })).toHaveAttribute('data-status', 'TODAY');
+    expect(screen.getByRole('button', { name: /^27\.11\.2026/ })).toHaveAttribute('data-status', 'UPCOMING');
+    expect(screen.getByText('Today.pdf')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^24\.11\.2026/ }));
+    expect(screen.queryByText('Today.pdf')).not.toBeInTheDocument();
+    expect(within(findRow('Late.pdf')).getByText('Сдано с опозданием')).toHaveClass('homework-history-status--late');
+    await user.click(screen.getByRole('button', { name: /^21\.11\.2026/ }));
+    expect(screen.getByText('На этот день домашнего задания нет.')).toBeInTheDocument();
+  });
+
+  it('keeps all statuses on a mixed day and does not make incomplete work look completed', async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date('2026-11-26T12:00:00Z'));
+    vi.mocked(api.homeworks.listForStudent).mockResolvedValue([
+      homework('done', 'Done.pdf', { submitted: true, submittedAt: '2026-11-20T12:00:00Z' }),
+      homework('missed', 'Open.pdf', { overdue: true }),
+    ]);
+    mount();
+    const day = await screen.findByRole('button', { name: /^20\.11\.2026/ });
+    expect(day).toHaveAttribute('data-status', 'MISSED');
+    expect(day).toHaveAccessibleName(/Не сдано: 1/);
+    expect(day).toHaveAccessibleName(/Сдано вовремя: 1/);
+    await user.click(day);
+    expect(screen.getByText('Done.pdf')).toBeInTheDocument();
+    expect(screen.getByText('Open.pdf')).toBeInTheDocument();
+  });
+
+  it('switches months across the year boundary and returns to today', async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date('2026-12-31T12:00:00Z'));
+    vi.mocked(api.homeworks.listForStudent).mockResolvedValue([
+      homework('january', 'January.pdf', { startDate: '2027-01-01', deadlineAt: '2027-01-01T23:00:00Z' }),
+    ]);
+    mount();
+    await user.click(await screen.findByRole('button', { name: 'Следующий месяц' }));
+    expect(screen.getByRole('heading', { name: /январь 2027/i })).toBeInTheDocument();
+    expect(screen.getByText('January.pdf')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Сегодня$/ }));
+    expect(screen.getByRole('heading', { name: /декабрь 2026/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^31\.12\.2026/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('January.pdf')).not.toBeInTheDocument();
   });
 });

@@ -4,10 +4,10 @@ import { api } from '../../api/client';
 import type { Homework, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { homeworkHistoryText, resolveHomeworkHistoryStatus } from '../../lib/homeworkHistory';
+import { HomeworkHistoryCalendar } from '../../components/HomeworkHistoryCalendar';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 import { GoogleDriveMultiPdfPicker } from './GoogleDriveMultiPdfPicker';
-
-type HomeworkHistoryStatus = 'DONE' | 'LATE' | 'MISSED' | 'TODAY' | 'UPCOMING';
 
 export function StudentHomeworksPage() {
   const { studentId = '' } = useParams();
@@ -240,11 +240,9 @@ export function StudentHomeworksPage() {
       </div>
 
       <h2>{language === 'DE' ? 'Hausaufgaben-Historie' : 'История домашки'}</h2>
-      {loading ? <p className="muted">{t('common.loading')}</p> : worksheetHomeworks.length === 0 ? (
-        <div className="panel"><p className="muted" style={{ margin: 0 }}>{language === 'DE' ? 'Noch keine PDF-Hausaufgaben.' : 'PDF-домашек пока нет.'}</p></div>
-      ) : (
-        <div className="panel"><div className="history-list">
-          {worksheetHomeworks.map((homework) => {
+      {loading ? <p className="muted">{t('common.loading')}</p> : (
+        <HomeworkHistoryCalendar key={studentId} homeworks={worksheetHomeworks} language={language}
+          onSelectionChange={() => setOpenMenuId(null)} renderHomework={(homework) => {
             const status = resolveHomeworkHistoryStatus(homework);
             const detailUrl = `/teacher/students/${studentId}/homeworks/${homework.id}`;
             const menuOpen = openMenuId === homework.id;
@@ -259,7 +257,7 @@ export function StudentHomeworksPage() {
                     <span className="muted homework-history-pages"> · {homework.worksheetPageCount} {language === 'DE' ? 'Seiten' : 'стр.'}</span>
                   )}
                 </Link>
-                <span className={`pill homework-history-status ${homeworkHistoryClass(status)}`}>
+                <span className={`pill homework-history-status homework-history-status--${status.toLowerCase()}`}>
                   {homeworkHistoryText(status, language)}
                 </span>
                 <div className="homework-history-actions" ref={menuOpen ? menuRef : undefined}>
@@ -287,8 +285,7 @@ export function StudentHomeworksPage() {
                 </div>
               </div>
             );
-          })}
-        </div></div>
+          }} />
       )}
 
       {pendingDelete && (
@@ -320,44 +317,6 @@ export function StudentHomeworksPage() {
       )}
     </div>
   );
-}
-
-function resolveHomeworkHistoryStatus(homework: Homework): HomeworkHistoryStatus {
-  if (homework.submittedLate) return 'LATE';
-  if (homework.submitted) return 'DONE';
-  if (homework.overdue) return 'MISSED';
-  const today = localDateString(new Date());
-  if (homework.startDate === today) return 'TODAY';
-  return 'UPCOMING';
-}
-
-function homeworkHistoryClass(status: HomeworkHistoryStatus) {
-  switch (status) {
-    case 'DONE': return 'pill--learned';
-    case 'LATE': return 'pill--danger';
-    case 'MISSED': return 'pill--danger';
-    case 'TODAY': return 'pill--pending';
-    case 'UPCOMING': return 'pill--active';
-  }
-}
-
-function homeworkHistoryText(status: HomeworkHistoryStatus, language: 'DE' | 'RU') {
-  if (language === 'DE') {
-    switch (status) {
-      case 'DONE': return 'Rechtzeitig abgegeben';
-      case 'LATE': return 'Verspätet abgegeben';
-      case 'MISSED': return 'Überfällig';
-      case 'TODAY': return 'Heute fällig';
-      case 'UPCOMING': return 'Geplant';
-    }
-  }
-  switch (status) {
-    case 'DONE': return 'Сдано вовремя';
-    case 'LATE': return 'Сдано с опозданием';
-    case 'MISSED': return 'Просрочено';
-    case 'TODAY': return 'Нужно сделать сегодня';
-    case 'UPCOMING': return 'Запланировано';
-  }
 }
 
 function addDays(dateString: string, days: number) {
