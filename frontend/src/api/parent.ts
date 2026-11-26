@@ -78,7 +78,7 @@ export interface ParentSkillsDashboard {
   skills: { id: string; title: string; germanTitle: string | null; topicId: string | null; mastery: number | null; updatedAt: string | null }[];
   trend: { at: string; confirmedPercent: number; assessedSkills: number; skillId: string; previous: number; current: number }[];
   lessonProgress: { lessonId: string; lessonTitle: string; endedAt: string; confirmedPercent: number | null; assessedSkills: number; changes: { skillId: string; skillTitle: string; previous: number | null; current: number; changedAt: string; sourceType: string; explanation: string; excerpt: string | null }[] }[];
-  lessons: { id: string; title: string; endedAt: string; reviewState: string; summary: string | null; summarySource: string; evidence: ParentSkillEvidence[]; observations: { topic: string; outcome: 'PRACTICED' | 'INDEPENDENT' | 'WITH_HELP' | 'DIFFICULTY'; explanation: string; excerpt: string }[]; improvements: { topic: string; comparison: 'BETWEEN_LESSONS' | 'WITHIN_LESSON'; before: string; after: string; explanation: string; beforeQuote: string; afterQuote: string }[] }[];
+  lessons: { id: string; title: string; endedAt: string; reviewState: string; summary: string | null; summarySource: string; evidence: ParentSkillEvidence[]; observations: { topic: string; outcome: 'PRACTICED' | 'INDEPENDENT' | 'WITH_HELP' | 'DIFFICULTY'; explanation: string; excerpt: string }[]; improvements: { topic: string; comparison: 'BETWEEN_LESSONS' | 'WITHIN_LESSON'; before: string; after: string; explanation: string; beforeQuote: string; afterQuote: string; skillId: string; masteryBefore: number | null; masteryAfter: number | null; scoreStatus: string }[] }[];
   practice: ParentSkillPractice[];
 }
 
