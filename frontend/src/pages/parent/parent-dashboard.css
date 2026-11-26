@@ -267,3 +267,19 @@
 .parent-progress__observation-tag--with_help { color:#9fc4ff; background:#253348; }
 .parent-progress__observation-tag--difficulty { color:#f2d878; background:#403921; }
 .parent-progress__observation-tag--practiced { color:var(--muted); background:var(--student-raised); }
+
+/* Skill development established by two actual pupil statements, without invented scores. */
+.parent-progress__improvements { display:flex;flex-direction:column;gap:11px; }
+.parent-progress__improvements > h3 { font-size:17px;margin:0; }
+.parent-progress__improvement {background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:17px 19px;}
+.parent-progress__improvement .parent-progress__dated-change-title { align-items:center; }
+.parent-progress__improvement-compare {display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.parent-progress__improvement-compare > div {background:var(--student-raised);padding:13px;border-radius:11px;}
+.parent-progress__improvement-compare > div:last-child {background:#253e34;}
+.parent-progress__improvement-compare small {color:var(--muted);font-size:12px;font-weight:650;}
+.parent-progress__improvement-compare p {margin:6px 0 0;line-height:1.5;overflow-wrap:anywhere;}
+.parent-progress__improvement > p {font-size:14px;line-height:1.6;margin:12px 0;}
+.parent-progress__improvement-proof {border-top:1px solid var(--border);padding-top:10px;color:var(--muted);font-size:13px;}
+.parent-progress__improvement-proof summary {cursor:pointer;color:var(--student-orange);font-weight:650;}
+.parent-progress__improvement-proof p {line-height:1.6;margin:9px 0 2px;overflow-wrap:anywhere;}
+@media(max-width:600px) {.parent-progress__improvement {padding:13px;}.parent-progress__improvement-compare {grid-template-columns:1fr;}}
