@@ -53,6 +53,24 @@ describe('combined student calendar', () => {
     expect(resolveCalendarLessonStatus(rows.find(row => row.archived)!, now)).toBe('COMPLETED');
   });
 
+  it('shows a group lesson recovered from authorized history without duplicating a saved lesson', () => {
+    const fromHistory: StudentLessonHistoryItem = {
+      sourceTeacherId: 'current-teacher', sourceTeacherName: 'Учитель',
+      eventId: 'group-lesson', title: 'Группа 1', groupName: 'Группа 1',
+      startsAt: lesson.startsAt, endsAt: lesson.endsAt,
+      hasWorkbook: false, hasAnswers: false, hasTranscript: false,
+      onlineClassStatus: 'ENDED', actualStartAt: lesson.startsAt,
+    };
+    const recovered = buildStudentCalendarLessons([], [fromHistory], 'pupil');
+    expect(recovered).toHaveLength(1);
+    expect(resolveCalendarLessonStatus(recovered[0], now)).toBe('COMPLETED');
+    const current = groupLesson({
+      eventId: 'group-lesson', title: 'Группа 1', groupName: 'Группа 1',
+      onlineClassStatus: 'ENDED', actualStartAt: lesson.startsAt,
+    });
+    expect(buildStudentCalendarLessons([current], [fromHistory], 'pupil')).toHaveLength(1);
+  });
+
   it('uses Berlin wall-clock times independently of browser timezone and omits invalid timestamps', () => {
     expect(formatCalendarLessonTime('2026-11-26T23:30:00Z', 'RU')).toBe('00:30');
     expect(formatCalendarLessonTime('2026-07-26T22:30:00Z', 'DE')).toBe('00:30');
