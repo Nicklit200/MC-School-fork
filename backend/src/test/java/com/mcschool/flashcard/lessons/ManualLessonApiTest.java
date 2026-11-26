@@ -40,6 +40,7 @@ class ManualLessonApiTest {
     @MockitoBean private ManualLessonService nativeLessons;
     @MockitoBean private GoogleCalendarLessonService calendar;
     @MockitoBean private LessonPreparationService preparation;
+    @MockitoBean private LessonExecutionSummaryService executionSummary;
     @MockitoBean private UserRepository users;
     @MockitoBean private JwtService jwt;
 

@@ -31,13 +31,16 @@ public class GroupLessonController {
     private final GoogleCalendarLessonService lessonService;
     private final LessonPreparationService preparationService;
     private final ManualLessonService manualLessonService;
+    private final LessonExecutionSummaryService executionSummaryService;
 
     public GroupLessonController(GoogleCalendarLessonService lessonService,
                                  LessonPreparationService preparationService,
-                                 ManualLessonService manualLessonService) {
+                                 ManualLessonService manualLessonService,
+                                 LessonExecutionSummaryService executionSummaryService) {
         this.lessonService = lessonService;
         this.preparationService = preparationService;
         this.manualLessonService = manualLessonService;
+        this.executionSummaryService = executionSummaryService;
     }
 
     @PostMapping
@@ -73,7 +76,9 @@ public class GroupLessonController {
     @GetMapping("/groups")
     public List<GroupLessonResponse> listGroupLessons(@AuthenticationPrincipal AuthenticatedUser caller,
                                                      @RequestParam(name = "refresh", defaultValue = "true") boolean refresh) {
-        return refresh ? lessonService.listGroupLessons(caller) : lessonService.listSavedGroupLessons(caller);
+        List<GroupLessonResponse> lessons = refresh
+                ? lessonService.listGroupLessons(caller) : lessonService.listSavedGroupLessons(caller);
+        return executionSummaryService.enrichCurrent(caller.id(), lessons);
     }
 
     @PostMapping("/{eventId}/site-opened")

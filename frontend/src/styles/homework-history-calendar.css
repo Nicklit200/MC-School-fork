@@ -30,13 +30,50 @@
 .homework-calendar__day:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .homework-calendar__day-number { display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; min-width: 24px; height: 24px; border-radius: 50%; color: #334155; font-size: 14px; font-weight: 650; }
 .homework-calendar__day[aria-current='date'] .homework-calendar__day-number { outline: 2px solid #2563eb; outline-offset: 2px; color: #1d4ed8; }
+.homework-calendar__day[data-completed-lesson='true'] { background: #f97316; border-color: #c2410c; color: #431407; opacity: 1; }
+.homework-calendar__day[data-completed-lesson='true'] .homework-calendar__day-number { color: #431407; }
+.homework-calendar__day[data-completed-lesson='true'][aria-current='date'] .homework-calendar__day-number { background: #fff; color: #1d4ed8; }
+.homework-calendar__day[data-completed-lesson='true'][aria-pressed='true'] { box-shadow: inset 0 0 0 2px #431407; border-color: #431407; }
+.homework-calendar__day[data-completed-lesson='true']:hover { border-color: #431407; }
+.homework-calendar__day[data-completed-lesson='true']:focus-visible { outline-color: #431407; }
+.homework-calendar__day[data-completed-lesson='true'] .homework-calendar__lesson-tile[data-lesson-status='COMPLETED'] { border-color: #9a3412; }
 .homework-calendar__marks { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-.homework-calendar__mark { display: flex; align-items: flex-start; gap: 4px; min-width: 0; color: var(--status-color); font-size: 11px; line-height: 1.4; }
+.homework-calendar__mark { display: flex; align-items: flex-start; gap: 4px; min-width: 0; padding: 3px 5px; border: 1px solid var(--status-line); border-radius: 6px; background: var(--status-bg); color: var(--status-color); font-size: 11px; line-height: 1.4; }
 .homework-calendar__status-text { overflow-wrap: anywhere; }
 .homework-calendar__count { margin-left: auto; font-weight: 700; }
 .homework-calendar__details { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
 .homework-calendar__details-title { margin: 0 0 8px; color: var(--text); font-size: 16px; font-weight: 650; }
 .homework-calendar__empty { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+.homework-calendar [data-lesson-status='COMPLETED'] { --lesson-color: #431407; --lesson-bg: #f97316; --lesson-line: #ea580c; }
+.homework-calendar [data-lesson-status='UPCOMING'] { --lesson-color: #9a3412; --lesson-bg: #fff; --lesson-line: #ea580c; }
+.homework-calendar [data-lesson-status='LIVE'] { --lesson-color: #9a3412; --lesson-bg: #ffedd5; --lesson-line: #c2410c; }
+.homework-calendar [data-lesson-status='PAST'],
+.homework-calendar [data-lesson-status='CANCELLED'] { --lesson-color: #64748b; --lesson-bg: #f8fafc; --lesson-line: #cbd5e1; }
+.homework-calendar__lesson-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 0 0 18px; color: #475569; font-size: 12px; line-height: 1.4; }
+.homework-calendar__lesson-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.homework-calendar__lesson-swatch { flex: 0 0 12px; width: 12px; height: 12px; border: 1px solid var(--lesson-line); border-radius: 2px; background: var(--lesson-bg); }
+.homework-calendar__lesson-swatch[data-lesson-status='CANCELLED'] { background: linear-gradient(45deg, #f8fafc 44%, #64748b 45%, #64748b 55%, #f8fafc 56%); }
+.homework-calendar__notice { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: #f1f5f9; color: #475569; font-size: 13px; }
+.homework-calendar__notice--error { background: #fff7ed; color: #9a3412; }
+.homework-calendar__lesson-tiles { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+.homework-calendar__lesson-tile { display: inline-flex; flex: 0 1 46px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 46px; max-width: 100%; aspect-ratio: 1; padding: 3px; border: 1px solid var(--lesson-line); border-radius: 4px; background: var(--lesson-bg); color: var(--lesson-color); font-variant-numeric: tabular-nums; line-height: 1; }
+.homework-calendar__lesson-tile time { font-size: 10px; font-weight: 750; white-space: nowrap; }
+.homework-calendar__lesson-symbol { font-size: 12px; font-weight: 750; }
+.homework-calendar__lesson-tile[data-lesson-status='LIVE'] { box-shadow: inset 0 0 0 1px var(--lesson-line); }
+.homework-calendar__lesson-tile[data-lesson-status='LIVE'] .homework-calendar__lesson-symbol { font-size: 9px; }
+.homework-calendar__lesson-tile[data-lesson-status='PAST'] { border-style: dashed; }
+.homework-calendar__lesson-tile[data-lesson-status='CANCELLED'] time { text-decoration: line-through; }
+.homework-calendar__lesson-details { display: grid; gap: 8px; margin: 16px 0; }
+.homework-calendar__section-title { margin: 6px 0 2px; color: #475569; font-size: 13px; font-weight: 650; }
+.homework-calendar__lesson-card { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 12px; min-width: 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; color: #1f2937; text-decoration: none; }
+.homework-calendar__lesson-card:hover { border-color: var(--lesson-line); }
+.homework-calendar__lesson-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.homework-calendar__lesson-card > .homework-calendar__lesson-tile { flex-shrink: 0; }
+.homework-calendar__lesson-content { display: flex; flex: 1 1 120px; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.homework-calendar__lesson-content > strong { font-size: 14px; }
+.homework-calendar__lesson-content > span { color: #64748b; font-size: 12px; }
+.homework-calendar__lesson-state { color: var(--lesson-color); font-size: 12px; font-weight: 600; }
+.homework-calendar__lesson-card[data-lesson-status='CANCELLED'] .homework-calendar__lesson-content > strong { text-decoration: line-through; }
 
 @media (max-width: 760px) {
   .homework-calendar { padding: 16px; }
@@ -47,6 +84,7 @@
   .homework-calendar__marks { flex-direction: row; flex-wrap: wrap; gap: 4px 6px; }
   .homework-calendar__mark { align-items: center; gap: 3px; }
   .homework-calendar__count { margin-left: 0; }
+  .homework-calendar__grid .homework-calendar__lesson-tile { flex-basis: 36px; width: 36px; padding: 2px; }
 }
 
 @media (max-width: 480px) {
@@ -65,7 +103,13 @@
   .homework-calendar__weekdays { font-size: 11px; }
   .homework-calendar__day { min-height: 75px; gap: 7px; padding: 6px 4px; border-radius: 8px; }
   .homework-calendar__day-number { min-width: 20px; height: 20px; font-size: 12px; }
-  .homework-calendar__mark { font-size: 10px; }
+  .homework-calendar__mark { gap: 2px; padding: 2px; font-size: 10px; }
   .homework-calendar__details { margin-top: 18px; padding-top: 16px; }
   .homework-calendar__details-title { font-size: 14px; }
+  .homework-calendar__lesson-legend { gap: 6px 12px; font-size: 11px; }
+  .homework-calendar__grid .homework-calendar__lesson-tile { flex-basis: 28px; width: 28px; padding: 1px; gap: 1px; border-radius: 3px; }
+  .homework-calendar__grid .homework-calendar__lesson-tile time { font-size: 8px; }
+  .homework-calendar__grid .homework-calendar__lesson-symbol { display: none; }
+  .homework-calendar__grid .homework-calendar__lesson-tile[data-lesson-status='LIVE'] .homework-calendar__lesson-symbol { display: block; font-size: 7px; }
+  .homework-calendar__lesson-card { padding: 10px; gap: 8px; }
 }

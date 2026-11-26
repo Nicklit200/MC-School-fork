@@ -40,6 +40,7 @@ class ManualLessonScheduleTest {
         context.getBeanFactory().registerSingleton("calendar", lessons);
         context.getBeanFactory().registerSingleton("preparations", mock(LessonPreparationService.class));
         context.getBeanFactory().registerSingleton("nativeLessons", mock(ManualLessonService.class));
+        context.getBeanFactory().registerSingleton("executionSummary", mock(LessonExecutionSummaryService.class));
         context.refresh();
         controller = context.getBean(GroupLessonController.class);
         mvc = MockMvcBuilders.standaloneSetup(controller)

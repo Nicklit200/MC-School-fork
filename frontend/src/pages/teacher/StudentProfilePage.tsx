@@ -96,7 +96,7 @@ export function StudentProfilePage() {
 
   const pdfs = homeworks.filter(h => h.hasWorksheet).sort((a, b) => b.startDate.localeCompare(a.startDate));
   const next = lessons.filter(e => new Date(e.startsAt).getTime() > Date.now()).sort((a,b) => a.startsAt.localeCompare(b.startsAt))[0];
-  const tabs = [['', tr('Обзор', 'Übersicht')], ['lessons', tr('Уроки', 'Unterricht')], ['homeworks', tr('Домашние задания', 'Hausaufgaben')], ['cards', tr('Карточки', 'Karten')], ['month-plan', tr('План на месяц', 'Monatsplan')], ['drive', 'Google Drive']];
+  const tabs = [['', tr('Обзор', 'Übersicht')], ['homeworks', tr('Уроки и домашка', 'Unterricht und Hausaufgaben')], ['cards', tr('Карточки', 'Karten')], ['month-plan', tr('План на месяц', 'Monatsplan')], ['drive', 'Google Drive']];
   const date = (value: string) => new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' }).format(new Date(value.length === 10 ? `${value}T12:00:00` : value));
   return <div className="group-detail-dashboard">
     <Link className="group-detail-back" to="/students">← {tr('К ученикам', 'Schüler')}</Link>
@@ -104,7 +104,7 @@ export function StudentProfilePage() {
       <button className="btn" type="button" onClick={() => void copyParentProgressLink()} disabled={!student || sharingParentLink}>
         {sharingParentLink ? tr('Создаём ссылку…', 'Link wird erstellt…') : tr('🔗 Скопировать ссылку для родителя', '🔗 Eltern-Link kopieren')}
       </button>
-      <Link to={`${base}/lessons`} className="btn btn--secondary">{tr('История уроков', 'Unterrichtsverlauf')}</Link>
+      <Link to={`${base}/homeworks`} className="btn btn--secondary">{tr('Календарь занятий', 'Unterrichtskalender')}</Link>
     </div></div>
     {parentShareError && <div className="banner banner--error" role="alert" style={{ marginBottom: 12 }}>{parentShareError}</div>}
     {parentShareStatus && <div className="banner banner--success" role="status" style={{ marginBottom: 12 }}>{parentShareStatus}</div>}
@@ -130,7 +130,7 @@ export function StudentProfilePage() {
     {error && <div className="banner banner--error">{error} <button className="btn btn--secondary" onClick={() => setRevision(n => n + 1)}>{tr('Повторить', 'Erneut versuchen')}</button></div>}
     <div className="group-summary-grid">
       <button className="group-summary-card" onClick={() => navigate(`${base}/cards`)}><div className="group-summary-card__icon group-summary-card__icon--orange">▤</div><div><strong>{loading || error ? '—' : summary?.total ?? 0}</strong><span>{tr('карточек', 'Karten')}</span></div><small>{tr('Перейти к карточкам', 'Karten öffnen')} →</small></button>
-      <button className="group-summary-card" onClick={() => navigate(`${base}/homeworks`)}><div className="group-summary-card__icon group-summary-card__icon--yellow">▤</div><div><strong>{loading || error ? '—' : pdfs.filter(h => !h.submitted).length}</strong><span>{tr('ДЗ ожидают сдачи', 'offene Hausaufgaben')}</span></div><small>{tr('Перейти к домашним заданиям', 'Hausaufgaben öffnen')} →</small></button>
+      <button className="group-summary-card" onClick={() => navigate(`${base}/homeworks`)}><div className="group-summary-card__icon group-summary-card__icon--yellow">▤</div><div><strong>{loading || error ? '—' : pdfs.filter(h => !h.submitted).length}</strong><span>{tr('ДЗ ожидают сдачи', 'offene Hausaufgaben')}</span></div><small>{tr('Открыть календарь', 'Kalender öffnen')} →</small></button>
       <div className="group-summary-card group-summary-card--lesson"><div className="group-summary-card__icon group-summary-card__icon--green">▣</div><div><span>{tr('Следующий урок', 'Nächster Unterricht')}</span><strong className="group-summary-card__lesson">{loading || error || !next ? '—' : date(next.startsAt)}</strong></div><small>{next && !loading && !error ? <Link to={`/teacher/lessons/${encodeURIComponent(next.eventId)}`}>{next.title} →</Link> : loading ? tr('Загрузка…', 'Laden…') : error ? '—' : tr('Ближайших уроков нет', 'Kein Unterricht geplant')}</small></div>
     </div>
     {timeReport && <div className="panel row" style={{gap:24,justifyContent:'space-around',flexWrap:'wrap',marginBottom:16}}>

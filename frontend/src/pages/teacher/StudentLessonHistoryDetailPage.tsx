@@ -10,7 +10,7 @@ type CompletedDocumentLink = StudentLessonHistoryDocument & { url: string };
 
 export function StudentLessonHistoryDetailPage() {
   const { studentId = '', sourceTeacherId = '', eventId = '' } = useParams();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [detail, setDetail] = useState<StudentLessonHistoryDetail | null>(null);
   const [files, setFiles] = useState<Partial<Record<DocumentKind, string>>>({});
   const [completedFiles, setCompletedFiles] = useState<CompletedDocumentLink[]>([]);
@@ -81,7 +81,7 @@ export function StudentLessonHistoryDetailPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <p><Link to={`/students/${encodeURIComponent(studentId)}/lessons`} className="muted">← Назад к истории уроков</Link></p>
+      <p><Link to={`/students/${encodeURIComponent(studentId)}/homeworks`} className="muted">← {language === 'DE' ? 'Zurück zu Unterricht und Hausaufgaben' : 'Назад к урокам и домашке'}</Link></p>
       {loading && <p className="muted">Загружаем историю урока…</p>}
       {error && <div className="banner banner--error">{error}</div>}
       {detail && (

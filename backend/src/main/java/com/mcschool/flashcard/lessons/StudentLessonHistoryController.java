@@ -24,16 +24,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class StudentLessonHistoryController {
 
     private final StudentLessonHistoryService service;
+    private final LessonExecutionSummaryService executionSummaryService;
 
-    public StudentLessonHistoryController(StudentLessonHistoryService service) {
+    public StudentLessonHistoryController(StudentLessonHistoryService service,
+                                         LessonExecutionSummaryService executionSummaryService) {
         this.service = service;
+        this.executionSummaryService = executionSummaryService;
     }
 
     @GetMapping
     public List<StudentLessonHistoryItem> list(
             @AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID studentId) {
-        return service.list(teacher, studentId);
+        return executionSummaryService.enrichHistory(studentId, service.list(teacher, studentId));
     }
 
     @GetMapping("/{sourceTeacherId}/{eventId}")

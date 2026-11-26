@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import type { Homework } from '../api/types';
 import {
   getSchoolDateString,
@@ -6,6 +7,12 @@ import {
   resolveHomeworkHistoryStatus,
   type HomeworkHistoryStatus,
 } from '../lib/homeworkHistory';
+import {
+  calendarLessonStatusText,
+  formatCalendarLessonTime,
+  resolveCalendarLessonStatus,
+  type StudentCalendarLesson,
+} from '../lib/studentCalendar';
 import '../styles/homework-history-calendar.css';
 
 type Props = {
@@ -13,9 +20,15 @@ type Props = {
   language: 'DE' | 'RU';
   renderHomework: (homework: Homework) => ReactNode;
   onSelectionChange?: () => void;
+  lessons?: StudentCalendarLesson[];
+  lessonsLoading?: boolean;
+  lessonsError?: string | null;
 };
 
 type StatusCounts = Partial<Record<HomeworkHistoryStatus, number>>;
+type LessonStatus = ReturnType<typeof resolveCalendarLessonStatus>;
+const lessonStatusOrder: LessonStatus[] = ['COMPLETED', 'UPCOMING', 'LIVE', 'PAST', 'CANCELLED'];
+const lessonSymbols: Record<LessonStatus, string> = { COMPLETED: '✓', UPCOMING: '◷', LIVE: '●', PAST: '?', CANCELLED: '×' };
 const statusOrder: HomeworkHistoryStatus[] = ['MISSED', 'LATE', 'TODAY', 'UPCOMING', 'DONE'];
 const summaryStatuses: HomeworkHistoryStatus[] = ['DONE', 'MISSED', 'LATE'];
 const symbols: Record<HomeworkHistoryStatus, string> = {
@@ -25,7 +38,7 @@ const dateFromKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 const dateKey = (date: Date) => date.toISOString().slice(0, 10);
 const monthKey = (key: string) => `${key.slice(0, 7)}-01`;
 
-export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, onSelectionChange }: Props) {
+export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, onSelectionChange, lessons = [], lessonsLoading = false, lessonsError = null }: Props) {
   const [now, setNow] = useState(() => new Date());
   const today = getSchoolDateString(now);
   const [month, setMonth] = useState(() => monthKey(today));
@@ -34,8 +47,8 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
   const detailsId = useId();
   const locale = language === 'DE' ? 'de-DE' : 'ru-RU';
   const text = language === 'DE'
-    ? { calendar: 'Hausaufgaben-Kalender', previous: 'Vorheriger Monat', next: 'Nächster Monat', today: 'Heute', empty: 'Keine Hausaufgaben an diesem Tag.', details: 'Hausaufgaben am', totals: 'Abgaben in diesem Monat', none: 'Keine Hausaufgaben' }
-    : { calendar: 'Календарь домашки', previous: 'Предыдущий месяц', next: 'Следующий месяц', today: 'Сегодня', empty: 'На этот день домашнего задания нет.', details: 'Задания на', totals: 'Сдача домашки за месяц', none: 'Нет домашних заданий' };
+    ? { calendar: 'Unterricht und Hausaufgaben', previous: 'Vorheriger Monat', next: 'Nächster Monat', today: 'Heute', empty: 'Kein Unterricht und keine Hausaufgaben an diesem Tag.', emptyHomework: 'Keine Hausaufgaben an diesem Tag.', details: 'Tagesübersicht am', totals: 'Abgaben in diesem Monat', none: 'Kein Unterricht und keine Hausaufgaben', lessons: 'Unterricht', homework: 'Hausaufgaben', lesson: 'Unterricht', lessonTotals: 'Unterricht in diesem Monat', loading: 'Unterricht wird geladen…', live: 'Live' }
+    : { calendar: 'Уроки и домашка', previous: 'Предыдущий месяц', next: 'Следующий месяц', today: 'Сегодня', empty: 'На этот день уроков и домашнего задания нет.', emptyHomework: 'На этот день домашнего задания нет.', details: 'План на', totals: 'Сдача домашки за месяц', none: 'Нет уроков и домашних заданий', lessons: 'Уроки', homework: 'Домашнее задание', lesson: 'Урок', lessonTotals: 'Уроки за месяц', loading: 'Загружаем уроки…', live: 'Идёт' };
 
   useEffect(() => {
     const refresh = () => setNow(new Date());
@@ -63,6 +76,20 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
     return { byDay, countsByDay };
   }, [homeworks, now]);
 
+  const lessonsByDay = useMemo(() => {
+    const map = new Map<string, StudentCalendarLesson[]>();
+    for (const lesson of lessons) {
+      const start = new Date(lesson.startsAt);
+      if (!Number.isFinite(start.getTime())) continue;
+      const key = getSchoolDateString(start);
+      const bucket = map.get(key) ?? [];
+      bucket.push(lesson);
+      map.set(key, bucket);
+    }
+    for (const bucket of map.values()) bucket.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+    return map;
+  }, [lessons]);
+
   const days = useMemo(() => {
     const first = dateFromKey(month);
     const offset = (first.getUTCDay() + 6) % 7;
@@ -80,11 +107,20 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
     if (!key.startsWith(month.slice(0, 7))) continue;
     for (const status of statusOrder) monthCounts[status] = (monthCounts[status] ?? 0) + (counts[status] ?? 0);
   }
+  const monthLessonCounts: Partial<Record<LessonStatus, number>> = {};
+  for (const [key, dayLessons] of lessonsByDay) {
+    if (!key.startsWith(month.slice(0, 7))) continue;
+    for (const lesson of dayLessons) {
+      const status = resolveCalendarLessonStatus(lesson, now);
+      monthLessonCounts[status] = (monthLessonCounts[status] ?? 0) + 1;
+    }
+  }
   const monthTitle = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(dateFromKey(month));
   const fullDate = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   const accessibleDate = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' });
   const selectedHomeworks = byDay.get(selectedDay) ?? [];
+  const selectedLessons = lessonsByDay.get(selectedDay) ?? [];
 
   function selectDay(key: string) {
     setSelectedDay(key);
@@ -129,6 +165,18 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
         ))}
       </div>
 
+      <div className="homework-calendar__lesson-legend" aria-label={text.lessonTotals}>
+        <strong>{text.lessons}</strong>
+        {lessonStatusOrder.filter(status => status === 'COMPLETED' || status === 'UPCOMING' || monthLessonCounts[status]).map(status => (
+          <span key={status}>
+            <span className="homework-calendar__lesson-swatch" data-lesson-status={status} aria-hidden="true" />
+            {calendarLessonStatusText(status, language)}{!lessonsLoading && !lessonsError && `: ${monthLessonCounts[status] ?? 0}`}
+          </span>
+        ))}
+      </div>
+      {lessonsLoading && <p className="homework-calendar__notice" role="status">{text.loading}</p>}
+      {lessonsError && <p className="homework-calendar__notice homework-calendar__notice--error" role="alert">{lessonsError}</p>}
+
       <div className="homework-calendar__weekdays" aria-hidden="true">
         {Array.from({ length: 7 }, (_, index) => <span key={index}>{weekday.format(new Date(Date.UTC(2024, 0, 1 + index)))}</span>)}
       </div>
@@ -137,16 +185,30 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
           const key = dateKey(date);
           const counts = countsByDay.get(key) ?? {};
           const present = statusOrder.filter(status => counts[status]);
+          const dayLessons = lessonsByDay.get(key) ?? [];
+          const hasCompletedLesson = dayLessons.some(lesson => resolveCalendarLessonStatus(lesson, now) === 'COMPLETED');
           const outside = !key.startsWith(month.slice(0, 7));
           const labels = present.map(status => `${homeworkHistoryText(status, language)}: ${counts[status]}`);
-          const label = [accessibleDate.format(date), key === today ? text.today : '', labels.length ? labels.join(', ') : text.none].filter(Boolean).join(', ');
+          labels.push(...dayLessons.map(lesson => `${text.lesson} ${formatCalendarLessonTime(lesson.startsAt, language)} - ${formatCalendarLessonTime(lesson.endsAt, language)}, ${calendarLessonStatusText(resolveCalendarLessonStatus(lesson, now), language)}`));
+          const emptyLabel = lessonsLoading || lessonsError ? text.emptyHomework : text.none;
+          const label = [accessibleDate.format(date), key === today ? text.today : '', labels.length ? labels.join(', ') : emptyLabel].filter(Boolean).join(', ');
           return (
             <button key={key} type="button" className="homework-calendar__day"
               data-status={present[0] ?? 'EMPTY'} data-outside={outside || undefined}
+              data-completed-lesson={hasCompletedLesson || undefined}
               aria-label={label} aria-pressed={selectedDay === key}
               aria-current={key === today ? 'date' : undefined} aria-controls={detailsId}
               onClick={() => selectDay(key)}>
               <span className="homework-calendar__day-number">{date.getUTCDate()}</span>
+              {dayLessons.length > 0 && <span className="homework-calendar__lesson-tiles" aria-hidden="true">
+                {dayLessons.map(lesson => {
+                  const status = resolveCalendarLessonStatus(lesson, now);
+                  return <span key={lesson.key} className="homework-calendar__lesson-tile" data-lesson-status={status}>
+                    <span className="homework-calendar__lesson-symbol">{status === 'LIVE' ? text.live : lessonSymbols[status]}</span>
+                    <time dateTime={lesson.startsAt}>{formatCalendarLessonTime(lesson.startsAt, language)}</time>
+                  </span>;
+                })}
+              </span>}
               <span className="homework-calendar__marks" aria-hidden="true">
                 {present.map(status => (
                   <span key={status} className="homework-calendar__mark" data-status={status}>
@@ -163,9 +225,29 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
 
       <section className="homework-calendar__details" id={detailsId} aria-label={`${text.details} ${fullDate.format(dateFromKey(selectedDay))}`}>
         <h4 className="homework-calendar__details-title" aria-live="polite">{text.details} {fullDate.format(dateFromKey(selectedDay))}</h4>
+        {selectedLessons.length > 0 && <div className="homework-calendar__lesson-details">
+          <h5 className="homework-calendar__section-title">{text.lessons}</h5>
+          {selectedLessons.map(lesson => {
+            const status = resolveCalendarLessonStatus(lesson, now);
+            return <Link key={lesson.key} to={lesson.href} className="homework-calendar__lesson-card" data-lesson-status={status}>
+              <span className="homework-calendar__lesson-tile" data-lesson-status={status} aria-hidden="true">
+                <span className="homework-calendar__lesson-symbol">{status === 'LIVE' ? text.live : lessonSymbols[status]}</span>
+                <time dateTime={lesson.startsAt}>{formatCalendarLessonTime(lesson.startsAt, language)}</time>
+              </span>
+              <span className="homework-calendar__lesson-content">
+                <strong>{lesson.title || text.lesson}</strong>
+                <span>{formatCalendarLessonTime(lesson.startsAt, language)} - {formatCalendarLessonTime(lesson.endsAt, language)} · {[lesson.groupName, lesson.sourceTeacherName].filter(Boolean).join(' · ') || text.lesson}</span>
+              </span>
+              <span className="homework-calendar__lesson-state">{calendarLessonStatusText(status, language)}</span>
+            </Link>;
+          })}
+        </div>}
         {selectedHomeworks.length ? (
-          <div className="history-list">{selectedHomeworks.map(homework => <Fragment key={homework.id}>{renderHomework(homework)}</Fragment>)}</div>
-        ) : <p className="homework-calendar__empty">{text.empty}</p>}
+          <div className="history-list">
+            <h5 className="homework-calendar__section-title">{text.homework}</h5>
+            {selectedHomeworks.map(homework => <Fragment key={homework.id}>{renderHomework(homework)}</Fragment>)}
+          </div>
+        ) : <p className="homework-calendar__empty">{selectedLessons.length || lessonsLoading || lessonsError ? text.emptyHomework : text.empty}</p>}
       </section>
     </section>
   );
