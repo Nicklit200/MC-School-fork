@@ -121,6 +121,30 @@ function SelectedLessonSkills({ data, language, lessonId }: {
         <h3>{point.lessonTitle}</h3></div>
       <span className="parent-progress__muted">{updates.length} {say(language,'изменений','Änderungen')}</span>
     </div>
+    {(lesson.improvements ?? []).length > 0 && <section className="parent-progress__improvements">
+      <h3>{say(language, 'Что действительно улучшилось', 'Was sich nachweislich verbessert hat')}</h3>
+      {lesson.improvements.map((item,index) => <article key={`${item.topic}-${index}`}
+          className="parent-progress__improvement">
+        <div className="parent-progress__dated-change-title">
+          <strong>{item.topic}</strong>
+          <span className="parent-progress__observation-tag parent-progress__observation-tag--independent">
+            {item.comparison === 'BETWEEN_LESSONS'
+              ? say(language, 'С прошлого урока', 'Seit der letzten Stunde')
+              : say(language, 'В ходе урока', 'Während der Stunde')}
+          </span>
+        </div>
+        <div className="parent-progress__improvement-compare">
+          <div><small>{say(language, 'Раньше', 'Vorher')}</small><p>{item.before}</p></div>
+          <div><small>{say(language, 'Теперь', 'Jetzt')}</small><p>{item.after}</p></div>
+        </div>
+        <p>{item.explanation}</p>
+        <details className="parent-progress__improvement-proof">
+          <summary>{say(language, 'Показать подтверждение из транскрипции', 'Belege aus dem Transkript anzeigen')}</summary>
+          <p><strong>{say(language, 'Раньше:', 'Vorher:')}</strong> {item.beforeQuote}</p>
+          <p><strong>{say(language, 'Теперь:', 'Jetzt:')}</strong> {item.afterQuote}</p>
+        </details>
+      </article>)}
+    </section>}
     {grouped.length || ungrouped.length
       ? <div className="parent-progress__dated-topic-list">
         {grouped.map(group => <section className="parent-progress__dated-topic" key={group.topic.id}>
