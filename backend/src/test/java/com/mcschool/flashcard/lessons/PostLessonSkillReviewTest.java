@@ -118,4 +118,20 @@ class PostLessonSkillReviewTest {
                 List.of(proposal("topic-fractions",99,4),proposal("skill-fractions",99,4))),
                 List.of(topic,archived))).isEmpty();
     }
+
+    @Test
+    void workerPersistsOnlyBoundedFailureIdentifiers() {
+        assertThat(PostLessonSkillReviewService.safeFailureCode(
+                new IllegalStateException("SKILL_REVIEW_AI_OUTPUT_LIMIT")))
+                .isEqualTo("SKILL_REVIEW_AI_OUTPUT_LIMIT");
+        assertThat(PostLessonSkillReviewService.safeFailureCode(
+                new IllegalStateException("SKILL_REVIEW_AI_HTTP_429")))
+                .isEqualTo("SKILL_REVIEW_AI_HTTP_429");
+        assertThat(PostLessonSkillReviewService.safeFailureCode(
+                new IllegalStateException("SKILL_REVIEW_AI_HTTP_401")))
+                .isEqualTo("SKILL_REVIEW_AI_HTTP_401");
+        assertThat(PostLessonSkillReviewService.safeFailureCode(
+                new IllegalStateException("Secret transcript data")))
+                .isEqualTo("ANALYSIS_OR_STORAGE_FAILED");
+    }
 }
