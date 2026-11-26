@@ -444,6 +444,70 @@ async function loadPublicProgress(incoming){
     $("empty").replaceChildren(element("strong","","Прогресс недоступен"),element("p","",error.message||"Попросите у Mindcrafti новую ссылку."));
   }
 }
+/**
+ * Embedded parent tree uses the SAME board.js layout as the teacher's tree.
+ * Its payload comes exclusively from the authenticated parent's child API,
+ * and the embedded frame never receives a login token or edit privileges.
+ */
+function loadParentTree(incoming) {
+  if(config)return;
+  const result=incoming?.progress;
+  if(!result || typeof result.boardId!=="string" ||
+      !result.board || !Array.isArray(result.board.nodes) ||
+      !Array.isArray(result.board.edges) || !result.student ||
+      !result.mastery || typeof result.mastery!=="object") {
+    notice("Не удалось открыть дерево навыков ребёнка.",true);
+    return;
+  }
+  try {
+    validateBoard(result.board);
+    config={apiBase:"",token:null,canEdit:false,userId:"parent",publicMode:true,parentEmbedded:true};
+    document.body.classList.add("public-progress","parent-embedded");
+    boardId=result.boardId;
+    snapshot={id:result.boardId,revision:result.boardRevision,
+      updatedAt:result.updatedAt||result.boardUpdatedAt,data:result.board};
+    data=clone(result.board);
+    const child={id:"parent",fullName:result.student.fullName||"Ученик",
+      grade:result.student.grade??data.grade,schoolType:result.student.schoolType||null};
+    students=[child];groups=[];selectedStudentId="parent";selectedGroupId="";
+    masteryByStudent={parent:result.mastery};
+    masteryHistoryByStudent={parent:Array.isArray(result.history)
+      ?result.history.map((entry,index)=>({...entry,id:index+1,studentId:"parent",
+        studentName:child.fullName,updatedBy:"parent"})):[]};
+    skillEvidenceByStudent={};individualMonthsByStudent={};
+    publicOverallPercent=Number.isFinite(result.overallPercent)?result.overallPercent:null;
+    trackFilterState=null;scope="overview";showArchived=false;
+    viewMode="hierarchy";selection=null;
+    $("board-grade").textContent=`${child.grade||data.grade} класс`;
+    const badge=document.querySelector(".draft-badge");
+    if(badge)badge.textContent="Просмотр родителя";
+    $("parent-share").hidden=true;$("parent-share-revoke").hidden=true;
+    $("save").hidden=true;$("school-calendar-toggle").hidden=true;
+    $("source-note").replaceChildren(
+      element("strong","",child.fullName),
+      document.createElement("br"),
+      document.createTextNode("Навыки и проценты связаны с графиком обучения. Изменения показываются только в истории оценок.")
+    );
+    renderStudentFilter();$("student-filter").disabled=true;
+    $("empty").hidden=true;render();showHelp();fit();status();
+  }catch(error) {
+    notice(error.message||"Ошибка загрузки дерева.",true);
+    $("empty").hidden=false;
+    $("empty").replaceChildren(element("strong","","Дерево недоступно"),
+      element("p","",error.message||"Обновите карту навыков."));
+  }
+}
+window.addEventListener("message",event=>{
+  if(event.origin!==location.origin||event.source!==window.parent||window.parent===window)return;
+  if(event.data?.type==="mindcrafti-skills-parent-config"&&!config)
+    loadParentTree(event.data);
+  else if(event.data?.type==="mindcrafti-skills-parent-focus-node"&&config?.parentEmbedded) {
+    const skillId=event.data.skillId;
+    if(typeof skillId!=="string"||node(skillId)?.kind!=="skill"||node(skillId)?.archived)return;
+    if(focusNode(skillId))showNode(skillId);
+  }
+});
+
 $("parent-share")?.addEventListener("click",()=>void copyParentShare());
 $("parent-share-revoke")?.addEventListener("click",()=>void revokeParentShare());
 window.addEventListener("message",event=>{
@@ -820,6 +884,9 @@ function field(form,label,name,value,kind="input",max=4000){
 }
 function showNode(id){
   const n=node(id);if(!n)return;selection={type:"node",id};
+  if(config?.parentEmbedded&&n.kind==="skill")
+    window.parent.postMessage({type:"mindcrafti-skills-parent-selected-skill",skillId:n.id},
+      location.origin);
   $("inspector").classList.remove("closed");$("inspector-heading").textContent=n.archived?"Карточка в архиве":"Свойства карточки";
   const chosen=selectedStudents(),masteryBox=element("div","mastery-box"),masteryTitle=element("div","mastery-title",`ОСВОЕНИЕ · ${selectedTargetLabel()}`);
   masteryBox.append(masteryTitle);
