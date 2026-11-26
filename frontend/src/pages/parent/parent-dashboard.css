@@ -21,9 +21,12 @@
 .parent-dashboard__section-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
 .parent-dashboard__section-heading h2 { margin:0; }
 .parent-dashboard__section-heading p { margin:5px 0 0; }
-.parent-dashboard__list { list-style:none; margin:16px 0 0; padding:0; }
-.student-shell .parent-dashboard__homework { display:grid; grid-template-columns:42px minmax(0,1fr) auto; align-items:center; gap:16px; margin:0; padding:20px 0; border-top:1px solid var(--border); border-bottom:0; }
+.parent-dashboard__history { min-width:0; container-type:inline-size; }
+.parent-dashboard__history > .parent-dashboard__section-heading { margin-bottom:16px; }
+.student-shell .parent-dashboard__homework { display:grid; grid-template-columns:42px minmax(0,1fr) auto; align-items:center; gap:16px; margin:0; padding:20px 0; border:0; border-top:1px solid var(--border); border-radius:0; background:transparent; }
+.student-shell .parent-dashboard__homework:first-child { border-top:0; }
 .student-shell .parent-dashboard__homework:last-child { padding-bottom:0; }
+.student-shell .parent-dashboard__homework-status { max-width:200px; background:var(--status-bg); color:var(--status-color); }
 .parent-dashboard__file-icon { display:grid; place-items:center; width:42px; height:46px; border-radius:12px; background:var(--student-selected); color:var(--student-orange); }
 .parent-dashboard__homework-body { min-width:0; }
 .parent-dashboard__homework-title { margin:2px 0 5px; overflow-wrap:anywhere; }
@@ -33,6 +36,38 @@
 .parent-dashboard__skills { max-width:760px; }
 .parent-dashboard__skills h2 { margin:20px 0 10px; }
 .parent-dashboard__skills p { max-width:620px; margin:0 0 24px; }
+
+/* Keep the teacher calendar's structure and status meanings in the student palette. */
+.student-shell--parent .homework-calendar { padding:24px; margin-bottom:0; }
+.student-shell--parent .homework-calendar [data-status='DONE'],
+.student-shell--parent .homework-calendar [data-status='CARDS_DONE'] { --status-color:#93d6bd; --status-bg:#253e34; --status-line:#3d6252; }
+.student-shell--parent .homework-calendar [data-status='MISSED'] { --status-color:#f5a5a5; --status-bg:#432b30; --status-line:#71434d; }
+.student-shell--parent .homework-calendar [data-status='LATE'] { --status-color:#f2d878; --status-bg:#403921; --status-line:#706237; }
+.student-shell--parent .homework-calendar [data-status='TODAY'] { --status-color:#9fc4ff; --status-bg:#253348; --status-line:#45628d; }
+.student-shell--parent .homework-calendar [data-status='UPCOMING'],
+.student-shell--parent .homework-calendar [data-status='EMPTY'] { --status-color:var(--muted); --status-bg:var(--student-raised); --status-line:var(--border); }
+.student-shell--parent .homework-calendar [data-status='CARDS_OPEN'] { --status-color:var(--student-orange); --status-bg:var(--student-selected); --status-line:#805133; }
+.student-shell--parent .homework-calendar__navigation button { background:var(--bg); color:var(--text); }
+.student-shell--parent .homework-calendar__navigation button:hover { background:var(--student-raised); }
+.student-shell--parent .homework-calendar__day[data-status='EMPTY'] { background:var(--surface); }
+.student-shell--parent .homework-calendar__day-number { color:var(--text); }
+.student-shell--parent .homework-calendar__day[aria-current='date'] .homework-calendar__day-number { color:#9fc4ff; outline-color:#9fc4ff; }
+
+@container (max-width:680px) {
+  .student-shell--parent .homework-calendar { padding:16px; }
+  .student-shell--parent .homework-calendar__status-text { display:none; }
+  .student-shell--parent .homework-calendar__day { min-height:86px; padding:8px; }
+  .student-shell--parent .homework-calendar__marks { flex-direction:row; flex-wrap:wrap; gap:4px 6px; }
+  .student-shell--parent .homework-calendar__mark { align-items:center; gap:3px; }
+  .student-shell--parent .homework-calendar__count { margin-left:0; }
+}
+@container (max-width:420px) {
+  .student-shell--parent .homework-calendar { padding:12px; }
+  .student-shell--parent .homework-calendar__day { min-height:75px; padding:6px 4px; }
+  .student-shell--parent .homework-calendar__summary-item { flex-wrap:wrap; gap:4px; padding:8px; font-size:11px; }
+  .student-shell--parent .homework-calendar__summary-item > span:nth-child(2) { order:2; width:100%; }
+  .student-shell--parent .homework-calendar__summary-item > strong { font-size:18px; }
+}
 @media(max-width:700px) {
   .parent-dashboard { gap:20px; }
   .parent-dashboard__date { padding-top:0; }
