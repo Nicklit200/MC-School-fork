@@ -59,7 +59,7 @@ describe('trial guest entry', () => {
     expect(trialInvitationsApi.join).not.toHaveBeenCalled();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Присоединиться|Войти на урок/ })); });
     await waitFor(() => expect(trialInvitationsApi.join).toHaveBeenCalledWith('guest-token', 'Anna'));
-    expect(setSessionAccessToken).toHaveBeenCalledWith('scoped-jwt');
+    expect(setSessionAccessToken).toHaveBeenCalledWith('scoped-jwt', '/trial/join/guest-token');
     expect(setUser).toHaveBeenCalled();
     expect(screen.getByText('Класс открыт')).toBeTruthy();
     expect(JSON.parse(screen.getByTestId('media-choice').textContent ?? '{}')).toEqual({ trialClassId: 'class-one', trialMedia: { videoDeviceId: 'cam-1', audioDeviceId: 'mic-1', cameraEnabled: true, microphoneEnabled: true } });
