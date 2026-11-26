@@ -60,7 +60,19 @@ public class ParentLessonRecapService {
                 SELECT c.id AS class_id,c.teacher_id,c.event_id,u.id AS student_id,
                        u.full_name AS student_name,(c.student_id=u.id) AS individual
                 FROM online_classes c
-                JOIN users u ON u.id=c.student_id
+                JOIN LATERAL (
+                    SELECT c.student_id AS user_id WHERE c.student_id IS NOT NULL
+                    UNION
+                    SELECT part.user_id FROM online_class_participants part
+                    WHERE part.class_id=c.id AND part.class_role='STUDENT'
+                      AND (part.first_joined_at IS NOT NULL OR part.admission_state='ADMITTED')
+                    UNION
+                    SELECT CAST(roster.pupil_id AS uuid)
+                    FROM post_lesson_skill_review_jobs job
+                    CROSS JOIN LATERAL jsonb_array_elements_text(job.roster_json) roster(pupil_id)
+                    WHERE job.class_id=c.id
+                ) present ON true
+                JOIN users u ON u.id=present.user_id
                 LEFT JOIN parent_lesson_recaps r
                   ON r.class_id=c.id AND r.student_id=u.id
                 LEFT JOIN lesson_preparations p
