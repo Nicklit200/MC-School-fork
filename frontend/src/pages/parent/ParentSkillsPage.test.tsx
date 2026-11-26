@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ParentSkillsPage } from './ParentSkillsPage';
 import { parentApi, type ParentSkillsDashboard } from '../../api/parent';
@@ -111,8 +111,21 @@ describe('parent curriculum changes per lesson', () => {
     expect(await screen.findByText('Изменившиеся навыки')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:/Найти навык в дереве/}));
     expect(screen.getByRole('tab',{name:'Дерево навыков'})).toHaveAttribute('aria-selected','true');
-    expect(await screen.findByTitle('Дерево навыков ребёнка')).toBeInTheDocument();
+    const iframe = await screen.findByTitle('Дерево навыков ребёнка') as HTMLIFrameElement;
+    expect(iframe).toBeInTheDocument();
     expect(parentApi.skillsTree).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222');
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    fireEvent.load(iframe);
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'mindcrafti-skills-parent-config',
+        progress: expect.objectContaining({
+          boardId: 'grade-5',
+          mastery: { 'g5-1-7': 45, 'g5-1-1': 60 },
+        }),
+      }),
+      window.location.origin,
+    ));
     fireEvent.click(screen.getByRole('tab',{name:'График роста'}));
     expect(screen.getByText('Изменившиеся навыки')).toBeInTheDocument();
   });
