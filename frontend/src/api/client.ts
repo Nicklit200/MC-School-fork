@@ -42,6 +42,17 @@ export class ApiRequestError extends Error {
 const ACCESS_TOKEN_KEY = 'accessToken';
 const SESSION_ACCESS_TOKEN_KEY = 'mindcrafti.impersonation.accessToken';
 const LEGACY_ADMIN_TOKEN_KEY = 'mindcrafti.impersonation.adminToken';
+const EXPIRED_SESSION_KEY = 'mindcrafti.auth.expiredPath';
+const GUEST_RETURN_KEY = 'mindcrafti.auth.guestReturn';
+export const AUTH_SESSION_EXPIRED_EVENT = 'mindcrafti:session-expired';
+
+function safeGuestPath(path: string | null): string | null {
+  return path && /^\/trial\/join\/[A-Za-z0-9_-]+$/.test(path) ? path : null;
+}
+export function getExpiredSessionPath(): string | null {
+  const path = sessionStorage.getItem(EXPIRED_SESSION_KEY);
+  return path ? safeGuestPath(path) ?? '/login' : null;
+}
 
 // Migration from the old impersonation flow:
 // previously the impersonated token replaced accessToken in localStorage while
@@ -49,7 +60,7 @@ const LEGACY_ADMIN_TOKEN_KEY = 'mindcrafti.impersonation.adminToken';
 // the admin token becomes persistent and the impersonated token becomes tab-local.
 const legacyAdminToken = sessionStorage.getItem(LEGACY_ADMIN_TOKEN_KEY);
 const legacyCurrentToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-if (!sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)
+if (!getExpiredSessionPath() && !sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)
     && legacyAdminToken
     && legacyCurrentToken
     && legacyAdminToken !== legacyCurrentToken) {
@@ -58,11 +69,15 @@ if (!sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)
   localStorage.removeItem('authUser');
 }
 
-let accessToken: string | null =
+let accessToken: string | null = getExpiredSessionPath() ? null :
   sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY) ?? localStorage.getItem(ACCESS_TOKEN_KEY);
+let authGeneration = 0;
 
 /** Set the real account token. This is the only token persisted across tabs. */
 export function setAccessToken(token: string | null): void {
+  authGeneration += 1;
+  sessionStorage.removeItem(EXPIRED_SESSION_KEY);
+  sessionStorage.removeItem(GUEST_RETURN_KEY);
   sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
   accessToken = token;
   if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token);
@@ -70,7 +85,12 @@ export function setAccessToken(token: string | null): void {
 }
 
 /** Set a temporary impersonation token for this browser tab only. */
-export function setSessionAccessToken(token: string | null): void {
+export function setSessionAccessToken(token: string | null, guestReturnPath?: string): void {
+  authGeneration += 1;
+  sessionStorage.removeItem(EXPIRED_SESSION_KEY);
+  const guestPath = token ? safeGuestPath(guestReturnPath ?? null) : null;
+  if (guestPath) sessionStorage.setItem(GUEST_RETURN_KEY, guestPath);
+  else sessionStorage.removeItem(GUEST_RETURN_KEY);
   if (token) sessionStorage.setItem(SESSION_ACCESS_TOKEN_KEY, token);
   else sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
   accessToken = token ?? localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -79,25 +99,64 @@ export function setSessionAccessToken(token: string | null): void {
 export function getAccessToken(): string | null { return accessToken; }
 export function getPersistentAccessToken(): string | null { return localStorage.getItem(ACCESS_TOKEN_KEY); }
 export function hasSessionAccessToken(): boolean { return Boolean(sessionStorage.getItem(SESSION_ACCESS_TOKEN_KEY)); }
-function authHeaders(): Record<string, string> { return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}; }
+/** Invalidate only the rejected identity. Never promote a guest or impersonated
+ * tab to the persistent administrator identity on a failed request. */
+export function expireAccessToken(rejectedToken: string | null, generation = authGeneration): void {
+  if (!rejectedToken || rejectedToken !== accessToken || generation !== authGeneration) return;
+  const scoped = hasSessionAccessToken();
+  const returnPath = scoped ? safeGuestPath(sessionStorage.getItem(GUEST_RETURN_KEY)) : null;
+  authGeneration += 1;
+  accessToken = null;
+  sessionStorage.setItem(EXPIRED_SESSION_KEY, returnPath ?? '/login');
+  sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(GUEST_RETURN_KEY);
+  sessionStorage.removeItem('mindcrafti.impersonation.user');
+  sessionStorage.removeItem(LEGACY_ADMIN_TOKEN_KEY);
+  if (!scoped && localStorage.getItem(ACCESS_TOKEN_KEY) === rejectedToken) {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem('authUser');
+  }
+  window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+}
+
+function isAnonymousPath(path: string): boolean {
+  const route = path.split('?')[0];
+  return route === '/auth/login' || route === '/auth/activate' || route.startsWith('/public/');
+}
+
+/** One rejection handler for JSON, binary downloads and multipart uploads.
+ * 403 is resource authorization, not a reason to sign out a valid user. */
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const anonymous = isAnonymousPath(path);
+  const token = anonymous ? null : accessToken;
+  const generation = authGeneration;
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  else headers.delete('Authorization');
+  const response = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  if (!anonymous && response.status === 401) expireAccessToken(token, generation);
+  return response;
+}
 
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = authHeaders();
+  const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const response = await fetch(`${BASE_URL}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const response = await apiFetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (response.status === 204) return undefined as T;
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : undefined;
+  let payload: any;
+  try { payload = text ? JSON.parse(text) : undefined; }
+  catch (error) { if (response.ok) throw error; }
   if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText);
   return payload as T;
 }
 
-async function uploadFile(path: string, file: File): Promise<void> { const form = new FormData(); form.append('file', file); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
-async function uploadFiles(path: string, files: File[]): Promise<void> { const form = new FormData(); files.forEach((file) => form.append('files', file)); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
-async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> { const form = new FormData(); form.append('startDate', startDate); form.append('file', file); const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: authHeaders(), body: form }); const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); return payload as T; }
+async function uploadFile(path: string, file: File): Promise<void> { const form = new FormData(); form.append('file', file); const response = await apiFetch(path, { method: 'POST', body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
+async function uploadFiles(path: string, files: File[]): Promise<void> { const form = new FormData(); files.forEach((file) => form.append('files', file)); const response = await apiFetch(path, { method: 'POST', body: form }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } }
+async function uploadDatedFile<T>(path: string, startDate: string, file: File): Promise<T> { const form = new FormData(); form.append('startDate', startDate); form.append('file', file); const response = await apiFetch(path, { method: 'POST', body: form }); const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } if (!response.ok) throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); return payload as T; }
 async function createPdfHomework(studentId: string, startDate: string, file: File): Promise<Homework> { return uploadDatedFile<Homework>(`/students/${studentId}/homeworks/pdf`, startDate, file); }
-export async function requestBlob(path: string): Promise<Blob> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return response.blob(); }
-async function requestText(path: string): Promise<string> { const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() }); const text = await response.text(); if (!response.ok) { let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return text; }
+export async function requestBlob(path: string): Promise<Blob> { const response = await apiFetch(path); if (!response.ok) { const text = await response.text(); let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return response.blob(); }
+async function requestText(path: string): Promise<string> { const response = await apiFetch(path); const text = await response.text(); if (!response.ok) { let payload: any; try { payload = text ? JSON.parse(text) : undefined; } catch { payload = undefined; } throw new ApiRequestError(response.status, payload?.errorCode ?? 'UNKNOWN', payload?.message ?? response.statusText); } return text; }
 
 export const api = {
   learningTime: {
