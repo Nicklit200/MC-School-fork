@@ -1,6 +1,9 @@
 package com.mcschool.flashcard.users;
 
 import com.mcschool.flashcard.lessons.TeacherTransferService;
+import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.students.dto.UpdateStudentUsernameRequest;
+import org.springframework.transaction.annotation.Transactional;
 import com.mcschool.flashcard.users.dto.AssignStudentTeacherRequest;
 import com.mcschool.flashcard.users.dto.StudentTransferResponse;
 import com.mcschool.flashcard.users.dto.TransferStudentsRequest;
@@ -49,6 +52,16 @@ public class AdminAccountController {
         return userRepository.findAllByRoleOrderByFullNameAsc(Role.TEACHER).stream()
                 .map(TeacherAssignmentOption::from)
                 .toList();
+    }
+
+    @PutMapping("/{studentId}/username")
+    @Transactional
+    public AdminAccountResponse updateStudentUsername(@PathVariable UUID studentId,
+                                                        @Valid @RequestBody UpdateStudentUsernameRequest request) {
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        StudentUsernames.change(student, request.username(), userRepository);
+        return AdminAccountResponse.from(student);
     }
 
     @PutMapping("/{studentId}/teacher")
