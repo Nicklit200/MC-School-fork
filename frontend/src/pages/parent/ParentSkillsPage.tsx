@@ -75,7 +75,7 @@ function Evidence({ item, language }: { item: ParentSkillEvidence | ParentSkillP
 function EventHistory({ data, language }: { data: ParentSkillsDashboard; language: Language }) {
   const events = useMemo(() => [
     ...data.lessons.map(x => ({ type: 'LESSON' as const, id: x.id, date: x.endedAt, title: x.title, lesson: x })),
-    ...data.practice.map((x, i) => ({
+    ...data.practice.filter(x => !x.cycleLessonId).map((x, i) => ({
       type: x.sourceType, id: `practice-${i}`, date: x.at,
       title: sourceNames[x.sourceType]?.[language] ?? sourceNames.HOMEWORK[language], practice: x,
     })),
@@ -86,7 +86,9 @@ function EventHistory({ data, language }: { data: ParentSkillsDashboard; languag
   </section>;
   return <div className="parent-progress__events">
     {events.map(event => {
-      const details = event.type === 'LESSON' ? event.lesson.evidence : [event.practice];
+      const cycleHomework = event.type === 'LESSON'
+        ? data.practice.filter(x => x.cycleLessonId === event.id) : [];
+      const details = event.type === 'LESSON' ? [...event.lesson.evidence, ...cycleHomework] : [event.practice];
       const changed = details.filter(item => item.changed).length;
       const active = open === event.id;
       return <article className="parent-progress__event" key={event.id}>
@@ -107,6 +109,10 @@ function EventHistory({ data, language }: { data: ParentSkillsDashboard; languag
               'Краткий подтверждённый пересказ пока отсутствует. Данные урока не подменяются предположениями.',
               'Noch keine belegte Zusammenfassung. Fehlende Daten werden nicht erfunden.')}</p>
           </section>}
+          {cycleHomework.length > 0 && <p className="parent-progress__muted">
+            {say(language, 'Домашняя работа, заданная после предыдущего занятия и проверенная до этого урока:',
+              'Hausaufgaben aus dem Zeitraum nach der vorigen und vor dieser Stunde:')}
+          </p>}
           <div className="parent-progress__evidence-list">
             {details.length > 0
               ? details.map((x,i) => <Evidence key={`${x.skillId}-${i}`} item={x} language={language} />)
