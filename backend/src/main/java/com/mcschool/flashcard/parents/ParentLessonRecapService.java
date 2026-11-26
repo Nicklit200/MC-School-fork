@@ -88,12 +88,15 @@ public class ParentLessonRecapService {
                   ON p.teacher_id=c.teacher_id AND p.event_id=c.event_id
                 WHERE c.status='ENDED' AND u.role='STUDENT' AND u.archived=false
                   AND (r.class_id IS NULL
-                    OR (r.state='DONE' AND r.comparison_checked_at IS NULL AND r.attempts<3))
+                    OR (r.state='DONE' AND r.attempts<3
+                        AND (r.comparison_checked_at IS NULL
+                          OR r.source_kind='TRANSCRIPT')))
                   AND (length(coalesce(p.transcript_text,''))>120
                     OR length(coalesce(p.soniox_transcript_text,''))>120
                     OR EXISTS (SELECT 1 FROM online_class_transcript_segments seg
                                WHERE seg.class_id=c.id AND seg.user_id IN (u.id,c.teacher_id)))
                 ORDER BY CASE WHEN u.parent_id IS NOT NULL THEN 0 ELSE 1 END,
+                         CASE WHEN r.state='DONE' AND r.source_kind='TRANSCRIPT' THEN 0 ELSE 1 END,
                          CASE WHEN r.class_id IS NULL THEN 0 ELSE 1 END,
                          coalesce(c.actual_end_at,c.scheduled_end_at) DESC
                 LIMIT 1
@@ -113,8 +116,8 @@ public class ParentLessonRecapService {
             VALUES(?,?,'RUNNING',1) ON CONFLICT DO NOTHING
             """,target.classId(),target.studentId());
         if (inserted!=1) {
-            // Older saved summaries are backfilled with a real before/after
-            // comparison, without removing or rewriting their existing report.
+            // Older recaps are re-rendered once with the action-first style,
+            // while any existing percentage/evidence history stays unchanged.
             compareExisting(target);
             return;
         }
@@ -151,13 +154,15 @@ public class ParentLessonRecapService {
                 return;
             }
             Recap result=askModel(target,transcript,previous);
+            if (result.summary().isBlank()) throw new IllegalStateException("EMPTY_PARENT_SUMMARY");
             jdbc.update("""
                 UPDATE parent_lesson_recaps
-                SET improvements=CAST(? AS jsonb),comparison_checked_at=now(),
-                    updated_at=now()
+                SET summary=?,observations=CAST(? AS jsonb),
+                    improvements=CAST(? AS jsonb),comparison_checked_at=now(),
+                    source_kind='TRANSCRIPT_IMPERSONAL',failure_code=NULL,updated_at=now()
                 WHERE class_id=? AND student_id=? AND state='DONE'
-                  AND comparison_checked_at IS NULL
-                """,json.writeValueAsString(result.improvements()),
+                """,result.summary(),json.writeValueAsString(result.observations()),
+                json.writeValueAsString(result.improvements()),
                 target.classId(),target.studentId());
             LOG.info("Parent progress comparison class={} findings={}",
                     target.classId(),result.improvements().size());
@@ -256,8 +261,18 @@ public class ParentLessonRecapService {
             Работай только с фактами из предоставленного урока. Никогда не придумывай
             задания, ответы, улучшения процентов, оценки и доказательства.
             summary: 3-6 информативных предложений на русском, не больше 2100 символов.
+            ПИШИ КАК СПОКОЙНЫЙ ОТЧЁТ О ТОМ, ЧТО ДЕЛАЛИ НА ЗАНЯТИИ, А НЕ О ЧЕЛОВЕКЕ.
+            Начинай с «На занятии разобрали...», «Решали...», «Отработали...»,
+            «Повторили...», «Закрепили...», «Возникли сложности с...».
+            НИ РАЗУ не упоминай имя, фамилию или личные местоимения ученика
+            в summary. Не подменяй имя фразами «ученик», «ребёнок»,
+            «он/она»: сразу описывай упражнения и результат.
+            Например: «На занятии работали с разрядным составом больших чисел,
+            решили примеры на деление, разобрали запись чисел по-немецки.
+            При округлении до сотен потребовались пояснения; стоит закрепить
+            правило выбора разряда». Не копируй пример как факты.
             Расскажи конкретные изученные темы, примеры упражнений, методы работы,
-            что получилось у ребёнка, где преподаватель помогал, что стоит закрепить.
+            что удалось, где потребовались пояснения и что стоит закрепить.
             Не включай личные разговоры и сведения о других детях.
             observations: до 7 конкретных математических навыков из транскрипции.
             outcome только PRACTICED, INDEPENDENT, WITH_HELP или DIFFICULTY.
@@ -480,7 +495,7 @@ public class ParentLessonRecapService {
             UPDATE parent_lesson_recaps
             SET state=?,summary=?,observations=CAST(? AS jsonb),
                 improvements=CAST(? AS jsonb),comparison_checked_at=now(),
-                source_kind='TRANSCRIPT',failure_code=?,updated_at=now()
+                source_kind='TRANSCRIPT_IMPERSONAL',failure_code=?,updated_at=now()
             WHERE class_id=? AND student_id=?
             """,state,summary,json.writeValueAsString(observations),
                 json.writeValueAsString(improvements),code,
