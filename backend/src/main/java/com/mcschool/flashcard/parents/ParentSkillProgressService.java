@@ -51,9 +51,12 @@ public class ParentSkillProgressService {
                                  Integer current, String autonomy, String explanation,
                                  String excerpt, String origin, boolean changed) {}
     public record LessonObservation(String topic, String outcome, String explanation, String excerpt) {}
+    public record LessonImprovement(String topic, String comparison, String before,
+                                    String after, String explanation, String beforeQuote,
+                                    String afterQuote) {}
     public record Lesson(UUID id, String title, Instant endedAt, String reviewState,
                          String summary, String summarySource, List<LessonEvidence> evidence,
-                         List<LessonObservation> observations) {}
+                         List<LessonObservation> observations, List<LessonImprovement> improvements) {}
     public record PracticeEvidence(String skillId, String skillTitle, String sourceType,
                                    String sourceRef, Instant at, UUID cycleLessonId,
                                    Integer previous, Integer current, boolean changed, String autonomy,
@@ -74,7 +77,7 @@ public class ParentSkillProgressService {
     private record LessonRow(UUID id, String title, Instant at, String state,
                              String summary, String coveredMaterial,
                              String transcript, String recapSummary,
-                             String recapObservations) {}
+                             String recapObservations, String recapImprovements) {}
 
     private final UserRepository users;
     private final SkillBoardService boards;
@@ -194,7 +197,8 @@ public class ParentSkillProgressService {
                    r.lesson_summary, p.covered_material,
                    coalesce(p.transcript_text,p.soniox_transcript_text) AS lesson_transcript,
                    CASE WHEN pr.state='DONE' THEN pr.summary END AS recap_summary,
-                   CASE WHEN pr.state='DONE' THEN pr.observations::text END AS recap_observations
+                   CASE WHEN pr.state='DONE' THEN pr.observations::text END AS recap_observations,
+                   CASE WHEN pr.state='DONE' THEN pr.improvements::text END AS recap_improvements
             FROM online_classes c
             LEFT JOIN parent_lesson_recaps pr
                 ON pr.class_id=c.id AND pr.student_id=?
@@ -215,7 +219,8 @@ public class ParentSkillProgressService {
                     rs.getString("title"), rs.getTimestamp("ended_at").toInstant(),
                     rs.getString("review_state"), rs.getString("lesson_summary"),
                     rs.getString("covered_material"), rs.getString("lesson_transcript"),
-                    rs.getString("recap_summary"), rs.getString("recap_observations")),
+                    rs.getString("recap_summary"), rs.getString("recap_observations"),
+                    rs.getString("recap_improvements")),
                     studentId, studentId, studentId, studentId, studentId.toString());
 
         List<Lesson> lessons = new ArrayList<>();
@@ -265,7 +270,8 @@ public class ParentSkillProgressService {
             }
             lessons.add(new Lesson(session.id(), session.title(), session.at(),
                     session.state(), summary, origin, List.copyOf(items),
-                    readRecapObservations(session.recapObservations())));
+                    readRecapObservations(session.recapObservations()),
+                    readRecapImprovements(session.recapImprovements())));
         }
         // Homework/test observations use the same mastery history as lessons.
         // The source is a verified database observation, NOT a guessed match
@@ -453,6 +459,31 @@ public class ParentSkillProgressService {
             return List.copyOf(results);
         } catch (Exception badRecap) {
             // An invalid or outdated AI record must never break the parent's page.
+            return List.of();
+        }
+    }
+
+    private List<LessonImprovement> readRecapImprovements(String encoded) {
+        if (encoded == null || encoded.isBlank()) return List.of();
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map<String,Object>> entries=json.readValue(encoded,List.class);
+            List<LessonImprovement> result=new ArrayList<>();
+            for(Map<String,Object> row:entries) {
+                if(result.size()>=5)break;
+                String topic=Objects.toString(row.get("topic"),"").strip();
+                String mode=Objects.toString(row.get("comparison"),"");
+                String before=Objects.toString(row.get("before"),"").strip();
+                String after=Objects.toString(row.get("after"),"").strip();
+                if(topic.isBlank()||before.isBlank()||after.isBlank()
+                        ||!Set.of("BETWEEN_LESSONS","WITHIN_LESSON").contains(mode))continue;
+                result.add(new LessonImprovement(topic,mode,before,after,
+                        Objects.toString(row.get("explanation"),""),
+                        Objects.toString(row.get("beforeQuote"),""),
+                        Objects.toString(row.get("afterQuote"),"")));
+            }
+            return List.copyOf(result);
+        } catch(Exception invalid) {
             return List.of();
         }
     }
