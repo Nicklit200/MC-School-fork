@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { parentApi, type ParentSkillsDashboard } from '../../api/parent';
 import { useI18n } from '../../i18n/I18nContext';
 import './parent-dashboard.css';
@@ -16,6 +16,17 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   selectedId: string | null; onSelect: (lessonId: string) => void;
 }) {
   const lessons = data.lessonProgress ?? [];
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The newest lesson is automatically selected when the page opens.
+    // Bring its point into view when the timeline is wider than the screen.
+    const newest = lessons.reduce<(typeof lessons)[number] | null>(
+      (latest, lesson) => !latest || Date.parse(lesson.endedAt) > Date.parse(latest.endedAt)
+        ? lesson : latest, null);
+    if (selectedId && newest?.lessonId === selectedId && scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth - scrollRef.current.clientWidth;
+    }
+  }, [lessons, selectedId]);
   if (!lessons.length) return <div className="parent-progress__chart-empty">
     {say(language, 'Завершённые уроки появятся на графике после проведения занятий.',
       'Abgeschlossene Unterrichtsstunden erscheinen nach dem Unterricht.')}
@@ -37,7 +48,7 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
     drawing = true;
   });
   const select = (id: string) => onSelect(id);
-  return <div className="parent-progress__graph" role="region"
+  return <div ref={scrollRef} className="parent-progress__graph" role="region"
     aria-label={say(language, 'Выберите точку урока на графике', 'Unterrichtspunkt im Diagramm wählen')}>
     <svg viewBox={`0 0 ${width} 230`} style={{ width, minWidth: '100%', maxWidth: 'none' }}
       aria-label={say(language, 'История прогресса по урокам', 'Lernfortschritt nach Unterricht')}
@@ -258,7 +269,14 @@ export function ParentSkillsPage() {
     if (!selected) return;
     let live = true;
     setLoading(true);setError('');setData(null);setSelectedLessonId(null);
-    parentApi.skills(selected).then(result => { if(live) setData(result); })
+    parentApi.skills(selected).then(result => {
+      if (!live) return;
+      // Selecting the most recent completed class also works when switching children.
+      const mostRecent = [...(result.lessonProgress ?? [])]
+        .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))[0];
+      setSelectedLessonId(mostRecent?.lessonId ?? null);
+      setData(result);
+    })
       .catch(e => { if(live) setError(String(e?.message ?? e)); })
       .finally(() => { if(live) setLoading(false); });
     return () => { live = false; };
