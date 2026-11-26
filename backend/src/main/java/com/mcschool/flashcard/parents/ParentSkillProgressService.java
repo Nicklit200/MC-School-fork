@@ -45,7 +45,7 @@ public class ParentSkillProgressService {
                                     Integer previous, int current, Instant changedAt,
                                     String sourceType, String explanation, String excerpt) {}
     public record LessonProgressPoint(UUID lessonId, String lessonTitle, Instant endedAt,
-                                      Integer confirmedPercent, int assessedSkills,
+                                      Double confirmedPercent, int assessedSkills,
                                       List<LessonSkillChange> changes) {}
     public record LessonEvidence(String skillId, String skillTitle, Integer previous,
                                  Integer current, String autonomy, String explanation,
@@ -65,7 +65,7 @@ public class ParentSkillProgressService {
                                    String explanation, String excerpt) {}
     public record Dashboard(UUID studentId, String studentName, Integer grade,
                             String schoolType, String boardId, String boardTitle,
-                            String curriculumSource, Integer confirmedPercent,
+                            String curriculumSource, Double confirmedPercent,
                             Integer assessedAveragePercent, int assessedSkills, int totalSkills,
                             Instant updatedAt, List<Topic> topics, List<Skill> skills,
                             List<TrendPoint> trend, List<Lesson> lessons,
@@ -152,8 +152,8 @@ public class ParentSkillProgressService {
         int total = skills.size();
         int currentSum = skills.stream().filter(s -> s.mastery() != null)
                 .mapToInt(s -> s.mastery()).sum();
-        Integer confirmed = assessed == 0 || total == 0 ? null :
-                (int)Math.round((double)currentSum / total);
+        Double confirmed = assessed == 0 || total == 0 ? null :
+                Math.round(10.0 * currentSum / total) / 10.0;
         Integer average = assessed == 0 ? null : (int)Math.round((double)currentSum / assessed);
 
         List<Change> history = jdbc.query("""
@@ -443,7 +443,7 @@ public class ParentSkillProgressService {
                 baseline.put(change.skillId(), change.current());
             for (Change change : pointChanges.getOrDefault(lesson.id(), List.of()))
                 baseline.put(change.skillId(), change.current());
-            Integer percent = baseline.isEmpty() ? null : confirmedPercent(baseline, allowed);
+            Double percent = baseline.isEmpty() ? null : confirmedPercentExact(baseline, allowed);
             // Several updates to one skill on the same day are consolidated.
             Map<String, LessonSkillChange> unique = new LinkedHashMap<>();
             for (LessonSkillChange step : explainedChanges.getOrDefault(lesson.id(), List.of())) {
@@ -536,6 +536,16 @@ public class ParentSkillProgressService {
         return skills.stream().filter(node -> Boolean.TRUE.equals(node.core())
                 || (schoolType != null && node.schoolTypes() != null
                     && node.schoolTypes().contains(schoolType))).toList();
+    }
+
+    static double confirmedPercentExact(Map<String,Integer> scores, Set<String> allowed) {
+        if (allowed.isEmpty()) return 0;
+        int sum = 0;
+        for (String id : allowed) {
+            Integer mastery = scores.get(id);
+            if (mastery != null) sum += Math.max(0, Math.min(100, mastery));
+        }
+        return Math.round(10.0 * sum / allowed.size()) / 10.0;
     }
 
     static int confirmedPercent(Map<String,Integer> scores, Set<String> allowed) {
