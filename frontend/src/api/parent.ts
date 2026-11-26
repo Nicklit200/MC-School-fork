@@ -77,6 +77,7 @@ export interface ParentSkillsDashboard {
   topics: { id: string; title: string; totalSkills: number; assessedSkills: number; averagePercent: number | null; confirmedPercent: number }[];
   skills: { id: string; title: string; germanTitle: string | null; topicId: string | null; mastery: number | null; updatedAt: string | null }[];
   trend: { at: string; confirmedPercent: number; assessedSkills: number; skillId: string; previous: number; current: number }[];
+  lessonProgress: { lessonId: string; lessonTitle: string; endedAt: string; confirmedPercent: number | null; assessedSkills: number }[];
   lessons: { id: string; title: string; endedAt: string; reviewState: string; summary: string | null; summarySource: string; evidence: ParentSkillEvidence[] }[];
   practice: ParentSkillPractice[];
 }
