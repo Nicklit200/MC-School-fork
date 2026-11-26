@@ -43,7 +43,8 @@ export function ParentSkillsTree({ data, focusedSkillId, onSelectSkill, language
     return {
       ...snapshot,
       student: { fullName: data.studentName, grade: data.grade, schoolType: data.schoolType },
-      mastery, history, overallPercent: data.confirmedPercent,
+      mastery, history, allowedSkillIds: data.skills.map(skill => skill.id),
+      overallPercent: data.confirmedPercent,
       assessedSkills: data.assessedSkills, totalSkills: data.totalSkills,
       updatedAt: data.updatedAt,
     };
