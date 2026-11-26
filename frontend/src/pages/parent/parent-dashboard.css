@@ -232,3 +232,28 @@
   .parent-progress__graph { margin:0 -6px; padding:0 6px 6px; }
   .parent-progress__selected-lesson { padding-top:17px; }
 }
+
+
+/* Selected lesson belongs to Topics & Skills; recaps appear BELOW those changes. */
+.parent-progress__dated-skills { display:flex; flex-direction:column; gap:18px; }
+.parent-progress__dated-topic-list { display:flex; flex-direction:column; gap:14px; }
+.parent-progress__dated-topic { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+.student-shell .parent-progress__dated-topic h3 { font-size:17px; margin:0 0 8px; }
+.parent-progress__dated-change { border-top:1px solid var(--border); padding:17px 0 5px; }
+.parent-progress__dated-change-title { display:flex; justify-content:space-between; align-items:flex-start; gap:15px; }
+.parent-progress__dated-change-title > strong { font-size:15px; padding-top:4px; overflow-wrap:anywhere; }
+.parent-progress__dated-change-value { flex:0 0 auto; font-weight:800; font-size:16px; font-variant-numeric:tabular-nums; display:flex; align-items:flex-end; flex-direction:column; gap:4px; padding:8px 12px; border-radius:10px; }
+.parent-progress__dated-change-value small { font-size:11px; font-weight:650; }
+.parent-progress__dated-change-value--up { color:#93d6bd; background:#253e34; }
+.parent-progress__dated-change-value--down { color:#f2d878; background:#403921; }
+.parent-progress__dated-change-value--initial { color:#9fc4ff; background:#253348; }
+.parent-progress__dated-change-explanation { color:var(--text); font-size:14px; margin:12px 0 6px; line-height:1.6; overflow-wrap:anywhere; }
+.parent-progress__dated-change .parent-progress__source { font-size:13px; padding:6px 0; }
+.parent-progress__covered { padding:20px 24px; }
+.parent-progress__covered p { margin:0; line-height:1.7; color:var(--muted); }
+@media (max-width:700px) {
+  .parent-progress__dated-topic { padding:14px; }
+  .parent-progress__dated-change-title { flex-wrap:wrap; }
+  .parent-progress__dated-change-value { align-items:flex-start; }
+  .parent-progress__covered { padding:16px; }
+}
