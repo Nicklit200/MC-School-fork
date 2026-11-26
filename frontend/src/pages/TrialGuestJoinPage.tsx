@@ -15,6 +15,7 @@ export function TrialGuestJoinPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [waitingRequested, setWaitingRequested] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
   const [mediaChoice, setMediaChoice] = useState<PrejoinChoice | null>(null);
 
   useEffect(() => {
@@ -55,7 +56,13 @@ export function TrialGuestJoinPage() {
       setUser(joined.auth.user);
       navigate('/online-classes/' + encodeURIComponent(joined.classId), { replace: true, state: { trialMedia: choice, trialClassId: joined.classId } });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Не удалось войти. Свяжитесь с преподавателем.');
+      const message = cause instanceof Error ? cause.message : '';
+      setError(/same name/i.test(message)
+        ? 'Введи то же имя, что и при первом входе на этот урок.'
+        : /no longer accept/i.test(message)
+          ? 'Эта комната больше не принимает гостей. Попроси преподавателя отправить новую ссылку.'
+          : 'Не удалось войти. Попробуй ещё раз или свяжись с преподавателем.');
+      setPreviewVersion(value => value + 1);
     } finally { setBusy(false); }
   }
 
@@ -82,12 +89,12 @@ export function TrialGuestJoinPage() {
           <input id="trial-student-name" className="input" autoComplete="given-name"
             placeholder="Твоё имя" maxLength={80} minLength={2} required value={name}
             onChange={event => setName(event.target.value)} />
-          {!waitingRequested && <PrejoinPanel joinDisabled={busy || name.trim().length < 2}
+          {!waitingRequested && <PrejoinPanel key={previewVersion} joinDisabled={busy || name.trim().length < 2}
             onJoin={choice => void submit(choice)} />}
           {busy && <p role="status">Подключаем...</p>}
           <p className="muted" style={{ fontSize: 13 }}>Регистрация, почта и пароль не нужны. Видеокамеру и микрофон можно включить перед входом.</p>
         </form>
-        {waitingRequested && <p role="status">Ты в комнате ожидания. Страница сама проверит, когда можно подключиться к уроку.</p>}
+        {waitingRequested && <><p role="status">Ты в комнате ожидания. Страница сама проверит, когда можно подключиться к уроку.</p><button className="btn" type="button" onClick={() => { setWaitingRequested(false); setPreviewVersion(value => value + 1); }}>Проверить устройства снова</button></>}
       </>}
       {error && <p role="alert" className="banner banner--error">{error}</p>}
       <Link to="/login" className="muted" style={{ fontSize: 13 }}>Войти в обычный аккаунт школы</Link>
