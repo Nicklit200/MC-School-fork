@@ -49,6 +49,7 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
       {path && <path d={path} className="parent-progress__line"/>}
       {items.map((point) => {
         const chosen = selectedId === point.lessonId;
+        const improvementCount = data.lessons.find(l=>l.id===point.lessonId)?.improvements?.length ?? 0;
         const description = `${point.lessonTitle}, ${day(point.endedAt, language)}, ${point.confirmedPercent == null
           ? say(language, 'нет оценки', 'keine Bewertung') : percent(point.confirmedPercent)}`;
         return <g key={point.lessonId} role="button" tabIndex={0} aria-label={description}
@@ -62,6 +63,8 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
           {chosen && <line x1={point.x} x2={point.x} y1="36" y2="185"
             className="parent-progress__selected-guide"/>}
           <circle cx={point.x} cy={point.y} r="17" className="parent-progress__hit-target"/>
+          {improvementCount > 0 && <circle cx={point.x} cy={point.y} r="11.5"
+            className="parent-progress__improvement-halo"/>}
           <circle cx={point.x} cy={point.y} r={chosen ? 7 : 5.5}
             className={point.confirmedPercent == null
               ? 'parent-progress__dot parent-progress__dot--unassessed'
@@ -71,7 +74,9 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
             {new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU',
               {day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}).format(new Date(point.endedAt))}
           </text>
-          <title>{description}</title>
+          <title>{description}{improvementCount > 0
+            ? `, ${say(language, 'есть подтверждённый прогресс по транскрипции',
+                  'belegter Fortschritt aus dem Transkript')}` : ''}</title>
         </g>;
       })}
     </svg>
@@ -156,8 +161,11 @@ function SelectedLessonSkills({ data, language, lessonId }: {
         </section>}
       </div>
       : <p className="parent-progress__muted">
-        {say(language,'За это занятие в истории карты навыков нет подтверждённых изменений процентов.',
-          'Für diese Stunde sind keine bestätigten Prozentänderungen gespeichert.')}
+        {(lesson.improvements ?? []).length
+          ? say(language, 'Проценты карты в этом занятии не пересчитывались; подтверждённые улучшения показаны выше.',
+              'Die Prozentwerte wurden nicht verändert; die belegten Fortschritte stehen oben.')
+          : say(language,'За это занятие в истории карты навыков нет подтверждённых изменений процентов.',
+              'Für diese Stunde sind keine bestätigten Prozentänderungen gespeichert.')}
       </p>}
     {(lesson.observations ?? []).length > 0 && <div className="parent-progress__observations">
       <div className="parent-progress__section-title">
