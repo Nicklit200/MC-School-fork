@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Mindcrafti",
+    "slug": "mindcrafti-mobile",
+    "owner": "mindcraftide",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "mindcrafti",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "de.mindcrafti.school",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "de.mindcrafti.school",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
