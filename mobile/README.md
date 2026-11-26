@@ -28,3 +28,29 @@ The backend currently implements browser Web Push, not Expo-native push tokens. 
 
 ## Safety
 Do not modify Railway production deployment branches or enable automatic publishing of unreviewed code. Do not store access tokens or API keys in GitHub files.
+
+## Parent dashboard in native iOS build
+
+The mobile shell now embeds the existing school UI using the Expo SDK 58 compatible
+`react-native-webview@14.0.1`. The app signs in via the existing school API,
+then opens `https://mc-school-production.up.railway.app/parent` with the same
+account session. Native notification controls remain in the app header.
+
+This feature requires a NEW iOS EAS build because WebView is a native dependency.
+On the computer that previously cloned the `feature/mindcrafti-mobile-app` branch:
+
+```powershell
+cd "$HOME\mindcrafti-app\mobile"
+git pull
+npm.cmd install
+npx.cmd expo install --check
+npx.cmd eas-cli@latest build --platform ios --profile preview
+```
+
+The installed preview app will not update automatically until the new signed
+build is installed. The production Railway website is unchanged. For eventual
+App Store review, a WebView-only shell may not meet Apple's minimum-functionality
+requirements; build richer native features before public release.
+
+Security: The access token is injected into WebView's origin-scoped localStorage
+only on the known school host. External HTTPS navigation opens in the system browser.
