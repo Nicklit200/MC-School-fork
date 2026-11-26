@@ -135,6 +135,32 @@ function SelectedLessonSkills({ data, language, lessonId }: {
         {say(language,'За это занятие в истории карты навыков нет подтверждённых изменений процентов.',
           'Für diese Stunde sind keine bestätigten Prozentänderungen gespeichert.')}
       </p>}
+    {(lesson.observations ?? []).length > 0 && <div className="parent-progress__observations">
+      <div className="parent-progress__section-title">
+        <h3>{say(language, 'Что удалось на уроке и над чем работали',
+          'Beobachtungen und Lernschritte')}</h3>
+        <span className="parent-progress__muted">{say(language,
+          'По транскрипции · без изменения процента', 'Transkript · ohne Prozentänderung')}</span>
+      </div>
+      {lesson.observations.map((item,index) => {
+        const status = item.outcome === 'INDEPENDENT' ? say(language, 'Самостоятельно', 'Selbstständig')
+          : item.outcome === 'WITH_HELP' ? say(language, 'С подсказкой', 'Mit Hilfe')
+          : item.outcome === 'DIFFICULTY' ? say(language, 'Нужна практика', 'Weiter üben')
+          : say(language, 'Разбирали на уроке', 'Im Unterricht behandelt');
+        return <article className="parent-progress__observation" key={`${item.topic}-${index}`}>
+          <div className="parent-progress__dated-change-title">
+            <strong>{item.topic}</strong>
+            <span className={`parent-progress__observation-tag parent-progress__observation-tag--${item.outcome.toLowerCase()}`}>
+              {status}
+            </span>
+          </div>
+          <p className="parent-progress__dated-change-explanation">{item.explanation}</p>
+          {item.excerpt && <p className="parent-progress__source">
+            <strong>{say(language, 'Из транскрипции:', 'Aus dem Transkript:')}</strong> {item.excerpt}
+          </p>}
+        </article>;
+      })}
+    </div>}
   </div>;
 }
 
