@@ -1,6 +1,5 @@
 package com.mcschool.flashcard.parents;
 
-import com.mcschool.flashcard.lessons.WorkbookContentService;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -76,7 +75,7 @@ public class ParentLessonRecapService {
                 LIMIT 1
                 """, (rs,i)->new Target(rs.getObject("class_id",UUID.class),
                         rs.getObject("teacher_id",UUID.class),
-                        rs.getString("event_id"),rs.getObject("student_id",UUID.class),
+                        rs.getObject("student_id",UUID.class),rs.getString("event_id"),
                         rs.getString("student_name"),rs.getBoolean("individual")));
             if (!missing.isEmpty()) process(missing.get(0));
         } catch (Exception failure) {
