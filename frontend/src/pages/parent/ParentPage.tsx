@@ -58,7 +58,7 @@ export function ParentPage() {
             <span className="muted">{homeworks.length}</span>
           </div>
           {homeworks.length === 0 && <p className="muted">{de ? 'Noch keine Hausaufgaben.' : 'Домашних заданий пока нет.'}</p>}
-          <HomeworkHistoryCalendar key={child.studentId} homeworks={homeworks} language={language}
+          <HomeworkHistoryCalendar compactDays key={child.studentId} homeworks={homeworks} language={language}
             getStatus={parentHomeworkStatus} renderHomework={(homework, now) => {
                 const status = parentHomeworkStatus(homework, now);
                 return <div className="list-row parent-dashboard__homework" key={homework.homeworkId}>
