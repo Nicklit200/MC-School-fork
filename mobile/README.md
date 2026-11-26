@@ -54,3 +54,48 @@ requirements; build richer native features before public release.
 
 Security: The access token is injected into WebView's origin-scoped localStorage
 only on the known school host. External HTTPS navigation opens in the system browser.
+
+
+## Live editing on a physical iPhone (Expo Development Client)
+
+The `development` profile in `eas.json` uses `developmentClient: true` and
+`distribution: internal`. Expo SDK 58 uses `expo-dev-client@~58.0.21`.
+This is different from the `preview` profile: install a development build
+**once** to preview TypeScript/React Native changes with Fast Refresh.
+
+On Windows PowerShell:
+
+```powershell
+cd "$HOME\mindcrafti-app\mobile"
+git pull
+npm.cmd install
+npx.cmd eas-cli@latest build --platform ios --profile development
+```
+
+When it finishes, open the new **development** build link on the registered
+iPhone and install it. If the Expo launcher is shown, this is expected.
+Keep Developer Mode enabled on iOS.
+
+Start the dev server on the Windows PC and leave the terminal running:
+
+```powershell
+npm.cmd run dev:phone
+```
+
+Connect the iPhone to the Expo dev server using the QR code or by choosing
+the development server inside the Mindcrafti Development Client. The tunnel
+works even if the devices are on different networks. Then TypeScript, JSX,
+styles, and React Native screen logic update with Fast Refresh.
+
+When changes are made on GitHub, run `git pull` **in a second terminal**;
+the running Metro process will pick up changes. A change to native modules,
+`app.json` native settings, iOS entitlements, or config plugins requires
+a new development build.
+
+The parent dashboard itself is a WebView of the production school site.
+Changes to the web frontend must be deployed to the website to appear in that
+WebView; Fast Refresh does **not** hot-reload the website source through Metro.
+
+Do not launch `eas build --profile preview` when you only want to iterate
+on JavaScript screens. Do not run `npm audit fix --force` without inspecting
+the dependency impact.
