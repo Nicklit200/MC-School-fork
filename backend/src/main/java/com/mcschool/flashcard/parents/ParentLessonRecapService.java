@@ -321,9 +321,9 @@ public class ParentLessonRecapService {
         content.add(Map.of("type","input_text","text","Ученик: "+pupil
                 +"\n=== ПРЕДЫДУЩИЙ УРОК ===\n"+previousTranscript
                 +"\n=== ТЕКУЩИЙ УРОК ===\n"+transcript));
-        Target prior=previousTarget(target);
+        Target previousLesson=previousTarget(target);
         List<PupilPdf> documents=new ArrayList<>();
-        if(prior!=null)documents.addAll(verifiedPersonalPdfs(prior,"PREVIOUS"));
+        if(previousLesson!=null)documents.addAll(verifiedPersonalPdfs(previousLesson,"PREVIOUS"));
         documents.addAll(verifiedPersonalPdfs(target,"CURRENT"));
         int totalBytes=0;
         for(PupilPdf doc:documents) {
