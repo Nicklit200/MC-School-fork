@@ -53,9 +53,10 @@ public class PostLessonSkillReviewService {
     private record Job(UUID classId, UUID teacherId, String eventId, String rosterJson, int attempts) {}
     private record StudentResult(String state, String boardId, String detail,
                                  List<PostLessonSkillAnalysisService.Observation> proposals,
-                                 int archivedPdfs,int verifiedInkPages,boolean verifiedSpeech) {
+                                 int archivedPdfs,int verifiedInkPages,boolean verifiedSpeech,
+                                 String lessonSummary) {
         StudentResult(String state,String boardId,String detail,List<PostLessonSkillAnalysisService.Observation> proposals) {
-            this(state,boardId,detail,proposals,0,0,false);
+            this(state,boardId,detail,proposals,0,0,false,"");
         }
     }
 
@@ -366,10 +367,10 @@ public class PostLessonSkillReviewService {
             },job.classId(),job.teacherId(),workbook,personal,workbook);
         if(pupilInk.isEmpty() && !hasSpeech)
             return new StudentResult("NO_EVIDENCE",board.id(),"NO_PUPIL_WORK_OR_SPEECH",
-                    List.of(),files.size(),pupilInk.size(),hasSpeech);
+                    List.of(),files.size(),pupilInk.size(),hasSpeech,"");
         if(files.isEmpty() && !hasSpeech)
             return new StudentResult("NO_EVIDENCE",board.id(),"ANNOTATED_PDF_NOT_SAVED",
-                    List.of(),0,pupilInk.size(),false);
+                    List.of(),0,pupilInk.size(),false,"");
 
         StringBuilder notes=new StringBuilder();
         preparations.findByTeacherIdAndEventId(job.teacherId(),job.eventId()).ifPresent(p->{
@@ -377,12 +378,13 @@ public class PostLessonSkillReviewService {
             notes.append("Lesson plan: ").append(Objects.toString(p.getLessonPlan(),"")).append('\n');
             notes.append("Difficulties noted: ").append(Objects.toString(p.getDifficulties(),""));
         });
-        List<PostLessonSkillAnalysisService.Observation> proposals=analyzer.analyze(
+        var result=analyzer.analyzeWithSummary(
                 student.getFullName(),student.getGrade(),student.getSchoolType(),
                 allowed,notes.toString(),transcript,files,pupilInk,focus);
+        var proposals=result.observations();
         return new StudentResult(proposals.isEmpty()?"NO_EVIDENCE":"RECORDED",
                 board.id(),proposals.isEmpty()?"NO_CONFIRMED_SKILL_EVIDENCE":"",proposals,
-                files.size(),pupilInk.size(),hasSpeech);
+                files.size(),pupilInk.size(),hasSpeech,result.lessonSummary());
     }
 
     /** Exact board and 1-based PDF page, constrained to the current pupil's ink. */
@@ -443,11 +445,12 @@ public class PostLessonSkillReviewService {
         }
         jdbc.update("""
             INSERT INTO post_lesson_skill_review_students
-                (class_id,student_id,board_id,state,observations,mastery_updates,detail)
-            VALUES (?,?,?,?,?,?,?)
+                (class_id,student_id,board_id,state,observations,mastery_updates,detail,lesson_summary)
+            VALUES (?,?,?,?,?,?,?,?)
             ON CONFLICT(class_id,student_id) DO NOTHING
             """,job.classId(),pupil,result.boardId(),result.state(),
-                result.proposals().size(),updates,result.detail());
+                result.proposals().size(),updates,result.detail(),
+                result.lessonSummary().isBlank()?null:result.lessonSummary());
         jdbc.update("""
             UPDATE post_lesson_skill_review_jobs
             SET processed_students=(SELECT count(*) FROM post_lesson_skill_review_students WHERE class_id=?),
