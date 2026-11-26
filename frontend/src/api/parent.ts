@@ -67,7 +67,7 @@ export interface ParentSkillEvidence {
   origin: string; changed: boolean;
 }
 export interface ParentSkillPractice extends ParentSkillEvidence {
-  sourceType: 'HOMEWORK' | 'TEST' | 'TEACHER_OBSERVATION'; sourceRef: string; at: string;
+  sourceType: 'HOMEWORK' | 'TEST' | 'TEACHER_OBSERVATION'; sourceRef: string; at: string; cycleLessonId: string | null;
 }
 export interface ParentSkillsDashboard {
   studentId: string; studentName: string; grade: number | null; schoolType: string | null;
