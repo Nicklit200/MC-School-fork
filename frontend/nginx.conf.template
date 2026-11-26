@@ -114,6 +114,20 @@ server {
         proxy_set_header Host ${API_PROXY_HOST};
     }
 
+    # Vite's content-hashed assets can disappear during deployments.
+    # Missing JS/CSS must never receive an HTML SPA fallback with HTTP 200.
+    location ^~ /assets/ {
+        try_files $uri =404;
+        expires 1y;
+    }
+
+    # Revalidate the release entry document on each navigation/reload.
+    # expires preserves the security headers inherited from the server.
+    location = /index.html {
+        try_files $uri =404;
+        expires -1;
+    }
+
     # SPA client-side routing: always fall back to index.html.
     location / {
         try_files $uri $uri/ /index.html;
