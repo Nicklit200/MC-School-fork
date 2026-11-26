@@ -218,6 +218,8 @@
 }
 .parent-progress__dot--unassessed { fill:var(--muted); }
 .parent-progress__selected-guide { stroke:var(--student-orange); stroke-dasharray:3 5; stroke-width:1.5; opacity:.7; pointer-events:none; }
+.parent-progress__point-value { fill:var(--text); font-size:14px; font-weight:800; font-variant-numeric:tabular-nums; paint-order:stroke; stroke:var(--surface); stroke-width:3px; stroke-linejoin:round; cursor:pointer; }
+.parent-progress__point-value--active { fill:var(--student-orange); font-weight:900; }
 .parent-progress__point-date { fill:var(--muted); font-size:13px; font-weight:650; pointer-events:none; }
 .parent-progress__point-date--active { fill:var(--student-orange); font-weight:800; }
 .parent-progress__selected-lesson { border-top:1px solid var(--border); margin-top:12px; padding-top:24px; }
