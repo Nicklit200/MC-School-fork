@@ -156,7 +156,7 @@ function SelectedLessonSkills({ data, language, lessonId }: {
         const hasScore = later != null && (item.scoreStatus === 'SCORED' || scoredChange != null);
         return <article key={`${item.topic}-${index}`} className="parent-progress__improvement">
           <div className="parent-progress__dated-change-title">
-            <strong>{item.topic}</strong>
+            <strong>{data.skills.find(skill => skill.id === item.skillId)?.title ?? item.topic}</strong>
             <span className="parent-progress__observation-tag parent-progress__observation-tag--independent">
               {item.comparison === 'BETWEEN_LESSONS'
                 ? say(language,'С прошлого урока','Seit der letzten Stunde')
