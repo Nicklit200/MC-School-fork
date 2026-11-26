@@ -257,3 +257,13 @@
   .parent-progress__dated-change-value { align-items:flex-start; }
   .parent-progress__covered { padding:16px; }
 }
+
+/* Qualitative transcript observations are distinct from score changes. */
+.parent-progress__observations { margin-top:20px; display:flex; flex-direction:column; gap:10px; }
+.parent-progress__observations .parent-progress__section-title h3 { margin:0; font-size:17px; }
+.parent-progress__observation { background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:16px 18px; }
+.parent-progress__observation-tag { flex:0 0 auto; border-radius:8px; padding:6px 9px; color:var(--muted); background:var(--student-raised); font-size:12px; font-weight:750; }
+.parent-progress__observation-tag--independent { color:#93d6bd; background:#253e34; }
+.parent-progress__observation-tag--with_help { color:#9fc4ff; background:#253348; }
+.parent-progress__observation-tag--difficulty { color:#f2d878; background:#403921; }
+.parent-progress__observation-tag--practiced { color:var(--muted); background:var(--student-raised); }
