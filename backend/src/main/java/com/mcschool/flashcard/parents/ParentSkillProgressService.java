@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -49,8 +50,10 @@ public class ParentSkillProgressService {
     public record LessonEvidence(String skillId, String skillTitle, Integer previous,
                                  Integer current, String autonomy, String explanation,
                                  String excerpt, String origin, boolean changed) {}
+    public record LessonObservation(String topic, String outcome, String explanation, String excerpt) {}
     public record Lesson(UUID id, String title, Instant endedAt, String reviewState,
-                         String summary, String summarySource, List<LessonEvidence> evidence) {}
+                         String summary, String summarySource, List<LessonEvidence> evidence,
+                         List<LessonObservation> observations) {}
     public record PracticeEvidence(String skillId, String skillTitle, String sourceType,
                                    String sourceRef, Instant at, UUID cycleLessonId,
                                    Integer previous, Integer current, boolean changed, String autonomy,
@@ -70,16 +73,20 @@ public class ParentSkillProgressService {
                          String explanation, String excerpt, Integer after, Instant at) {}
     private record LessonRow(UUID id, String title, Instant at, String state,
                              String summary, String coveredMaterial,
-                             String transcript) {}
+                             String transcript, String recapSummary,
+                             String recapObservations) {}
 
     private final UserRepository users;
     private final SkillBoardService boards;
     private final JdbcTemplate jdbc;
+    private final ObjectMapper json;
 
-    public ParentSkillProgressService(UserRepository users, SkillBoardService boards, JdbcTemplate jdbc) {
+    public ParentSkillProgressService(UserRepository users, SkillBoardService boards,
+                                      JdbcTemplate jdbc, ObjectMapper json) {
         this.users = users;
         this.boards = boards;
         this.jdbc = jdbc;
+        this.json = json;
     }
 
     @Transactional(readOnly = true)
@@ -185,8 +192,12 @@ public class ParentSkillProgressService {
             SELECT c.id,c.title,coalesce(c.actual_end_at,c.scheduled_end_at) AS ended_at,
                    coalesce(r.state,j.state,'NONE') AS review_state,
                    r.lesson_summary, p.covered_material,
-                   coalesce(p.transcript_text,p.soniox_transcript_text) AS lesson_transcript
+                   coalesce(p.transcript_text,p.soniox_transcript_text) AS lesson_transcript,
+                   CASE WHEN pr.state='DONE' THEN pr.summary END AS recap_summary,
+                   CASE WHEN pr.state='DONE' THEN pr.observations::text END AS recap_observations
             FROM online_classes c
+            LEFT JOIN parent_lesson_recaps pr
+                ON pr.class_id=c.id AND pr.student_id=?
             LEFT JOIN lesson_preparations p ON p.teacher_id=c.teacher_id AND p.event_id=c.event_id
             LEFT JOIN post_lesson_skill_review_jobs j ON j.class_id=c.id
             LEFT JOIN post_lesson_skill_review_students r
@@ -203,8 +214,9 @@ public class ParentSkillProgressService {
             """, (rs, i) -> new LessonRow(rs.getObject("id",UUID.class),
                     rs.getString("title"), rs.getTimestamp("ended_at").toInstant(),
                     rs.getString("review_state"), rs.getString("lesson_summary"),
-                    rs.getString("covered_material"), rs.getString("lesson_transcript")),
-                    studentId, studentId, studentId, studentId.toString());
+                    rs.getString("covered_material"), rs.getString("lesson_transcript"),
+                    rs.getString("recap_summary"), rs.getString("recap_observations")),
+                    studentId, studentId, studentId, studentId, studentId.toString());
 
         List<Lesson> lessons = new ArrayList<>();
         for (var session : sessions) {
@@ -231,8 +243,12 @@ public class ParentSkillProgressService {
                         proof.after(), proof.autonomy(), proof.explanation(),
                         proof.excerpt(), origin, changed));
             }
-            String summary = normalizedSummary(session.summary());
-            String origin = summary == null ? "NONE" : "AI";
+            String summary = normalizedSummary(session.recapSummary());
+            String origin = summary == null ? "NONE" : "AI_TRANSCRIPT_RECAP";
+            if (summary == null) {
+                summary = normalizedSummary(session.summary());
+                if (summary != null) origin = "AI";
+            }
             if (summary == null) {
                 summary = normalizedSummary(session.coveredMaterial());
                 if (summary != null) origin = "TEACHER_NOTES";
@@ -248,7 +264,8 @@ public class ParentSkillProgressService {
                 origin = "OBSERVED_SKILLS";
             }
             lessons.add(new Lesson(session.id(), session.title(), session.at(),
-                    session.state(), summary, origin, List.copyOf(items)));
+                    session.state(), summary, origin, List.copyOf(items),
+                    readRecapObservations(session.recapObservations())));
         }
         // Homework/test observations use the same mastery history as lessons.
         // The source is a verified database observation, NOT a guessed match
@@ -415,6 +432,29 @@ public class ParentSkillProgressService {
                     percent, baseline.size(), List.copyOf(unique.values())));
         }
         return List.copyOf(result);
+    }
+
+    private List<LessonObservation> readRecapObservations(String encoded) {
+        if (encoded == null || encoded.isBlank()) return List.of();
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map<String,Object>> entries = json.readValue(encoded, List.class);
+            List<LessonObservation> results = new ArrayList<>();
+            for (Map<String,Object> entry : entries) {
+                if (results.size() >= 7) break;
+                String topic = Objects.toString(entry.get("topic"), "").strip();
+                String kind = Objects.toString(entry.get("outcome"), "");
+                if (topic.isEmpty() || !Set.of("PRACTICED","INDEPENDENT","WITH_HELP","DIFFICULTY").contains(kind))
+                    continue;
+                results.add(new LessonObservation(topic,kind,
+                        Objects.toString(entry.get("explanation"), ""),
+                        Objects.toString(entry.get("excerpt"), "")));
+            }
+            return List.copyOf(results);
+        } catch (Exception badRecap) {
+            // An invalid or outdated AI record must never break the parent's page.
+            return List.of();
+        }
     }
 
     private User requireOwnChild(AuthenticatedUser parent, UUID studentId) {
