@@ -21,6 +21,8 @@ import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentLearningProfileRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentTranscriptDriveFolderRequest;
 import com.mcschool.flashcard.users.Invitations;
+import com.mcschool.flashcard.users.StudentUsernames;
+import com.mcschool.flashcard.students.dto.UpdateStudentUsernameRequest;
 import com.mcschool.flashcard.users.Role;
 import com.mcschool.flashcard.users.User;
 import com.mcschool.flashcard.users.UserRepository;
@@ -146,6 +148,14 @@ public class StudentService {
     }
 
     @Transactional
+    public StudentListResponse updateStudentUsername(AuthenticatedUser teacher, UUID studentId,
+                                                      UpdateStudentUsernameRequest request) {
+        User student = requireOwnedStudent(teacher.id(), studentId);
+        StudentUsernames.change(student, request.username(), userRepository);
+        return StudentListResponse.from(student);
+    }
+
+    @Transactional
     public StudentListResponse updateLearningProfile(AuthenticatedUser teacher, UUID studentId,
                                                      UpdateStudentLearningProfileRequest request) {
         User student = requireOwnedStudent(teacher.id(), studentId);
@@ -244,7 +254,7 @@ public class StudentService {
         if (student.getRole() != Role.STUDENT || (student.getUsername() != null && !student.getUsername().isBlank())) {
             return;
         }
-        String base = usernameBase(student.getFullName());
+        String base = StudentUsernames.base(student.getFullName());
         for (int attempt = 0; attempt < 1000; attempt++) {
             String candidate = base + (100 + USERNAME_RANDOM.nextInt(900));
             if (!userRepository.existsByUsernameIgnoreCase(candidate)) {
@@ -253,18 +263,6 @@ public class StudentService {
             }
         }
         throw new IllegalStateException("Could not generate a unique student username");
-    }
-
-    private static String usernameBase(String fullName) {
-        String first = fullName == null ? "student" : fullName.trim().split("\\s+")[0];
-        String cleaned = first.replaceAll("[^\\p{L}\\p{N}]", "");
-        if (cleaned.isBlank()) {
-            cleaned = "student";
-        }
-        if (cleaned.length() > 40) {
-            cleaned = cleaned.substring(0, 40);
-        }
-        return cleaned;
     }
 
     private LocalDate reviewToday() {
