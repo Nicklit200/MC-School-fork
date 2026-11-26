@@ -73,12 +73,13 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('student home')).toBeInTheDocument();
   });
 
-  it('renders nothing while auth is still initializing', () => {
+  it('shows loading without revealing protected content while auth is initializing', () => {
     authState.user = null;
     authState.initializing = true;
-    const { container } = renderAt('/online-classes', ['TEACHER', 'STUDENT']);
+    renderAt('/online-classes', ['TEACHER', 'STUDENT']);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByText('class list')).not.toBeInTheDocument();
     authState.initializing = false;
   });
 });
