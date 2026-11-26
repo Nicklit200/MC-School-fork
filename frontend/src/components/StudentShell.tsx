@@ -40,8 +40,8 @@ export function StudentShell({ name, children, variant = 'student', isImpersonat
   const settingsPath = isParent ? '/parent/settings' : '/settings';
   const links: { to: string; label: string; icon: IconName; active: boolean }[] = isParent ? [
     { to: '/parent', label: de ? 'Hausaufgaben' : 'Домашние задания', icon: 'book', active: pathname === '/parent' },
-    { to: '/parent/settings', label: t('nav.settings'), icon: 'settings', active: pathname.startsWith('/parent/settings') },
     { to: '/parent/skills', label: de ? 'Kompetenzkarte' : 'Карта навыков', icon: 'skills', active: pathname.startsWith('/parent/skills') },
+    { to: '/parent/settings', label: t('nav.settings'), icon: 'settings', active: pathname.startsWith('/parent/settings') },
   ] : [
     { to: '/today', label: t('nav.today'), icon: 'home', active: pathname === '/today' },
     { to: '/my-cards', label: t('nav.myCards'), icon: 'cards', active: pathname.startsWith('/my-cards') || pathname.startsWith('/session/') },
