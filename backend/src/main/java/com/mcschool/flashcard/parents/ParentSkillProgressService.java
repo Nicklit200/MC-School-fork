@@ -44,16 +44,21 @@ public class ParentSkillProgressService {
                                  String excerpt, String origin, boolean changed) {}
     public record Lesson(UUID id, String title, Instant endedAt, String reviewState,
                          String summary, String summarySource, List<LessonEvidence> evidence) {}
+    public record PracticeEvidence(String skillId, String skillTitle, String sourceType,
+                                   String sourceRef, Instant at, Integer previous,
+                                   Integer current, boolean changed, String autonomy,
+                                   String explanation, String excerpt) {}
     public record Dashboard(UUID studentId, String studentName, Integer grade,
                             String schoolType, String boardId, String boardTitle,
                             String curriculumSource, Integer confirmedPercent,
                             Integer assessedAveragePercent, int assessedSkills, int totalSkills,
                             Instant updatedAt, List<Topic> topics, List<Skill> skills,
-                            List<TrendPoint> trend, List<Lesson> lessons) {}
+                            List<TrendPoint> trend, List<Lesson> lessons,
+                            List<PracticeEvidence> practice) {}
 
     private record Score(int value, Instant updatedAt) {}
     private record Change(String skillId, int previous, int current, Instant at) {}
-    private record Proof(String skillId, String sourceRef, String autonomy,
+    private record Proof(String skillId, String sourceType, String sourceRef, String autonomy,
                          String explanation, String excerpt, Integer after, Instant at) {}
     private record LessonRow(UUID id, String title, Instant at, String state,
                              String summary) {}
@@ -77,7 +82,7 @@ public class ParentSkillProgressService {
         if (candidates.size() != 1)
             return new Dashboard(studentId, child.getFullName(), grade, child.getSchoolType(),
                     null, null, null, null, null, 0, 0,
-                    null, List.of(), List.of(), List.of(), List.of());
+                    null, List.of(), List.of(), List.of(), List.of(), List.of());
 
         var board = boards.get(candidates.get(0).id());
         List<SkillBoardService.Node> applicable = relevantSkills(board.data(), child.getSchoolType());
@@ -151,13 +156,13 @@ public class ParentSkillProgressService {
         }
 
         List<Proof> proofRows = jdbc.query("""
-            SELECT skill_id, source_ref, autonomy, explanation, source_excerpt,
+            SELECT skill_id, source_type, source_ref, autonomy, explanation, source_excerpt,
                    mastery_after, recorded_at
             FROM student_skill_evidence
-            WHERE student_id=? AND board_id=? AND source_type='LESSON'
+            WHERE student_id=? AND board_id=?
             ORDER BY recorded_at DESC LIMIT 500
-            """, (rs, i) -> new Proof(rs.getString("skill_id"), rs.getString("source_ref"),
-                    rs.getString("autonomy"), rs.getString("explanation"),
+            """, (rs, i) -> new Proof(rs.getString("skill_id"), rs.getString("source_type"),
+                    rs.getString("source_ref"), rs.getString("autonomy"), rs.getString("explanation"),
                     rs.getString("source_excerpt"),
                     rs.getObject("mastery_after")==null?null:rs.getInt("mastery_after"),
                     rs.getTimestamp("recorded_at").toInstant()), studentId, board.id());
@@ -194,7 +199,8 @@ public class ParentSkillProgressService {
             String prefix = session.id().toString() + ":";
             List<LessonEvidence> items = new ArrayList<>();
             for (var proof : proofRows) {
-                if (!proof.sourceRef().startsWith(prefix) || !allowed.contains(proof.skillId())) continue;
+                if (!"LESSON".equals(proof.sourceType()) || !proof.sourceRef().startsWith(prefix)
+                        || !allowed.contains(proof.skillId())) continue;
                 // A stored observation may not change mastery at all. Never
                 // describe such an observation as an increase.
                 Change matched = proof.after() == null ? null : history.stream()
@@ -224,12 +230,33 @@ public class ParentSkillProgressService {
             lessons.add(new Lesson(session.id(), session.title(), session.at(),
                     session.state(), summary, origin, List.copyOf(items)));
         }
+        // Homework/test observations use the same mastery history as lessons.
+        // The source is a verified database observation, NOT a guessed match
+        // from a PDF upload. Direct score edits with no evidence remain unlabelled.
+        List<PracticeEvidence> practice = new ArrayList<>();
+        for (var proof : proofRows) {
+            if ("LESSON".equals(proof.sourceType()) || !allowed.contains(proof.skillId())) continue;
+            Change matched = proof.after() == null ? null : history.stream()
+                    .filter(h -> h.skillId().equals(proof.skillId())
+                            && h.current() == proof.after()
+                            && Math.abs(Duration.between(h.at(), proof.at()).toSeconds()) <= 120)
+                    .min(Comparator.comparingLong(h ->
+                            Math.abs(Duration.between(h.at(), proof.at()).toSeconds())))
+                    .orElse(null);
+            practice.add(new PracticeEvidence(proof.skillId(),
+                    names.getOrDefault(proof.skillId(),proof.skillId()),
+                    proof.sourceType(),proof.sourceRef(),proof.at(),
+                    matched == null ? null : matched.previous(),
+                    proof.after(),matched != null,proof.autonomy(),
+                    proof.explanation(),proof.excerpt()));
+        }
         Instant last = scores.values().stream().map(Score::updatedAt)
                 .max(Instant::compareTo).orElse(null);
         return new Dashboard(studentId, child.getFullName(), grade, child.getSchoolType(),
                 board.id(), board.data().title(), board.data().source(),
                 confirmed, average, assessed, total, last,
-                List.copyOf(topics), List.copyOf(skills), List.copyOf(trend), List.copyOf(lessons));
+                List.copyOf(topics), List.copyOf(skills), List.copyOf(trend), List.copyOf(lessons),
+                List.copyOf(practice));
     }
 
     private User requireOwnChild(AuthenticatedUser parent, UUID studentId) {
