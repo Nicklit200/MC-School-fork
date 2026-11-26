@@ -38,10 +38,14 @@ public class ParentSkillProgressService {
     public record Topic(String id, String title, int totalSkills, int assessedSkills,
                         Integer averagePercent, int confirmedPercent) {}
     public record TrendPoint(Instant at, int confirmedPercent, int assessedSkills,
-                             String skillId, int previous, int current) {}
+                             String skillId, Integer previous, int current) {}
     /** One confirmed-progress milestone per real ended lesson, not per skill edit. */
+    public record LessonSkillChange(String skillId, String skillTitle,
+                                    Integer previous, int current, Instant changedAt,
+                                    String sourceType, String explanation, String excerpt) {}
     public record LessonProgressPoint(UUID lessonId, String lessonTitle, Instant endedAt,
-                                      Integer confirmedPercent, int assessedSkills) {}
+                                      Integer confirmedPercent, int assessedSkills,
+                                      List<LessonSkillChange> changes) {}
     public record LessonEvidence(String skillId, String skillTitle, Integer previous,
                                  Integer current, String autonomy, String explanation,
                                  String excerpt, String origin, boolean changed) {}
@@ -61,7 +65,7 @@ public class ParentSkillProgressService {
                             List<LessonProgressPoint> lessonProgress) {}
 
     private record Score(int value, Instant updatedAt) {}
-    private record Change(String skillId, int previous, int current, Instant at) {}
+    private record Change(String skillId, Integer previous, int current, Instant at) {}
     private record Proof(String skillId, String sourceType, String sourceRef, String autonomy,
                          String explanation, String excerpt, Integer after, Instant at) {}
     private record LessonRow(UUID id, String title, Instant at, String state,
@@ -147,7 +151,7 @@ public class ParentSkillProgressService {
                 ORDER BY updated_at DESC, id DESC LIMIT 500
             ) recent ORDER BY updated_at, id
             """, (rs, i) -> new Change(rs.getString("skill_id"),
-                    rs.getInt("previous_mastery"), rs.getInt("mastery"),
+                    rs.getObject("previous_mastery", Integer.class), rs.getInt("mastery"),
                     rs.getTimestamp("updated_at").toInstant()), studentId, board.id());
         Map<String,Integer> historyState = new HashMap<>();
         List<TrendPoint> trend = new ArrayList<>();
@@ -291,7 +295,7 @@ public class ParentSkillProgressService {
                     proof.explanation(),proof.excerpt()));
         }
         List<LessonProgressPoint> lessonProgress = lessonTimeline(
-                chronologicalLessons, history, proofRows, practice, allowed);
+                chronologicalLessons, history, proofRows, practice, allowed, names);
         Instant last = scores.values().stream().map(Score::updatedAt)
                 .max(Instant::compareTo).orElse(null);
         return new Dashboard(studentId, child.getFullName(), grade, child.getSchoolType(),
@@ -302,65 +306,101 @@ public class ParentSkillProgressService {
     }
 
     /**
-     * Replays the persisted mastery changes onto actual lesson milestones.
-     * The AI often finishes AFTER the end timestamp, so a verified LESSON
-     * sourceRef takes priority over timestamps. Verified homework belongs to
-     * the next lesson in its own assignment cycle; never a later lesson.
-     * Other updates are shown on the next completed lesson snapshot without
-     * claiming they were caused by that lesson.
+     * Replays the persisted map at actual lesson milestones, with exactly
+     * one point per ended class. Existing grades are a baseline, NOT falsely
+     * attributed to the first visible lesson.
      */
     private static List<LessonProgressPoint> lessonTimeline(
             List<LessonRow> chronologicalLessons, List<Change> history,
-            List<Proof> proofs, List<PracticeEvidence> practice, Set<String> allowed) {
+            List<Proof> proofs, List<PracticeEvidence> practice,
+            Set<String> allowed, Map<String, String> names) {
         if (chronologicalLessons.isEmpty()) return List.of();
-        Map<UUID, List<Change>> byLesson = new HashMap<>();
+        Map<UUID, List<Change>> pointChanges = new HashMap<>();
+        Map<UUID, List<LessonSkillChange>> explainedChanges = new HashMap<>();
         for (Change change : history) {
             if (!allowed.contains(change.skillId())) continue;
-            UUID owner = null;
+            UUID owningLesson = null;
+            Proof best = null;
+
+            // The strongest link is an immutable evidence source pointing
+            // to this exact finished class or to an eligible homework cycle.
             for (Proof proof : proofs) {
                 if (proof.after() == null || !proof.skillId().equals(change.skillId())
-                        || proof.after() != change.current()
+                        || proof.after().intValue() != change.current()
                         || Math.abs(Duration.between(proof.at(), change.at()).toSeconds()) > 120)
                     continue;
                 if ("LESSON".equals(proof.sourceType())) {
-                    for (LessonRow session : chronologicalLessons) {
-                        if (proof.sourceRef().startsWith(session.id() + ":")) {
-                            owner = session.id();
+                    for (LessonRow lesson : chronologicalLessons)
+                        if (proof.sourceRef().startsWith(lesson.id() + ":")) {
+                            owningLesson = lesson.id();
+                            best = proof;
                             break;
                         }
-                    }
                 } else if ("HOMEWORK".equals(proof.sourceType())) {
-                    for (PracticeEvidence p : practice) {
-                        if (p.changed() && p.cycleLessonId() != null
-                                && p.skillId().equals(proof.skillId())
-                                && p.sourceRef().equals(proof.sourceRef())
-                                && Objects.equals(p.current(), proof.after())) {
-                            owner = p.cycleLessonId();
+                    for (PracticeEvidence item : practice)
+                        if (item.changed() && item.cycleLessonId() != null
+                                && item.skillId().equals(proof.skillId())
+                                && item.sourceRef().equals(proof.sourceRef())
+                                && Objects.equals(item.current(), proof.after())) {
+                            owningLesson = item.cycleLessonId();
+                            best = proof;
                             break;
                         }
-                    }
                 }
-                if (owner != null) break;
+                if (owningLesson != null) break;
+                // Other evidence can still explain an update performed
+                // on the day of the lesson, but does not prove the lesson caused it.
+                if (best == null) best = proof;
             }
-            if (owner == null) {
-                for (LessonRow session : chronologicalLessons) {
-                    if (!change.at().isAfter(session.at())) {
-                        owner = session.id();
+            if (owningLesson == null) {
+                var changedDay = change.at().atZone(java.time.ZoneId.of("Europe/Berlin")).toLocalDate();
+                // Assign a same-day legacy edit once, without claiming
+                // that an older map update happened during today's class.
+                for (LessonRow lesson : chronologicalLessons) {
+                    var lessonDay = lesson.at().atZone(java.time.ZoneId.of("Europe/Berlin")).toLocalDate();
+                    if (lessonDay.equals(changedDay)) {
+                        owningLesson = lesson.id();
                         break;
                     }
                 }
             }
-            if (owner != null) byLesson.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(change);
+            if (owningLesson == null) continue;
+            pointChanges.computeIfAbsent(owningLesson, ignored -> new ArrayList<>()).add(change);
+            Proof source = best;
+            String explanation = source != null && source.explanation() != null
+                    && !source.explanation().isBlank() ? source.explanation()
+                    : "Процент изменён в карте навыков. Подробное обоснование для этой записи не сохранено.";
+            explainedChanges.computeIfAbsent(owningLesson, ignored -> new ArrayList<>())
+                    .add(new LessonSkillChange(change.skillId(),
+                            names.getOrDefault(change.skillId(), change.skillId()),
+                            change.previous(), change.current(), change.at(),
+                            source == null ? "HISTORY" : source.sourceType(),
+                            explanation, source == null ? null : source.excerpt()));
         }
-        Map<String, Integer> assessed = new HashMap<>();
+
+        Map<String, Integer> baseline = new HashMap<>();
         List<LessonProgressPoint> result = new ArrayList<>();
-        for (LessonRow session : chronologicalLessons) {
-            for (Change change : byLesson.getOrDefault(session.id(), List.of()))
-                assessed.put(change.skillId(), change.current());
-            // Null means no verified evaluation, NOT zero competence.
-            Integer percent = assessed.isEmpty() ? null : confirmedPercent(assessed, allowed);
-            result.add(new LessonProgressPoint(session.id(), session.title(), session.at(),
-                    percent, assessed.size()));
+        for (LessonRow lesson : chronologicalLessons) {
+            // Historical scores from before the first available lesson must
+            // already be reflected in the first point, but have NO fake "lesson change".
+            for (Change change : history) {
+                if (allowed.contains(change.skillId()) && !change.at().isAfter(lesson.at()))
+                    baseline.put(change.skillId(), change.current());
+            }
+            for (Change change : pointChanges.getOrDefault(lesson.id(), List.of()))
+                baseline.put(change.skillId(), change.current());
+            Integer percent = baseline.isEmpty() ? null : confirmedPercent(baseline, allowed);
+            // Several updates to one skill on the same day are consolidated.
+            Map<String, LessonSkillChange> unique = new LinkedHashMap<>();
+            for (LessonSkillChange step : explainedChanges.getOrDefault(lesson.id(), List.of())) {
+                LessonSkillChange first = unique.get(step.skillId());
+                if (first == null) unique.put(step.skillId(), step);
+                else unique.put(step.skillId(), new LessonSkillChange(step.skillId(),
+                        step.skillTitle(), first.previous(), step.current(), step.changedAt(),
+                        step.sourceType(), step.explanation(), step.excerpt()));
+            }
+            result.add(new LessonProgressPoint(lesson.id(), lesson.title(), lesson.at(),
+                    percent, baseline.size(), List.copyOf(unique.values())));
         }
         return List.copyOf(result);
     }
