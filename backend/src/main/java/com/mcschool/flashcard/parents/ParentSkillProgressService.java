@@ -572,6 +572,6 @@ public class ParentSkillProgressService {
 
     private static String normalizedSummary(String summary) {
         String safe = Objects.toString(summary,"").replaceAll("[\\r\\n\\t]+"," ").strip();
-        return safe.isEmpty() ? null : safe.substring(0,Math.min(550,safe.length()));
+        return safe.isEmpty() ? null : safe.substring(0,Math.min(2200,safe.length()));
     }
 }
