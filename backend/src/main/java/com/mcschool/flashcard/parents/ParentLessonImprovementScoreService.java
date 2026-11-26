@@ -72,6 +72,8 @@ public class ParentLessonImprovementScoreService {
                     JOIN online_classes c ON c.id=r.class_id
                     JOIN users u ON u.id=r.student_id
                     WHERE r.state='DONE' AND r.scoring_checked_at IS NULL
+                      AND r.comparison_checked_at IS NOT NULL
+                      AND r.source_kind='TRANSCRIPT_IMPERSONAL'
                       AND jsonb_array_length(r.improvements)>0
                       AND c.status='ENDED' AND u.role='STUDENT'
                       AND NOT EXISTS(
@@ -174,7 +176,10 @@ public class ParentLessonImprovementScoreService {
                 improvement.put("masteryAfter",earlier);
                 continue;
             }
-            int next=earlier==null?60:Math.min(MAX_MASTERY,earlier+5);
+            // The ordinary lesson analyzer awards 60 as a first score only
+            // after >=2 independently correct examples. One confirmed
+            // before/after comparison is preliminary, so start conservatively.
+            int next=earlier==null?40:Math.min(MAX_MASTERY,earlier+5);
             String reason="Подтверждённое сравнение решений: ранее — "
                     +Objects.toString(improvement.get("before"),"")
                     +"; затем — "+Objects.toString(improvement.get("after"),"")
