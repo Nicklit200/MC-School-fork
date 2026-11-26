@@ -1,3 +1,4 @@
+import { getExpiredSessionPath } from '../api/client';
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import type { Role } from '../api/types';
@@ -16,7 +17,7 @@ export function ProtectedRoute({ role, children }: { role?: Role | Role[]; child
     return null;
   }
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={getExpiredSessionPath() ?? "/login"} replace />;
   }
   const allowed = role === undefined || (Array.isArray(role) ? role.includes(user.role) : user.role === role);
   if (!allowed) {
