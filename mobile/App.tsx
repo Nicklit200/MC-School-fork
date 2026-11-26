@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 
 const API = 'https://mindcrafti-school-production.up.railway.app/api/v1';
 const SESSION_KEY = 'mindcrafti.mobile.accessToken';
+const PUSH_TOKEN_KEY = 'mindcrafti.mobile.pushToken';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -91,12 +92,36 @@ export default function App() {
       }
       const resultToken = await Notifications.getExpoPushTokenAsync({ projectId });
       if (!resultToken.data) throw new Error('Не удалось получить push-токен.');
-      // Registration with the school API will be added as a separate authenticated endpoint.
-      // Never report "connected" until the backend has confirmed registration.
-      setPushState('Токен телефона получен. Сервер ещё не подключён');
+      if (!accessToken) throw new Error('Войдите в аккаунт Mindcrafti.');
+      const response = await fetch(API + '/mobile-push/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ token: resultToken.data, platform: Platform.OS }),
+      });
+      if (!response.ok) {
+        setPushState('Токен получен. Сервер не подключён');
+        throw new Error('Сервер пока не принимает регистрацию устройств (HTTP ' + response.status + ').');
+      }
+      await SecureStore.setItemAsync(PUSH_TOKEN_KEY, resultToken.data);
+      setPushState('Устройство зарегистрировано на сервере');
     } catch (err) {
       setPushState('Ошибка подключения');
       Alert.alert('Не удалось подключить push', String((err as Error).message));
+    } finally { setWorking(false); }
+  }
+
+  async function testServerNotification() {
+    if (!accessToken) return;
+    setWorking(true);
+    try {
+      const response = await fetch(API + '/mobile-push/test', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken },
+      });
+      if (!response.ok) throw new Error('Сервер ответил HTTP ' + response.status);
+      Alert.alert('Отправлено', 'Expo принял запрос на отправку. Доставка не гарантирована.');
+    } catch (err) {
+      Alert.alert('Ошибка отправки с сервера', String((err as Error).message));
     } finally { setWorking(false); }
   }
 
@@ -114,6 +139,24 @@ export default function App() {
   }
 
   async function logout() {
+    const registered = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+    if (registered && accessToken) {
+      try {
+        const response = await fetch(API + '/mobile-push/devices', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+          body: JSON.stringify({ token: registered }),
+        });
+        if (!response.ok) {
+          Alert.alert('Не удалось отключить уведомления', 'Повторите попытку выхода при доступном сервере.');
+          return;
+        }
+        await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
+      } catch {
+        Alert.alert('Нет связи с сервером', 'Для безопасного выхода сначала отключите устройство на сервере.');
+        return;
+      }
+    }
     await SecureStore.deleteItemAsync(SESSION_KEY);
     setAccessToken(null);
     setUser(null);
@@ -142,7 +185,8 @@ export default function App() {
             <Text style={styles.status}>Система: {permission === 'granted' ? 'разрешены' : 'выключены'}</Text>
             <Text style={styles.status}>Подписка: {pushState}</Text>
             <Pressable disabled={working} style={styles.button} onPress={enableNotifications}>{working ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Включить уведомления</Text>}</Pressable>
-            <Pressable style={styles.secondaryButton} onPress={testLocalNotification}><Text style={styles.secondaryText}>Проверить на телефоне</Text></Pressable>
+            <Pressable style={styles.secondaryButton} onPress={testLocalNotification}><Text style={styles.secondaryText}>Локальное уведомление</Text></Pressable>
+            <Pressable disabled={working || pushState !== 'Устройство зарегистрировано на сервере'} style={styles.secondaryButton} onPress={testServerNotification}><Text style={styles.secondaryText}>Отправить с сервера</Text></Pressable>
             <Pressable style={styles.exit} onPress={logout}><Text style={styles.exitText}>Выйти</Text></Pressable>
           </View>
         )}
