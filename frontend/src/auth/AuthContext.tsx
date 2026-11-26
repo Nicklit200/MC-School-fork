@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, ApiRequestError, getAccessToken, hasSessionAccessToken, setAccessToken } from '../api/client';
+import { api, ApiRequestError, AUTH_SESSION_EXPIRED_EVENT, expireAccessToken, getAccessToken, hasSessionAccessToken, setAccessToken } from '../api/client';
 import type { User } from '../api/types';
 import { useI18n } from '../i18n/I18nContext';
 
@@ -49,21 +49,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!getAccessToken()) {
+    const expired = () => { setUser(null); setInitializing(false); };
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, expired);
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, expired);
+  }, []);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) {
       setInitializing(false);
       return;
     }
     api.auth
       .me()
-      .then(applyUser)
+      .then(next => { if (getAccessToken() === token) applyUser(next); })
       .catch((error) => {
         // Keep the saved session during temporary backend/network failures.
         // Only remove the token when the server explicitly says it is invalid.
         if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
-          setAccessToken(null);
-          localStorage.removeItem(CACHED_USER_KEY);
-          sessionStorage.removeItem(SESSION_CACHED_USER_KEY);
-          setUser(null);
+          expireAccessToken(token);
         }
       })
       .finally(() => setInitializing(false));
