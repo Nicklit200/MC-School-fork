@@ -170,7 +170,7 @@ public class PostLessonSkillAnalysisService {
                 "properties", Map.of("observations", Map.of("type", "array", "items", field)),
                 "required", List.of("observations"));
         Map<String,Object> request = Map.of("model", model, "store", false,
-                "max_output_tokens", 2300, "instructions", instructions,
+                "max_output_tokens", 6500, "instructions", instructions,
                 "input", List.of(Map.of("role", "user", "content", parts)),
                 "text", Map.of("format", Map.of("type", "json_schema",
                         "name", "pupil_lesson_skill_evidence", "strict", true, "schema", format)));
@@ -186,8 +186,17 @@ public class PostLessonSkillAnalysisService {
             throw new IllegalStateException("SKILL_REVIEW_AI_RESPONSE_TOO_LARGE");
         @SuppressWarnings("unchecked")
         Map<String,Object> raw = json.readValue(response.body(), Map.class);
-        if (raw == null || !"completed".equals(raw.get("status")))
+        if (raw == null) throw new IllegalStateException("SKILL_REVIEW_AI_EMPTY_RESPONSE");
+        if (!"completed".equals(raw.get("status"))) {
+            // Responses API counts reasoning and JSON output against the same budget.
+            // Preserve a bounded, non-sensitive diagnostic code for the job status.
+            String reason = "";
+            if (raw.get("incomplete_details") instanceof Map<?,?> details)
+                reason = Objects.toString(details.get("reason"), "");
+            if ("max_output_tokens".equals(reason))
+                throw new IllegalStateException("SKILL_REVIEW_AI_OUTPUT_LIMIT");
             throw new IllegalStateException("SKILL_REVIEW_AI_INCOMPLETE");
+        }
         @SuppressWarnings("unchecked")
         Map<String,Object> parsed = json.readValue(WorkbookContentService.outputText(raw), Map.class);
         return validateVerified(parsed,allowedSkills,pupilWrittenPages,
