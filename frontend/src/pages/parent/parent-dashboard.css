@@ -201,3 +201,34 @@
   .parent-progress__event-count { font-size:11px; }
   .parent-progress__event-details { padding:6px 12px 12px; }
 }
+
+
+/* Lesson-based progress chart: large touch targets and a detail panel under the line. */
+.parent-progress__graph { overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; }
+.parent-progress__graph svg { display:block; height:auto; max-height:none; }
+.parent-progress__graph-point { cursor:pointer; outline:none; }
+.parent-progress__hit-target { fill:transparent; pointer-events:all; }
+.parent-progress__graph-point:hover .parent-progress__dot,
+.parent-progress__graph-point:focus-visible .parent-progress__dot,
+.parent-progress__graph-point--active .parent-progress__dot {
+  stroke:var(--student-orange); stroke-width:4;
+}
+.parent-progress__graph-point:focus-visible .parent-progress__hit-target {
+  stroke:var(--student-orange); stroke-width:2;
+}
+.parent-progress__dot--unassessed { fill:var(--muted); }
+.parent-progress__selected-guide { stroke:var(--student-orange); stroke-dasharray:3 5; stroke-width:1.5; opacity:.7; pointer-events:none; }
+.parent-progress__point-date { fill:var(--muted); font-size:13px; font-weight:650; pointer-events:none; }
+.parent-progress__point-date--active { fill:var(--student-orange); font-weight:800; }
+.parent-progress__selected-lesson { border-top:1px solid var(--border); margin-top:12px; padding-top:24px; }
+.parent-progress__selected-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; }
+.parent-progress__selected-heading h3 { font-size:18px; margin:7px 0 0; }
+.parent-progress__selected-score { font-size:20px; background:var(--student-selected); color:var(--student-orange); padding:8px 14px; border-radius:11px; }
+.parent-progress__selected-lesson > .parent-progress__section-title { margin:12px 0 10px; }
+.parent-progress__selected-lesson > .parent-progress__section-title h3 { font-size:16px; margin:0; }
+.parent-progress__selected-lesson .parent-progress__proof { margin:12px 0; }
+@media (max-width:700px) {
+  .parent-progress__chart-panel { overflow:hidden; }
+  .parent-progress__graph { margin:0 -6px; padding:0 6px 6px; }
+  .parent-progress__selected-lesson { padding-top:17px; }
+}
