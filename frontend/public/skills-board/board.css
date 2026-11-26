@@ -947,3 +947,17 @@ body.public-progress .mastery-box input,body.public-progress .mastery-box button
 body.public-progress .mastery-box .mastery-editor-row{grid-template-columns:minmax(0,1fr) auto}
 body.public-progress .mastery-box .mastery-editor-value{display:inline-block}
 @media(max-width:850px){.public-overall{font-size:10px;padding:0 8px}}
+
+/* Parent's authenticated, read-only embedded tree: navigation stays on the outer page. */
+body.parent-embedded .student-filter,
+body.parent-embedded .view-switch,
+body.parent-embedded #school-calendar-toggle,
+body.parent-embedded #parent-share,
+body.parent-embedded #parent-share-revoke { display:none!important; }
+body.parent-embedded .catalog { max-width:205px; }
+body.parent-embedded .canvas-help { display:none; }
+@media(max-width:620px) {
+  body.parent-embedded .catalog { width:110px;max-width:110px; }
+  body.parent-embedded .bar { min-height:58px; }
+  body.parent-embedded .top-actions { display:none; }
+}

@@ -5,6 +5,7 @@ const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},individualMonthsByStudent={},skillEvidenceByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
 const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"],[9,"grade-9"]]);let boardId="";
+let parentAllowedSkills=null;
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
 try{
@@ -83,6 +84,8 @@ const defaultTrackFilterState=()=>({core:true,schools:new Set(selectedStudents()
 const trackFilterKey=()=>`mindcrafti.skills.trackFilters.${selectedGroupId?"g:"+selectedGroupId:selectedStudentId?"s:"+selectedStudentId:"none"}`;
 function loadTrackFilterState(){
   const fallback=defaultTrackFilterState();
+  // Parent embedded frames always start with this child's actual school track.
+  if(config?.parentEmbedded)return fallback;
   try{
     const raw=JSON.parse(localStorage.getItem(trackFilterKey())||"null");
     if(raw&&typeof raw==="object"&&typeof raw.core==="boolean"&&Array.isArray(raw.schools)){
@@ -96,7 +99,7 @@ function currentTrackFilters(){
   return trackFilterState;
 }
 function saveTrackFilterState(){
-  if(!trackFilterState)return;
+  if(!trackFilterState||config?.parentEmbedded)return;
   try{localStorage.setItem(trackFilterKey(),JSON.stringify({core:trackFilterState.core,schools:[...trackFilterState.schools]}));}catch{/* Optional display preference. */}
 }
 const activeSchoolTypes=()=>currentTrackFilters().schools;
@@ -247,7 +250,8 @@ function masteryPercent(n,studentId){
   if(!studentId||!n)return 0;
   const mastery=masteryByStudent[studentId]||{};
   if(n.kind==="skill")return Math.max(0,Math.min(100,Number(mastery[n.id])||0));
-  const ids=descendants(data,n.id),skills=data.nodes.filter(x=>ids.has(x.id)&&x.kind==="skill"&&!x.archived);
+  const ids=descendants(data,n.id),skills=data.nodes.filter(x=>ids.has(x.id)&&x.kind==="skill"&&!x.archived
+    &&(!config?.parentEmbedded||!parentAllowedSkills||parentAllowedSkills.has(x.id)));
   if(!skills.length)return 0;
   return Math.round(skills.reduce((sum,x)=>sum+Math.max(0,Math.min(100,Number(mastery[x.id])||0)),0)/skills.length);
 }
@@ -444,6 +448,71 @@ async function loadPublicProgress(incoming){
     $("empty").replaceChildren(element("strong","","Прогресс недоступен"),element("p","",error.message||"Попросите у Mindcrafti новую ссылку."));
   }
 }
+/**
+ * Embedded parent tree uses the SAME board.js layout as the teacher's tree.
+ * Its payload comes exclusively from the authenticated parent's child API,
+ * and the embedded frame never receives a login token or edit privileges.
+ */
+function loadParentTree(incoming) {
+  if(config)return;
+  const result=incoming?.progress;
+  if(!result || typeof result.boardId!=="string" ||
+      !result.board || !Array.isArray(result.board.nodes) ||
+      !Array.isArray(result.board.edges) || !result.student ||
+      !result.mastery || typeof result.mastery!=="object") {
+    notice("Не удалось открыть дерево навыков ребёнка.",true);
+    return;
+  }
+  try {
+    validateBoard(result.board);
+    config={apiBase:"",token:null,canEdit:false,userId:"parent",publicMode:true,parentEmbedded:true};
+    document.body.classList.add("public-progress","parent-embedded");
+    boardId=result.boardId;
+    snapshot={id:result.boardId,revision:result.boardRevision,
+      updatedAt:result.updatedAt||result.boardUpdatedAt,data:result.board};
+    data=clone(result.board);
+    const child={id:"parent",fullName:result.student.fullName||"Ученик",
+      grade:result.student.grade??data.grade,schoolType:result.student.schoolType||null};
+    students=[child];groups=[];selectedStudentId="parent";selectedGroupId="";
+    masteryByStudent={parent:result.mastery};
+    parentAllowedSkills=new Set(Array.isArray(result.allowedSkillIds)?result.allowedSkillIds:[]);
+    masteryHistoryByStudent={parent:Array.isArray(result.history)
+      ?result.history.map((entry,index)=>({...entry,id:index+1,studentId:"parent",
+        studentName:child.fullName,updatedBy:"parent"})):[]};
+    skillEvidenceByStudent={};individualMonthsByStudent={};
+    publicOverallPercent=Number.isFinite(result.overallPercent)?result.overallPercent:null;
+    trackFilterState=null;scope="overview";showArchived=false;
+    viewMode="hierarchy";selection=null;
+    $("board-grade").textContent=`${child.grade||data.grade} класс`;
+    const badge=document.querySelector(".draft-badge");
+    if(badge)badge.textContent="Просмотр родителя";
+    $("parent-share").hidden=true;$("parent-share-revoke").hidden=true;
+    $("save").hidden=true;$("school-calendar-toggle").hidden=true;
+    $("source-note").replaceChildren(
+      element("strong","",child.fullName),
+      document.createElement("br"),
+      document.createTextNode("Навыки и проценты связаны с графиком обучения. Изменения показываются только в истории оценок.")
+    );
+    renderStudentFilter();$("student-filter").disabled=true;
+    $("empty").hidden=true;render();showHelp();fit();status();
+  }catch(error) {
+    notice(error.message||"Ошибка загрузки дерева.",true);
+    $("empty").hidden=false;
+    $("empty").replaceChildren(element("strong","","Дерево недоступно"),
+      element("p","",error.message||"Обновите карту навыков."));
+  }
+}
+window.addEventListener("message",event=>{
+  if(event.origin!==location.origin||event.source!==window.parent||window.parent===window)return;
+  if(event.data?.type==="mindcrafti-skills-parent-config"&&!config)
+    loadParentTree(event.data);
+  else if(event.data?.type==="mindcrafti-skills-parent-focus-node"&&config?.parentEmbedded) {
+    const skillId=event.data.skillId;
+    if(typeof skillId!=="string"||node(skillId)?.kind!=="skill"||node(skillId)?.archived)return;
+    if(focusNode(skillId))showNode(skillId);
+  }
+});
+
 $("parent-share")?.addEventListener("click",()=>void copyParentShare());
 $("parent-share-revoke")?.addEventListener("click",()=>void revokeParentShare());
 window.addEventListener("message",event=>{
@@ -820,6 +889,9 @@ function field(form,label,name,value,kind="input",max=4000){
 }
 function showNode(id){
   const n=node(id);if(!n)return;selection={type:"node",id};
+  if(config?.parentEmbedded&&n.kind==="skill")
+    window.parent.postMessage({type:"mindcrafti-skills-parent-selected-skill",skillId:n.id},
+      location.origin);
   $("inspector").classList.remove("closed");$("inspector-heading").textContent=n.archived?"Карточка в архиве":"Свойства карточки";
   const chosen=selectedStudents(),masteryBox=element("div","mastery-box"),masteryTitle=element("div","mastery-title",`ОСВОЕНИЕ · ${selectedTargetLabel()}`);
   masteryBox.append(masteryTitle);

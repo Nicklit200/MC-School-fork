@@ -82,11 +82,31 @@ export interface ParentSkillsDashboard {
   practice: ParentSkillPractice[];
 }
 
+/** A private, read-only snapshot of the SAME curriculum graph used by teachers. */
+export interface ParentSkillTreeSnapshot {
+  boardId: string;
+  boardRevision: number;
+  boardUpdatedAt: string;
+  board: {
+    schemaVersion: number;
+    title: string;
+    grade: number;
+    source: string;
+    nodes: {
+      id: string; kind: string; title: string; de: string; description: string;
+      example: string; source: string; color: string; x: number; y: number;
+      archived: boolean; core: boolean | null; schoolTypes: string[] | null;
+    }[];
+    edges: { id: string; source: string; target: string; kind: string }[];
+  };
+}
+
 export const parentApi = {
   linkToStudent: (studentId: string, fullName: string, email: string) =>
     jsonRequest<ParentInvitation>('POST', `/students/${studentId}/parent`, { fullName, email }),
   children: () => jsonRequest<ParentChildStatus[]>('GET', '/parent/children'),
   skills: (studentId: string) => jsonRequest<ParentSkillsDashboard>('GET', `/parent/children/${encodeURIComponent(studentId)}/skills`),
+  skillsTree: (studentId: string) => jsonRequest<ParentSkillTreeSnapshot>('GET', `/parent/children/${encodeURIComponent(studentId)}/skills/tree`),
 };
 
 export const teacherParentApi = {

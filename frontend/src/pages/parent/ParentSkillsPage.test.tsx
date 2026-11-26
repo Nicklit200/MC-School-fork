@@ -1,10 +1,10 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ParentSkillsPage } from './ParentSkillsPage';
 import { parentApi, type ParentSkillsDashboard } from '../../api/parent';
 
 vi.mock('../../api/parent', () => ({
-  parentApi: { children: vi.fn(), skills: vi.fn() },
+  parentApi: { children: vi.fn(), skills: vi.fn(), skillsTree: vi.fn() },
 }));
 vi.mock('../../i18n/I18nContext', () => ({
   useI18n: () => ({ language: 'RU' }),
@@ -69,8 +69,9 @@ describe('parent curriculum changes per lesson', () => {
     const point = await screen.findByRole('button', { name: /Индивидуальный урок/ });
     expect(screen.queryByText(/проверено/)).not.toBeInTheDocument();
     expect(screen.queryByText('Разряды и большие числа')).not.toBeInTheDocument();
-    fireEvent.click(point);
-    expect(screen.getByText('Изменившиеся навыки')).toBeInTheDocument();
+    // The newest lesson is selected automatically on opening the skills tab.
+    expect(point).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByText('Изменившиеся навыки')).toBeInTheDocument();
     expect(screen.getByText('Степени и степени десяти')).toBeInTheDocument();
     expect(screen.getByText('40% → 45%')).toBeInTheDocument();
     expect(screen.getByText('Самостоятельно вычислены степени.')).toBeInTheDocument();
@@ -81,8 +82,70 @@ describe('parent curriculum changes per lesson', () => {
   it('does not invent a changed skill when no mastery history exists', async () => {
     vi.mocked(parentApi.skills).mockResolvedValue(dashboard([]));
     render(<ParentSkillsPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /Индивидуальный урок/ }));
+    expect((await screen.findByRole('button', { name: /Индивидуальный урок/ })))
+      .toHaveAttribute('aria-pressed','true');
     expect(screen.queryByText('Степени и степени десяти')).not.toBeInTheDocument();
     expect(screen.getByText(/не записано изменений процентов/)).toBeInTheDocument();
+  });
+
+  it('switches from graph to the original tree for the same student', async () => {
+    vi.mocked(parentApi.skills).mockResolvedValue(dashboard([{
+      skillId:'g5-1-7', skillTitle:'Степени и степени десяти',
+      previous:40, current:45, changedAt:'2026-11-20T19:01:00Z',
+      sourceType:'LESSON', explanation:'Самостоятельные решения.',
+      excerpt:null,
+    }]));
+    vi.mocked(parentApi.skillsTree).mockResolvedValue({
+      boardId:'grade-5', boardRevision:3, boardUpdatedAt:'2026-11-20T20:00:00Z',
+      board: {
+        schemaVersion:1, title:'Математика 5 класс',grade:5,source:'Lehrplan',
+        nodes:[
+          {id:'g5-1-7',kind:'skill',title:'Степени и степени десяти',
+            de:'Potenzen',description:'',example:'',source:'',color:'orange',
+            x:0,y:0,archived:false,core:true,schoolTypes:[]},
+        ],
+        edges:[],
+      },
+    });
+    render(<ParentSkillsPage />);
+    expect(await screen.findByText('Изменившиеся навыки')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:/Найти навык в дереве/}));
+    expect(screen.getByRole('tab',{name:'Дерево навыков'})).toHaveAttribute('aria-selected','true');
+    const iframe = await screen.findByTitle('Дерево навыков ребёнка') as HTMLIFrameElement;
+    expect(iframe).toBeInTheDocument();
+    expect(parentApi.skillsTree).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222');
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    fireEvent.load(iframe);
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'mindcrafti-skills-parent-config',
+        progress: expect.objectContaining({
+          boardId: 'grade-5',
+          mastery: { 'g5-1-7': 45, 'g5-1-1': 60 },
+        }),
+      }),
+      window.location.origin,
+    ));
+    fireEvent.click(screen.getByRole('tab',{name:'График роста'}));
+    expect(screen.getByText('Изменившиеся навыки')).toBeInTheDocument();
+  });
+
+  it('opens the chronologically newest lesson even if the API list is unordered', async () => {
+    const data=dashboard([]);
+    const older='33333333-3333-4333-8333-333333333333';
+    data.lessonProgress=[
+      {lessonId:classroom,lessonTitle:'Новый урок',endedAt:'2026-11-20T18:00:00Z',
+        confirmedPercent:15.1,assessedSkills:6,changes:[]},
+      {lessonId:older,lessonTitle:'Старый урок',endedAt:'2026-11-13T18:00:00Z',
+        confirmedPercent:13.2,assessedSkills:6,changes:[]},
+    ];
+    data.lessons=[...data.lessons,{...data.lessons[0],id:older,title:'Старый урок',
+      endedAt:'2026-11-13T18:00:00Z'}];
+    vi.mocked(parentApi.skills).mockResolvedValue(data);
+    render(<ParentSkillsPage />);
+    expect((await screen.findByRole('button',{name:/Новый урок/})))
+      .toHaveAttribute('aria-pressed','true');
+    expect(screen.getByRole('button',{name:/Старый урок/}))
+      .toHaveAttribute('aria-pressed','false');
   });
 });

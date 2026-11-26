@@ -63,6 +63,23 @@ public class ParentSkillProgressService {
                                    String sourceRef, Instant at, UUID cycleLessonId,
                                    Integer previous, Integer current, boolean changed, String autonomy,
                                    String explanation, String excerpt) {}
+    /** Canonical curriculum tree for one child. No editable links or credentials. */
+    public record TreeSnapshot(String boardId, long boardRevision, Instant boardUpdatedAt,
+                               SkillBoardService.Board board) {}
+
+    public TreeSnapshot tree(AuthenticatedUser parent, UUID studentId) {
+        User child = requireOwnChild(parent, studentId);
+        if (child.getGrade() == null)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Класс ребёнка не определён");
+        List<SkillBoardService.BoardSummary> available = boards.list().stream()
+                .filter(board -> board.grade() == child.getGrade()).toList();
+        if (available.size() != 1)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Карта для класса не найдена");
+        SkillBoardService.Snapshot snapshot = boards.get(available.get(0).id());
+        return new TreeSnapshot(snapshot.id(), snapshot.revision(), snapshot.updatedAt(),
+                snapshot.data());
+    }
+
     public record Dashboard(UUID studentId, String studentName, Integer grade,
                             String schoolType, String boardId, String boardTitle,
                             String curriculumSource, Double confirmedPercent,

@@ -19,6 +19,14 @@ public class ParentSkillProgressController {
         this.service = service;
     }
 
+    /** The tree is the exact same curriculum graph used by the teacher dashboard. */
+    @GetMapping("/tree")
+    public ParentSkillProgressService.TreeSnapshot tree(
+            @AuthenticationPrincipal AuthenticatedUser parent,
+            @PathVariable UUID studentId) {
+        return service.tree(parent, studentId);
+    }
+
     @GetMapping
     public ParentSkillProgressService.Dashboard get(
             @AuthenticationPrincipal AuthenticatedUser parent,

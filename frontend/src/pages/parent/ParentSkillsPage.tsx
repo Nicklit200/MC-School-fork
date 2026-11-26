@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { parentApi, type ParentSkillsDashboard } from '../../api/parent';
 import { useI18n } from '../../i18n/I18nContext';
+import { ParentSkillsTree } from './ParentSkillsTree';
 import './parent-dashboard.css';
 
 type Language = 'RU' | 'DE';
@@ -100,8 +101,9 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
 }
 
 /** Shows the curriculum topics that genuinely changed at the chosen lesson. */
-function SelectedLessonSkills({ data, language, lessonId }: {
+function SelectedLessonSkills({ data, language, lessonId, onOpenSkill }: {
   data: ParentSkillsDashboard; language: Language; lessonId: string | null;
+  onOpenSkill: (skillId: string) => void;
 }) {
   const point = data.lessonProgress?.find(x => x.lessonId === lessonId);
   const lesson = data.lessons.find(x => x.id === lessonId);
@@ -140,6 +142,10 @@ function SelectedLessonSkills({ data, language, lessonId }: {
         {say(language, 'Источник: история карты навыков; ссылка на работу не сохранена.',
           'Quelle: Kompetenzverlauf; kein direkter Arbeitsnachweis gespeichert.')}
       </small>}
+      <button type="button" className="parent-progress__open-in-tree"
+        onClick={() => onOpenSkill(change.skillId)}>
+        {say(language, 'Найти навык в дереве', 'Kompetenz im Baum ansehen')} ↗
+      </button>
     </div>;
   };
   return <div className="parent-progress__dated-skills">
@@ -196,6 +202,10 @@ function SelectedLessonSkills({ data, language, lessonId }: {
             {' '}{item.before} → {item.after}
           </p>
           <p>{item.explanation}</p>
+          {item.skillId && <button type="button" className="parent-progress__open-in-tree"
+            onClick={() => onOpenSkill(item.skillId)}>
+            {say(language, 'Найти навык в дереве', 'Kompetenz im Baum ansehen')} ↗
+          </button>}
           {!hasScore && <small className="parent-progress__muted">
             {say(language, 'Наблюдение подтверждено, но численная оценка навыка пока не обновлена.',
               'Die Beobachtung ist belegt, aber der Kompetenzwert wurde noch nicht geändert.')}
@@ -254,6 +264,19 @@ export function ParentSkillsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'graph' | 'tree'>('graph');
+  const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
+
+  const openSkillInTree = (skillId: string) => {
+    setFocusedSkillId(skillId);
+    setViewMode('tree');
+  };
+  const selectTreeSkill = (skillId: string) => {
+    setFocusedSkillId(skillId);
+    const latestMatchingLesson = [...(data?.lessonProgress ?? [])].reverse()
+      .find(lesson => lesson.changes.some(change => change.skillId === skillId));
+    if (latestMatchingLesson) setSelectedLessonId(latestMatchingLesson.lessonId);
+  };
 
   useEffect(() => {
     let live = true;
@@ -268,7 +291,7 @@ export function ParentSkillsPage() {
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    setLoading(true);setError('');setData(null);setSelectedLessonId(null);
+    setLoading(true);setError('');setData(null);setSelectedLessonId(null);setFocusedSkillId(null);
     parentApi.skills(selected).then(result => {
       if (!live) return;
       // Selecting the most recent completed class also works when switching children.
@@ -300,6 +323,20 @@ export function ParentSkillsPage() {
       data && !data.boardId ? <section className="panel parent-progress__empty">
         {say(language,'Для выбранного класса пока нет однозначно определённой карты. Проверьте учебный профиль ребёнка.','Für diese Klasse ist noch kein eindeutiger Lernplan hinterlegt.')}
       </section> : data && <>
+        <div className="parent-progress__view-switch" role="tablist"
+          aria-label={say(language, 'Вид карты навыков', 'Kompetenzansicht')}>
+          <button type="button" role="tab" aria-selected={viewMode === 'graph'}
+            className={viewMode === 'graph' ? 'is-active' : ''}
+            onClick={() => setViewMode('graph')}>
+            {say(language, 'График роста', 'Lernkurve')}
+          </button>
+          <button type="button" role="tab" aria-selected={viewMode === 'tree'}
+            className={viewMode === 'tree' ? 'is-active' : ''}
+            onClick={() => setViewMode('tree')}>
+            {say(language, 'Дерево навыков', 'Kompetenzbaum')}
+          </button>
+        </div>
+        {viewMode === 'graph' ? <div role="tabpanel">
         <section className="panel parent-progress__chart-panel">
           <div className="parent-progress__section-title"><h2>{say(language,'Как растут знания','Lernfortschritt im Zeitverlauf')}</h2>
             <span className="parent-progress__muted">{say(language,'Одна точка = один урок','Ein Punkt = eine Stunde')}</span></div>
@@ -314,9 +351,14 @@ export function ParentSkillsPage() {
               {say(language,'Только реальные изменения из карты навыков','Nur nachgewiesene Änderungen der Kompetenzkarte')}
             </span>
           </div>
-          <SelectedLessonSkills data={data} language={language} lessonId={selectedLessonId} />
+          <SelectedLessonSkills data={data} language={language} lessonId={selectedLessonId}
+            onOpenSkill={openSkillInTree} />
         </section>}
         <SelectedLessonRecap data={data} language={language} lessonId={selectedLessonId} />
+        </div> : <div role="tabpanel">
+          <ParentSkillsTree key={data.studentId} data={data} language={language}
+            focusedSkillId={focusedSkillId} onSelectSkill={selectTreeSkill} />
+        </div>}
         <p className="parent-progress__footnote">{say(language,
           'Проценты основаны на сохранённых проверках Mindcrafti. История изменений и доказательства показываются отдельно. Отсутствие оценки не означает отсутствие знаний.',
           'Werte stammen aus gespeicherten Prüfungen von Mindcrafti. Ohne Bewertung bedeutet nicht ohne Kenntnisse.')}</p>
