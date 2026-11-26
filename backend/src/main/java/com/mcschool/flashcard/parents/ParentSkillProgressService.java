@@ -415,15 +415,32 @@ public class ParentSkillProgressService {
                             explanation, source == null ? null : source.excerpt()));
         }
 
+        // Replay scores exactly once. Re-reading an older manual edit at
+        // every lesson would erase an improvement retroactively attributed to
+        // an earlier lesson (the scoring job may run days after that lesson).
+        Set<Change> assigned = new HashSet<>();
+        pointChanges.values().forEach(assigned::addAll);
         Map<String, Integer> baseline = new HashMap<>();
+        Map<UUID,List<Change>> unattributedByLesson = new HashMap<>();
+        Instant firstEnd = chronologicalLessons.get(0).at();
+        for (Change change : history) {
+            if (!allowed.contains(change.skillId()) || assigned.contains(change)) continue;
+            if (!change.at().isAfter(firstEnd)) {
+                baseline.put(change.skillId(),change.current());
+                continue;
+            }
+            for (LessonRow lesson : chronologicalLessons) {
+                if (!change.at().isAfter(lesson.at())) {
+                    unattributedByLesson.computeIfAbsent(lesson.id(),
+                            unused -> new ArrayList<>()).add(change);
+                    break;
+                }
+            }
+        }
         List<LessonProgressPoint> result = new ArrayList<>();
         for (LessonRow lesson : chronologicalLessons) {
-            // Historical scores from before the first available lesson must
-            // already be reflected in the first point, but have NO fake "lesson change".
-            for (Change change : history) {
-                if (allowed.contains(change.skillId()) && !change.at().isAfter(lesson.at()))
-                    baseline.put(change.skillId(), change.current());
-            }
+            for (Change change : unattributedByLesson.getOrDefault(lesson.id(), List.of()))
+                baseline.put(change.skillId(), change.current());
             for (Change change : pointChanges.getOrDefault(lesson.id(), List.of()))
                 baseline.put(change.skillId(), change.current());
             Integer percent = baseline.isEmpty() ? null : confirmedPercent(baseline, allowed);
