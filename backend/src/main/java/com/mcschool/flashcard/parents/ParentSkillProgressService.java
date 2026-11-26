@@ -69,7 +69,8 @@ public class ParentSkillProgressService {
     private record Proof(String skillId, String sourceType, String sourceRef, String autonomy,
                          String explanation, String excerpt, Integer after, Instant at) {}
     private record LessonRow(UUID id, String title, Instant at, String state,
-                             String summary) {}
+                             String summary, String coveredMaterial,
+                             String transcript) {}
 
     private final UserRepository users;
     private final SkillBoardService boards;
@@ -183,8 +184,10 @@ public class ParentSkillProgressService {
         List<LessonRow> sessions = jdbc.query("""
             SELECT c.id,c.title,coalesce(c.actual_end_at,c.scheduled_end_at) AS ended_at,
                    coalesce(r.state,j.state,'NONE') AS review_state,
-                   r.lesson_summary
+                   r.lesson_summary, p.covered_material,
+                   coalesce(p.transcript_text,p.soniox_transcript_text) AS lesson_transcript
             FROM online_classes c
+            LEFT JOIN lesson_preparations p ON p.teacher_id=c.teacher_id AND p.event_id=c.event_id
             LEFT JOIN post_lesson_skill_review_jobs j ON j.class_id=c.id
             LEFT JOIN post_lesson_skill_review_students r
                 ON r.class_id=c.id AND r.student_id=?
@@ -199,7 +202,8 @@ public class ParentSkillProgressService {
             ORDER BY ended_at DESC, c.id DESC LIMIT 35
             """, (rs, i) -> new LessonRow(rs.getObject("id",UUID.class),
                     rs.getString("title"), rs.getTimestamp("ended_at").toInstant(),
-                    rs.getString("review_state"), rs.getString("lesson_summary")),
+                    rs.getString("review_state"), rs.getString("lesson_summary"),
+                    rs.getString("covered_material"), rs.getString("lesson_transcript")),
                     studentId, studentId, studentId, studentId.toString());
 
         List<Lesson> lessons = new ArrayList<>();
@@ -229,6 +233,14 @@ public class ParentSkillProgressService {
             }
             String summary = normalizedSummary(session.summary());
             String origin = summary == null ? "NONE" : "AI";
+            if (summary == null) {
+                summary = normalizedSummary(session.coveredMaterial());
+                if (summary != null) origin = "TEACHER_NOTES";
+            }
+            if (summary == null) {
+                summary = transcriptTopicSummary(session.transcript());
+                if (summary != null) origin = "TRANSCRIPT_TOPICS";
+            }
             if (summary == null && !items.isEmpty()) {
                 String joined = items.stream().map(LessonEvidence::skillTitle).distinct()
                         .limit(5).reduce((a,b) -> a + ", " + b).orElse("");
@@ -448,6 +460,43 @@ public class ParentSkillProgressService {
             previous = end;
         }
         return previous;
+    }
+
+    /**
+     * Historical lesson fallback: transcript is already persisted, but it may
+     * include several speakers. Never expose raw dialogue or infer individual
+     * competence. Only report unmistakable curriculum keywords that occurred.
+     */
+    static String transcriptTopicSummary(String transcript) {
+        if (transcript == null || transcript.isBlank()) return null;
+        String lower = transcript.toLowerCase(java.util.Locale.ROOT);
+        List<String> topics = new ArrayList<>();
+        if (hasTopic(lower,"\\bdivision\\b|\\bdividier|\\bgeteilt\\b|делени|разделить"))
+            topics.add("деление");
+        if (hasTopic(lower,"\\bkopfrechnen\\b|устн.{0,8}сч[её]т|вычислен|\\bmental arithmetic\\b"))
+            topics.add("устный счёт");
+        if (hasTopic(lower,"\\brundung\\b|\\brunden\\b|округл|\\bnachbarhunderte\\b"))
+            topics.add("округление чисел");
+        if (hasTopic(lower,"\\bmilliarden\\b|\\bmillionen\\b|миллиард|миллион|\\bstellenwert\\b|разряд"))
+            topics.add("большие числа и разряды");
+        if (hasTopic(lower,"дроб[ьи]|\\bbr[üu]che\\b|\\bbruchrechnung\\b"))
+            topics.add("дроби");
+        if (hasTopic(lower,"уравнен|\\bgleichung\\b|\\bgleichungen\\b"))
+            topics.add("уравнения");
+        if (hasTopic(lower,"\\bprozent|процент"))
+            topics.add("проценты");
+        if (hasTopic(lower,"\\bgeometrie\\b|геометри|\\bfl[äa]che\\b|площад"))
+            topics.add("геометрия");
+        if (hasTopic(lower,"текстов.{0,8}задач|\\btextaufgabe|\\bsachaufgabe"))
+            topics.add("текстовые задачи");
+        if (topics.isEmpty()) return null;
+        return "По сохранённой транскрипции занятия обсуждались: "
+                + String.join(", ",topics) + ". Это перечень тем, не оценка освоения.";
+    }
+
+    private static boolean hasTopic(String transcript,String regex) {
+        return java.util.regex.Pattern.compile(regex,java.util.regex.Pattern.UNICODE_CASE)
+                .matcher(transcript).find();
     }
 
     private static String normalizedSummary(String summary) {
