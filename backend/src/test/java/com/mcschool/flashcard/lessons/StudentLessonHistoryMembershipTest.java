@@ -94,6 +94,25 @@ class StudentLessonHistoryMembershipTest {
                 .containsExactly("legacy-group");
     }
 
+    @Test
+    void currentTeachersGroupHistoryAlsoAppearsForLegacyMembershipWithoutARoster() {
+        StudentGroup group = StudentGroup.create(currentTeacher, "Vitalina group");
+        StudentGroupMember membership = StudentGroupMember.create(group, student);
+        ReflectionTestUtils.setField(membership, "createdAt", START.minusSeconds(86400));
+        when(members.findAllByStudentIdOrderByCreatedAtAsc(student.getId())).thenReturn(List.of(membership));
+        LessonHistoryEntry entry = LessonHistoryEntry.create(currentTeacher, new GroupLessonResponse(
+                "group-current", "group-current", group.getId(), group.getName(), null, null,
+                List.of(), "Math group", START, START.plusSeconds(2700), null, null));
+        when(history.findAllByGroupIdAndDeletedAtIsNullOrderByStartsAtDesc(group.getId()))
+                .thenReturn(List.of(entry));
+
+        assertThat(service.list(caller, student.getId()))
+                .extracting(StudentLessonHistoryItem::eventId).containsExactly("group-current");
+
+        entry.replaceParticipants(List.of());
+        assertThat(service.list(caller, student.getId())).isEmpty();
+    }
+
     private StudentGroup memberOfGroup() {
         StudentGroup group = StudentGroup.create(formerTeacher, "Group");
         StudentGroupMember membership = StudentGroupMember.create(group, student);

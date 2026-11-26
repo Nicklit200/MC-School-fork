@@ -59,7 +59,7 @@ public class StudentLessonHistoryService {
         Map<String, LessonHistoryEntry> unique = new LinkedHashMap<>();
         for (LessonHistoryEntry entry : candidates) {
             UUID ownerId = entry.getTeacher().getId();
-            if (ownerId.equals(caller.id()) || !belongsToStudent(entry, studentId, groupMembershipCreatedAt)) {
+            if (!belongsToStudent(entry, studentId, groupMembershipCreatedAt)) {
                 continue;
             }
             unique.putIfAbsent(ownerId + ":" + entry.getEventId(), entry);
