@@ -86,6 +86,29 @@ describe('one-click parent/student push onboarding', () => {
     expect(screen.queryByRole('button', { name: 'Включить уведомления' })).not.toBeInTheDocument();
   });
 
+  it('quiet parent view rebinds approved notifications and announces the updated device without showing setup', async () => {
+    setPermission('granted');
+    getSubscription.mockResolvedValue({
+      options: { applicationServerKey: Uint8Array.from([1, 0, 1]).buffer },
+      toJSON: () => ({ endpoint: 'https://push.example/sub/parent', keys: { p256dh: 'parent-key', auth: 'parent-auth' } }),
+    });
+    const onPushChanged = vi.fn();
+    window.addEventListener('mindcrafti-push-changed', onPushChanged);
+    try {
+      const { container } = render(<MemoryRouter><PushQuickStart userId="parent-123" role="PARENT" quiet /></MemoryRouter>);
+      await waitFor(() => expect(api.push.subscribe).toHaveBeenCalledWith({
+        endpoint: 'https://push.example/sub/parent', p256dh: 'parent-key', auth: 'parent-auth',
+      }));
+      await waitFor(() => expect(onPushChanged).toHaveBeenCalledOnce());
+      expect(container).toBeEmptyDOMElement();
+      expect(Notification.requestPermission).not.toHaveBeenCalled();
+      expect(subscribeBrowser).not.toHaveBeenCalled();
+      expect(api.push.test).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('mindcrafti-push-changed', onPushChanged);
+    }
+  });
+
   it('recreates a missing subscription silently when browser permission was already granted', async () => {
     setPermission('granted');
     mount('PARENT');

@@ -54,6 +54,7 @@ import { StudentHomeworkDetailPage } from './pages/student/StudentHomeworkDetail
 import { PdfHomeworkWithSubmissionPage } from './pages/student/PdfHomeworkWithSubmissionPage';
 import { SettingsPage } from './pages/student/SettingsPage';
 import { ParentPage } from './pages/parent/ParentPage';
+import { ParentSkillsPage } from './pages/parent/ParentSkillsPage';
 
 // Online-class pages pull in the LiveKit SDK (~700 kB). They are lazy-loaded so
 // the flashcard flows — especially on student mobile — do not pay for it.
@@ -148,6 +149,7 @@ export function App() {
 
       <Route path="/parent" element={<ProtectedRoute role="PARENT"><Layout><ParentPage /></Layout></ProtectedRoute>} />
       <Route path="/parent/settings" element={<ProtectedRoute role="PARENT"><Layout><SettingsPage /></Layout></ProtectedRoute>} />
+      <Route path="/parent/skills" element={<ProtectedRoute role="PARENT"><Layout><ParentSkillsPage /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to={user ? homePathForRole(user.role) : '/login'} replace />} />
     </Routes>

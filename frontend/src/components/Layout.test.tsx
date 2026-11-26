@@ -142,8 +142,8 @@ describe('Layout: role designs and server-controlled online classroom navigation
     expect(authActions.logout).toHaveBeenCalledOnce();
   });
 
-  it('can return to the administrator from the student design', async () => {
-    role = 'STUDENT';
+  it.each(['STUDENT', 'PARENT'] as const)('can return to the administrator from the %s design', async (nextRole) => {
+    role = nextRole;
     sessionStorage.setItem('mindcrafti.impersonation.adminToken', 'test-admin-token');
     sessionStorage.setItem('mindcrafti.impersonation.returnTo', '/admin/accounts');
     const admin = { id: 'admin', fullName: 'Admin', role: 'ADMIN', preferredLanguage: 'RU' } as User;
@@ -155,8 +155,23 @@ describe('Layout: role designs and server-controlled online classroom navigation
     expect(authActions.logout).not.toHaveBeenCalled();
   });
 
-  it.each(['PARENT', 'ADMIN'] as const)('keeps %s outside the student theme', (nextRole) => {
-    role = nextRole;
+  it('uses the existing student design for parent navigation without exposing pupil actions', () => {
+    role = 'PARENT';
+    const { container } = mount('/parent/settings');
+    expect(container.querySelector('.student-shell')).toHaveAttribute('data-variant', 'parent');
+    expect(container.querySelector('.teacher-shell')).not.toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Основная навигация' });
+    expect(within(nav).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual([
+      '/parent', '/parent/settings', '/parent/skills',
+    ]);
+    expect(within(nav).getByRole('link', { name: 'Настройки' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('link', { name: 'Мои карточки' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+    expect(authActions.logout).toHaveBeenCalledOnce();
+  });
+
+  it('keeps administrators outside the student theme', () => {
+    role = 'ADMIN';
     const { container } = mount();
     expect(container.querySelector('.student-shell')).not.toBeInTheDocument();
     expect(container.querySelector('.teacher-shell')).not.toBeInTheDocument();
