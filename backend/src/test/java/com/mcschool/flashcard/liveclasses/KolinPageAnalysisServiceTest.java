@@ -94,6 +94,26 @@ class KolinPageAnalysisServiceTest {
         assertThat(context).containsKey("savedPageAnalysisCoverage");
     }
 
+    @Test void additionalTeachersDoNotDisableOriginalPilotOrEnableOthers() {
+        var additional = new AuthenticatedUser(UUID.randomUUID(),"additional@example.test",Role.TEACHER);
+        var unrelated = new AuthenticatedUser(UUID.randomUUID(),"unrelated@example.test",Role.TEACHER);
+        var second = new AuthenticatedUser(UUID.randomUUID(),"second@example.test",Role.TEACHER);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"additionalTeacherIds",
+                " , "+additional.id()+" , "+second.id()+", ");
+        assertThat(service.enabledFor(host)).isTrue();
+        assertThat(service.enabledFor(additional)).isTrue();
+        assertThat(service.enabledFor(second)).isTrue();
+        assertThat(service.enabledFor(unrelated)).isFalse();
+        assertThat(service.enabledFor(null)).isFalse();
+    }
+
+    @Test void emptyAdditionalAllowlistPreservesOriginalPilot() {
+        var unrelated = new AuthenticatedUser(UUID.randomUUID(),"unrelated@example.test",Role.TEACHER);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"additionalTeacherIds"," , , ");
+        assertThat(service.enabledFor(host)).isTrue();
+        assertThat(service.enabledFor(unrelated)).isFalse();
+    }
+
     @Test void disabledPilotCannotClaimOrCallProvider() {
         org.springframework.test.util.ReflectionTestUtils.setField(service,"pilotTeacherId","");
         assertThat(service.enabled(host,room.getId())).isFalse();
