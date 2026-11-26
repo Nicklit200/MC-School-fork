@@ -1,31 +1,35 @@
 import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import type { Homework } from '../api/types';
 import {
   getSchoolDateString,
   homeworkHistoryText,
   resolveHomeworkHistoryStatus,
+  type HomeworkHistoryRecord,
   type HomeworkHistoryStatus,
 } from '../lib/homeworkHistory';
 import '../styles/homework-history-calendar.css';
 
-type Props = {
-  homeworks: Homework[];
+type CalendarHomework = HomeworkHistoryRecord & { id: string };
+
+type Props<T extends CalendarHomework> = {
+  homeworks: T[];
   language: 'DE' | 'RU';
-  renderHomework: (homework: Homework) => ReactNode;
+  renderHomework: (homework: T, now: Date) => ReactNode;
+  getStatus?: (homework: T, now: Date) => HomeworkHistoryStatus;
   onSelectionChange?: () => void;
 };
 
 type StatusCounts = Partial<Record<HomeworkHistoryStatus, number>>;
-const statusOrder: HomeworkHistoryStatus[] = ['MISSED', 'LATE', 'TODAY', 'UPCOMING', 'DONE'];
+const statusOrder: HomeworkHistoryStatus[] = ['MISSED', 'LATE', 'TODAY', 'CARDS_OPEN', 'UPCOMING', 'DONE', 'CARDS_DONE'];
 const summaryStatuses: HomeworkHistoryStatus[] = ['DONE', 'MISSED', 'LATE'];
 const symbols: Record<HomeworkHistoryStatus, string> = {
   DONE: '✓', MISSED: '!', LATE: '◷', TODAY: '○', UPCOMING: '·',
+  CARDS_DONE: '✓', CARDS_OPEN: '○',
 };
 const dateFromKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 const dateKey = (date: Date) => date.toISOString().slice(0, 10);
 const monthKey = (key: string) => `${key.slice(0, 7)}-01`;
 
-export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, onSelectionChange }: Props) {
+export function HomeworkHistoryCalendar<T extends CalendarHomework>({ homeworks, language, renderHomework, getStatus = resolveHomeworkHistoryStatus, onSelectionChange }: Props<T>) {
   const [now, setNow] = useState(() => new Date());
   const today = getSchoolDateString(now);
   const [month, setMonth] = useState(() => monthKey(today));
@@ -48,7 +52,7 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
   }, []);
 
   const { byDay, countsByDay } = useMemo(() => {
-    const byDay = new Map<string, Homework[]>();
+    const byDay = new Map<string, T[]>();
     const countsByDay = new Map<string, StatusCounts>();
     for (const homework of homeworks) {
       const key = homework.startDate.slice(0, 10);
@@ -56,12 +60,12 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
       bucket.push(homework);
       byDay.set(key, bucket);
       const counts = countsByDay.get(key) ?? {};
-      const status = resolveHomeworkHistoryStatus(homework, now);
+      const status = getStatus(homework, now);
       counts[status] = (counts[status] ?? 0) + 1;
       countsByDay.set(key, counts);
     }
     return { byDay, countsByDay };
-  }, [homeworks, now]);
+  }, [homeworks, now, getStatus]);
 
   const days = useMemo(() => {
     const first = dateFromKey(month);
@@ -85,6 +89,10 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
   const accessibleDate = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' });
   const selectedHomeworks = byDay.get(selectedDay) ?? [];
+  const legendStatuses: HomeworkHistoryStatus[] = ['TODAY', 'UPCOMING'];
+  for (const status of ['CARDS_DONE', 'CARDS_OPEN'] as const) {
+    if (monthCounts[status]) legendStatuses.push(status);
+  }
 
   function selectDay(key: string) {
     setSelectedDay(key);
@@ -121,7 +129,7 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
       </div>
 
       <div className="homework-calendar__pending-legend">
-        {(['TODAY', 'UPCOMING'] as HomeworkHistoryStatus[]).map(status => (
+        {legendStatuses.map(status => (
           <span key={status} data-status={status}>
             <span className="homework-calendar__dot" aria-hidden="true" />
             {homeworkHistoryText(status, language)}
@@ -164,7 +172,7 @@ export function HomeworkHistoryCalendar({ homeworks, language, renderHomework, o
       <section className="homework-calendar__details" id={detailsId} aria-label={`${text.details} ${fullDate.format(dateFromKey(selectedDay))}`}>
         <h4 className="homework-calendar__details-title" aria-live="polite">{text.details} {fullDate.format(dateFromKey(selectedDay))}</h4>
         {selectedHomeworks.length ? (
-          <div className="history-list">{selectedHomeworks.map(homework => <Fragment key={homework.id}>{renderHomework(homework)}</Fragment>)}</div>
+          <div className="history-list">{selectedHomeworks.map(homework => <Fragment key={homework.id}>{renderHomework(homework, now)}</Fragment>)}</div>
         ) : <p className="homework-calendar__empty">{text.empty}</p>}
       </section>
     </section>

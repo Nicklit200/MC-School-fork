@@ -1,6 +1,9 @@
 import type { Homework } from '../api/types';
 
-export type HomeworkHistoryStatus = 'DONE' | 'LATE' | 'MISSED' | 'TODAY' | 'UPCOMING';
+export type HomeworkHistoryStatus = 'DONE' | 'LATE' | 'MISSED' | 'TODAY' | 'UPCOMING' | 'CARDS_DONE' | 'CARDS_OPEN';
+
+export type HomeworkHistoryRecord = Pick<Homework,
+  'startDate' | 'submitted' | 'submittedAt' | 'deadlineAt' | 'overdue' | 'submittedLate'>;
 
 const schoolDateFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -12,7 +15,7 @@ export function getSchoolDateString(now = new Date()): string {
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
-export function resolveHomeworkHistoryStatus(homework: Homework, now = new Date()): HomeworkHistoryStatus {
+export function resolveHomeworkHistoryStatus(homework: HomeworkHistoryRecord, now = new Date()): HomeworkHistoryStatus {
   const deadline = Date.parse(homework.deadlineAt);
   if (homework.submitted) {
     const submitted = homework.submittedAt ? Date.parse(homework.submittedAt) : NaN;
@@ -31,10 +34,12 @@ export function homeworkHistoryText(status: HomeworkHistoryStatus, language: 'DE
     ? {
       DONE: 'Rechtzeitig abgegeben', LATE: 'Verspätet abgegeben', MISSED: 'Nicht abgegeben',
       TODAY: 'Heute fällig', UPCOMING: 'Geplant',
+      CARDS_DONE: 'Lernkarten gelernt', CARDS_OPEN: 'Lernkarten wiederholen',
     }
     : {
       DONE: 'Сдано вовремя', LATE: 'Сдано с опозданием', MISSED: 'Не сдано',
       TODAY: 'Нужно сделать сегодня', UPCOMING: 'Запланировано',
+      CARDS_DONE: 'Карточки изучены', CARDS_OPEN: 'Нужно повторить карточки',
     };
   return labels[status];
 }
