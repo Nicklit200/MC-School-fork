@@ -20,31 +20,70 @@ const day = (v: string, language: Language) => new Intl.DateTimeFormat(language 
   day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Berlin',
 }).format(new Date(v));
 
-/** Every point is from persisted mastery history, not simulated chart data. */
-function ProgressGraph({ data, language }: { data: ParentSkillsDashboard; language: Language }) {
-  const points = data.trend;
-  if (!points.length) return <div className="parent-progress__chart-empty">
-    {say(language, 'Первые подтверждённые результаты появятся здесь после проверки работы.', 'Die ersten belegten Lernfortschritte erscheinen nach der Auswertung.')}
+/** One selectable point for each actual finished class. The backend owns all percentages. */
+function ProgressGraph({ data, language, selectedId, onSelect }: {
+  data: ParentSkillsDashboard; language: Language;
+  selectedId: string | null; onSelect: (lessonId: string) => void;
+}) {
+  const lessons = data.lessonProgress ?? [];
+  if (!lessons.length) return <div className="parent-progress__chart-empty">
+    {say(language, 'Завершённые уроки появятся на графике после проведения занятий.',
+      'Abgeschlossene Unterrichtsstunden erscheinen nach dem Unterricht.')}
   </div>;
-  const start = points[0].at;
-  const series = [{ at: start, confirmedPercent: 0 }, ...points].map((p, i) => ({
-    x: 48 + (i / Math.max(1, points.length)) * 665,
-    y: 182 - (p.confirmedPercent / 100) * 145,
-    value: p.confirmedPercent,
-    at: p.at,
+  const width = Math.max(760, (lessons.length - 1) * 100 + 112);
+  const left = 54;
+  const right = width - 43;
+  const y = (value: number) => 182 - Math.max(0, Math.min(100, value)) * 1.45;
+  const items = lessons.map((lesson, i) => ({
+    ...lesson, x: lessons.length === 1 ? (left + right) / 2 : left + i * (right-left)/(lessons.length-1),
+    y: lesson.confirmedPercent == null ? 182 : y(lesson.confirmedPercent),
   }));
-  const path = series.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  return <div className="parent-progress__graph">
-    <svg viewBox="0 0 760 224" role="img" aria-label={say(language, 'График подтверждённого прогресса по классу', 'Diagramm des nachgewiesenen Lernfortschritts')} preserveAspectRatio="xMidYMid meet">
+  // Do not draw an invented zero baseline for lessons with no assessed work.
+  let path = '';
+  let drawing = false;
+  items.forEach(item => {
+    if (item.confirmedPercent == null) { drawing = false; return; }
+    path += `${drawing ? 'L' : 'M'}${item.x.toFixed(1)},${item.y.toFixed(1)} `;
+    drawing = true;
+  });
+  const select = (id: string) => onSelect(id);
+  return <div className="parent-progress__graph" role="region"
+    aria-label={say(language, 'Выберите точку урока на графике', 'Unterrichtspunkt im Diagramm wählen')}>
+    <svg viewBox={`0 0 ${width} 230`} style={{ width, minWidth: '100%', maxWidth: 'none' }}
+      aria-label={say(language, 'История прогресса по урокам', 'Lernfortschritt nach Unterricht')}
+      role="img">
       {[0,25,50,75,100].map(n => <g key={n}>
-        <line x1="48" x2="714" y1={182 - n*1.45} y2={182 - n*1.45} className="parent-progress__gridline"/>
-        <text x="34" y={187 - n*1.45} textAnchor="end" className="parent-progress__axis">{n}%</text>
+        <line x1={left} x2={right} y1={y(n)} y2={y(n)} className="parent-progress__gridline"/>
+        <text x="40" y={y(n)+5} textAnchor="end" className="parent-progress__axis">{n}%</text>
       </g>)}
-      <path d={path} className="parent-progress__line" />
-      {series.slice(1).map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === series.length - 2 ? 5 : 3.7}
-        className="parent-progress__dot"><title>{`${day(p.at,language)}: ${p.value}%`}</title></circle>)}
-      <text x="48" y="213" className="parent-progress__axis">{day(points[0].at,language)}</text>
-      <text x="713" y="213" className="parent-progress__axis" textAnchor="end">{day(points[points.length-1].at,language)}</text>
+      {path && <path d={path} className="parent-progress__line"/>}
+      {items.map((point) => {
+        const chosen = selectedId === point.lessonId;
+        const description = `${point.lessonTitle}, ${day(point.endedAt, language)}, ${point.confirmedPercent == null
+          ? say(language, 'нет оценки', 'keine Bewertung') : percent(point.confirmedPercent)}`;
+        return <g key={point.lessonId} role="button" tabIndex={0} aria-label={description}
+          aria-pressed={chosen} className={`parent-progress__graph-point ${chosen ? 'parent-progress__graph-point--active' : ''}`}
+          onClick={() => select(point.lessonId)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault(); select(point.lessonId);
+            }
+          }}>
+          {chosen && <line x1={point.x} x2={point.x} y1="36" y2="185"
+            className="parent-progress__selected-guide"/>}
+          <circle cx={point.x} cy={point.y} r="17" className="parent-progress__hit-target"/>
+          <circle cx={point.x} cy={point.y} r={chosen ? 7 : 5.5}
+            className={point.confirmedPercent == null
+              ? 'parent-progress__dot parent-progress__dot--unassessed'
+              : 'parent-progress__dot'}/>
+          <text className={`parent-progress__point-date ${chosen ? 'parent-progress__point-date--active' : ''}`}
+            x={point.x} y="213" textAnchor="middle">
+            {new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU',
+              {day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}).format(new Date(point.endedAt))}
+          </text>
+          <title>{description}</title>
+        </g>;
+      })}
     </svg>
   </div>;
 }
@@ -70,6 +109,60 @@ function Evidence({ item, language }: { item: ParentSkillEvidence | ParentSkillP
       UNKNOWN: say(language,'Самостоятельность не определена','Selbstständigkeit unbekannt'),
     }[item.autonomy] ?? ''}</small>}
   </div>;
+}
+
+/** The selected graph point expands the exact historical lesson below the chart. */
+function SelectedLessonDetails({ data, language, lessonId }: {
+  data: ParentSkillsDashboard; language: Language; lessonId: string | null;
+}) {
+  if (!lessonId) return <p className="parent-progress__muted">
+    {say(language, 'Нажмите на дату или точку урока, чтобы увидеть подробности.',
+      'Klicken Sie auf einen Unterrichtspunkt, um Details zu sehen.')}
+  </p>;
+  const lesson = data.lessons.find(item => item.id === lessonId);
+  if (!lesson) return <p className="parent-progress__muted">
+    {say(language, 'Детали урока пока недоступны.', 'Unterrichtsdetails sind noch nicht verfügbar.')}
+  </p>;
+  const homework = data.practice.filter(item => item.cycleLessonId === lessonId);
+  const changes = [...lesson.evidence, ...homework];
+  const point = data.lessonProgress?.find(item => item.lessonId === lessonId);
+  return <section className="parent-progress__selected-lesson" aria-live="polite"
+    aria-label={say(language, 'Подробности выбранного урока', 'Ausgewählte Unterrichtsdetails')}>
+    <div className="parent-progress__selected-heading">
+      <div><small className="parent-progress__muted">{day(lesson.endedAt, language)}</small>
+        <h3>{lesson.title}</h3></div>
+      <strong className="parent-progress__selected-score">
+        {point?.confirmedPercent == null ? say(language, 'Не оценено', 'Nicht bewertet') : percent(point.confirmedPercent)}
+      </strong>
+    </div>
+    <div className="parent-progress__recap">
+      <strong>{say(language, 'Что проходили', 'Unterrichtsinhalte')}</strong>
+      <p>{lesson.summary || say(language,
+        'Краткий пересказ этого занятия пока не сохранён.',
+        'Für diese Stunde wurde noch keine Zusammenfassung gespeichert.')}</p>
+    </div>
+    <div className="parent-progress__section-title">
+      <h3>{say(language, 'Изменения навыков', 'Kompetenzänderungen')}</h3>
+      <span className="parent-progress__muted">
+        {changes.filter(item=>item.changed).length} {say(language, 'подтверждённых изменений', 'bestätigte Änderungen')}
+      </span>
+    </div>
+    {lesson.evidence.length > 0
+      ? lesson.evidence.map((item,i) => <Evidence key={`lesson-${i}`} item={item} language={language}/>)
+      : <p className="parent-progress__muted">
+        {say(language, 'По этому уроку подтверждённых изменений пока нет.',
+          'Für diese Stunde liegen noch keine bestätigten Änderungen vor.')}
+      </p>}
+    <div className="parent-progress__recap">
+      <strong>{say(language, 'Домашняя работа после предыдущего урока',
+        'Hausaufgaben seit der vorigen Stunde')}</strong>
+      {homework.length
+        ? homework.map((item,i) => <Evidence key={`homework-${i}`} item={item} language={language}/>)
+        : <p>{say(language,
+            'Подтверждённых изменений по домашней работе за этот период пока нет.',
+            'Für diesen Zeitraum sind noch keine bestätigten Hausaufgabenänderungen vorhanden.')}</p>}
+    </div>
+  </section>;
 }
 
 function EventHistory({ data, language }: { data: ParentSkillsDashboard; language: Language }) {
@@ -133,6 +226,7 @@ export function ParentSkillsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -147,7 +241,7 @@ export function ParentSkillsPage() {
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    setLoading(true);setError('');setData(null);setExpandedTopic(null);
+    setLoading(true);setError('');setData(null);setExpandedTopic(null);setSelectedLessonId(null);
     parentApi.skills(selected).then(result => { if(live) setData(result); })
       .catch(e => { if(live) setError(String(e?.message ?? e)); })
       .finally(() => { if(live) setLoading(false); });
@@ -190,8 +284,10 @@ export function ParentSkillsPage() {
         </section>
         <section className="panel parent-progress__chart-panel">
           <div className="parent-progress__section-title"><h2>{say(language,'Как растут знания','Lernfortschritt im Zeitverlauf')}</h2>
-            <span className="parent-progress__muted">{say(language,'Данные из истории навыков','Echte Verlaufsdaten')}</span></div>
-          <ProgressGraph data={data} language={language} />
+            <span className="parent-progress__muted">{say(language,'Одна точка = один урок','Ein Punkt = eine Stunde')}</span></div>
+          <ProgressGraph data={data} language={language} selectedId={selectedLessonId}
+            onSelect={id => setSelectedLessonId(current => current === id ? null : id)} />
+          <SelectedLessonDetails data={data} language={language} lessonId={selectedLessonId} />
         </section>
         <section className="parent-progress__topics">
           <div className="parent-progress__section-title"><h2>{say(language,'Темы и навыки','Themen und Kompetenzen')}</h2>
