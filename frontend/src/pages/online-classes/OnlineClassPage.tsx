@@ -64,7 +64,7 @@ export function OnlineClassPage() {
 
   const entry = session.onlineClass ? lessonEntry(session.onlineClass, session.onlineClass.scheduledStartAt, now) : null;
   if (session.onlineClass && (session.onlineClass.status === 'ENDED' || session.onlineClass.status === 'CANCELLED'
-      || (!session.connection && entry && !entry.canJoin))) {
+      || (!session.connection && entry && !entry.canJoin && session.onlineClass.viewerIsHost))) {
     return <section className="panel">
       <h1>{session.onlineClass.title}</h1>
       <LessonEntryAction room={session.onlineClass} startsAt={session.onlineClass.scheduledStartAt} language={language} now={now} />
@@ -223,13 +223,13 @@ export function OnlineClassPage() {
       <h1>{session.onlineClass?.title ?? t('onlineClass.title')}</h1>
 
       <div role="status" aria-live="polite">
-        {session.phase === 'waiting' && <p>{t('onlineClass.waitingForTeacher')}</p>}
+        {(session.phase === 'waiting' || (entry && !entry.canJoin)) && <p>{t('onlineClass.waitingForTeacher')}</p>}
         {session.phase === 'notOpen' && <p>{t('onlineClass.notOpen')}</p>}
         {session.phase === 'failed' && <p>{t('error.generic')}</p>}
       </div>
 
       <PrejoinPanel
-        joinDisabled={session.phase === 'requesting'}
+        joinDisabled={session.phase === 'requesting' || session.phase === 'waiting' || Boolean(entry && !entry.canJoin)}
         onJoin={(choice) => {
           setInitialMedia(choice);
           void session.requestConnection();
