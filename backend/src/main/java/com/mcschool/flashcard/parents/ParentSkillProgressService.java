@@ -45,8 +45,8 @@ public class ParentSkillProgressService {
     public record Lesson(UUID id, String title, Instant endedAt, String reviewState,
                          String summary, String summarySource, List<LessonEvidence> evidence) {}
     public record PracticeEvidence(String skillId, String skillTitle, String sourceType,
-                                   String sourceRef, Instant at, Integer previous,
-                                   Integer current, boolean changed, String autonomy,
+                                   String sourceRef, Instant at, UUID cycleLessonId,
+                                   Integer previous, Integer current, boolean changed, String autonomy,
                                    String explanation, String excerpt) {}
     public record Dashboard(UUID studentId, String studentName, Integer grade,
                             String schoolType, String boardId, String boardTitle,
@@ -237,8 +237,9 @@ public class ParentSkillProgressService {
         // was ASSIGNED, never to every later lesson. A cycle starts after the
         // previous ended lesson and closes at the next ended lesson (or now).
         // We use homeworks.created_at, not a mutable due/start_date.
-        List<Instant> lessonEnds = sessions.stream().map(LessonRow::at)
-                .sorted().toList();
+        List<LessonRow> chronologicalLessons = sessions.stream()
+                .sorted(Comparator.comparing(LessonRow::at)).toList();
+        List<Instant> lessonEnds = chronologicalLessons.stream().map(LessonRow::at).toList();
         List<Map.Entry<UUID,Instant>> assignedHomeworks = jdbc.query("""
                 SELECT id,created_at FROM homeworks WHERE student_id=?
                 ORDER BY created_at DESC LIMIT 500
@@ -247,10 +248,30 @@ public class ParentSkillProgressService {
         List<PracticeEvidence> practice = new ArrayList<>();
         for (var proof : proofRows) {
             if ("LESSON".equals(proof.sourceType()) || !allowed.contains(proof.skillId())) continue;
-            if ("HOMEWORK".equals(proof.sourceType()) && assignedHomeworks.stream()
-                    .noneMatch(hw -> proof.sourceRef().contains(hw.getKey().toString())
-                            && homeworkCycleStart(hw.getValue(), lessonEnds) != null
-                            && !proof.at().isBefore(hw.getValue()))) continue;
+            UUID cycleLessonId = null;
+            if ("HOMEWORK".equals(proof.sourceType())) {
+                // The homework identity is explicit; do not infer its owner from
+                // similarity of topics or the PDF's display filename.
+                var ownedHomework = assignedHomeworks.stream()
+                        .filter(hw -> proof.sourceRef().contains(hw.getKey().toString()))
+                        .findFirst().orElse(null);
+                if (ownedHomework == null || proof.at().isBefore(ownedHomework.getValue())) continue;
+                Instant previousEnd = homeworkCycleStart(ownedHomework.getValue(), lessonEnds);
+                if (previousEnd == null) continue;
+                // Associate only with the first lesson ending AFTER assignment,
+                // not every subsequent lesson. An in-progress cycle remains
+                // unattached until that next lesson ends.
+                var nextLesson = chronologicalLessons.stream()
+                        .filter(session -> session.at().isAfter(ownedHomework.getValue()))
+                        .findFirst().orElse(null);
+                if (nextLesson != null) {
+                    if (proof.at().isAfter(nextLesson.at())) continue;
+                    cycleLessonId = nextLesson.id();
+                } else {
+                    // Do not backdate an open homework cycle to a previous lesson.
+                    continue;
+                }
+            }
             Change matched = proof.after() == null ? null : history.stream()
                     .filter(h -> h.skillId().equals(proof.skillId())
                             && h.current() == proof.after()
@@ -260,7 +281,7 @@ public class ParentSkillProgressService {
                     .orElse(null);
             practice.add(new PracticeEvidence(proof.skillId(),
                     names.getOrDefault(proof.skillId(),proof.skillId()),
-                    proof.sourceType(),proof.sourceRef(),proof.at(),
+                    proof.sourceType(),proof.sourceRef(),proof.at(),cycleLessonId,
                     matched == null ? null : matched.previous(),
                     proof.after(),matched != null,proof.autonomy(),
                     proof.explanation(),proof.excerpt()));
