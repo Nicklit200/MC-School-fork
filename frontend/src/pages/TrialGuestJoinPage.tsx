@@ -52,7 +52,7 @@ export function TrialGuestJoinPage() {
     try {
       const joined = await trialInvitationsApi.join(token, name.trim());
       // Scope to this tab: never replace the teacher/parent login in localStorage.
-      setSessionAccessToken(joined.auth.accessToken);
+      setSessionAccessToken(joined.auth.accessToken, '/trial/join/' + encodeURIComponent(token));
       setUser(joined.auth.user);
       navigate('/online-classes/' + encodeURIComponent(joined.classId), { replace: true, state: { trialMedia: choice, trialClassId: joined.classId } });
     } catch (cause) {
