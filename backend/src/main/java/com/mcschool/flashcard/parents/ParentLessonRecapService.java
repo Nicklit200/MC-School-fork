@@ -52,7 +52,7 @@ public class ParentLessonRecapService {
     }
 
     /** Read-mostly bounded backfill; process at most one missing pupil per pass. */
-    @Scheduled(initialDelay = 45000, fixedDelay = 90000)
+    @Scheduled(initialDelay = 20000, fixedDelay = 45000)
     public void backfillMissing() {
         if (apiKey.isEmpty() || model.isEmpty()) return;
         try {
@@ -83,7 +83,8 @@ public class ParentLessonRecapService {
                     OR length(coalesce(p.soniox_transcript_text,''))>120
                     OR EXISTS (SELECT 1 FROM online_class_transcript_segments seg
                                WHERE seg.class_id=c.id AND seg.user_id IN (u.id,c.teacher_id)))
-                ORDER BY coalesce(c.actual_end_at,c.scheduled_end_at) DESC
+                ORDER BY CASE WHEN u.parent_id IS NOT NULL THEN 0 ELSE 1 END,
+                         coalesce(c.actual_end_at,c.scheduled_end_at) DESC
                 LIMIT 1
                 """, (rs,i)->new Target(rs.getObject("class_id",UUID.class),
                         rs.getObject("teacher_id",UUID.class),
@@ -224,6 +225,7 @@ public class ParentLessonRecapService {
                 // Never trust invented quotations or claims from the provider;
                 // require the quote to occur verbatim in the supplied transcript.
                 if(!excerpt.isBlank() && !transcript.contains(excerpt))excerpt="";
+                if(excerpt.isBlank() && !"PRACTICED".equals(kind)) continue;
                 observations.add(new Observation(topic,kind,description,excerpt));
             }
         return new Recap(summary,observations);
