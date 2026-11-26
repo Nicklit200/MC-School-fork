@@ -1,4 +1,6 @@
 import { Suspense, lazy } from 'react';
+import { loadRouteModule } from './lib/routeModuleRecovery';
+import { PageLoading, RouteErrorBoundary } from './components/RouteRecovery';
 import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { LearningTimeAdminPage } from './pages/admin/LearningTimeAdminPage';
 import { LearningTimeStudentPage } from './pages/admin/LearningTimeStudentPage';
@@ -59,24 +61,24 @@ import { ParentSkillsPage } from './pages/parent/ParentSkillsPage';
 // Online-class pages pull in the LiveKit SDK (~700 kB). They are lazy-loaded so
 // the flashcard flows — especially on student mobile — do not pay for it.
 const UpcomingOnlineClassesPage = lazy(() =>
-  import('./pages/online-classes/UpcomingOnlineClassesPage').then((m) => ({
+  loadRouteModule(() => import('./pages/online-classes/UpcomingOnlineClassesPage')).then((m) => ({
     default: m.UpcomingOnlineClassesPage,
   })),
 );
 const OnlineClassPage = lazy(() =>
-  import('./pages/online-classes/OnlineClassPage').then((m) => ({ default: m.OnlineClassPage })),
+  loadRouteModule(() => import('./pages/online-classes/OnlineClassPage')).then((m) => ({ default: m.OnlineClassPage })),
 );
-const LessonBoardPage = lazy(() => import('./pages/lesson-board/LessonBoardPage').then((m) => ({ default: m.LessonBoardPage })));
-const PhoneCameraPage = lazy(() => import('./features/notebook-camera/PhoneCameraPage').then(m => ({ default: m.PhoneCameraPage })));
-const NotebookCameraPage = lazy(() => import('./features/notebook-camera/NotebookCameraPage').then(m => ({ default: m.NotebookCameraPage })));
+const LessonBoardPage = lazy(() => loadRouteModule(() => import('./pages/lesson-board/LessonBoardPage')).then((m) => ({ default: m.LessonBoardPage })));
+const PhoneCameraPage = lazy(() => loadRouteModule(() => import('./features/notebook-camera/PhoneCameraPage')).then(m => ({ default: m.PhoneCameraPage })));
+const NotebookCameraPage = lazy(() => loadRouteModule(() => import('./features/notebook-camera/NotebookCameraPage')).then(m => ({ default: m.NotebookCameraPage })));
 
 export function App() {
   const { user, initializing } = useAuth();
   const location = useLocation();
-  if (initializing && !location.pathname.startsWith('/phone-camera') && !location.pathname.startsWith('/skill-progress')) return null;
+  if (initializing && !location.pathname.startsWith('/phone-camera') && !location.pathname.startsWith('/skill-progress')) return <PageLoading />;
 
   return (
-    <Routes>
+    <RouteErrorBoundary routeKey={location.key}><Routes>
       <Route path="/skills" element={<ProtectedRoute><Layout><SkillsPage /></Layout></ProtectedRoute>} />
       <Route path="/skill-progress" element={<PublicSkillProgressPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -144,7 +146,7 @@ export function App() {
 
       {/* Online classes: teachers and students share these routes; the
           backend decides who may see or join each class. */}
-      <Route path="/online-classes" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={null}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
+      <Route path="/online-classes" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Layout><Suspense fallback={<PageLoading />}><UpcomingOnlineClassesPage /></Suspense></Layout></ProtectedRoute>} />
       <Route path="/online-classes/:classId" element={<ProtectedRoute role={['TEACHER', 'STUDENT']}><Suspense fallback={<p>Подключаем онлайн-урок…</p>}><OnlineClassPage /></Suspense></ProtectedRoute>} />
 
       <Route path="/parent" element={<ProtectedRoute role="PARENT"><Layout><ParentPage /></Layout></ProtectedRoute>} />
@@ -152,6 +154,6 @@ export function App() {
       <Route path="/parent/skills" element={<ProtectedRoute role="PARENT"><Layout><ParentSkillsPage /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to={user ? homePathForRole(user.role) : '/login'} replace />} />
-    </Routes>
+    </Routes></RouteErrorBoundary>
   );
 }
