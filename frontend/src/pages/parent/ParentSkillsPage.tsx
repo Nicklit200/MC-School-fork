@@ -6,10 +6,6 @@ import './parent-dashboard.css';
 type Language = 'RU' | 'DE';
 const say = (language: Language, ru: string, de: string) => language === 'DE' ? de : ru;
 const percent = (n: number | null | undefined) => n == null ? '—' : `${n}%`;
-const schoolType = (s: string | null) => ({
-  GYMNASIUM: 'Gymnasium', REALSCHULE: 'Realschule', MITTELSCHULE: 'Mittelschule',
-  WIRTSCHAFTSSCHULE: 'Wirtschaftsschule', GESAMTSCHULE: 'Gesamtschule',
-}[s ?? ''] ?? s ?? '');
 const day = (v: string, language: Language) => new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
   day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Berlin',
 }).format(new Date(v));
