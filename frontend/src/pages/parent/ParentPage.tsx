@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { parentApi } from '../../api/parent';
 import type { ParentChildStatus, ParentHomeworkStatus } from '../../api/types';
 import { ParentTeacherChat } from '../../components/ParentTeacherChat';
+import { HomeworkHistoryCalendar } from '../../components/HomeworkHistoryCalendar';
 import { useI18n } from '../../i18n/I18nContext';
+import { getSchoolDateString, homeworkHistoryText, resolveHomeworkHistoryStatus, type HomeworkHistoryStatus } from '../../lib/homeworkHistory';
 import { ParentNotifications } from './ParentNotifications';
 import './parent-dashboard.css';
 
@@ -25,10 +27,10 @@ export function ParentPage() {
   }, []);
 
   const child = children.find((item) => item.studentId === selectedId) ?? children[0];
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
-  const homeworks = [...(child?.homeworks ?? [])].sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const today = getSchoolDateString();
+  const homeworks = useMemo(() => [...(child?.homeworks ?? [])]
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .map(homework => ({ ...homework, id: homework.homeworkId })), [child]);
 
   return (
     <div className="stack parent-dashboard">
@@ -83,16 +85,16 @@ export function ParentPage() {
           </section>
         </div>
 
-        <section className="panel parent-dashboard__history" aria-labelledby="parent-homework-history">
+        <section className="parent-dashboard__history" aria-labelledby="parent-homework-history">
           <div className="parent-dashboard__section-heading">
-            <h2 id="parent-homework-history">{de ? 'Hausaufgaben-Verlauf' : 'История заданий'}</h2>
+            <h2 id="parent-homework-history">{de ? 'Hausaufgaben-Verlauf' : 'История домашки'}</h2>
             <span className="muted">{homeworks.length}</span>
           </div>
-          {homeworks.length === 0 ? <p className="muted">{de ? 'Noch keine Hausaufgaben.' : 'Домашних заданий пока нет.'}</p> : (
-            <ul className="parent-dashboard__list">
-              {homeworks.map((homework) => {
-                const status = homeworkStatus(homework, today, language);
-                return <li className="list-row parent-dashboard__homework" key={homework.homeworkId}>
+          {homeworks.length === 0 && <p className="muted">{de ? 'Noch keine Hausaufgaben.' : 'Домашних заданий пока нет.'}</p>}
+          <HomeworkHistoryCalendar key={child.studentId} homeworks={homeworks} language={language}
+            getStatus={parentHomeworkStatus} renderHomework={(homework, now) => {
+                const status = parentHomeworkStatus(homework, now);
+                return <div className="list-row parent-dashboard__homework" key={homework.homeworkId}>
                   <span className="parent-dashboard__file-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H5v18h14V8Z M14 3v5h5 M8 12h8 M8 16h5" /></svg>
                   </span>
@@ -107,11 +109,9 @@ export function ParentPage() {
                       {homework.totalCards > 0 && `${de ? 'Karten gelernt' : 'Карточек изучено'}: ${homework.learnedCards}/${homework.totalCards}`}
                     </div>
                   </div>
-                  <span className={`pill ${status.className}`}>{status.label}</span>
-                </li>;
-              })}
-            </ul>
-          )}
+                  <span className="pill parent-dashboard__homework-status" data-status={status}>{homeworkHistoryText(status, language)}</span>
+                </div>;
+              }} />
         </section>
 
         <section className="panel parent-dashboard__chat">
@@ -136,15 +136,11 @@ function homeworkTitle(homework: ParentHomeworkStatus, language: 'RU' | 'DE') {
   return language === 'DE' ? 'Arbeitsblatt' : 'Рабочий лист';
 }
 
-function homeworkStatus(homework: ParentHomeworkStatus, today: string, language: 'RU' | 'DE') {
-  const de = language === 'DE';
-  const cardsDone = homework.totalCards === 0 || homework.learnedCards >= homework.totalCards;
-  const pdfDone = !homework.hasWorksheet || homework.submitted;
-  if (homework.submittedLate) return { className: 'pill--danger', label: de ? 'Verspätet' : 'С опозданием' };
-  if (homework.overdue) return { className: 'pill--danger', label: de ? 'Überfällig' : 'Просрочено' };
-  if (cardsDone && pdfDone) return { className: 'pill--learned', label: de ? 'Erledigt' : 'Выполнено' };
-  if (homework.startDate > today) return { className: 'parent-dashboard__neutral', label: de ? 'Geplant' : 'Запланировано' };
-  return { className: 'pill--pending', label: de ? 'Noch offen' : 'Не выполнено' };
+function parentHomeworkStatus(homework: ParentHomeworkStatus, now: Date): HomeworkHistoryStatus {
+  if (homework.hasWorksheet) return resolveHomeworkHistoryStatus(homework, now);
+  // Card mastery has no submission timestamp and is not subject to the PDF deadline.
+  if (homework.totalCards > 0 && homework.learnedCards >= homework.totalCards) return 'CARDS_DONE';
+  return homework.startDate > getSchoolDateString(now) ? 'UPCOMING' : 'CARDS_OPEN';
 }
 
 function formatDate(date: string, language: 'RU' | 'DE') {
