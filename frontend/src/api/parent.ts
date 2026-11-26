@@ -61,10 +61,31 @@ export interface ParentTeacherMessage {
   createdAt: string;
 }
 
+export interface ParentSkillEvidence {
+  skillId: string; skillTitle: string; previous: number | null; current: number | null;
+  autonomy: string; explanation: string; excerpt: string | null;
+  origin: string; changed: boolean;
+}
+export interface ParentSkillPractice extends ParentSkillEvidence {
+  sourceType: 'HOMEWORK' | 'TEST' | 'TEACHER_OBSERVATION'; sourceRef: string; at: string;
+}
+export interface ParentSkillsDashboard {
+  studentId: string; studentName: string; grade: number | null; schoolType: string | null;
+  boardId: string | null; boardTitle: string | null; curriculumSource: string | null;
+  confirmedPercent: number | null; assessedAveragePercent: number | null;
+  assessedSkills: number; totalSkills: number; updatedAt: string | null;
+  topics: { id: string; title: string; totalSkills: number; assessedSkills: number; averagePercent: number | null; confirmedPercent: number }[];
+  skills: { id: string; title: string; germanTitle: string | null; topicId: string | null; mastery: number | null; updatedAt: string | null }[];
+  trend: { at: string; confirmedPercent: number; assessedSkills: number; skillId: string; previous: number; current: number }[];
+  lessons: { id: string; title: string; endedAt: string; reviewState: string; summary: string | null; summarySource: string; evidence: ParentSkillEvidence[] }[];
+  practice: ParentSkillPractice[];
+}
+
 export const parentApi = {
   linkToStudent: (studentId: string, fullName: string, email: string) =>
     jsonRequest<ParentInvitation>('POST', `/students/${studentId}/parent`, { fullName, email }),
   children: () => jsonRequest<ParentChildStatus[]>('GET', '/parent/children'),
+  skills: (studentId: string) => jsonRequest<ParentSkillsDashboard>('GET', `/parent/children/${encodeURIComponent(studentId)}/skills`),
 };
 
 export const teacherParentApi = {
