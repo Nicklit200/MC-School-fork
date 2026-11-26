@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#dbe1ea', borderRadius: 9, backgroundColor: '#fff',
   },
   languageButtonActive: { borderColor: '#ffcbae', backgroundColor: '#fff4ee' },
-  languageButtonText: { color: '#5f6a80', fontSize: 14, fontWeight: '650' },
+  languageButtonText: { color: '#5f6a80', fontSize: 14, fontWeight: '600' },
   languageButtonTextActive: { color: '#ff5b00' },
   center: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
