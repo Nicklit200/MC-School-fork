@@ -5,6 +5,7 @@ const $=id=>document.getElementById(id);
 const svgNS="http://www.w3.org/2000/svg";
 let config=null,snapshot=null,data=null,history=[],dirty=false,saving=false,scope="overview",selection=null,connectMode=false,linkSource=null,op=null,space=false,students=[],groups=[],selectedStudentId="",selectedGroupId="",masteryByStudent={},masteryHistoryByStudent={},individualMonthsByStudent={},skillEvidenceByStudent={},masteryLoading=false,trackFilterState=null,selectedHistoryUpdate=null,publicOverallPercent=null;
 const boardIdByGrade=new Map([[5,"grade-5"],[6,"grade-6"],[8,"grade-8-m8"],[9,"grade-9"]]);let boardId="";
+let parentAllowedSkills=null;
 const boardIdForStudent=student=>boardIdByGrade.get(Number(student?.grade))||"";
 let view={x:40,y:40,z:1},lastPoint={x:0,y:0},showArchived=false,viewMode="free",hierarchyPositions=new Map(),catalogCollapsed=false;
 try{
@@ -83,6 +84,8 @@ const defaultTrackFilterState=()=>({core:true,schools:new Set(selectedStudents()
 const trackFilterKey=()=>`mindcrafti.skills.trackFilters.${selectedGroupId?"g:"+selectedGroupId:selectedStudentId?"s:"+selectedStudentId:"none"}`;
 function loadTrackFilterState(){
   const fallback=defaultTrackFilterState();
+  // Parent embedded frames always start with this child's actual school track.
+  if(config?.parentEmbedded)return fallback;
   try{
     const raw=JSON.parse(localStorage.getItem(trackFilterKey())||"null");
     if(raw&&typeof raw==="object"&&typeof raw.core==="boolean"&&Array.isArray(raw.schools)){
@@ -96,7 +99,7 @@ function currentTrackFilters(){
   return trackFilterState;
 }
 function saveTrackFilterState(){
-  if(!trackFilterState)return;
+  if(!trackFilterState||config?.parentEmbedded)return;
   try{localStorage.setItem(trackFilterKey(),JSON.stringify({core:trackFilterState.core,schools:[...trackFilterState.schools]}));}catch{/* Optional display preference. */}
 }
 const activeSchoolTypes=()=>currentTrackFilters().schools;
@@ -247,7 +250,8 @@ function masteryPercent(n,studentId){
   if(!studentId||!n)return 0;
   const mastery=masteryByStudent[studentId]||{};
   if(n.kind==="skill")return Math.max(0,Math.min(100,Number(mastery[n.id])||0));
-  const ids=descendants(data,n.id),skills=data.nodes.filter(x=>ids.has(x.id)&&x.kind==="skill"&&!x.archived);
+  const ids=descendants(data,n.id),skills=data.nodes.filter(x=>ids.has(x.id)&&x.kind==="skill"&&!x.archived
+    &&(!config?.parentEmbedded||!parentAllowedSkills||parentAllowedSkills.has(x.id)));
   if(!skills.length)return 0;
   return Math.round(skills.reduce((sum,x)=>sum+Math.max(0,Math.min(100,Number(mastery[x.id])||0)),0)/skills.length);
 }
@@ -471,6 +475,7 @@ function loadParentTree(incoming) {
       grade:result.student.grade??data.grade,schoolType:result.student.schoolType||null};
     students=[child];groups=[];selectedStudentId="parent";selectedGroupId="";
     masteryByStudent={parent:result.mastery};
+    parentAllowedSkills=new Set(Array.isArray(result.allowedSkillIds)?result.allowedSkillIds:[]);
     masteryHistoryByStudent={parent:Array.isArray(result.history)
       ?result.history.map((entry,index)=>({...entry,id:index+1,studentId:"parent",
         studentName:child.fullName,updatedBy:"parent"})):[]};
