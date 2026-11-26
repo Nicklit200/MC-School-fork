@@ -39,6 +39,9 @@ public class ParentSkillProgressService {
                         Integer averagePercent, int confirmedPercent) {}
     public record TrendPoint(Instant at, int confirmedPercent, int assessedSkills,
                              String skillId, int previous, int current) {}
+    /** One confirmed-progress milestone per real ended lesson, not per skill edit. */
+    public record LessonProgressPoint(UUID lessonId, String lessonTitle, Instant endedAt,
+                                      Integer confirmedPercent, int assessedSkills) {}
     public record LessonEvidence(String skillId, String skillTitle, Integer previous,
                                  Integer current, String autonomy, String explanation,
                                  String excerpt, String origin, boolean changed) {}
@@ -54,7 +57,8 @@ public class ParentSkillProgressService {
                             Integer assessedAveragePercent, int assessedSkills, int totalSkills,
                             Instant updatedAt, List<Topic> topics, List<Skill> skills,
                             List<TrendPoint> trend, List<Lesson> lessons,
-                            List<PracticeEvidence> practice) {}
+                            List<PracticeEvidence> practice,
+                            List<LessonProgressPoint> lessonProgress) {}
 
     private record Score(int value, Instant updatedAt) {}
     private record Change(String skillId, int previous, int current, Instant at) {}
@@ -82,7 +86,7 @@ public class ParentSkillProgressService {
         if (candidates.size() != 1)
             return new Dashboard(studentId, child.getFullName(), grade, child.getSchoolType(),
                     null, null, null, null, null, 0, 0,
-                    null, List.of(), List.of(), List.of(), List.of(), List.of());
+                    null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
         var board = boards.get(candidates.get(0).id());
         List<SkillBoardService.Node> applicable = relevantSkills(board.data(), child.getSchoolType());
@@ -286,13 +290,79 @@ public class ParentSkillProgressService {
                     proof.after(),matched != null,proof.autonomy(),
                     proof.explanation(),proof.excerpt()));
         }
+        List<LessonProgressPoint> lessonProgress = lessonTimeline(
+                chronologicalLessons, history, proofRows, practice, allowed);
         Instant last = scores.values().stream().map(Score::updatedAt)
                 .max(Instant::compareTo).orElse(null);
         return new Dashboard(studentId, child.getFullName(), grade, child.getSchoolType(),
                 board.id(), board.data().title(), board.data().source(),
                 confirmed, average, assessed, total, last,
                 List.copyOf(topics), List.copyOf(skills), List.copyOf(trend), List.copyOf(lessons),
-                List.copyOf(practice));
+                List.copyOf(practice), lessonProgress);
+    }
+
+    /**
+     * Replays the persisted mastery changes onto actual lesson milestones.
+     * The AI often finishes AFTER the end timestamp, so a verified LESSON
+     * sourceRef takes priority over timestamps. Verified homework belongs to
+     * the next lesson in its own assignment cycle; never a later lesson.
+     * Other updates are shown on the next completed lesson snapshot without
+     * claiming they were caused by that lesson.
+     */
+    private static List<LessonProgressPoint> lessonTimeline(
+            List<LessonRow> chronologicalLessons, List<Change> history,
+            List<Proof> proofs, List<PracticeEvidence> practice, Set<String> allowed) {
+        if (chronologicalLessons.isEmpty()) return List.of();
+        Map<UUID, List<Change>> byLesson = new HashMap<>();
+        for (Change change : history) {
+            if (!allowed.contains(change.skillId())) continue;
+            UUID owner = null;
+            for (Proof proof : proofs) {
+                if (proof.after() == null || !proof.skillId().equals(change.skillId())
+                        || proof.after() != change.current()
+                        || Math.abs(Duration.between(proof.at(), change.at()).toSeconds()) > 120)
+                    continue;
+                if ("LESSON".equals(proof.sourceType())) {
+                    for (LessonRow session : chronologicalLessons) {
+                        if (proof.sourceRef().startsWith(session.id() + ":")) {
+                            owner = session.id();
+                            break;
+                        }
+                    }
+                } else if ("HOMEWORK".equals(proof.sourceType())) {
+                    for (PracticeEvidence p : practice) {
+                        if (p.changed() && p.cycleLessonId() != null
+                                && p.skillId().equals(proof.skillId())
+                                && p.sourceRef().equals(proof.sourceRef())
+                                && Objects.equals(p.current(), proof.after())) {
+                            owner = p.cycleLessonId();
+                            break;
+                        }
+                    }
+                }
+                if (owner != null) break;
+            }
+            if (owner == null) {
+                for (LessonRow session : chronologicalLessons) {
+                    if (!change.at().isAfter(session.at())) {
+                        owner = session.id();
+                        break;
+                    }
+                }
+            }
+            if (owner != null) byLesson.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(change);
+        }
+        Map<String, Integer> assessed = new HashMap<>();
+        List<LessonProgressPoint> result = new ArrayList<>();
+        for (LessonRow session : chronologicalLessons) {
+            for (Change change : byLesson.getOrDefault(session.id(), List.of()))
+                assessed.put(change.skillId(), change.current());
+            // Null means no verified evaluation, NOT zero competence.
+            Integer percent = assessed.isEmpty() ? null : confirmedPercent(assessed, allowed);
+            result.add(new LessonProgressPoint(session.id(), session.title(), session.at(),
+                    percent, assessed.size()));
+        }
+        return List.copyOf(result);
     }
 
     private User requireOwnChild(AuthenticatedUser parent, UUID studentId) {
