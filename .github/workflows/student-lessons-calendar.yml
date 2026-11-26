@@ -33,6 +33,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm test -- src/pages/teacher/monthReadiness.test.ts src/pages/teacher/WorkbookDraftPreviewPage.test.tsx src/components/PushQuickStart.test.tsx
+      - name: Verify combined lesson and homework calendar
+        run: npm test -- src/pages/teacher/StudentHomeworksPage.test.tsx src/pages/parent/ParentPage.test.tsx src/lib/homeworkHistory.test.ts src/lib/studentCalendar.test.ts
       - run: npm run build
 
   backend:
@@ -50,4 +52,6 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
       - run: mvn -B -ntp -Dtest=MonthlyReadinessCalculatorTest,WorkbookDraftDownloadServiceTest test
+      - name: Verify lesson lifecycle evidence and student history access
+        run: mvn -B -ntp -Dtest=LessonExecutionSummaryServiceTest,StudentLessonHistoryMembershipTest,ManualLessonApiTest,ManualLessonScheduleTest test
       - run: mvn -B -ntp -DskipTests package

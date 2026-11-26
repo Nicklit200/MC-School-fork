@@ -34,6 +34,10 @@ public interface OnlineClassRepository extends JpaRepository<OnlineClass, UUID> 
     List<OnlineClass> findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(
             UUID teacherId, String eventId);
 
+    /** Batch lifecycle lookup for already-authorized calendar occurrences. */
+    List<OnlineClass> findAllByTeacherIdAndEventIdInOrderByCreatedAtDescIdDesc(
+            UUID teacherId, List<String> eventIds);
+
     /** The current materialization wins over callbacks from a retired room. */
     Optional<OnlineClass> findFirstByTeacherIdAndEventIdOrderByCreatedAtDesc(
             UUID teacherId, String eventId);

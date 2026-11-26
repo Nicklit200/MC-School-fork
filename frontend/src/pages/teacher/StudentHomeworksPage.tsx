@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import type { Homework, StudentListItem } from '../../api/types';
+import type { GroupLesson, Homework, StudentLessonHistoryItem, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
-import { homeworkHistoryText, resolveHomeworkHistoryStatus } from '../../lib/homeworkHistory';
+import { getSchoolDateString, homeworkHistoryText, resolveHomeworkHistoryStatus } from '../../lib/homeworkHistory';
+import { buildStudentCalendarLessons } from '../../lib/studentCalendar';
 import { HomeworkHistoryCalendar } from '../../components/HomeworkHistoryCalendar';
 import { GoogleDrivePdfPicker } from './GoogleDrivePdfPicker';
 import { GoogleDriveMultiPdfPicker } from './GoogleDriveMultiPdfPicker';
 
 export function StudentHomeworksPage() {
   const { studentId = '' } = useParams();
+  return <StudentHomeworksContent key={studentId} studentId={studentId} />;
+}
+
+function StudentHomeworksContent({ studentId }: { studentId: string }) {
   const { language, t } = useI18n();
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
-  const [startDate, setStartDate] = useState(() => localDateString(new Date()));
+  const [lessons, setLessons] = useState<GroupLesson[]>([]);
+  const [lessonHistory, setLessonHistory] = useState<StudentLessonHistoryItem[]>([]);
+  const [lessonsLoading, setLessonsLoading] = useState(true);
+  const [lessonsError, setLessonsError] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState(() => getSchoolDateString());
   const [daysCount, setDaysCount] = useState(1);
   const [pdfFiles, setPdfFiles] = useState<Array<File | null>>([null]);
   const [creating, setCreating] = useState(false);
@@ -68,6 +77,41 @@ export function StudentHomeworksPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+    setLessons([]);
+    setLessonHistory([]);
+    setLessonsLoading(true);
+    setLessonsError(null);
+    async function loadLessons() {
+      if (inFlight) return;
+      inFlight = true;
+      const [schedule, history] = await Promise.allSettled([
+        api.lessons.savedGroupLessons(), api.students.lessonHistory(studentId),
+      ]);
+      inFlight = false;
+      if (cancelled) return;
+      if (schedule.status === 'fulfilled') setLessons(schedule.value);
+      if (history.status === 'fulfilled') setLessonHistory(history.value);
+      setLessonsError(schedule.status === 'rejected' || history.status === 'rejected'
+        ? language === 'DE'
+          ? 'Ein Teil der Unterrichtsdaten konnte nicht geladen werden. Bitte aktualisiere die Seite.'
+          : 'Не удалось загрузить часть уроков. Обновите страницу, чтобы повторить.'
+        : null);
+      setLessonsLoading(false);
+    }
+    void loadLessons();
+    const onFocus = () => { void loadLessons(); };
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; window.removeEventListener('focus', onFocus); };
+  }, [studentId, language]);
+
+  const calendarLessons = useMemo(
+    () => buildStudentCalendarLessons(lessons, lessonHistory, studentId),
+    [lessons, lessonHistory, studentId],
+  );
 
   const worksheetHomeworks = useMemo(
     () => homeworks
@@ -164,12 +208,12 @@ export function StudentHomeworksPage() {
   return (
     <div>
       <p><Link to="/students" className="muted">← {t('common.back')}</Link></p>
-      <h1>{language === 'DE' ? 'Hausaufgaben' : 'Домашка'}{student ? ` — ${student.fullName}` : ''}</h1>
+      <h1>{language === 'DE' ? 'Unterricht und Hausaufgaben' : 'Уроки и домашка'}{student ? ` · ${student.fullName}` : ''}</h1>
       {error && <div className="banner banner--error">{error}</div>}
       {message && <div className="banner banner--success">{message}</div>}
 
-      <div className="panel">
-        <h2>{language === 'DE' ? 'Hausaufgabe erstellen' : 'Создать домашку'}</h2>
+      <details className="panel student-calendar-create">
+        <summary>{language === 'DE' ? 'Hausaufgabe erstellen' : 'Создать домашку'}</summary>
         <form className="stack" onSubmit={createHomework}>
           <div className="row" style={{ alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
             <label className="field" style={{ margin: 0, flex: '1 1 220px' }}>
@@ -237,11 +281,12 @@ export function StudentHomeworksPage() {
             {creating ? (language === 'DE' ? 'Wird erstellt…' : 'Создаём домашки…') : (language === 'DE' ? `${daysCount} Hausaufgaben erstellen` : `Создать на ${daysCount} дн.`)}
           </button>
         </form>
-      </div>
+      </details>
 
-      <h2>{language === 'DE' ? 'Hausaufgaben-Historie' : 'История домашки'}</h2>
+      <h2>{language === 'DE' ? 'Kalender' : 'Календарь занятий и домашки'}</h2>
       {loading ? <p className="muted">{t('common.loading')}</p> : (
         <HomeworkHistoryCalendar key={studentId} homeworks={worksheetHomeworks} language={language}
+          lessons={calendarLessons} lessonsLoading={lessonsLoading} lessonsError={lessonsError}
           onSelectionChange={() => setOpenMenuId(null)} renderHomework={(homework) => {
             const status = resolveHomeworkHistoryStatus(homework);
             const detailUrl = `/teacher/students/${studentId}/homeworks/${homework.id}`;

@@ -213,7 +213,9 @@ public class StudentLessonHistoryService {
 
     private boolean belongsToStudent(
             LessonHistoryEntry entry, UUID studentId, Map<UUID, Instant> groupMembershipCreatedAt) {
-        if (studentId.equals(entry.getStudentId())) return true;
+        // An explicitly edited occurrence roster wins over its original binding,
+        // including an empty roster after the teacher removed the last pupil.
+        if (!entry.isParticipantsManuallyEdited() && studentId.equals(entry.getStudentId())) return true;
         String participantIds = entry.getParticipantStudentIds();
         if (participantIds != null && !participantIds.isBlank()) {
             for (String participantId : participantIds.split(",")) {
@@ -221,6 +223,7 @@ public class StudentLessonHistoryService {
             }
             return false;
         }
+        if (entry.isParticipantsManuallyEdited()) return false;
         if (entry.getGroupId() == null) return false;
         Instant joinedAt = groupMembershipCreatedAt.get(entry.getGroupId());
         return joinedAt != null && !joinedAt.isAfter(entry.getStartsAt());

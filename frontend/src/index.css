@@ -155,6 +155,9 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 .homework-history-status.homework-history-status--missed { background: #fee2e2; color: #991b1b; }
 .homework-history-status.homework-history-status--today { background: #eff6ff; color: #1d4ed8; }
 .homework-history-status.homework-history-status--upcoming { background: #f1f5f9; color: #475569; }
+.student-calendar-create > summary { cursor: pointer; font-size: 15px; font-weight: 650; }
+.student-calendar-create[open] > summary { margin-bottom: 18px; }
+.student-calendar-create > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .homework-history-actions {
   position: relative;
   justify-self: end;
