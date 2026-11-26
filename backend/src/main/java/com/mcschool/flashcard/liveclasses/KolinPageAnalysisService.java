@@ -20,6 +20,8 @@ public class KolinPageAnalysisService {
     private final ObjectMapper mapper;
     @org.springframework.beans.factory.annotation.Value("${KOLYN_AUTO_PAGE_ANALYSIS_TEACHER_ID:}")
     private String pilotTeacherId="";
+    @org.springframework.beans.factory.annotation.Value("${KOLYN_AUTO_PAGE_ANALYSIS_ADDITIONAL_TEACHER_IDS:}")
+    private String additionalTeacherIds="";
 
     public KolinPageAnalysisService(OnlineClassAccessService access, KolinTaskRoster roster,
             OnlineClassDocumentService documents, KolinBoardReviewService reviews,
@@ -28,9 +30,12 @@ public class KolinPageAnalysisService {
         this.store=store; this.ai=ai; this.mapper=mapper;
     }
 
-    /** Fail-closed rollout: only the configured teacher may start automatic paid reviews. */
+    /** Fail-closed rollout: preserve the original pilot and allow explicitly configured additional teachers. */
     public boolean enabledFor(AuthenticatedUser teacher) {
-        return teacher!=null && teacher.id()!=null && teacher.id().toString().equals(pilotTeacherId);
+        if (teacher==null || teacher.id()==null) return false;
+        String teacherId=teacher.id().toString();
+        return teacherId.equals(pilotTeacherId) || java.util.Arrays.stream(additionalTeacherIds.split(","))
+                .map(String::trim).anyMatch(teacherId::equals);
     }
 
     public boolean enabled(AuthenticatedUser teacher, UUID classId) {
