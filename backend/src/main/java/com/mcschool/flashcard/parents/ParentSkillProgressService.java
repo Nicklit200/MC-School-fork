@@ -233,9 +233,24 @@ public class ParentSkillProgressService {
         // Homework/test observations use the same mastery history as lessons.
         // The source is a verified database observation, NOT a guessed match
         // from a PDF upload. Direct score edits with no evidence remain unlabelled.
+        // A homework result belongs only to the lesson cycle in which it
+        // was ASSIGNED, never to every later lesson. A cycle starts after the
+        // previous ended lesson and closes at the next ended lesson (or now).
+        // We use homeworks.created_at, not a mutable due/start_date.
+        List<Instant> lessonEnds = sessions.stream().map(LessonRow::at)
+                .sorted().toList();
+        List<Map.Entry<UUID,Instant>> assignedHomeworks = jdbc.query("""
+                SELECT id,created_at FROM homeworks WHERE student_id=?
+                ORDER BY created_at DESC LIMIT 500
+                """, (rs,i) -> Map.entry(rs.getObject("id", UUID.class),
+                        rs.getTimestamp("created_at").toInstant()),studentId);
         List<PracticeEvidence> practice = new ArrayList<>();
         for (var proof : proofRows) {
             if ("LESSON".equals(proof.sourceType()) || !allowed.contains(proof.skillId())) continue;
+            if ("HOMEWORK".equals(proof.sourceType()) && assignedHomeworks.stream()
+                    .noneMatch(hw -> proof.sourceRef().contains(hw.getKey().toString())
+                            && homeworkCycleStart(hw.getValue(), lessonEnds) != null
+                            && !proof.at().isBefore(hw.getValue()))) continue;
             Change matched = proof.after() == null ? null : history.stream()
                     .filter(h -> h.skillId().equals(proof.skillId())
                             && h.current() == proof.after()
@@ -288,6 +303,20 @@ public class ParentSkillProgressService {
             if (value != null) sum += Math.max(0, Math.min(100, value));
         }
         return (int)Math.round((double)sum / allowed.size());
+    }
+
+    /**
+     * A homework assignment is eligible only inside the period following one
+     * real completed lesson. Assignments older than the first known lesson are
+     * not attached retrospectively to later lessons.
+     */
+    static Instant homeworkCycleStart(Instant assignedAt, List<Instant> orderedLessonEnds) {
+        Instant previous = null;
+        for (Instant end : orderedLessonEnds) {
+            if (assignedAt.isBefore(end) || assignedAt.equals(end)) return previous;
+            previous = end;
+        }
+        return previous;
     }
 
     private static String normalizedSummary(String summary) {
