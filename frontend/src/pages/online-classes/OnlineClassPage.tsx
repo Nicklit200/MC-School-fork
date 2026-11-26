@@ -239,7 +239,7 @@ export function OnlineClassPage() {
         {session.phase === 'failed' && <p>{t('error.generic')}</p>}
       </div>
 
-      {guestAutoJoin.current && !entry?.canJoin ? (
+      {guestAutoJoin.current ? (
         <section className="prejoin">
           <p role="status">{language === 'DE' ? 'Geräte geprüft. Wir warten auf die Lehrkraft.' : 'Устройства проверены. Ожидаем преподавателя.'}</p>
           <button type="button" className="prejoin__retry" onClick={() => { guestAutoJoin.current = false; setInitialMedia(previous => ({ ...previous })); }}>
@@ -247,7 +247,7 @@ export function OnlineClassPage() {
           </button>
         </section>
       ) : session.phase === 'requesting' || session.phase === 'waiting' ? null : <PrejoinPanel
-        joinDisabled={session.phase === 'requesting' || session.phase === 'waiting' || Boolean(entry && !entry.canJoin)}
+        joinDisabled={Boolean(entry && !entry.canJoin)}
         onJoin={(choice) => {
           guestAutoJoin.current = false;
           setInitialMedia(choice);
