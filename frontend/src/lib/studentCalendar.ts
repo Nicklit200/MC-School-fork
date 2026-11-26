@@ -71,6 +71,7 @@ export function buildStudentCalendarLessons(
       status: lesson.onlineClassStatus, actualStartAt: lesson.actualStartAt, actualEndAt: lesson.actualEndAt,
     }));
   const currentScheduleKeys = new Set(current.map(scheduleKey));
+  const currentEventIds = new Set(current.map(lesson => lesson.eventId));
   const previous: StudentCalendarLesson[] = history
     .map(lesson => ({
       key: `${lesson.sourceTeacherId}:${lesson.eventId}`, eventId: lesson.eventId, title: lesson.title,
@@ -80,7 +81,16 @@ export function buildStudentCalendarLessons(
       status: lesson.onlineClassStatus, actualStartAt: lesson.actualStartAt, actualEndAt: lesson.actualEndAt,
     }))
     // A copied transfer schedule is one occurrence. Keep separately recorded lessons.
-    .filter(lesson => hasRecordedStart(lesson) || !currentScheduleKeys.has(scheduleKey(lesson)));
+    .filter(lesson => {
+      // The same teacher's saved occurrence is also returned through history.
+      // Do not display a duplicate completed lesson for the same event/time.
+      if (currentEventIds.has(lesson.eventId) && currentScheduleKeys.has(scheduleKey(lesson))) {
+        const matchingCurrent = current.find(item => item.eventId === lesson.eventId
+          && scheduleKey(item) === scheduleKey(lesson));
+        if (matchingCurrent && (!hasRecordedStart(lesson) || hasRecordedStart(matchingCurrent))) return false;
+      }
+      return hasRecordedStart(lesson) || !currentScheduleKeys.has(scheduleKey(lesson));
+    });
   const unique = new Map<string, StudentCalendarLesson>();
   for (const lesson of [...current, ...previous]) {
     if (Number.isFinite(Date.parse(lesson.startsAt)) && Number.isFinite(Date.parse(lesson.endsAt))) {
