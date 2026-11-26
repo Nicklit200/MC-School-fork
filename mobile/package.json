@@ -1,0 +1,24 @@
+{
+  "name": "mindcrafti-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~58.0.0",
+    "expo-notifications": "~58.1.9",
+    "expo-constants": "~58.0.16",
+    "expo-secure-store": "~58.0.3",
+    "react": "19.3.0",
+    "react-native": "0.88.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3"
+  }
+}
