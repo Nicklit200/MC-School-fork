@@ -6,6 +6,7 @@ import type { Language } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { ParentNotifications } from '../parent/ParentNotifications';
 
 /** Shared account settings: language, password for students, push notifications and logout. */
 const NICK_AI_PILOT_TEACHER_ID = '14e3c7c1-1fc8-41bd-858a-6c20efdd957a';
@@ -28,6 +29,25 @@ export function SettingsPage() {
   const [aiSettingsLoaded, setAiSettingsLoaded] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
   const languages: Language[] = ['RU', 'DE'];
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (active) setPushEnabled(Boolean(subscription));
+      } catch { /* Keep the current state if the browser is temporarily unavailable. */ }
+    };
+    // Quick setup and these controls share one subscription on this device.
+    const onPushChanged = () => { void refresh(); };
+    window.addEventListener('mindcrafti-push-changed', onPushChanged);
+    return () => {
+      active = false;
+      window.removeEventListener('mindcrafti-push-changed', onPushChanged);
+    };
+  }, []);
 
   useEffect(() => {
     if (user?.id !== NICK_AI_PILOT_TEACHER_ID) return;
@@ -78,6 +98,7 @@ export function SettingsPage() {
           return;
         }
         await api.push.subscribe({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+        window.dispatchEvent(new Event('mindcrafti-push-changed'));
         setPushEnabled(true);
       } catch {
         setPushConfigured(false);
@@ -178,6 +199,7 @@ export function SettingsPage() {
         throw new Error('Invalid push subscription');
       }
       await api.push.subscribe({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+      window.dispatchEvent(new Event('mindcrafti-push-changed'));
       setPushEnabled(true);
       await api.push.test();
     } catch (e) {
@@ -201,6 +223,7 @@ export function SettingsPage() {
         await subscription.unsubscribe();
       }
       setPushEnabled(false);
+      window.dispatchEvent(new Event('mindcrafti-push-changed'));
     } catch (e) {
       setError(e instanceof Error ? e.message : toErrorMessage(e, t));
     } finally {
@@ -376,6 +399,8 @@ export function SettingsPage() {
           </>
         )}
       </div>
+
+      {user?.role === 'PARENT' && <ParentNotifications />}
 
       <div className="panel">
         <button

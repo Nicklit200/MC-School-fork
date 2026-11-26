@@ -91,6 +91,14 @@ export function Layout({ children }: { children: ReactNode }) {
     </StudentShell>;
   }
 
+  if (isParent) {
+    return <StudentShell variant="parent" name={user.fullName} isImpersonating={isImpersonating} returningToAdmin={returningToAdmin}
+      onReturnToAdmin={() => void returnToAdmin()} onLogout={fullLogout}>
+      {!isImpersonating && <PushQuickStart userId={user.id} role="PARENT" quiet={pathname !== '/parent/settings'} />}
+      {children}
+    </StudentShell>;
+  }
+
   const links: { to: string; label: TranslationKey | string }[] = isStudent
     ? [
         { to: '/today', label: 'nav.today' },

@@ -59,7 +59,7 @@ function subscriptionData(subscription: PushSubscription) {
  * An EXISTING granted subscription is silently rebound on sign-in, which also
  * handles a device used by more than one school account.
  */
-export function PushQuickStart({ userId, role }: { userId: string; role: Role }) {
+export function PushQuickStart({ userId, role, quiet = false }: { userId: string; role: Role; quiet?: boolean }) {
   const { language } = useI18n();
   const de = language === 'DE';
   const snoozeKey = 'mindcrafti.push.quickStart.snoozedUntil.' + userId;
@@ -114,6 +114,7 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
               });
             }
             await api.push.subscribe(subscriptionData(subscription));
+            window.dispatchEvent(new Event('mindcrafti-push-changed'));
             if (active) setPhase('enabled');
             return;
           } catch {
@@ -166,6 +167,7 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
         });
       }
       await api.push.subscribe(subscriptionData(subscription));
+      window.dispatchEvent(new Event('mindcrafti-push-changed'));
       setPhase('enabled');
       // A single welcome push confirms the device is connected; no repeat
       // tests on subsequent sign-ins or passive account resynchronization.
@@ -177,7 +179,8 @@ export function PushQuickStart({ userId, role }: { userId: string; role: Role })
     } finally { setBusy(false); }
   }
 
-  if (phase === 'checking' || phase === 'hidden' || phase === 'enabled') return null;
+  // Keep automatic account/device rebinding when setup is shown in Settings.
+  if (quiet || phase === 'checking' || phase === 'hidden' || phase === 'enabled') return null;
 
   const staff = role === 'ADMIN' || role === 'TEACHER';
   const title = de ? 'Keine wichtigen Schulnachrichten verpassen'

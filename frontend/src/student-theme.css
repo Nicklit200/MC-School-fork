@@ -1,4 +1,4 @@
-/* Mindcrafti student theme. All application changes are scoped to this role. */
+/* Mindcrafti student design, shared by the student and parent shells. */
 .student-shell {
   --bg:#151719; --surface:#202326; --border:#353b3e; --text:#f0f3f2; --muted:#a6b0b4;
   --accent:#f56b18; --accent-dark:#de5a10; --green:#93d6bd; --green-dark:#93d6bd;
@@ -284,3 +284,7 @@ body:has(.student-shell) { background:#151719; }
   .student-batch__stats small { font-size:10px; }
 }
 @media(prefers-reduced-motion:reduce) { .student-shell * { transition:none !important; scroll-behavior:auto !important; } }
+
+@media(max-width:700px) {
+  .student-shell--parent .student-shell__nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}

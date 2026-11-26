@@ -1,0 +1,44 @@
+/* Parent content uses the same StudentShell palette, cards and controls. */
+.parent-dashboard { gap:24px; min-width:0; }
+.parent-dashboard__heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.student-shell .parent-dashboard__heading h1 { margin:0 0 8px; }
+.parent-dashboard__heading p { margin:0; }
+.parent-dashboard__date { color:var(--muted); font-size:14px; padding-top:9px; }
+.parent-dashboard__notice { display:flex; align-items:center; justify-content:space-between; gap:12px 20px; padding:12px 16px; border:1px solid var(--border); border-radius:12px; color:var(--muted); font-size:14px; flex-wrap:wrap; }
+.parent-dashboard__notice a { color:var(--student-orange); font-weight:600; padding:5px 0; }
+.parent-dashboard__child { display:flex; align-items:center; gap:14px; min-width:0; }
+.parent-dashboard__child .student-shell__avatar { width:48px; height:48px; font-size:20px; }
+.parent-dashboard__child > div,.parent-dashboard__child > label { min-width:0; }
+.parent-dashboard__child h2 { margin:3px 0 0; overflow-wrap:anywhere; }
+.parent-dashboard__child .muted { display:block; font-size:14px; }
+.parent-dashboard__child select { margin-top:5px; max-width:100%; min-width:180px; }
+.parent-dashboard__summary .result__stat { margin:0 0 16px; text-align:left; }
+.parent-dashboard__summary .parent-dashboard__total { font-size:26px; color:var(--muted); }
+.student-shell .parent-dashboard__summary h2 { font-size:16px; margin:0 0 20px; }
+.student-shell .parent-dashboard__summary .muted { font-size:14px; margin:14px 0 0; }
+.student-shell .parent-dashboard .pill { font-size:14px; flex-shrink:0; align-self:center; }
+.student-shell .parent-dashboard__neutral { background:var(--student-raised); color:var(--muted); }
+.parent-dashboard__section-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.parent-dashboard__section-heading h2 { margin:0; }
+.parent-dashboard__section-heading p { margin:5px 0 0; }
+.parent-dashboard__list { list-style:none; margin:16px 0 0; padding:0; }
+.student-shell .parent-dashboard__homework { display:grid; grid-template-columns:42px minmax(0,1fr) auto; align-items:center; gap:16px; margin:0; padding:20px 0; border-top:1px solid var(--border); border-bottom:0; }
+.student-shell .parent-dashboard__homework:last-child { padding-bottom:0; }
+.parent-dashboard__file-icon { display:grid; place-items:center; width:42px; height:46px; border-radius:12px; background:var(--student-selected); color:var(--student-orange); }
+.parent-dashboard__homework-body { min-width:0; }
+.parent-dashboard__homework-title { margin:2px 0 5px; overflow-wrap:anywhere; }
+.student-shell .parent-dashboard__homework .muted { font-size:14px; }
+.parent-dashboard__chat #parent-teacher-chat { margin-top:20px; }
+.parent-dashboard__empty { color:var(--muted); }
+.parent-dashboard__skills { max-width:760px; }
+.parent-dashboard__skills h2 { margin:20px 0 10px; }
+.parent-dashboard__skills p { max-width:620px; margin:0 0 24px; }
+@media(max-width:700px) {
+  .parent-dashboard { gap:20px; }
+  .parent-dashboard__date { padding-top:0; }
+  .student-shell .parent-dashboard__homework { grid-template-columns:36px minmax(0,1fr); gap:10px 12px; }
+  .parent-dashboard__file-icon { width:36px; height:42px; }
+  .student-shell .parent-dashboard__homework > .pill { grid-column:2; justify-self:start; }
+  .parent-dashboard__child select { min-width:0; width:100%; }
+  .parent-dashboard__chat .btn { width:100%; }
+}

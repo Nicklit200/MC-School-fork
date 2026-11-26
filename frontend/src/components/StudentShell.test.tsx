@@ -39,4 +39,26 @@ describe('student role shell', () => {
     expect(screen.getByRole('link', { name: 'Онлайн-уроки' })).toHaveAttribute('href', '/online-classes');
     expect(screen.getByRole('link', { name: 'Онлайн-уроки' })).toHaveAttribute('aria-current', 'page');
   });
+  it('gives parents the three requested sections and keeps account links in the parent cabinet', () => {
+    mount('/parent/skills', { name: 'Родитель', variant: 'parent', onlineClassesAvailable: true });
+    const navigation = screen.getByRole('navigation', { name: 'Основная навигация' });
+    expect(within(navigation).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual([
+      '/parent', '/parent/settings', '/parent/skills',
+    ]);
+    expect(within(navigation).getByRole('link', { name: 'Карта навыков' })).toHaveAttribute('aria-current', 'page');
+    expect(within(navigation).getByRole('link', { name: 'Домашние задания' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: 'Открыть настройки аккаунта' })).toHaveAttribute('href', '/parent/settings');
+    for (const logo of screen.getAllByRole('img', { name: 'Mindcrafti School' })) {
+      expect(logo.closest('a')).toHaveAttribute('href', '/parent');
+    }
+  });
+  it('translates parent navigation and delegates logout', () => {
+    localStorage.setItem('language', 'DE');
+    const callbacks = mount('/parent', { variant: 'parent' });
+    expect(screen.getByRole('link', { name: 'Hausaufgaben' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Kompetenzkarte' })).toHaveAttribute('href', '/parent/skills');
+    expect(screen.getByText('Elternkonto')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Abmelden' }));
+    expect(callbacks.onLogout).toHaveBeenCalledOnce();
+  });
 });
