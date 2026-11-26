@@ -4,7 +4,6 @@ import com.mcschool.flashcard.common.ConflictException;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import java.text.Normalizer;
 import java.util.Locale;
-import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 
 public final class StudentUsernames {
