@@ -15,7 +15,6 @@ const PUSH_TOKEN_KEY = 'mindcrafti.mobile.pushToken';
 
 type User = { id?: string; fullName?: string; role?: string; preferredLanguage?: string };
 type LoginResult = { accessToken: string; user: User };
-type Screen = 'dashboard' | 'notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -33,10 +32,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [working, setWorking] = useState(false);
-  const [screen, setScreen] = useState<Screen>('dashboard');
   const [webError, setWebError] = useState(false);
-  const [permission, setPermission] = useState('unknown');
-  const [pushState, setPushState] = useState('Не подключены');
 
   useEffect(() => {
     let active = true;
@@ -64,9 +60,6 @@ export default function App() {
         if (active) setLoadingSession(false);
       }
     })();
-    void Notifications.getPermissionsAsync().then(result => {
-      if (active) setPermission(result.granted ? 'granted' : 'denied');
-    }).catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -90,7 +83,6 @@ export default function App() {
       setUser(data.user);
       setPassword('');
       setWebError(false);
-      setScreen('dashboard');
     } catch (error) {
       Alert.alert('Не удалось войти', (error as Error).message);
     } finally {
@@ -98,110 +90,56 @@ export default function App() {
     }
   }
 
-  async function enableNotifications() {
-    if (!accessToken) return;
-    setWorking(true);
-    try {
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('mindcrafti', {
-          name: 'Mindcrafti',
-          importance: Notifications.AndroidImportance.HIGH,
-        });
-      }
-      const prior = await Notifications.getPermissionsAsync();
-      const result = prior.granted ? prior : await Notifications.requestPermissionsAsync();
-      setPermission(result.granted ? 'granted' : 'denied');
-      if (!result.granted) {
-        setPushState('Не разрешены');
-        return;
-      }
-      const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
-      if (!projectId) throw new Error('Проект Expo не привязан.');
-      const push = await Notifications.getExpoPushTokenAsync({ projectId });
-      if (!push.data) throw new Error('iPhone не выдал push-токен.');
-      const response = await fetch(API + '/mobile-push/devices', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + accessToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token: push.data, platform: Platform.OS }),
-      });
-      if (!response.ok) {
-        setPushState('Токен получен, сервер ещё не подключён');
-        Alert.alert('Сервер ещё не готов', 'Мобильная регистрация будет доступна после обновления сервера школы.');
-        return;
-      }
-      await SecureStore.setItemAsync(PUSH_TOKEN_KEY, push.data);
-      setPushState('Подключены к серверу');
-    } catch (error) {
-      Alert.alert('Уведомления', (error as Error).message);
-    } finally {
-      setWorking(false);
-    }
-  }
+  // Ask iOS for permission after login, not via a permanent native toolbar.
+  // iOS displays the system dialog only when permission is undetermined.
+  // When the backend endpoint is deployed, register the Expo token silently.
+  useEffect(() => {
+    if (!accessToken || !user) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('mindcrafti', {
+            name: 'Mindcrafti',
+            importance: Notifications.AndroidImportance.HIGH,
+          });
+        }
+        const previous = await Notifications.getPermissionsAsync();
+        const permission = previous.status === 'undetermined'
+          ? await Notifications.requestPermissionsAsync()
+          : previous;
+        if (!permission.granted || cancelled) return;
 
-  async function testLocal() {
-    const status = await Notifications.getPermissionsAsync();
-    if (!status.granted) {
-      Alert.alert('Сначала включите уведомления');
-      return;
-    }
-    await Notifications.scheduleNotificationAsync({
-      content: { title: 'Mindcrafti', body: 'Тестовое уведомление работает!' },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3 },
-    });
-    Alert.alert('Готово', 'Уведомление запланировано через 3 секунды.');
-  }
-
-  async function testServer() {
-    if (!accessToken) return;
-    setWorking(true);
-    try {
-      const response = await fetch(API + '/mobile-push/test', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + accessToken },
-      });
-      if (!response.ok) throw new Error('Сервер ответил HTTP ' + response.status);
-      Alert.alert('Отправлено', 'Сервер отправил запрос Expo; ожидайте уведомление.');
-    } catch (error) {
-      Alert.alert('Не удалось отправить', (error as Error).message);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function logout() {
-    if (working) return;
-    setWorking(true);
-    try {
-      const token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
-      if (token && accessToken) {
+        const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
+        if (!projectId) return;
+        const expoToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        if (!expoToken || cancelled) return;
         const response = await fetch(API + '/mobile-push/devices', {
-          method: 'DELETE',
+          method: 'POST',
           headers: {
             Authorization: 'Bearer ' + accessToken,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ token: expoToken, platform: Platform.OS }),
         });
-        if (!response.ok) {
-          Alert.alert('Ошибка', 'Не удалось отключить уведомления от аккаунта. Повторите позже.');
-          return;
+        if (response.ok && !cancelled) {
+          await SecureStore.setItemAsync(PUSH_TOKEN_KEY, expoToken);
         }
-        await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
+        // The production API does not yet expose the mobile push endpoint.
+        // Do not interrupt the parent dashboard with a technical error.
+      } catch {
+        // Offline users should still be able to use the school dashboard.
       }
-      await SecureStore.deleteItemAsync(SESSION_KEY);
-      setAccessToken(null);
-      setUser(null);
-      setLoginId('');
-      setPassword('');
-      setScreen('dashboard');
-    } catch {
-      Alert.alert('Ошибка сети', 'Не удалось безопасно завершить сеанс. Попробуйте ещё раз.');
-    } finally {
-      setWorking(false);
-    }
+    })();
+    return () => { cancelled = true; };
+  }, [accessToken, user?.id]);
+
+  async function handleWebLogout() {
+    await SecureStore.deleteItemAsync(SESSION_KEY);
+    setAccessToken(null);
+    setUser(null);
+    setLoginId('');
+    setPassword('');
   }
 
   // The existing web app reads accessToken and authUser from origin-scoped localStorage.
@@ -249,16 +187,7 @@ export default function App() {
 
   return <SafeAreaView style={styles.root}>
     <StatusBar barStyle="light-content" />
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>Mindcrafti</Text>
-      <Pressable accessibilityLabel={screen === 'dashboard' ? 'Настройки уведомлений' : 'Вернуться в кабинет'}
-        style={styles.headerButton} onPress={() => setScreen(screen === 'dashboard' ? 'notifications' : 'dashboard')}>
-        <Text style={styles.headerButtonText}>{screen === 'dashboard' ? 'Уведомления' : 'Кабинет'}</Text>
-      </Pressable>
-    </View>
-
-    {/* Keep the WebView mounted when opening settings to preserve forms and navigation. */}
-    <View style={[styles.webContainer, screen !== 'dashboard' && styles.hidden]}>
+    <View style={styles.webContainer}>
       {webError ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>Не удалось открыть кабинет Mindcrafti.</Text>
@@ -282,6 +211,11 @@ export default function App() {
             if (/^https:\/\//.test(request.url)) void Linking.openURL(request.url).catch(() => {});
             return false;
           }}
+          onNavigationStateChange={nav => {
+            if (nav.url === SCHOOL_ORIGIN + '/login' || nav.url.startsWith(SCHOOL_ORIGIN + '/login?')) {
+              void handleWebLogout();
+            }
+          }}
           onError={() => setWebError(true)}
           startInLoadingState
           renderLoading={() => <View style={styles.center}><ActivityIndicator color="#2563eb" /></View>}
@@ -289,26 +223,7 @@ export default function App() {
       )}
     </View>
 
-    {screen === 'notifications' && (
-      <ScrollView contentContainerStyle={styles.settings}>
-        <Text style={styles.cardTitle}>Уведомления</Text>
-        <Text style={styles.caption}>Аккаунт: {user.fullName ?? loginId}</Text>
-        <Text style={styles.caption}>Разрешение iPhone: {permission === 'granted' ? 'включено' : 'не включено'}</Text>
-        <Text style={styles.caption}>Статус: {pushState}</Text>
-        <Pressable style={styles.button} disabled={working} onPress={enableNotifications}>
-          <Text style={styles.buttonText}>Включить push</Text>
-        </Pressable>
-        <Pressable style={styles.secondaryButton} onPress={testLocal}>
-          <Text style={styles.secondaryText}>Проверить на телефоне</Text>
-        </Pressable>
-        <Pressable style={styles.secondaryButton} disabled={working || pushState !== 'Подключены к серверу'} onPress={testServer}>
-          <Text style={styles.secondaryText}>Отправить с сервера</Text>
-        </Pressable>
-        <Pressable style={styles.exit} disabled={working} onPress={logout}>
-          <Text style={styles.exitText}>Выйти из аккаунта</Text>
-        </Pressable>
-      </ScrollView>
-    )}
+
   </SafeAreaView>;
 }
 
@@ -325,17 +240,6 @@ const styles = StyleSheet.create({
   input: { color: '#fff', borderRadius: 12, borderColor: '#3b4a63', borderWidth: 1, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16, backgroundColor: '#0b1220' },
   button: { backgroundColor: '#2563eb', paddingVertical: 15, paddingHorizontal: 22, alignItems: 'center', borderRadius: 12, marginTop: 5 },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  header: { height: 50, paddingHorizontal: 16, backgroundColor: '#0b1220', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { color: '#fff', fontWeight: '800', fontSize: 18 },
-  headerButton: { backgroundColor: '#1c335b', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  headerButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   webContainer: { flex: 1, backgroundColor: '#fff' },
-  hidden: { display: 'none' },
   errorText: { color: '#192538', fontSize: 16, marginBottom: 20, textAlign: 'center' },
-  settings: { flexGrow: 1, padding: 24, gap: 18 },
-  caption: { color: '#bbcbe1', fontSize: 15 },
-  secondaryButton: { borderRadius: 12, borderWidth: 1, borderColor: '#3b4a63', padding: 15, alignItems: 'center' },
-  secondaryText: { color: '#e3edff', fontWeight: '600' },
-  exit: { alignItems: 'center', padding: 12 },
-  exitText: { color: '#b0bed2' },
 });
