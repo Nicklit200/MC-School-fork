@@ -1,4 +1,5 @@
 import { Navigate } from 'react-router-dom';
+import { PageLoading } from '../components/RouteRecovery';
 import type { ReactNode } from 'react';
 import type { Role } from '../api/types';
 import { useAuth } from './AuthContext';
@@ -13,7 +14,7 @@ export function ProtectedRoute({ role, children }: { role?: Role | Role[]; child
   const { user, initializing } = useAuth();
 
   if (initializing) {
-    return null;
+    return <PageLoading />;
   }
   if (!user) {
     return <Navigate to="/login" replace />;
