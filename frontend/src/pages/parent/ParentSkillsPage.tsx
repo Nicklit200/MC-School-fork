@@ -69,6 +69,11 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
             className={point.confirmedPercent == null
               ? 'parent-progress__dot parent-progress__dot--unassessed'
               : 'parent-progress__dot'}/>
+          <text x={point.x} y={Math.max(20, point.y - 18)} textAnchor="middle"
+            className={`parent-progress__point-value ${chosen ? 'parent-progress__point-value--active' : ''}`}
+            aria-hidden="true">
+            {point.confirmedPercent == null ? '—' : percent(point.confirmedPercent)}
+          </text>
           <text className={`parent-progress__point-date ${chosen ? 'parent-progress__point-date--active' : ''}`}
             x={point.x} y="213" textAnchor="middle">
             {new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU',
