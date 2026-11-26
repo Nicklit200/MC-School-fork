@@ -16,6 +16,7 @@ import com.mcschool.flashcard.students.dto.TestReviewReminderResponse;
 import com.mcschool.flashcard.students.dto.UpdateStudentDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentHomeworkDriveFolderRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentNameRequest;
+import com.mcschool.flashcard.students.dto.UpdateStudentUsernameRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentLearningProfileRequest;
 import com.mcschool.flashcard.students.dto.UpdateStudentTranscriptDriveFolderRequest;
 import com.mcschool.flashcard.users.dto.ChangePasswordRequest;
@@ -93,6 +94,13 @@ public class StudentController {
                                                  @PathVariable UUID studentId,
                                                  @Valid @RequestBody UpdateStudentNameRequest request) {
         return studentService.updateStudentName(caller, studentId, request);
+    }
+
+    @PutMapping("/{studentId}/username")
+    public StudentListResponse updateStudentUsername(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                      @PathVariable UUID studentId,
+                                                      @Valid @RequestBody UpdateStudentUsernameRequest request) {
+        return studentService.updateStudentUsername(caller, studentId, request);
     }
 
     @PutMapping("/{studentId}/learning-profile")

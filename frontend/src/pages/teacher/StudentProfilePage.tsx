@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-
 import { api, request } from '../../api/client';
 import type { CardSummary, GroupLesson, Homework, SchoolType, StudentListItem } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
+import { askStudentUsername, studentUsernameError } from '../../lib/studentUsername';
 
 export function StudentProfilePage() {
   const { studentId = '' } = useParams();
@@ -12,6 +13,9 @@ export function StudentProfilePage() {
   const tr = (ru: string, de: string) => language === 'DE' ? de : ru;
   const base = `/students/${studentId}`;
   const overview = location.pathname.replace(/\/$/, '') === base;
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameMessage, setUsernameMessage] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [student, setStudent] = useState<StudentListItem | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [summary, setSummary] = useState<CardSummary | null>(null);
@@ -38,10 +42,30 @@ export function StudentProfilePage() {
   }, [studentId, revision, overview]);
   useEffect(() => { let live = true; api.learningTime.student(studentId,30).then(r => { if(live) setTimeReport(r); }).catch(()=>{}); return () => { live = false; }; }, [studentId]);
   useEffect(() => {
+    setUsernameMessage(null);
+    setUsernameError(null);
     setParentShareUrl(null);
     setParentShareStatus(null);
     setParentShareError(null);
   }, [studentId]);
+
+  async function renameUsername() {
+    if (!student || editingUsername || student.id !== studentId) return;
+    const username = askStudentUsername(student.username, language);
+    if (!username) return;
+    setEditingUsername(true);
+    setUsernameMessage(null);
+    setUsernameError(null);
+    try {
+      const updated = await api.students.renameUsername(student.id, username);
+      setStudent(current => current?.id === updated.id ? { ...current, username: updated.username } : current);
+      setUsernameMessage(tr('Новый логин: ', 'Neuer Login: ') + updated.username);
+    } catch (e) {
+      setUsernameError(studentUsernameError(e, language));
+    } finally {
+      setEditingUsername(false);
+    }
+  }
 
   async function copyParentProgressLink() {
     if (!student || sharingParentLink) return;
@@ -101,11 +125,14 @@ export function StudentProfilePage() {
   return <div className="group-detail-dashboard">
     <Link className="group-detail-back" to="/students">← {tr('К ученикам', 'Schüler')}</Link>
     <div className="group-detail-heading"><div><h1>{student?.fullName ?? tr('Ученик', 'Schüler')}</h1><p>{tr('Логин', 'Login')}: {student?.username ?? '—'} · {tr('Родитель', 'Elternteil')}: {student?.parentFullName ?? '—'}</p></div><div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+      <button className="btn btn--secondary" type="button" disabled={!student || loading || editingUsername} onClick={() => void renameUsername()}>{tr('Изменить логин', 'Login ändern')}</button>
       <button className="btn" type="button" onClick={() => void copyParentProgressLink()} disabled={!student || sharingParentLink}>
         {sharingParentLink ? tr('Создаём ссылку…', 'Link wird erstellt…') : tr('🔗 Скопировать ссылку для родителя', '🔗 Eltern-Link kopieren')}
       </button>
       <Link to={`${base}/homeworks`} className="btn btn--secondary">{tr('Календарь занятий', 'Unterrichtskalender')}</Link>
     </div></div>
+    {usernameMessage && <div className="banner banner--success" role="status">{usernameMessage}</div>}
+    {usernameError && <div className="banner banner--error" role="alert">{usernameError}</div>}
     {parentShareError && <div className="banner banner--error" role="alert" style={{ marginBottom: 12 }}>{parentShareError}</div>}
     {parentShareStatus && <div className="banner banner--success" role="status" style={{ marginBottom: 12 }}>{parentShareStatus}</div>}
     {parentShareUrl && (

@@ -7,6 +7,7 @@ import { homePathForRole } from '../../auth/roleRoutes';
 import { saveAdminImpersonation } from '../../auth/adminImpersonation';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { askStudentUsername, studentUsernameError } from '../../lib/studentUsername';
 
 type ManagedRole = 'STUDENT' | 'PARENT';
 type LoadState = 'loading' | 'ready' | 'failed';
@@ -19,7 +20,7 @@ const loadingResources: Record<AccountResources, LoadState> = {
 };
 
 export function AdminAccountsPage() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -30,6 +31,7 @@ export function AdminAccountsPage() {
   const [teachers, setTeachers] = useState<User[]>([]);
   const [teacherOptions, setTeacherOptions] = useState<TeacherAssignmentOption[]>([]);
   const [teacherSelections, setTeacherSelections] = useState<Record<string, string>>({});
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [bulkFromTeacherId, setBulkFromTeacherId] = useState('');
   const [bulkToTeacherId, setBulkToTeacherId] = useState('');
@@ -96,6 +98,21 @@ export function AdminAccountsPage() {
         .some((value) => value!.toLocaleLowerCase().includes(query)),
     );
   }, [accounts, search]);
+
+  async function renameUsername(account: AdminAccount) {
+    if (editingUsername || account.role !== 'STUDENT') return;
+    const username = askStudentUsername(account.username, language);
+    if (!username) return;
+    setEditingUsername(account.id);
+    setError(null); setSuccess(null);
+    try {
+      const updated = await api.adminAccounts.renameStudentUsername(account.id, username);
+      setStudents(current => current.map(item => item.id === updated.id ? { ...item, username: updated.username } : item));
+      setSuccess((language === 'DE' ? 'Neuer Login: ' : 'Новый логин: ') + updated.username);
+    } catch (e) {
+      setError(studentUsernameError(e, language));
+    } finally { setEditingUsername(null); }
+  }
 
   async function assignTeacher(account: AdminAccount) {
     const teacherId = teacherSelections[account.id] ?? '';
@@ -248,6 +265,7 @@ export function AdminAccountsPage() {
             <div style={{ flex: '1 1 320px' }}>
               <div className="list-row__title">{account.fullName}</div>
               <div className="muted">{account.username ? `Логин: ${account.username}` : account.email || 'Логин ещё не задан'}</div>
+              {account.role === 'STUDENT' && <button type="button" className="btn btn--ghost" disabled={Boolean(editingUsername)} onClick={() => void renameUsername(account)}>{language === 'DE' ? 'Login ändern' : 'Изменить логин'}</button>}
               {account.username && account.email && <div className="muted">{account.email}</div>}
               {activeRole === 'PARENT' && parentDelivery[account.id] && <div className="muted" style={{marginTop:6}}>
                 {parentDelivery[account.id].linkedChildren === 0
