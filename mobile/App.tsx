@@ -297,7 +297,11 @@ export default function App() {
       ) : (
         <WebView
           key={user.id ?? user.role ?? 'school'}
-          source={{ uri: SCHOOL_ORIGIN + (user.role === 'PARENT' ? '/parent' : '/') + '?mobileRefresh=20261126-2' }}
+          source={{ uri: SCHOOL_ORIGIN + (
+            user.role === 'PARENT' ? '/parent'
+              : user.role === 'TEACHER' ? '/students'
+                : user.role === 'STUDENT' ? '/today' : '/teachers'
+          ) + '?mobileRefresh=20261127-ipad-teacher' }}
           cacheEnabled={false}
           originWhitelist={[SCHOOL_ORIGIN]}
           injectedJavaScriptBeforeContentLoaded={bootstrap}
@@ -305,6 +309,15 @@ export default function App() {
           domStorageEnabled
           sharedCookiesEnabled={false}
           thirdPartyCookiesEnabled={false}
+          // The iPad teacher classroom uses LiveKit getUserMedia inside WKWebView.
+          // iOS prompts on first use, then reuses the approved same-host grant.
+          mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          allowsBackForwardNavigationGestures
+          automaticallyAdjustContentInsets={false}
+          contentInsetAdjustmentBehavior="never"
+          autoManageStatusBarEnabled={false}
           onShouldStartLoadWithRequest={request => {
             if (request.url === 'about:blank') return true;
             if (request.url.startsWith(SCHOOL_ORIGIN + '/') || request.url === SCHOOL_ORIGIN) return true;
