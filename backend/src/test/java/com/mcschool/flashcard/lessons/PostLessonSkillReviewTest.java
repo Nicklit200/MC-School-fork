@@ -121,8 +121,8 @@ class PostLessonSkillReviewTest {
 
     @Test
     void longTranscriptsPreserveEveryAnswerWithoutSilentInitialWindowTruncation() {
-        String line="STUDENT [t=123s]: Я решил -2 умножить на -2 и получил 4.\\n";
-        String transcript=line.repeat(900)+"STUDENT [t=5376s]: END_OF_LESSON_ANSWER\\n";
+        String line="STUDENT [t=123s]: Я решил -2 умножить на -2 и получил 4.\n";
+        String transcript=line.repeat(900)+"STUDENT [t=5376s]: END_OF_LESSON_ANSWER\n";
         assertThat(transcript.length()).isGreaterThan(18000);
         assertThat(PostLessonSkillAnalysisService.transcriptChunks(transcript))
                 .hasSize(1).first().asString().contains("END_OF_LESSON_ANSWER");
@@ -130,8 +130,8 @@ class PostLessonSkillReviewTest {
 
     @Test
     void oversizedTranscriptsSplitAtSpeakerLinesAndDoNotDropLateEvidence() {
-        String line="STUDENT [t=123s]: A verified, chronological math solution.\\n";
-        String transcript=line.repeat(2600)+"STUDENT [t=9899s]: LATE_VERIFIED_ANSWER\\n";
+        String line="STUDENT [t=123s]: A verified, chronological math solution.\n";
+        String transcript=line.repeat(2600)+"STUDENT [t=9899s]: LATE_VERIFIED_ANSWER\n";
         var chunks=PostLessonSkillAnalysisService.transcriptChunks(transcript);
         assertThat(chunks).hasSizeGreaterThan(1);
         assertThat(String.join("",chunks)).isEqualTo(transcript);
