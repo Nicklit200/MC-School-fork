@@ -48,7 +48,7 @@ export function PageAnalysisFeedback({ current, pageNumber, de, inline = false }
       ? (de ? 'Neue Version wird geprüft - letzte Prüfung bleibt gespeichert' : 'Проверяется новая версия - предыдущая проверка сохранена')
       : newerAttempt?.state === 'FAILED'
         ? (de ? 'Neue Prüfung fehlgeschlagen - letzte Prüfung bleibt gespeichert' : 'Новая проверка не удалась - предыдущая проверка сохранена')
-        : row && !row.isCurrent
+        : row?.isCurrent === false
           ? (de ? 'Letzte abgeschlossene Prüfung - Seite wurde inzwischen geändert' : 'Последняя завершённая проверка - после неё страница изменялась')
           : row
             ? (de ? 'Gespeicherte Prüfung' : 'Сохранённая проверка')
@@ -59,7 +59,7 @@ export function PageAnalysisFeedback({ current, pageNumber, de, inline = false }
                 : de ? 'Warte auf 30 Sekunden Schreibpause' : 'Ожидание 30 секунд бездействия';
   const content = row?.text
       ? <div className="kolin-saved-page__content" tabIndex={inline ? 0 : undefined}>
-          {!row.isCurrent && <small>{de ? 'Historischer Stand - neue Schülerantworten sind noch nicht geprüft.' : 'Предыдущая версия - новые записи ученика ещё не проверены.'}</small>}
+          {row.isCurrent === false && <small>{de ? 'Historischer Stand - neue Schülerantworten sind noch nicht geprüft.' : 'Предыдущая версия - новые записи ученика ещё не проверены.'}</small>}
           <KolinRichText text={row.text} />
           {row.finishedAt && <small>{new Date(row.finishedAt).toLocaleTimeString(de ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}
         </div>
