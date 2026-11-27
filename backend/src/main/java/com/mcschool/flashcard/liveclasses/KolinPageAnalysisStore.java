@@ -197,7 +197,9 @@ public class KolinPageAnalysisStore {
     public List<SavedResult> current(UUID classId, UUID teacherId, UUID studentId, String boardId,
                                      long documentVersion, long sharedVersion) {
         return jdbc.query("""
-            SELECT a.*, COALESCE(latest.sequence = a.pupil_ink_revision, false) AS is_current
+            SELECT a.*,
+                   COALESCE(a.document_version=? AND a.shared_document_version=?
+                       AND latest.sequence = a.pupil_ink_revision, false) AS is_current
             FROM kolyn_page_analyses a
             JOIN online_class_annotation_documents doc ON doc.class_id=a.class_id
               AND doc.target_type='WHITEBOARD' AND doc.target_id=a.board_id
@@ -209,9 +211,9 @@ public class KolinPageAnalysisStore {
                 ORDER BY ev.sequence DESC LIMIT 1
             ) latest ON true
             WHERE a.class_id=? AND a.teacher_id=? AND a.student_id=? AND a.board_id=?
-              AND a.document_version=? AND a.shared_document_version=? AND a.analysis_version=?
+              AND a.analysis_version=?
             ORDER BY a.page_number, a.created_at DESC, a.id DESC LIMIT 500
-            """,SAVED_MAPPER,classId,teacherId,studentId,boardId,documentVersion,sharedVersion,ANALYSIS_VERSION);
+            """,SAVED_MAPPER,documentVersion,sharedVersion,classId,teacherId,studentId,boardId,ANALYSIS_VERSION);
     }
 
     private Result exact(Key key,long pupilRevision) {
