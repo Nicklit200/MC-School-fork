@@ -77,7 +77,7 @@ describe('personal lesson worksheets', () => {
     mountWithRoster();
     const select = await screen.findByRole('combobox', { name: 'Выбрать ученика для добавления' });
     await userEvent.selectOptions(select, 'sofia');
-    await userEvent.click(screen.getByRole('button', { name: '+ Добавить ученика' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Добавить на один урок' }));
     await waitFor(() => expect(api.lessons.addParticipant).toHaveBeenCalledWith('lesson-1', 'sofia'));
   });
 
