@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { documentPageSize, documentRailWidth, documentScrollBounds, zoomDocumentScroll } from './documentBoardView';
+import { compactPageReviewColumns, documentPageSize, documentRailWidth, documentScrollBounds, zoomDocumentScroll } from './documentBoardView';
 
 describe('continuous document geometry', () => {
+  it('anchors the pupil page on the left and allocates the remaining overview width to Kolyn', () => {
+    const columns = compactPageReviewColumns(800, 450, 210 / 297);
+    expect(columns.paperWidth).toBeCloseTo(450 * (210 / 297));
+    expect(columns.reviewWidth).toBeCloseTo(800 - columns.paperWidth - columns.gap);
+    expect(columns.reviewWidth).toBeGreaterThan(columns.paperWidth);
+    expect(columns.paperWidth + columns.gap + columns.reviewWidth).toBeCloseTo(800);
+  });
+
+  it('keeps both overview columns inside small tiles without negative widths', () => {
+    const columns = compactPageReviewColumns(200, 200, 210 / 297);
+    expect(columns.paperWidth).toBeGreaterThan(0);
+    expect(columns.reviewWidth).toBeGreaterThan(0);
+    expect(columns.paperWidth + columns.gap + columns.reviewWidth).toBeCloseTo(200);
+    const tiny = compactPageReviewColumns(80, 100, 210 / 297);
+    expect(tiny.paperWidth).toBeGreaterThanOrEqual(0);
+    expect(tiny.reviewWidth).toBeGreaterThanOrEqual(0);
+    expect(tiny.paperWidth + tiny.gap + tiny.reviewWidth).toBeCloseTo(80);
+  });
+
   it('scales portrait and landscape paper without changing their format', () => {
     expect(documentPageSize(800, 600, 4, 2)).toEqual({ width: 1600, height: 400 });
     const a4 = documentPageSize(800, 600, 210 / 297, 2);

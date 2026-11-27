@@ -3,6 +3,34 @@ import { clampZoom } from './boardView';
 export interface DocumentPoint { x: number; y: number }
 export interface DocumentScroll { left: number; top: number }
 
+export interface CompactPageReviewColumns {
+  paperWidth: number;
+  reviewWidth: number;
+  gap: number;
+}
+
+/** In the all-pupils overview, reserve an A4-sized left column and give every
+ * remaining horizontal pixel to the readable Kolyn feedback panel. */
+export function compactPageReviewColumns(
+  viewportWidth: number,
+  viewportHeight: number,
+  aspect: number,
+  gap = 8,
+  pageShare = 0.42,
+  minimumReviewWidth = 120,
+): CompactPageReviewColumns {
+  const width = Number.isFinite(viewportWidth) ? Math.max(0, viewportWidth) : 0;
+  const height = Number.isFinite(viewportHeight) ? Math.max(0, viewportHeight) : 0;
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 210 / 297;
+  const safeGap = Math.min(width, Math.max(0, gap));
+  const minimumPaperWidth = Math.min(96, Math.max(0, width - safeGap));
+  const reviewFloor = Math.min(Math.max(0, minimumReviewWidth), Math.max(0, width - safeGap - minimumPaperWidth));
+  const maximumPaperWidth = Math.max(0, width - safeGap - reviewFloor);
+  const share = Math.min(1, Math.max(0, pageShare));
+  const paperWidth = Math.min(maximumPaperWidth, width * share, height * safeAspect);
+  return { paperWidth, reviewWidth: Math.max(0, width - paperWidth - safeGap), gap: safeGap };
+}
+
 /** Real page dimensions, so the canvas and its input coordinates resize together. */
 export function documentPageSize(width: number, height: number, aspect: number, zoom = 1) {
   const baseWidth = Math.min(width, height * aspect);
