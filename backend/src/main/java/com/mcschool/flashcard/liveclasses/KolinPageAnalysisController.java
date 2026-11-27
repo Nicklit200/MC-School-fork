@@ -38,7 +38,7 @@ public class KolinPageAnalysisController {
     }
 
     @GetMapping
-    public ResponseEntity<List<KolinPageAnalysisStore.Result>> current(@AuthenticationPrincipal AuthenticatedUser teacher,
+    public ResponseEntity<List<KolinPageAnalysisStore.SavedResult>> current(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId,@RequestParam UUID studentId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.current(teacher,classId,studentId));
     }
