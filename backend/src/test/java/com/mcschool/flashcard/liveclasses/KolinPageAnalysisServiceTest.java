@@ -34,7 +34,10 @@ class KolinPageAnalysisServiceTest {
     final KolinBoardReviewService.Metadata metadata=new KolinBoardReviewService.Metadata(pupil.getId(),"Pupil",board,
             2,0,7,now,"a".repeat(64),"task_page",5,List.of(new KolinBoardReviewService.PageMetadata(2,7,"a".repeat(64))));
 
-    KolinPageAnalysisStore.SavedResult receipt(String state,String text) {
+    KolinPageAnalysisStore.Result receipt(String state,String text) {
+        return new KolinPageAnalysisStore.Result(id,pupil.getId(),board,2,0,3,7,state,text,null,now,now);
+    }
+    KolinPageAnalysisStore.SavedResult savedReceipt(String state,String text) {
         return new KolinPageAnalysisStore.SavedResult(id,pupil.getId(),board,2,0,3,7,state,text,null,now,now,true);
     }
 
@@ -113,8 +116,8 @@ class KolinPageAnalysisServiceTest {
 
     @Test void textContextIncludesOnlyReadyReceiptsAndReportsLimits() {
         var context=new HashMap<String,Object>();
-        assertThat(KolinChatService.includePageAnalyses(context,List.of(receipt("RUNNING",null),receipt("READY","saved facts")))).isTrue();
-        assertThat(context.get("savedPageAnalyses")).isEqualTo(List.of(receipt("READY","saved facts")));
+        assertThat(KolinChatService.includePageAnalyses(context,List.of(savedReceipt("RUNNING",null),savedReceipt("READY","saved facts")))).isTrue();
+        assertThat(context.get("savedPageAnalyses")).isEqualTo(List.of(savedReceipt("READY","saved facts")));
         assertThat(context).containsKey("savedPageAnalysisCoverage");
     }
 
