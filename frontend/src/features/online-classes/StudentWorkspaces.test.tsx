@@ -29,6 +29,7 @@ function camera(ownerId: string, cameraId = `camera-${ownerId}`): NotebookCamera
 function surface(props: Partial<ComponentProps<typeof StudentWorkspaces>> = {}) {
   return <StudentWorkspaces students={pupils} camerasByOwner={new Map([['p1', camera('p1')], ['p3', camera('p3')]])}
     activeBoard="all-student-boards" overview visible onSelect={vi.fn()} onOverview={vi.fn()}
+    onCheck={async () => ({ checked: 0, skipped: 0, failed: 0 })}
     renderBoard={(id, active, compact, following) => <div data-testid={`board-${id}`}
       data-active={String(active)} data-compact={String(compact)} data-following={String(following)}>Доска {id}</div>}
     renderCameraBoard={(id, active, compact, source, following) => <div data-testid={`camera-board-${id}`}
@@ -56,7 +57,7 @@ describe('pupil board and camera surfaces', () => {
     available('camera-p1', true); available('camera-p3', true);
     for (const name of ['Анна', 'Вера']) {
       const region = screen.getByRole('region', { name: `Работа ученика: ${name}` });
-      expect(within(region).getByText('Камера тетради')).toBeInTheDocument();
+      expect(within(region).getByRole('button', { name: 'Проверить тетрадь: ' + name })).toBeInTheDocument();
     }
     expect(screen.getByTestId('board-p1').parentElement).toHaveAttribute('hidden');
     expect(screen.getByTestId('board-p3').parentElement).toHaveAttribute('hidden');
@@ -75,6 +76,30 @@ describe('pupil board and camera surfaces', () => {
     rerender(surface({ students: pupils.slice(0, 4), camerasByOwner: new Map() }));
     expect(overview()).toHaveAttribute('data-overview-count', '4');
     expect(screen.getAllByRole('region', { name: /Работа ученика:/ })).toHaveLength(4);
+  });
+
+  it('puts an individual check button in each pupil header and checks only that pupil', async () => {
+    const user = userEvent.setup();
+    const onCheck = vi.fn().mockResolvedValue({ checked: 2, skipped: 1, failed: 0 });
+    render(surface({ camerasByOwner: new Map(), onCheck }));
+    const anna = screen.getByRole('region', { name: 'Работа ученика: Анна' });
+    const boris = screen.getByRole('region', { name: 'Работа ученика: Борис' });
+    const button = within(anna).getByRole('button', { name: 'Проверить тетрадь: Анна' });
+    expect(button.parentElement).toBe(anna.querySelector('.online-class-room__student-tile-header'));
+    expect(within(anna).queryByText('Доска', { exact: true })).not.toBeInTheDocument();
+    await user.click(button);
+    expect(onCheck).toHaveBeenCalledExactlyOnceWith('p1');
+    expect(await within(anna).findByRole('status')).toHaveTextContent('Проверено: 2, пропущено: 1');
+    expect(within(boris).queryByRole('status')).not.toBeInTheDocument();
+    await user.click(within(boris).getByRole('button', { name: 'Проверить тетрадь: Борис' }));
+    expect(onCheck).toHaveBeenLastCalledWith('p2');
+  });
+
+  it('disables each check button while the lesson board is being archived', () => {
+    render(surface({ camerasByOwner: new Map(), onCheck: vi.fn(), checkDisabled: true }));
+    for (const name of ['Анна', 'Борис', 'Вера', 'Глеб']) {
+      expect(screen.getByRole('button', { name: 'Проверить тетрадь: ' + name })).toBeDisabled();
+    }
   });
 
   it('starts with independent views and toggles follow for only the selected pupil', async () => {

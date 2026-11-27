@@ -149,6 +149,8 @@ export const kolinApi = {
     request<{ enabled: boolean }>('GET', `${base(classId)}/page-analyses/enabled`),
   pageAnalysisCandidates: (classId: string) =>
     request<KolinPageAnalysisCandidate[]>('GET', `${base(classId)}/page-analyses/candidates`),
+  manualPageAnalysisCandidates: (classId: string, studentId: string) =>
+    request<KolinPageAnalysisCandidate[]>('GET', `${base(classId)}/page-analyses/manual-candidates?studentId=${encodeURIComponent(studentId)}`),
   analyzePage: (classId: string, snapshot: KolinBoardSnapshot) =>
     request<KolinPageAnalysisResult>('POST', `${base(classId)}/page-analyses`, snapshot),
   savedPageAnalyses: (classId: string, studentId: string) =>

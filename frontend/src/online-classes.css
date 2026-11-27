@@ -2035,11 +2035,28 @@
   background: var(--v3-selected, #553824);
   color: var(--v3-orange, #ff812f);
 }
-.student-workspace__kind {
-  flex-shrink: 0;
-  margin-left: auto;
-  font-size: 11px;
-  color: #526b88;
+.student-workspace .online-class-room__student-tile-header .student-workspace__check {
+  min-height:28px;
+  margin-left:auto;
+  white-space:nowrap;
+  border-color:#efc49f;
+  background:#fff7ed;
+  color:#96501e;
+}
+.student-workspace .online-class-room__student-tile-header .student-workspace__check:disabled {
+  opacity:.55;
+  cursor:wait;
+}
+.student-workspace__check-status {
+  flex:1 0 100%;
+  min-width:0;
+  font-size:10px;
+  color:#526b88;
+}
+.online-class-room--original-v3 .student-workspace .online-class-room__student-tile-header .student-workspace__check {
+  border-color:var(--v3-orange, #ff812f);
+  background:var(--v3-selected, #553824);
+  color:var(--v3-orange, #ff812f);
 }
 .student-workspace__content { position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; }
 .student-workspace__board, .student-workspace__camera-board, .student-workspace__camera { position: absolute; inset: 0; min-width: 0; min-height: 0; }
@@ -2062,7 +2079,7 @@
   .student-workspaces { padding: 4px 4px calc(72px + env(safe-area-inset-bottom)); }
   .student-workspaces--overview { gap: 4px; }
   .student-workspace .online-class-room__student-tile-header { flex-wrap: wrap; gap: 3px; padding: 4px; }
-  .student-workspace__kind { font-size: 10px; }
+  .student-workspace__check-status { font-size:9px; }
 }
 
 

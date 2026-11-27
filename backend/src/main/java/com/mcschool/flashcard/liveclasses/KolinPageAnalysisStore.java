@@ -74,29 +74,25 @@ public class KolinPageAnalysisStore {
      */
     private Long eligiblePupilRevision(Key key) {
         return jdbc.query("""
-            SELECT latest.sequence
+            SELECT pupil_ink.sequence
             FROM online_class_annotation_documents doc
             JOIN LATERAL (
-                SELECT ev.sequence,ev.created_at FROM online_class_annotation_events ev
+                SELECT ev.sequence
+                FROM online_class_annotation_events ev
                 WHERE ev.document_id=doc.id
-                  AND (ev.layer_owner_id=? OR ev.operation_type='CLEAR_ALL')
-                ORDER BY ev.sequence DESC LIMIT 1
-            ) latest ON true
-            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD'
-              AND doc.target_id=? AND doc.page_index=? AND doc.revision=?
-              AND latest.created_at <= now() - interval '30 seconds'
-              AND EXISTS (
-                SELECT 1 FROM online_class_annotation_events ev
-                WHERE ev.document_id=doc.id AND ev.actor_id=? AND ev.layer_owner_id=?
+                  AND ev.layer_owner_id=?
                   AND ev.operation_type IN ('ADD','UPDATE')
                   AND ev.sequence > COALESCE((
                     SELECT MAX(cl.sequence) FROM online_class_annotation_events cl
                     WHERE cl.document_id=doc.id AND (cl.operation_type='CLEAR_ALL'
                       OR (cl.operation_type='CLEAR_LAYER' AND cl.layer_owner_id=?))
                   ),0)
-              )
-            """,(rs,i)->rs.getLong(1),key.studentId(),key.classId(),key.boardId(),
-                key.pageNumber()-1,key.revision(),key.studentId(),key.studentId(),key.studentId())
+                ORDER BY ev.sequence DESC LIMIT 1
+            ) pupil_ink ON true
+            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD'
+              AND doc.target_id=? AND doc.page_index=? AND doc.revision=?
+            """,(rs,i)->rs.getLong(1),key.studentId(),key.studentId(),key.classId(),key.boardId(),
+                key.pageNumber()-1,key.revision())
                 .stream().findFirst().orElse(null);
     }
 
@@ -104,8 +100,8 @@ public class KolinPageAnalysisStore {
         return eligiblePupilRevision(key)!=null;
     }
 
-    /** Durable metadata only; no PDF/image bytes are read to find settled revisions.
-     * Require a real pupil operation since the last layer/all clear.
+    /** Durable metadata only; no PDF/image bytes are read to find new pupil writing.
+     * Teacher ink, erasing, undo and redo do not trigger another paid review.
      * The final renderer separately discards pages with no visible pupil ink. */
     @Transactional(readOnly=true)
     public List<Candidate> candidates(UUID classId, UUID teacherId, UUID studentId, String boardId,
@@ -114,38 +110,34 @@ public class KolinPageAnalysisStore {
             SELECT doc.page_index,doc.revision
             FROM online_class_annotation_documents doc
             JOIN LATERAL (
-                SELECT ev.sequence,ev.created_at FROM online_class_annotation_events ev
+                SELECT ev.sequence
+                FROM online_class_annotation_events ev
                 WHERE ev.document_id=doc.id
-                  AND (ev.layer_owner_id=? OR ev.operation_type='CLEAR_ALL')
-                ORDER BY ev.sequence DESC LIMIT 1
-            ) latest ON true
-            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD' AND doc.target_id=?
-              AND doc.page_index BETWEEN 0 AND 999 AND doc.revision>0
-              AND latest.created_at <= now() - interval '30 seconds'
-              AND EXISTS (
-                SELECT 1 FROM online_class_annotation_events ev
-                WHERE ev.document_id=doc.id AND ev.actor_id=? AND ev.layer_owner_id=? AND ev.operation_type IN ('ADD','UPDATE')
+                  AND ev.layer_owner_id=?
+                  AND ev.operation_type IN ('ADD','UPDATE')
                   AND ev.sequence > COALESCE((
                     SELECT MAX(cl.sequence) FROM online_class_annotation_events cl
                     WHERE cl.document_id=doc.id AND (cl.operation_type='CLEAR_ALL'
                       OR (cl.operation_type='CLEAR_LAYER' AND cl.layer_owner_id=?))
                   ),0)
-              )
+                ORDER BY ev.sequence DESC LIMIT 1
+            ) pupil_ink ON true
+            WHERE doc.class_id=? AND doc.target_type='WHITEBOARD' AND doc.target_id=?
+              AND doc.page_index BETWEEN 0 AND 999 AND doc.revision>0
               AND NOT EXISTS (
                 SELECT 1 FROM kolyn_page_analyses a
                 WHERE a.class_id=doc.class_id AND a.teacher_id=? AND a.student_id=?
                   AND a.board_id=doc.target_id AND a.page_number=doc.page_index+1
-                  AND a.document_version=? AND a.shared_document_version=?
-                  AND a.pupil_ink_revision=latest.sequence AND a.analysis_version=?
+                  AND a.pupil_ink_revision=pupil_ink.sequence AND a.analysis_version=?
               )
-            ORDER BY latest.created_at,doc.page_index LIMIT 8
+            ORDER BY doc.page_index LIMIT 1000
             """,(rs,i)->new Candidate(studentId,boardId,rs.getInt("page_index")+1,
                 documentVersion,sharedVersion,rs.getLong("revision")),
-                studentId,classId,boardId,studentId,studentId,studentId,teacherId,studentId,documentVersion,sharedVersion,ANALYSIS_VERSION);
+                studentId,studentId,classId,boardId,teacherId,studentId,ANALYSIS_VERSION);
     }
 
-    /** The provider runs outside this short transaction. Never auto-retry a paid call
-     * after an ambiguous failure or a lost process; a later ink revision is a new job. */
+    /** The provider runs outside this short transaction. A pupil's exact ink revision
+     * can only be claimed once, regardless of later PDF/background version changes. */
     @Transactional
     public Claim claim(Key key, String imageSha256) {
         Long pupilRevision=eligiblePupilRevision(key);
@@ -156,14 +148,28 @@ public class KolinPageAnalysisStore {
               (id,class_id,teacher_id,student_id,board_id,page_number,document_version,
                shared_document_version,ink_revision,pupil_ink_revision,analysis_version,image_sha256,state)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'RUNNING')
-            ON CONFLICT ON CONSTRAINT uq_kolyn_page_analysis_revision DO NOTHING
+            ON CONFLICT (class_id,teacher_id,student_id,board_id,page_number,pupil_ink_revision,analysis_version) DO NOTHING
             """,id,key.classId(),key.teacherId(),key.studentId(),key.boardId(),key.pageNumber(),
                 key.documentVersion(),key.sharedDocumentVersion(),key.revision(),pupilRevision,ANALYSIS_VERSION,imageSha256);
         if (inserted == 0) {
-            jdbc.update("UPDATE kolyn_page_analyses SET state='FAILED',failure_code='ABANDONED',finished_at=now() WHERE "
-                    + EXACT + " AND state='RUNNING' AND created_at < now() - interval '3 minutes'",key.parameters(pupilRevision));
+            jdbc.update("""
+                UPDATE kolyn_page_analyses SET state='FAILED',failure_code='ABANDONED',finished_at=now()
+                WHERE class_id=? AND teacher_id=? AND student_id=? AND board_id=? AND page_number=?
+                  AND pupil_ink_revision=? AND analysis_version=? AND state='RUNNING'
+                  AND created_at < now() - interval '3 minutes'
+                """,key.classId(),key.teacherId(),key.studentId(),key.boardId(),key.pageNumber(),
+                    pupilRevision,ANALYSIS_VERSION);
+            return new Claim(false,jdbc.queryForObject("""
+                SELECT * FROM kolyn_page_analyses
+                WHERE class_id=? AND teacher_id=? AND student_id=? AND board_id=? AND page_number=?
+                  AND pupil_ink_revision=? AND analysis_version=?
+                ORDER BY CASE state WHEN 'READY' THEN 0 WHEN 'RUNNING' THEN 1 ELSE 2 END,
+                         created_at DESC,id DESC
+                LIMIT 1
+                """,MAPPER,key.classId(),key.teacherId(),key.studentId(),key.boardId(),key.pageNumber(),
+                    pupilRevision,ANALYSIS_VERSION));
         }
-        return new Claim(inserted==1, exact(key,pupilRevision));
+        return new Claim(true,exact(key,pupilRevision));
     }
 
     @Transactional
