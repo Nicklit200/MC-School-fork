@@ -94,6 +94,7 @@ public class MindcraftiMcpController {
     private PersonalWorkbookDraftService personalDrafts;
     private com.mcschool.flashcard.skills.SkillBoardService workbookBoards;
     private com.mcschool.flashcard.skills.SkillMasteryService workbookMastery;
+    private WorkbookLessonRosterService workbookLessonRoster;
     private final StoryTemplateMasterService storyTemplateMasterService;
     private final StoryTemplateDownloadLinkService storyTemplateDownloadLinkService;
     private final FunnelAnalyticsService funnelAnalyticsService;
@@ -225,6 +226,11 @@ public class MindcraftiMcpController {
                                   com.mcschool.flashcard.skills.SkillMasteryService mastery) {
         this.workbookBoards = boards;
         this.workbookMastery = mastery;
+    }
+
+    @Autowired
+    public void setWorkbookLessonRoster(WorkbookLessonRosterService service) {
+        this.workbookLessonRoster = service;
     }
 
     @Autowired
@@ -1901,60 +1907,60 @@ public class MindcraftiMcpController {
         result.put("previousLessons", previousSummaries);
         result.put("previousLesson", previousSummaries.isEmpty() ? null : previousSummaries.get(0));
 
-        List<Map<String,Object>> students = new ArrayList<>();
-        if (lesson.studentId() != null) {
-            students.add(Map.of("id", lesson.studentId().toString(),
-                    "name", lesson.studentName() == null ? "Student" : lesson.studentName()));
-        } else if (lesson.groupId() != null) {
-            Map<String,Object> targets = homeworkSeriesService.findTargets(teacher, "");
-            Object raw = targets.get("targets");
-            if (raw instanceof List<?> targetList) for (Object entry : targetList) {
-                if (!(entry instanceof Map<?,?> t) ||
-                    !String.valueOf(lesson.groupId()).equals(String.valueOf(t.get("id"))) ||
-                    !"group".equalsIgnoreCase(String.valueOf(t.get("type")))) continue;
-                Object members = t.get("students");
-                if (members instanceof List<?> memberList) for (Object member : memberList) {
-                    if (member instanceof Map<?,?> m && m.get("id") != null) {
-                        Map<String,Object> item = new LinkedHashMap<>();
-                        item.put("id", String.valueOf(m.get("id")));
-                        item.put("name", String.valueOf(m.get("name")));
-                        students.add(item);
-                    }
-                }
-                break;
-            }
-        }
-        LocalDate activityEnd = lessonDate.isAfter(LocalDate.now(WORKBOOK_ZONE))
-                ? LocalDate.now(WORKBOOK_ZONE) : lessonDate;
-        LocalDate activityStart = activityEnd.minusDays(20);
+        WorkbookLessonRosterService.Roster effectiveRoster = workbookLessonRoster == null
+                ? new WorkbookLessonRosterService.Roster(List.of(), "ROSTER_SERVICE_UNAVAILABLE", true)
+                : workbookLessonRoster.resolve(teacher, lesson);
+        result.put("studentRosterSource", effectiveRoster.source());
+        result.put("studentMembershipNeedsTeacherReview", effectiveRoster.needsTeacherReview());
         List<Map<String,Object>> studentContexts = new ArrayList<>();
-        for (Map<String,Object> student : students) {
-            UUID studentId = uuid(String.valueOf(student.get("id")), "studentId");
-            Map<String,Object> item = new LinkedHashMap<>(student);
-            userRepository.findById(studentId)
-                    .filter(u -> u.getRole() == Role.STUDENT && u.getTeacher() != null && teacher.id().equals(u.getTeacher().getId()))
-                    .ifPresent(u -> {
-                        item.put("grade", u.getGrade());
-                        item.put("schoolType", u.getSchoolType());
-                        item.put("learningStrengths", u.getLearningStrengths());
-                        item.put("learningDifficulties", u.getLearningDifficulties());
-                        item.put("learningNotes", u.getLearningNotes());
-                    });
+        for (WorkbookLessonRosterService.Student student : effectiveRoster.students()) {
+            UUID studentId = student.id();
+            Map<String,Object> item = new LinkedHashMap<>();
+            item.put("id", studentId.toString());
+            item.put("name", student.name());
+            User studentUser = userRepository.findById(studentId)
+                    .filter(u -> u.getRole() == Role.STUDENT && !u.isArchived()
+                            && u.getTeacher() != null && teacher.id().equals(u.getTeacher().getId()))
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "A lesson participant is no longer an active student of the selected teacher"));
+            item.put("grade", studentUser.getGrade());
+            item.put("schoolType", studentUser.getSchoolType());
+            item.put("learningStrengths", studentUser.getLearningStrengths());
+            item.put("learningDifficulties", studentUser.getLearningDifficulties());
+            item.put("learningNotes", studentUser.getLearningNotes());
+
+            // A group plan is useful shared guidance, but each pupil's own plan
+            // is authoritative for the content and level of their private PDF.
+            MonthlyPlanResponse personalPlan = monthlyPlanService.get(
+                    teacher, "student", studentId, lessonDate.toString().substring(0, 7));
+            Map<String,Object> personalPlanJson = new LinkedHashMap<>();
+            if (personalPlan.planJson() != null && !personalPlan.planJson().isBlank()) {
+                personalPlanJson = objectMapper.readValue(personalPlan.planJson(), Map.class);
+            }
+            item.put("personalMonthPlan", personalPlanJson);
+            item.put("personalMonthPlanAvailable", !personalPlanJson.isEmpty());
+            item.put("personalMonthPlanVersion", personalPlan.version());
+            item.put("personalMonthPlanUpdatedAt",
+                    personalPlan.updatedAt() == null ? null : personalPlan.updatedAt().toString());
+
             Map<String,Object> activity = analyticsService.studentActivity(auth.user(), auth.apiKey(),
                     studentId, activityStart, activityEnd);
             item.put("activityTotals", activity.get("totals"));
             if (workbookBoards != null && workbookMastery != null) {
                 List<Map<String,Object>> skills = new ArrayList<>();
                 for (var board : workbookBoards.list()) {
-                    if (item.get("grade") instanceof Number grade && board.grade() != grade.intValue()) continue;
-                    var mastery = workbookMastery.get(board.id(), studentId, teacher);
-                    if (mastery.mastery().isEmpty()) continue;
-                    // Read the current board before interpreting saved node IDs.
+                    if (studentUser.getGrade() != null && board.grade() != studentUser.getGrade()) continue;
                     var currentBoard = workbookBoards.get(board.id());
+                    var mastery = workbookMastery.get(board.id(), studentId, teacher);
+                    List<Map<String,Object>> nodes = currentBoard.data().nodes().stream()
+                            .filter(node -> "skill".equals(node.kind()) && !node.archived())
+                            .map(node -> Map.<String,Object>of(
+                                    "id", node.id(),
+                                    "title", node.title(),
+                                    "mastery", mastery.mastery().getOrDefault(node.id(), 0)))
+                            .toList();
                     skills.add(Map.of("boardId", board.id(), "revision", currentBoard.revision(),
-                            "mastery", mastery.mastery(), "skills", currentBoard.data().nodes().stream()
-                                    .filter(node -> mastery.mastery().containsKey(node.id()))
-                                    .map(node -> Map.of("id", node.id(), "title", node.title())).toList()));
+                            "mastery", mastery.mastery(), "skills", nodes));
                     if (skills.size() >= 3) break;
                 }
                 item.put("savedSkills", skills);
@@ -1973,11 +1979,11 @@ public class MindcraftiMcpController {
             }
             item.put("documentedCardErrors", errorEvidence);
             if (schoolCalendarService != null
-                    && item.get("grade") instanceof Number level
-                    && item.get("schoolType") instanceof String schoolType) {
+                    && studentUser.getGrade() instanceof Integer level
+                    && studentUser.getSchoolType() instanceof String schoolType) {
                 try {
                     item.put("schoolCalendarReference",
-                            schoolCalendarService.referenceForStudent(level.intValue(), schoolType,
+                            schoolCalendarService.referenceForStudent(level, schoolType,
                                     lessonDate.getMonthValue()));
                 } catch (RuntimeException unavailable) {
                     item.put("schoolCalendarReference",
@@ -2019,7 +2025,6 @@ public class MindcraftiMcpController {
         }
         result.put("students", studentContexts);
         result.put("schoolCalendarGuidance", "If present, schoolCalendarReference is a month-by-month planning example, NOT the verified teaching order or test schedule of this pupil's school. Verify what the pupil actually studied, last lesson and confirmed teacher announcements before recommending homework.");
-        result.put("studentMembershipNeedsTeacherReview", true);
         var prompts = schoolPromptSettingsService.readForMcp();
         String teachingPrompt = lesson.groupId() != null
                 ? prompts.groupLessonPrompt() : prompts.individualLessonPrompt();
