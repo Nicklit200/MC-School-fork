@@ -677,6 +677,7 @@ public class AiLessonPilotService {
         }
     }
 
+    public String kolinModelNameForUsage() { return kolinModelName(); }
     private String kolinModelName() { return kolinModel==null || kolinModel.isBlank()?"gpt-6-luna":kolinModel.trim(); }
     private void kolinReasoning(Map<String,Object> payload,String effort) {
         if(kolinModelName().startsWith("gpt-6") || kolinModelName().startsWith("gpt-5")) payload.put("reasoning",Map.of("effort",effort));
