@@ -198,7 +198,10 @@ public class WorkbookGenerationJobService {
             if(message.contains("exceeded 115 seconds")||message.contains("timed out"))return "TIMEOUT";
             if(message.startsWith("Server content generation is not configured"))return "AI_NOT_CONFIGURED";
             if(message.contains("Algebra QA")||message.contains("Algebra validation")||message.contains("Incorrect math in "))return "MATH_QA_FAILED";
-            if(message.contains("Layout QA")||message.contains("layout check")||message.contains("overflow A4"))return "LAYOUT_QA_FAILED";
+            if(message.contains("Layout QA")||message.contains("layout check")||message.contains("overflow A4")
+                    ||message.contains("A4 page packing exhausted")
+                    ||message.contains("diagram and its next task exceed one A4 page")
+                    ||message.contains("likely to overflow A4"))return "LAYOUT_QA_FAILED";
             if(ex instanceof IllegalArgumentException)return "VALIDATION_FAILED";
         }
         return "GENERATION_FAILED";

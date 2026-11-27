@@ -46,7 +46,9 @@ public class LessonParticipantsService {
 
     @Transactional(readOnly = true)
     public boolean hasLesson(UUID teacherId, String eventId) {
-        return history.findByTeacherIdAndEventId(teacherId, eventId).isPresent();
+        return history.findByTeacherIdAndEventId(teacherId, eventId)
+                .filter(lesson -> lesson.getDeletedAt() == null)
+                .isPresent();
     }
 
     @Transactional(readOnly = true)
