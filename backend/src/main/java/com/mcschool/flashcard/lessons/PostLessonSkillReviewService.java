@@ -49,6 +49,9 @@ public class PostLessonSkillReviewService {
     private static final int MAX_ATTEMPTS = 3;
     private static final int MAX_PUPILS = 25;
     private static final int MAX_PDFS = 2;
+    // Keep the entire authenticated pupil/teacher dialogue. The analysis service
+    // windows long lessons explicitly; never silently drop their final answers.
+    private static final int MAX_ATTRIBUTED_TRANSCRIPT_CHARS = 180_000;
 
     private record Job(UUID classId, UUID teacherId, String eventId, String rosterJson, int attempts) {}
     private record StudentResult(String state, String boardId, String detail,
@@ -447,6 +450,7 @@ public class PostLessonSkillReviewService {
 
     private String attributedTranscript(Job job,UUID pupil) {
         StringBuilder result=new StringBuilder();
+        boolean[] tooLong={false};
         jdbc.query("""
             SELECT user_id,start_ms,text FROM online_class_transcript_segments
             WHERE class_id=? ORDER BY start_ms,id
@@ -454,12 +458,16 @@ public class PostLessonSkillReviewService {
                 UUID speaker=rs.getObject("user_id",UUID.class);
                 if(!pupil.equals(speaker)&&!job.teacherId().equals(speaker))return;
                 String text=Objects.toString(rs.getString("text"),"").replaceAll("[\\r\\n]+"," ").strip();
-                if(text.isEmpty() || result.length()>=18000)return;
+                if(text.isEmpty() || tooLong[0])return;
                 String who=pupil.equals(speaker)?"STUDENT":"TEACHER";
                 String label=who+" [t="+rs.getLong("start_ms")/1000+"s]: ";
-                int remaining=Math.max(0,18000-result.length()-label.length()-2);
-                result.append(label).append(text,0,Math.min(remaining,text.length())).append('\n');
+                if(result.length()+label.length()+text.length()+1 > MAX_ATTRIBUTED_TRANSCRIPT_CHARS) {
+                    tooLong[0]=true;
+                    return;
+                }
+                result.append(label).append(text).append('\n');
             },job.classId());
+        if(tooLong[0]) throw new IllegalStateException("SKILL_REVIEW_TRANSCRIPT_TOO_LONG");
         return result.toString();
     }
 
