@@ -56,15 +56,10 @@ class KolinPageAnalysisStoreIntegrationTest {
         page=documents.saveAndFlush(OnlineClassAnnotationDocument.create(room,AnnotationTargetType.WHITEBOARD,board,0));
     }
 
-    private void write(User actor,User owner,AnnotationOperationType operation,int secondsAgo){
+    private void write(User actor,User owner,AnnotationOperationType operation){
         long revision=page.nextRevision();
         page=documents.saveAndFlush(page);
-        var event=events.saveAndFlush(OnlineClassAnnotationEvent.record(page,UUID.randomUUID(),revision,actor,owner,operation,"{}"));
-        jdbc.update("UPDATE online_class_annotation_events SET created_at=now()-(? * INTERVAL '1 second') WHERE id=?",secondsAgo,event.getId());
-    }
-
-    private void agePupilInk(){
-        jdbc.update("UPDATE online_class_annotation_events SET created_at=now()-INTERVAL '31 seconds' WHERE document_id=? AND layer_owner_id=?",page.getId(),pupil.getId());
+        events.saveAndFlush(OnlineClassAnnotationEvent.record(page,UUID.randomUUID(),revision,actor,owner,operation,"{}"));
     }
 
     private KolinPageAnalysisStore.Key key(){
@@ -80,46 +75,45 @@ class KolinPageAnalysisStoreIntegrationTest {
         return store.current(room.getId(),teacher.getId(),pupil.getId(),board,documentVersion,0);
     }
 
-    @Test void thirtySecondPauseAndPupilOnlyRevisionDeduplicatePaidReviews(){
-        write(teacher,teacher,AnnotationOperationType.ADD,60);
+    @Test void manualChecksOnlyNewPupilInkAndDeduplicateAcrossPdfVersions(){
+        write(teacher,teacher,AnnotationOperationType.ADD);
         assertThat(candidates()).isEmpty();
-        write(pupil,pupil,AnnotationOperationType.ADD,0);
-        assertThat(candidates()).isEmpty();
-        assertThat(store.hasPupilInk(key())).isFalse();
-        agePupilInk();
+
+        write(pupil,pupil,AnnotationOperationType.ADD);
         assertThat(candidates()).hasSize(1);
         assertThat(store.hasPupilInk(key())).isTrue();
         var first=store.claim(key(),"a".repeat(64));
         assertThat(first.acquired()).isTrue();
-        assertThat(store.claim(key(),"a".repeat(64)).acquired()).isFalse();
-        store.finish(key(),first.result().id(),"✅ Correct");
-        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("✅ Correct");
+        store.finish(key(),first.result().id(),"First review");
+        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("First review");
 
-        write(teacher,teacher,AnnotationOperationType.ADD,0);
+        // Teacher ink changes the full board revision but not the pupil's review revision.
+        write(teacher,teacher,AnnotationOperationType.ADD);
         assertThat(candidates()).isEmpty();
-        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::id).containsExactly(first.result().id());
-        assertThat(store.claim(key(),"b".repeat(64)).acquired()).isFalse();
+        var changedBoardRevision=key();
+        assertThat(store.claim(changedBoardRevision,"b".repeat(64)).acquired()).isFalse();
 
-        write(pupil,pupil,AnnotationOperationType.ADD,0);
+        // A new pupil stroke makes exactly this pupil's page eligible again.
+        write(pupil,pupil,AnnotationOperationType.ADD);
         assertThat(current()).hasSize(1);
         assertThat(current().get(0).isCurrent()).isFalse();
-        assertThat(current(1)).hasSize(1); // saved receipt survives a workbook/PDF version change
-        assertThat(current(1).get(0).isCurrent()).isFalse();
-        assertThat(candidates()).isEmpty();
-        agePupilInk();
         assertThat(candidates()).hasSize(1);
         var next=store.claim(key(),"c".repeat(64));
         assertThat(next.acquired()).isTrue();
         assertThat(next.result().id()).isNotEqualTo(first.result().id());
-        store.finish(key(),next.result().id(),"❌ Incorrect");
+        store.finish(key(),next.result().id(),"Second review");
         assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::text)
-                .containsExactly("❌ Incorrect","✅ Correct");
+                .containsExactly("Second review","First review");
         assertThat(current()).filteredOn(KolinPageAnalysisStore.SavedResult::isCurrent)
-                .extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("❌ Incorrect");
+                .extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("Second review");
 
-        write(pupil,pupil,AnnotationOperationType.CLEAR_LAYER,60);
-        assertThat(current()).hasSize(2);
+        // Erasing/undoing old marks does not count as new writing and never sends a blank page.
+        write(pupil,pupil,AnnotationOperationType.ERASE);
+        assertThat(candidates()).isEmpty();
         assertThat(current()).allMatch(result -> !result.isCurrent());
+
+        // A clear requires a fresh pupil ADD/UPDATE before another review.
+        write(pupil,pupil,AnnotationOperationType.CLEAR_LAYER);
         assertThat(candidates()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM kolyn_page_analyses",Integer.class)).isEqualTo(2);
     }
